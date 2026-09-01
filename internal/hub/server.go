@@ -206,6 +206,26 @@ type session struct {
 
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
 	vt *vtBuffer
+	// JSON 外: Provider が登録時点で custom_providers に実在した id だったか。
+	// 零値 false は「custom ではない」という安全側の既定値になる ―― 大半の
+	// session{} リテラル（テスト含む65箇所超）はこのフィールドを一切知らない
+	// まま書かれるが、それでも isAIProvider(Provider) 側の判定は影響を受けない。
+	// 承認「検出」の可否は必ず sessionApprovalDetectionEligible(ses) 経由で
+	// 読む（isAIProvider(Provider) || ses.customProviderSession）。この値
+	// 単体を「検出できる/できない」の真偽として直接使わない。
+	//
+	// 登録時に一度だけ判定して固定する（wrapperLoop / handleReattach。cfgMu を
+	// 承認検出のホットパスへ持ち込まないため）。isAIProvider 自体はフック注入
+	// スイープ（built-in のみ・承認「検出」とは別物）でも使うため、この値で
+	// 置き換えない — plan_custom-provider-spawn-execution.md 決定事項5。
+	//
+	// 2026-09-01 敵対レビューでの訂正: 当初はこのフィールド自体に
+	// 「isAIProvider(Provider) || custom」を合成して入れる設計だったが、零値
+	// false が「検出しない」を意味してしまい、フィールドを知らない既存の
+	// session{} リテラル（TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource
+	// 等）で built-in provider の承認検出が無音で壊れた。custom 判定だけを
+	// 持たせ、isAIProvider との合成は毎回呼び出し側で行う形に直した。
+	customProviderSession bool
 	// replayEpoch identifies the current terminal restoration stream. It is
 	// independent from approvalSourceEpoch: reflow/replay must not create a
 	// new logical prompt generation.

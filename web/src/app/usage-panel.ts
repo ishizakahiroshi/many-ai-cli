@@ -158,6 +158,10 @@ function windowLabelText(label: ReturnType<typeof windowLabel>): string {
   }
 }
 
+// メーターは全 provider 共通で「残量」を表示し、塗り幅も残量にする（使うほど縮む）。
+// provider の Web 画面は逆に「使用済み」で塗るため、同じ状態でもバーの向きが逆に見え、
+// 丸めの違いで used + remaining が 101 になることもある。**数字は正しい。**
+// 経緯・実測・使用済み表記へ寄せない理由は docs/local/reference/reference_usage-display.md。
 function meter(label: string, window: UsageWindow | undefined): string {
   if (!window) return '';
   const remaining = remainingPercent(window as UsageWindowInput);

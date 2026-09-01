@@ -284,6 +284,57 @@ func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string,
 	}
 }
 
+// validSpawnProvider reports whether provider is spawnable: a built-in AI
+// CLI, "shell", or a config.yaml custom_providers entry. Custom providers go
+// through config.EffectiveCustomProviders, so a broken or built-in-colliding
+// entry (see internal/config/custom_provider.go) is rejected here exactly as
+// it is dropped from the spawn dropdown in /api/info (misc_handlers.go).
+//
+// Kept in sync with web/src/app/spawn-panel.ts's injectCustomProviderOptions
+// and with the native <option> values the spawn form already ships with —
+// this is the check plan_provider-user-config.md's C2 needed to actually let
+// a custom provider spawn, not just appear in the dropdown (敵対レビュー
+// 2026-08-31 Finding 1: this switch used to be a fixed built-in list only).
+func (s *Server) validSpawnProvider(provider string) bool {
+	switch provider {
+	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code", "shell":
+		return true
+	}
+	s.cfgMu.Lock()
+	custom := s.cfg.CustomProviders
+	s.cfgMu.Unlock()
+	for _, p := range config.EffectiveCustomProviders(custom) {
+		if p.ID == provider {
+			return true
+		}
+	}
+	return false
+}
+
+// validGridAIProvider reports whether provider is valid as the AI half of
+// handleSpawnGrid's "ai+shell" preset: any provider validSpawnProvider
+// accepts, except "shell" itself (that half of the pair is fixed to shell
+// sessions already, so allowing "shell" here would be a self-referential no-op).
+// Built-in providers, and now custom_providers entries too
+// (plan_custom-provider-spawn-execution.md C2), both qualify.
+func (s *Server) validGridAIProvider(provider string) bool {
+	return provider != "shell" && s.validSpawnProvider(provider)
+}
+
+// resolveSpawnModel decides the --model value handleSpawn passes downstream.
+// A custom provider gets none: built-in per-provider args/env injection
+// (RouteForModel, Ollama/LM Studio routing, ANTHROPIC_*/OPENAI_* presets)
+// only makes sense for the providers many-ai-cli knows the shape of, and
+// none of it is meant to reach an arbitrary user CLI (decision 2,
+// plan_custom-provider-spawn-execution.md). Extracted as its own function so
+// this suppression is unit-testable without spawning a real wrap process.
+func resolveSpawnModel(model string, isCustomProvider bool) string {
+	if isCustomProvider {
+		return ""
+	}
+	return strings.TrimSpace(model)
+}
+
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
@@ -319,10 +370,15 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "grok" && body.Provider != "command-code" && body.Provider != "shell" {
+	if !s.validSpawnProvider(body.Provider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
+	// custom provider かどうかは以降で何度か使う（subscription 早期拒否・
+	// model/route 抑止）。同じ判定を s.cfgMu 越しに何度も取らないよう1回だけ引く。
+	s.cfgMu.Lock()
+	isCustomProvider := s.cfg.IsCustomProviderID(body.Provider)
+	s.cfgMu.Unlock()
 	validPermModes := map[string]bool{
 		"": true, "default": true, "plan": true,
 		"acceptEdits": true, "auto": true, "bypassPermissions": true,
@@ -385,6 +441,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// 誤ったアカウントで走ることの方が、起動できないことより重い。
 	if strings.TrimSpace(body.SubscriptionProfileID) != "" && body.Provider == "shell" {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "shell sessions do not use subscription profiles")
+		return
+	}
+	if strings.TrimSpace(body.SubscriptionProfileID) != "" && isCustomProvider {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "custom providers do not use subscription profiles")
 		return
 	}
 	subEnv, _, subErr := s.subscriptionLaunch(body.Provider, body.SubscriptionProfileID)
@@ -481,7 +541,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wrapArgs := []string{"wrap", body.Provider}
-	resolvedModel := strings.TrimSpace(body.Model)
+	resolvedModel := resolveSpawnModel(body.Model, isCustomProvider)
 
 	if body.Label != "" {
 		// --label=value 形式で渡す（空白区切りだと value が次フラグに化ける可能性がある）。
@@ -855,15 +915,12 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// AI provider バリデーション（ai+shell プリセット時のみ使用）
+	// AI provider バリデーション（ai+shell プリセット時のみ使用）。
 	aiProvider := body.Provider
 	if aiProvider == "" {
 		aiProvider = "claude"
 	}
-	validAIProviders := map[string]bool{
-		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true, "command-code": true,
-	}
-	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
+	if body.Preset == "ai+shell" && !s.validGridAIProvider(aiProvider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")
 		return
 	}

@@ -837,6 +837,20 @@ func commandCodePermissionArgs(permissionMode string) []string {
 	}
 }
 
+// customProviderFor looks up provider in cfg.CustomProviders' effective set
+// (config.EffectiveCustomProviders — built-in-collision and duplicate
+// entries already excluded, matching what internal/hub validated before
+// spawning this process). Used by Run for the session's display name and to
+// resolve Command into the argv actually executed.
+func customProviderFor(cfg *config.Config, provider string) (config.CustomProvider, bool) {
+	for _, p := range config.EffectiveCustomProviders(cfg.CustomProviders) {
+		if p.ID == provider {
+			return p, true
+		}
+	}
+	return config.CustomProvider{}, false
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	// 記録点フックの sink をここで 1 度だけ組み込む（既定ビルドでは no-op）。
 	installProbes(logger, cfg)
@@ -922,7 +936,13 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
+	// customProvider は config.yaml の custom_providers: エントリ（見つかれば）。
+	// 表示名（下）と、後段の起動 argv 解決（startProcess 呼び出し直前）の両方で使う。
+	customProvider, isCustomProvider := customProviderFor(cfg, provider)
 	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "command-code": "Command Code", "shell": "Shell"}[provider]
+	if display == "" && isCustomProvider {
+		display = customProvider.EffectiveLabel()
+	}
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h
@@ -1090,7 +1110,28 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
 		fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
 	}
-	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows, providerExtraEnv)
+	// custom provider は Command（config.yaml）を argv へ分解したものを実行ファイル・
+	// 引数の先頭に据える。分解に失敗した場合（閉じない引用符・制御文字・空など）は
+	// PTY を開く前に、startProcess 失敗時と同じ診断ブロック＋session_end 経路で終了する
+	// （新しい失敗 UX を作らない・decision 7, plan_custom-provider-spawn-execution.md）。
+	var customArgv []string
+	if isCustomProvider {
+		argv, argvErr := customProvider.Argv()
+		if argvErr != nil {
+			diagnoseStartFailure(os.Stderr, provider, providerArgs, argvErr)
+			_ = websocket.JSON.Send(conn, proto.Message{
+				Type:      "session_end",
+				SessionID: sessionID,
+				State:     "error",
+				ExitCode:  1,
+				Reason:    classifyStartFailure(argvErr),
+			})
+			_ = conn.Close()
+			return argvErr
+		}
+		customArgv = argv
+	}
+	ps, err := startProcess(provider, customArgv, providerArgs, cwd, initCols, initRows, providerExtraEnv)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に

@@ -61,6 +61,8 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 
 Gemini CLI is intentionally out of scope.
 
+Want to run a CLI `many-ai-cli` does not wrap out of the box — including one it deliberately excludes here? You can register it yourself; see [Custom providers](#custom-providers-power-users) below.
+
 ---
 
 ## Features
@@ -161,6 +163,39 @@ This is **not an API key router**. It does not pool metered API keys to make req
 **Removing a profile** unregisters it from `many-ai-cli` and leaves the vendor credentials in place. Deleting the credentials as well is a separate, explicit confirmation, and it is never applied to a directory you pointed at yourself with `profile_dir`.
 
 If you never open this section, nothing changes: sessions launch with the environment they always had, byte for byte.
+
+---
+
+## Custom providers (power users)
+
+Beyond the [six built-in CLIs](#supported-providers), you can register your own AI CLI as a spawn option by hand-editing `custom_providers:` in `config.yaml`. There is no "Add provider" button anywhere in the Hub UI — writing `config.yaml` yourself is the only way in, and the only way to change or remove an entry too. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection.
+
+```yaml
+custom_providers:
+  - id: my-cli              # spawn value: lowercase letters/digits/./_/- only; must not match a built-in provider id or the reserved id "shell"
+    label: My CLI            # optional; shown in the spawn dropdown in place of id
+    command: my-cli --agent  # command line many-ai-cli runs for this provider — see "How command is parsed" below
+    approval_pattern_source: ~/my-cli-approval-patterns.md  # reserved for future use — not read yet, see below
+```
+
+Leave `custom_providers:` out entirely — the default — and nothing about `many-ai-cli` changes.
+
+**How `command` is parsed.** `many-ai-cli` splits it into an executable plus arguments itself; it never hands the string to a shell. The rules are deliberately small and fixed:
+
+- ASCII spaces and tabs separate arguments; runs of them collapse to one
+- `"..."` quotes one argument, or part of one — quoting can start and end mid-argument (`--path="C:\a b\c"` becomes `--path=C:\a b\c`); the quotes themselves are removed
+- `""` inside a quoted span is a literal `"` character
+- `\` is always a literal character, never an escape — Windows paths (`C:\a\b.exe`) need no special handling
+- Nothing else is expanded or interpreted: environment variables (`$X`, `%X%`), `~`, globs, and shell operators (`|`, `&&`, `;`, `>`, `<`) all pass through as literal argument text, because the string never reaches a real shell
+- An unterminated quote or an empty command is rejected before anything starts
+
+**Nothing built-in gets attached to a custom provider.** No `--model`, permission-mode/sandbox/ask-for-approval flags, `ANTHROPIC_*` / `OPENAI_*` environment presets, Ollama/LM Studio routing, or subscription profile selection — none of that has a defined meaning for an arbitrary CLI, so the spawn form hides the model field for a custom provider and the Hub never adds any of it. Only `command`'s own arguments and the common `MANY_AI_CLI*` session environment reach the process.
+
+**Approval detection still works for a custom provider, through the same generic text heuristic every provider's terminal output is scanned with** — it looks for approval-shaped wording and option labels (Yes/No/Allow/Deny and similar) rather than a per-provider pattern file. `approval_pattern_source` is reserved in the schema for a future per-provider pattern source but is not read yet; `many-ai-cli doctor` flags any entry that sets it so you know it has no effect for now. The **hook** that writes an approval-rules block into `CLAUDE.md` / `AGENTS.md` is built-in only and is never applied to a custom provider.
+
+If `command`'s executable is not on PATH, the session ends the same way a missing built-in CLI would (`... not found in PATH`); `many-ai-cli doctor` checks PATH for every configured custom provider without ever running it.
+
+**This is a power-user setting, and it carries none of the review that goes into the built-in list.** The terms-of-service judgment calls described under [Security / Privacy](#security--privacy) — including why Gemini CLI is out of scope — are about the *built-in* provider list only. Whatever CLI you point `command` at is entirely your own choice, and checking that CLI's own terms of service before you wire it in is on you. `many-ai-cli doctor` reports how many custom providers are configured, as a standing reminder; it does not warn you again on every spawn.
 
 ---
 

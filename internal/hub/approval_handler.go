@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/wrapper"
 )
 
@@ -71,8 +72,16 @@ func mergeApprovalRuleTargets(targets []approvalRuleTarget) []approvalRuleTarget
 	return out
 }
 
-// isAIProvider は provider が AI セッション（承認・chat history・done summary 等が
-// 適用される）かどうかを返す。Shell セッションは対象外。
+// isAIProvider は provider が built-in の7種 AI CLI かどうかを返す
+// （承認・chat history・done summary 等が適用される対象。Shell は対象外）。
+// これは built-in 限定の述語で、承認ルールのフック注入スイープ（このファイル
+// 下方）と done summary / AI コミットのフォールバック（done_summary.go /
+// git_commit_ai.go）のゲートを兼ねる。いずれも custom_providers には広げない
+// （plan_custom-provider-spawn-execution.md 決定事項5・9）。
+//
+// **承認「検出」（PTY 出力を承認プロンプトとしてスキャンするか）の可否はこの
+// 関数だけでは決まらない。** 必ず sessionApprovalDetectionEligible(ses) を
+// 経由する（isAIProvider(ses.Provider) || ses.customProviderSession）。
 func isAIProvider(provider string) bool {
 	switch provider {
 	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code":
@@ -80,6 +89,25 @@ func isAIProvider(provider string) bool {
 	default:
 		return false
 	}
+}
+
+// customProviderSessionFor computes session.customProviderSession at
+// registration time: whether provider names a config.yaml custom_providers
+// entry. wrapperLoop and its reattach counterpart call this exactly once, at
+// session registration, and store the result rather than re-deriving it on
+// every PTY chunk (cfgMu never reaches the detection hot path).
+func customProviderSessionFor(cfg *config.Config, provider string) bool {
+	return cfg.IsCustomProviderID(provider)
+}
+
+// sessionApprovalDetectionEligible reports whether ses's PTY output should be
+// scanned for an approval prompt at all: a built-in AI CLI or a registered
+// custom provider both qualify; "shell" and an unrecognized provider do not.
+// Every approval-detection call site reads this instead of isAIProvider
+// directly — see isAIProvider's doc comment for why the two must stay
+// separate.
+func sessionApprovalDetectionEligible(ses *session) bool {
+	return ses != nil && (isAIProvider(ses.Provider) || ses.customProviderSession)
 }
 
 func uniqueProviders(providers []string) []string {
