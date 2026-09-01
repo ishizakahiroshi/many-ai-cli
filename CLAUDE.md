@@ -32,7 +32,7 @@ v0.7.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプ�
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
 | Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok`（`gemini` は対象外・見送り台帳 D-01） |
 
-> **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカーの残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。
+> **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカーの残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。また `docs/local` と `docs/obsidian` はジャンクションで、AI の Glob / Grep ツールは中を辿らず同じく **0 件に見える**。この 2 つの列挙・検索は PowerShell で行う。
 
 ## 技術スタック・ディレクトリ構成
 
