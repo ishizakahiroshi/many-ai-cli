@@ -873,6 +873,17 @@ type Config struct {
 	// **認証情報は入らない**（実体は各 profile ディレクトリ内で vendor CLI が持つ）。
 	// 未設定なら nil で、従来どおり各 CLI の既定ログイン環境がそのまま使われる。
 	Subscriptions SubscriptionProfiles `yaml:"subscriptions,omitempty" json:"subscriptions,omitempty"`
+	// CustomProviders は利用者が自分で追加する AI CLI の一覧（玄人設定）。
+	// 置き場所はここのみで Hub UI からは追加できない
+	// （docs/local/plan_provider-user-config.md の決定事項）。未設定なら nil で
+	// 既存の built-in provider 一覧だけが選択肢になる。
+	//
+	// 起動時、Command は internal/config.SplitCommandLine（正本はそのコメント。
+	// README.md の「Custom providers」節はそれを写したもの）で argv へ分解され、
+	// built-in の provider 別引数・env（--model・permission-mode・ANTHROPIC_* /
+	// OPENAI_*・Ollama/LM Studio route・subscription profile）は一切付与しない
+	// （plan_custom-provider-spawn-execution.md 決定事項2）。
+	CustomProviders CustomProviders `yaml:"custom_providers,omitempty" json:"custom_providers,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -1131,6 +1142,11 @@ func (cfg *Config) Clone() *Config {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
 	c.Subscriptions = cfg.Subscriptions.Clone()
+	if cfg.CustomProviders != nil {
+		s := make(CustomProviders, len(cfg.CustomProviders))
+		copy(s, cfg.CustomProviders)
+		c.CustomProviders = s
+	}
 	return &c
 }
 
@@ -1233,6 +1249,7 @@ func (cfg *Config) Warnings() []string {
 			host))
 	}
 	warnings = append(warnings, cfg.subscriptionWarnings()...)
+	warnings = append(warnings, cfg.customProviderWarnings()...)
 	return warnings
 }
 

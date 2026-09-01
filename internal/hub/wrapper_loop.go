@@ -90,6 +90,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 
 	s.cfgMu.Lock()
 	logDir := s.cfg.Hub.LogDir
+	// custom_providers エントリかどうかは登録時に一度だけ判定して固定する
+	// （session.customProviderSession のコメント参照。cfgMu を承認検出の
+	// ホットパスへ持ち込まないため）。
+	customProviderSession := customProviderSessionFor(s.cfg, reg.Provider)
 	s.cfgMu.Unlock()
 	rawLogPath, jsonlPath, history := s.startSessionLog(logDir, sessionlog.Metadata{
 		SessionID: id,
@@ -185,6 +189,8 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		JSONLPath:       jsonlPath,
 		History:         history,
 		inflightInput:   map[int64]inflightInput{},
+
+		customProviderSession: customProviderSession,
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
 	if childMeta.OrchestrationID != "" {
@@ -354,6 +360,11 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// プリミティブにしない）。
 	s.cfgMu.Lock()
 	logDir := s.cfg.Hub.LogDir
+	// wrapperLoop と同じ理由で登録時に一度だけ判定する（session.
+	// customProviderSession 参照）。reattach は既存セッションの継続なので
+	// 実質値は変わらないはずだが、Hub 再起動をまたぐ cold reattach では前回値を
+	// 引き継げないため、ここでも同じ判定式で計算し直す。
+	customProviderSession := customProviderSessionFor(s.cfg, req.Provider)
 	s.cfgMu.Unlock()
 	rawLogPath, jsonlPath, history := s.startSessionLog(logDir, sessionlog.Metadata{
 		SessionID: req.SessionID,
@@ -622,6 +633,8 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		inflightInput:       prevInflightInput,
 		resendInput:         prevResendInput,
 		inputAckCapable:     prevInputAckCapable,
+
+		customProviderSession: customProviderSession,
 	}
 	if prevExists {
 		applyReattachPreservedStateLocked(s.sessions[acceptedID], prevReattachState)
@@ -829,7 +842,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				if chunkHasApprovalTrigger && now.Before(ses.vtResizeDebounceUntil) {
 					ses.nativeApprovalScanQueued = true
 				}
-				shouldCheckApproval := isAIProvider(provider) &&
+				shouldCheckApproval := sessionApprovalDetectionEligible(ses) &&
 					now.After(ses.vtResizeDebounceUntil) &&
 					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
 				if shouldCheckApproval {
@@ -854,7 +867,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// ここで VT を読まない。両方から同じ質問を立てると、折り返しで
 				// 質問文が切れている側と切れていない側で candidateKey が割れる
 				// （approval_marker_transcript.go の冒頭が理由の正本）。
-				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) &&
+				if sessionApprovalDetectionEligible(ses) && now.After(ses.vtResizeDebounceUntil) &&
 					!approvalMarkerSourceIsTranscriptLocked(ses) {
 					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）＋
 					// 開始マーカーが画面外へ流れた場合の再構成（approval_marker.go）。

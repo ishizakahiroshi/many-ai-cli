@@ -85,7 +85,7 @@ func TestResolveDefaultShell_Windows(t *testing.T) {
 // resolveDefaultShell の結果と同じコマンドを返すことを確認する。
 func TestResolveCmdShellProvider_Windows(t *testing.T) {
 	want := resolveDefaultShell()
-	got, gotArgs := resolveCmd("shell", []string{})
+	got, gotArgs := resolveCmd("shell", nil, []string{})
 	if got != want {
 		t.Errorf("resolveCmd(shell) = %q, want %q", got, want)
 	}

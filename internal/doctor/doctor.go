@@ -65,11 +65,12 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 	checks = append(checks, residue(ctx, cfg)...)
 	checks = append(checks, commandCode(ctx)...)
 	checks = append(checks, subscriptions(ctx, cfg)...)
+	checks = append(checks, customProviders(cfg)...)
 	return Report{Checks: checks}
 }
 
 func providers(ctx context.Context) Check {
-	names := []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code"}
+	names := config.BuiltinProviderIDs
 	var found []string
 	for _, name := range names {
 		path, err := providerLookPath(name)

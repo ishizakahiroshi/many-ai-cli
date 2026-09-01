@@ -279,7 +279,7 @@ func (s *Server) evaluateReplayApproval(id int) {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || ses.vt == nil || !isAIProvider(ses.Provider) || now.Before(ses.vtResizeDebounceUntil) {
+	if ses == nil || ses.vt == nil || !sessionApprovalDetectionEligible(ses) || now.Before(ses.vtResizeDebounceUntil) {
 		s.sessionsMu.Unlock()
 		return
 	}

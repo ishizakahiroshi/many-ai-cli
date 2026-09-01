@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"many-ai-cli/internal/config"
 )
 
 // TestCalcGridLayout は session 数から正しい grid layout 文字列を返すことを検証する。
@@ -159,5 +161,115 @@ func TestHandleSpawnAcceptsCommandCodeProvider(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "subscription") {
 		t.Fatalf("expected subscription profile error, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleSpawnAcceptsCustomProvider は config.yaml の custom_providers エントリが
+// handleSpawn の provider whitelist を実際に通ることを確認する（敵対レビュー
+// 2026-08-31 Finding 1: config.CustomProviders に追加しても spawn_handler.go の
+// ホワイトリストが固定リストのままで、UI のドロップダウンに出るのに Launch すると
+// 「invalid provider」で 400 になっていた）。TestHandleSpawnAcceptsCommandCodeProvider と
+// 同じ手法で、存在しない subscription profile を指定して whitelist の後段まで進んだことを
+// エラー文言の違いで確認する。
+func TestHandleSpawnAcceptsCustomProvider(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	s.cfg.CustomProviders = config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli --agent"},
+	}
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider":                "my-cli",
+		"cwd":                     s.hubCWD,
+		"subscription_profile_id": "deleted-profile",
+	}))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "invalid provider") {
+		t.Fatalf("custom provider my-cli was rejected as invalid provider: %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "subscription") {
+		t.Fatalf("expected subscription profile error, got: %s", w.Body.String())
+	}
+}
+
+// TestHandleSpawnRejectsProviderNotInCustomProviders は custom_providers が設定されていても
+// そこに無い provider 名まで通してしまわないことを確認する（validSpawnProvider がただの
+// 「何でも許可」になっていないことの回帰テスト）。
+func TestHandleSpawnRejectsProviderNotInCustomProviders(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	s.cfg.CustomProviders = config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli --agent"},
+	}
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider": "some-other-cli",
+		"cwd":      s.hubCWD,
+	}))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "invalid provider") {
+		t.Fatalf("code = %d, body = %s, want 400 invalid provider", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleSpawnRejectsCustomProviderSubscriptionProfile は custom provider へ
+// subscription_profile_id を指定したリクエストが、shell と同じ理由で（ただし別の
+// 文言で）早期に 400 になることを確認する（plan_custom-provider-spawn-execution.md
+// 決定事項2）。
+func TestHandleSpawnRejectsCustomProviderSubscriptionProfile(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	s.cfg.CustomProviders = config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli --agent"},
+	}
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider":                "my-cli",
+		"cwd":                     s.hubCWD,
+		"subscription_profile_id": "main",
+	}))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code = %d, want 400: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "custom providers do not use subscription profiles") {
+		t.Fatalf("body = %s, want the custom-provider-specific subscription rejection message", w.Body.String())
+	}
+}
+
+// TestResolveSpawnModel は decision 2（custom provider に built-in の model/route/env
+// 注入を一切行わない）の実装単位を、実プロセスを起動せず直接固定する。
+func TestResolveSpawnModel(t *testing.T) {
+	if got := resolveSpawnModel("claude-opus", false); got != "claude-opus" {
+		t.Fatalf("resolveSpawnModel(model, false) = %q, want the model preserved", got)
+	}
+	if got := resolveSpawnModel("  claude-opus  ", false); got != "claude-opus" {
+		t.Fatalf("resolveSpawnModel(model, false) = %q, want trimmed", got)
+	}
+	if got := resolveSpawnModel("some-model", true); got != "" {
+		t.Fatalf("resolveSpawnModel(model, true) = %q, want empty for a custom provider", got)
+	}
+	if got := resolveSpawnModel("", true); got != "" {
+		t.Fatalf("resolveSpawnModel(\"\", true) = %q, want empty", got)
+	}
+}
+
+// TestValidGridAIProvider は handleSpawnGrid の ai+shell プリセットが、shell 自体は
+// 引き続き拒否しつつ built-in と custom_providers の両方を AI 側として受け付けることを
+// 確認する（plan_custom-provider-spawn-execution.md C2）。
+func TestValidGridAIProvider(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.cfg.CustomProviders = config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli --agent"},
+	}
+	for _, provider := range []string{"claude", "codex", "command-code", "my-cli"} {
+		if !s.validGridAIProvider(provider) {
+			t.Errorf("validGridAIProvider(%q) = false, want true", provider)
+		}
+	}
+	for _, provider := range []string{"shell", "some-other-cli", ""} {
+		if s.validGridAIProvider(provider) {
+			t.Errorf("validGridAIProvider(%q) = true, want false", provider)
+		}
 	}
 }

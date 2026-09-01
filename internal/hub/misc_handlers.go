@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/config"
 )
 
 const (
@@ -70,28 +71,42 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	binaryStale := s.binGuard.IsStale()
 	s.noteStaleBinary(binaryStale)
 	writeJSON(w, map[string]any{
-		"cwd":             s.hubCWD,
-		"version":         s.version,
-		"binary_sha256":   s.binGuard.StartSHA(),
-		"binary_stale":    binaryStale,
-		"web_src_hash":    s.webSrcHash,
-		"web_dist_fresh":  s.webDistFresh,
-		"active_sessions": s.activeSessionCount(),
-		"git_commit":      s.gitCommit,
-		"build_time":      s.buildTime,
-		"runtime_mode":    mode,
-		"runtime_label":   runtimeLabel(mode),
-		"ssh":             sshSession,
-		"host_ip":         hostIP,
-		"env_kind":        env.Kind,
-		"env_label":       env.Label,
-		"env_short":       env.Short,
-		"env_color":       env.Color,
-		"env_title":       env.Title,
-		"env_host_label":  env.HostLabel,
-		"userAvatar":      userAvatar,
-		"userDisplayName": userDisplayName,
+		"cwd":              s.hubCWD,
+		"custom_providers": customProviderOptions(cfg.CustomProviders),
+		"version":          s.version,
+		"binary_sha256":    s.binGuard.StartSHA(),
+		"binary_stale":     binaryStale,
+		"web_src_hash":     s.webSrcHash,
+		"web_dist_fresh":   s.webDistFresh,
+		"active_sessions":  s.activeSessionCount(),
+		"git_commit":       s.gitCommit,
+		"build_time":       s.buildTime,
+		"runtime_mode":     mode,
+		"runtime_label":    runtimeLabel(mode),
+		"ssh":              sshSession,
+		"host_ip":          hostIP,
+		"env_kind":         env.Kind,
+		"env_label":        env.Label,
+		"env_short":        env.Short,
+		"env_color":        env.Color,
+		"env_title":        env.Title,
+		"env_host_label":   env.HostLabel,
+		"userAvatar":       userAvatar,
+		"userDisplayName":  userDisplayName,
 	})
+}
+
+// customProviderOptions は config.yaml の custom_providers: を spawn ドロップダウンが
+// 使える最小の形（id + 表示ラベル）へ落とす。built-in と衝突する・壊れたエントリは
+// EffectiveCustomProviders が既に弾いている。空でも null ではなく [] を返す
+// （web/src/app/spawn-panel.ts 側で毎回配列として扱えるようにするため）。
+func customProviderOptions(raw config.CustomProviders) []map[string]string {
+	effective := config.EffectiveCustomProviders(raw)
+	out := make([]map[string]string, 0, len(effective))
+	for _, p := range effective {
+		out = append(out, map[string]string{"id": p.ID, "label": p.EffectiveLabel()})
+	}
+	return out
 }
 
 // handleNetHint は launcher（SSH tunnel モード）から接続元情報を受け取り保持する。

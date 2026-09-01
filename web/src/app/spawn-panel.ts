@@ -613,6 +613,52 @@ export function resetSpawnProviderOrder(): void {
     updateSpawnProviderIcon();
   };
 
+  // custom_providers:（config.yaml の玄人設定。Hub UI に追加・編集の導線は無い）を
+  // spawn の選択肢へ混ぜる。/api/info が返した一覧をネイティブ <select> の <option>
+  // として注入するだけで、既存の並び順記憶・アイコン解決（providerIconHtml の
+  // フォールバック）・選択ロジックはそのまま使い回す。未設定なら custom_providers
+  // が空配列で返るため、この関数は何もしない。
+  //
+  // injectedCustomProviderIds は注入した id の記憶（plan_custom-provider-spawn-execution.md
+  // C2）。custom provider には built-in の provider 別引数・env 注入を一切行わない
+  // 決定のうち、model 欄だけはこの Set を見て syncSpawnProviderFields / 送信ボディの
+  // 両方で明示的に抑止する必要がある（permission 欄は providerHasPermissionSelect が
+  // 既知 provider だけを許可するため、subscription 欄は selectableProfiles が未知 id に
+  // 対して自然に空を返すため、どちらも custom provider では追加対応なしで元々隠れる）。
+  const injectedCustomProviderIds = new Set<string>();
+  function isCustomProviderValue(p: string): boolean {
+    return injectedCustomProviderIds.has(p);
+  }
+  async function injectCustomProviderOptions(): Promise<void> {
+    if (!spawnProviderEl) return;
+    try {
+      const res = await fetch(`/api/info?token=${token}`);
+      if (!res.ok) return;
+      const info = await res.json();
+      const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];
+      if (list.length === 0) return;
+      const select = spawnProviderEl as HTMLSelectElement;
+      const existing = new Set(Array.from(select.options).map((opt) => opt.value));
+      let added = false;
+      for (const entry of list) {
+        const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
+        if (!id || existing.has(id)) continue; // built-in や重複と衝突する id は表示しない
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = typeof entry?.label === 'string' && entry.label ? entry.label : id;
+        select.appendChild(opt);
+        existing.add(id);
+        injectedCustomProviderIds.add(id);
+        added = true;
+      }
+      if (added) {
+        updateSpawnProviderIcon();
+        syncSpawnProviderFields(spawnProviderEl.value);
+      }
+    } catch (_) { /* オフライン等: 追加されないだけで既存の選択肢はそのまま動く */ }
+  }
+  void injectCustomProviderOptions();
+
   // 全項目を出し切るのに要る高さ。max-height を外した状態でしか測れないので、
   // 開いた直後に 1 回だけ測って使い回す（毎回測ると、リスト自身をスクロール中に
   // max-height を外した瞬間 scrollTop が飛ぶ）。
@@ -883,7 +929,9 @@ export function resetSpawnProviderOrder(): void {
   function syncSpawnProviderFields(p: string): void {
     const isShell = (p === 'shell');
     const modelRow = document.querySelector<HTMLElement>('.spawn-model-row');
-    if (modelRow) modelRow.hidden = isShell;
+    // custom provider には built-in の model 引数を一切渡さない決定
+    // （plan_custom-provider-spawn-execution.md 決定事項2）。欄ごと隠す。
+    if (modelRow) modelRow.hidden = isShell || isCustomProviderValue(p);
     const claudeOpts = document.getElementById('spawn-claude-opts');
     if (claudeOpts) claudeOpts.hidden = (p !== 'claude');
     const codexOpts = document.getElementById('spawn-codex-opts');
@@ -2359,16 +2407,18 @@ export function resetSpawnProviderOrder(): void {
         } catch (_) {}
       }
 
-      // Shell は model / route / permission 系フィールドを送らない
+      // Shell と custom provider は model / route / permission 系フィールドを送らない
+      // （custom は plan_custom-provider-spawn-execution.md 決定事項2）。
+      const skipsAIFields = provider === 'shell' || isCustomProviderValue(provider);
       const bodyObj: any = { provider, cwd, label };
-      if (provider !== 'shell') bodyObj.model = model;
+      if (!skipsAIFields) bodyObj.model = model;
       if (utf8Session) bodyObj.utf8_session = true;
       // チェック時のみ送る。未チェックでは省略し、config の user_prefs.spawn.worktree_auto
       // を Hub 側の既定として温存する（設定ファイルで常時 ON にしている利用者を壊さない）。
       if (spawnIsolateWorktree?.checked) bodyObj.isolate_worktree = true;
       // 同上。未チェックでは省略し、config の user_prefs.spawn.delegation_auto を温存する。
       if (spawnDelegation?.checked) bodyObj.delegation = true;
-      if (provider !== 'shell' && route) bodyObj.route = route;
+      if (!skipsAIFields && route) bodyObj.route = route;
       // 「Default CLI login」を選んだときはキーごと送らない（従来リクエストと同一）。
       const subscriptionID = selectedSubscriptionID();
       if (subscriptionID) bodyObj.subscription_profile_id = subscriptionID;
