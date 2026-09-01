@@ -824,6 +824,16 @@ type Config struct {
 		TrustedNetworks            []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
 		AllowedHosts               []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
 		EnvKind                    string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
+		// ForceColor: 既定 true。Hub のペインは xterm.js なので色を出せる。TERM /
+		// COLORTERM を上書きするのと同じ理由で、子 CLI へ FORCE_COLOR / CLICOLOR_FORCE
+		// を渡し、Hub の起動環境から継承した NO_COLOR は落とす（AI エージェントの
+		// ハーネス配下などで意図せず色が消えるのを防ぐ）。
+		//
+		// **false にすると継承した NO_COLOR をそのまま子へ渡し、FORCE_COLOR /
+		// CLICOLOR_FORCE も付けない。** NO_COLOR は端末の能力ではなく利用者の意思表示
+		// なので、色を出したくない人が 1 行で降りられる逃げ道を必ず残す
+		// （docs/local/pending_wrap-inherits-no-color-from-hub-env.md の決定）。
+		ForceColor bool `yaml:"force_color"`
 	} `yaml:"hub"`
 	Log LogConfig `yaml:"log"`
 	// Input はブラウザ入力欄から PTY へ送る際の調整値。
@@ -1006,6 +1016,7 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
 	cfg.Hub.StaleBinaryAutoRestart = true
+	cfg.Hub.ForceColor = true
 	// When invoked via the many-ai-cli-launcher.exe Windows launcher's WSL
 	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the
