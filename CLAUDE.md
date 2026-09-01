@@ -73,7 +73,7 @@ docs/local/               設計書・plan 等（非公開）
 | 承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_marker_transcript.go` | `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
 | 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
 | auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
-| 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 |
+| 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 / `scripts/check-approval-rules-residue.mjs`（commit 混入） |
 | 調査用の観測コードは同じコミットで `instrumentation.json` へ登録する | `scripts/check-instrumentation.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | 版数を手で直す場所は無い（タグが単一ソース。古いままが正常） | `scripts/check-version-sources.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |

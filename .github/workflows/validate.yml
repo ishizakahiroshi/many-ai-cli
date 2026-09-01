@@ -103,6 +103,14 @@ jobs:
       - name: Check CLAUDE.md stays an index
         run: node scripts/check-claude-md.mjs
 
+      # codex / copilot / cursor-agent / opencode を wrap すると、wrapper が
+      # AGENTS.md の末尾へ承認ルールのブロックを追記する。many-ai-cli 自身を開発しながら
+      # 子セッションを起こすと、それがこのリポジトリの追跡ファイルへ書かれる
+      # （2026-09-01 に 132 行が入った）。doctor は「次回起動時」に気づくが、
+      # git status に紛れて commit へ混ざる穴は別に残る。pre-commit と CI の両方で止める。
+      - name: Check approval-rules residue
+        run: node scripts/check-approval-rules-residue.mjs --all-tracked
+
   # リリースで使う PAT に必要なスコープが揃っているかを、タグを打つ前に確かめる。
   #
   # 2026-08-11 v0.6.0 で、PUBLISH_GITHUB_TOKEN に workflow スコープが無いまま
