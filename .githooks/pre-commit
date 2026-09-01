@@ -2,4 +2,8 @@
 # secrets-scan layer 2 (per-commit) — non-pnpm path via core.hooksPath = .githooks
 # 設計詳細: docs/local/secrets-scan-design/ (gitignored)
 # Activate with: bash scripts/install-hooks.sh  or  pwsh scripts/install-hooks.ps1
-node scripts/secrets-scan.mjs --staged --block
+node scripts/secrets-scan.mjs --staged --block || exit 1
+
+# 子セッションを起こすと wrapper が AGENTS.md へ承認ルールを追記する。
+# doctor は「次回起動時」に気づくが、commit への混入は別の穴なのでここで止める。
+node scripts/check-approval-rules-residue.mjs
