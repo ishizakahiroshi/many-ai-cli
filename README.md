@@ -175,7 +175,7 @@ custom_providers:
   - id: my-cli              # spawn value: lowercase letters/digits/./_/- only; must not match a built-in provider id or the reserved id "shell"
     label: My CLI            # optional; shown in the spawn dropdown in place of id
     command: my-cli --agent  # command line many-ai-cli runs for this provider — see "How command is parsed" below
-    approval_pattern_source: ~/my-cli-approval-patterns.md  # reserved for future use — not read yet, see below
+    approval_pattern_source: <absolute path under your .many-ai-cli config dir>/my-cli-approval-patterns.md  # optional — see "Approval detection" below for the exact rule (no "~" expansion)
 ```
 
 Leave `custom_providers:` out entirely — the default — and nothing about `many-ai-cli` changes.
@@ -191,7 +191,7 @@ Leave `custom_providers:` out entirely — the default — and nothing about `ma
 
 **Nothing built-in gets attached to a custom provider.** No `--model`, permission-mode/sandbox/ask-for-approval flags, `ANTHROPIC_*` / `OPENAI_*` environment presets, Ollama/LM Studio routing, or subscription profile selection — none of that has a defined meaning for an arbitrary CLI, so the spawn form hides the model field for a custom provider and the Hub never adds any of it. Only `command`'s own arguments and the common `MANY_AI_CLI*` session environment reach the process.
 
-**Approval detection still works for a custom provider, through the same generic text heuristic every provider's terminal output is scanned with** — it looks for approval-shaped wording and option labels (Yes/No/Allow/Deny and similar) rather than a per-provider pattern file. `approval_pattern_source` is reserved in the schema for a future per-provider pattern source but is not read yet; `many-ai-cli doctor` flags any entry that sets it so you know it has no effect for now. The **hook** that writes an approval-rules block into `CLAUDE.md` / `AGENTS.md` is built-in only and is never applied to a custom provider.
+**Approval detection works for a custom provider two ways.** A generic text heuristic — approval-shaped wording and option labels (Yes/No/Allow/Deny and similar) — runs for every custom session automatically, the same as it does server-side for the built-in ones. On top of that, `approval_pattern_source` lets you add your CLI's own trigger phrases: point it at a markdown file with one backtick-quoted phrase per bullet (the same format the built-in `resources/approval-patterns/*.md` files use), and the Hub fetches or reads it once at startup into `~/.many-ai-cli/approval-patterns/<id>.json`, which the browser then loads the same way it already loads the 7 built-in providers' pattern files. The source itself is constrained the same way the built-in pattern-source override is: either an absolute local path under `~/.many-ai-cli/` (no `~` expansion — write the real path) or an `https://raw.githubusercontent.com/...` URL; anything else is rejected. `many-ai-cli doctor` reports whether a configured source has actually synced yet — restart the Hub if it hasn't, and check `hub.log` if it stays missing. The **hook** that writes an approval-rules block into `CLAUDE.md` / `AGENTS.md` is built-in only and is never applied to a custom provider.
 
 If `command`'s executable is not on PATH, the session ends the same way a missing built-in CLI would (`... not found in PATH`); `many-ai-cli doctor` checks PATH for every configured custom provider without ever running it.
 

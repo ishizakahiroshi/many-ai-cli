@@ -1946,6 +1946,12 @@ func safeToken(value string) string {
 // Claude で作業している人が「レビューさせて」と言っただけで、黙って別契約の codex が
 // 動き出す。親と同じなら少なくとも意外性が無い。役割ごとの記憶があれば、1 度だけ
 // 承認ダイアログで直せば以後その役割はその provider になる（毎回聞かなくてよい）。
+//
+// custom provider の親（`plan_custom-provider-extension-triage.md` C1）は
+// `validOrchestrationProvider` が常に偽になるため、上記の「親と同じ」を素通りして
+// ステップ4（ハードコード `codex`）へ落ちる。既定の `spawn_confirm_mode` では起動前に
+// 確認ダイアログを挟むため完全に無言ではないが、ダイアログ自体は選定理由までは示さず、
+// `spawn_confirm_mode: off` の環境では本当に無言になる。せめてログには残す。
 func (s *Server) resolveChildProviderFallback(parent *session, role string) string {
 	s.cfgMu.Lock()
 	remembered := s.cfg.UserPrefs.Spawn.RoleProvider[role]
@@ -1956,7 +1962,13 @@ func (s *Server) resolveChildProviderFallback(parent *session, role string) stri
 	if parent != nil && validOrchestrationProvider(parent.Provider) {
 		return parent.Provider
 	}
-	// 親が shell / 不明のときの最後の受け皿。従来の既定と同じ値にしておく。
+	// 親が shell / custom provider / 不明のときの最後の受け皿。従来の既定と同じ値にしておく。
+	parentProvider := ""
+	if parent != nil {
+		parentProvider = parent.Provider
+	}
+	s.logger.Info("orchestration child provider fallback used hardcoded default",
+		"role", role, "parent_provider", parentProvider, "fallback_provider", "codex")
 	return "codex"
 }
 

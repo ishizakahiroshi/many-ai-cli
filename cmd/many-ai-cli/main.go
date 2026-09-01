@@ -386,6 +386,13 @@ func run(args []string) error {
 	case "-h", "--help", "help":
 		return usage()
 	default:
+		// custom_providers: の id は built-in のような専用 case を持てない（起動時の
+		// config 次第で変わる）ので、既知の verb に一致しなかったときだけ config を
+		// 照合する。built-in と同じ「id を直接叩けば起動する」体験を揃える
+		// （plan_custom-provider-extension-triage.md C4）。`wrap <id>` は従来どおり動く。
+		if cfg.IsCustomProviderID(cmd) {
+			return wrapper.Run(cfg, logger, cmd, args[1:])
+		}
 		return fmt.Errorf("unknown command: %s", cmd)
 	}
 }

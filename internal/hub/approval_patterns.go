@@ -337,7 +337,7 @@ func (s *Server) handleApprovalPatternAsset(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/approval-patterns/")
-	if !validApprovalPatternAssetName(name) {
+	if !validApprovalPatternAssetName(name) && !s.validCustomApprovalPatternAssetName(name) {
 		writeJSONError(w, http.StatusNotFound, "not_found", "not found")
 		return
 	}

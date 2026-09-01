@@ -222,7 +222,9 @@ type Message struct {
 	Filename  string `json:"filename,omitempty"` // 元ファイル名（拡張子の決定に使用）
 
 	// approval_patterns_updated: Hub → UI。リモート fetch で公式パターンに差分があった
-	// 場合に通知する。Providers には差分があった provider 名のみが入る。
+	// 場合、または custom_providers: の approval_pattern_source が新規に同期できた
+	// 場合に通知する（後者は internal/hub/approval_patterns_custom.go）。Providers には
+	// 差分があった provider 名／custom provider id のみが入る。
 	Providers []string `json:"providers,omitempty"`
 
 	// UIActiveSessionID: UI register 時に UI 側が現在表示中のセッション ID を伝える。

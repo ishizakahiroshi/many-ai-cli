@@ -282,6 +282,37 @@ export function isShellProvider(provider: string): boolean {
   return provider === 'shell';
 }
 
+// custom_providers:（config.yaml の玄人設定）の id 集合。built-in 7種の固定リストに
+// 頼れない判定（relay 開始ボタン等）はこちらも合わせて見る
+// （plan_custom-provider-extension-triage.md C2）。/api/info の custom_providers を
+// 起動時に1回 fetch してキャッシュするだけで、spawn-panel.ts の同種 fetch とは独立。
+export const knownCustomProviderIds = new Set<string>();
+
+// loadApprovalPatterns（下）がどの custom provider id の承認パターンを fetch すれば
+// いいかを知るため、先にこちらの完了を待ってから走る。
+const knownCustomProviderIdsReady = (async function loadKnownCustomProviderIds() {
+  try {
+    const res = await fetch(`api/info?token=${encodeURIComponent(token || '')}`);
+    if (!res.ok) return;
+    const info = await res.json();
+    const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];
+    for (const entry of list) {
+      const id = entry && typeof entry.id === 'string' ? entry.id : '';
+      if (id) knownCustomProviderIds.add(id);
+    }
+  } catch (e) {
+    console.warn('custom_providers load failed', e);
+  }
+})();
+
+// Go 側の sessionApprovalDetectionEligible に対応する TS 版。isAIProvider（built-in
+// 限定）か、custom_providers に定義された id かのどちらかを受理する。relay 開始ボタン
+// のような「AI セッションか」判定は本来これを使うべきで、isAIProvider 単独は built-in
+// 限定の判定が要る箇所（フック注入相当の判定等）専用として残す。
+export function isAIOrCustomProvider(provider: string): boolean {
+  return isAIProvider(provider) || knownCustomProviderIds.has(provider);
+}
+
 // \x15(Ctrl+U) を行クリアとして解釈しない provider。送ると逆に悪さをする:
 // - shell: PowerShell 等で行クリアにならずリテラル ^U が混入してコマンドを壊す（2026-06-13 e168426 で確認）
 // - codex: Rust TUI が \x15 を行クリアとして解釈せず、続く \r がコマンド実行に至らない
@@ -298,7 +329,10 @@ export function shouldSkipClearPrefix(provider: string): boolean {
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
-export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], grok: [], 'command-code': [], common: [] };
+// custom_providers: の id もキーに持てるよう Record にしている
+// （plan_custom-provider-extension-triage.md C5。built-in 分は起動時に必ず埋まるが、
+// custom 分は approval_pattern_source を設定した id だけ埋まる）。
+export const providerApprovalTriggers: Record<string, string[]> = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], grok: [], 'command-code': [], common: [] };
 
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
@@ -311,10 +345,10 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
       return [];
     }
   };
+  const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
   const [claude, codex, copilot, cursorAgent, opencode, grok, commandCode, common] = await Promise.all([
     fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('opencode'), fetchJson('grok'), fetchJson('command-code'), fetchJson('common'),
   ]);
-  const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
   providerApprovalTriggers.claude = norm(claude);
   providerApprovalTriggers.codex  = norm(codex);
   providerApprovalTriggers.copilot = norm(copilot);
@@ -323,6 +357,13 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
   providerApprovalTriggers.grok = norm(grok);
   providerApprovalTriggers['command-code'] = norm(commandCode);
   providerApprovalTriggers.common = norm(common);
+
+  // custom provider は approval_pattern_source を設定した id だけサーバー側に
+  // ファイルができる。未設定の id は 404 → fetchJson が [] を返すだけで無害。
+  await knownCustomProviderIdsReady;
+  await Promise.all(Array.from(knownCustomProviderIds).map(async (id) => {
+    providerApprovalTriggers[id] = norm(await fetchJson(id));
+  }));
 })();
 
 export function matchProviderApprovalTrigger(provider, line) {
@@ -471,8 +512,9 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
   const t = terminals.get(id);
   if (!t) return;
   const provider = sessions.get(id)?.provider;
-  // Shell session は approval parser の対象外
-  if (!isAIProvider(provider || '')) return;
+  // Shell session は approval parser の対象外。custom provider は対象（Go 側の
+  // sessionApprovalDetectionEligible と対応。plan_custom-provider-extension-triage.md C5）
+  if (!isAIOrCustomProvider(provider || '')) return;
   const text = decodedText !== undefined ? decodedText : (t.textDecoder || utf8Decoder).decode(bytes, { stream: true });
   t.pendingTextTail = (t.pendingTextTail + text).slice(-APPROVAL_PENDING_TEXT_TAIL_LIMIT);
 
@@ -1022,9 +1064,10 @@ export function detectApproval(id) {
   // 早期 return しても検出機会は失われない。
   if (id !== activeSessionId) return;
   if (isApprovalReplayPending(id)) return;
-  // Shell session は approval parser の対象外
+  // Shell session は approval parser の対象外。custom provider は対象（Go 側の
+  // sessionApprovalDetectionEligible と対応。plan_custom-provider-extension-triage.md C5）
   const provider = sessions.get(id)?.provider;
-  if (!isAIProvider(provider || '')) return;
+  if (!isAIOrCustomProvider(provider || '')) return;
 
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);

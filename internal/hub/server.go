@@ -1447,6 +1447,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
+	s.safeGo("custom_approval_patterns_sync", func() { s.syncCustomApprovalPatterns(runCtx) })
 	shutdownDone := make(chan struct{})
 	s.safeGo("shutdown_wait", func() {
 		defer func() {

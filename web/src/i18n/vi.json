@@ -832,6 +832,7 @@
   "slash_picker_error": "Lấy thất bại",
   "slash_picker_not_configured": "Chưa cấu hình URL nguồn (đặt trong Cài đặt)",
   "slash_picker_empty": "Không tìm thấy lệnh",
+  "slash_commands_unsupported_provider": "Nhà cung cấp này không hỗ trợ danh sách lệnh gạch chéo",
   "slash_picker_just_now": "vừa xong",
   "slash_picker_ago_min": "{n} phút trước",
   "slash_picker_ago_hour": "{n} giờ trước",

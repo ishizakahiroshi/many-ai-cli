@@ -11,6 +11,8 @@ package doctor
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"many-ai-cli/internal/config"
@@ -67,35 +69,51 @@ func customProviderPath(effective config.CustomProviders) Check {
 }
 
 // customProviderApprovalPatternNotice fires only when at least one entry sets
-// approval_pattern_source, since that field is not wired to anything yet
-// (plan_custom-provider-spawn-execution.md decision 4 — deferred to a later
-// plan). internal/hub/approval_patterns.go's fetched per-provider pattern
-// files DO reach a live detector — but only the browser-side one
-// (web/src/app/approval.ts's providerApprovalTriggers / hasNativePromptHint),
-// and only for the 7 built-in provider ids that array is keyed to; a custom
-// provider's id is never a key there, so approval_pattern_source has nothing
-// to plug into on that path either way. Custom sessions still get approval
-// *detection* through a different route: internal/hub/approval_detector.go's
-// Go-side heuristic (nativeApprovalTriggerTokens + nativeApprovalLooksValid)
-// is generic text matching, not keyed to a provider allowlist, so it already
-// runs for any approvalDetectionEligible session. This notice just keeps the
-// approval_pattern_source gap visible to whoever wrote the field expecting
-// it to already do something.
+// approval_pattern_source. internal/hub の syncCustomApprovalPatterns
+// （Hub 起動時に非同期で実行）が source を fetch/読み込みして
+// ~/.many-ai-cli/approval-patterns/<id>.json へ書き出し、ブラウザ側の
+// providerApprovalTriggers がそれを消費する（plan_custom-provider-extension-triage.md
+// C5）。doctor は「local, non-mutating diagnostics」の建前どおりここでは fetch を
+// 一切行わず、このファイルが既に存在するかどうかだけを見る——存在すれば前回の
+// Hub 起動で同期済み、無ければ「まだ Hub を経由して同期していない」か「source が
+// 読めず失敗した」のどちらかで、後者は hub.log を見ないとここからは判別できない。
 func customProviderApprovalPatternNotice(effective config.CustomProviders) (Check, bool) {
-	var ids []string
+	var withSource []config.CustomProvider
 	for _, p := range effective {
 		if strings.TrimSpace(p.ApprovalPatternSource) != "" {
-			ids = append(ids, p.ID)
+			withSource = append(withSource, p)
 		}
 	}
-	if len(ids) == 0 {
+	if len(withSource) == 0 {
 		return Check{}, false
+	}
+	var missing []string
+	for _, p := range withSource {
+		if !customApprovalPatternMirrorExists(p.ID) {
+			missing = append(missing, p.ID)
+		}
+	}
+	if len(missing) == 0 {
+		return Check{
+			"custom provider approval pattern", OK,
+			fmt.Sprintf("approval_pattern_source を設定している custom_providers は全て同期済みです（%d 件）", len(withSource)),
+			"",
+		}, true
 	}
 	return Check{
 		"custom provider approval pattern", Warn,
 		fmt.Sprintf(
-			"approval_pattern_source を設定している custom_providers（%s）がありますが、現状この値は未使用です。承認検出はプロバイダ別の設定ファイルではなく、汎用の文言ヒューリスティックで行われます",
-			strings.Join(ids, ", ")),
+			"approval_pattern_source を設定しているのに未同期の custom_providers があります（%s）。Hub を起動（または再起動）すると同期を試みます。それでも消えない場合は source（絶対パスなら ~/.many-ai-cli 配下、URL なら https://raw.githubusercontent.com のみ許可）を確認し、hub.log を見てください",
+			strings.Join(missing, ", ")),
 		"",
 	}, true
+}
+
+func customApprovalPatternMirrorExists(id string) bool {
+	dir, err := config.Dir()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(filepath.Join(dir, "approval-patterns", id+".json"))
+	return err == nil
 }
