@@ -582,10 +582,18 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
         updateHistoryHint(id);
       });
     }
-    const viewport = t.term.element?.querySelector('.xterm-viewport');
-    if (viewport && !t.viewportScrollIntentInstalled) {
+    // xterm 6.0 で .xterm-viewport は画面上に見えている描画レイヤー
+    // （.xterm-scrollable-element とその子孫 = 本文の canvas・新スクロールバーの
+    // スライダー）の兄弟要素になり、視覚的には重なっていてもクリックはそちら側の
+    // 要素が受け取る。.xterm-viewport への pointerdown はイベントバブリングの経路上
+    // 一切通らないため無効なコードになっていた（本文クリックとスクロールバーの
+    // スライダードラッグの両方を実機の document.elementFromPoint() で検証済み。
+    // pending_xterm6-viewport-scrolltop-deadcode.md 参照）。.xterm コンテナ自体は
+    // 両方の祖先になるため、ここへ付け替えて拾う。
+    const termEl = t.term.element as HTMLElement | null;
+    if (termEl && !t.viewportScrollIntentInstalled) {
       t.viewportScrollIntentInstalled = true;
-      viewport.addEventListener('pointerdown', () => {
+      termEl.addEventListener('pointerdown', () => {
         markTerminalManualScrollIntent();
       });
     }
