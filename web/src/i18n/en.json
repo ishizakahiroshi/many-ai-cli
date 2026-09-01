@@ -832,6 +832,7 @@
   "slash_picker_error": "Fetch failed",
   "slash_picker_not_configured": "Source URL not configured (set it in Settings)",
   "slash_picker_empty": "No commands found",
+  "slash_commands_unsupported_provider": "Slash commands aren't available for this provider",
   "slash_picker_just_now": "just now",
   "slash_picker_ago_min": "{n}m ago",
   "slash_picker_ago_hour": "{n}h ago",

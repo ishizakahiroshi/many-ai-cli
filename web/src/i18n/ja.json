@@ -832,6 +832,7 @@
   "slash_picker_error": "取得に失敗しました",
   "slash_picker_not_configured": "ソース URL が未設定です（設定パネルで登録してください）",
   "slash_picker_empty": "コマンドが見つかりません",
+  "slash_commands_unsupported_provider": "このプロバイダはスラッシュコマンド一覧に対応していません",
   "slash_picker_just_now": "たった今",
   "slash_picker_ago_min": "{n}分前",
   "slash_picker_ago_hour": "{n}時間前",

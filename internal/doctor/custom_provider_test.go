@@ -3,6 +3,8 @@ package doctor
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -131,6 +133,16 @@ func TestCustomProviderApprovalPatternNoticeOnlyWhenSet(t *testing.T) {
 	}); ok {
 		t.Fatal("customProviderApprovalPatternNotice returned a check when no entry sets approval_pattern_source")
 	}
+}
+
+// TestCustomProviderApprovalPatternNoticeWarnsWhenMirrorMissing は、
+// approval_pattern_source を設定していても ~/.many-ai-cli/approval-patterns/<id>.json
+// がまだ無い（Hub を経由して同期していない・fetch が失敗した等）状態を Warn で
+// 拾うことを固定する（plan_custom-provider-extension-triage.md C5）。
+func TestCustomProviderApprovalPatternNoticeWarnsWhenMirrorMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	check, ok := customProviderApprovalPatternNotice(config.CustomProviders{
 		{ID: "my-cli", Command: "my-cli", ApprovalPatternSource: "~/patterns.md"},
@@ -138,7 +150,34 @@ func TestCustomProviderApprovalPatternNoticeOnlyWhenSet(t *testing.T) {
 	if !ok {
 		t.Fatal("customProviderApprovalPatternNotice returned no check when an entry sets approval_pattern_source")
 	}
-	if check.Level != Warn || !strings.Contains(check.Message, "my-cli") || !strings.Contains(check.Message, "未使用") {
-		t.Fatalf("check = %+v, want a Warn naming my-cli and stating it is unused", check)
+	if check.Level != Warn || !strings.Contains(check.Message, "my-cli") {
+		t.Fatalf("check = %+v, want a Warn naming my-cli", check)
+	}
+}
+
+// TestCustomProviderApprovalPatternNoticeOKWhenMirrorSynced は、Hub の
+// syncCustomApprovalPatterns が既にミラーファイルを書き出し済みのケースで
+// OK になることを固定する（同期済みなのに毎回 Warn を出し続けない）。
+func TestCustomProviderApprovalPatternNoticeOKWhenMirrorSynced(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	dir := filepath.Join(home, ".many-ai-cli", "approval-patterns")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "my-cli.json"), []byte(`["ok?"]`), 0o600); err != nil {
+		t.Fatalf("write mirror fixture failed: %v", err)
+	}
+
+	check, ok := customProviderApprovalPatternNotice(config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli", ApprovalPatternSource: "~/patterns.md"},
+	})
+	if !ok {
+		t.Fatal("customProviderApprovalPatternNotice returned no check when an entry sets approval_pattern_source")
+	}
+	if check.Level != OK {
+		t.Fatalf("check = %+v, want OK once the mirror file exists", check)
 	}
 }

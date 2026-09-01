@@ -60,6 +60,14 @@ func TestResolveChildProviderFallbackPrefersMemoryThenParent(t *testing.T) {
 	if got := s.resolveChildProviderFallback(nil, "review"); got != "codex" {
 		t.Fatalf("親が nil のときの受け皿が違う: got %q", got)
 	}
+
+	// 親が custom provider のときも同じ受け皿へ（plan_custom-provider-extension-triage.md C1）。
+	// customProviderSession 側の分岐ではなく validOrchestrationProvider が built-in
+	// 固定リストのため常に偽になる経路で codex へ落ちることを固定する。
+	s.cfg.UserPrefs.Spawn.RoleProvider = nil
+	if got := s.resolveChildProviderFallback(&session{Provider: "my-cli", customProviderSession: true}, "review"); got != "codex" {
+		t.Fatalf("親が custom provider のときの受け皿が違う: got %q", got)
+	}
 }
 
 // サブスクリプションは provider に紐づく。同じ provider なら親から引き継ぎ、

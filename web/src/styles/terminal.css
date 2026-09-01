@@ -757,6 +757,8 @@
 .slash-item.selected { background: var(--accent-soft); }
 .slash-item .slash-cmd { color: var(--accent); font-family: Consolas, monospace; font-size: 13px; min-width: 120px; }
 .slash-item .slash-desc { color: var(--muted-2); font-size: 12px; }
+.slash-item.slash-unsupported-notice { cursor: default; color: var(--muted-2); font-size: 12px; }
+.slash-item.slash-unsupported-notice:hover { background: none; }
 
 /* 入力バー */
 #input-bar {

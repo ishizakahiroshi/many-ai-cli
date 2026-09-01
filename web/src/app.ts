@@ -16,7 +16,7 @@ import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js
 import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -753,13 +753,31 @@ export let slashIndex = -1;
 export function updateSlashMenu() {
   const val = inputEl.value;
   if (!val.startsWith('/') && !val.startsWith('$')) { hideSlashMenu(); return; }
-  ensureSlashCommands(activeProvider(), activeSessionId); // 非同期: 取得完了時に自動で再描画
+  const provider = activeProvider();
+  ensureSlashCommands(provider, activeSessionId); // 非同期: 取得完了時に自動で再描画
   const filtered = getSlashCommands().filter(c => c.cmd.startsWith(val));
-  if (filtered.length === 0) { hideSlashMenu(); return; }
+  if (filtered.length === 0) {
+    // custom provider（built-in 7種以外）はスラッシュコマンド一覧そのものが無いので、
+    // fetch 完了待ちの「空」と区別できるよう1行出す（plan_custom-provider-extension-triage.md C3）。
+    if (!isAIProvider(provider)) { renderSlashUnsupportedNotice(); return; }
+    hideSlashMenu();
+    return;
+  }
   slashItems = filtered;
   if (slashIndex >= slashItems.length) slashIndex = 0;
   if (slashIndex < 0) slashIndex = 0;
   renderSlashMenu();
+}
+
+function renderSlashUnsupportedNotice() {
+  slashItems = [];
+  slashIndex = -1;
+  slashMenuEl.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'slash-item slash-unsupported-notice';
+  div.textContent = t('slash_commands_unsupported_provider');
+  slashMenuEl.appendChild(div);
+  slashMenuEl.hidden = false;
 }
 
 export function renderSlashMenu() {

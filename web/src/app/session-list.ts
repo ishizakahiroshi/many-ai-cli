@@ -10,7 +10,7 @@ import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickT
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { detectApproval, isAIProvider, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
+import { detectApproval, isAIOrCustomProvider, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
 import { getSessionAgentInfo, getSessionCtxPct, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
@@ -1074,7 +1074,7 @@ export function renderSessionList() {
 
       // AI セッション（子ではない）から relay を開始する入口。conductor の進行中 relay
       // の有無にかかわらず、追加の relay を開けるようにする。
-      if (!s.parent_session_id && isAIProvider(String(s.provider || ''))) {
+      if (!s.parent_session_id && isAIOrCustomProvider(String(s.provider || ''))) {
         const relayBtn = document.createElement('button');
         relayBtn.className = 'session-relay-open-btn';
         relayBtn.textContent = '🔁';
