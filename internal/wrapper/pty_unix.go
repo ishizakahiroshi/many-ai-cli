@@ -87,7 +87,14 @@ func startProcess(provider string, customArgv []string, args []string, cwd strin
 	cmdName, cmdArgs := resolveCmd(provider, customArgv, args)
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1")
+	// Hub のペインは xterm.js なので色を出せる。TERM / COLORTERM を上書きするのと同じ
+	// 理由で FORCE_COLOR / CLICOLOR_FORCE も立てる。Hub を NO_COLOR=1 や
+	// FORCE_COLOR=0 の環境（AI エージェントのハーネス配下など）から起こすと、TERM を
+	// 上書きしても子 CLI が色を落とすため（実測: Linux の claude セッションは SGR 0 個、
+	// 同日の Windows は色指定 15132 個）。os/exec は同じキーの最後の値を採用するので、
+	// 継承した値はここで上書きされる。FORCE_COLOR=3 は 24bit、CLICOLOR_FORCE は
+	// Rust 系 CLI 向け。
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "FORCE_COLOR=3", "CLICOLOR_FORCE=1", "MANY_AI_CLI=1")
 	cmd.Env = append(cmd.Env, extraEnv...)
 	var (
 		f   *os.File
