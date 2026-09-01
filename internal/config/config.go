@@ -806,6 +806,30 @@ func (o OrchestrationConfig) WorktreeEnabled() bool {
 	return o.WorktreeAuto == nil || *o.WorktreeAuto
 }
 
+// 端末の色方針（Hub.TerminalColor）。
+const (
+	// TerminalColorForce: 既定。Hub のペインは xterm.js なので色を出せる。
+	// 子 CLI へ FORCE_COLOR / CLICOLOR_FORCE を渡し、継承した NO_COLOR は落とす。
+	TerminalColorForce = "force"
+	// TerminalColorInherit: 起動元の環境をそのまま渡す。色が出るかは環境と CLI 次第。
+	TerminalColorInherit = "inherit"
+	// TerminalColorOff: 色を出さない。子 CLI へ NO_COLOR を渡し、色の強制指定は外す。
+	TerminalColorOff = "off"
+)
+
+// NormalizeTerminalColor は未知の値・空を既定（force）へ丸める。
+// 利用者が config.yaml へ打ち間違えても起動を止めない。
+func NormalizeTerminalColor(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case TerminalColorInherit:
+		return TerminalColorInherit
+	case TerminalColorOff:
+		return TerminalColorOff
+	default:
+		return TerminalColorForce
+	}
+}
+
 type Config struct {
 	Hub struct {
 		Port         int  `yaml:"port"`
@@ -824,16 +848,11 @@ type Config struct {
 		TrustedNetworks            []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
 		AllowedHosts               []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
 		EnvKind                    string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
-		// ForceColor: 既定 true。Hub のペインは xterm.js なので色を出せる。TERM /
-		// COLORTERM を上書きするのと同じ理由で、子 CLI へ FORCE_COLOR / CLICOLOR_FORCE
-		// を渡し、Hub の起動環境から継承した NO_COLOR は落とす（AI エージェントの
-		// ハーネス配下などで意図せず色が消えるのを防ぐ）。
-		//
-		// **false にすると継承した NO_COLOR をそのまま子へ渡し、FORCE_COLOR /
-		// CLICOLOR_FORCE も付けない。** NO_COLOR は端末の能力ではなく利用者の意思表示
-		// なので、色を出したくない人が 1 行で降りられる逃げ道を必ず残す
-		// （docs/local/pending_wrap-inherits-no-color-from-hub-env.md の決定）。
-		ForceColor bool `yaml:"force_color"`
+		// TerminalColor は wrap した子 CLI へ色を出させるかの方針。
+		// TerminalColorForce（既定）/ TerminalColorInherit / TerminalColorOff。
+		// 意味と、なぜ真偽値ではなく 3 択なのかは internal/wrapper/env_color.go 参照。
+		// Hub UI の設定画面からも変更できる（config.yaml を手で編集させない）。
+		TerminalColor string `yaml:"terminal_color"`
 	} `yaml:"hub"`
 	Log LogConfig `yaml:"log"`
 	// Input はブラウザ入力欄から PTY へ送る際の調整値。
@@ -977,6 +996,7 @@ func LoadOrCreate() (*Config, error) {
 	if cfg.UserPrefs.Spawn.LastModel == nil {
 		cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
+	cfg.Hub.TerminalColor = NormalizeTerminalColor(cfg.Hub.TerminalColor)
 	cfg.SlashCmdSources = EffectiveSlashCmdSources(cfg.SlashCmdSources)
 	cfg.ApprovalPatternSources = EffectiveApprovalPatternSources(cfg.ApprovalPatternSources)
 	cfg.ApprovalProfiles = EffectiveApprovalProfiles(cfg.ApprovalProfiles)
@@ -1016,7 +1036,7 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
 	cfg.Hub.StaleBinaryAutoRestart = true
-	cfg.Hub.ForceColor = true
+	cfg.Hub.TerminalColor = TerminalColorForce
 	// When invoked via the many-ai-cli-launcher.exe Windows launcher's WSL
 	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the
