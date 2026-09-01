@@ -14,6 +14,7 @@ import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
+import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
 import { altScrollPagesUp, ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
@@ -380,6 +381,7 @@ export function ensureTerminal(id) {
     screenClearSeqCarry: new Uint8Array(0),
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
+    crFilterAltScreen: false,
     cursorHideFilterCarry: new Uint8Array(0),
     inCursorHideBlock: false,
     cursorHideBlockBuf: [] as number[],
@@ -1944,36 +1946,21 @@ export function syncLiveStatusDomForActive() {
   renderLiveStatusDom(v.mode, v.text);
 }
 
-// \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに
-// 旧テキストの末尾が残ってスクロールバック上で混在して見える。
-// \r の直後に \x1b[K（EL: Erase Line from cursor to right）を挿入して残留を防ぐ。
-// \r\n の \r（正常な改行ペア）には挿入しない（不要かつ \n 前の空白消去になる）。
+// \r の直後へ \x1b[K（EL）を挿入して行末の残留を防ぐ本体は、node:test で検証できる
+// よう cr-erase-filter.ts の filterBareCarriageReturnPure に切り出した。挿入の目的・
+// alternate screen 中に挿入しない理由（Claude は alt buffer 上で「1 行描く → \r →
+// カーソル下移動」と描くため、EL を入れると描いた行を毎回消してしまう）もそちら参照。
+// 下のラッパーは terminal の state と純関数の state を橋渡しするだけ。
 export function filterBareCarriageReturnForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
-  const carry = t.crFilterCarry || new Uint8Array(0);
-  const combined = new Uint8Array(carry.length + bytes.length);
-  combined.set(carry, 0);
-  combined.set(bytes, carry.length);
-
-  const EL = asciiBytes('\x1b[K');
-  const out: number[] = [];
-  for (let i = 0; i < combined.length; i++) {
-    out.push(combined[i]);
-    if (combined[i] === 0x0D) {  // \r
-      if (i + 1 < combined.length) {
-        if (combined[i + 1] !== 0x0A) {  // 直後が \n でなければ EL を挿入
-          for (const b of EL) out.push(b);
-        }
-      } else {
-        // チャンク末尾の \r は次チャンクの先頭が \n かどうか未確定のため carry に残す
-        t.crFilterCarry = combined.slice(i);
-        return new Uint8Array(out.slice(0, out.length - 1));
-      }
-    }
-  }
-  t.crFilterCarry = new Uint8Array(0);
-  return new Uint8Array(out);
+  const { out, state } = filterBareCarriageReturnPure(bytes, {
+    carry: t.crFilterCarry || new Uint8Array(0),
+    altScreen: t.crFilterAltScreen || false,
+  });
+  t.crFilterCarry = state.carry;
+  t.crFilterAltScreen = state.altScreen;
+  return out;
 }
 
 export function writePTYChunk(id, term, bytes, onFlush) {
