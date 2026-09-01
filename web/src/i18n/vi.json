@@ -1560,7 +1560,7 @@
   "subs_status_signed_in": "Đã đăng nhập",
   "subs_status_signed_in_plan": "Đã đăng nhập · {plan}",
   "subs_session_badge_tooltip": "Gói đăng ký đang dùng",
-  "subs_consent_title": "Thêm gói đăng ký thứ hai cho nhà cung cấp này",
+  "subs_consent_title": "Thêm gói đăng ký khác cho nhà cung cấp này",
   "subs_consent_body": "Trước khi thêm, hãy xem những điều đã biết về điều khoản.<br>・Việc sở hữu nhiều tài khoản tự nó không bị Anthropic / OpenAI / xAI cấm (GitHub là ngoại lệ: mỗi người một tài khoản miễn phí).<br>・<b>Chuyển sang tài khoản khác để tiếp tục làm việc sau khi chạm giới hạn lại là chuyện khác.</b> Các nhà cung cấp đều cấm việc lách giới hạn tốc độ hoặc biện pháp bảo vệ, và việc cộng dồn hạn mức có thể bị xem là như vậy. Quyết định thuộc về họ, và việc đình chỉ không được hoàn tiền.<br>・Dùng các quyền riêng biệt đúng mục đích của chúng là cách dùng thông thường (tài khoản công ty cho công việc, tài khoản cá nhân cho dự án cá nhân).<br>・Khi chạm giới hạn, hãy ưu tiên phương án trả phí chính thức của nhà cung cấp (usage credits của Anthropic, ChatGPT credits của OpenAI).<br>・<b>many-ai-cli không bao giờ tự động đổi gói đăng ký dựa trên hạn mức còn lại.</b> Bạn tự chọn gói mỗi lần khởi tạo phiên. many-ai-cli không thể đánh giá thiết lập của bạn có tuân thủ hay không.",
   "subs_consent_readme": "Mở phần Bảo mật của README",
   "subs_consent_agree": "Tôi sẽ tự kiểm tra điều khoản hiện hành và sử dụng với rủi ro của mình",
