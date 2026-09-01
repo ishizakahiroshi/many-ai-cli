@@ -69,13 +69,16 @@ func customProviderPath(effective config.CustomProviders) Check {
 // customProviderApprovalPatternNotice fires only when at least one entry sets
 // approval_pattern_source, since that field is not wired to anything yet
 // (plan_custom-provider-spawn-execution.md decision 4 — deferred to a later
-// plan; internal/hub/approval_patterns.go's fetchable per-provider pattern
-// files feed the Settings UI only and were confirmed, by reading their only
-// caller, to never reach the live detector). Custom sessions still get
-// approval *detection*: internal/hub/approval_detector.go's heuristic
-// (nativeApprovalTriggerTokens + nativeApprovalLooksValid) is generic text
-// matching, not keyed to a provider allowlist, so it already runs for any
-// approvalDetectionEligible session. This notice just keeps the
+// plan). internal/hub/approval_patterns.go's fetched per-provider pattern
+// files DO reach a live detector — but only the browser-side one
+// (web/src/app/approval.ts's providerApprovalTriggers / hasNativePromptHint),
+// and only for the 7 built-in provider ids that array is keyed to; a custom
+// provider's id is never a key there, so approval_pattern_source has nothing
+// to plug into on that path either way. Custom sessions still get approval
+// *detection* through a different route: internal/hub/approval_detector.go's
+// Go-side heuristic (nativeApprovalTriggerTokens + nativeApprovalLooksValid)
+// is generic text matching, not keyed to a provider allowlist, so it already
+// runs for any approvalDetectionEligible session. This notice just keeps the
 // approval_pattern_source gap visible to whoever wrote the field expecting
 // it to already do something.
 func customProviderApprovalPatternNotice(effective config.CustomProviders) (Check, bool) {
