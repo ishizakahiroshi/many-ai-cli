@@ -15,9 +15,10 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
+import { encodeWheelSeq, initialMouseModeTrackerState, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
-import { altScrollPagesUp, ensureAltScrollRail, noteAltScrollPage, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altScrollNotchesUp, ensureAltScrollRail, noteAltScrollNotch, requestNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
 
@@ -382,6 +383,7 @@ export function ensureTerminal(id) {
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
     crFilterAltScreen: false,
+    mouseMode: initialMouseModeTrackerState(),
     cursorHideFilterCarry: new Uint8Array(0),
     inCursorHideBlock: false,
     cursorHideBlockBuf: [] as number[],
@@ -931,16 +933,20 @@ export function canPageAltBuffer(sessionId, t) {
 }
 
 // alt buffer 中のスクロール操作は PTY 側アプリ（Claude Code / opencode 等の TUI）に
-// PgUp/PgDn として転送する。xterm は disableStdin:true のため、mouse tracking が
-// ON でも wheel を PTY へ送らない。
+// ホイールイベントとして転送する。追跡モードを観測できないセッションでは PageUp /
+// PageDown へフォールバックする。
 // 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
 export function scrollAltBufferPage(sessionId, t, direction) {
   if (!canPageAltBuffer(sessionId, t)) return false;
-  const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
+  const mode: WheelEncoding = t.mouseMode?.tracking
+    ? (t.mouseMode.sgr ? 'sgr' : 'x10')
+    : 'page';
+  const key = encodeWheelSeq(direction, t.term.cols, t.term.rows, mode);
   try {
     probe('geo.scroll', () => ({
       sessionId,
       direction,
+      mode,
       cols: t.term.cols,
       rows: t.term.rows,
       lastSent: lastSentPtySize.get(sessionId) || '',
@@ -952,7 +958,7 @@ export function scrollAltBufferPage(sessionId, t, direction) {
   // ホイール・↑up / ↓down ボタン・疑似レールのどれで送ってもここを通る。
   // 疑似レールのスライダー位置はこの計上だけを根拠にしている（CLI 内部の
   // スクロール量は取得できないため近似）。
-  noteAltScrollPage(sessionId, direction);
+  noteAltScrollNotch(sessionId, direction);
   return true;
 }
 
@@ -966,7 +972,7 @@ export function scrollAltBufferPage(sessionId, t, direction) {
 // docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md の
 // 2026-08-23 追記。7 時間前に回答した承認ブロックが再描画されていた）。
 export function isTerminalShowingHistory(id): boolean {
-  return altScrollPagesUp(id) > 0;
+  return altScrollNotchesUp(id) > 0;
 }
 
 export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
@@ -1300,7 +1306,7 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   const t = terminals.get(activeSessionId);
   if (!t) return;
   markTerminalManualScrollIntent();
-  if (scrollAltBufferPage(activeSessionId, t, -1)) {
+  if (canPageAltBuffer(activeSessionId, t) && requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) + 12)) {
     t.autoScroll = false;
     updateScrollLockBtn(true);
     return;
@@ -1324,7 +1330,7 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t) return;
-  if (scrollAltBufferPage(activeSessionId, t, 1)) {
+  if (canPageAltBuffer(activeSessionId, t) && requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) - 12)) {
     t.autoScroll = true;
     updateScrollLockBtn(false);
     return;
@@ -1964,6 +1970,8 @@ export function filterBareCarriageReturnForDisplay(id, bytes) {
 }
 
 export function writePTYChunk(id, term, bytes, onFlush) {
+  const t = terminals.get(id);
+  if (t) t.mouseMode = scanMouseModePure(bytes, t.mouseMode || initialMouseModeTrackerState());
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
   // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
@@ -2239,4 +2247,3 @@ window.addEventListener('focus', reassertActivePtySize);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) reassertActivePtySize();
 });
-

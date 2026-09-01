@@ -3,7 +3,7 @@
 // 位置モデルは alt-scroll-rail.ts（純関数・node:test 済み）。ここは描画と入力だけを持つ。
 // なぜ必要かは alt-scroll-rail.ts の冒頭と docs/local/plan_alt-screen-scroll-rail.md を参照。
 //
-// 操作はすべて terminal.ts の scrollAltBufferPage() を経由して PgUp / PgDn として
+// 操作はすべて terminal.ts の scrollAltBufferPage() を経由して 1 ノッチとして
 // CLI へ送る。ホイールと ↑up / ↓down ボタンも同じ関数を通るので、3 経路のどれで
 // スクロールしてもスライダー位置に反映される（計上は terminal.ts 側で行う）。
 
@@ -11,24 +11,24 @@ import { terminals } from './state.js';
 import { t as ti18n } from '../i18n.js';
 import {
   AltRailState,
-  altRailApplyPages,
+  altRailApplyNotches,
   altRailGeometry,
   altRailInitialState,
-  altRailPagesFromSliderTop,
+  altRailNotchesFromSliderTop,
   altRailStep,
 } from './alt-scroll-rail.js';
 import { canPageAltBuffer, markTerminalManualScrollIntent, scrollAltBufferPage } from './terminal.js';
 
-/** キーを流す間隔（ms）。1 ドラッグで PageUp を連投して TUI を壊さないための律速。 */
+/** イベントを流す間隔（ms）。1 ドラッグでホイールを連投して TUI を壊さないための律速。 */
 const PUMP_INTERVAL_MS = 40;
-/** 1 回の操作で送るページ数の上限。grok の PageUp 連投事故と同型を作らないための蓋。 */
-const MAX_QUEUED_PAGES = 30;
+/** 1 回の操作で送るノッチ数の上限。大きな連投で TUI を壊さないための蓋。 */
+const MAX_QUEUED_NOTCHES = 120;
 
 interface RailEntry {
   rail: HTMLElement;
   slider: HTMLElement;
   state: AltRailState;
-  /** ドラッグ・クリックで目指しているページ数。未操作時は null。 */
+  /** ドラッグ・クリックで目指しているノッチ数。未操作時は null。 */
   target: number | null;
   dragging: boolean;
   grabOffset: number;
@@ -44,7 +44,7 @@ function clamp(value: number, min: number, max: number): number {
 function displayState(entry: RailEntry): AltRailState {
   // ドラッグ中はキー送信の完了を待たずスライダーを指に追従させる。
   if (entry.target === null) return entry.state;
-  return altRailApplyPages(entry.state, entry.target);
+  return altRailApplyNotches(entry.state, entry.target);
 }
 
 // PTY の flush ごとに clientHeight を読むとレイアウトを強制同期させてしまうため、
@@ -91,7 +91,7 @@ function pump(id: number): void {
     stopPump(entry);
     return;
   }
-  const diff = entry.target - entry.state.pagesUp;
+  const diff = entry.target - entry.state.notchesUp;
   if (diff === 0) {
     if (!entry.dragging) entry.target = null;
     stopPump(entry);
@@ -104,25 +104,25 @@ function pump(id: number): void {
     stopPump(entry);
     return;
   }
-  // 送ってもページ数が動かない状況（想定外のクランプ等）で回り続けないための保険。
-  const before = entry.state.pagesUp;
-  // diff > 0 は「もっと上へ」＝ PgUp。scrollAltBufferPage 側でページ数が計上される。
+  // 送ってもノッチ数が動かない状況（想定外のクランプ等）で回り続けないための保険。
+  const before = entry.state.notchesUp;
+  // diff > 0 は「もっと上へ」。scrollAltBufferPage 側でノッチ数が計上される。
   const sent = scrollAltBufferPage(id, t, diff > 0 ? -1 : 1);
   // 転送できない provider・メインバッファへ戻った場合は諦める（レールも次の描画で消える）。
-  if (!sent || entry.state.pagesUp === before) {
+  if (!sent || entry.state.notchesUp === before) {
     entry.target = null;
     stopPump(entry);
     renderRail(id);
   }
 }
 
-function requestPages(id: number, target: number): void {
+export function requestNotches(id: number, target: number): boolean {
   const entry = rails.get(id);
-  if (!entry) return;
+  if (!entry) return false;
   entry.target = clamp(
     Math.max(0, Math.round(target)),
-    entry.state.pagesUp - MAX_QUEUED_PAGES,
-    entry.state.pagesUp + MAX_QUEUED_PAGES,
+    entry.state.notchesUp - MAX_QUEUED_NOTCHES,
+    entry.state.notchesUp + MAX_QUEUED_NOTCHES,
   );
   markTerminalManualScrollIntent();
   renderRail(id);
@@ -130,6 +130,7 @@ function requestPages(id: number, target: number): void {
     entry.pumpTimer = setInterval(() => pump(id), PUMP_INTERVAL_MS);
     pump(id);
   }
+  return true;
 }
 
 function sliderTopFromPointer(entry: RailEntry, clientY: number): number {
@@ -152,17 +153,17 @@ function bindPointer(id: number, entry: RailEntry): void {
       try { entry.rail.setPointerCapture(ev.pointerId); } catch (_) { /* 対応外環境では掴み替えのみ諦める */ }
       return;
     }
-    // トラック部分のクリックは通常のスクロールバーと同じく 1 ページ送り。
+    // トラック部分のクリックは通常のスクロールバーと同じく 1 ノッチ送り。
     const base = displayState(entry);
     const up = ev.clientY < sliderRect.top;
-    requestPages(id, altRailStep(base, up ? -1 : 1).pagesUp);
+    requestNotches(id, altRailStep(base, up ? -1 : 1).notchesUp);
   });
 
   entry.rail.addEventListener('pointermove', (ev: PointerEvent) => {
     if (!entry.dragging) return;
     ev.preventDefault();
     const railRect = entry.rail.getBoundingClientRect();
-    requestPages(id, altRailPagesFromSliderTop(entry.state, railRect.height, sliderTopFromPointer(entry, ev.clientY)));
+    requestNotches(id, altRailNotchesFromSliderTop(entry.state, railRect.height, sliderTopFromPointer(entry, ev.clientY)));
   });
 
   const endDrag = (ev: PointerEvent) => {
@@ -220,10 +221,10 @@ export function updateAltScrollRail(id: number): void {
 }
 
 /**
- * PgUp / PgDn を 1 ページ送ったことを計上する。terminal.ts の scrollAltBufferPage から
+ * ホイールを 1 ノッチ送ったことを計上する。terminal.ts の scrollAltBufferPage から
  * 呼ばれるので、ホイール・↑up / ↓down ボタン・レールの 3 経路すべてが反映される。
  */
-export function noteAltScrollPage(id: number, direction: number): void {
+export function noteAltScrollNotch(id: number, direction: number): void {
   const entry = rails.get(id);
   if (!entry) return;
   entry.state = altRailStep(entry.state, direction);
@@ -231,15 +232,15 @@ export function noteAltScrollPage(id: number, direction: number): void {
 }
 
 /**
- * 送った PgUp から PgDn を引いた純ページ数。0 が最下部＝CLI はライブの画面を描いている。
+ * 送ったホイール上から下を引いた純ノッチ数。0 が最下部＝CLI はライブの画面を描いている。
  *
  * 0 より大きい間、CLI の画面には過去の位置が載っている。Hub の承認検出は VT ミラー＝
  * 今の画面を見るので、この値は「画面に出ているものを今の承認として扱ってよいか」の
  * 判定にも使われる（terminal.ts の isTerminalShowingHistory 経由で approval-ui.ts）。
  * 承認側に別の計上を作らないため、遡り位置の正本はここ 1 本にする。
  */
-export function altScrollPagesUp(id: number): number {
-  return rails.get(id)?.state.pagesUp ?? 0;
+export function altScrollNotchesUp(id: number): number {
+  return rails.get(id)?.state.notchesUp ?? 0;
 }
 
 /** セッション破棄時に呼ぶ。 */
