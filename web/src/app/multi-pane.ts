@@ -430,7 +430,6 @@ export class MultiPaneManager {
       }
       t.autoScroll = false;
       t.term.scrollToTop();
-      this._syncViewportToBuffer(t, { top: true });
       return;
     }
     if (scrollAltBufferPage(sessionId, t, 1)) {
@@ -438,7 +437,7 @@ export class MultiPaneManager {
       return;
     }
     t.autoScroll = true;
-    this._scrollToBottomAndSync(t);
+    this._scrollToBottom(t);
   }
 
   _terminalIsAtBottom(t) {
@@ -459,15 +458,12 @@ export class MultiPaneManager {
       ) {
         window.updateScrollLockBtn(!atBottom);
       }
-      this._syncViewportToBuffer(t);
     });
   }
 
-  _scrollToBottomAndSync(t) {
+  _scrollToBottom(t) {
     if (!t || !t.term) return;
     t.term.scrollToBottom();
-    this._syncViewportToBuffer(t, { bottom: true });
-    requestAnimationFrame(() => this._syncViewportToBuffer(t, { bottom: true }));
   }
 
   _shouldForceBottomOnAttach(session) {
@@ -483,7 +479,7 @@ export class MultiPaneManager {
       if (!t || !t.term) return;
       if (!force && !t.autoScroll) return;
       if (force) t.autoScroll = true;
-      this._scrollToBottomAndSync(t);
+      this._scrollToBottom(t);
     };
     const next = () => {
       if (remaining <= 0) return;
@@ -497,31 +493,6 @@ export class MultiPaneManager {
     next();
     for (const delay of [80, 220]) {
       setTimeout(snap, delay);
-    }
-  }
-
-  _syncViewportToBuffer(t, opts: any = {}) {
-    if (!t || !t.term || !t.container || !t.term.buffer) return;
-    const vp = t.container.querySelector('.xterm-viewport');
-    const buf = t.term.buffer.active;
-    if (!vp || !buf) return;
-
-    const maxScrollTop = Math.max(0, vp.scrollHeight - vp.clientHeight);
-    let targetScrollTop;
-    if (opts.bottom) {
-      targetScrollTop = maxScrollTop;
-    } else if (opts.top) {
-      targetScrollTop = 0;
-    } else {
-      const maxViewportY = Math.max(0, buf.length - t.term.rows);
-      const viewportY = Math.max(0, Math.min(buf.viewportY || 0, maxViewportY));
-      targetScrollTop = maxViewportY > 0
-        ? Math.round((viewportY / maxViewportY) * maxScrollTop)
-        : 0;
-    }
-
-    if (Number.isFinite(targetScrollTop)) {
-      vp.scrollTop = targetScrollTop;
     }
   }
 
@@ -692,8 +663,11 @@ export class MultiPaneManager {
         // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
         disableWebglRenderer(t);
         termArea.appendChild(t.container);
-        // DOM 移動で .xterm-viewport の scrollTop がブラウザにリセットされるため、
-        // 次フレームでスクロール位置を xterm 内部状態に合わせて再同期する
+        // 次フレームでレイアウト確定後に fit する（下のコメント参照）。xterm 5.x までは
+        // ここで DOM 再配置による .xterm-viewport.scrollTop のリセットも re-sync していたが、
+        // xterm 6.0 では .xterm-viewport 自体がスクロールしなくなり無効な処理だったため削除した
+        // （pending_xterm6-viewport-scrolltop-deadcode.md。autoScroll=false 側の実際の表示位置は
+        // buf.viewportY に基づく xterm 自身の描画がそのまま正しく、DOM 再配置の影響を受けない）。
         requestAnimationFrame(() => {
           // DOM 再配置でレイアウトが確定してから fit し、新ペインの行数(rows)を PTY へ反映する。
           // 636 行の同期呼び出しは container 移動直後＝レイアウト未確定のサイズで判定されるため
@@ -702,10 +676,7 @@ export class MultiPaneManager {
           this._fitTerminalInSlot(termArea, t, session.id);
           if (forceBottom || t.autoScroll) {
             if (forceBottom) t.autoScroll = true;
-            this._scrollToBottomAndSync(t);
-          } else {
-            // autoScroll=false（ユーザーが上にスクロール中）の場合は viewportY に合わせる
-            this._syncViewportToBuffer(t);
+            this._scrollToBottom(t);
           }
           // 配置・fit 確定後に WebGL レンダラを再生成する
           enableWebglRenderer(t);
@@ -732,7 +703,7 @@ export class MultiPaneManager {
           this._installResizeObserver(slotEl, termArea, t, session.id);
           this._fitTerminalInSlot(termArea, t, session.id);
           if (forceBottom) this._stickToBottomSoon(t, { force: true, passes: 4 });
-          else if (t.autoScroll) this._scrollToBottomAndSync(t);
+          else if (t.autoScroll) this._scrollToBottom(t);
         }
       });
       return;
@@ -767,10 +738,12 @@ export class MultiPaneManager {
       t.fitAddon.fit();
       if (wasAtBottom) {
         t.autoScroll = true;
-        this._scrollToBottomAndSync(t);
-      } else {
-        this._syncViewportToBuffer(t);
+        this._scrollToBottom(t);
       }
+      // wasAtBottom=false（履歴を読んでいる途中）側は xterm 自身の fit() 後の再描画が
+      // buf.viewportY をそのまま反映するので、ここでの追加の同期は不要
+      // （pending_xterm6-viewport-scrolltop-deadcode.md。xterm 6.0 で .xterm-viewport が
+      // スクロールしなくなり、旧実装の再同期は既に無効化していた）。
       if (
         (t.term.cols !== prevCols || t.term.rows !== prevRows) &&
         typeof window.sendResize === 'function'
