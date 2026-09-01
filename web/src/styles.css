@@ -802,13 +802,35 @@ header {
   min-width: 0;
   flex: 1 1 auto;
 }
+.web-menu-item-state {
+  flex: 0 1 auto;
+  margin-left: auto;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  color: var(--muted-2, var(--muted));
+}
+.web-menu-item-state.is-ready { color: var(--green, #3fb950); }
+.web-menu-item-state.is-warn { color: var(--warn, #d29922); }
 .web-menu-divider {
   height: 1px;
   margin: 4px 12px;
   background: var(--line);
 }
-/* 旧ドットは状態反映の互換フックとして残し、表示はサーバー線画のランプに集約する。 */
+/* 旧ドットは状態反映の互換フック。表示はメニュー行の文言と、閉じた Web ボタンのランプ。 */
 #web-menu-dropdown #expose-dot { display: none !important; }
+/* ヘッダーボタン時代の「ON 枠」はメニューではホバーと区別できないので外す。 */
+#web-menu-dropdown #expose-btn.expose-on,
+#web-menu-dropdown #expose-btn[aria-pressed="true"] {
+  border-color: transparent;
+  background: transparent;
+}
+#web-menu-dropdown #expose-btn:hover,
+#web-menu-dropdown #expose-btn:focus-visible {
+  color: var(--text);
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+}
 /* 既存の狭幅用ヘッダールールより、メニュー内のラベル表示を優先する。 */
 #web-menu-dropdown #expose-btn span[data-i18n="expose_btn"],
 #web-menu-dropdown #bug-report-btn span:last-child { display: inline; }
