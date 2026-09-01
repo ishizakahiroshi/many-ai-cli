@@ -59,6 +59,26 @@ var secretReadDeniedBasenames = map[string]bool{
 	".pypirc":          true,
 	".git-credentials": true,
 	".htpasswd":        true,
+	// 同型の穴埋め（2026-09-01 Grok 監査 MAC-05）。どれも「設定ファイルの顔」を
+	// した credential 置き場で、これまでの列挙から漏れていた。
+	"kubeconfig":   true, // KUBECONFIG で任意の場所に置かれる綴り
+	".pgpass":      true, // PostgreSQL のパスワードファイル
+	".my.cnf":      true, // MySQL クライアント設定（password= を持つ）
+	".s3cfg":       true, // s3cmd（access_key / secret_key）
+	".boto":        true, // 旧 GCS/AWS boto 設定
+	".dockercfg":   true, // 旧 Docker（registry auth の base64）
+	"secrets.yaml": true,
+	"secrets.yml":  true,
+	"secrets.json": true,
+}
+
+// secretReadDeniedParentPairs は「親ディレクトリ名 + ファイル名」の組（小文字・
+// 完全一致）で拒否する既知の形式。basename 単体では一般的すぎて拒否できない名前
+// （config / config.json）を、credential を置く定番ディレクトリ配下に限って拒否する。
+var secretReadDeniedParentPairs = map[string]map[string]bool{
+	".kube":   {"config": true},      // kubeconfig の既定配置
+	".docker": {"config.json": true}, // registry auth の base64
+	".aws":    {"config": true},      // credentials は既に部分一致で拒否済み
 }
 
 // isSSHPrivateKeyName は OpenSSH の既定鍵名かを返す（小文字の basename を渡す）。
@@ -88,11 +108,14 @@ func manyAiCliHomeDir() (string, error) {
 }
 
 // isSecretReadDenied は「許可ルート外のファイル内容をブラウザへ返す経路」で拒否すべき
-// 秘密情報ファイルかを返す。対象は次の 5 種類:
+// 秘密情報ファイルかを返す。対象は次の 6 種類:
 //
 //   - 鍵ファイル: *.pem / *.key / OpenSSH の既定鍵名（isSSHPrivateKeyName）
 //   - 資格情報: ファイル名に credentials を含むもの、および認証情報が設定値と
 //     同居する既知の形式（.netrc / .npmrc / .pypirc / .git-credentials ほか）
+//   - 資格情報の定番ディレクトリ: .kube/config / .docker/config.json / .aws/config
+//     （親ディレクトリ名との組で拒否。secretReadDeniedParentPairs）と .gnupg 配下全部
+//     （鍵束・trustdb がディレクトリごと秘密なので、名前を列挙しない）
 //   - 環境変数ファイル: .env / .env.local / .env.<環境名>
 //   - Hub のセッション履歴 DB: any-ai-cli.db（+ -wal / -shm）
 //   - Hub 設定: ~/.many-ai-cli/config.yaml* （config.yaml とその複製）
@@ -118,6 +141,17 @@ func isSecretReadDenied(absPath string) bool {
 	base := strings.ToLower(filepath.Base(absPath))
 	if secretReadDeniedBasenames[base] {
 		return true
+	}
+	parent := strings.ToLower(filepath.Base(filepath.Dir(absPath)))
+	if pairs, ok := secretReadDeniedParentPairs[parent]; ok && pairs[base] {
+		return true
+	}
+	// .gnupg はディレクトリごと秘密（秘密鍵束・trustdb・random_seed）。
+	// 配下のファイル名を列挙せず、パス成分で丸ごと拒否する。
+	for _, comp := range strings.Split(strings.ToLower(filepath.ToSlash(absPath)), "/") {
+		if comp == ".gnupg" {
+			return true
+		}
 	}
 	if isSSHPrivateKeyName(base) {
 		return true

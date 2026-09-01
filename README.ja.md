@@ -1248,7 +1248,7 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 
 - Hub の HTTP / WebSocket サーバは `127.0.0.1` のみにバインドし、外部ホストから直接アクセスすることはできません
 - ランダムトークンを起動時に生成し、URL に付与します（`?token=xxx`）
-- token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。 <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
+- token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。`/24`（IPv6 は `/64`）より広い CIDR は設定エラーになります。tailnet 全体のような広い私設範囲から届かせたい場合は `hub.trusted_networks` ではなく `hub.allowed_hosts` + token（+ 任意 PIN）を使ってください。 <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
 - `many-ai-cli` 自身はテレメトリ・利用状況の送信を一切行いません
 
 ### Claude Workflow journal のメタ情報

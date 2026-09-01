@@ -406,6 +406,7 @@
             <button id="remote-pin-clear-btn" class="settings-inline-btn danger" data-i18n="settings_remote_pin_clear" hidden>解除</button>
           </div>
           <div class="settings-note" data-i18n="settings_remote_pin_desc">既定 OFF。設定すると非 loopback（スマホ/VPN）からのアクセス時に PIN ログインを要求します。loopback（このPC）は従来どおり token のみで通ります。VPN 専用で SSH を置かない運用の追加の鍵向けです。</div>
+          <div id="remote-pin-exposed-hint" class="settings-note settings-note-warn" data-i18n="settings_remote_pin_exposed_hint" hidden>allowed_hosts / trusted_networks が設定されていますが PIN は未設定です。遠隔経路は token だけで通ります。</div>
         </div>
       </details>
       <details class="settings-section" data-section="doctor">

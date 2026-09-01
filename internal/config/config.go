@@ -1347,6 +1347,17 @@ func validateTrustedNetworks(networks []string) error {
 		if bits == 0 || ones == 0 {
 			return fmt.Errorf("hub.trusted_networks %q is too broad", raw)
 		}
+		// IPv4 は /24、IPv6 は /64 より広い CIDR を拒否する（MAC-09）。
+		// trusted_networks は token 無しで全 API に到達できる範囲なので、
+		// README のセキュリティ節は gateway の /32 単一指定を案内している。
+		// tailnet 全体のような広い範囲を許したい場合は trusted_networks ではなく
+		// allowed_hosts + token（+ 任意 PIN）の経路を使う。
+		if bits == 32 && ones < 24 {
+			return fmt.Errorf("hub.trusted_networks %q is too broad: IPv4 prefix must be /24 or narrower", raw)
+		}
+		if bits == 128 && ones < 64 {
+			return fmt.Errorf("hub.trusted_networks %q is too broad: IPv6 prefix must be /64 or narrower", raw)
+		}
 	}
 	return nil
 }

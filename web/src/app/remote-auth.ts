@@ -64,6 +64,10 @@ async function loadPINStatus(): Promise<void> {
     const enabled = !!data.pin_enabled;
     if (statusEl) statusEl.textContent = enabled ? t('settings_remote_pin_on') : t('settings_remote_pin_off');
     if (clearBtn) clearBtn.hidden = !enabled;
+    // 遠隔公開設定（allowed_hosts / trusted_networks）があるのに PIN 未設定なら
+    // ヒントを出す（2026-09-01 監査 MAC-04 の代替。必須化はしない）。
+    const exposedHint = document.getElementById('remote-pin-exposed-hint');
+    if (exposedHint) exposedHint.hidden = !(data.remote_exposed && !enabled);
   } catch (_) {}
 }
 

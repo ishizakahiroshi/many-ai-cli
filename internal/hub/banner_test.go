@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+// 遠隔公開設定（allowed_hosts / trusted_networks）があるのに PIN 未設定のときだけ
+// Remote PIN 行を出す（2026-09-01 監査 MAC-04 の代替。必須化はしない）。
+func TestStartupBannerRemotePINHint(t *testing.T) {
+	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "")
+	t.Setenv("WSL_INTEROP", "")
+	t.Setenv("WSL_DISTRO_NAME", "")
+
+	exposedNoPIN := startupBanner("0.1.3", "127.0.0.1:47777", "abc123", startupBannerAccess{
+		AllowedHosts: []string{"hub.example.ts.net"},
+	})
+	if !strings.Contains(exposedNoPIN, "Remote PIN: NOT SET") {
+		t.Fatalf("banner missing Remote PIN hint:\n%s", exposedNoPIN)
+	}
+
+	exposedWithPIN := startupBanner("0.1.3", "127.0.0.1:47777", "abc123", startupBannerAccess{
+		AllowedHosts: []string{"hub.example.ts.net"},
+		RemotePINSet: true,
+	})
+	if strings.Contains(exposedWithPIN, "Remote PIN: NOT SET") {
+		t.Fatalf("banner must not show Remote PIN hint when PIN is set:\n%s", exposedWithPIN)
+	}
+
+	loopbackOnly := startupBanner("0.1.3", "127.0.0.1:47777", "abc123")
+	if strings.Contains(loopbackOnly, "Remote PIN: NOT SET") {
+		t.Fatalf("banner must not show Remote PIN hint without remote exposure:\n%s", loopbackOnly)
+	}
+}
+
 func TestStartupBannerIncludesProductDetails(t *testing.T) {
 	t.Setenv("MANY_AI_CLI_WSL_LAUNCHER", "")
 	t.Setenv("WSL_INTEROP", "")

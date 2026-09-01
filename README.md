@@ -1258,7 +1258,7 @@ The Hub decides a session's liveness solely from **whether the terminal (PTY) pr
 
 - The Hub HTTP/WebSocket server binds to `127.0.0.1` only — external hosts cannot reach it directly
 - Random token in URL prevents unauthorized local access
-- Token-less access is available only as an explicit opt-in for loopback / trusted private paths such as SSH local forwarding or a per-user WireGuard/Docker gateway. Configure `hub.allow_loopback_without_token: true`, narrow `hub.trusted_networks` values such as `172.19.0.1/32`, and `hub.allowed_hosts` values such as `10.8.0.1` only when that private path is already protected. Never use it with public bind addresses, reverse proxies, shared shell hosts, or broad CIDRs such as `0.0.0.0/0`. <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
+- Token-less access is available only as an explicit opt-in for loopback / trusted private paths such as SSH local forwarding or a per-user WireGuard/Docker gateway. Configure `hub.allow_loopback_without_token: true`, narrow `hub.trusted_networks` values such as `172.19.0.1/32`, and `hub.allowed_hosts` values such as `10.8.0.1` only when that private path is already protected. Never use it with public bind addresses, reverse proxies, shared shell hosts, or broad CIDRs such as `0.0.0.0/0`. CIDRs wider than `/24` (IPv4) or `/64` (IPv6) are rejected as a config error; to reach the Hub from a wider private range such as a whole tailnet, use `hub.allowed_hosts` with the token (plus the optional PIN) instead of `hub.trusted_networks`. <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
 - `many-ai-cli` itself sends no telemetry or usage data to any service
 
 ### Claude workflow journal metadata

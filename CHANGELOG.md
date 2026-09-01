@@ -10,6 +10,27 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Security
+- Reject `hub.trusted_networks` CIDRs wider than `/24` (IPv4) / `/64` (IPv6) as
+  a config error. Existing configs with a wider entry now fail at startup with
+  an error naming the entry; use `hub.allowed_hosts` with the token for wider
+  private ranges such as a whole tailnet.
+- Extend the outside-roots secret-file read denylist with more
+  credential-bearing names (`kubeconfig`, `.pgpass`, `.my.cnf`, `.s3cfg`,
+  `.boto`, `.dockercfg`, `secrets.yaml` / `.yml` / `.json`) and
+  directory-scoped pairs (`.kube/config`, `.docker/config.json`,
+  `.aws/config`, everything under `.gnupg/`).
+- `findGitRoot` no longer adopts a home directory that happens to be a git
+  repository as the git root, so Files API scopes and relay worktree bases stay
+  at the working directory instead of expanding to the whole home.
+- Auto-approval hard-blocks now cover `find` side-effect options
+  (`-exec` / `-execdir` / `-ok` / `-okdir` / `-delete`) and command
+  substitution (`$(...)`, backticks), which could previously pass the low-risk
+  gate behind a broad user rule.
+- The startup banner and the remote access settings panel now point out when
+  `allowed_hosts` / `trusted_networks` are configured without a remote PIN.
+  The PIN itself remains optional.
+
 ### Added
 - **Orchestration relay loop.** `internal/hub/relay.go`, `relay_worktree.go`,
   `relay_store.go`, and `relay_api.go` run each plan C through implementation,

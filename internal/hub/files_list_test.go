@@ -10,6 +10,60 @@ import (
 	"testing"
 )
 
+// TestFindGitRootStopsAtHomeDirectory は、ホームを dotfiles の git リポジトリに
+// している環境で findGitRoot がホームを git root として返さないことを確認する
+// （2026-09-01 監査 MAC-05。許可ルートと relay worktree 基点がホーム全体へ広がる）。
+func TestFindGitRootStopsAtHomeDirectory(t *testing.T) {
+	home := setSecTestHome(t)
+	if err := os.MkdirAll(filepath.Join(home, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// ホーム配下・自身は git repo でないディレクトリ → ホームの .git を採用せず dir 自身
+	sub := filepath.Join(home, "proj", "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := findGitRoot(sub); got != sub {
+		t.Fatalf("findGitRoot(%q) = %q, want dir itself (home must not become git root)", sub, got)
+	}
+
+	// ホーム配下の git repo のサブディレクトリ → その repo root で止まる
+	repo := filepath.Join(home, "proj2")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inner := filepath.Join(repo, "docs")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := findGitRoot(inner); got != repo {
+		t.Fatalf("findGitRoot(%q) = %q, want %q", inner, got, repo)
+	}
+
+	// ホーム自身を渡したときは天井を掛けない（cwd と git root が一致するだけ）
+	if got := findGitRoot(home); got != filepath.Clean(home) {
+		t.Fatalf("findGitRoot(home) = %q, want %q", got, filepath.Clean(home))
+	}
+}
+
+// TestFindGitRootWalksUpOutsideHome は、ホーム外のモノレポではサブディレクトリ
+// から repo root まで従来どおり遡ることを確認する（天井の巻き添え防止）。
+func TestFindGitRootWalksUpOutsideHome(t *testing.T) {
+	setSecTestHome(t) // ホームを別の場所に固定し、tmp がホーム外になるようにする
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inner := filepath.Join(repo, "apps", "web")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := findGitRoot(inner); got != repo {
+		t.Fatalf("findGitRoot(%q) = %q, want %q", inner, got, repo)
+	}
+}
+
 func TestWalkFilesLocalIncludesEmptyDirectories(t *testing.T) {
 	tmp := t.TempDir()
 	emptyDir := filepath.Join(tmp, "docs", "local", "reference")

@@ -855,6 +855,7 @@
   "settings_remote_pin_set": "設定",
   "settings_remote_pin_clear": "解除",
   "settings_remote_pin_desc": "既定 OFF。設定すると非 loopback（スマホ/VPN）からのアクセス時に PIN ログインを要求します。loopback（このPC）は従来どおり token のみで通ります。VPN 専用で SSH を置かない運用の追加の鍵向けです。",
+  "settings_remote_pin_exposed_hint": "allowed_hosts / trusted_networks が設定されていますが PIN は未設定です。遠隔経路は token だけで通ります。",
   "settings_remote_pin_format": "PIN は 6 桁以上の数字で入力してください",
   "settings_remote_pin_set_done": "PIN を設定しました",
   "settings_remote_pin_set_failed": "PIN の設定に失敗しました",

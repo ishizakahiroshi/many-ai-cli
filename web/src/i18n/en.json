@@ -855,6 +855,7 @@
   "settings_remote_pin_set": "Set",
   "settings_remote_pin_clear": "Clear",
   "settings_remote_pin_desc": "Off by default. When set, non-loopback (phone/VPN) access additionally requires a PIN login. Loopback (this PC) keeps passing with the token only. Intended as an extra lock for VPN-only setups that don't expose SSH.",
+  "settings_remote_pin_exposed_hint": "allowed_hosts / trusted_networks are configured but no PIN is set. Remote paths are reachable with the token alone.",
   "settings_remote_pin_format": "PIN must be 6 or more digits",
   "settings_remote_pin_set_done": "PIN set",
   "settings_remote_pin_set_failed": "Failed to set PIN",
