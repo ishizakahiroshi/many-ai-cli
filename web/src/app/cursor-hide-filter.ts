@@ -28,12 +28,13 @@ export const showCursorSeq = asciiEncoder.encode('\x1b[?25h');
 export const altScreenEnterSeq = asciiEncoder.encode('\x1b[?1049h');
 export const altScreenExitSeq = asciiEncoder.encode('\x1b[?1049l');
 
-// Grok と Codex は CUP（絶対カーソル移動）を本文・フルフレーム描画にも使う。
+// Grok / Codex / Claude は CUP（絶対カーソル移動）を本文・フルフレーム描画にも使う。
 // メインバッファ上の「CUP あり・LF なし」をステータスバーとして破棄すると、
-// 本文そのもの（Grok）や後続描画に必要なカーソル位置（Codex）が失われる。
-// OpenCode は alt buffer 追跡で保護し、Claude は従来どおりスピナーを除去する。
+// 本文そのもの（Grok）や後続描画に必要なカーソル位置（Codex）、
+// Claude Ink の初回ペイント／同意 UI が失われる。
+// OpenCode は alt buffer 追跡で保護する。
 export function shouldBypassCursorHideFilterForProvider(provider: string | undefined): boolean {
-  return provider === 'grok' || provider === 'codex';
+  return provider === 'grok' || provider === 'codex' || provider === 'claude';
 }
 
 // Claude Code の /model 等のセレクタダイアログは描画後カーソルを非表示のままにして
