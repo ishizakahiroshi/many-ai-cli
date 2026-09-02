@@ -1,0 +1,119 @@
+// 子セッション起動の確認待ちを保持する、DOM に一切触れない純粋なストア。
+//
+// spawn-confirm.ts（ダイアログの markup 生成・イベント配線）から意図的に分離している。
+// spawn-confirm.ts は session-list.js を import しており、それが terminal.ts /
+// settings.ts / chat-history.ts 等の巨大な import グラフを引き込む。その中には
+// `document.addEventListener(...)` のようなトップレベル副作用があるモジュールが含まれ、
+// DOM の無い Bun テスト環境（web/tests/*.test.ts、bun:test）で import すると
+// ReferenceError で落ちる。ここに置いた純粋関数だけは、その import グラフに触れずに
+// 単体テストできる（web/tests/spawn-confirm-store.test.ts）。
+//
+// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3。
+
+export interface SpawnConfirmationRecord {
+  id: string;
+  parentId: number;
+  role: string;
+  provider: string;
+  model: string;
+  cwd: string;
+  initialPrompt: string;
+  requestedAtMs: number;
+}
+
+export interface SpawnConfirmationClosedController {
+  applyClosed: (m: any) => void;
+}
+
+// Hub がまだ持っている（決定が付いていない）確認の一覧。
+// spawn_confirmation_requested（新規要求 / 再接続時の再送のどちらも同じ型）で追加し、
+// spawn_confirmation_closed で取り除く。
+const pendingSpawnConfirmations = new Map<string, SpawnConfirmationRecord>();
+
+// 現在ダイアログとして開いている確認 ID → その結果反映コールバック。
+const openDialogControllers = new Map<string, SpawnConfirmationClosedController>();
+
+export function recordFromMessage(m: any): SpawnConfirmationRecord {
+  return {
+    id: String(m?.spawn_confirmation_id || ''),
+    parentId: Number(m?.session_id || 0),
+    role: String(m?.role || ''),
+    provider: String(m?.provider || ''),
+    model: String(m?.model || ''),
+    cwd: String(m?.cwd || ''),
+    initialPrompt: String(m?.initial_prompt || ''),
+    requestedAtMs: Number(m?.spawn_requested_at_ms || 0) || Date.now(),
+  };
+}
+
+// spawn_confirmation_requested を受けたらストアへ積む。同じ ID の再送（UI 再接続時の
+// resend）では単に上書きする。
+export function noteSpawnConfirmationRequested(m: any): void {
+  const record = recordFromMessage(m);
+  if (!record.id) return;
+  pendingSpawnConfirmations.set(record.id, record);
+}
+
+// parentId の保留件数（サイドバーの印・× 無効化の両方から使う）。
+export function pendingSpawnConfirmationCount(parentId: number): number {
+  let n = 0;
+  for (const rec of pendingSpawnConfirmations.values()) {
+    if (rec.parentId === parentId) n++;
+  }
+  return n;
+}
+
+// parentId の保留のうち、isOpen(id) が false のものだけを対象に、最も古い
+// （requestedAtMs が最小の）ものを 1 件返す。「開いている確認をもう一度開かない」
+// 「古い順に開く」の 2 つのルールを、任意の Map を渡して検証できるようにしている。
+export function selectOldestPendingConfirmation(
+  records: Map<string, SpawnConfirmationRecord>,
+  parentId: number,
+  isOpen: (id: string) => boolean,
+): SpawnConfirmationRecord | null {
+  let best: SpawnConfirmationRecord | null = null;
+  for (const rec of records.values()) {
+    if (rec.parentId !== parentId) continue;
+    if (isOpen(rec.id)) continue;
+    if (!best || rec.requestedAtMs < best.requestedAtMs) best = rec;
+  }
+  return best;
+}
+
+// spawn-confirm.ts の openNextSpawnConfirmationFor から使う、モジュール内シングルトンの
+// ストアに対する薄いラッパー。
+export function selectOldestPendingConfirmationFor(parentId: number): SpawnConfirmationRecord | null {
+  return selectOldestPendingConfirmation(pendingSpawnConfirmations, parentId, (id) => openDialogControllers.has(id));
+}
+
+export function registerDialogController(id: string, controller: SpawnConfirmationClosedController): void {
+  if (!id) return;
+  openDialogControllers.set(id, controller);
+}
+
+export function unregisterDialogController(id: string): void {
+  openDialogControllers.delete(id);
+}
+
+export function isDialogControllerOpen(id: string): boolean {
+  return openDialogControllers.has(id);
+}
+
+// spawn_confirmation_closed を受けたらストアから外し、開いているダイアログが
+// あればそちらへ結果を渡す。開いていなければ（サイドバーの印を消すだけで）何もしない。
+export function closeSpawnConfirmation(m: any): void {
+  const id = String(m?.spawn_confirmation_id || '');
+  if (!id) return;
+  pendingSpawnConfirmations.delete(id);
+  const controller = openDialogControllers.get(id);
+  if (controller) controller.applyClosed(m);
+}
+
+// Hub 再起動検出時にローカル状態を破棄する purgeLocalStateForHubRestart から呼ぶ。
+// 開いているダイアログも道連れで閉じる（保留自体が Hub 上で消えているため）。
+export function clearAllSpawnConfirmationsForHubRestart(): void {
+  pendingSpawnConfirmations.clear();
+  for (const [id, controller] of Array.from(openDialogControllers.entries())) {
+    controller.applyClosed({ spawn_confirmation_id: id, reason: 'parent_gone' });
+  }
+}

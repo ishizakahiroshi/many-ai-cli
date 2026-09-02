@@ -20,6 +20,7 @@ import { dirnameForPath } from './path-links.js';
 import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 import { openRelayDialog } from './relay-dialog.js';
+import { openNextSpawnConfirmationFor, pendingSpawnConfirmationCount } from './spawn-confirm.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -139,6 +140,15 @@ export function activateSessionForMultiPane(id) {
 window.activateSessionForMultiPane = activateSessionForMultiPane;
 
 export function activateSession(id) {
+  // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 「その親が
+  // アクティブになったとき」に確認ダイアログを開く唯一のフック。関数の冒頭で
+  // スケジュールしておくことで、この下の早期 return（マルチペイン委譲）を通っても
+  // 通常ビューの経路を最後まで通っても、どちらの後でも実行される。queueMicrotask
+  // にしているのは、この関数の残り（set_activeSessionId 等）が確実に終わってから
+  // openNextSpawnConfirmationFor 内の activeSessionId 判定を走らせるため。
+  // activateSessionForMultiPane には同じフックを足さない（別窓 Grid が直接呼ぶ経路
+  // なので、そちらは Hub タブへ戻って親を選び直すまで割り込ませない）。
+  queueMicrotask(() => openNextSpawnConfirmationFor(id));
   // C4: マルチタブが開いているとき、外部からの activateSession 呼び出し（承認自動移動等）は
   // 軽量版にリダイレクトし、シングルビュー固有の処理（attachTerminal 等）を実行しない。
   // _multiPaneFocusSyncing フラグが立っているときは再帰防止のためスキップ。
@@ -273,6 +283,9 @@ const STATE_ICON_SVG = {
   dot: '<circle cx="8" cy="8" r="3.6" stroke="none"/>',
   ring: '<circle cx="8" cy="8" r="3.5" fill="none" stroke-width="1.5" stroke-dasharray="2.3 1.9"/>',
   cross: '<path d="m4.7 4.7 6.6 6.6M11.3 4.7 4.7 11.3" stroke-width="1.7" stroke-linecap="round"/>',
+  // 子起動の確認待ち（pending-spawn-confirm）専用の記号。既存の awaiting_approval（flag）
+  // と混同されないよう、あえて別の形にしている（角丸四角＋十字＝「新しい子を追加できる」の意匠）。
+  spawnPending: '<rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2" fill="none" stroke-width="1.4"/><path d="M8 5.6v4.8M5.6 8h4.8" stroke-width="1.4" stroke-linecap="round"/>',
 };
 
 export function stateIconSvgHtml(kind) {
@@ -286,6 +299,16 @@ function stateActivityDecoration(s) {
   if (s.awaiting_approval) {
     const activityLabel = ti18n('card_activity_awaiting_approval', 'Awaiting approval');
     return { className: 'awaiting-approval', iconKind: 'flag', label: activityLabel === baseLabel ? baseLabel : `${baseLabel}: ${activityLabel}` };
+  }
+  // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): AI 本体の
+  // 承認（awaiting_approval、上の分岐）が立っていないときに限って、子起動の確認待ちを
+  // 出す。子起動の確認は AI 本体の承認より優先度を上げない。
+  const pendingSpawnConfirmCount = pendingSpawnConfirmationCount(s.id);
+  if (pendingSpawnConfirmCount > 0) {
+    const activityLabel = pendingSpawnConfirmCount > 1
+      ? ti18n('card_pending_spawn_confirm_count', '{count} pending child spawn confirmations', { count: pendingSpawnConfirmCount })
+      : ti18n('card_activity_pending_spawn_confirm', 'Child spawn awaiting confirmation');
+    return { className: 'pending-spawn-confirm', iconKind: 'spawnPending', label: `${baseLabel}: ${activityLabel}` };
   }
   if (s.awaiting_user) {
     const activityLabel = ti18n('card_activity_awaiting_input', 'Awaiting input');
@@ -862,7 +885,13 @@ export function renderSessionList() {
       const projXBtn = document.createElement('button');
       projXBtn.className = 'dismiss-btn';
       projXBtn.textContent = t('remove');
-      projXBtn.title = t('project_dismiss');
+      // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): グループ内に
+      // 子起動の確認待ちを抱えたセッションが 1 件でもあれば、グループ ✕ ごと無効化する。
+      // requestSessionDismiss 側の先回りガードもあるが、押せる見た目のまま弾かれるのは
+      // 分かりにくいので、ボタン自体を disabled にしておく。
+      const groupHasPendingSpawnConfirm = groupSessions.some(s => pendingSpawnConfirmationCount(s.id) > 0);
+      projXBtn.title = groupHasPendingSpawnConfirm ? t('dismiss_disabled_pending_spawn_tooltip') : t('project_dismiss');
+      projXBtn.disabled = groupHasPendingSpawnConfirm;
       projXBtn.onclick = (e) => {
         e.stopPropagation();
         groupSessions.forEach(s => dismissSession(s.id));
@@ -953,9 +982,10 @@ export function renderSessionList() {
       const activity = stateActivityDecoration(s);
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
       const approvalClass = activity.className === 'awaiting-approval' ? ' awaiting-approval' : '';
+      const pendingSpawnConfirmClass = activity.className === 'pending-spawn-confirm' ? ' pending-spawn-confirm' : '';
       const orchClass = entry.depth > 0 ? ' orchestration-child' : (entry.childCount > 0 || s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
-      c.className = 'card' + stateClass + approvalClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
+      c.className = 'card' + stateClass + approvalClass + pendingSpawnConfirmClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
@@ -1090,7 +1120,12 @@ export function renderSessionList() {
       const xBtn = document.createElement('button');
       xBtn.className = 'dismiss-btn';
       xBtn.textContent = t('remove');
-      xBtn.title = t('dismiss_session');
+      // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
+      // 確認待ちを抱えている親は × を無効化する。requestSessionDismiss 側にも同じガードが
+      // あるが、押せる見た目のまま弾かれるのは分かりにくいのでボタン自体を disabled にする。
+      const hasPendingSpawnConfirm = pendingSpawnConfirmationCount(s.id) > 0;
+      xBtn.title = hasPendingSpawnConfirm ? t('dismiss_disabled_pending_spawn_tooltip') : t('dismiss_session');
+      xBtn.disabled = hasPendingSpawnConfirm;
       xBtn.onclick = (e) => { e.stopPropagation(); dismissSession(s.id); };
       actions.appendChild(xBtn);
 
@@ -1459,6 +1494,7 @@ export function updateSessionCardStateInPlace(id) {
   card.classList.toggle('running', state === 'running');
   card.classList.toggle('waiting', state === 'waiting');
   card.classList.toggle('awaiting-approval', activity.className === 'awaiting-approval');
+  card.classList.toggle('pending-spawn-confirm', activity.className === 'pending-spawn-confirm');
   card.classList.toggle('active', id === activeSessionId);
   const pill = card.querySelector('.card-state-pill');
   if (pill) {

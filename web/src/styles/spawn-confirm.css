@@ -99,6 +99,21 @@
   color: var(--text-soft);
   word-break: break-all;
 }
+/* C4: 明示 cwd が無く親から解決した場合の補足バッジ。 */
+.spawn-confirm-inherit-note {
+  color: var(--muted);
+  font-style: italic;
+}
+/* C4: 親セッションが既に消えている場合の警告文。 */
+.spawn-confirm-parent-gone {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: 0.78rem;
+}
 
 /* ── 変更できる情報（CLI / モデル） ── */
 .spawn-confirm-fields {
@@ -173,6 +188,20 @@
 .spawn-confirm-prompt.is-empty {
   color: var(--muted);
   font-style: italic;
+}
+
+/* ── 結果表示（C4: 決定後〜spawn_confirmation_closed 反映の間の状態） ── */
+.spawn-confirm-status {
+  margin: 0;
+  padding: 0 16px;
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+.spawn-confirm-status[hidden] { display: none; }
+.spawn-confirm-processing {
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 /* ── アクション ── */

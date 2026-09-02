@@ -31,6 +31,7 @@ import './app/prompt-templates.js';
 // 観測 sink の登録（既定ビルドでは空ファイルへ差し替えられる）。
 import './debug/index.js';
 import { setActiveTab } from './app/settings.js';
+import { pendingSpawnConfirmationCount } from './app/spawn-confirm.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -1542,6 +1543,18 @@ export function sendText(sessionId, text) {
 }
 
 export function requestSessionDismiss(id) {
+  // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
+  // 確認待ちを抱えた親セッションは閉じさせない。UI 側の先回りガードで、カードの ×
+  // 無効化と合わせた二重の防御。Hub 側（handleDismiss の hasPendingSpawnConfirmation
+  // ガード・session_dismiss_refused の送信）はまだ実装されていない ―
+  // internal/hub/server.go・internal/hub/orchestration.go には本 C とは別の未コミット
+  // 変更が同居しており、衝突を避けるため本 C ではそちらへ手を入れていない。したがって
+  // 現時点では自動 dismiss 経路（auto-dismiss 等）や、この関数を経由しない直接の WS
+  // 送信は防げていない。UI の × とこの関数を経由する経路だけが対象。
+  if (pendingSpawnConfirmationCount(id) > 0) {
+    showToast(t('toast_session_dismiss_blocked_pending_spawn'));
+    return;
+  }
   // 「セッションが勝手に消える」事案の犯人特定用
   // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md)。
   // dismiss を投げる直前に呼び出し元スタックを console と PTY 生ログ両方へ残す。

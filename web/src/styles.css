@@ -1237,6 +1237,10 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
 .card.awaiting-approval { background: color-mix(in srgb, var(--warn-bg) 12%, var(--bg-elev)); }
+/* 子起動の確認待ち（pending-spawn-confirm）。既存の awaiting-approval（AI 本体の承認）
+   と並んだときに見分けられるよう、--warn ではなく --perm（元々未使用だった紫系トークン）
+   を流用する（plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3）。 */
+.card.pending-spawn-confirm { background: color-mix(in srgb, var(--perm-bg) 12%, var(--bg-elev)); }
 .card.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev));
@@ -1270,6 +1274,7 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card.running::before { background: var(--green); opacity: 1; }
 .card.waiting::before { background: var(--warn); opacity: 1; }
 .card.awaiting-approval::before { background: var(--warn); opacity: 1; width: 5px; }
+.card.pending-spawn-confirm::before { background: var(--perm); opacity: 1; width: 5px; }
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
 /* 1 行に並ぶ文字は baseline で揃える。align-items:center だと各項目の baseline が
    その項目の中心から (ascent-descent)/2 ＝ 約 0.41em ずれるため、font-size が違う
@@ -1316,6 +1321,7 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
 .card-state-pill.disconnected { color: var(--danger); }
 /* 付帯状態は通常 state の色より優先する（standby 中の入力待ち等）。 */
 .card-state-pill.awaiting-approval { color: #111; background: var(--warn); border-radius: var(--radius-sm); }
+.card-state-pill.pending-spawn-confirm { color: #111; background: var(--perm); border-radius: var(--radius-sm); }
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active { color: var(--muted-2); }
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
@@ -1693,6 +1699,10 @@ body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1
   display: block;
 }
 .dismiss-btn:hover { color: var(--danger); }
+/* C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
+   確認待ちを抱えたセッション（グループ）は × を押せない見た目にする。 */
+.dismiss-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.dismiss-btn:disabled:hover { color: var(--muted); }
 
 /* お気に入りボタン */
 .star-btn,
