@@ -59,6 +59,28 @@
 // 案 C（2026-06-23）を当時見送った理由は「Ink の絶対カーソル位置指定が xterm のスクロールと
 // 衝突する可能性が残る」という懸念だったが、実際に衝突していたのは書き戻す側だった。本文は
 // CLI 自身が既に描いているので、こちらは何も足さないのが正しい。
+//
+// 案 I（2026-09-02）: マーカー文字列そのものが端末の折り返しで分断される。
+// 案 E〜H はどれも「マーカーは連続したバイト列として届く」を前提に完全一致で探していたが、
+// CLI は端末幅で長い行を折り返すので、マーカーの途中に CR / LF・行末パディングの空白・
+// カーソル移動の CSI が割り込む。実測（2026-09-02 セッション #3・Codex 130 桁）:
+//   [/MANY-AI-CLI-  CR LF  空白 130  CR LF  空白 130 …  ESC[?25l ESC[35;1H LF ESC[30;1H  DONE]
+// この形だと DONE の CLOSE が永久に一致せず、ラッチしたまま以降の端末出力を全部捨てる。
+// 復帰するのは 32KB 溜まってセーフガードが働くときだけで、CLI が上限などで止まっていると
+// 新しい出力が来ないため永久に画面が固まる（利用者からは「送ったのに何も起きない」に見える）。
+//
+// 実害の実測（同日のセッションログ 17 本を filterHubMarkersPure へ再生）:
+//   codex #3   1,417,693B 中 441,727B（31.2%）が xterm へ届かず・ログ末尾でも飲み込んだまま
+//   claude #7  557,317B 中 68,189B（12.2%）  /  grok #15  1,656,211B 中 215,711B（13.0%）
+// provider 横断で起きる。折り返し位置が CLOSE を跨ぐかどうかは完了サマリーの長さと端末幅
+// 次第なので、特定 CLI の癖ではない。
+//
+// 対処: マーカー照合を折り返し耐性ありにする（matchMarkerAllowingWrap）。マーカー文字の
+// 間に限り CR / LF / 空白 / タブ / 完結した ESC シーケンスを読み飛ばす。印字文字が 1 つでも
+// 割り込んだ時点で不一致にするので、地の文が誤ってマーカー扱いされることはない。読み飛ばし
+// 総量は MAX_MARKER_WRAP_GAP_BYTES で頭打ちにして、病的な走査と carry の肥大を防ぐ。
+// 割り込んだバイトの扱いは既存の方針をそのまま踏襲する。承認ブロック（案 H = 何も足さない・
+// 何も削らない）では素通しし、DONE ブロック（案 G = ブロックごと落とす）では捨てる。
 
 
 export const hubMarkerBytePatterns = [
@@ -100,9 +122,94 @@ export function isPossiblePrefix(bytes: Uint8Array, offset: number, patterns: Ui
   });
 }
 
-export function isPossibleMarkerPrefix(bytes: Uint8Array, offset: number): boolean {
-  return isPossiblePrefix(bytes, offset, hubMarkerBytePatterns) ||
-    isPossiblePrefix(bytes, offset, [hubDoneMarkerOpen]);
+// 案 I: マーカー文字の間に読み飛ばしてよい折り返し由来バイトの総量。
+// 実測の割り込みは 130 桁 × 2 行 + CSI 数個で 400B 前後。4KB あればどの端末幅でも足りるうえ、
+// 上限を持たせることで「'[' の後ろが延々と空白」のような入力で carry が肥大するのを防ぐ。
+export const MAX_MARKER_WRAP_GAP_BYTES = 4096;
+
+const EMPTY_BYTES = new Uint8Array(0);
+
+export type MarkerMatch = {
+  // >0 = 一致して消費したバイト数 / 0 = 不一致 / -1 = バイト不足（carry して次チャンクへ）
+  consumed: number;
+  // マーカー文字列の途中へ折り返しが割り込ませたバイト（CR / LF / 空白 / タブ / ESC シーケンス）
+  noise: Uint8Array;
+};
+
+const MARKER_NO_MATCH: MarkerMatch = { consumed: 0, noise: EMPTY_BYTES };
+const MARKER_NEED_MORE: MarkerMatch = { consumed: -1, noise: EMPTY_BYTES };
+
+function isWrapNoiseByte(b: number): boolean {
+  return b === 0x0d || b === 0x0a || b === 0x20 || b === 0x09;
+}
+
+// offset から ESC シーケンス 1 個を読み飛ばす。
+// 戻り値: 消費バイト数 / 0 = ESC で始まっていない / -1 = 終端が来る前にバイトが尽きた
+export function skipWrapEscape(bytes: Uint8Array, offset: number): number {
+  if (bytes[offset] !== 0x1b) return 0;
+  let j = offset + 1;
+  if (j >= bytes.length) return -1;
+  const kind = bytes[j];
+  if (kind === 0x5b) { // CSI: 終端は 0x40〜0x7e
+    j++;
+    while (j < bytes.length) {
+      const b = bytes[j];
+      j++;
+      if (b >= 0x40 && b <= 0x7e) return j - offset;
+    }
+    return -1;
+  }
+  if (kind === 0x5d) { // OSC: BEL または ESC \ で終わる
+    j++;
+    while (j < bytes.length) {
+      const b = bytes[j];
+      j++;
+      if (b === 0x07) return j - offset;
+      if (b === 0x1b) {
+        if (j >= bytes.length) return -1;
+        return j + 1 - offset;
+      }
+    }
+    return -1;
+  }
+  return 2; // ESC + 単一バイト
+}
+
+// 案 I: 折り返しで分断されたマーカーも一致させる。マーカーの 1 文字目には割り込みを認めず、
+// 2 文字目以降の隙間でだけ CR / LF / 空白 / タブ / 完結した ESC シーケンスを読み飛ばす。
+// 印字文字が割り込んだ時点で不一致にするので、地の文の誤爆は増えない。
+export function matchMarkerAllowingWrap(
+  bytes: Uint8Array,
+  offset: number,
+  pattern: Uint8Array,
+): MarkerMatch {
+  if (offset >= bytes.length) return MARKER_NEED_MORE;
+  if (bytes[offset] !== pattern[0]) return MARKER_NO_MATCH;
+  let i = offset + 1;
+  let p = 1;
+  let gap = 0;
+  let noise: number[] | null = null;
+  while (p < pattern.length) {
+    if (i >= bytes.length) return MARKER_NEED_MORE;
+    if (bytes[i] === pattern[p]) { i++; p++; continue; }
+    const esc = skipWrapEscape(bytes, i);
+    if (esc < 0) return MARKER_NEED_MORE;
+    if (esc > 0) {
+      if (!noise) noise = [];
+      for (let k = 0; k < esc; k++) noise.push(bytes[i + k]);
+      i += esc;
+      gap += esc;
+    } else if (isWrapNoiseByte(bytes[i])) {
+      if (!noise) noise = [];
+      noise.push(bytes[i]);
+      i++;
+      gap++;
+    } else {
+      return MARKER_NO_MATCH;
+    }
+    if (gap > MAX_MARKER_WRAP_GAP_BYTES) return MARKER_NO_MATCH;
+  }
+  return { consumed: i - offset, noise: noise ? new Uint8Array(noise) : EMPTY_BYTES };
 }
 
 export type HubMarkerFilterState = {
@@ -172,15 +279,18 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
 
   while (i < combined.length) {
     if (inDone) {
-      if (bytesStartWith(combined, i, hubDoneMarkerClose)) {
-        i += hubDoneMarkerClose.length;
+      // 案 I: 折り返しで分断された CLOSE も受理する。割り込んだバイトは DONE ブロックの一部
+      // として捨てる（案 G の「ブロックごと落とす」と同じ扱い）。
+      const doneClose = matchMarkerAllowingWrap(combined, i, hubDoneMarkerClose);
+      if (doneClose.consumed > 0) {
+        i += doneClose.consumed;
         inDone = false;
         lineStart = false;
         // 案 G（2026-08-26）: DONE 本文は端末へ書き戻さず、ブロックごと落とす（本ファイル冒頭参照）。
         doneBufArr.length = 0;
         continue;
       }
-      if (isPossiblePrefix(combined, i, [hubDoneMarkerClose])) break;
+      if (doneClose.consumed < 0) break;
       // 案 G: 本文は出さないが、close が来ないまま肥大した場合のセーフガード
       // （MAX_MARKER_BUFFER_BYTES 超過で状態リセット）に量が要るので貯めるのは続ける。
       doneBufArr.push(combined[i]);
@@ -194,12 +304,13 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       continue;
     }
 
-    if (bytesStartWith(combined, i, hubDoneMarkerOpen)) {
+    const doneOpen = matchMarkerAllowingWrap(combined, i, hubDoneMarkerOpen);
+    if (doneOpen.consumed > 0) {
       // 案 H で承認ブロック本文も trackByte を通すようになったため、ブロック内でも lineStart が
       // 立つ。承認ブロックの本文に DONE マーカーのリテラルが行頭で現れても DONE としてラッチ
       // しないよう、案 E〜G と同じ「ブロック内では DONE を見ない」挙動を明示で維持する。
       if (lineStart && !inMarker) {
-        i += hubDoneMarkerOpen.length;
+        i += doneOpen.consumed;
         inDone = true;
         lineStart = false;
         continue;
@@ -211,30 +322,40 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       continue;
     }
 
-    const marker = hubMarkerBytePatterns.find(pattern => bytesStartWith(combined, i, pattern));
+    // 承認マーカー。OPEN と CLOSE は 2 バイト目で分岐するので同時には一致しない。
+    const approvalOpen = matchMarkerAllowingWrap(combined, i, hubMarkerBytePatterns[0]);
+    const approvalClose = approvalOpen.consumed > 0
+      ? MARKER_NO_MATCH
+      : matchMarkerAllowingWrap(combined, i, hubMarkerEndBytes);
+    const marker = approvalOpen.consumed > 0 ? approvalOpen
+      : (approvalClose.consumed > 0 ? approvalClose : null);
     if (marker) {
-      const isClose = marker === hubMarkerEndBytes;
+      const isClose = marker === approvalClose;
       // 行頭ゲート: OPEN は行頭のみラッチ。close は inMarker 中なら位置を問わず受理し、
       // stray close（開きなし）は行頭のみマーカー扱い（文中の prose リテラルは素通し）。
       if (inMarker || lineStart) {
-        i += marker.length;
+        i += marker.consumed;
         lineStart = false;
         // 案 H: open / close ともタグ文字列を落とすだけ。本文は下の分岐で素通しする。
+        // 案 I: 折り返しがタグの途中へ割り込ませた CR / LF / 空白 / ESC は本文側の描画指示
+        // なので落とさず素通しする（案 H の「本文へ 1 バイトも足さない・削らない」を保つ）。
+        for (const b of marker.noise) out.push(b);
         // close 後の erase-below も出さない。こちらは何も書いていないので消す残骸が無く、
         // 送れば Ink が描いた画面下部を消すだけになる（案 G と同じ理由）。
         inMarker = !isClose;
         markerSeen = 0;
         continue;
       }
-      if (!inMarker) {
-        trackByte(combined[i]);
-        out.push(combined[i]);
-        i++;
-        continue;
-      }
+      trackByte(combined[i]);
+      out.push(combined[i]);
+      i++;
+      continue;
     }
     // マーカー prefix の carry は「ラッチし得る文脈」のときだけ行う（文中は素通しでよい）
-    if ((inMarker || lineStart) && isPossibleMarkerPrefix(combined, i)) break;
+    const needMoreForMarker = doneOpen.consumed < 0
+      || approvalOpen.consumed < 0
+      || approvalClose.consumed < 0;
+    if ((inMarker || lineStart) && needMoreForMarker) break;
     // 案 H: 承認ブロックの本文は素通しする（落とすのは上の inDone 分岐の DONE 本文だけ）。
     trackByte(combined[i]);
     out.push(combined[i]);
