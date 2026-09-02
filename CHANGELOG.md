@@ -32,6 +32,11 @@ Release artifacts are published at
   The PIN itself remains optional.
 
 ### Added
+- **Spawn approval settings can be remembered when you want them.** The new-session
+  form defaults to remembering the last successful provider-specific approval
+  settings, while an explicit opt-out restores safe defaults. High-risk launch
+  confirmation still appears every time.
+
 - **Orchestration relay loop.** `internal/hub/relay.go`, `relay_worktree.go`,
   `relay_store.go`, and `relay_api.go` run each plan C through implementation,
   review, and fix with explicit round limits, optional strong escalation, and

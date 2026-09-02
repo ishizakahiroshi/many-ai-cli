@@ -527,6 +527,8 @@
   "spawn_model_discover_tooltip": "Duyệt model Ollama Cloud (bên ngoài)",
   "spawn_model_fetch_failed": "Không lấy được danh sách model",
   "spawn_model_provider_mismatch": "Model này không khả dụng với provider đã chọn.",
+  "spawn_remember_approval_label": "Ghi nhớ",
+  "spawn_remember_approval_tooltip": "Ghi nhớ cài đặt phê duyệt gần nhất cho provider này",
   "spawn_permission_default": "Chế độ phê duyệt: Mặc định",
   "spawn_permission_plan": "plan (xác nhận trước khi thay đổi)",
   "spawn_permission_accept_edits": "acceptEdits (tự cho phép chỉ chỉnh sửa)",

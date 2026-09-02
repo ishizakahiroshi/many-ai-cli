@@ -527,6 +527,8 @@
   "spawn_model_discover_tooltip": "Browse Ollama Cloud models (external)",
   "spawn_model_fetch_failed": "Failed to fetch model list",
   "spawn_model_provider_mismatch": "This model is not available for the selected provider.",
+  "spawn_remember_approval_label": "Remember",
+  "spawn_remember_approval_tooltip": "Remember the previous approval settings for this provider",
   "spawn_permission_default": "Approval mode: Default",
   "spawn_permission_plan": "plan (confirm before changes)",
   "spawn_permission_accept_edits": "acceptEdits (auto-allow edits only)",
