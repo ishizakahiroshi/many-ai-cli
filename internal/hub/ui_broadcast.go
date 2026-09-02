@@ -193,6 +193,18 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 			return
 		}
 	}
+
+	// C2 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md):
+	// resend every spawn confirmation the Hub is still holding, so a browser
+	// that just connected (or reconnected after a reload) does not lose track
+	// of a confirmation it never got to decide.
+	for _, m := range s.pendingSpawnConfirmationMessages() {
+		if err := uc.sendWithDeadline(m, time.Now().Add(broadcastWriteTimeout)); err != nil {
+			s.logger.Warn("sendSnapshot: spawn_confirmation_requested resend failed, removing dead connection", "err", err)
+			s.removeUI(uc.ws)
+			return
+		}
+	}
 }
 
 func snapshotUsageStatMessages(sessionIDs []int, providerByID map[int]string) []proto.Message {

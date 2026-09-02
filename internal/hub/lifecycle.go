@@ -29,19 +29,50 @@ func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) killAllWrappers(reason string) {
 	s.sessionsMu.Lock()
-	conns := make([]*wrapperConn, 0, len(s.wrappers))
-	for _, wc := range s.wrappers {
-		conns = append(conns, wc)
+	ids := make([]int, 0, len(s.wrappers))
+	for id := range s.wrappers {
+		ids = append(ids, id)
 	}
 	s.sessionsMu.Unlock()
-	deadline := time.Now().Add(500 * time.Millisecond)
-	msg := proto.Message{Type: proto.TypeSessionDismissed, Reason: reason}
-	for _, wc := range conns {
-		_ = wc.sendWithDeadline(msg, deadline)
+	// killWrapper sends-then-closes one connection at a time rather than the
+	// previous "send to all, then close all" two-phase loop. This does not
+	// change what any single wrapper observes (it still gets the dismiss
+	// message before its own connection closes); it only changes the
+	// interleaving across different wrappers, which are independent
+	// connections (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md
+	// C3 — same stop logic used once instead of twice).
+	for _, id := range ids {
+		s.killWrapper(id, reason)
 	}
-	for _, wc := range conns {
-		wc.close()
+}
+
+// killWrapper stops a single session's wrapper without the full session
+// teardown handleDismiss performs (no worktree cleanup, no session removal
+// from s.sessions): it tells that one wrapper to end itself
+// (proto.TypeSessionDismissed, matching handleDismiss's own SessionID usage
+// for log/JSONL traceability) and closes the connection. The wrapper does
+// not itself look at SessionID (one wrapper is always exactly one session),
+// so this only ever affects the targeted session's own connection.
+//
+// Used by the orchestration startup-failure path (C3,
+// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md) so a child
+// that never produced anything stops taking up a slot, without touching any
+// worktree the way a dismiss would (D10). Returns false if no wrapper was
+// connected for sessionID (nothing to stop).
+func (s *Server) killWrapper(sessionID int, reason string) bool {
+	s.sessionsMu.Lock()
+	wc := s.wrappers[sessionID]
+	s.sessionsMu.Unlock()
+	if wc == nil {
+		return false
 	}
+	_ = wc.sendWithDeadline(proto.Message{
+		Type:      proto.TypeSessionDismissed,
+		SessionID: sessionID,
+		Reason:    reason,
+	}, time.Now().Add(500*time.Millisecond))
+	wc.close()
+	return true
 }
 
 func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
