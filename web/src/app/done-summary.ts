@@ -1,6 +1,7 @@
 // done-summary.ts — 完了サマリー（[MANY-AI-CLI-DONE] ブロック）の保持と表示用整形。
 //
-// 端末への書き戻しをやめた（hub-marker-filter.ts の案 G）ぶんの受け皿。Hub は
+// 端末は「今見ているセッションの、今の画面」しか映さない。その外側で完了に気づくための
+// 受け皿がここ（端末へは何も書き戻さない = hub-marker-filter.ts の案 H / 案 J）。Hub は
 // internal/hub/done_summary.go の publishDoneSummary で done_summary を
 // **通知設定と無関係に** broadcast しているので、ここで保持して
 // ライブ帯（terminal.ts）とセッションカード（session-list.ts）の両方へ配る。

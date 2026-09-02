@@ -502,8 +502,8 @@ export function _connectWs() {
     return;
   }
 
-  // 完了サマリーは端末へ書かない（hub-marker-filter.ts の案 G）ため、ここが唯一の
-  // 画面表示経路になる。Hub は通知設定と無関係に broadcast してくるので、
+  // 端末は今見ているセッションの今の画面しか映さないため、**見ていないセッション**の
+  // 完了を知る経路はここだけになる。Hub は通知設定と無関係に broadcast してくるので、
   // 外部通知を切っている利用者でもライブ帯とカードには出る。
   if (m.type === 'done_summary') {
     if (Number.isFinite(m.session_id) && m.done_summary) {

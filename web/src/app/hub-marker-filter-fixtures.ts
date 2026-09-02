@@ -19,7 +19,7 @@ function initialState(): HubMarkerFilterState {
     inDone: false,
     inMarker: false,
     markerSeen: 0,
-    doneBuf: new Uint8Array(0),
+    doneSeen: 0,
   };
 }
 
@@ -77,21 +77,19 @@ test('filterHubMarkersPure: 閉じマーカーの途中で chunk が割れても
   assert.equal(state2.markerSeen, 0);
 });
 
-test('filterHubMarkersPure (案 G): [MANY-AI-CLI-DONE] ブロックは本文ごと端末へ出さない', () => {
+test('filterHubMarkersPure (案 J): [MANY-AI-CLI-DONE] ブロックはタグだけ剥がして本文は残す', () => {
   const input = bytes('before\n[MANY-AI-CLI-DONE]\x1b[32mタスク完了\x1b[mしました[/MANY-AI-CLI-DONE]after');
   const { out, state } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  // 本文・タグのいずれも残さず、ブロックが無かったのと同じ出力になる。
-  // 端末へ書くと Ink 管理外のセルが汚れて消えないため（hub-marker-filter.ts 冒頭の案 G）。
-  assert.equal(text, 'before\nafter');
-  assert.equal(text.includes('タスク完了'), false);
+  // 案 J: 承認ブロックと同じ扱い。SGR も含めて本文はそのまま、剥がすのはタグ文字列だけ。
+  // 本文は CLI 自身が描いたものなので、こちらは何も足さない・何も削らない。
+  assert.equal(text, 'before\n\x1b[32mタスク完了\x1b[mしましたafter');
   assert.equal(text.includes('[MANY-AI-CLI-DONE]'), false);
   assert.equal(text.includes('[/MANY-AI-CLI-DONE]'), false);
   assert.equal(state.inDone, false);
-  assert.equal(state.doneBuf.length, 0);
 });
 
-test('filterHubMarkersPure (案 G/H): 承認ブロックの本文は落とさない（DONE の扱いは波及しない）', () => {
+test('filterHubMarkersPure (案 H/J): 承認ブロックの本文も落とさない', () => {
   const input = bytes('before\n[MANY-AI-CLI]\x1b[32m質問\x1b[mです[/MANY-AI-CLI]after');
   const { out } = filterHubMarkersPure(input, initialState());
   // 案 H: SGR も含めて本文はそのまま。剥がすのはタグ文字列だけ。
@@ -140,19 +138,19 @@ test('filterHubMarkersPure: 開きマーカー文字列の途中で chunk が割
   assert.equal(state2.inMarker, false);
 });
 
-test('filterHubMarkersPure セーフガード: DONE close が typo で来ない場合、閾値超過で破棄＋状態リセット', () => {
+test('filterHubMarkersPure セーフガード: DONE close が typo で来なくても閾値超過でラッチだけ解除', () => {
   // 2026-07-01 セッション #16 実測の実例: [/MANARY-AI-CLI-DONE] とタイポし close 不一致
   const summary = 'サマリー本文';
   const filler = 'x'.repeat(MAX_MARKER_BUFFER_BYTES + 100);
   const input = bytes(`[MANY-AI-CLI-DONE]${summary} ${filler}[/MANARY-AI-CLI-DONE]after`);
   const { out, state } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  // 2026-07-04: 閾値超過分は本文ではなく再描画の堆積とみなし破棄する
-  // （旧仕様の強制 flush は 32KB の剥離ゴミを scrollback へ化石化させていた）
-  assert.equal(text.includes(summary), false);
-  // 状態は復帰しており、閾値超過後のバイトは素通しで届く（凍結しない）
+  // 案 J: 本文は貯めずに素通し済みなので、出力からは 1 バイトも欠けない
+  assert.equal(text.includes(summary), true);
+  assert.equal(text.includes('xxx'), true);
+  // ラッチだけ解除する。放置すると以後の stray close を位置に関係なく受理してしまうため。
   assert.equal(state.inDone, false);
-  assert.equal(state.doneBuf.length, 0);
+  assert.equal(state.doneSeen, 0);
   assert.equal(text.includes('after'), true);
 });
 
@@ -270,23 +268,24 @@ test('案 H: 出力はタグのバイト数ぶんだけ短くなる（本文へ�
 // カーソル移動の CSI が割り込む。連続バイト列の完全一致では CLOSE を取りこぼし、ラッチした
 // まま以降の端末出力を全部捨てていた（セッション #3 で 31.2% の出力が xterm へ届いていない）。
 
-test('案 I: 折り返しで分断された DONE の CLOSE を受理し、以降の出力を捨てない', () => {
+test('案 I/J: 折り返しで分断された DONE の CLOSE を受理し、タグだけ剥がす', () => {
   // 2026-09-02 セッション #3（Codex 130 桁）の実測パターン
   const wrapped = '[/MANY-AI-CLI-\r\n' + ' '.repeat(130) + '\r\n\x1b[?25l\x1b[35;1H\n\x1b[30;1H  DONE]';
   const input = bytes(`\x1b[30;1H  [MANY-AI-CLI-DONE] 対象 plan は未完了です。 ${wrapped}\x1b[30;1H■ You've hit your usage limit.`);
   const { out, state } = filterHubMarkersPure(input, initialState());
   const text = str(out);
-  // DONE 本文は落ちるが、CLOSE 以降の CLI 出力（使用量上限のエラー行）は届く
-  assert.equal(text.includes('対象 plan は未完了です。'), false);
+  // 案 J: 本文も CLOSE 以降の CLI 出力（使用量上限のエラー行）も届き、タグだけ消える
+  assert.equal(text.includes('対象 plan は未完了です。'), true);
   assert.equal(text.includes("■ You've hit your usage limit."), true);
+  assert.equal(text.includes('[MANY-AI-CLI-DONE]'), false);
+  assert.equal(text.includes('[/MANY-AI-CLI-'), false);
   assert.equal(state.inDone, false);
-  assert.equal(state.doneBuf.length, 0);
 });
 
-test('案 I: 折り返しで分断された DONE の OPEN もラッチする', () => {
+test('案 I/J: 折り返しで分断された DONE の OPEN もラッチし、割り込んだバイトは素通しする', () => {
   const input = bytes('\n[MANY-AI-CLI-\r\n  DONE]サマリー[/MANY-AI-CLI-DONE]after');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  assert.equal(str(out), '\nafter');
+  assert.equal(str(out), '\n\r\n  サマリーafter');
   assert.equal(state.inDone, false);
 });
 
@@ -308,8 +307,8 @@ test('案 I: 折り返しで分断された承認 OPEN も行頭ゲートを通�
 test('案 I: マーカーの途中に印字文字が割り込んだら一致させない（誤爆を増やさない）', () => {
   const input = bytes('\n[MANY-AI-CLI-DONE]本文 [/MANY-AI-CLI-x DONE]tail');
   const { out, state } = filterHubMarkersPure(input, initialState());
-  // CLOSE と認めないので DONE ラッチは続く（従来どおり 32KB のセーフガードで復帰する）
-  assert.equal(str(out), '\n');
+  // CLOSE と認めないので DONE ラッチは続くが、案 J では本文も壊れた CLOSE も素通しで届く
+  assert.equal(str(out), '\n本文 [/MANY-AI-CLI-x DONE]tail');
   assert.equal(state.inDone, true);
 });
 
@@ -317,20 +316,22 @@ test('案 I: 読み飛ばし総量が上限を超えたら一致させない', (
   const gap = ' '.repeat(MAX_MARKER_WRAP_GAP_BYTES + 10);
   const input = bytes(`\n[MANY-AI-CLI-DONE]本文 [/MANY-AI-CLI-${gap}DONE]tail`);
   const { out, state } = filterHubMarkersPure(input, initialState());
-  assert.equal(str(out), '\n');
+  const text = str(out);
+  assert.equal(text.includes('本文 [/MANY-AI-CLI-'), true);
+  assert.equal(text.endsWith('DONE]tail'), true);
   assert.equal(state.inDone, true);
 });
 
 test('案 I: 折り返しの隙間で chunk が割れても carry で次に繋ぐ', () => {
   const part1 = bytes('\n[MANY-AI-CLI-DONE]サマリー [/MANY-AI-CLI-\r\n   ');
   const { out: out1, state: state1 } = filterHubMarkersPure(part1, initialState());
-  assert.equal(str(out1), '\n');
+  assert.equal(str(out1), '\nサマリー ');
   assert.equal(state1.inDone, true);
   assert.ok(state1.carry.length > 0);
 
   const part2 = bytes('DONE]after');
   const { out: out2, state: state2 } = filterHubMarkersPure(part2, state1);
-  assert.equal(str(out2), 'after');
+  assert.equal(str(out2), '\r\n   after');
   assert.equal(state2.inDone, false);
   assert.equal(state2.carry.length, 0);
 });
@@ -343,4 +344,38 @@ test('案 I: matchMarkerAllowingWrap は不一致・バイト不足・一致を�
   const m = matchMarkerAllowingWrap(wrapped, 0, pattern);
   assert.equal(m.consumed, wrapped.length);
   assert.equal(str(m.noise), '\r\n  ');
+});
+
+// ── 案 J（2026-09-03）: CLOSE が 1 バイトも描かれない再描画フレーム ──
+// 代替画面では CLI が 2 次元のセルを絶対座標で塗り直すので、1 回の再描画に OPEN だけが入り、
+// CLOSE は画面外にあって描かれないことが起きる（折り返しで分断されているのではなく不在）。
+// 案 G〜I の「OPEN が来たら CLOSE まで捨てる」だと、そこから 32KB 溜まるまで端末が固まる。
+// 2026-09-03 セッション #7 実測: 171 万バイト中 33 万バイト（19.3%）が xterm へ届かず、
+// 最長 3 分 6 秒フリーズ。利用者からは「処理中にホイールで遡っても画面が動かない」に見えた。
+
+test('案 J: CLOSE の来ない再描画フレームが後続フレームを飲み込まない', () => {
+  // 遡りスクロール中の再描画: OPEN を含む行は描かれるが CLOSE の行は画面外で描かれない
+  const frame1 = bytes('\x1b[2;3H  [MANY-AI-CLI-DONE] 完了サマリー本文\x1b[3;3H次の行');
+  const { out: out1, state: state1 } = filterHubMarkersPure(frame1, initialState());
+  assert.equal(str(out1), '\x1b[2;3H   完了サマリー本文\x1b[3;3H次の行');
+  assert.equal(state1.inDone, true);
+
+  // 次のホイール 1 ノッチぶんの再描画。旧実装ではここが丸ごと捨てられて画面が固まっていた。
+  const frame2 = bytes('\x1b[2;3H遡った先の本文\x1b[3;3Hさらに前の行');
+  const { out: out2 } = filterHubMarkersPure(frame2, state1);
+  assert.equal(str(out2), '\x1b[2;3H遡った先の本文\x1b[3;3Hさらに前の行');
+});
+
+test('案 J: CLOSE が OPEN より先に描かれても後続フレームを飲み込まない', () => {
+  // 絶対座標の塗り直しでは行の描画順が転倒しうる（CLOSE の行 → OPEN の行）
+  const frame = bytes('\x1b[27;3H[/MANY-AI-CLI-DONE]\x1b[25;3H[MANY-AI-CLI-DONE] サマリー');
+  const { out, state } = filterHubMarkersPure(frame, initialState());
+  const text = str(out);
+  assert.equal(text.includes('[MANY-AI-CLI-DONE]'), false);
+  assert.equal(text.includes('サマリー'), true);
+  assert.equal(state.inDone, true);
+
+  const next = bytes('\x1b[2;3H次のフレーム');
+  const { out: out2 } = filterHubMarkersPure(next, state);
+  assert.equal(str(out2), '\x1b[2;3H次のフレーム');
 });

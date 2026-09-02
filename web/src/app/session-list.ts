@@ -598,8 +598,8 @@ function cardStatusRowHtml(s) {
       return `<span class="card-end-reason" data-tooltip="${escapeHtml(translated)}">${escapeHtml(translated)}</span>`;
     }
   }
-  // 直前ターンの完了サマリー。完了サマリーは端末へ書かなくなった（hub-marker-filter.ts の
-  // 案 G）ので、**見ていないセッション**の完了に気づける経路はここだけになる。
+  // 直前ターンの完了サマリー。端末は今見ているセッションの今の画面しか映さないので、
+  // **見ていないセッション**の完了に気づける経路はここだけになる。
   // 稼働中は上の長時間バッジや状態表示のほうが今知りたい情報なので、待機側の状態でだけ出す。
   if (state !== 'running' && state !== 'waiting') {
     const done = getDoneSummary(s.id);
