@@ -6,25 +6,36 @@
 // 操作はすべて terminal.ts の scrollAltBufferPage() を経由して 1 ノッチとして
 // CLI へ送る。ホイール／メイン画面の ↑up・↓down ボタン／レール自身の pump／
 // マルチペイン ↑up・↓down／別窓グリッド ↑up・↓down の 6 経路のどれで
-// スクロールしてもスライダー位置に反映される（計上は terminal.ts 側で行う）。
+// スクロールしても、PTY 応答後に画面変化を確認できた分だけ位置へ反映する。
 
 import { terminals } from './state.js';
 import { t as ti18n } from '../i18n.js';
 import {
   AltRailState,
-  altRailApplyNotches,
   altRailClampTarget,
   altRailGeometry,
   altRailInitialState,
   altRailNotchesFromSliderTop,
   altRailStep,
 } from './alt-scroll-rail.js';
+import {
+  isConfirmedAltScreenChange,
+  type TerminalScreenSnapshot,
+} from './terminal-history-strategy.js';
 import { canPageAltBuffer, markTerminalManualScrollIntent, scrollAltBufferPage } from './terminal.js';
 
 /** イベントを流す間隔（ms）。1 ドラッグでホイールを連投して TUI を壊さないための律速。 */
 const PUMP_INTERVAL_MS = 40;
 /** 1 回の操作で送るノッチ数の上限。大きな連投で TUI を壊さないための蓋。 */
 const MAX_QUEUED_NOTCHES = 120;
+/** 入力後に画面変化を待つ上限。履歴端の空振りで pump を回し続けないための蓋。 */
+const CONFIRM_TIMEOUT_MS = 350;
+
+interface PendingNotch {
+  direction: number;
+  before: TerminalScreenSnapshot;
+  timeout: ReturnType<typeof setTimeout>;
+}
 
 interface RailEntry {
   rail: HTMLElement;
@@ -35,14 +46,16 @@ interface RailEntry {
   dragging: boolean;
   grabOffset: number;
   pumpTimer: ReturnType<typeof setInterval> | null;
+  /** PTY へ送信済みで、xterm の可視画面変化を待っている 1 ノッチ。 */
+  pending: PendingNotch | null;
 }
 
 const rails = new Map<number, RailEntry>();
 
 function displayState(entry: RailEntry): AltRailState {
-  // ドラッグ中はキー送信の完了を待たずスライダーを指に追従させる。
-  if (entry.target === null) return entry.state;
-  return altRailApplyNotches(entry.state, entry.target);
+  // target は「移動要求」であって現在位置ではない。入力が履歴端で空振りしても
+  // スライダーだけ先行しないよう、描画は確認済み state のみを正本にする。
+  return entry.state;
 }
 
 // PTY の flush ごとに clientHeight を読むとレイアウトを強制同期させてしまうため、
@@ -82,6 +95,18 @@ function stopPump(entry: RailEntry): void {
   }
 }
 
+function clearPending(entry: RailEntry): void {
+  if (entry.pending === null) return;
+  clearTimeout(entry.pending.timeout);
+  entry.pending = null;
+}
+
+function stopUnconfirmedRequest(entry: RailEntry): void {
+  clearPending(entry);
+  entry.target = null;
+  stopPump(entry);
+}
+
 function pump(id: number): void {
   const entry = rails.get(id);
   if (!entry) return;
@@ -102,14 +127,11 @@ function pump(id: number): void {
     stopPump(entry);
     return;
   }
-  // 送ってもノッチ数が動かない状況（想定外のクランプ等）で回り続けないための保険。
-  const before = entry.state.notchesUp;
-  // diff > 0 は「もっと上へ」。scrollAltBufferPage 側でノッチ数が計上される。
+  // diff > 0 は「もっと上へ」。位置の計上は PTY 応答後の confirm で行う。
   const sent = scrollAltBufferPage(id, t, diff > 0 ? -1 : 1);
-  // 転送できない provider・メインバッファへ戻った場合は諦める（レールも次の描画で消える）。
-  if (!sent || entry.state.notchesUp === before) {
-    entry.target = null;
-    stopPump(entry);
+  // 転送できない戦略・メインバッファへ戻った場合は諦める（レールも次の描画で消える）。
+  if (!sent) {
+    stopUnconfirmedRequest(entry);
     renderRail(id);
   }
 }
@@ -207,6 +229,7 @@ export function ensureAltScrollRail(id: number, t: any): void {
     dragging: false,
     grabOffset: 0,
     pumpTimer: null,
+    pending: null,
   };
   rails.set(id, entry);
   bindPointer(id, entry);
@@ -220,19 +243,62 @@ export function updateAltScrollRail(id: number): void {
 }
 
 /**
- * ホイールを 1 ノッチ送ったことを計上する。terminal.ts の scrollAltBufferPage から
- * 呼ばれるので、ホイール／メイン画面の ↑up・↓down ボタン／レール自身の pump／
- * マルチペイン ↑up・↓down／別窓グリッド ↑up・↓down の 6 経路すべてが反映される。
+ * 1 ノッチを送る直前に、現在の可視画面を pending として保持する。
+ * pending 中の追加イベントは PTY へ送らず、最初の応答を待つ。
  */
-export function noteAltScrollNotch(id: number, direction: number): void {
+export function beginAltScrollNotch(
+  id: number,
+  direction: number,
+  before: TerminalScreenSnapshot,
+): 'started' | 'busy' | 'untracked' {
+  const entry = rails.get(id);
+  if (!entry) return 'untracked';
+  if (entry.pending !== null) return 'busy';
+  const pending = {} as PendingNotch;
+  pending.direction = direction;
+  pending.before = before;
+  pending.timeout = setTimeout(() => {
+    if (entry.pending !== pending) return;
+    // PTY 出力が無い、または出ても可視本文が同一なら履歴端の空振り。要求を破棄し、
+    // 確認済み位置からレールを動かさない。
+    stopUnconfirmedRequest(entry);
+    renderRail(id);
+  }, CONFIRM_TIMEOUT_MS);
+  entry.pending = pending;
+  return 'started';
+}
+
+/** sendText が失敗したとき、画面変化待ちを即座に破棄する。 */
+export function cancelAltScrollNotch(id: number): void {
   const entry = rails.get(id);
   if (!entry) return;
-  entry.state = altRailStep(entry.state, direction);
-  renderRail(id);
+  clearPending(entry);
 }
 
 /**
- * 送ったホイール上から下を引いた純ノッチ数。0 が最下部＝CLI はライブの画面を描いている。
+ * xterm が PTY chunk を描画し終えた後に呼ぶ。送信前から可視本文が操作方向へ
+ * ずれた場合だけ 1 ノッチを確定するので、履歴端の空振りで疑似レールだけが進まない。
+ */
+export function confirmAltScrollNotch(id: number, after: TerminalScreenSnapshot): boolean {
+  const entry = rails.get(id);
+  const pending = entry?.pending;
+  if (!entry || !pending) return false;
+  if (!isConfirmedAltScreenChange(pending.before, after, pending.direction)) return false;
+  const direction = pending.direction;
+  clearPending(entry);
+  entry.state = altRailStep(entry.state, direction);
+  renderRail(id);
+  return true;
+}
+
+/** PTY flush のたびに可視行を走査せず、pending 中だけ snapshot を作るための軽量判定。 */
+export function hasPendingAltScrollNotch(id: number): boolean {
+  return rails.get(id)?.pending != null;
+}
+
+/**
+ * 画面移動を確認できたホイール上から下を引いた純ノッチ数。
+ * 0 が最下部＝CLI はライブの画面を描いている。
  *
  * 0 より大きい間、CLI の画面には過去の位置が載っている。Hub の承認検出は VT ミラー＝
  * 今の画面を見るので、この値は「画面に出ているものを今の承認として扱ってよいか」の
@@ -247,6 +313,7 @@ export function altScrollNotchesUp(id: number): number {
 export function disposeAltScrollRail(id: number): void {
   const entry = rails.get(id);
   if (!entry) return;
+  clearPending(entry);
   stopPump(entry);
   try { entry.rail.remove(); } catch (_) { /* 既に外れていれば何もしない */ }
   rails.delete(id);

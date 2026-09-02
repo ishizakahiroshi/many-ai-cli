@@ -18,7 +18,15 @@ import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
 import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
-import { altScrollNotchesUp, ensureAltScrollRail, noteAltScrollNotch, requestNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import {
+  resolveTerminalHistoryStrategy,
+  terminalHistoryCapabilitiesForProvider,
+  type TerminalBufferType,
+  type TerminalHistoryCapabilities,
+  type TerminalHistoryStrategy,
+  type TerminalScreenSnapshot,
+} from './terminal-history-strategy.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith } from './hub-marker-filter.js';
 
@@ -918,18 +926,56 @@ export function isAlternateBuffer(t) {
   return !!(active && active.type === 'alternate');
 }
 
-// ページ転送が有効なセッションか。代替画面バッファに居ることに加えて、
-// grok だけは転送しない（下の理由）。疑似スクロールレール（alt-scroll-rail-view.ts）の
-// 表示条件も同じ述語を使う。押しても動かないレールを出さないため、判定は 1 本にする。
+interface TerminalHistoryRoute {
+  strategy: TerminalHistoryStrategy;
+  capabilities: TerminalHistoryCapabilities;
+}
+
+function terminalBufferType(t): TerminalBufferType {
+  const type = t?.term?.buffer?.active?.type;
+  if (type === 'alternate') return 'alternate';
+  if (type === 'normal') return 'normal';
+  return 'unknown';
+}
+
+function terminalHistoryRoute(sessionId, t): TerminalHistoryRoute {
+  const capabilities = terminalHistoryCapabilitiesForProvider(sessions.get(sessionId)?.provider);
+  const buffer = t?.term?.buffer?.active;
+  const nativeScrollbackAvailable = buffer?.type === 'normal' && buffer.length > (t?.term?.rows || 0);
+  return {
+    capabilities,
+    strategy: resolveTerminalHistoryStrategy(terminalBufferType(t), capabilities, nativeScrollbackAvailable),
+  };
+}
+
+function openTranscriptViewerForRoute(sessionId, route: TerminalHistoryRoute): boolean {
+  if (route.strategy !== 'transcript-viewer') return false;
+  if (route.capabilities.transcriptViewer === 'grok-chat') {
+    if (!isGrokChatViewerOpen()) openGrokChatViewer(sessionId);
+    return true;
+  }
+  return false;
+}
+
+export function captureTerminalScreenSnapshot(t): TerminalScreenSnapshot {
+  const term = t?.term || t;
+  const buffer = term?.buffer?.active;
+  const rows = Math.max(0, Number(term?.rows) || 0);
+  const cols = Math.max(0, Number(term?.cols) || 0);
+  const start = Math.max(0, Number(buffer?.viewportY) || 0);
+  const lines: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    lines.push(buffer?.getLine?.(start + i)?.translateToString(false) || '');
+  }
+  const rawType = buffer?.type;
+  const bufferType: TerminalBufferType = rawType === 'alternate' || rawType === 'normal' ? rawType : 'unknown';
+  return { bufferType, cols, rows, lines };
+}
+
+// 代替画面へ履歴入力を送れる戦略か。疑似スクロールレールの表示条件も同じ述語を
+// 使う。Provider 固有事情は terminal-history-strategy.ts の capability profile に閉じる。
 export function canPageAltBuffer(sessionId, t) {
-  if (!isAlternateBuffer(t)) return false;
-  // grok の TUI は PageUp で履歴領域に飛び、その状態で次の応答が来ると応答が画面外
-  // （履歴領域）に描画されユーザーには「Waiting のまま動かない」ように見える。
-  // trackpad 慣性や高 DPI マウスは 1 操作で wheel イベントを数発発火するため、
-  // 1 ノッチのつもりが PageUp 数連投になり確実にこの状態に陥る（s32 17:00:45〜47 に
-  // ESC[5~ が 6 回連発した実例あり）。grok 宛は wheel→PageUp 転送を停止する。
-  if (sessions.get(sessionId)?.provider === 'grok') return false;
-  return true;
+  return terminalHistoryRoute(sessionId, t).strategy === 'alt-input-confirmed';
 }
 
 // alt buffer 中のスクロール操作は PTY 側アプリ（Claude Code / opencode 等の TUI）に
@@ -938,6 +984,12 @@ export function canPageAltBuffer(sessionId, t) {
 // 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
 export function scrollAltBufferPage(sessionId, t, direction) {
   if (!canPageAltBuffer(sessionId, t)) return false;
+  // pending 中は PTY へも送らず、可視行 snapshot の再作成も避ける。
+  if (hasPendingAltScrollNotch(sessionId)) return true;
+  const pending = beginAltScrollNotch(sessionId, direction, captureTerminalScreenSnapshot(t));
+  // 1 件ずつ画面変化を確認する。同じ入力が pending 中の wheel/pump はここで吸収し、
+  // PTY へ連投しない（呼び元には「代替画面経路で処理済み」と返す）。
+  if (pending === 'busy') return true;
   const requestedMode: WheelEncoding = t.mouseMode?.tracking
     ? (t.mouseMode.sgr ? 'sgr' : 'x10')
     : 'page';
@@ -959,11 +1011,11 @@ export function scrollAltBufferPage(sessionId, t, direction) {
       elemH: t.container?.clientHeight ?? -1,
     }));
   } catch (_) {}
-  try { sendText(sessionId, key); } catch (_) {}
-  // ホイール・↑up / ↓down ボタン・疑似レールのどれで送ってもここを通る。
-  // 疑似レールのスライダー位置はこの計上だけを根拠にしている（CLI 内部の
-  // スクロール量は取得できないため近似）。
-  noteAltScrollNotch(sessionId, direction);
+  const sent = sendText(sessionId, key);
+  if (!sent) {
+    if (pending === 'started') cancelAltScrollNotch(sessionId);
+    return false;
+  }
   return true;
 }
 
@@ -1103,22 +1155,21 @@ document.addEventListener('wheel', (e) => {
     return;
   }
 
-  // Grok で上端にいる状態の上方向ホイールは、Grok 会話履歴ビューアを自動展開する。
-  // Grok のように改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
+  // 専用 transcript viewer capability を持つ TUI で上方向ホイールが来たら、自動展開する。
+  // 改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
   // 育たないため、ホイール上は無反応のままになる（履歴ボタンも表示条件 buf.length>rows を
   // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで会話履歴へ導線する。
   // 生 PTY ログ再生（history-viewer）は絶対座標フレームの機械置換で読めない表示になるため、
-  // Grok は chat_history.jsonl 由来の整形ビューア（grok-chat-viewer）を使う。
+  // 現在の grok-chat viewer は chat_history.jsonl 由来の整形表示を使う。
   const multiViewEl = document.getElementById('multi-view');
   const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
   const buf = t.term.buffer.active;
-  // alt buffer でここに到達するのは grok のみ（他 provider は forwardWheelToAltBuffer が
-  // PgUp/PgDn 転送で return 済み。grok 宛転送は事故防止で停止中 → scrollAltBufferPage 参照）。
+  // alt-input-confirmed は forwardWheelToAltBuffer で return 済み。transcript-viewer は
+  // PTY 転送をしないためここへ到達する。
   // alt buffer は scrollback を持たず「上端」概念が無いので、常にビューア導線の対象にする。
   const atTop = buf.type === 'alternate' || buf.viewportY === 0;
-  const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
-  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isGrokChatViewerOpen()) {
-    openGrokChatViewer(targetSessionId);
+  const historyRoute = terminalHistoryRoute(targetSessionId, t);
+  if (historyRoute.strategy === 'transcript-viewer' && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && openTranscriptViewerForRoute(targetSessionId, historyRoute)) {
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -1323,14 +1374,11 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
     updateScrollLockBtn(true);
     return;
   }
-  // スクロールバックが無い（Grok のように改行を出さない TUI / alt buffer）場合、
+  // スクロールバックが無い（固定位置に描く TUI / alt buffer）場合、
   // scrollToTop は無反応のままになる。ホイール経路と同じく、その状態の▲は
-  // Grok 会話履歴ビューアを開く導線として扱う（grok のみ。alt buffer 中の grok は
-  // PgUp 転送も事故防止で停止しているため、ここが唯一の履歴導線）。
-  const buf = t.term.buffer.active;
-  const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
-  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isGrokChatViewerOpen()) {
-    openGrokChatViewer(activeSessionId);
+  // capability profile が宣言する専用 transcript viewer の導線として扱う。
+  const historyRoute = terminalHistoryRoute(activeSessionId, t);
+  if (openTranscriptViewerForRoute(activeSessionId, historyRoute)) {
     return;
   }
   t.autoScroll = false;
@@ -1994,6 +2042,11 @@ export function writePTYChunk(id, term, bytes, onFlush) {
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
     primeScrollbarVisibility(term.element);
+    // 入力送信時点では疑似位置を動かさない。xterm が PTY 応答を描画し終え、可視本文が
+    // 実際に変わった場合だけ pending の 1 ノッチを確定する。
+    if (hasPendingAltScrollNotch(id)) {
+      confirmAltScrollNotch(id, captureTerminalScreenSnapshot(t || { term }));
+    }
     // 代替画面への出入り（ESC[?1049h / l）は PTY 出力で起きるので、flush ごとに
     // 疑似レールの表示条件を取り直す。
     updateAltScrollRail(id);
