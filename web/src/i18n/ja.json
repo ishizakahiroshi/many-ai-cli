@@ -1622,6 +1622,7 @@
   "relay_stop": "停止",
   "relay_resume": "再開",
   "relay_cleanup_worktree": "worktree を片付ける",
+  "relay_cleanup_confirm": "子セッション {count} 本も閉じて worktree を片付けます。続けますか？",
   "relay_action_failed": "Relay 操作に失敗しました",
   "relay_timeline_title": "時系列",
   "relay_timeline_show_all": "すべて表示",

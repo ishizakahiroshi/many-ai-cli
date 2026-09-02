@@ -9,6 +9,40 @@ import (
 	"many-ai-cli/internal/config"
 )
 
+func TestHubSpawnEnvOverridesHubIdentityAndExecutable(t *testing.T) {
+	got := hubSpawnEnv([]string{
+		"PATH=/bin",
+		"MANY_AI_CLI=0",
+		"MANY_AI_CLI_HUB_PORT=1",
+		"MANY_AI_CLI_BIN=old",
+	}, 47777, `/repo/dist/many-ai-cli`)
+	joined := "\n" + strings.Join(got, "\n") + "\n"
+	for _, want := range []string{
+		"\nMANY_AI_CLI=1\n",
+		"\nMANY_AI_CLI_HUB_PORT=47777\n",
+		"\nMANY_AI_CLI_BIN=/repo/dist/many-ai-cli\n",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("spawn env missing %q: %v", want, got)
+		}
+	}
+	for _, stale := range []string{"MANY_AI_CLI=0", "MANY_AI_CLI_HUB_PORT=1", "MANY_AI_CLI_BIN=old"} {
+		if strings.Contains(joined, "\n"+stale+"\n") {
+			t.Fatalf("spawn env kept stale value %q: %v", stale, got)
+		}
+	}
+}
+
+func TestConductorPromptRequiresHubExecutable(t *testing.T) {
+	prompt := buildConductorInitialPrompt("orch-test", nil)
+	if !strings.Contains(prompt, manyAICLIBinEnv) {
+		t.Fatalf("conductor prompt does not name %s: %s", manyAICLIBinEnv, prompt)
+	}
+	if strings.Contains(prompt, "run: many-ai-cli orchestrate relay") {
+		t.Fatalf("conductor prompt still recommends PATH lookup: %s", prompt)
+	}
+}
+
 // TestCalcGridLayout は session 数から正しい grid layout 文字列を返すことを検証する。
 func TestCalcGridLayout(t *testing.T) {
 	cases := []struct {

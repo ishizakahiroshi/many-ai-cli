@@ -115,8 +115,28 @@ func (s *Server) cleanupRelayWorktree(parentCWD, path, branch string, keepBranch
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if out, err := exec.CommandContext(ctx, "git", "-C", parentCWD, "worktree", "remove", "--force", path).CombinedOutput(); err != nil {
-		return fmt.Errorf("remove relay worktree: %s: %w", strings.TrimSpace(string(out)), err)
+		removeDetail := strings.TrimSpace(string(out))
+		registered, checkErr := relayWorktreeRegistered(ctx, parentCWD, path)
+		if checkErr != nil {
+			return fmt.Errorf("remove relay worktree: %s: %w (could not verify worktree registration: %v)", removeDetail, err, checkErr)
+		}
+		if registered {
+			return fmt.Errorf("relay child may still be using the worktree; close the child sessions and retry cleanup: %s: %w", removeDetail, err)
+		}
+		// Git can unregister the worktree before Windows rejects removal of a
+		// directory still used as a process cwd. Recover that partial state so a
+		// retry remains possible and no empty relay directory is stranded.
+		if pruneOut, pruneErr := exec.CommandContext(ctx, "git", "-C", parentCWD, "worktree", "prune").CombinedOutput(); pruneErr != nil {
+			return fmt.Errorf("relay worktree was unregistered but cleanup recovery failed; close child sessions and retry: prune: %s: %w", strings.TrimSpace(string(pruneOut)), pruneErr)
+		}
+		if removeErr := os.RemoveAll(path); removeErr != nil {
+			return fmt.Errorf("relay worktree was unregistered but its directory is still in use; close child sessions and retry cleanup: %w", removeErr)
+		}
 	}
+	// The layout is <root>/<orchestration-id>/relay. Remove only the now-empty
+	// ID directory; os.Remove is deliberately non-recursive and harmless when
+	// another artifact exists there.
+	_ = os.Remove(filepath.Dir(path))
 	if keepBranch || !validRevision(branch) {
 		return nil
 	}
@@ -124,6 +144,24 @@ func (s *Server) cleanupRelayWorktree(parentCWD, path, branch string, keepBranch
 		return fmt.Errorf("delete relay branch: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
+}
+
+func relayWorktreeRegistered(ctx context.Context, parentCWD, target string) (bool, error) {
+	out, err := exec.CommandContext(ctx, "git", "-C", parentCWD, "worktree", "list", "--porcelain").Output()
+	if err != nil {
+		return false, err
+	}
+	target = filepath.Clean(target)
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(line, "worktree ") {
+			continue
+		}
+		listed := filepath.Clean(filepath.FromSlash(strings.TrimPrefix(line, "worktree ")))
+		if isUnder(listed, target) && isUnder(target, listed) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // relayGitHead is the default relayDeps.gitHead.

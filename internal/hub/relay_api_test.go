@@ -104,6 +104,35 @@ func TestResolveRelayPlanPathValidation(t *testing.T) {
 	}
 }
 
+func TestResolveRelayPlanPathAllowsPlanBelowLinkedDirectory(t *testing.T) {
+	h := newRelayHarness(t)
+	outDir := t.TempDir()
+	want := filepath.Join(outDir, "junction-plan.md")
+	if err := os.WriteFile(want, []byte("# linked plan\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	linkDir := filepath.Join(h.parent.CWD, "docs", "local")
+	if err := os.MkdirAll(filepath.Dir(linkDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outDir, linkDir); err != nil {
+		t.Skipf("directory symlink creation unavailable: %v", err)
+	}
+
+	got, err := resolveRelayPlanPath(h.parent.CWD, filepath.Join("docs", "local", "junction-plan.md"))
+	if err != nil {
+		t.Fatalf("plan below linked directory rejected: %v", err)
+	}
+	resolvedWant, err := filepath.EvalSymlinks(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Clean(resolvedWant) {
+		t.Fatalf("resolved plan = %q, want %q", got, resolvedWant)
+	}
+}
+
 func TestHandleRelayStartValidationAndDefaults(t *testing.T) {
 	h := newRelayHarness(t)
 	h.s.cfg.Hub.AllowLoopbackWithoutToken = true
@@ -194,6 +223,40 @@ func TestHandleRelayMultipleStopGetAndLimits(t *testing.T) {
 	code, none := relayAPICall(t, h.s, http.MethodPost, "/api/sessions/1/relay-stop", relayControlAPIRequest{})
 	if code != http.StatusNotFound || none.Error != "relay_not_found" {
 		t.Fatalf("stop with no active status=%d response=%+v", code, none)
+	}
+}
+
+func TestCloseRelayChildrenDismissesAndStopsBoardWatch(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	if !h.s.relayFinish(h.run(id), relayStateCompleted, "", "finished by test") {
+		t.Fatal("relayFinish returned false")
+	}
+	// The harness websocket is only a send sentinel and cannot be closed.
+	// Lifecycle tests cover connected-wrapper shutdown; here we exercise the
+	// no-wrapper teardown path used when a child process already exited.
+	h.s.sessionsMu.Lock()
+	delete(h.s.wrappers, impl)
+	h.s.sessionsMu.Unlock()
+
+	if remaining := h.s.closeRelayChildren([]int{impl}); len(remaining) != 0 {
+		t.Fatalf("remaining children = %v", remaining)
+	}
+	h.s.markRelayChildrenDone(id, []int{impl})
+	h.s.sessionsMu.Lock()
+	_, sessionExists := h.s.sessions[impl]
+	_, wrapperExists := h.s.wrappers[impl]
+	h.s.sessionsMu.Unlock()
+	if sessionExists || wrapperExists {
+		t.Fatalf("child retained after cleanup: session=%v wrapper=%v", sessionExists, wrapperExists)
+	}
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	done := h.s.orchestration.boards[id].Done[impl]
+	h.s.orchestration.mu.Unlock()
+	if child == nil || !child.Done || !done {
+		t.Fatalf("board child not finalized: child=%+v done=%v", child, done)
 	}
 }
 

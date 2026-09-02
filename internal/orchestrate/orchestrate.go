@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -146,6 +147,18 @@ func runSend(args []string) error {
 }
 
 func runRelay(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "status":
+			return runRelayStatus(args[1:])
+		case "stop":
+			return runRelayStop(args[1:])
+		default:
+			if !strings.HasPrefix(args[0], "-") {
+				return fmt.Errorf("orchestrate relay: unknown action %q (want status|stop, or pass --plan to start)", args[0])
+			}
+		}
+	}
 	fs := flag.NewFlagSet("orchestrate relay", flag.ContinueOnError)
 	plan := fs.String("plan", "", "plan markdown path (required)")
 	maxRounds := fs.Int("max-rounds", 0, "maximum review rounds per C (default: 3)")
@@ -161,6 +174,10 @@ func runRelay(args []string) error {
 	}
 	if strings.TrimSpace(*plan) == "" {
 		return errors.New("orchestrate relay: --plan is required")
+	}
+	planPath, err := filepath.Abs(strings.TrimSpace(*plan))
+	if err != nil {
+		return fmt.Errorf("orchestrate relay: resolve --plan: %w", err)
 	}
 
 	roles := map[string]relayRoleAssignment{}
@@ -196,7 +213,7 @@ func runRelay(args []string) error {
 		fmt.Println("warning: same-tree mode: the relay children edit your working tree directly; do not edit the repository in parallel")
 	}
 	result, err := postChildAPI(fmt.Sprintf("%s/api/sessions/%d/relay", hubURL, sessionID), token, relayStartRequest{
-		PlanPath:      *plan,
+		PlanPath:      planPath,
 		MaxRounds:     *maxRounds,
 		Mode:          mode,
 		Roles:         roles,
@@ -212,6 +229,70 @@ func runRelay(args []string) error {
 	st := result.Relay
 	fmt.Printf("relay started orchestration=%s mode=%s branch=%s worktree=%s implementation=#%d max_rounds=%d\n",
 		st.OrchestrationID, st.Mode, st.Branch, st.WorktreePath, st.ImplementationSessionID, st.MaxRounds)
+	return nil
+}
+
+func runRelayStatus(args []string) error {
+	fs := flag.NewFlagSet("orchestrate relay status", flag.ContinueOnError)
+	id := fs.String("id", "", "show only this orchestration id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("orchestrate relay status [--id <orchestration-id>]")
+	}
+	hubURL, token, sessionID, err := hubEnv("relay status")
+	if err != nil {
+		return err
+	}
+	result, err := getChildAPI(fmt.Sprintf("%s/api/sessions/%d/relay", hubURL, sessionID), token)
+	if err != nil {
+		return err
+	}
+	shown := 0
+	for _, item := range result.Relays {
+		st := item.Relay
+		if strings.TrimSpace(*id) != "" && st.OrchestrationID != strings.TrimSpace(*id) {
+			continue
+		}
+		fmt.Printf("relay orchestration=%s state=%s completed_cs=%d round=%d/%d branch=%s\n",
+			st.OrchestrationID, st.State, st.CompletedCs, st.Round, st.MaxRounds, st.Branch)
+		shown++
+	}
+	if shown == 0 {
+		if strings.TrimSpace(*id) != "" {
+			return fmt.Errorf("orchestrate relay status: relay %q not found", strings.TrimSpace(*id))
+		}
+		fmt.Println("no relays")
+	}
+	return nil
+}
+
+func runRelayStop(args []string) error {
+	fs := flag.NewFlagSet("orchestrate relay stop", flag.ContinueOnError)
+	id := fs.String("id", "", "orchestration id (optional when exactly one relay is active)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("orchestrate relay stop [--id <orchestration-id>]")
+	}
+	hubURL, token, sessionID, err := hubEnv("relay stop")
+	if err != nil {
+		return err
+	}
+	result, err := postChildAPI(fmt.Sprintf("%s/api/sessions/%d/relay-stop", hubURL, sessionID), token, relayControlRequest{
+		OrchestrationID: strings.TrimSpace(*id),
+	})
+	if err != nil {
+		return err
+	}
+	if result.Relay == nil {
+		return errors.New("hub returned no relay status")
+	}
+	st := result.Relay
+	fmt.Printf("relay stopped orchestration=%s state=%s completed_cs=%d round=%d/%d branch=%s\n",
+		st.OrchestrationID, st.State, st.CompletedCs, st.Round, st.MaxRounds, st.Branch)
 	return nil
 }
 
@@ -265,17 +346,18 @@ type sendChildRequest struct {
 }
 
 type childAPIResponse struct {
-	OK                      bool                 `json:"ok"`
-	SessionID               int                  `json:"session_id"`
-	BoardPath               string               `json:"board_path"`
-	CWD                     string               `json:"cwd"`
-	OrchestrationID         string               `json:"orchestration_id"`
-	ImplementationSessionID int                  `json:"implementation_session_id"`
-	WorktreePath            string               `json:"worktree_path"`
-	Branch                  string               `json:"branch"`
-	Relay                   *relayStatusResponse `json:"relay"`
-	Error                   string               `json:"error"`
-	Detail                  string               `json:"detail"`
+	OK                      bool                   `json:"ok"`
+	SessionID               int                    `json:"session_id"`
+	BoardPath               string                 `json:"board_path"`
+	CWD                     string                 `json:"cwd"`
+	OrchestrationID         string                 `json:"orchestration_id"`
+	ImplementationSessionID int                    `json:"implementation_session_id"`
+	WorktreePath            string                 `json:"worktree_path"`
+	Branch                  string                 `json:"branch"`
+	Relay                   *relayStatusResponse   `json:"relay"`
+	Relays                  []relayAPIItemResponse `json:"relays"`
+	Error                   string                 `json:"error"`
+	Detail                  string                 `json:"detail"`
 }
 
 type relayRoleAssignment struct {
@@ -290,6 +372,14 @@ type relayStartRequest struct {
 	Roles         map[string]relayRoleAssignment `json:"roles,omitempty"`
 	EscalateAfter int                            `json:"escalate_after,omitempty"`
 	Extra         map[string]string              `json:"extra,omitempty"`
+}
+
+type relayControlRequest struct {
+	OrchestrationID string `json:"orchestration_id,omitempty"`
+}
+
+type relayAPIItemResponse struct {
+	Relay relayStatusResponse `json:"relay"`
 }
 
 type relayStatusResponse struct {
@@ -314,6 +404,36 @@ func spawnChild(hubURL, token string, sessionID int, body spawnChildRequest) (*c
 // sendChild は POST /api/sessions/:id/send-child を叩く。
 func sendChild(hubURL, token string, sessionID int, body sendChildRequest) (*childAPIResponse, error) {
 	return postChildAPI(fmt.Sprintf("%s/api/sessions/%d/send-child", hubURL, sessionID), token, body)
+}
+
+func getChildAPI(url, token string) (*childAPIResponse, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http get: %w", err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	var result childAPIResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("parse response (status %d): %w", resp.StatusCode, err)
+	}
+	if resp.StatusCode != http.StatusOK || !result.OK {
+		detail := result.Detail
+		if detail == "" {
+			detail = result.Error
+		}
+		return nil, fmt.Errorf("hub returned %d: %s", resp.StatusCode, detail)
+	}
+	return &result, nil
 }
 
 // postChildAPI は orchestration API への JSON POST 共通部。

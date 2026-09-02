@@ -1208,6 +1208,38 @@ func TestRelay_prepareRelayWorktree(t *testing.T) {
 	}
 }
 
+func TestRelay_cleanupRelayWorktreeRecoversUnregisteredEmptyDirectory(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	path, branch, _, err := s.prepareRelayWorktree(repo, "r1-partial", config.OrchestrationConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registered, err := relayWorktreeRegistered(context.Background(), repo, path); err != nil || !registered {
+		t.Fatalf("registered before removal = %v, %v", registered, err)
+	}
+	runWorktreeTestGit(t, repo, "worktree", "remove", "--force", path)
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if registered, err := relayWorktreeRegistered(context.Background(), repo, path); err != nil || registered {
+		t.Fatalf("registered after manual removal = %v, %v", registered, err)
+	}
+
+	if err := s.cleanupRelayWorktree(repo, path, branch, true); err != nil {
+		t.Fatalf("cleanup partial worktree: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("partial worktree directory remains: %v", err)
+	}
+	if _, err := os.Stat(filepath.Dir(path)); !os.IsNotExist(err) {
+		t.Fatalf("empty orchestration directory remains: %v", err)
+	}
+	if branches := gitOutput(t, repo, "branch", "--list", branch); !strings.Contains(branches, branch) {
+		t.Fatalf("branch %q was deleted during recovery: %q", branch, branches)
+	}
+}
+
 func TestRelay_worktreeMode(t *testing.T) {
 	h := newRelayHarness(t)
 	repo := newRelayTestRepo(t)
@@ -1276,6 +1308,32 @@ func TestRelay_worktreeMode(t *testing.T) {
 	}
 	if len(h2.spawns) != 0 || len(h2.s.relayStatusesFor(h2.parent.ID)) != 0 {
 		t.Fatalf("refused relay left spawns=%d relays=%d", len(h2.spawns), len(h2.s.relayStatusesFor(h2.parent.ID)))
+	}
+}
+
+func TestRelay_completedWorktreeNotifiesMergeCommandWithoutMerging(t *testing.T) {
+	h := newRelayHarness(t)
+	repo := newRelayTestRepo(t)
+	h.parent.CWD = repo
+	baseHead := gitOutput(t, repo)
+	baseBranch := strings.TrimSpace(gitOutput(t, repo, "branch", "--show-current"))
+	req := h.request()
+	req.Mode = relayModeWorktree
+	st, err := h.s.startRelay(h.parent.ID, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !h.s.relayFinish(h.run(st.OrchestrationID), relayStateCompleted, "", "finished by test") {
+		t.Fatal("relayFinish returned false")
+	}
+	if len(h.notifies) != 1 || !strings.Contains(h.notifies[0], "git merge "+st.Branch) || !strings.Contains(h.notifies[0], "not run automatically") {
+		t.Fatalf("completion notice = %q", h.notifies)
+	}
+	if got := gitOutput(t, repo); got != baseHead {
+		t.Fatalf("parent HEAD changed: got %q want %q", got, baseHead)
+	}
+	if got := strings.TrimSpace(gitOutput(t, repo, "branch", "--show-current")); got != baseBranch {
+		t.Fatalf("parent branch changed: got %q want %q", got, baseBranch)
 	}
 }
 

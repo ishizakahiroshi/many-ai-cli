@@ -7,12 +7,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
 
 const maxGitTurnSnapshots = 100
+
+const gitTurnIndexTempPrefix = "many-ai-cli-git-turn-"
 
 // gitTurnSnapshot is kept only in memory for the lifetime of a live session.
 // Tree object IDs are intentionally not serialized in the public session
@@ -98,7 +101,7 @@ func (s *Server) captureGitTurnStart(sessionID int) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
 	defer cancel()
-	tree, err := writeGitWorktreeTree(ctx, gitRoot)
+	tree, err := s.writeGitTurnWorktreeTree(ctx, sessionID, ses, gitRoot)
 
 	s.sessionsMu.Lock()
 	if s.sessions[sessionID] == ses && ses.gitTurnCaptureDone == captureDone {
@@ -150,7 +153,7 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 		return
 	}
 	snapshotCtx, snapshotCancel := context.WithTimeout(context.Background(), gitCommandTimeout)
-	endTree, err := writeGitWorktreeTree(snapshotCtx, gitRoot)
+	endTree, err := s.writeGitTurnWorktreeTree(snapshotCtx, sessionID, ses, gitRoot)
 	snapshotCancel()
 	if err != nil {
 		s.logger.Warn("git turn end snapshot failed", "session_id", sessionID, "err", err)
@@ -249,37 +252,170 @@ func (s *Server) finishGitTurnCaptureFailure(sessionID int, expected *session, c
 	s.sessionsMu.Unlock()
 }
 
-// writeGitWorktreeTree materializes staged, unstaged, and untracked content in
-// a temporary index. It writes ordinary loose Git objects only; the temporary
-// index is removed immediately and the objects remain eligible for normal gc.
+// writeGitTurnWorktreeTree materializes a tree through the index retained by a
+// live session. Keeping that index preserves Git's stat cache across turn
+// boundaries, so unchanged files do not have to be re-read and hashed for
+// every user message.
+func (s *Server) writeGitTurnWorktreeTree(ctx context.Context, sessionID int, expected *session, gitRoot string) (string, error) {
+	s.sessionsMu.Lock()
+	current := s.sessions[sessionID]
+	if current != expected {
+		s.sessionsMu.Unlock()
+		return "", fmt.Errorf("git turn session changed before index setup")
+	}
+	indexDir := expected.gitTurnIndexDir
+	s.sessionsMu.Unlock()
+
+	if indexDir == "" {
+		created, err := os.MkdirTemp("", gitTurnIndexTempPrefix)
+		if err != nil {
+			return "", fmt.Errorf("create reusable git index directory: %w", err)
+		}
+		s.sessionsMu.Lock()
+		current = s.sessions[sessionID]
+		if current != expected {
+			s.sessionsMu.Unlock()
+			removeGitTurnIndexDir(created)
+			return "", fmt.Errorf("git turn session changed during index setup")
+		}
+		if expected.gitTurnIndexDir == "" {
+			expected.gitTurnIndexDir = created
+			indexDir = created
+			created = ""
+		} else {
+			indexDir = expected.gitTurnIndexDir
+		}
+		sessionsRoot := expected.gitTurnIndexRoot
+		previousHead := expected.gitTurnIndexHead
+		ready := expected.gitTurnIndexReady
+		s.sessionsMu.Unlock()
+		if created != "" {
+			removeGitTurnIndexDir(created)
+		}
+		return s.finishGitTurnWorktreeTree(ctx, sessionID, expected, gitRoot, indexDir, sessionsRoot, previousHead, ready)
+	}
+
+	s.sessionsMu.Lock()
+	sessionsRoot := expected.gitTurnIndexRoot
+	previousHead := expected.gitTurnIndexHead
+	ready := expected.gitTurnIndexReady
+	s.sessionsMu.Unlock()
+	return s.finishGitTurnWorktreeTree(ctx, sessionID, expected, gitRoot, indexDir, sessionsRoot, previousHead, ready)
+}
+
+func (s *Server) finishGitTurnWorktreeTree(ctx context.Context, sessionID int, expected *session, gitRoot, indexDir, previousRoot, previousHead string, ready bool) (string, error) {
+	indexPath := filepath.Join(indexDir, "index")
+	if previousRoot != gitRoot {
+		ready = false
+	}
+	if _, err := os.Stat(indexPath); err != nil {
+		ready = false
+	}
+	tree, headTree, err := writeGitWorktreeTreeAtIndex(ctx, gitRoot, indexPath, ready, previousHead)
+
+	s.sessionsMu.Lock()
+	current := s.sessions[sessionID]
+	cleanupIndex := false
+	// Reattach replaces the session pointer but preserves the index directory.
+	// In that case the completed Git command still owns the same logical cache.
+	if current == expected || (current != nil && current.gitTurnIndexDir == indexDir) {
+		if err != nil {
+			current.gitTurnIndexReady = false
+		} else {
+			current.gitTurnIndexRoot = gitRoot
+			current.gitTurnIndexHead = headTree
+			current.gitTurnIndexReady = true
+		}
+	} else {
+		// Dismiss may race with a Git command. Its immediate cleanup can fail on
+		// Windows while git.exe still has the index open, so retry after the
+		// command has released the file.
+		cleanupIndex = true
+	}
+	s.sessionsMu.Unlock()
+	if cleanupIndex {
+		removeGitTurnIndexDir(indexDir)
+	}
+	return tree, err
+}
+
+// writeGitWorktreeTree is the cold, one-shot variant used by tests and callers
+// that do not own a live session cache.
 func writeGitWorktreeTree(ctx context.Context, gitRoot string) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "many-ai-cli-git-turn-")
+	tmpDir, err := os.MkdirTemp("", gitTurnIndexTempPrefix)
 	if err != nil {
 		return "", fmt.Errorf("create temporary git index directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer removeGitTurnIndexDir(tmpDir)
 	indexPath := filepath.Join(tmpDir, "index")
+	tree, _, err := writeGitWorktreeTreeAtIndex(ctx, gitRoot, indexPath, false, "")
+	return tree, err
+}
+
+func writeGitWorktreeTreeAtIndex(ctx context.Context, gitRoot, indexPath string, ready bool, previousHead string) (string, string, error) {
 	env := []string{"GIT_INDEX_FILE=" + indexPath}
 
-	if _, err := runGitEnv(ctx, gitRoot, env, "rev-parse", "--verify", "HEAD^{tree}"); err == nil {
-		if _, err := runGitEnv(ctx, gitRoot, env, "read-tree", "HEAD"); err != nil {
-			return "", err
+	currentHead := ""
+	if out, err := runGitEnv(ctx, gitRoot, env, "rev-parse", "--verify", "HEAD^{tree}"); err == nil {
+		currentHead = strings.TrimSpace(string(out))
+	}
+	if gitTurnIndexNeedsReset(ready, previousHead, currentHead) {
+		if currentHead != "" {
+			if _, err := runGitEnv(ctx, gitRoot, env, "read-tree", "HEAD"); err != nil {
+				return "", "", err
+			}
+		} else if _, err := runGitEnv(ctx, gitRoot, env, "read-tree", "--empty"); err != nil {
+			return "", "", err
 		}
-	} else if _, err := runGitEnv(ctx, gitRoot, env, "read-tree", "--empty"); err != nil {
-		return "", err
 	}
 	if _, err := runGitEnv(ctx, gitRoot, env, "add", "-A", "--", "."); err != nil {
-		return "", err
+		return "", "", err
 	}
 	out, err := runGitEnv(ctx, gitRoot, env, "write-tree")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	tree := strings.TrimSpace(string(out))
 	if !validRevision(tree) {
-		return "", fmt.Errorf("git write-tree returned an invalid object id")
+		return "", "", fmt.Errorf("git write-tree returned an invalid object id")
 	}
-	return tree, nil
+	return tree, currentHead, nil
+}
+
+func gitTurnIndexNeedsReset(ready bool, previousHead, currentHead string) bool {
+	return !ready || previousHead != currentHead
+}
+
+func removeGitTurnIndexDir(dir string) {
+	clean := filepath.Clean(dir)
+	parent := filepath.Dir(clean)
+	tempRoot := filepath.Clean(os.TempDir())
+	insideTempRoot := parent == tempRoot
+	if runtime.GOOS == "windows" {
+		insideTempRoot = strings.EqualFold(parent, tempRoot)
+	}
+	if !insideTempRoot || !strings.HasPrefix(filepath.Base(clean), gitTurnIndexTempPrefix) {
+		return
+	}
+	_ = os.RemoveAll(clean)
+}
+
+func (s *Server) cleanupGitTurnIndexes() {
+	s.sessionsMu.Lock()
+	dirs := make([]string, 0, len(s.sessions))
+	for _, ses := range s.sessions {
+		if ses != nil && ses.gitTurnIndexDir != "" {
+			dirs = append(dirs, ses.gitTurnIndexDir)
+			ses.gitTurnIndexDir = ""
+			ses.gitTurnIndexRoot = ""
+			ses.gitTurnIndexHead = ""
+			ses.gitTurnIndexReady = false
+		}
+	}
+	s.sessionsMu.Unlock()
+	for _, dir := range dirs {
+		removeGitTurnIndexDir(dir)
+	}
 }
 
 func runGitEnv(ctx context.Context, cwd string, extraEnv []string, args ...string) ([]byte, error) {

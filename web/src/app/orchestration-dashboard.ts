@@ -356,6 +356,16 @@ function appendRelayActionButton(container: HTMLElement, conductor: any, relay: 
   button.textContent = i18n(labelKey, action);
   button.addEventListener('click', (event) => {
     event.stopPropagation();
+    if (action === 'relay-cleanup') {
+      const childCount = new Set([
+        relay.implementation_session_id,
+        relay.strong_session_id,
+        relay.review_session_id,
+      ].map(Number).filter((id) => id > 0)).size;
+      const message = i18n('relay_cleanup_confirm', 'Clean up the worktree and close {count} child session(s)?')
+        .replace('{count}', String(childCount));
+      if (!window.confirm(message)) return;
+    }
     button.disabled = true;
     void sendRelayAction(conductor, relay, action, button);
   });

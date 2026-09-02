@@ -345,6 +345,10 @@ type session struct {
 	gitTurnCaptureDone     chan struct{}
 	gitTurnCaptureWaiters  int
 	gitTurns               []gitTurnSnapshot
+	gitTurnIndexDir        string
+	gitTurnIndexRoot       string
+	gitTurnIndexHead       string
+	gitTurnIndexReady      bool
 
 	// JSON 外: Git タブ「Ask AI」コミットメッセージ生成の待ち受け状態。
 	// 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
@@ -1414,6 +1418,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。同じ理由で
 	// hub.state マーカーも defer で必ず消す（プロセスの異常終了以外は消える）。
 	defer func() {
+		s.cleanupGitTurnIndexes()
 		_ = os.Remove(pidPath)
 		// hub-runtime.json は自 PID 記録時のみ削除（新しい Hub が上書き済みなら
 		// 残す）。強制終了の残骸は読み取り側の二重ガードで除外される。
@@ -1460,6 +1465,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
+	s.safeGo("clean_orchestration_artifacts", s.cleanOrchestrationArtifacts)
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
@@ -2166,6 +2172,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var endedWorktree normalWorktree
 	var endedWorktreeCleanup string
 	var endedUsageProbe bool
+	var endedGitTurnIndexDir string
 	if exists {
 		ses := s.sessions[m.SessionID]
 		s.stopAgentChatTailLocked(ses)
@@ -2177,6 +2184,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		endedUsageProbe = ses.UsageProbe
 		endedWorktree = ses.NormalWorktree
 		endedWorktreeCleanup = ses.WorktreeCleanup
+		endedGitTurnIndexDir = ses.gitTurnIndexDir
 		ses.History = nil
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
@@ -2185,6 +2193,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
+	removeGitTurnIndexDir(endedGitTurnIndexDir)
 	// The hasPendingSpawnConfirmation guard above already refused this dismiss
 	// for any parent that had a confirmation pending when the request arrived,
 	// so this normally finds nothing. It remains the safety net for a

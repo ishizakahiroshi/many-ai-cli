@@ -4,11 +4,17 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"many-ai-cli/internal/attach"
 	"many-ai-cli/internal/sessionlog"
+)
+
+const (
+	orchestrationRetention = 30 * 24 * time.Hour
+	orchestrationMaxDirs   = 200
 )
 
 // recoverTranscripts は logs/sessions/*.jsonl のうち、対応する .txt が
@@ -139,8 +145,114 @@ func (s *Server) maintenanceLoop(ctx context.Context) {
 			s.cleanAttachments()
 			s.cleanSpawnLogs()
 			s.cleanSessionLogs()
+			s.cleanOrchestrationArtifacts()
 		}
 	}
+}
+
+// cleanOrchestrationArtifacts bounds board / relay history growth. One
+// orchestration legitimately owns one directory; old terminal history is
+// retained for 30 days, with a hard cap of 200 directories. Live sessions and
+// resumable relays are never removed.
+func (s *Server) cleanOrchestrationArtifacts() {
+	if err := s.cleanOrchestrationArtifactsAt(time.Now()); err != nil {
+		s.logger.Warn("orchestration artifact cleanup failed", "err", err)
+	}
+}
+
+func (s *Server) cleanOrchestrationArtifactsAt(now time.Time) error {
+	base, err := orchestrationDir()
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	protected := s.activeOrchestrationArtifactIDs(base)
+	type candidate struct {
+		name    string
+		path    string
+		modTime time.Time
+	}
+	candidates := make([]candidate, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			continue
+		}
+		path := filepath.Join(base, entry.Name())
+		if !isUnder(path, base) || path == filepath.Clean(base) {
+			continue
+		}
+		candidates = append(candidates, candidate{name: entry.Name(), path: path, modTime: info.ModTime()})
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].modTime.After(candidates[j].modTime) })
+	cutoff := now.Add(-orchestrationRetention)
+	protectedCount := 0
+	for _, item := range candidates {
+		if protected[item.name] {
+			protectedCount++
+		}
+	}
+	maxUnprotected := orchestrationMaxDirs - protectedCount
+	if maxUnprotected < 0 {
+		maxUnprotected = 0
+	}
+	keptUnprotected := 0
+	for _, item := range candidates {
+		if protected[item.name] {
+			continue
+		}
+		if keptUnprotected < maxUnprotected && !item.modTime.Before(cutoff) {
+			keptUnprotected++
+			continue
+		}
+		if removeErr := os.RemoveAll(item.path); removeErr != nil {
+			s.logger.Warn("orchestration artifact retained", "path", item.path, "err", removeErr)
+		}
+	}
+	return nil
+}
+
+func (s *Server) activeOrchestrationArtifactIDs(base string) map[string]bool {
+	protected := map[string]bool{}
+	s.sessionsMu.Lock()
+	for _, ses := range s.sessions {
+		if rawID := strings.TrimSpace(ses.OrchestrationID); rawID != "" {
+			protected[safeToken(rawID)] = true
+		}
+		if boardPath := strings.TrimSpace(ses.BoardPath); boardPath != "" {
+			dir := filepath.Dir(filepath.Clean(boardPath))
+			if isUnder(dir, base) {
+				protected[filepath.Base(dir)] = true
+			}
+		}
+	}
+	s.sessionsMu.Unlock()
+
+	s.orchestration.mu.Lock()
+	runs := make([]*relayRun, 0, len(s.orchestration.relays))
+	for _, run := range s.orchestration.relays {
+		runs = append(runs, run)
+	}
+	s.orchestration.mu.Unlock()
+	for _, run := range runs {
+		run.mu.Lock()
+		keep := !run.terminalLocked() || (run.state == relayStateStopped && relayResumableReason(run.reason))
+		id := safeToken(run.orchestrationID)
+		run.mu.Unlock()
+		if keep && id != "" {
+			protected[id] = true
+		}
+	}
+	return protected
 }
 
 // attachmentsDir は添付ファイルの保存先 ~/.many-ai-cli/attachments を返す。

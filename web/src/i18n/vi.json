@@ -1622,6 +1622,7 @@
   "relay_stop": "Dừng",
   "relay_resume": "Tiếp tục",
   "relay_cleanup_worktree": "Dọn worktree",
+  "relay_cleanup_confirm": "Đóng {count} phiên con và dọn worktree?",
   "relay_action_failed": "Thao tác relay thất bại",
   "relay_timeline_title": "Dòng thời gian",
   "relay_timeline_show_all": "Hiện tất cả",

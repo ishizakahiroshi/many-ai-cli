@@ -92,8 +92,9 @@ type residueReport struct {
 
 // relayWorktreeResidue は残っている relay 作業ツリー 1 本。
 type relayWorktreeResidue struct {
-	Path   string
-	Branch string
+	Path       string
+	Branch     string
+	Registered bool
 }
 
 // residue は doctor の検査 1 本ぶん。置き去りが無ければ空スライスを返し、
@@ -222,12 +223,13 @@ func relayStateDir() string {
 func relayWorktreeLeftovers(ctx context.Context, root, stateDir string) []relayWorktreeResidue {
 	out, err := runResidueGit(ctx, root, "worktree", "list", "--porcelain")
 	if err != nil {
-		return nil
+		return emptyRelayWorktreeLeftovers(root, nil)
 	}
 	var found []relayWorktreeResidue
 	var cur relayWorktreeResidue
 	flush := func() {
 		if cur.Path != "" && strings.HasPrefix(cur.Branch, proto.RelayBranchPrefix) && !relayInProgress(stateDir, strings.TrimPrefix(cur.Branch, proto.RelayBranchPrefix)) {
+			cur.Registered = true
 			found = append(found, cur)
 		}
 		cur = relayWorktreeResidue{}
@@ -245,6 +247,41 @@ func relayWorktreeLeftovers(ctx context.Context, root, stateDir string) []relayW
 		}
 	}
 	flush()
+	return emptyRelayWorktreeLeftovers(root, found)
+}
+
+// emptyRelayWorktreeLeftovers finds the partial Windows failure shape where
+// git already unregistered a relay worktree but could not remove its directory.
+// Such a directory is absent from `git worktree list`, so it needs a lexical
+// scan of the default relay root to remain visible to doctor.
+func emptyRelayWorktreeLeftovers(root string, registered []relayWorktreeResidue) []relayWorktreeResidue {
+	found := append([]relayWorktreeResidue(nil), registered...)
+	seen := make(map[string]bool, len(found))
+	for _, wt := range found {
+		seen[filepath.Clean(wt.Path)] = true
+	}
+	worktreeRoot := filepath.Join(root, ".many-ai-cli", "worktrees")
+	entries, err := os.ReadDir(worktreeRoot)
+	if err != nil {
+		return found
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		path := filepath.Join(worktreeRoot, entry.Name(), "relay")
+		if seen[filepath.Clean(path)] {
+			continue
+		}
+		children, readErr := os.ReadDir(path)
+		if readErr != nil || len(children) != 0 {
+			continue
+		}
+		found = append(found, relayWorktreeResidue{
+			Path:   path,
+			Branch: proto.RelayBranchPrefix + entry.Name(),
+		})
+	}
 	return found
 }
 
@@ -327,6 +364,12 @@ func residueChecks(report residueReport) []Check {
 	}
 
 	for _, wt := range report.RelayWorktrees {
+		if !wt.Registered {
+			checks = append(checks, Check{"residue", Warn,
+				fmt.Sprintf("relay の未登録の空ディレクトリが残っています: %s（途中で片付けに失敗した痕跡）", wt.Path),
+				fmt.Sprintf("relay が停止済みであることを確認してから、この空ディレクトリを削除してください: %s", wt.Path)})
+			continue
+		}
 		checks = append(checks, Check{"residue", Warn,
 			fmt.Sprintf("relay の作業ツリーが残っています: %s（ブランチ %s。relay は進行中ではありません）", wt.Path, wt.Branch),
 			fmt.Sprintf("ブランチを取り込んだら `git -C %s worktree remove %s` で片付けてください（未コミットの変更があると拒否されます。捨ててよければ --force）。ブランチ %s は残るので、不要なら `git branch -D %s`", report.Root, wt.Path, wt.Branch, wt.Branch)})
