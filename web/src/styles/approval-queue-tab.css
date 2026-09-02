@@ -349,3 +349,89 @@
     flex-direction: column;
   }
 }
+
+/* --- 承認履歴（台帳 /api/approval-history）--- */
+/* 承認待ちカードの下に置く。過去ぶんは「読む」ものなので、カードではなく行で密に並べる。 */
+.aqt-history {
+  margin-top: var(--space-4, 16px);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border, rgba(128, 128, 128, 0.25));
+}
+
+.aqt-history-head {
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.aqt-history-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.aqt-history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aqt-history-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-soft, rgba(128, 128, 128, 0.12));
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.aqt-history-row:last-child {
+  border-bottom: none;
+}
+
+.aqt-history-time {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.aqt-history-session {
+  flex: none;
+  color: var(--muted);
+  max-width: 12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aqt-history-q {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aqt-history-answer {
+  flex: none;
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.aqt-history-row.is-pending .aqt-history-answer {
+  color: var(--warn-text, #b26b00);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .aqt-history-row {
+    flex-wrap: wrap;
+  }
+  .aqt-history-q {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+}

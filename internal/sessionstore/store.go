@@ -167,6 +167,31 @@ type AttachmentRef struct {
 	Kind     string `json:"kind,omitempty"`
 }
 
+// ApprovalRow は承認台帳の 1 行。UI へそのまま JSON で返す。
+//
+// Block はマーカー由来の承認の原文で、選択肢はブラウザ側の既存パーサが解く。
+// Options は VT ミラー由来の承認だけが持つ。どちらか一方しか埋まらないのが正常。
+type ApprovalRow struct {
+	ID            int64                  `json:"id"`
+	SessionDBID   int64                  `json:"session_db_id"`
+	LiveSessionID int                    `json:"session_id"`
+	Provider      string                 `json:"provider,omitempty"`
+	CWD           string                 `json:"cwd,omitempty"`
+	Sig           string                 `json:"sig"`
+	Source        string                 `json:"source,omitempty"`
+	Kind          string                 `json:"kind,omitempty"`
+	Question      string                 `json:"question,omitempty"`
+	Context       string                 `json:"context,omitempty"`
+	Block         string                 `json:"block,omitempty"`
+	CandidateKey  string                 `json:"candidate_key,omitempty"`
+	SourceEpoch   uint64                 `json:"source_epoch,omitempty"`
+	Options       []proto.ApprovalOption `json:"options,omitempty"`
+	SelectedText  string                 `json:"selected_text,omitempty"`
+	State         string                 `json:"state"`
+	DetectedAt    string                 `json:"detected_at,omitempty"`
+	ResolvedAt    string                 `json:"resolved_at,omitempty"`
+}
+
 type SearchResult struct {
 	MessageID     int64  `json:"message_id"`
 	SessionDBID   int64  `json:"session_db_id"`
@@ -478,6 +503,10 @@ func (s *Store) init() error {
 			state TEXT NOT NULL,
 			detected_at TEXT,
 			resolved_at TEXT,
+			provider TEXT,
+			candidate_key TEXT,
+			source_epoch INTEGER NOT NULL DEFAULT 0,
+			block TEXT,
 			UNIQUE(session_id, sig)
 		)`,
 		`CREATE TABLE IF NOT EXISTS attachments (
@@ -503,16 +532,28 @@ func (s *Store) init() error {
 	if err := s.ensureSessionColumns(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureApprovalColumns(ctx); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(text, raw_text, content='messages', content_rowid='id')`); err == nil {
 		s.ftsEnabled = true
 	}
 	return nil
 }
 
-func (s *Store) ensureSessionColumns(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(sessions)`)
+// columnMigration は既存 DB へ後から足す 1 列ぶんの移行。
+// CREATE TABLE IF NOT EXISTS は既存テーブルに列を足さないので、列を増やしたら
+// 必ずここへ 1 行足す（新規 DB は CREATE 側、既存 DB はこちらが担当する）。
+type columnMigration struct {
+	name string
+	sql  string
+}
+
+// ensureColumns は table に足りない列だけを ALTER TABLE で追加する。
+func (s *Store) ensureColumns(ctx context.Context, table string, add []columnMigration) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
 	if err != nil {
-		return fmt.Errorf("inspect sessions schema: %w", err)
+		return fmt.Errorf("inspect %s schema: %w", table, err)
 	}
 	defer rows.Close()
 	have := map[string]bool{}
@@ -530,10 +571,19 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	add := []struct {
-		name string
-		sql  string
-	}{
+	for _, col := range add {
+		if have[col.name] {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, col.sql); err != nil {
+			return fmt.Errorf("migrate %s.%s: %w", table, col.name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) ensureSessionColumns(ctx context.Context) error {
+	return s.ensureColumns(ctx, "sessions", []columnMigration{
 		{"title", `ALTER TABLE sessions ADD COLUMN title TEXT`},
 		{"tags_json", `ALTER TABLE sessions ADD COLUMN tags_json TEXT`},
 		{"summary", `ALTER TABLE sessions ADD COLUMN summary TEXT`},
@@ -550,16 +600,21 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 		{"auto_title", `ALTER TABLE sessions ADD COLUMN auto_title TEXT`},
 		{"archived", `ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`},
 		{"subscription_id", `ALTER TABLE sessions ADD COLUMN subscription_id TEXT`},
-	}
-	for _, col := range add {
-		if have[col.name] {
-			continue
-		}
-		if _, err := s.db.ExecContext(ctx, col.sql); err != nil {
-			return fmt.Errorf("migrate sessions.%s: %w", col.name, err)
-		}
-	}
-	return nil
+	})
+}
+
+// ensureApprovalColumns は承認台帳へ後から足した同一性まわりの列を補う。
+// provider / candidate_key / source_epoch は承認の同一性（approval_identity.go の
+// 1 本ルール）を台帳側でも保つため、block はマーカー承認の本文をそのまま持つため。
+// マーカーブロックから選択肢を組み立てるパーサは Go 側に無く、ブラウザ側の
+// extractHubMarkerApproval が唯一の解釈器なので、台帳は解釈せず原文を持つ。
+func (s *Store) ensureApprovalColumns(ctx context.Context) error {
+	return s.ensureColumns(ctx, "approvals", []columnMigration{
+		{"provider", `ALTER TABLE approvals ADD COLUMN provider TEXT`},
+		{"candidate_key", `ALTER TABLE approvals ADD COLUMN candidate_key TEXT`},
+		{"source_epoch", `ALTER TABLE approvals ADD COLUMN source_epoch INTEGER NOT NULL DEFAULT 0`},
+		{"block", `ALTER TABLE approvals ADD COLUMN block TEXT`},
+	})
 }
 
 func (s *Store) StartSession(st SessionStart) (int64, error) {
@@ -802,27 +857,54 @@ func (s *Store) storeEvent(liveSessionID int, event map[string]any) error {
 	return tx.Commit()
 }
 
-func (s *Store) StoreApprovalDetected(liveSessionID int, sig, source, kind, question, contextText string, options []proto.ApprovalOption, detectedAt time.Time) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
-	if err != nil || sessionID == 0 || sig == "" {
+// ApprovalDetected は台帳へ記録する 1 件ぶんの承認。
+//
+// Options は VT ミラー由来の承認（Go 側にパーサがある）だけが埋める。マーカー由来は
+// Block に原文を入れ、選択肢の解釈はブラウザ側の既存パーサに任せる（解釈器を 2 本に
+// しないため）。CandidateKey / SourceEpoch は承認の同一性で、復元時に回答済みかどうかを
+// 判定するのに要る。
+type ApprovalDetected struct {
+	LiveSessionID int
+	Sig           string
+	Source        string
+	Kind          string
+	Provider      string
+	Question      string
+	Context       string
+	Block         string
+	CandidateKey  string
+	SourceEpoch   uint64
+	Options       []proto.ApprovalOption
+	DetectedAt    time.Time
+}
+
+func (s *Store) StoreApprovalDetected(d ApprovalDetected) {
+	sessionID, err := s.sessionIDForLive(d.LiveSessionID)
+	if err != nil || sessionID == 0 || d.Sig == "" {
 		return
 	}
+	detectedAt := d.DetectedAt
 	if detectedAt.IsZero() {
 		detectedAt = time.Now()
 	}
-	optionsJSON, _ := json.Marshal(options)
-	_ = s.exec(`INSERT INTO approvals(session_id, sig, source, kind, question, context, options_json, state, detected_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+	optionsJSON, _ := json.Marshal(d.Options)
+	_ = s.exec(`INSERT INTO approvals(session_id, sig, source, kind, provider, question, context, options_json, block, candidate_key, source_epoch, state, detected_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
 		ON CONFLICT(session_id, sig) DO UPDATE SET
 			source=excluded.source,
 			kind=excluded.kind,
+			provider=excluded.provider,
 			question=excluded.question,
 			context=excluded.context,
 			options_json=excluded.options_json,
+			block=excluded.block,
+			candidate_key=excluded.candidate_key,
+			source_epoch=excluded.source_epoch,
 			state='pending',
 			detected_at=excluded.detected_at,
 			resolved_at=NULL`,
-		sessionID, sig, source, kind, question, contextText, string(optionsJSON), detectedAt.Format(time.RFC3339))
+		sessionID, d.Sig, d.Source, d.Kind, d.Provider, d.Question, d.Context, string(optionsJSON),
+		d.Block, d.CandidateKey, int64(d.SourceEpoch), detectedAt.Format(time.RFC3339))
 }
 
 func (s *Store) StoreApprovalConsumed(liveSessionID int, sig, selectedText string, resolvedAt time.Time) {
@@ -835,6 +917,99 @@ func (s *Store) StoreApprovalConsumed(liveSessionID int, sig, selectedText strin
 	}
 	_ = s.exec(`UPDATE approvals SET state='resolved', selected_text=?, resolved_at=? WHERE session_id=? AND sig=?`,
 		selectedText, resolvedAt.Format(time.RFC3339), sessionID, sig)
+}
+
+// approvalSelectSQL は承認台帳の読み出し 3 経路で共有する SELECT。
+// provider はセッション行にもあるので、台帳側が空の古い行でも表示名が出るよう
+// COALESCE で拾う。NULL 許容の列はここで空文字へ潰し、Scan 側を単純に保つ。
+const approvalSelectSQL = `SELECT a.id, a.session_id, se.live_session_id,
+		COALESCE(NULLIF(a.provider, ''), COALESCE(se.provider, '')),
+		COALESCE(se.cwd, ''), a.sig, COALESCE(a.source, ''), COALESCE(a.kind, ''),
+		COALESCE(a.question, ''), COALESCE(a.context, ''), COALESCE(a.options_json, ''),
+		COALESCE(a.block, ''), COALESCE(a.candidate_key, ''), COALESCE(a.source_epoch, 0),
+		COALESCE(a.selected_text, ''), a.state, COALESCE(a.detected_at, ''),
+		COALESCE(a.resolved_at, '')
+	FROM approvals a JOIN sessions se ON se.id = a.session_id`
+
+const (
+	approvalRowsDefaultLimit = 100
+	approvalRowsMaxLimit     = 500
+)
+
+func (s *Store) queryApprovals(where string, args []any, limit int) ([]ApprovalRow, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = approvalRowsDefaultLimit
+	}
+	if limit > approvalRowsMaxLimit {
+		limit = approvalRowsMaxLimit
+	}
+	query := approvalSelectSQL
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += " ORDER BY a.detected_at DESC, a.id DESC LIMIT ?"
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, query, append(append([]any{}, args...), limit)...)
+	if err != nil {
+		return nil, fmt.Errorf("query approvals: %w", err)
+	}
+	defer rows.Close()
+	out := []ApprovalRow{}
+	for rows.Next() {
+		var r ApprovalRow
+		var optionsJSON string
+		var epoch int64
+		if err := rows.Scan(&r.ID, &r.SessionDBID, &r.LiveSessionID, &r.Provider, &r.CWD,
+			&r.Sig, &r.Source, &r.Kind, &r.Question, &r.Context, &optionsJSON,
+			&r.Block, &r.CandidateKey, &epoch, &r.SelectedText, &r.State,
+			&r.DetectedAt, &r.ResolvedAt); err != nil {
+			return nil, fmt.Errorf("scan approval: %w", err)
+		}
+		if epoch > 0 {
+			r.SourceEpoch = uint64(epoch)
+		}
+		if optionsJSON != "" && optionsJSON != "null" {
+			_ = json.Unmarshal([]byte(optionsJSON), &r.Options)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ApprovalsByLiveSession は稼働中セッションの承認を新しい順で返す。
+func (s *Store) ApprovalsByLiveSession(liveSessionID, limit int, pendingOnly bool) ([]ApprovalRow, error) {
+	sessionID, err := s.sessionIDForRead(liveSessionID)
+	if err != nil || sessionID == 0 {
+		return []ApprovalRow{}, err
+	}
+	return s.ApprovalsBySessionID(sessionID, limit, pendingOnly)
+}
+
+// ApprovalsBySessionID は保存済みセッション（sessions.id）の承認を新しい順で返す。
+// live_session_id は Hub プロセス内でしか一意でないため、履歴 UI から開くときは
+// こちらを使う（chat 読み出しと同じ理由・同じ 2 系統）。
+func (s *Store) ApprovalsBySessionID(dbID int64, limit int, pendingOnly bool) ([]ApprovalRow, error) {
+	if dbID <= 0 {
+		return []ApprovalRow{}, nil
+	}
+	where := "a.session_id=?"
+	if pendingOnly {
+		where += " AND a.state='pending'"
+	}
+	return s.queryApprovals(where, []any{dbID}, limit)
+}
+
+// RecentApprovals は全セッション横断で承認を新しい順に返す（承認タブの履歴用）。
+func (s *Store) RecentApprovals(limit int, pendingOnly bool) ([]ApprovalRow, error) {
+	where := ""
+	if pendingOnly {
+		where = "a.state='pending'"
+	}
+	return s.queryApprovals(where, nil, limit)
 }
 
 func (s *Store) ChatMessagesByLiveSession(liveSessionID, limit int) ([]ChatMessage, error) {

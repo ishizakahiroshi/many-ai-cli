@@ -604,11 +604,21 @@ func (c *wrapperConn) send(m any) (err error) {
 }
 
 func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) (err error) {
-	if c == nil || c.ws == nil {
+	if c == nil {
 		return fmt.Errorf("wrapper not connected")
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	// sendFunc is test-only transport injection (see the field doc on
+	// wrapperConn); mirrors the same check in send() above so a fake wrapper
+	// built with sendFunc (and no real ws) can also be used to test the
+	// deadline-bounded senders (killWrapper / killAllWrappers / handleDismiss).
+	if c.sendFunc != nil {
+		return c.sendFunc(m)
+	}
+	if c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("wrapper send failed: %v", r)
@@ -1214,6 +1224,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
+	mux.HandleFunc("/api/approval-history", s.handleApprovalHistory)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/session-store/prune-transcript-noise", s.handleSessionStorePruneTranscriptNoise)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
@@ -2130,6 +2141,22 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 // 理由: inject 中 dismiss → 後続 session_update で UI だけ幽霊化したケースや、
 // session_removed 取りこぼし後の再 × で、UI が永遠に消えないのを防ぐ。
 func (s *Server) handleDismiss(m proto.Message) (skip bool) {
+	// C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): a
+	// session holding an undecided spawn confirmation must not be dismissed
+	// out from under it — the child-spawn decision the confirmation is
+	// waiting on would become permanently unanswerable (registerSpawnConfirmation
+	// keeps at most one confirmation per parent+role, so there is nowhere else
+	// for that decision to land). The UI's own × disabling and
+	// requestSessionDismiss short-circuit are best-effort fast paths; this
+	// check is the actual gate, since session_dismiss can also arrive from an
+	// automatic dismiss path or another connected browser that never saw
+	// those UI-side guards. Checked before touching sessionsMu so this never
+	// nests inside it (orchestration.mu is acquired here, sessionsMu below).
+	if s.hasPendingSpawnConfirmation(m.SessionID) {
+		s.logger.Info("session dismiss refused: pending spawn confirmation", "session_id", m.SessionID)
+		s.broadcast(proto.Message{Type: "session_dismiss_refused", SessionID: m.SessionID})
+		return true
+	}
 	s.sessionsMu.Lock()
 	wc := s.wrappers[m.SessionID]
 	_, exists := s.sessions[m.SessionID]
@@ -2158,6 +2185,16 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
+	// The hasPendingSpawnConfirmation guard above already refused this dismiss
+	// for any parent that had a confirmation pending when the request arrived,
+	// so this normally finds nothing. It remains the safety net for a
+	// confirmation registered in the race window between that check and this
+	// point: such a confirmation cannot be answered by a human anymore (the
+	// session it belonged to is gone below), and its disappearance is not a
+	// person clicking refuse, so it is expired separately from the
+	// user_refusal path (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md
+	// C1 / C5).
+	s.expireSpawnConfirmationsForParent(m.SessionID, "dismiss")
 	if !exists {
 		// map には無いが UI 側に残っている幽霊カードを落とす。
 		s.logger.Info("session dismiss (already gone)", "session_id", m.SessionID)

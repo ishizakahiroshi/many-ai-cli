@@ -250,3 +250,28 @@ test('遡り表示中に届いた回答済みの中身だけを落とす', () =>
   const fresh = markerOptions('別の質問ですか?', ['はい', 'いいえ']);
   assert.equal(isStaleHistoryRepaint(23, approvalCandidateShape(23, fresh, 'marker'), true), false);
 });
+
+// --- plan_approval-history-ledger.md C4 の回帰 ---
+//
+// 承認台帳から保留中の承認を組み直す経路（approval.ts の restoreApprovalFromLedger）は、
+// Hub がその世代のマーカーを配信済みでも動く必要がある。ローカル走査を止める
+// isHubMarkerAuthoritative は「端末テキストから候補を立てるな」という規則であって、
+// Hub 由来の台帳から戻すことまでは禁じていない。ここが逆になると、取りこぼした承認は
+// 二度と戻らない（この plan が消そうとしている症状そのもの）。
+test('Hub 正本の世代でも、台帳から戻した未回答の承認は候補になる', () => {
+  resetSession(40);
+  noteHubMarkerDelivered(40, getApprovalSourceEpoch(40));
+  const fromLedger = markerOptions('この変更を適用しますか?', ['はい', 'いいえ']);
+  assert.equal(isHubMarkerAuthoritative(40), true);
+  assert.equal(isAnsweredApprovalCandidate(40, fromLedger, 'marker'), false);
+});
+
+// 逆側の歯止め。台帳には回答済みの行も残るので、復元経路が回答済み判定を
+// 通さないと、押すたびに解決済みの承認が蘇る。
+test('台帳から戻した承認でも、回答済みなら候補にしない', () => {
+  resetSession(41);
+  const answered = markerOptions('この変更を適用しますか?', ['はい', 'いいえ']);
+  recordAnsweredApprovalCandidate(41, answered, 'marker');
+  const fromLedger = markerOptions('この変更を適用しますか?', ['はい', 'いいえ']);
+  assert.equal(isAnsweredApprovalCandidate(41, fromLedger, 'marker'), true);
+});
