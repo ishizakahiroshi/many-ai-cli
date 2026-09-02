@@ -1,8 +1,8 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
 import { render } from './session-list.js';
-import { disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
-import { ensureAltScrollRail } from './alt-scroll-rail-view.js';
+import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
+import { altScrollNotchesUp, ensureAltScrollRail, requestNotches } from './alt-scroll-rail-view.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -424,7 +424,10 @@ export class MultiPaneManager {
       if (typeof window.markTerminalManualScrollIntent === 'function') {
         window.markTerminalManualScrollIntent();
       }
-      if (scrollAltBufferPage(sessionId, t, -1)) {
+      if (canPageAltBuffer(sessionId, t)) {
+        if (!requestNotches(sessionId, altScrollNotchesUp(sessionId) + 12)) {
+          scrollAltBufferPage(sessionId, t, -1);
+        }
         t.autoScroll = false;
         return;
       }
@@ -432,12 +435,15 @@ export class MultiPaneManager {
       t.term.scrollToTop();
       return;
     }
-    if (scrollAltBufferPage(sessionId, t, 1)) {
+    if (canPageAltBuffer(sessionId, t)) {
+      if (!requestNotches(sessionId, altScrollNotchesUp(sessionId) - 12)) {
+        scrollAltBufferPage(sessionId, t, 1);
+      }
       t.autoScroll = true;
       return;
     }
     t.autoScroll = true;
-    this._scrollToBottom(t);
+    t.term.scrollToBottom();
   }
 
   _terminalIsAtBottom(t) {
