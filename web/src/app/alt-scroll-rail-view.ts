@@ -1,10 +1,11 @@
 // alt-scroll-rail-view.ts — 代替画面バッファのセッションへ出す疑似スクロールレール（DOM 側）。
 //
 // 位置モデルは alt-scroll-rail.ts（純関数・node:test 済み）。ここは描画と入力だけを持つ。
-// なぜ必要かは alt-scroll-rail.ts の冒頭と docs/local/plan_alt-screen-scroll-rail.md を参照。
+// なぜ必要かは alt-scroll-rail.ts の冒頭と docs/local/archive/v0.8.x/plan_alt-screen-scroll-rail.md を参照。
 //
 // 操作はすべて terminal.ts の scrollAltBufferPage() を経由して 1 ノッチとして
-// CLI へ送る。ホイールと ↑up / ↓down ボタンも同じ関数を通るので、3 経路のどれで
+// CLI へ送る。ホイール／メイン画面の ↑up・↓down ボタン／レール自身の pump／
+// マルチペイン ↑up・↓down／別窓グリッド ↑up・↓down の 6 経路のどれで
 // スクロールしてもスライダー位置に反映される（計上は terminal.ts 側で行う）。
 
 import { terminals } from './state.js';
@@ -12,6 +13,7 @@ import { t as ti18n } from '../i18n.js';
 import {
   AltRailState,
   altRailApplyNotches,
+  altRailClampTarget,
   altRailGeometry,
   altRailInitialState,
   altRailNotchesFromSliderTop,
@@ -36,10 +38,6 @@ interface RailEntry {
 }
 
 const rails = new Map<number, RailEntry>();
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
 
 function displayState(entry: RailEntry): AltRailState {
   // ドラッグ中はキー送信の完了を待たずスライダーを指に追従させる。
@@ -119,11 +117,12 @@ function pump(id: number): void {
 export function requestNotches(id: number, target: number): boolean {
   const entry = rails.get(id);
   if (!entry) return false;
-  entry.target = clamp(
-    Math.max(0, Math.round(target)),
-    entry.state.notchesUp - MAX_QUEUED_NOTCHES,
-    entry.state.notchesUp + MAX_QUEUED_NOTCHES,
-  );
+  const clamped = altRailClampTarget(entry.state, target, MAX_QUEUED_NOTCHES);
+  // 既に目標どおりの位置で、かつ動いている最中でもないなら「何もしなかった」と正直に返す。
+  // ドラッグ中に掴んだ位置へ戻す呼び出し（entry.target が既に非 null）は、動きを止める
+  // ための正当な操作なのでここでは弾かない。
+  if (entry.target === null && clamped === entry.state.notchesUp) return false;
+  entry.target = clamped;
   markTerminalManualScrollIntent();
   renderRail(id);
   if (entry.pumpTimer === null) {
@@ -222,7 +221,8 @@ export function updateAltScrollRail(id: number): void {
 
 /**
  * ホイールを 1 ノッチ送ったことを計上する。terminal.ts の scrollAltBufferPage から
- * 呼ばれるので、ホイール・↑up / ↓down ボタン・レールの 3 経路すべてが反映される。
+ * 呼ばれるので、ホイール／メイン画面の ↑up・↓down ボタン／レール自身の pump／
+ * マルチペイン ↑up・↓down／別窓グリッド ↑up・↓down の 6 経路すべてが反映される。
  */
 export function noteAltScrollNotch(id: number, direction: number): void {
   const entry = rails.get(id);

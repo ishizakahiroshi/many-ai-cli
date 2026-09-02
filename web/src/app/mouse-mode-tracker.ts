@@ -10,6 +10,13 @@ const PRIVATE = 0x3f;
 const SET_MODE = 0x68; // h
 const RESET_MODE = 0x6c; // l
 
+/**
+ * 終端 (h/l) の来ない `CSI ? ...` が際限なく伸びるのを防ぐ上限（バイト数）。
+ * 正常な `CSI ? ... h/l` は長くても数十バイトで収まるため、64 は十分な余裕を
+ * 残しつつ無制限成長を止める値。
+ */
+const MAX_PENDING_ESCAPE_BYTES = 64;
+
 export interface MouseModeTrackerState {
   carry: Uint8Array;
   tracking: boolean;
@@ -85,6 +92,15 @@ function applyMouseModeSequence(
 }
 
 /**
+ * 終端の来ない未完了シーケンスを carry として持ち越す前に上限を適用する。
+ * 上限を超えたら未完了のシーケンスごと捨てる（tracking/sgr/urxvt はそれまでに
+ * 確定した値のまま変えない）。
+ */
+function boundedCarry(pending: Uint8Array): Uint8Array {
+  return pending.length > MAX_PENDING_ESCAPE_BYTES ? new Uint8Array(0) : pending;
+}
+
+/**
  * PTY の 1 チャンクからマウス追跡状態を更新する。
  * 不完全な CSI ? ... h/l は carry に残し、次のチャンクと連結してから解釈する。
  */
@@ -109,14 +125,14 @@ export function scanMouseModePure(
       continue;
     }
     if (i + 1 >= combined.length) {
-      return { carry: combined.slice(i), ...next };
+      return { carry: boundedCarry(combined.slice(i)), ...next };
     }
     if (combined[i + 1] !== CSI) {
       i++;
       continue;
     }
     if (i + 2 >= combined.length) {
-      return { carry: combined.slice(i), ...next };
+      return { carry: boundedCarry(combined.slice(i)), ...next };
     }
     if (combined[i + 2] !== PRIVATE) {
       i++;
@@ -125,14 +141,14 @@ export function scanMouseModePure(
 
     const parameterStart = i + 3;
     if (parameterStart >= combined.length) {
-      return { carry: combined.slice(i), ...next };
+      return { carry: boundedCarry(combined.slice(i)), ...next };
     }
     let final = parameterStart;
     while (final < combined.length && (isDigit(combined[final]) || combined[final] === 0x3b)) {
       final++;
     }
     if (final >= combined.length) {
-      return { carry: combined.slice(i), ...next };
+      return { carry: boundedCarry(combined.slice(i)), ...next };
     }
     if (combined[final] !== SET_MODE && combined[final] !== RESET_MODE) {
       i++;
@@ -151,6 +167,16 @@ function centeredCoordinate(value: number): number {
 
 function x10Coordinate(value: number): number {
   return Math.min(223, centeredCoordinate(value));
+}
+
+/**
+ * X10 の座標バイトが JSON/UTF-8 経由でも 1 バイトのまま送れるかを判定する。
+ * X10 は `32 + 座標` を 1 文字として送るため、座標が 96 以上（文字コードが
+ * 128 以上）だと JS 文字列 → JSON → Go の string 化を経由する過程で UTF-8 の
+ * 2 バイト表現になり、CLI 側が期待する「1 バイト = 1 値」の契約が壊れる。
+ */
+export function isX10CoordinateSafe(cols: number, rows: number): boolean {
+  return x10Coordinate(cols) < 96 && x10Coordinate(rows) < 96;
 }
 
 /** 代替画面へ送る 1 ノッチ分のホイール／PageUp・PageDown シーケンスを作る。 */

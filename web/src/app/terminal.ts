@@ -15,7 +15,7 @@ import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSession
 import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
-import { encodeWheelSeq, initialMouseModeTrackerState, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
+import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
 import { altScrollNotchesUp, ensureAltScrollRail, noteAltScrollNotch, requestNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
@@ -938,9 +938,14 @@ export function canPageAltBuffer(sessionId, t) {
 // 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
 export function scrollAltBufferPage(sessionId, t, direction) {
   if (!canPageAltBuffer(sessionId, t)) return false;
-  const mode: WheelEncoding = t.mouseMode?.tracking
+  const requestedMode: WheelEncoding = t.mouseMode?.tracking
     ? (t.mouseMode.sgr ? 'sgr' : 'x10')
     : 'page';
+  // X10 は cols/rows が大きいと座標バイトが JSON/UTF-8 経由で 2 バイト化けするため、
+  // その組み合わせのときだけ page（PageUp/PageDown）へ読み替える。
+  const mode: WheelEncoding = requestedMode === 'x10' && !isX10CoordinateSafe(t.term.cols, t.term.rows)
+    ? 'page'
+    : requestedMode;
   const key = encodeWheelSeq(direction, t.term.cols, t.term.rows, mode);
   try {
     probe('geo.scroll', () => ({
@@ -965,7 +970,8 @@ export function scrollAltBufferPage(sessionId, t, direction) {
 // ページ送りで CLI が過去の画面を描いている最中か。
 //
 // 代替画面バッファの provider では、ホイールも ↑up / ↓down ボタンも疑似レールも
-// scrollAltBufferPage() を通って PgUp / PgDn として CLI へ届く。つまりここでの
+// scrollAltBufferPage() を通って CLI へ届く（マウス追跡が有効なら SGR/X10 ホイール、
+// 無効なら従来どおり PageUp/PageDown）。つまりここでの
 // 「スクロール」は xterm の scrollback 移動ではなく CLI 自身の再描画であり、遡って
 // いる間は画面に過去の内容が載る。Hub の承認検出は VT ミラー＝今の画面を読むので、
 // 遡り中かどうかを知らないと回答済みの承認が新しい候補として届く（実測は
@@ -1306,7 +1312,13 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   const t = terminals.get(activeSessionId);
   if (!t) return;
   markTerminalManualScrollIntent();
-  if (canPageAltBuffer(activeSessionId, t) && requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) + 12)) {
+  if (canPageAltBuffer(activeSessionId, t)) {
+    // レール位置は近似（alt-scroll-rail.ts 冒頭のコメント参照）なので、requestNotches が
+    // 「動く必要が無い」と正直に false を返しても CLI 側にはまだ余地があるかもしれない。
+    // その場合は 1 回だけ直接送ってから同じ分岐に合流させる（無反応に見せない）。
+    if (!requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) + 12)) {
+      scrollAltBufferPage(activeSessionId, t, -1);
+    }
     t.autoScroll = false;
     updateScrollLockBtn(true);
     return;
@@ -1330,7 +1342,10 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t) return;
-  if (canPageAltBuffer(activeSessionId, t) && requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) - 12)) {
+  if (canPageAltBuffer(activeSessionId, t)) {
+    if (!requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) - 12)) {
+      scrollAltBufferPage(activeSessionId, t, 1);
+    }
     t.autoScroll = true;
     updateScrollLockBtn(false);
     return;

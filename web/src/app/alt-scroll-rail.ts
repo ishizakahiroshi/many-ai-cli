@@ -5,7 +5,7 @@
 // `ScrollbarVisibilityController.setIsNeeded(false)` のまま `invisible`（`fade` なし）に
 // 固定され、terminal.css の常時表示上書きが効かない。つまり本物のスクロールバーは
 // 原理的に出ない。メインバッファに描く Codex だけが本物を持っている状態だった。
-// 由来: docs/local/plan_alt-screen-scroll-rail.md
+// 由来: docs/local/archive/v0.8.x/plan_alt-screen-scroll-rail.md
 //
 // このモジュールは「送ったホイールイベントのノッチ数」だけからスライダーの位置と高さを
 // 決める。CLI 内部のスクロール量を取得する手段は無いので、**位置は近似**であり
@@ -98,4 +98,13 @@ export function altRailApplyNotches(state: AltRailState, nextNotches: number): A
 /** direction < 0 で 1 ノッチ上、> 0 で 1 ノッチ下。 */
 export function altRailStep(state: AltRailState, direction: number): AltRailState {
   return altRailApplyNotches(state, state.notchesUp + (direction < 0 ? 1 : -1));
+}
+
+/**
+ * 要求されたノッチ数を、0 以上かつ現在値から `maxQueued` 以内へクランプする。
+ * `requestNotches()` が「実際に動く目標か」を判定するための下ごしらえ。
+ */
+export function altRailClampTarget(state: AltRailState, target: number, maxQueued: number): number {
+  const rounded = Math.max(0, Math.round(Number.isFinite(target) ? target : 0));
+  return clamp(rounded, state.notchesUp - maxQueued, state.notchesUp + maxQueued);
 }

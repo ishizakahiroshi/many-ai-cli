@@ -4,6 +4,7 @@ import {
   ALT_RAIL_MIN_SLIDER_PX,
   ALT_RAIL_MIN_VIRTUAL_NOTCHES,
   altRailApplyNotches,
+  altRailClampTarget,
   altRailGeometry,
   altRailInitialState,
   altRailNotchTotal,
@@ -90,4 +91,21 @@ test('alt-rail: トラック外へドラッグしても両端でクランプす�
   const s = altRailApplyNotches(altRailInitialState(), 5);
   assert.equal(altRailNotchesFromSliderTop(s, TRACK, -999), altRailNotchTotal(s) - 1);
   assert.equal(altRailNotchesFromSliderTop(s, TRACK, 9999), 0);
+});
+
+test('alt-rail: altRailClampTarget は最下部からさらに下を要求すると no-op になる', () => {
+  const s = altRailInitialState();
+  assert.equal(altRailClampTarget(s, -12, 120), 0);
+});
+
+test('alt-rail: altRailClampTarget は動きが要るケースでは目標値を返す', () => {
+  let s = altRailInitialState();
+  for (let i = 0; i < 5; i++) s = altRailStep(s, -1);
+  assert.equal(s.notchesUp, 5);
+  assert.equal(altRailClampTarget(s, -7, 120), 0);
+});
+
+test('alt-rail: altRailClampTarget は maxQueued で上限クランプする', () => {
+  const s = altRailInitialState();
+  assert.equal(altRailClampTarget(s, 500, 120), 120);
 });
