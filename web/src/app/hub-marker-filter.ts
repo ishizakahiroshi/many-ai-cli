@@ -1,7 +1,7 @@
 // xterm に渡すバイト列から [MANY-AI-CLI]…[/MANY-AI-CLI] / [MANY-AI-CLI-DONE]…
 // [/MANY-AI-CLI-DONE] の OPEN/CLOSE タグを剥がす純粋関数。
-// 承認ブロックの本文は ANSI escape を全て除去した plain text として xterm へ流し、
-// 完了サマリー（DONE）ブロックの本文は端末へ流さず落とす（案 G）。
+// 承認ブロック・完了サマリー（DONE）ブロックとも、本文は CLI が描いたまま素通しし、
+// 剥がすのはタグ文字列だけ（案 J）。出力を捨てる分岐は持たない。
 // terminal.ts の filterHubMarkersForDisplay から状態の橋渡しのみ受けて呼ばれる。
 // 純関数として切り出すことで DOM/xterm 依存なしで node:test から検証可能にしている。
 //
@@ -81,6 +81,33 @@
 // 総量は MAX_MARKER_WRAP_GAP_BYTES で頭打ちにして、病的な走査と carry の肥大を防ぐ。
 // 割り込んだバイトの扱いは既存の方針をそのまま踏襲する。承認ブロック（案 H = 何も足さない・
 // 何も削らない）では素通しし、DONE ブロック（案 G = ブロックごと落とす）では捨てる。
+//
+// 案 J（2026-09-03）: DONE ブロックも承認ブロックと同じ「タグだけ剥がす」へ揃える。案 G の
+// 「本文ごと落とす」をやめ、出力を捨てる経路そのものを無くす。
+//
+// 案 G〜I はどれも「OPEN が来たら CLOSE が来るまで捨てる」というストリーム前提の状態機械
+// だった。ところが代替画面では CLI が 2 次元のセルを絶対座標で塗り直すので、**1 回の再描画に
+// OPEN だけが入り、CLOSE は画面外にあって 1 バイトも描かれない**ことが普通に起きる。CLOSE が
+// 折り返しで分断されている（案 I が直した形）のではなく、そもそも存在しない。案 I の折り返し
+// 耐性では原理的に届かない。
+//
+// 2026-09-03 実測（セッション #7 claude・利用者が処理中に遡ろうとした 5 分間のログを
+// filterHubMarkersPure へ再生）:
+//   1,711,596B 中 330,205B（19.3%）が xterm へ届かない
+//   最初のホイールまでの 243,471B では 792B（正規の DONE ブロック 1 個）しか落ちていない
+//   01:32:47 にラッチしてから解除まで 3 分 6 秒。解除も CLOSE 一致ではなく 32KB セーフガード
+//   DONE の OPEN リテラルは 95 回、CLOSE リテラルは 79 回しか描かれていない（差の 16 回が事故）
+// 利用者からは「処理中にホイールで遡ろうとしても画面がまったく動かない」に見える。CLI 側は
+// 正常にホイールを受けて再描画を返しており、その再描画が全部ここで捨てられていた。
+//
+// 案 G が本文を落としていた理由は「案 E〜F の書き戻しが Ink 管理外のセルを汚す」ことだったが、
+// 案 H で書き戻し自体をやめた時点でその理由は消えている。本文は CLI 自身が既に描いており、
+// こちらは何も足さない・何も削らないのが正しい（案 H が承認ブロックで出した結論と同じ）。
+// 代償は完了サマリーの数行が端末にも見えること。Hub 側の done_summary 配信は従来どおり残る。
+//
+// これで出力を捨てる分岐が 1 つも無くなるので、CLOSE の有無に関わらず端末が固まらない。
+// inDone / inMarker は「ブロックの中か」を示すだけの札になり、stray な CLOSE を位置に関係なく
+// 受理してよいかの判定にしか使わない。
 
 
 export const hubMarkerBytePatterns = [
@@ -91,16 +118,11 @@ export const hubMarkerEndBytes = hubMarkerBytePatterns[1];
 export const hubDoneMarkerOpen = new TextEncoder().encode('[MANY-AI-CLI-DONE]');
 export const hubDoneMarkerClose = new TextEncoder().encode('[/MANY-AI-CLI-DONE]');
 
-// 案 E セーフガード（2026-07-01）: 実運用のマーカー本文は数百 B〜数 KB。
-// close マーカー typo（例: [/MANARY-AI-CLI-DONE]）や AI 側の切断で close が来ないと、
-// inMarker / inDone 状態のまま bytes が永久蓄積し、以降の CLI 側描画が全部 buf に飲まれて
-// xterm が凍結する（2026-07-01 セッション #16 実測で確認）。閾値を超えたら諦めて
-// 状態リセットして描画を復帰させる。閾値は正常運用の 10 倍以上のマージン。
-// 2026-07-04: 超過時の扱いを「強制 flush（剥離テキスト一括ダンプ）」から「破棄」へ変更。
-// close が 32KB 来ない時点で buf の中身は本文ではなく、Ink が interleave した
-// スピナー再描画・ステータス行の堆積であり、剥離ダンプすると 32KB のゴミテキストが
-// scrollback に化石化する（bugfix_spinner-cup-not-consumed-in-webui_2026-07-02.md で実測）。
-// 承認 UI は Hub 側 Go の PTY 解析から出るため、破棄しても承認ボタンには影響しない。
+// ラッチ解除の閾値（2026-07-01 導入 / 案 J で役割が縮小）。実運用のマーカー本文は数百 B〜数 KB。
+// close マーカー typo（例: [/MANARY-AI-CLI-DONE]）や再描画で close が描かれないと、
+// inMarker / inDone がラッチしたままになる。案 J 以降はラッチしていても本文を素通しするので
+// 出力は欠けないが、放置すると以後の stray close を位置に関係なく受理してしまう。閾値を
+// 超えたらラッチだけ解除する。閾値は正常運用の 10 倍以上のマージン。
 export const MAX_MARKER_BUFFER_BYTES = 32 * 1024;
 
 export function bytesStartWith(bytes: Uint8Array, offset: number, pattern: Uint8Array): boolean {
@@ -216,10 +238,10 @@ export type HubMarkerFilterState = {
   carry: Uint8Array;
   inDone: boolean;
   inMarker: boolean;
-  // 案 H: 承認ブロック本文は貯めずに素通しするので、持つのは open からのバイト数だけ。
+  // 案 H / 案 J: ブロック本文は貯めずに素通しするので、持つのは open からのバイト数だけ。
   // close が来ないまま肥大したときのラッチ解除にしか使わない。
   markerSeen?: number;
-  doneBuf: Uint8Array;
+  doneSeen?: number;
   // 行頭ゲート（2026-07-04）: OPEN マーカーは「行頭（空白のみ先行）」でのみラッチする。
   // AI が地の文でマーカーをリテラル引用した場合（例:「…はすべて [MANY-AI-CLI] マーカー形式で…」）、
   // close が来ないまま inMarker にラッチし、後続の画面再描画 32KB を飲み込む事故の再発防止
@@ -244,7 +266,7 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
   let inDone = state.inDone;
   let inMarker = state.inMarker;
   let markerSeen = state.markerSeen ?? 0;
-  const doneBufArr: number[] = Array.from(state.doneBuf || new Uint8Array(0));
+  let doneSeen = state.doneSeen ?? 0;
   let lineStart = state.lineStart ?? true;
   let escPhase = state.escPhase ?? 0;
 
@@ -278,41 +300,28 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
   };
 
   while (i < combined.length) {
-    if (inDone) {
-      // 案 I: 折り返しで分断された CLOSE も受理する。割り込んだバイトは DONE ブロックの一部
-      // として捨てる（案 G の「ブロックごと落とす」と同じ扱い）。
-      const doneClose = matchMarkerAllowingWrap(combined, i, hubDoneMarkerClose);
-      if (doneClose.consumed > 0) {
-        i += doneClose.consumed;
-        inDone = false;
-        lineStart = false;
-        // 案 G（2026-08-26）: DONE 本文は端末へ書き戻さず、ブロックごと落とす（本ファイル冒頭参照）。
-        doneBufArr.length = 0;
-        continue;
-      }
-      if (doneClose.consumed < 0) break;
-      // 案 G: 本文は出さないが、close が来ないまま肥大した場合のセーフガード
-      // （MAX_MARKER_BUFFER_BYTES 超過で状態リセット）に量が要るので貯めるのは続ける。
-      doneBufArr.push(combined[i]);
-      i++;
-      if (doneBufArr.length > MAX_MARKER_BUFFER_BYTES) {
-        // typo/欠落/切断で close が来ない: 本文ではなく再描画の堆積とみなし破棄＋状態リセット
-        inDone = false;
-        lineStart = false;
-        doneBufArr.length = 0;
-      }
-      continue;
-    }
-
+    // 完了マーカー。OPEN と CLOSE は 2 バイト目（'M' / '/'）で分岐するので同時には一致しない。
+    // 案 J: 承認マーカーと同型に扱い、タグ文字列だけを剥がして本文は素通しする。
     const doneOpen = matchMarkerAllowingWrap(combined, i, hubDoneMarkerOpen);
-    if (doneOpen.consumed > 0) {
-      // 案 H で承認ブロック本文も trackByte を通すようになったため、ブロック内でも lineStart が
-      // 立つ。承認ブロックの本文に DONE マーカーのリテラルが行頭で現れても DONE としてラッチ
-      // しないよう、案 E〜G と同じ「ブロック内では DONE を見ない」挙動を明示で維持する。
-      if (lineStart && !inMarker) {
-        i += doneOpen.consumed;
-        inDone = true;
+    const doneClose = doneOpen.consumed > 0
+      ? MARKER_NO_MATCH
+      : matchMarkerAllowingWrap(combined, i, hubDoneMarkerClose);
+    const doneTag = doneOpen.consumed > 0 ? doneOpen
+      : (doneClose.consumed > 0 ? doneClose : null);
+    if (doneTag) {
+      const isDoneClose = doneTag === doneClose;
+      // 行頭ゲート: OPEN は行頭のみラッチ。close は inDone 中なら位置を問わず受理し、
+      // stray close（開きなし）は行頭のみマーカー扱いにする（承認側と同じ規則）。
+      // 承認ブロックの本文に DONE マーカーのリテラルが現れても DONE として扱わないよう、
+      // 案 E〜G と同じ「ブロック内では相手方のマーカーを見ない」挙動を維持する。
+      if (!inMarker && (inDone || lineStart)) {
+        i += doneTag.consumed;
         lineStart = false;
+        // 案 I: 折り返しがタグの途中へ割り込ませた CR / LF / 空白 / ESC は本文側の描画指示
+        // なので落とさず素通しする（案 J の「本文へ 1 バイトも足さない・削らない」を保つ）。
+        for (const b of doneTag.noise) out.push(b);
+        inDone = !isDoneClose;
+        doneSeen = 0;
         continue;
       }
       // 文中の prose リテラルはマーカー扱いせず素通し（'[' 1 バイトだけ進めて再走査）
@@ -333,7 +342,7 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       const isClose = marker === approvalClose;
       // 行頭ゲート: OPEN は行頭のみラッチ。close は inMarker 中なら位置を問わず受理し、
       // stray close（開きなし）は行頭のみマーカー扱い（文中の prose リテラルは素通し）。
-      if (inMarker || lineStart) {
+      if (!inDone && (inMarker || lineStart)) {
         i += marker.consumed;
         lineStart = false;
         // 案 H: open / close ともタグ文字列を落とすだけ。本文は下の分岐で素通しする。
@@ -353,20 +362,28 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
     }
     // マーカー prefix の carry は「ラッチし得る文脈」のときだけ行う（文中は素通しでよい）
     const needMoreForMarker = doneOpen.consumed < 0
+      || doneClose.consumed < 0
       || approvalOpen.consumed < 0
       || approvalClose.consumed < 0;
-    if ((inMarker || lineStart) && needMoreForMarker) break;
-    // 案 H: 承認ブロックの本文は素通しする（落とすのは上の inDone 分岐の DONE 本文だけ）。
+    if ((inDone || inMarker || lineStart) && needMoreForMarker) break;
+    // 案 H / 案 J: 承認ブロックも DONE ブロックも本文は素通しする（落とす分岐はもう無い）。
     trackByte(combined[i]);
     out.push(combined[i]);
     i++;
+    // typo/欠落/再描画で close が来ない: ラッチしたままだと以後の stray close を位置に
+    // 関係なく受理してしまうため状態だけ戻す（本文は素通し済みで捨てるものは無い）。
     if (inMarker) {
       markerSeen++;
       if (markerSeen > MAX_MARKER_BUFFER_BYTES) {
-        // typo/欠落/切断で close が来ない: ラッチしたままだと以後の stray close を位置に
-        // 関係なく受理してしまうため状態だけ戻す（本文は素通し済みで捨てるものは無い）。
         inMarker = false;
         markerSeen = 0;
+      }
+    }
+    if (inDone) {
+      doneSeen++;
+      if (doneSeen > MAX_MARKER_BUFFER_BYTES) {
+        inDone = false;
+        doneSeen = 0;
       }
     }
   }
@@ -378,7 +395,7 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
       inDone,
       inMarker,
       markerSeen,
-      doneBuf: new Uint8Array(doneBufArr),
+      doneSeen,
       lineStart,
       escPhase,
     },

@@ -1415,7 +1415,7 @@ export const screenClearSeqBytePatterns = [
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
 export { hideCursorSeq, showCursorSeq };
 
-// xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
+// xterm 入口の [MANY-AI-CLI] タグ・[MANY-AI-CLI-DONE] タグ除去は
 // hub-marker-filter.ts の純関数 filterHubMarkersPure に集約されている（DOM 非依存・
 // node:test 検証可能）。本ラッパーは terminal の state（markerFilterCarry / inMarkerBlock /
 // inDoneBlock）と純関数の state を橋渡しするだけ。
@@ -1427,7 +1427,7 @@ export function filterHubMarkersForDisplay(id, bytes) {
     inDone: t.inDoneBlock || false,
     inMarker: t.inMarkerBlock || false,
     markerSeen: t.markerSeen || 0,
-    doneBuf: t.doneBuf || new Uint8Array(0),
+    doneSeen: t.doneSeen || 0,
     lineStart: t.markerLineStart ?? true,
     escPhase: t.markerEscPhase ?? 0,
   });
@@ -1435,7 +1435,7 @@ export function filterHubMarkersForDisplay(id, bytes) {
   t.inDoneBlock = state.inDone;
   t.inMarkerBlock = state.inMarker;
   t.markerSeen = state.markerSeen;
-  t.doneBuf = state.doneBuf;
+  t.doneSeen = state.doneSeen;
   t.markerLineStart = state.lineStart;
   t.markerEscPhase = state.escPhase;
   return out;
@@ -1903,8 +1903,9 @@ function liveStatusViewFor(sid) {
     case 'disconnected': return { mode: 'idle',    text: ti18n('live_status_disconnected') };
     default: {
       // standby ＝ 待機中（送信待ち）。直前のターンが完了サマリーを出していれば、
-      // 汎用ラベルより「何が終わったか」を優先する。完了サマリーは端末へ書かなくなった
-      // （hub-marker-filter.ts の案 G）ので、ここが見ているセッション側の唯一の表示口。
+      // 汎用ラベルより「何が終わったか」を優先する。端末側は CLI が描いた本文が
+      // 流れていくだけなので（hub-marker-filter.ts の案 J）、ここが「直前のターンが
+      // どう終わったか」を残す唯一の表示口になる。
       const done = doneSummaryDisplayText(getDoneSummary(sid), LIVE_STATUS_DONE_MAX_LEN);
       if (done) return { mode: 'done', text: done };
       return { mode: 'idle', text: ti18n('live_status_idle') };
