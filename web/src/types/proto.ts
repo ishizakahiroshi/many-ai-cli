@@ -51,7 +51,13 @@ export type MessageType =
   | 'done_summary'
   | 'git_turn'
   | 'user_turn_started'
-  | 'spawn_confirmation_requested';
+  | 'spawn_confirmation_requested'
+  | 'spawn_confirmation_closed'
+  // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): Hub → UI.
+  // 承認待ちを抱えた親セッションの dismiss を Hub が拒否したことを伝える。
+  // session_id は拒否された対象、reason は固定文言不要（UI 側は一律のトースト文言を出す）。
+  // 型だけ先に用意しておく（Hub 側の送信実装は internal/ 配下のため本 C の範囲外）。
+  | 'session_dismiss_refused';
 
 // 'unknown' は Hub の フォールバック 専用（マーカーが無いままターンが終わった）。
 // 「終わったが何が終わったか分からない」であって異常ではないので needs_action と分ける。
@@ -302,6 +308,14 @@ export interface Message {
 	cross_session_messages?: CrossSessionMessage[];
 	spawn_confirmation_id?: string;
 	initial_prompt?: string;
+	/** epoch ms。spawn_confirmation_requested とその再送の両方に載る。 */
+	spawn_requested_at_ms?: number;
+	/**
+	 * spawn_confirmation_closed の reason は5値のみ:
+	 * approved | refused | superseded | parent_gone | spawn_failed。
+	 * spawn_failed のときだけ text に失敗理由が入る。session_id は親。
+	 */
+	spawn_child_session_id?: number;
   first_message?: string;
   last_message?: string;
   inject?: string;
