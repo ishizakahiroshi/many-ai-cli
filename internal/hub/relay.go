@@ -314,6 +314,22 @@ func (run *relayRun) childIDLocked(role string) int {
 	return 0
 }
 
+func (run *relayRun) childIDsLocked() []int {
+	seen := make(map[int]struct{}, 3)
+	ids := make([]int, 0, 3)
+	for _, id := range []int{run.implID, run.strongID, run.reviewID} {
+		if id <= 0 {
+			continue
+		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 func (run *relayRun) roleOfLocked(childID int) string {
 	switch {
 	case childID == 0:
@@ -546,6 +562,16 @@ func (s *Server) relayByID(orchestrationID string) *relayRun {
 // handling (D-6: no generic DONE processing and no automatic notices there).
 func (s *Server) relayOwns(boardID string) bool {
 	return s.relayByID(boardID) != nil
+}
+
+func (s *Server) relayTerminal(boardID string) bool {
+	run := s.relayByID(boardID)
+	if run == nil {
+		return false
+	}
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	return run.terminalLocked()
 }
 
 // relayBudgetForParent returns how many relays are in progress for the parent
@@ -1386,8 +1412,12 @@ func (s *Server) relayFinishLocked(run *relayRun, state, reason, detail string) 
 	s.relaySaveLocked(run)
 	s.syncRelaySession(run)
 	if run.parentAttached {
-		deps.notifyParent(run.orchestrationID, run.parentID, fmt.Sprintf("\n%s relay %s: plan=%s c=%d round=%d reason=%s review=%s branch=%s\n",
-			run.tagLocked(), state, run.planPath, run.completedCs, run.round, run.reason, run.reviewPath, run.branch))
+		notice := fmt.Sprintf("\n%s relay %s: plan=%s c=%d round=%d reason=%s review=%s branch=%s\n",
+			run.tagLocked(), state, run.planPath, run.completedCs, run.round, run.reason, run.reviewPath, run.branch)
+		if state == relayStateCompleted && strings.TrimSpace(run.branch) != "" {
+			notice += fmt.Sprintf("Merge when ready (not run automatically):\n  git merge %s\n", run.branch)
+		}
+		deps.notifyParent(run.orchestrationID, run.parentID, notice)
 	}
 	text = fmt.Sprintf("%s: %s (c=%d, round=%d", filepath.Base(run.planPath), state, run.completedCs, run.round)
 	if strings.TrimSpace(run.reason) != "" {

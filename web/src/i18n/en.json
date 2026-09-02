@@ -1622,6 +1622,7 @@
   "relay_stop": "Stop",
   "relay_resume": "Resume",
   "relay_cleanup_worktree": "Clean up worktree",
+  "relay_cleanup_confirm": "Close {count} child session(s) and clean up the worktree?",
   "relay_action_failed": "Relay action failed",
   "relay_timeline_title": "Timeline",
   "relay_timeline_show_all": "Show all",

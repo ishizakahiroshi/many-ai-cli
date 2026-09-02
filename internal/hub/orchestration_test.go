@@ -878,6 +878,36 @@ func Test_checkOrchestrationChildTimers_relayIdleNudgesChildNotParent(t *testing
 	}
 }
 
+func Test_checkOrchestrationChildTimers_terminalRelayStopsWatchingChildren(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	if !h.s.relayFinish(h.run(id), relayStateCompleted, "", "finished by test") {
+		t.Fatal("relayFinish returned false")
+	}
+	old := time.Now().Add(-10 * time.Minute)
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.SpawnedAt, child.LastBoardWrite = old, old
+	h.s.orchestration.mu.Unlock()
+	h.s.sessions[impl].lastOutputAt = old
+	boardPath := h.run(id).boardPath
+	before, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.s.checkOrchestrationChildTimers(id, time.Now(), config.OrchestrationConfig{IdleDoneThresholdSec: 60})
+
+	after, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) || len(h.injects) != 0 {
+		t.Fatalf("terminal relay watcher changed state: injects=%d board_changed=%v", len(h.injects), string(after) != string(before))
+	}
+}
+
 func Test_completeOrchestrationChildOnSessionEnd_relayStopsRelay(t *testing.T) {
 	h := newRelayHarness(t)
 	st := h.start()

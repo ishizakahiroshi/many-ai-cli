@@ -82,9 +82,13 @@ type reattachPreservedState struct {
 	taskDetailFileState       workflowTaskDetailFileState
 	taskDetailProgress        *proto.WorkflowProgress
 
-	gitTurnStartTree string
-	gitTurnStartedAt time.Time
-	gitTurns         []gitTurnSnapshot
+	gitTurnStartTree  string
+	gitTurnStartedAt  time.Time
+	gitTurns          []gitTurnSnapshot
+	gitTurnIndexDir   string
+	gitTurnIndexRoot  string
+	gitTurnIndexHead  string
+	gitTurnIndexReady bool
 
 	commitMsgAwait        bool
 	commitMsgDeadline     time.Time
@@ -173,9 +177,13 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 		taskDetailFileState:       fileState,
 		taskDetailProgress:        cloneWorkflowProgress(ses.taskDetailProgress),
 
-		gitTurnStartTree: ses.gitTurnStartTree,
-		gitTurnStartedAt: ses.gitTurnStartedAt,
-		gitTurns:         append([]gitTurnSnapshot(nil), ses.gitTurns...),
+		gitTurnStartTree:  ses.gitTurnStartTree,
+		gitTurnStartedAt:  ses.gitTurnStartedAt,
+		gitTurns:          append([]gitTurnSnapshot(nil), ses.gitTurns...),
+		gitTurnIndexDir:   ses.gitTurnIndexDir,
+		gitTurnIndexRoot:  ses.gitTurnIndexRoot,
+		gitTurnIndexHead:  ses.gitTurnIndexHead,
+		gitTurnIndexReady: ses.gitTurnIndexReady,
 
 		commitMsgAwait:        ses.commitMsgAwait,
 		commitMsgDeadline:     ses.commitMsgDeadline,
@@ -299,6 +307,10 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.gitTurnStartTree = state.gitTurnStartTree
 	dst.gitTurnStartedAt = state.gitTurnStartedAt
 	dst.gitTurns = append([]gitTurnSnapshot(nil), state.gitTurns...)
+	dst.gitTurnIndexDir = state.gitTurnIndexDir
+	dst.gitTurnIndexRoot = state.gitTurnIndexRoot
+	dst.gitTurnIndexHead = state.gitTurnIndexHead
+	dst.gitTurnIndexReady = state.gitTurnIndexReady
 	// An in-flight git worker belongs to the old session pointer. Reset its
 	// completion channel and let the worker observe the pointer mismatch.
 	dst.gitTurnCaptureInFlight = false

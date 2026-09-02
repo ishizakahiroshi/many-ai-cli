@@ -127,6 +127,25 @@ func TestClassifyResidueReportsRelayWorktree(t *testing.T) {
 	}
 }
 
+func TestClassifyResidueReportsUnregisteredEmptyRelayDirectory(t *testing.T) {
+	dir := initGitRepo(t)
+	writeFile(t, filepath.Join(dir, "README.md"), "# hello\n")
+	gitCommitAll(t, dir, "init")
+	empty := filepath.Join(dir, ".many-ai-cli", "worktrees", "r1-partial", "relay")
+	if err := os.MkdirAll(empty, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	report := classifyResidue(context.Background(), dir, false)
+	if len(report.RelayWorktrees) != 1 || report.RelayWorktrees[0].Registered || filepath.Clean(report.RelayWorktrees[0].Path) != empty {
+		t.Fatalf("empty relay directory not reported: %+v", report.RelayWorktrees)
+	}
+	checks := residueChecks(report)
+	if len(checks) != 1 || !strings.Contains(checks[0].Message, "未登録の空ディレクトリ") || strings.Contains(checks[0].Fix, "worktree remove") {
+		t.Fatalf("empty relay directory check = %+v", checks)
+	}
+}
+
 func TestClassifyResidueNoneOnCleanRepo(t *testing.T) {
 	dir := initGitRepo(t)
 	writeFile(t, filepath.Join(dir, "README.md"), "# hello\n")

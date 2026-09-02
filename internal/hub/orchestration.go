@@ -60,7 +60,7 @@ type orchestrationManager struct {
 	// roles は C1 (plan_orchestration-spawn-ui-exposure.md) で起動時に受け取った
 	// 役割マッピングを orchestration_id ごとに保持する。conductor への instruction file
 	// 注入（C2）はここから読み出す想定。
-	roles              map[string]map[string]orchestrationRoleAssignment
+	roles map[string]map[string]orchestrationRoleAssignment
 	// spawnConfirmations holds every spawn confirmation the Hub has not yet
 	// seen a browser decide, keyed by its ID. Unlike the pre-C1 design, this
 	// is a Hub-side hold with no deadline: a pending confirmation lives here
@@ -1806,6 +1806,9 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	// (TimedOut / IdleWarned) below are shared; the relay releases them when it
 	// hands the child its next instruction.
 	owns := s.relayOwns(boardID)
+	if owns && s.relayTerminal(boardID) {
+		return
+	}
 	boardPath := ""
 	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
 	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
@@ -2650,19 +2653,21 @@ func buildConductorInitialPrompt(orchestrationID string, roles map[string]orches
 			b.WriteString(fmt.Sprintf("- %s: provider=%s model=%s\n", role, ra.Provider, ra.Model))
 		}
 		b.WriteString("To spawn a child for a role above, run:\n")
-		b.WriteString("  many-ai-cli orchestrate spawn --role <role> \"<prompt>\"\n")
+		b.WriteString("  <MANY_AI_CLI_BIN> orchestrate spawn --role <role> \"<prompt>\"\n")
 		b.WriteString("(provider/model are resolved automatically from the mapping above; pass --provider/--model to override a specific spawn.)\n")
 	} else {
 		b.WriteString("No child role mapping was configured. Decide provider/model yourself whenever a child is needed and run:\n")
-		b.WriteString("  many-ai-cli orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
+		b.WriteString("  <MANY_AI_CLI_BIN> orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
 	}
 	b.WriteString("Do not call the Hub HTTP API or handle any auth token directly; this subcommand does it for you.\n")
-	b.WriteString("To run a plan file through the implementation→review→fix relay without conducting it yourself, run: many-ai-cli orchestrate relay --plan <path-to-plan.md> (roles come from the mapping above; pass --impl/--review provider[/model] if no mapping is configured; add --strong provider[/model] to hand a C to a stronger implementer when it keeps failing review; the relay works in its own git worktree unless you pass --same-tree). Relay children are driven by the Hub: do not spawn or send to them yourself, and you may close this session while a relay is running — it continues without you and you will be notified when it finishes.\n")
+	b.WriteString("The Hub exposes its exact executable path in MANY_AI_CLI_BIN. Invoke that path, not a many-ai-cli resolved from PATH, for every orchestrate command.\n")
+	b.WriteString("To run a plan file through the implementation→review→fix relay without conducting it yourself, run: <MANY_AI_CLI_BIN> orchestrate relay --plan <path-to-plan.md> (roles come from the mapping above; pass --impl/--review provider[/model] if no mapping is configured; add --strong provider[/model] to hand a C to a stronger implementer when it keeps failing review; the relay works in its own git worktree unless you pass --same-tree). Relay children are driven by the Hub: do not spawn or send to them yourself, and you may close this session while a relay is running — it continues without you and you will be notified when it finishes.\n")
+	b.WriteString("Use `<MANY_AI_CLI_BIN> orchestrate relay status [--id <orchestration-id>]` to inspect relay state and `<MANY_AI_CLI_BIN> orchestrate relay stop [--id <orchestration-id>]` to stop it.\n")
 	// 2026-07-04 の実運用（plan_orchestration-conductor-improvements.md C3）で確立した
 	// conductor 運用ルール。spawn 反復による枠涸渇・停止指示の解釈違い・レビューと修正の
 	// レースを構造的に防ぐ。
 	b.WriteString("Operating rules:\n")
-	b.WriteString("- To give follow-up instructions to an existing live child, run `many-ai-cli orchestrate send --role <role> \"<text>\"` instead of spawning again. spawn is rejected (409) while a live child exists for the role; send injects the text into the child and records it on the board automatically.\n")
+	b.WriteString("- To give follow-up instructions to an existing live child, run `<MANY_AI_CLI_BIN> orchestrate send --role <role> \"<text>\"` instead of spawning again. spawn is rejected (409) while a live child exists for the role; send injects the text into the child and records it on the board automatically.\n")
 	b.WriteString("- When the user asks you to stop, confirm in one line whether they mean immediately or after the current work unit completes (default: after completion).\n")
 	b.WriteString("- Do not dispatch a reviewer while the implementation child is still working on fixes; wait for its `## DONE` entry on the board first.\n")
 	return b.String()

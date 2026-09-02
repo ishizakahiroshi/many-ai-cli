@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -142,7 +143,54 @@ func TestRunRelayBuildsSameTreeRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runRelay: %v", err)
 	}
-	if got.PlanPath != "docs/plan.md" || got.Mode != "same-tree" || got.Roles["implementation"].Provider != "claude" || got.Roles["review"].Model != "gpt-5" || got.Roles["implementation-strong"].Model != "opus-strong" {
+	wantPlan, err := filepath.Abs(filepath.Join("docs", "plan.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.PlanPath != wantPlan || got.Mode != "same-tree" || got.Roles["implementation"].Provider != "claude" || got.Roles["review"].Model != "gpt-5" || got.Roles["implementation-strong"].Model != "opus-strong" {
 		t.Fatalf("relay request = %+v", got)
+	}
+}
+
+func TestRunRelayStatusAndStop(t *testing.T) {
+	var methods []string
+	var stopped relayControlRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer relay-secret" {
+			t.Fatalf("authorization header = %q", r.Header.Get("Authorization"))
+		}
+		methods = append(methods, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/sessions/9/relay":
+			_, _ = w.Write([]byte(`{"ok":true,"relays":[{"relay":{"orchestration_id":"r9-test","state":"reviewing","completed_cs":2,"round":1,"max_rounds":3,"branch":"many-ai-cli/relay/r9-test"}}]}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/sessions/9/relay-stop":
+			if err := json.NewDecoder(r.Body).Decode(&stopped); err != nil {
+				t.Fatalf("decode stop request: %v", err)
+			}
+			_, _ = w.Write([]byte(`{"ok":true,"relay":{"orchestration_id":"r9-test","state":"stopped","completed_cs":2,"round":1,"max_rounds":3,"branch":"many-ai-cli/relay/r9-test"}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	port := server.Listener.Addr().String()
+	port = port[strings.LastIndex(port, ":")+1:]
+	t.Setenv(hubPortEnv, port)
+	t.Setenv(sessionIDEnv, "9")
+	t.Setenv(hubTokenEnv, "relay-secret")
+
+	if err := runRelay([]string{"status", "--id", "r9-test"}); err != nil {
+		t.Fatalf("relay status: %v", err)
+	}
+	if err := runRelay([]string{"stop", "--id", "r9-test"}); err != nil {
+		t.Fatalf("relay stop: %v", err)
+	}
+	if stopped.OrchestrationID != "r9-test" {
+		t.Fatalf("stop request = %+v", stopped)
+	}
+	want := []string{"GET /api/sessions/9/relay", "POST /api/sessions/9/relay-stop"}
+	if len(methods) != len(want) || methods[0] != want[0] || methods[1] != want[1] {
+		t.Fatalf("requests = %v, want %v", methods, want)
 	}
 }

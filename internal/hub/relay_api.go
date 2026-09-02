@@ -196,6 +196,22 @@ func (s *Server) handleRelayCleanup(w http.ResponseWriter, r *http.Request, pare
 		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
 	}
+	childIDs := run.childIDsLocked()
+	run.mu.Unlock()
+	if remaining := s.closeRelayChildren(childIDs); len(remaining) > 0 {
+		writeJSONError(w, http.StatusConflict, "relay_children_active", fmt.Sprintf("relay child sessions are still active: %v; close them before cleaning up the worktree", remaining))
+		return
+	}
+	s.markRelayChildrenDone(body.OrchestrationID, childIDs)
+
+	// Another cleanup request can run while the child sessions are closing.
+	// Re-lock and verify that this request still owns the same worktree handle.
+	run.mu.Lock()
+	if run.worktreePath != path {
+		run.mu.Unlock()
+		writeJSONError(w, http.StatusConflict, "relay_worktree_missing", "relay worktree has already been cleaned up")
+		return
+	}
 	if info, statErr := os.Stat(path); statErr != nil || !info.IsDir() {
 		run.mu.Unlock()
 		writeJSONError(w, http.StatusConflict, "relay_worktree_missing", "relay worktree is no longer present")
@@ -214,6 +230,39 @@ func (s *Server) handleRelayCleanup(w http.ResponseWriter, r *http.Request, pare
 	st := run.statusLocked()
 	run.mu.Unlock()
 	writeJSON(w, map[string]any{"ok": true, "relay": st})
+}
+
+func (s *Server) closeRelayChildren(ids []int) []int {
+	for _, id := range ids {
+		s.handleDismiss(proto.Message{Type: "session_dismiss", SessionID: id})
+	}
+	remaining := make([]int, 0)
+	s.sessionsMu.Lock()
+	for _, id := range ids {
+		if s.sessions[id] != nil {
+			remaining = append(remaining, id)
+		}
+	}
+	s.sessionsMu.Unlock()
+	return remaining
+}
+
+func (s *Server) markRelayChildrenDone(boardID string, ids []int) {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	board := s.orchestration.boards[boardID]
+	if board == nil {
+		return
+	}
+	for _, id := range ids {
+		board.Done[id] = true
+		if child := board.Children[id]; child != nil {
+			child.Done = true
+		}
+		delete(board.IdleWarned, id)
+		delete(board.TimedOut, id)
+		delete(board.StartupFailed, id)
+	}
 }
 
 // handleRelayGet handles GET /api/sessions/:id/relay and includes each relay's
@@ -326,8 +375,21 @@ func resolveRelayPlanPath(parentCWD, raw string) (string, error) {
 	}
 	gitRoot := relayGitRoot(base)
 	allowed, err := isPathUnderAllowedRoots(resolved, base, gitRoot)
-	if err != nil || !allowed {
+	if err != nil {
 		return "", fmt.Errorf("%w: plan_path is outside the parent cwd and git root", errRelayPlanPath)
+	}
+	if !allowed {
+		// Repository-local plan queues may be directory junctions whose physical
+		// target is outside the repository. Permit that layout when the lexical
+		// path is still under an allowed root, but do not extend this exception
+		// to a plan file that is itself a symlink.
+		lexicallyAllowed := false
+		if planInfo, lstatErr := os.Lstat(plan); lstatErr == nil && planInfo.Mode()&os.ModeSymlink == 0 {
+			lexicallyAllowed = isUnder(plan, base) || isUnder(plan, gitRoot)
+		}
+		if !lexicallyAllowed {
+			return "", fmt.Errorf("%w: plan_path is outside the parent cwd and git root", errRelayPlanPath)
+		}
 	}
 	return resolved, nil
 }

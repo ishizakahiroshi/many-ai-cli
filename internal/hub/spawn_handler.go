@@ -40,6 +40,19 @@ type spawnWrappedSpec struct {
 	UsageProbe bool
 }
 
+const manyAICLIBinEnv = "MANY_AI_CLI_BIN"
+
+// hubSpawnEnv gives every Hub-spawned session the exact executable that
+// launched it. This avoids resolving an older distribution from PATH when an
+// orchestration conductor invokes a newer subcommand such as relay.
+func hubSpawnEnv(base []string, hubPort int, exe string) []string {
+	return mergeEnvOverrides(sanitizeEnv(base), []string{
+		"MANY_AI_CLI=1",
+		fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort),
+		manyAICLIBinEnv + "=" + exe,
+	})
+}
+
 func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []string {
 	if permissionMode != "" && permissionMode != "default" {
 		return append(wrapArgs, "--permission-mode", permissionMode)
@@ -176,7 +189,7 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = spec.CWD
 	hubPort := s.currentHubPort()
-	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1", fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
 	probeValue := "0"
 	if spec.UsageProbe {
 		probeValue = "1"
@@ -558,8 +571,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		hubPort := s.currentHubPort()
 		cmd := exec.Command(exe, wrapArgs...)
 		cmd.Dir = cwd
-		cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
-			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+		cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 		}
@@ -729,8 +741,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	hubPort := s.currentHubPort()
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
-		fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
 	// 画面の指定と config 既定を Hub 側で解決し、wrapper へは結論だけを渡す
 	// （判定を 2 箇所に置かない）。0 も明示して、env が残った環境で意図せず ON にならないようにする。
 	if delegation {
@@ -975,8 +986,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		wrapArgs := []string{"wrap", spec.provider, "--label=" + spec.label}
 		cmd := exec.Command(exe, wrapArgs...)
 		cmd.Dir = cwd
-		cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
-			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+		cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 		}

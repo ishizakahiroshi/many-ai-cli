@@ -45,6 +45,10 @@ func TestReattachPreservedStateTransfersLogicalState(t *testing.T) {
 		gitTurnStartTree:      "tree-start",
 		gitTurnStartedAt:      time.Date(2026, 8, 23, 17, 0, 0, 0, time.UTC),
 		gitTurns:              []gitTurnSnapshot{{Turn: 1, StartTree: "a", EndTree: "b"}},
+		gitTurnIndexDir:       "index-dir",
+		gitTurnIndexRoot:      "repo-root",
+		gitTurnIndexHead:      "head-tree",
+		gitTurnIndexReady:     true,
 		commitMsgAwait:        true,
 		commitMsgDeadline:     time.Now().Add(time.Minute),
 		commitMsgLang:         "ja",
@@ -81,6 +85,9 @@ func TestReattachPreservedStateTransfersLogicalState(t *testing.T) {
 	}
 	if dst.gitTurnStartTree != "tree-start" || len(dst.gitTurns) != 1 || dst.gitTurnCaptureInFlight || dst.gitTurnCaptureDone != nil {
 		t.Fatal("git turn state was not preserved/reset correctly")
+	}
+	if dst.gitTurnIndexDir != "index-dir" || dst.gitTurnIndexRoot != "repo-root" || dst.gitTurnIndexHead != "head-tree" || !dst.gitTurnIndexReady {
+		t.Fatal("git turn index cache was not preserved across reattach")
 	}
 	if got := dst.commitMsgBuf.String(); got != "commit fragment" {
 		t.Fatalf("commit marker buffer = %q, want preserved fragment", got)
