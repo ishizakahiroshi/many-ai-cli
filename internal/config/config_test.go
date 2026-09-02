@@ -72,6 +72,61 @@ func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
 	}
 }
 
+// TestChildStartupFastFailConfigDefaultsAndOverrides covers C1
+// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md): the two
+// child_startup_* settings default to enabled with a 60s grace, and an
+// explicit false/override in YAML survives applyDefaults.
+func TestChildStartupFastFailConfigDefaultsAndOverrides(t *testing.T) {
+	cfg := &Config{}
+	cfg.applyDefaults()
+	if cfg.Orchestration.ChildStartupGraceSeconds != 60 {
+		t.Fatalf("default child_startup_grace_seconds = %d, want 60", cfg.Orchestration.ChildStartupGraceSeconds)
+	}
+	if !cfg.Orchestration.ChildStartupFailEnabled() {
+		t.Fatal("default ChildStartupFailEnabled() = false, want true")
+	}
+	if !cfg.Orchestration.ChildStartupKillEnabled() {
+		t.Fatal("default ChildStartupKillEnabled() = false, want true")
+	}
+
+	yamlCfg := &Config{}
+	if err := yaml.Unmarshal([]byte("orchestration:\n  child_startup_fail_enabled: false\n  child_startup_kill: false\n  child_startup_grace_seconds: 30\n"), yamlCfg); err != nil {
+		t.Fatal(err)
+	}
+	yamlCfg.applyDefaults()
+	if yamlCfg.Orchestration.ChildStartupFailEnabled() {
+		t.Fatal("explicit child_startup_fail_enabled=false was ignored by applyDefaults")
+	}
+	if yamlCfg.Orchestration.ChildStartupKillEnabled() {
+		t.Fatal("explicit child_startup_kill=false was ignored by applyDefaults")
+	}
+	if yamlCfg.Orchestration.ChildStartupGraceSeconds != 30 {
+		t.Fatalf("explicit child_startup_grace_seconds = %d, want 30 (applyDefaults must not clobber a positive value)", yamlCfg.Orchestration.ChildStartupGraceSeconds)
+	}
+}
+
+// TestConfigCloneDeepCopiesChildStartupPointers covers C1's Clone requirement:
+// ChildStartupFail / ChildStartupKill must not alias the source config's
+// *bool after Clone (same pattern as WorktreeAuto).
+func TestConfigCloneDeepCopiesChildStartupPointers(t *testing.T) {
+	cfg := &Config{}
+	failFalse := false
+	killFalse := false
+	cfg.Orchestration.ChildStartupFail = &failFalse
+	cfg.Orchestration.ChildStartupKill = &killFalse
+
+	clone := cfg.Clone()
+	*cfg.Orchestration.ChildStartupFail = true
+	*cfg.Orchestration.ChildStartupKill = true
+
+	if clone.Orchestration.ChildStartupFail == nil || *clone.Orchestration.ChildStartupFail {
+		t.Fatal("ChildStartupFail pointer was aliased by Clone")
+	}
+	if clone.Orchestration.ChildStartupKill == nil || *clone.Orchestration.ChildStartupKill {
+		t.Fatal("ChildStartupKill pointer was aliased by Clone")
+	}
+}
+
 func TestProviderDefaultsIncludeCopilot(t *testing.T) {
 	slash := DefaultSlashCmdSources()
 	if slash.Copilot == "" || !strings.Contains(slash.Copilot, "/copilot.md") {

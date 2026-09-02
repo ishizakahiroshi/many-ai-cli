@@ -79,6 +79,10 @@ const (
 	relayReasonUserStop          = "user_stop"
 	relayReasonSpawnError        = "spawn_error"
 	relayReasonHubRestart        = "hub_restart"
+	// relayReasonStartupFailed: the awaited child never produced any progress
+	// after its initial prompt was delivered
+	// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md, D9/D10).
+	relayReasonStartupFailed = "startup_failed"
 )
 
 // Event kinds (proto.RelayEvent.Kind).
@@ -1311,6 +1315,28 @@ func (s *Server) relayOnChildTimeout(boardID string, childID int) {
 		return
 	}
 	s.relayFinishLocked(run, relayStateStopped, relayReasonTimeout, fmt.Sprintf("%s #%d", run.roleOfLocked(childID), childID))
+}
+
+// relayOnChildStartupFailed stops the relay when the awaited child never
+// produced any progress after its initial prompt was delivered (C2/C3,
+// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md). Mirrors
+// relayOnChildTimeout: a startup failure of a child the relay is not
+// currently awaiting is ignored (it is not blocking any relay progress).
+// The board record, latch and evidence capture happen in
+// handleChildStartupFailed (orchestration.go) before this is called;
+// relayFinishLocked owns the relay's own board/event/parent-notification path
+// (D10 — no new injection route is introduced here).
+func (s *Server) relayOnChildStartupFailed(boardID string, childID int) {
+	run := s.relayByID(boardID)
+	if run == nil {
+		return
+	}
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	if run.terminalLocked() || run.awaitingReconnect || childID != run.awaitedChildLocked() {
+		return
+	}
+	s.relayFinishLocked(run, relayStateStopped, relayReasonStartupFailed, fmt.Sprintf("%s #%d", run.roleOfLocked(childID), childID))
 }
 
 // relayTransitionLocked records a non-terminal state change.

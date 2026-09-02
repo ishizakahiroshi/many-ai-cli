@@ -800,10 +800,32 @@ type OrchestrationConfig struct {
 	BoardNotifyMode       BoardNotifyMode  `yaml:"board_notify_mode,omitempty" json:"board_notify_mode,omitempty"`
 	SpawnConfirmMode      SpawnConfirmMode `yaml:"spawn_confirm_mode,omitempty" json:"spawn_confirm_mode,omitempty"`
 	SpawnConfirmProviders []string         `yaml:"spawn_confirm_providers,omitempty" json:"spawn_confirm_providers,omitempty"`
+	// 起動ハンドシェイク未達の早期検知（plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md）。
+	// ChildStartupGraceSeconds: 初期プロンプトの配送成功が記録されてから、進捗ファイルが
+	// 1 度も作られないまま standby が続くのを起動失敗とみなすまでの猶予（既定 60）。
+	ChildStartupGraceSeconds int `yaml:"child_startup_grace_seconds,omitempty" json:"child_startup_grace_seconds,omitempty"`
+	// ChildStartupFail: 起動ハンドシェイク未達の検知そのものの ON/OFF（既定 true）。
+	// フィールド名をアクセサ ChildStartupFailEnabled() と同名にできない（Go は field と
+	// method の同名を許さない）ため、WorktreeAuto/WorktreeEnabled と同じ作法で
+	// 生ポインタと別名にしてある。
+	ChildStartupFail *bool `yaml:"child_startup_fail_enabled,omitempty" json:"child_startup_fail_enabled,omitempty"`
+	// ChildStartupKill: 起動失敗と確定した子セッションを Hub 側で停止するか（既定 true）。
+	// timeout 経路の子には適用しない（D6）。
+	ChildStartupKill *bool `yaml:"child_startup_kill,omitempty" json:"child_startup_kill,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
 	return o.WorktreeAuto == nil || *o.WorktreeAuto
+}
+
+// ChildStartupFailEnabled は起動ハンドシェイク未達の検知が有効かを返す（既定 true）。
+func (o OrchestrationConfig) ChildStartupFailEnabled() bool {
+	return o.ChildStartupFail == nil || *o.ChildStartupFail
+}
+
+// ChildStartupKillEnabled は起動失敗の子セッションを Hub 側で停止するかを返す（既定 true）。
+func (o OrchestrationConfig) ChildStartupKillEnabled() bool {
+	return o.ChildStartupKill == nil || *o.ChildStartupKill
 }
 
 // 端末の色方針（Hub.TerminalColor）。
@@ -1168,6 +1190,14 @@ func (cfg *Config) Clone() *Config {
 		v := *cfg.Orchestration.WorktreeAuto
 		c.Orchestration.WorktreeAuto = &v
 	}
+	if cfg.Orchestration.ChildStartupFail != nil {
+		v := *cfg.Orchestration.ChildStartupFail
+		c.Orchestration.ChildStartupFail = &v
+	}
+	if cfg.Orchestration.ChildStartupKill != nil {
+		v := *cfg.Orchestration.ChildStartupKill
+		c.Orchestration.ChildStartupKill = &v
+	}
 	c.Orchestration.SpawnConfirmProviders = cloneStringSlice(cfg.Orchestration.SpawnConfirmProviders)
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
@@ -1218,6 +1248,9 @@ func (cfg *Config) applyDefaults() {
 	}
 	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
 		cfg.Orchestration.IdleDoneThresholdSec = 600
+	}
+	if cfg.Orchestration.ChildStartupGraceSeconds <= 0 {
+		cfg.Orchestration.ChildStartupGraceSeconds = 60
 	}
 	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
 		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")

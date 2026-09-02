@@ -199,8 +199,39 @@ type Message struct {
 	// spawn_confirmation_requested is sent to browser UIs before an
 	// orchestration child is created. The response travels by HTTP, never via
 	// the conductor PTY, so the user remains the authority for the decision.
+	// The Hub holds the confirmation with no deadline (C1,
+	// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md), so it
+	// is re-sent to a browser that connects (or reconnects) while it is still
+	// undecided; SpawnRequestedAtMs lets the UI show how long it has waited.
 	SpawnConfirmationID string `json:"spawn_confirmation_id,omitempty"`
 	InitialPrompt       string `json:"initial_prompt,omitempty"`
+	// SpawnRequestedAtMs is the epoch-millisecond time a spawn confirmation
+	// was first requested. Carried on both spawn_confirmation_requested (for
+	// the elapsed-time display) and its resend on UI connect.
+	SpawnRequestedAtMs int64 `json:"spawn_requested_at_ms,omitempty"`
+	// spawn_confirmation_closed: Hub → UI. Tells every browser that a spawn
+	// confirmation is no longer open, so any dialog showing it can close.
+	// Reason is one of exactly five values (C2,
+	// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md):
+	//   approved     - a human approved it; SpawnChildSessionID is the new child.
+	//   refused      - a human explicitly refused it (the only case that also
+	//                  writes a user_refusal line to the board).
+	//   superseded   - the same parent+role requested a new confirmation
+	//                  before this one was decided.
+	//   parent_gone  - the parent session was dismissed or otherwise removed
+	//                  before anyone decided.
+	//   spawn_failed - a human approved it, but performSpawn itself failed;
+	//                  Text carries the failure detail.
+	// SessionID carries the parent, as on spawn_confirmation_requested.
+	SpawnChildSessionID int `json:"spawn_child_session_id,omitempty"`
+
+	// session_dismiss_refused: Hub → UI. Broadcast when handleDismiss refuses
+	// a session_dismiss because SessionID is holding at least one undecided
+	// spawn confirmation (hasPendingSpawnConfirmation) (C5,
+	// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md). Carries
+	// no new fields: SessionID is the session the dismiss targeted and was not
+	// removed; Reason is left empty (the UI shows one fixed toast regardless
+	// of which pending confirmation caused the refusal).
 
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`

@@ -125,3 +125,92 @@ func TestRememberRoleProviderStoresOnlyValidValues(t *testing.T) {
 		t.Fatalf("temp の config.yaml が作られていない: %v", err)
 	}
 }
+
+// C2 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md): 症状A（--provider 無視）の
+// 修正。明示 requested は roleAssigned / remembered / parentProvider のどれにも負けない。
+func TestResolveChildProviderExplicitAlwaysWins(t *testing.T) {
+	provider, source := resolveChildProvider("claude", "codex", "grok", "cursor-agent")
+	if provider != "claude" || source != providerSourceExplicit {
+		t.Fatalf("explicit requested が勝っていない: provider=%q source=%q", provider, source)
+	}
+	// role map / remembered / parent が全部揃っていても、明示指定が唯一の decisive factor。
+	provider, source = resolveChildProvider("codex", "claude", "claude", "claude")
+	if provider != "codex" || source != providerSourceExplicit {
+		t.Fatalf("explicit requested が勝っていない(2): provider=%q source=%q", provider, source)
+	}
+}
+
+// requested が空のときの解決順: role_map → remembered → parent → default(codex)。
+// 無効な remembered / parentProvider（旧版の値・custom provider 等）はスキップされる。
+func TestResolveChildProviderFallsThroughInOrder(t *testing.T) {
+	if provider, source := resolveChildProvider("", "claude", "grok", "cursor-agent"); provider != "claude" || source != providerSourceRoleMap {
+		t.Fatalf("role_map が優先されていない: provider=%q source=%q", provider, source)
+	}
+	if provider, source := resolveChildProvider("", "", "grok", "cursor-agent"); provider != "grok" || source != providerSourceRemembered {
+		t.Fatalf("remembered が優先されていない: provider=%q source=%q", provider, source)
+	}
+	if provider, source := resolveChildProvider("", "", "", "cursor-agent"); provider != "cursor-agent" || source != providerSourceParent {
+		t.Fatalf("parent が使われていない: provider=%q source=%q", provider, source)
+	}
+	if provider, source := resolveChildProvider("", "", "", ""); provider != "codex" || source != providerSourceDefault {
+		t.Fatalf("既定への受け皿が違う: provider=%q source=%q", provider, source)
+	}
+	// 無効な remembered（旧版の壊れた値）は無視して親へ落ちる。
+	if provider, source := resolveChildProvider("", "", "ChatGPT", "cursor-agent"); provider != "cursor-agent" || source != providerSourceParent {
+		t.Fatalf("無効な remembered を採用している: provider=%q source=%q", provider, source)
+	}
+	// 無効な parentProvider（shell / custom provider 等）は無視して default へ落ちる。
+	if provider, source := resolveChildProvider("", "", "", "shell"); provider != "codex" || source != providerSourceDefault {
+		t.Fatalf("無効な parentProvider を採用している: provider=%q source=%q", provider, source)
+	}
+}
+
+// resolveSpawnChildProvider は handleSpawnChild の役割対応表・記憶・親 provider を束ねた
+// Server 側の入口。明示 --provider が role map（起動時に設定した対応表）にも記憶にも
+// 負けないことを、実際の呼び出し経路に近い形で固定する（mer の role_provider:
+// mer-c5-rotation: codex のような既存の記憶があっても、明示指定なら claude で起動する）。
+func TestResolveSpawnChildProviderExplicitBeatsRoleMapAndMemory(t *testing.T) {
+	s := newTestServer()
+	parent := &session{Provider: "cursor-agent"}
+	s.cfg.UserPrefs.Spawn.RoleProvider = map[string]string{"review": "codex"}
+	s.orchestration.roles = map[string]map[string]orchestrationRoleAssignment{
+		"o1": {"review": {Provider: "codex", Model: "gpt-5"}},
+	}
+	parent.OrchestrationID = "o1"
+
+	body := &spawnChildRequest{Role: "review", Provider: "claude"}
+	source := s.resolveSpawnChildProvider(parent, body)
+	if body.Provider != "claude" || source != providerSourceExplicit {
+		t.Fatalf("明示 provider が負けている: body.Provider=%q source=%q", body.Provider, source)
+	}
+	// 明示 --provider を渡しても、role map の model 補完は生きている（model は未指定のまま）。
+	if body.Model != "gpt-5" {
+		t.Fatalf("role map の model 補完が効いていない: body.Model=%q", body.Model)
+	}
+
+	// provider を省略すると role map → remembered → parent の順で解決される。
+	body2 := &spawnChildRequest{Role: "review"}
+	source2 := s.resolveSpawnChildProvider(parent, body2)
+	if body2.Provider != "codex" || source2 != providerSourceRoleMap {
+		t.Fatalf("role map が使われていない: body.Provider=%q source=%q", body2.Provider, source2)
+	}
+
+	// role map に無い役割は記憶 → 親の順。
+	body3 := &spawnChildRequest{Role: "implementation"}
+	source3 := s.resolveSpawnChildProvider(parent, body3)
+	if body3.Provider != "cursor-agent" || source3 != providerSourceParent {
+		t.Fatalf("記憶が無い役割は親に落ちるはず: body.Provider=%q source=%q", body3.Provider, source3)
+	}
+}
+
+// C2 item 2: 承認ダイアログの決定が確認前の値と違うときだけ board 用の1行を返す。
+// 同じなら空文字（＝書かない）。
+func TestProviderConfirmationChangeNote(t *testing.T) {
+	if note := providerConfirmationChangeNote("claude", "claude"); note != "" {
+		t.Fatalf("一致するときは空のはず: %q", note)
+	}
+	note := providerConfirmationChangeNote("claude", "codex")
+	if !strings.Contains(note, "requested=claude") || !strings.Contains(note, "decided=codex") {
+		t.Fatalf("note の内容が不足: %q", note)
+	}
+}

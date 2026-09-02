@@ -8,6 +8,7 @@ package orchestrate
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -68,36 +69,50 @@ func runSpawn(args []string) error {
 	role := fs.String("role", "", "child role (required, e.g. implementation/test/review)")
 	provider := fs.String("provider", "", "override provider; one of claude|codex|copilot|cursor-agent|opencode|grok (exact lowercase). Default: the role mapping decided at conductor launch, then the provider last used for this role, then the parent's provider")
 	model := fs.String("model", "", "override model (default: resolved from the role mapping decided at conductor launch)")
-	cwd := fs.String("cwd", "", "child working directory (default: parent session cwd)")
+	cwd := fs.String("cwd", "", "root for the child's working directory (default: parent session cwd). By default many-ai-cli creates an orchestration worktree under this directory and the child runs there, not directly in this directory; pass -same-tree to have the child run in this directory itself")
+	sameTree := fs.Bool("same-tree", false, "run the child directly in -cwd instead of an orchestration worktree (default: use a worktree; the child then edits your working tree directly, so do not edit it in parallel)")
 	force := fs.Bool("force", false, "spawn a new child even if a live child already exists for the role (default: rejected; use `orchestrate send` instead)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return errors.New(`orchestrate spawn --role <role> [--provider <provider> --model <model>] [--force] "<prompt>"`)
+		return errors.New(`orchestrate spawn --role <role> [--provider <provider> --model <model>] [--cwd <path>] [--same-tree] [--force] "<prompt>"`)
 	}
 	if *role == "" {
 		return errors.New("orchestrate spawn: --role is required")
 	}
 	prompt := fs.Arg(0)
 
+	if *sameTree {
+		fmt.Println("warning: same-tree mode: the child edits your working tree directly; do not edit the repository in parallel")
+	}
+
 	hubURL, token, sessionID, err := hubEnv("spawn")
 	if err != nil {
 		return err
 	}
 
-	result, err := spawnChild(hubURL, token, sessionID, spawnChildRequest{
+	req := spawnChildRequest{
 		Role:          *role,
 		Provider:      *provider,
 		Model:         *model,
 		InitialPrompt: prompt,
 		CWD:           *cwd,
 		Force:         *force,
-	})
+	}
+	if *sameTree {
+		t := true
+		req.SameTree = &t
+	}
+	result, err := spawnChild(hubURL, token, sessionID, req)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("spawned child session #%d role=%s board=%s cwd=%s\n", result.SessionID, *role, result.BoardPath, result.CWD)
+	cwdOut := result.CWD
+	if strings.TrimSpace(*cwd) != "" && result.CWD != *cwd {
+		cwdOut = fmt.Sprintf("%s (requested=%s)", result.CWD, *cwd)
+	}
+	fmt.Printf("spawned child session #%d role=%s board=%s cwd=%s\n", result.SessionID, *role, result.BoardPath, cwdOut)
 	return nil
 }
 
@@ -237,6 +252,11 @@ type spawnChildRequest struct {
 	InitialPrompt string `json:"initial_prompt"`
 	CWD           string `json:"cwd,omitempty"`
 	Force         bool   `json:"force,omitempty"`
+	// SameTree is tri-state: nil (omitted) means "follow the user's
+	// orchestration.worktree_auto setting" (default). Set to true only when
+	// -same-tree was passed. There is deliberately no way to send an explicit
+	// false from this CLI flag (see -same-tree help text).
+	SameTree *bool `json:"same_tree,omitempty"`
 }
 
 type sendChildRequest struct {
@@ -311,12 +331,18 @@ func postChildAPI(url, token string, body any) (*childAPIResponse, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	// A user-facing spawn confirmation can legitimately take longer than the
-	// old request timeout. Keep this bounded so a disconnected Hub still does
-	// not leave the conductor command hanging indefinitely.
+	// A user-facing spawn confirmation is held by the Hub with no deadline
+	// (C1, plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md):
+	// it survives this process being killed by its own tool-call timeout.
+	// This client-side timeout only bounds how long *this* command waits; it
+	// does not cancel the confirmation itself, so its wording must not read
+	// as a refusal.
 	client := &http.Client{Timeout: 3 * time.Minute}
 	resp, err := client.Do(req)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("hub still holds the spawn confirmation pending (waited %s locally): open the parent session in the browser to decide it, then retry or use `orchestrate send`: %w", client.Timeout, err)
+		}
 		return nil, fmt.Errorf("http post: %w", err)
 	}
 	defer resp.Body.Close()
@@ -332,6 +358,10 @@ func postChildAPI(url, token string, body any) (*childAPIResponse, error) {
 		detail := result.Detail
 		if detail == "" {
 			detail = result.Error
+		}
+		if result.Error == "spawn_refused" {
+			// The only case that actually means a human clicked refuse.
+			return nil, fmt.Errorf("spawn refused by the user: %s", detail)
 		}
 		return nil, fmt.Errorf("hub returned %d: %s", resp.StatusCode, detail)
 	}
