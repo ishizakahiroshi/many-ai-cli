@@ -135,6 +135,24 @@
 .spawn-provider-row { display: flex; align-items: center; gap: var(--space-2); }
 .spawn-provider-row .spawn-select { flex: 1; }
 .spawn-provider-row .spawn-provider-combobox { flex: 1; min-width: 0; }
+.spawn-remember-approval-label {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.spawn-remember-approval-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
 .spawn-provider-native {
   position: absolute;
   width: 1px;
@@ -436,6 +454,8 @@
 }
 
 @media (max-width: 520px) {
+  .spawn-provider-row { gap: var(--space-1); }
+  .spawn-remember-approval-label { font-size: 0.68rem; }
   .spawn-provider-trigger {
     grid-template-columns: 15px minmax(0, 1fr) 10px;
     gap: var(--space-1);

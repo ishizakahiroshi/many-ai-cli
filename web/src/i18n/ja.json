@@ -527,6 +527,8 @@
   "spawn_model_discover_tooltip": "Ollama Cloud モデル一覧を開く（外部）",
   "spawn_model_fetch_failed": "モデル一覧の取得に失敗しました",
   "spawn_model_provider_mismatch": "選択中のプロバイダーでは使えないモデルです。",
+  "spawn_remember_approval_label": "記憶",
+  "spawn_remember_approval_tooltip": "このプロバイダーの直前の承認設定を記憶",
   "spawn_permission_default": "承認モード: デフォルト",
   "spawn_permission_plan": "plan（変更前に確認）",
   "spawn_permission_accept_edits": "acceptEdits（編集のみ自動許可）",

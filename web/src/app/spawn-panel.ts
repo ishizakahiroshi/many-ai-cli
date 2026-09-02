@@ -1,12 +1,13 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, token } from './util.js';
-import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, setUserPref } from './user-prefs.js';
+import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
+import { DEFAULT_APPROVAL_FORM_SETTINGS, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, restoreApprovalSettings } from './spawn-approval-memory.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -35,6 +36,8 @@ export function resetSpawnProviderOrder(): void {
   const spawnProviderTriggerIcon = document.getElementById('spawn-provider-trigger-icon');
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnProviderNoteHelp = document.getElementById('spawn-provider-note-help');
+  const spawnRememberApprovalSettings = document.getElementById('spawn-remember-approval-settings') as HTMLInputElement | null;
+  const spawnRememberApprovalLabel = document.getElementById('spawn-remember-approval-label');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
@@ -118,13 +121,25 @@ export function resetSpawnProviderOrder(): void {
     document.getElementById(spawnProviderNoteIds.claude),
   );
 
+  function syncRememberApprovalSettingsLabel(): void {
+    const tooltip = t('spawn_remember_approval_tooltip');
+    if (spawnRememberApprovalLabel) {
+      spawnRememberApprovalLabel.dataset.tooltip = tooltip;
+      spawnRememberApprovalLabel.title = tooltip;
+    }
+    spawnRememberApprovalSettings?.setAttribute('aria-label', tooltip);
+  }
+
+  document.addEventListener('i18n-ready', syncRememberApprovalSettingsLabel);
+  syncRememberApprovalSettingsLabel();
+
   // 前回起動時に選んだサブスクリプションは provider ごとに覚える（profile 一覧は
   // provider 固有なので、1 つの値を使い回すと provider を切り替えた瞬間に無関係な
   // ID が残る）。spawn.defaults は map[string]string なので、入れ子ではなく
   // `subscription_<provider>` のフラットなキーで往復させる。
   const SUBSCRIPTION_PREF_PREFIX = 'subscription_';
 
-  function readSpawnDefaults(): Record<string, string> {
+  function readSpawnDefaults(): Record<string, unknown> {
     try {
       const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
       return (s && typeof s === 'object' && !Array.isArray(s)) ? s : {};
@@ -950,6 +965,24 @@ export function resetSpawnProviderOrder(): void {
     syncPermissionModeOptions(p);
   }
 
+  function applySpawnApprovalSettings(provider: string, defaults: Record<string, unknown>): void {
+    const approval = {
+      ...DEFAULT_APPROVAL_FORM_SETTINGS,
+      ...restoreApprovalSettings(provider, defaults),
+    };
+    if (spawnPermissionMode) {
+      spawnPermissionMode.value = approval.permission_mode;
+      syncPermissionModeOptions(provider);
+    }
+    const sandbox = document.getElementById('spawn-sandbox') as HTMLSelectElement | null;
+    if (sandbox) sandbox.value = approval.sandbox;
+    const askForApproval = document.getElementById('spawn-ask-approval') as HTMLSelectElement | null;
+    if (askForApproval) askForApproval.value = approval.ask_for_approval;
+    if (spawnOpenCodeFullAllow) {
+      spawnOpenCodeFullAllow.checked = approval.opencode_permission_mode === 'bypassPermissions';
+    }
+  }
+
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
@@ -1014,10 +1047,28 @@ export function resetSpawnProviderOrder(): void {
     spawnIsolateWorktree.addEventListener('change', syncIsolateWorktreeNote);
   }
 
+  async function persistRememberApprovalSettings(): Promise<void> {
+    if (!spawnRememberApprovalSettings) return;
+    const defaults = readSpawnDefaults();
+    const provider = typeof defaults.provider === 'string' && defaults.provider
+      ? defaults.provider
+      : spawnProviderEl.value;
+    const next = mergeApprovalSettings(defaults, provider, {}, spawnRememberApprovalSettings.checked);
+    setUserPref('spawn.defaults', next);
+    await flushUserPrefsPut();
+  }
+
+  spawnRememberApprovalSettings?.addEventListener('change', () => {
+    void persistRememberApprovalSettings();
+  });
+
   function loadSpawnSettings() {
+    if (spawnRememberApprovalSettings) spawnRememberApprovalSettings.checked = true;
+    applySpawnApprovalSettings(spawnProviderEl.value, {});
     try {
-      const s = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
-      if (s.provider) {
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_SPAWN_KEY) || '{}');
+      const s: Record<string, any> = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      if (typeof s.provider === 'string' && s.provider) {
         spawnProviderEl.value = s.provider;
         syncSpawnProviderFields(s.provider);
       }
@@ -1027,13 +1078,10 @@ export function resetSpawnProviderOrder(): void {
       // /model 既定（1M 窓など）を 200K へ上書きする原因だった。非既定モデルを
       // 使いたいときは datalist から明示選択する（その選択はそのセッションにのみ適用）。
       // s.model は後方互換のため保存自体は残すが、ここでは読み込まない。
-      if (s.permission_mode && spawnPermissionMode) {
-        spawnPermissionMode.value = s.permission_mode;
-        syncPermissionModeOptions(spawnProviderEl.value);
+      if (spawnRememberApprovalSettings) {
+        spawnRememberApprovalSettings.checked = isApprovalSettingsMemoryEnabled(s);
       }
-      if (s.sandbox)          document.getElementById('spawn-sandbox').value = s.sandbox;
-      if (s.ask_for_approval) document.getElementById('spawn-ask-approval').value = s.ask_for_approval;
-      if (spawnOpenCodeFullAllow) spawnOpenCodeFullAllow.checked = s.opencode_permission_mode === 'bypassPermissions';
+      applySpawnApprovalSettings(spawnProviderEl.value, s);
       // C2: Detached 設定を復元
       if (s.open_target) {
         const radio = document.getElementById(`spawn-target-${s.open_target}`) as HTMLInputElement | null;
@@ -1069,8 +1117,9 @@ export function resetSpawnProviderOrder(): void {
     } catch (_) { return false; }
   }
 
-  function saveSpawnSettings(obj) {
+  async function saveSpawnSettings(obj: Record<string, string>): Promise<void> {
     setUserPref('spawn.defaults', obj);
+    await flushUserPrefsPut();
   }
 
   // C2: detached-grid URL を生成して別窓で開く
@@ -2540,7 +2589,7 @@ export function resetSpawnProviderOrder(): void {
         if (spawnSubscriptionRow && !spawnSubscriptionRow.hidden) {
           subscriptionDefaults[SUBSCRIPTION_PREF_PREFIX + provider] = subscriptionID;
         }
-        saveSpawnSettings({
+        const savedDefaults = {
           ...subscriptionDefaults,
           provider,
           cwd,
@@ -2550,10 +2599,15 @@ export function resetSpawnProviderOrder(): void {
           detached_preset: detachedPreset,
           isolate_worktree: spawnIsolateWorktree?.checked ? 'true' : 'false',
           delegation: spawnDelegation?.checked ? 'true' : 'false',
-          ...(providerHasPermissionSelect(provider) ? { permission_mode: bodyObj.permission_mode } : {}),
-          ...(provider === 'codex'  ? { sandbox: bodyObj.sandbox, ask_for_approval: bodyObj.ask_for_approval } : {}),
-          ...(provider === 'opencode' ? { opencode_permission_mode: bodyObj.permission_mode } : {}),
-        });
+        };
+        const rememberApprovalSettings = spawnRememberApprovalSettings?.checked ?? true;
+        const persistedDefaults = mergeApprovalSettings(
+          savedDefaults,
+          provider,
+          { ...bodyObj, opencode_permission_mode: bodyObj.permission_mode },
+          rememberApprovalSettings,
+        );
+        await saveSpawnSettings(persistedDefaults);
         document.getElementById('spawn-label').value = '';
         codexModelSelection  = null;
         claudeModelSelection = null;

@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
 import { showToast, token } from './util.js';
+import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -400,16 +401,36 @@ export async function _putUserPrefsNow() {
   if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
 }
 
+const _userPrefsPutQueue = createUserPrefsPutQueue(async () => {
+  try {
+    await _putUserPrefsNow();
+  } catch (e) {
+    console.warn('[user-prefs] PUT failed:', e);
+    showToast(_userPrefsSaveErrorMessage(e));
+  }
+});
+
+function _putUserPrefsWithFeedback(): Promise<void> {
+  return _userPrefsPutQueue.request();
+}
+
 export function _scheduleUserPrefsPut() {
   if (_userPrefsDebounceTimer) clearTimeout(_userPrefsDebounceTimer);
-  _userPrefsDebounceTimer = setTimeout(async () => {
-    try {
-      await _putUserPrefsNow();
-    } catch (e) {
-      console.warn('[user-prefs] PUT failed:', e);
-      showToast(_userPrefsSaveErrorMessage(e));
-    }
+  _userPrefsDebounceTimer = setTimeout(() => {
+    _userPrefsDebounceTimer = null;
+    void _putUserPrefsWithFeedback();
   }, 200);
+}
+
+// デバウンス中の最新 user_prefs を待たずに Hub へ届ける。spawn のように
+// 成功レスポンス後すぐ画面や Hub が閉じられる経路で、localStorage だけが先に
+// 更新される競合を避けるために使う。
+export async function flushUserPrefsPut(): Promise<void> {
+  if (_userPrefsDebounceTimer) {
+    clearTimeout(_userPrefsDebounceTimer);
+    _userPrefsDebounceTimer = null;
+  }
+  await _putUserPrefsWithFeedback();
 }
 
 export function setUserPref(path: string, value: any): void {
