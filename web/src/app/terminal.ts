@@ -12,7 +12,7 @@ import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
-import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
+import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
 import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
 import { encodeWheelSeq, initialMouseModeTrackerState, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
@@ -20,7 +20,7 @@ import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, ext
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
 import { altScrollNotchesUp, ensureAltScrollRail, noteAltScrollNotch, requestNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
-export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
+export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
 // サブエージェント実行行・ツール要約行は "+N lines" 無しで "(ctrl+o to expand)" 単独で

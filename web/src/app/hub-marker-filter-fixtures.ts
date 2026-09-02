@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   filterHubMarkersPure,
+  matchMarkerAllowingWrap,
   MAX_MARKER_BUFFER_BYTES,
+  MAX_MARKER_WRAP_GAP_BYTES,
   type HubMarkerFilterState,
 } from './hub-marker-filter.js';
 
@@ -261,4 +263,84 @@ test('案 H: 出力はタグのバイト数ぶんだけ短くなる（本文へ�
   const { out } = filterHubMarkersPure(input, initialState());
   const tagBytes = '[MANY-AI-CLI]'.length + '[/MANY-AI-CLI]'.length;
   assert.equal(out.length, input.length - tagBytes);
+});
+
+// ── 案 I（2026-09-02）: 折り返しで分断されたマーカー ──
+// CLI は端末幅で長い行を折り返すので、マーカー文字列の途中に CR / LF・行末パディングの空白・
+// カーソル移動の CSI が割り込む。連続バイト列の完全一致では CLOSE を取りこぼし、ラッチした
+// まま以降の端末出力を全部捨てていた（セッション #3 で 31.2% の出力が xterm へ届いていない）。
+
+test('案 I: 折り返しで分断された DONE の CLOSE を受理し、以降の出力を捨てない', () => {
+  // 2026-09-02 セッション #3（Codex 130 桁）の実測パターン
+  const wrapped = '[/MANY-AI-CLI-\r\n' + ' '.repeat(130) + '\r\n\x1b[?25l\x1b[35;1H\n\x1b[30;1H  DONE]';
+  const input = bytes(`\x1b[30;1H  [MANY-AI-CLI-DONE] 対象 plan は未完了です。 ${wrapped}\x1b[30;1H■ You've hit your usage limit.`);
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  const text = str(out);
+  // DONE 本文は落ちるが、CLOSE 以降の CLI 出力（使用量上限のエラー行）は届く
+  assert.equal(text.includes('対象 plan は未完了です。'), false);
+  assert.equal(text.includes("■ You've hit your usage limit."), true);
+  assert.equal(state.inDone, false);
+  assert.equal(state.doneBuf.length, 0);
+});
+
+test('案 I: 折り返しで分断された DONE の OPEN もラッチする', () => {
+  const input = bytes('\n[MANY-AI-CLI-\r\n  DONE]サマリー[/MANY-AI-CLI-DONE]after');
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), '\nafter');
+  assert.equal(state.inDone, false);
+});
+
+test('案 I: 承認マーカーが折り返しで分断されてもタグだけ落とし、割り込んだバイトは素通しする', () => {
+  // 案 H の「本文へ 1 バイトも足さない・削らない」を保つ。割り込んだ CR/LF/空白は CLI の描画指示。
+  const input = bytes('\n[MANY-AI-CLI]Q1?\n1. opt[/MANY-AI-CL\r\n   I]tail');
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), '\nQ1?\n1. opt\r\n   tail');
+  assert.equal(state.inMarker, false);
+});
+
+test('案 I: 折り返しで分断された承認 OPEN も行頭ゲートを通ればラッチする', () => {
+  const input = bytes('\r\n  [MANY-AI-CL\r\n  I]Q1?[/MANY-AI-CLI]tail');
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), '\r\n  \r\n  Q1?tail');
+  assert.equal(state.inMarker, false);
+});
+
+test('案 I: マーカーの途中に印字文字が割り込んだら一致させない（誤爆を増やさない）', () => {
+  const input = bytes('\n[MANY-AI-CLI-DONE]本文 [/MANY-AI-CLI-x DONE]tail');
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  // CLOSE と認めないので DONE ラッチは続く（従来どおり 32KB のセーフガードで復帰する）
+  assert.equal(str(out), '\n');
+  assert.equal(state.inDone, true);
+});
+
+test('案 I: 読み飛ばし総量が上限を超えたら一致させない', () => {
+  const gap = ' '.repeat(MAX_MARKER_WRAP_GAP_BYTES + 10);
+  const input = bytes(`\n[MANY-AI-CLI-DONE]本文 [/MANY-AI-CLI-${gap}DONE]tail`);
+  const { out, state } = filterHubMarkersPure(input, initialState());
+  assert.equal(str(out), '\n');
+  assert.equal(state.inDone, true);
+});
+
+test('案 I: 折り返しの隙間で chunk が割れても carry で次に繋ぐ', () => {
+  const part1 = bytes('\n[MANY-AI-CLI-DONE]サマリー [/MANY-AI-CLI-\r\n   ');
+  const { out: out1, state: state1 } = filterHubMarkersPure(part1, initialState());
+  assert.equal(str(out1), '\n');
+  assert.equal(state1.inDone, true);
+  assert.ok(state1.carry.length > 0);
+
+  const part2 = bytes('DONE]after');
+  const { out: out2, state: state2 } = filterHubMarkersPure(part2, state1);
+  assert.equal(str(out2), 'after');
+  assert.equal(state2.inDone, false);
+  assert.equal(state2.carry.length, 0);
+});
+
+test('案 I: matchMarkerAllowingWrap は不一致・バイト不足・一致を区別する', () => {
+  const pattern = bytes('[/MANY-AI-CLI-DONE]');
+  assert.equal(matchMarkerAllowingWrap(bytes('xyz'), 0, pattern).consumed, 0);
+  assert.equal(matchMarkerAllowingWrap(bytes('[/MANY-AI-CLI-'), 0, pattern).consumed, -1);
+  const wrapped = bytes('[/MANY-AI-CLI-\r\n  DONE]');
+  const m = matchMarkerAllowingWrap(wrapped, 0, pattern);
+  assert.equal(m.consumed, wrapped.length);
+  assert.equal(str(m.noise), '\r\n  ');
 });

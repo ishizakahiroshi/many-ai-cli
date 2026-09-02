@@ -79,7 +79,7 @@ docs/local/               設計書・plan 等（非公開）
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |
 | profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
 | 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
-| 代替画面を CLI が全面管理している端末へ、こちらのテキストを差し込まない（消せない残骸になる） | `web/src/app/hub-marker-filter.ts` の案 G・案 H | `hub-marker-filter-fixtures.ts` の案 G 2 件・案 H 4 件 |
+| 代替画面を CLI が全面管理している端末へこちらのテキストを差し込まない（消せない残骸になる）／マーカーは端末の折り返しで分断される前提で照合する（連続バイト完全一致にしない） | `web/src/app/hub-marker-filter.ts` の案 G・案 H・案 I | `hub-marker-filter-fixtures.ts` の案 G 2 件・案 H 4 件・案 I 8 件 |
 | 全画面オーバーレイには wheel 除外クラス `.aac-wheel-overlay` を付ける（端末に重なるだけのポップオーバーは `data-wheel-native`） | `web/src/app/terminal.ts` の `isModalOverlayOpen()` | `scripts/check-wheel-overlays.mjs`（Validate CI） |
 | relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `internal/hub/relay.go` / `internal/hub/relay_worktree.go` | `TestRelay_*`（`internal/hub/`） |
 | サイドバーの配置は 1 本の木から導く（兄弟順と折りたたみ以外でノードが器を越えない） | `web/src/app/sidebar-tree.ts` | `sidebar-tree-fixtures.ts` |
