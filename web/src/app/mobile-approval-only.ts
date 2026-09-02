@@ -7,7 +7,12 @@ import { approvalRawOptionsCache, sessions } from './state.js';
 import { escapeHtml } from './util.js';
 
 const ROUTE = '/mobile/approvals';
-const MODE_KEY = 'many-ai-cli.mobile.approval-only';
+// 2026-09-03: モードの記憶と復元を撤去した（docs/local/bugfix_mobile-approval-route-pins-hub_2026-09-03.md）。
+// 旧実装はこのキーへ 'approval' を書き、以後ルートを開くたびに承認専用画面へ
+// リダイレクトしていた。入口ボタンは 2026-07-12 に撤去済みだが、書き込み済みの値は
+// 利用者のブラウザに残り続けて PC でもフル Hub を開けなくする。読まなくするだけでは
+// 残骸が消えないので、初期化のたびに 1 度消して回収する。
+const LEGACY_MODE_KEY = 'many-ai-cli.mobile.approval-only';
 const approveRe = /\b(yes|approve|allow|continue|proceed|confirm|accept|run|execute)\b/i;
 const rejectRe = /\b(no|deny|reject|skip|cancel|abort|decline)\b|don't\s+allow/i;
 
@@ -15,20 +20,12 @@ function isApprovalRoute(): boolean {
   return window.location.pathname.replace(/\/+$/, '') === ROUTE;
 }
 
-function setMode(value: 'approval' | 'full'): void {
-  try { localStorage.setItem(MODE_KEY, value); } catch (_) {}
-}
-
-function mode(): string {
-  try { return localStorage.getItem(MODE_KEY) || ''; } catch (_) { return ''; }
+function dropLegacyMode(): void {
+  try { localStorage.removeItem(LEGACY_MODE_KEY); } catch (_) {}
 }
 
 function fullHubUrl(): string {
   return `${window.location.origin}/${window.location.search}${window.location.hash}`;
-}
-
-function approvalUrl(): string {
-  return `${window.location.origin}${ROUTE}${window.location.search}${window.location.hash}`;
 }
 
 function selectOptions(id: number): { approve: any | null; reject: any | null } {
@@ -62,10 +59,7 @@ function renderApprovalOnly(): void {
   heading.className = 'mao-header';
   const title = document.createElement('div');
   title.innerHTML = '<strong>承認キュー</strong><span>外出先の詰まりを片づける</span>';
-  const full = optionButton('フル Hub へ', 'mao-full-hub', () => {
-    setMode('full');
-    window.location.assign(fullHubUrl());
-  });
+  const full = optionButton('フル Hub へ', 'mao-full-hub', () => window.location.assign(fullHubUrl()));
   heading.append(title, full);
   root.appendChild(heading);
 
@@ -108,10 +102,7 @@ function renderApprovalOnly(): void {
     }
     if (selected.reject) actions.appendChild(optionButton('Reject', 'mao-reject', () => sendChoice(id, selected.reject.num)));
     if (!selected.approve && !selected.reject) {
-      const fallback = optionButton('フル Hub で回答', 'mao-full-hub', () => {
-        setMode('full');
-        window.location.assign(fullHubUrl());
-      });
+      const fallback = optionButton('フル Hub で回答', 'mao-full-hub', () => window.location.assign(fullHubUrl()));
       actions.appendChild(fallback);
     }
     card.appendChild(actions);
@@ -121,13 +112,8 @@ function renderApprovalOnly(): void {
 }
 
 export function initMobileApprovalOnly(): void {
-  const route = isApprovalRoute();
-  if (!route && mode() === 'approval') {
-    window.location.replace(approvalUrl());
-    return;
-  }
-  if (!route) return;
-  setMode('approval');
+  dropLegacyMode();
+  if (!isApprovalRoute()) return;
   document.body.classList.add('mobile-approval-only-view');
   const root = document.createElement('div');
   root.id = 'mobile-approval-only';
