@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionstore"
 )
 
 func (s *Server) resetNativeApprovalClearMisses(id int) {
@@ -115,7 +116,19 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 			return
 		}
 		if s.sessionStore != nil && msg.Type == "approval_detected" {
-			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
+			s.sessionStore.StoreApprovalDetected(sessionstore.ApprovalDetected{
+				LiveSessionID: id,
+				Sig:           approval.Sig,
+				Source:        approvalSourceGoVT,
+				Kind:          approval.Kind,
+				Provider:      msg.Provider,
+				Question:      approval.Question,
+				Context:       approval.Context,
+				CandidateKey:  msg.ApprovalCandidateKey,
+				SourceEpoch:   msg.ApprovalSourceEpoch,
+				Options:       approval.Options,
+				DetectedAt:    now,
+			})
 		}
 		s.broadcast(*msg)
 		if msg.Type == "approval_detected" {

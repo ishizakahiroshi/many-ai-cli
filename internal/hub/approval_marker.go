@@ -8,6 +8,7 @@ import (
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionstore"
 )
 
 // approvalMarkerSuppressNotifyInterval は破損ブロック抑止の告知を UI へ送る最小間隔。
@@ -239,6 +240,23 @@ func (s *Server) maybeBroadcastApprovalMarkerFrom(id int, marker *approvalMarker
 	ses.approvalMarkerCandidateShape = candidateIdentity.shape
 	ses.approvalMarkerSourceEpoch = sourceEpoch
 	s.sessionsMu.Unlock()
+
+	// 台帳へ記録するのは配信するものだけ。構造が壊れて抑止したブロックは上で return
+	// しているので、ここへは来ない（壊れた選択肢を後から復元させないため）。
+	// 選択肢は解かずブロック原文を持つ（解釈器はブラウザ側の 1 本に保つ）。
+	if s.sessionStore != nil {
+		s.sessionStore.StoreApprovalDetected(sessionstore.ApprovalDetected{
+			LiveSessionID: id,
+			Sig:           marker.Sig,
+			Source:        source,
+			Kind:          "marker",
+			Provider:      provider,
+			Block:         marker.Block,
+			CandidateKey:  candidateKey,
+			SourceEpoch:   sourceEpoch,
+			DetectedAt:    detectedAt,
+		})
+	}
 
 	s.broadcast(proto.Message{
 		Type:                   "approval_marker",

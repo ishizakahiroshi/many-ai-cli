@@ -154,7 +154,7 @@ const BG_APPROVAL_TAIL_LINES = 80;
 // 質問だけを単問承認として誤描画する（行数依存の構造的バグ）。マーカーは明示デリミタ済みで
 // scrollback 誤検出の懸念が無いため、ヒューリスティック scanner（40 行）と分離して全文を渡し、
 // 取りこぼし上限は pendingTextTail の保持量（APPROVAL_PENDING_TEXT_TAIL_LIMIT 文字）に一本化する。
-function markerLinesFromTail(tail) {
+export function markerLinesFromTail(tail) {
   // 差分再描画型 TUI（Grok CLI 等）は行境界を改行ではなく絶対カーソル移動で表現するため、
   // stripAnsi で削除する前にカーソル制御を改行・空白へ変換する（normalizeVtCursorOps 参照）。
   // これを挟まないとマーカーブロック全体が 1 行に連結され、番号直後の「. 」も消えて
@@ -1611,6 +1611,58 @@ export function reshowActionBar(id) {
   if (id === undefined || id === null) return;
   clearManualHide(id);
   detectApproval(id);
+  const cached = approvalRawOptionsCache.get(id);
+  if (approvalVisibleCache.get(id) && Array.isArray(cached) && cached.length > 0) return;
+  void restoreApprovalFromLedger(id);
+}
+
+// 端末の再走査で戻せなかったときに、Hub の承認台帳から保留中の承認を組み直す。
+//
+// claude / codex は「その世代で Hub がマーカーを配信したら、ブラウザのローカル走査は
+// 候補を立てない」（isHubMarkerAuthoritative）ので、配信を 1 度取りこぼすと
+// detectApproval には戻す材料が無い。Hub も同じ候補を二度配信しないため、
+// 台帳が唯一の復元元になる。
+//
+// 台帳から出すときも回答済み判定は必ず通す。ここを抜くと、回答済みの承認が
+// 押すたびに蘇る（承認の同一性は candidateKey + sourceEpoch の 1 本のまま）。
+async function restoreApprovalFromLedger(id) {
+  try {
+    const res = await fetch(`/api/approval-history?session_id=${encodeURIComponent(String(id))}&state=pending&limit=1&token=${encodeURIComponent(token)}`);
+    if (!res.ok) return;
+    const body = await res.json();
+    const row = Array.isArray(body?.approvals) ? body.approvals[0] : null;
+    if (!row) return;
+    // 待っている間にセッションが変わった / 通常経路で出た場合は触らない。
+    if (id !== activeSessionId) return;
+    if (approvalVisibleCache.get(id)) return;
+    const block = String(row.block || '');
+    if (!block) return;
+    const options = extractHubMarkerApproval(markerLinesFromTail(block));
+    if (!options || options.length === 0) return;
+    const identity = {
+      candidateKey: String(row.candidate_key || ''),
+      sourceEpoch: Number(row.source_epoch || 0) || getApprovalSourceEpoch(id),
+      shape: approvalCandidateShape(id, options, 'marker'),
+    };
+    if (identity.candidateKey) annotateApprovalIdentity(options, identity);
+    if (isAnsweredApprovalCandidate(id, options, 'marker')) return;
+    const bar = document.getElementById('action-bar');
+    if (!bar) return;
+    approvalUiAdapter.cacheApprovalOptions(id, options);
+    approvalSourceCache.set(id, {
+      source: 'hub_marker',
+      sig: approvalSig(options),
+      kind: 'marker',
+      detectedAt: String(row.detected_at || ''),
+      candidateKey: identity.candidateKey,
+      sourceEpoch: identity.sourceEpoch,
+      shape: identity.shape,
+    });
+    approvalUiAdapter.setApprovalVisible(id, true);
+    approvalUiAdapter.showOptions(bar, id, options, true);
+  } catch (_) {
+    // 取れなければ従来どおり何も出さない（押しても無反応なのは変わらないが、悪化はしない）
+  }
 }
 
 export function normalizeActionOptions(options) {
