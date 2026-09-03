@@ -118,3 +118,22 @@ func TestWrapperCleanupAlreadyDismissedLocked(t *testing.T) {
 		t.Fatal("a remaining wrapper must not be treated as a dismissed session")
 	}
 }
+
+func TestReattachPreservedStateTransfersInFlightGitTurnCapture(t *testing.T) {
+	done := make(chan struct{})
+	old := &session{
+		gitTurnStartTree:       "tree-start",
+		gitTurnCaptureInFlight: true,
+		gitTurnCaptureDone:     done,
+		gitTurnIndexDir:        "index-dir",
+	}
+	state := snapshotReattachStateLocked(old)
+	dst := &session{Provider: "claude", State: "running"}
+	applyReattachPreservedStateLocked(dst, state)
+	if !dst.gitTurnCaptureInFlight || dst.gitTurnCaptureDone != done {
+		t.Fatal("in-flight git turn capture was not transferred to the replacement session")
+	}
+	if dst.gitTurnStartTree != "tree-start" || dst.gitTurnIndexDir != "index-dir" {
+		t.Fatal("open git turn was not preserved across reattach")
+	}
+}

@@ -8,6 +8,9 @@ import {
   registerDialogController,
   selectOldestPendingConfirmation,
   selectOldestPendingConfirmationFor,
+  spawnConfirmDecisionFromHttp,
+  spawnConfirmShouldOfferCloseWithoutBroadcast,
+  SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
   unregisterDialogController,
   type SpawnConfirmationRecord,
 } from '../src/app/spawn-confirm-store.ts';
@@ -145,3 +148,44 @@ describe('clearAllSpawnConfirmationsForHubRestart', () => {
     unregisterDialogController('sc-a');
   });
 });
+
+describe('spawn confirm HTTP 200 without WS close', () => {
+  test('POST 200 waits for spawn_confirmation_closed and has a fallback timeout', () => {
+    const decision = spawnConfirmDecisionFromHttp(true, 200);
+    expect(decision.waitForCloseBroadcast).toBe(true);
+    expect(decision.fallbackMs).toBe(SPAWN_CONFIRM_CLOSED_FALLBACK_MS);
+    expect(decision.terminalReason).toBe('');
+    expect(SPAWN_CONFIRM_CLOSED_FALLBACK_MS).toBeGreaterThan(0);
+  });
+
+  test('offers Close when HTTP 200 succeeded but no WS closed event arrives', () => {
+    const decision = spawnConfirmDecisionFromHttp(true, 200);
+    expect(spawnConfirmShouldOfferCloseWithoutBroadcast(
+      decision.waitForCloseBroadcast,
+      false,
+      decision.fallbackMs,
+      decision.fallbackMs,
+    )).toBe(true);
+  });
+
+  test('does not offer the fallback Close if the WS closed event arrived first', () => {
+    const decision = spawnConfirmDecisionFromHttp(true, 200);
+    expect(spawnConfirmShouldOfferCloseWithoutBroadcast(
+      decision.waitForCloseBroadcast,
+      true,
+      decision.fallbackMs,
+      decision.fallbackMs,
+    )).toBe(false);
+  });
+
+  test('HTTP errors still become terminal with Close and do not wait for WS', () => {
+    expect(spawnConfirmDecisionFromHttp(false, 404)).toEqual({
+      waitForCloseBroadcast: false,
+      fallbackMs: 0,
+      terminalReason: 'expired',
+    });
+    expect(spawnConfirmDecisionFromHttp(false, 409).terminalReason).toBe('decided_elsewhere');
+    expect(spawnConfirmDecisionFromHttp(false, 500).terminalReason).toBe('submit_failed');
+  });
+});
+

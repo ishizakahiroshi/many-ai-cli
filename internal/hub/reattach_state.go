@@ -82,13 +82,15 @@ type reattachPreservedState struct {
 	taskDetailFileState       workflowTaskDetailFileState
 	taskDetailProgress        *proto.WorkflowProgress
 
-	gitTurnStartTree  string
-	gitTurnStartedAt  time.Time
-	gitTurns          []gitTurnSnapshot
-	gitTurnIndexDir   string
-	gitTurnIndexRoot  string
-	gitTurnIndexHead  string
-	gitTurnIndexReady bool
+	gitTurnStartTree       string
+	gitTurnStartedAt       time.Time
+	gitTurnCaptureInFlight bool
+	gitTurnCaptureDone     chan struct{}
+	gitTurns               []gitTurnSnapshot
+	gitTurnIndexDir        string
+	gitTurnIndexRoot       string
+	gitTurnIndexHead       string
+	gitTurnIndexReady      bool
 
 	commitMsgAwait        bool
 	commitMsgDeadline     time.Time
@@ -177,13 +179,15 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 		taskDetailFileState:       fileState,
 		taskDetailProgress:        cloneWorkflowProgress(ses.taskDetailProgress),
 
-		gitTurnStartTree:  ses.gitTurnStartTree,
-		gitTurnStartedAt:  ses.gitTurnStartedAt,
-		gitTurns:          append([]gitTurnSnapshot(nil), ses.gitTurns...),
-		gitTurnIndexDir:   ses.gitTurnIndexDir,
-		gitTurnIndexRoot:  ses.gitTurnIndexRoot,
-		gitTurnIndexHead:  ses.gitTurnIndexHead,
-		gitTurnIndexReady: ses.gitTurnIndexReady,
+		gitTurnStartTree:       ses.gitTurnStartTree,
+		gitTurnStartedAt:       ses.gitTurnStartedAt,
+		gitTurnCaptureInFlight: ses.gitTurnCaptureInFlight,
+		gitTurnCaptureDone:     ses.gitTurnCaptureDone,
+		gitTurns:               append([]gitTurnSnapshot(nil), ses.gitTurns...),
+		gitTurnIndexDir:        ses.gitTurnIndexDir,
+		gitTurnIndexRoot:       ses.gitTurnIndexRoot,
+		gitTurnIndexHead:       ses.gitTurnIndexHead,
+		gitTurnIndexReady:      ses.gitTurnIndexReady,
 
 		commitMsgAwait:        ses.commitMsgAwait,
 		commitMsgDeadline:     ses.commitMsgDeadline,
@@ -311,10 +315,12 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.gitTurnIndexRoot = state.gitTurnIndexRoot
 	dst.gitTurnIndexHead = state.gitTurnIndexHead
 	dst.gitTurnIndexReady = state.gitTurnIndexReady
-	// An in-flight git worker belongs to the old session pointer. Reset its
-	// completion channel and let the worker observe the pointer mismatch.
-	dst.gitTurnCaptureInFlight = false
-	dst.gitTurnCaptureDone = nil
+	// An in-flight git-turn worker still holds the old pointer, but the
+	// replacement is the same logical session (same index dir). Keep the
+	// completion channel so captureGitTurnStart waits, and let the worker
+	// commit onto this pointer via gitTurnSessionMatches.
+	dst.gitTurnCaptureInFlight = state.gitTurnCaptureInFlight
+	dst.gitTurnCaptureDone = state.gitTurnCaptureDone
 	dst.gitTurnCaptureWaiters = 0
 
 	dst.commitMsgAwait = state.commitMsgAwait

@@ -630,6 +630,7 @@
   "spawn_confirm_result_spawn_failed": "Khởi động thất bại: {detail}",
   "spawn_confirm_result_expired": "Xác nhận này đã hết hạn",
   "spawn_confirm_result_decided_elsewhere": "Đã được quyết định ở màn hình khác",
+  "spawn_confirm_result_accepted": "Hub đã nhận quyết định này. Bạn có thể đóng hộp thoại.",
   "spawn_open_target_label": "Đích mở",
   "spawn_target_hub": "Tab Hub",
   "spawn_target_detached": "Cửa sổ tách",

@@ -117,3 +117,39 @@ export function clearAllSpawnConfirmationsForHubRestart(): void {
     controller.applyClosed({ spawn_confirmation_id: id, reason: 'parent_gone' });
   }
 }
+
+// After POST /spawn-confirm returns 2xx the Hub has accepted the decision, but
+// the dialog still waits for spawn_confirmation_closed. That broadcast can be
+// lost if the UI WebSocket is down or stale. HTTP 200 is written before
+// performSpawn, so a missing close event must not leave the overlay stuck in
+// deciding with Escape disabled and no Close button.
+export const SPAWN_CONFIRM_CLOSED_FALLBACK_MS = 4000;
+
+export type SpawnConfirmHttpDecision = {
+  waitForCloseBroadcast: boolean;
+  fallbackMs: number;
+  terminalReason: '' | 'expired' | 'decided_elsewhere' | 'submit_failed';
+};
+
+export function spawnConfirmDecisionFromHttp(ok: boolean, status: number): SpawnConfirmHttpDecision {
+  if (ok) {
+    return { waitForCloseBroadcast: true, fallbackMs: SPAWN_CONFIRM_CLOSED_FALLBACK_MS, terminalReason: '' };
+  }
+  if (status === 404) {
+    return { waitForCloseBroadcast: false, fallbackMs: 0, terminalReason: 'expired' };
+  }
+  if (status === 409) {
+    return { waitForCloseBroadcast: false, fallbackMs: 0, terminalReason: 'decided_elsewhere' };
+  }
+  return { waitForCloseBroadcast: false, fallbackMs: 0, terminalReason: 'submit_failed' };
+}
+
+export function spawnConfirmShouldOfferCloseWithoutBroadcast(
+  waitForCloseBroadcast: boolean,
+  receivedClosedBroadcast: boolean,
+  elapsedMs: number,
+  fallbackMs: number = SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
+): boolean {
+  return waitForCloseBroadcast && !receivedClosedBroadcast && elapsedMs >= fallbackMs;
+}
+
