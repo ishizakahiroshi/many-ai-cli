@@ -630,6 +630,7 @@
   "spawn_confirm_result_spawn_failed": "Failed to start: {detail}",
   "spawn_confirm_result_expired": "This confirmation has already expired",
   "spawn_confirm_result_decided_elsewhere": "Already decided from another screen",
+  "spawn_confirm_result_accepted": "The Hub accepted this decision. You can close this dialog.",
   "spawn_open_target_label": "Open target",
   "spawn_target_hub": "Hub tab",
   "spawn_target_detached": "Detached window",

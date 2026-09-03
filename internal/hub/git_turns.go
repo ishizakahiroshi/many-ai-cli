@@ -104,15 +104,16 @@ func (s *Server) captureGitTurnStart(sessionID int) {
 	tree, err := s.writeGitTurnWorktreeTree(ctx, sessionID, ses, gitRoot)
 
 	s.sessionsMu.Lock()
-	if s.sessions[sessionID] == ses && ses.gitTurnCaptureDone == captureDone {
+	live := s.sessions[sessionID]
+	if gitTurnSessionMatches(live, ses) && live.gitTurnCaptureDone == captureDone {
 		if err != nil {
 			s.logger.Debug("git turn start snapshot skipped", "session_id", sessionID, "err", err)
 		} else {
-			ses.gitTurnStartTree = tree
-			ses.gitTurnStartedAt = time.Now()
+			live.gitTurnStartTree = tree
+			live.gitTurnStartedAt = time.Now()
 		}
-		ses.gitTurnCaptureInFlight = false
-		ses.gitTurnCaptureDone = nil
+		live.gitTurnCaptureInFlight = false
+		live.gitTurnCaptureDone = nil
 	}
 	close(captureDone)
 	s.sessionsMu.Unlock()
@@ -174,14 +175,17 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 	}
 
 	s.sessionsMu.Lock()
-	if s.sessions[sessionID] != ses || ses.gitTurnCaptureDone != captureDone {
+	live := s.sessions[sessionID]
+	// Reattach replaces the session pointer. Commit onto the live session when
+	// it inherited this turn's index and still owns this capture channel.
+	if !gitTurnSessionMatches(live, ses) || live.gitTurnCaptureDone != captureDone {
 		close(captureDone)
 		s.sessionsMu.Unlock()
 		return
 	}
 	turnNo := 1
-	if n := len(ses.gitTurns); n > 0 {
-		turnNo = ses.gitTurns[n-1].Turn + 1
+	if n := len(live.gitTurns); n > 0 {
+		turnNo = live.gitTurns[n-1].Turn + 1
 	}
 	turn := gitTurnSnapshot{
 		Turn:      turnNo,
@@ -193,12 +197,12 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 		Added:     diff.Summary.Added,
 		Removed:   diff.Summary.Removed,
 	}
-	ses.gitTurns = append(ses.gitTurns, turn)
-	if len(ses.gitTurns) > maxGitTurnSnapshots {
-		ses.gitTurns = append([]gitTurnSnapshot(nil), ses.gitTurns[len(ses.gitTurns)-maxGitTurnSnapshots:]...)
+	live.gitTurns = append(live.gitTurns, turn)
+	if len(live.gitTurns) > maxGitTurnSnapshots {
+		live.gitTurns = append([]gitTurnSnapshot(nil), live.gitTurns[len(live.gitTurns)-maxGitTurnSnapshots:]...)
 	}
-	ses.gitTurnStartTree = ""
-	ses.gitTurnStartedAt = time.Time{}
+	live.gitTurnStartTree = ""
+	live.gitTurnStartedAt = time.Time{}
 	s.sessionsMu.Unlock()
 
 	// A compact event lets the active session show its completion card without
@@ -229,9 +233,10 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 	// is slow enough to hide it, and only surfaced on the Linux and macOS
 	// runners.
 	s.sessionsMu.Lock()
-	if s.sessions[sessionID] == ses && ses.gitTurnCaptureDone == captureDone {
-		ses.gitTurnCaptureInFlight = false
-		ses.gitTurnCaptureDone = nil
+	live = s.sessions[sessionID]
+	if gitTurnSessionMatches(live, ses) && live.gitTurnCaptureDone == captureDone {
+		live.gitTurnCaptureInFlight = false
+		live.gitTurnCaptureDone = nil
 	}
 	close(captureDone)
 	s.sessionsMu.Unlock()
@@ -240,7 +245,7 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 func (s *Server) finishGitTurnCaptureFailure(sessionID int, expected *session, captureDone chan struct{}, clearStart bool) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
-	if ses == expected && ses.gitTurnCaptureDone == captureDone {
+	if gitTurnSessionMatches(ses, expected) && ses.gitTurnCaptureDone == captureDone {
 		ses.gitTurnCaptureInFlight = false
 		ses.gitTurnCaptureDone = nil
 		if clearStart {
@@ -252,6 +257,18 @@ func (s *Server) finishGitTurnCaptureFailure(sessionID int, expected *session, c
 	s.sessionsMu.Unlock()
 }
 
+// gitTurnSessionMatches reports whether current is the session a Git-turn
+// worker started with, or the reattach replacement that inherited its index.
+func gitTurnSessionMatches(current, expected *session) bool {
+	if current == nil || expected == nil {
+		return false
+	}
+	if current == expected {
+		return true
+	}
+	return current.gitTurnIndexDir != "" && current.gitTurnIndexDir == expected.gitTurnIndexDir
+}
+
 // writeGitTurnWorktreeTree materializes a tree through the index retained by a
 // live session. Keeping that index preserves Git's stat cache across turn
 // boundaries, so unchanged files do not have to be re-read and hashed for
@@ -259,11 +276,11 @@ func (s *Server) finishGitTurnCaptureFailure(sessionID int, expected *session, c
 func (s *Server) writeGitTurnWorktreeTree(ctx context.Context, sessionID int, expected *session, gitRoot string) (string, error) {
 	s.sessionsMu.Lock()
 	current := s.sessions[sessionID]
-	if current != expected {
+	if !gitTurnSessionMatches(current, expected) {
 		s.sessionsMu.Unlock()
 		return "", fmt.Errorf("git turn session changed before index setup")
 	}
-	indexDir := expected.gitTurnIndexDir
+	indexDir := current.gitTurnIndexDir
 	s.sessionsMu.Unlock()
 
 	if indexDir == "" {
@@ -273,21 +290,21 @@ func (s *Server) writeGitTurnWorktreeTree(ctx context.Context, sessionID int, ex
 		}
 		s.sessionsMu.Lock()
 		current = s.sessions[sessionID]
-		if current != expected {
+		if !gitTurnSessionMatches(current, expected) {
 			s.sessionsMu.Unlock()
 			removeGitTurnIndexDir(created)
 			return "", fmt.Errorf("git turn session changed during index setup")
 		}
-		if expected.gitTurnIndexDir == "" {
-			expected.gitTurnIndexDir = created
+		if current.gitTurnIndexDir == "" {
+			current.gitTurnIndexDir = created
 			indexDir = created
 			created = ""
 		} else {
-			indexDir = expected.gitTurnIndexDir
+			indexDir = current.gitTurnIndexDir
 		}
-		sessionsRoot := expected.gitTurnIndexRoot
-		previousHead := expected.gitTurnIndexHead
-		ready := expected.gitTurnIndexReady
+		sessionsRoot := current.gitTurnIndexRoot
+		previousHead := current.gitTurnIndexHead
+		ready := current.gitTurnIndexReady
 		s.sessionsMu.Unlock()
 		if created != "" {
 			removeGitTurnIndexDir(created)
@@ -296,9 +313,14 @@ func (s *Server) writeGitTurnWorktreeTree(ctx context.Context, sessionID int, ex
 	}
 
 	s.sessionsMu.Lock()
-	sessionsRoot := expected.gitTurnIndexRoot
-	previousHead := expected.gitTurnIndexHead
-	ready := expected.gitTurnIndexReady
+	current = s.sessions[sessionID]
+	if !gitTurnSessionMatches(current, expected) {
+		s.sessionsMu.Unlock()
+		return "", fmt.Errorf("git turn session changed before index setup")
+	}
+	sessionsRoot := current.gitTurnIndexRoot
+	previousHead := current.gitTurnIndexHead
+	ready := current.gitTurnIndexReady
 	s.sessionsMu.Unlock()
 	return s.finishGitTurnWorktreeTree(ctx, sessionID, expected, gitRoot, indexDir, sessionsRoot, previousHead, ready)
 }

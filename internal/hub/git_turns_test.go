@@ -393,3 +393,72 @@ func TestNextInputWaitsForPreviousTurnEndBeforeBaselineAndDelivery(t *testing.T)
 		t.Fatalf("pending provider delivery = %#v, want next input after baseline", pending)
 	}
 }
+
+func TestGitTurnEndCaptureSurvivesReattach(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	old := &session{
+		ID:       12,
+		Provider: "codex",
+		CWD:      dir,
+		State:    "running",
+		inputMu:  new(sync.Mutex),
+	}
+	s.sessions[12] = old
+
+	s.captureGitTurnStart(12)
+	s.sessionsMu.Lock()
+	if old.gitTurnStartTree == "" || old.gitTurnIndexDir == "" {
+		s.sessionsMu.Unlock()
+		t.Fatal("start capture did not record a baseline tree and index")
+	}
+	s.sessionsMu.Unlock()
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed-across-reattach\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate an in-flight end worker that still holds the pre-reattach
+	// pointer: mark capture pending on A, replace A with B (preserving the
+	// start tree / index / completion channel), then run the worker on A.
+	s.sessionsMu.Lock()
+	startTree := old.gitTurnStartTree
+	startedAt := old.gitTurnStartedAt
+	captureDone := make(chan struct{})
+	old.gitTurnCaptureInFlight = true
+	old.gitTurnCaptureDone = captureDone
+	state := snapshotReattachStateLocked(old)
+	s.sessionsMu.Unlock()
+
+	replacement := &session{
+		ID:       12,
+		Provider: "codex",
+		CWD:      dir,
+		State:    "running",
+		inputMu:  new(sync.Mutex),
+	}
+	applyReattachPreservedStateLocked(replacement, state)
+	s.sessionsMu.Lock()
+	s.sessions[12] = replacement
+	s.sessionsMu.Unlock()
+
+	s.captureGitTurnEndWorker(12, time.Now().Format(time.RFC3339), old, captureDone, startTree, startedAt, nil)
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[12]
+	if ses == old {
+		t.Fatal("expected the replacement session to be live")
+	}
+	if len(ses.gitTurns) != 1 {
+		t.Fatalf("turn count = %d, want 1 (end snapshot dropped across reattach)", len(ses.gitTurns))
+	}
+	if ses.gitTurns[0].StartTree != startTree || ses.gitTurns[0].EndTree == "" {
+		t.Fatalf("completed turn = %+v, want start=%s and a non-empty end tree", ses.gitTurns[0], startTree)
+	}
+	if ses.gitTurnStartTree != "" {
+		t.Fatalf("pending start tree = %q, want cleared", ses.gitTurnStartTree)
+	}
+	if ses.gitTurnCaptureInFlight || ses.gitTurnCaptureDone != nil {
+		t.Fatal("replacement still has an in-flight git turn capture")
+	}
+}

@@ -8,6 +8,8 @@ import {
   registerDialogController,
   selectOldestPendingConfirmation,
   selectOldestPendingConfirmationFor,
+  spawnConfirmDecisionFromHttp,
+  SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
   unregisterDialogController,
   type SpawnConfirmationRecord,
 } from '../src/app/spawn-confirm-store.ts';
@@ -145,3 +147,24 @@ describe('clearAllSpawnConfirmationsForHubRestart', () => {
     unregisterDialogController('sc-a');
   });
 });
+
+describe('spawn confirm HTTP 200 without WS close', () => {
+  test('POST 200 waits for spawn_confirmation_closed and has a fallback timeout', () => {
+    const decision = spawnConfirmDecisionFromHttp(true, 200);
+    expect(decision.waitForCloseBroadcast).toBe(true);
+    expect(decision.fallbackMs).toBe(SPAWN_CONFIRM_CLOSED_FALLBACK_MS);
+    expect(decision.terminalReason).toBe('');
+    expect(SPAWN_CONFIRM_CLOSED_FALLBACK_MS).toBeGreaterThan(0);
+  });
+
+  test('HTTP errors still become terminal with Close and do not wait for WS', () => {
+    expect(spawnConfirmDecisionFromHttp(false, 404)).toEqual({
+      waitForCloseBroadcast: false,
+      fallbackMs: 0,
+      terminalReason: 'expired',
+    });
+    expect(spawnConfirmDecisionFromHttp(false, 409).terminalReason).toBe('decided_elsewhere');
+    expect(spawnConfirmDecisionFromHttp(false, 500).terminalReason).toBe('submit_failed');
+  });
+});
+

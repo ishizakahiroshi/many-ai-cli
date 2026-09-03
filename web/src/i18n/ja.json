@@ -630,6 +630,7 @@
   "spawn_confirm_result_spawn_failed": "起動に失敗しました: {detail}",
   "spawn_confirm_result_expired": "この確認は既に失効しています",
   "spawn_confirm_result_decided_elsewhere": "他の画面で決定済みです",
+  "spawn_confirm_result_accepted": "Hub は決定を受け取りました。このダイアログを閉じてかまいません。",
   "spawn_open_target_label": "表示先",
   "spawn_target_hub": "Hub タブ",
   "spawn_target_detached": "別窓 Grid",

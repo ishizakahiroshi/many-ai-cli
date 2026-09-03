@@ -23,6 +23,7 @@ import {
   pendingSpawnConfirmationCount,
   registerDialogController,
   selectOldestPendingConfirmationFor,
+  spawnConfirmDecisionFromHttp,
   unregisterDialogController,
   type SpawnConfirmationRecord,
 } from './spawn-confirm-store.js';
@@ -196,15 +197,20 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   //             閉じるまで残す。
   let state: 'open' | 'deciding' | 'terminal' = 'open';
   let closing = false;
+  // Set after HTTP 200 if spawn_confirmation_closed never arrives, so Escape
+  // and Close can dismiss the overlay without a second POST.
+  let dismissibleWhileDeciding = false;
   let elapsedTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
     const el = dialog.querySelector('[data-spawn-confirm-elapsed]');
     if (el) el.textContent = formatElapsed(record.requestedAtMs);
   }, SPAWN_CONFIRM_ELAPSED_TICK_MS);
   let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+  let closedFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   function stopTimers(): void {
     if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
     if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
+    if (closedFallbackTimer) { clearTimeout(closedFallbackTimer); closedFallbackTimer = null; }
   }
 
   // 決定済み（state !== 'open'）のときだけ「次の保留があれば続けて開く」。
@@ -240,7 +246,19 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   }
 
   function scheduleAutoClose(): void {
+    if (autoCloseTimer) { clearTimeout(autoCloseTimer); autoCloseTimer = null; }
     autoCloseTimer = setTimeout(cleanup, SPAWN_CONFIRM_AUTO_CLOSE_MS);
+  }
+
+  function armClosedFallback(fallbackMs: number): void {
+    if (closedFallbackTimer) { clearTimeout(closedFallbackTimer); closedFallbackTimer = null; }
+    closedFallbackTimer = setTimeout(() => {
+      closedFallbackTimer = null;
+      if (state !== 'deciding') return;
+      dismissibleWhileDeciding = true;
+      showStatus(t('spawn_confirm_result_accepted'));
+      setActionsToClose();
+    }, fallbackMs);
   }
 
   async function decide(approved: boolean): Promise<void> {
@@ -258,11 +276,17 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ confirmation_id: record.id, approved, provider: providerVal, model: modelVal }),
       });
-      if (res.ok) return; // 結果は spawn_confirmation_closed の broadcast を待って反映する。
       if (state !== 'deciding') return; // 既に broadcast 経由で terminal 済み。
+      const decision = spawnConfirmDecisionFromHttp(res.ok, res.status);
+      if (decision.waitForCloseBroadcast) {
+        // Hub accepted the decision. Wait briefly for spawn_confirmation_closed,
+        // then offer Close so a down/stale WS cannot wedge the overlay.
+        armClosedFallback(decision.fallbackMs);
+        return;
+      }
       state = 'terminal';
-      if (res.status === 404) showStatus(t('spawn_confirm_result_expired'));
-      else if (res.status === 409) showStatus(t('spawn_confirm_result_decided_elsewhere'));
+      if (decision.terminalReason === 'expired') showStatus(t('spawn_confirm_result_expired'));
+      else if (decision.terminalReason === 'decided_elsewhere') showStatus(t('spawn_confirm_result_decided_elsewhere'));
       else showStatus(t('spawn_confirm_submit_failed'));
       setActionsToClose();
     } catch (_) {
@@ -284,10 +308,10 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     });
   }
 
-  // 'deciding' の間だけ Escape/cancel を無効化する。POST の応答か broadcast のどちらかで
-  // 必ず 'terminal' か cleanup() のどちらかに落ち着くので、無限に固まることはない。
+  // 'deciding' の間は Escape を無効化する。HTTP 200 後に WS close が来なければ
+  // fallback が Close を出し、その時点から Escape も許可する。
   dialog.addEventListener('cancel', (e) => {
-    if (state === 'deciding') e.preventDefault();
+    if (state === 'deciding' && !dismissibleWhileDeciding) e.preventDefault();
   });
 
   // ここが「Escape で拒否を送らない」の実装本体
@@ -304,7 +328,9 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   registerDialogController(record.id, {
     applyClosed(m: any) {
       if (state === 'terminal') return; // 既にローカルの失敗表示で terminal 済み。
+      if (closedFallbackTimer) { clearTimeout(closedFallbackTimer); closedFallbackTimer = null; }
       state = 'terminal';
+      dismissibleWhileDeciding = false;
       const reason = String(m?.reason || '');
       showStatus(outcomeMessage(reason, m));
       if (reason === 'spawn_failed') {
