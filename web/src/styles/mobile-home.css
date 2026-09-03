@@ -777,7 +777,9 @@
   }
   .mtl-msg-ai {
     align-self: stretch;
-    color: #d8d8d8;
+    /* 端末本文の色。テーマ変数を使う（生値を書くとライトテーマで
+       --bg-deep の明るい背景に明るい文字が乗って読めなくなる）。 */
+    color: var(--text-soft);
     padding-right: 8px;
   }
   .mtl-msg-user {
@@ -838,10 +840,12 @@
     height: 32px;
     padding: 0;
     margin: 0;
-    background: rgba(255, 255, 255, 0.08);
+    /* 半透明の重ね色は白固定にせず前景色から作る（ライトテーマで白を重ねると消える）。
+       比率 8/14/20% は白固定だった頃の値をそのまま引き継いでいる。 */
+    background: color-mix(in srgb, var(--text) 8%, transparent);
     border: 1px solid var(--line);
     border-radius: var(--radius-sm, 6px);
-    color: #d8d8d8;
+    color: var(--text-soft);
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
@@ -852,11 +856,11 @@
     -webkit-backdrop-filter: blur(4px);
   }
   .mtl-detail-icon:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: #fff;
+    background: color-mix(in srgb, var(--text) 14%, transparent);
+    color: var(--text);
   }
   .mtl-detail-icon:active {
-    background: rgba(255, 255, 255, 0.20);
+    background: color-mix(in srgb, var(--text) 20%, transparent);
   }
 
   /* 「詳細を見る」モーダル（PTY バッファ全行を全画面 pre で表示）。 */
@@ -920,7 +924,7 @@
     overflow: auto;
     padding: 8px 10px;
     margin: 0;
-    color: #d8d8d8;
+    color: var(--text-soft);
     background: var(--bg-deep, #0d1117);
     font-family: Consolas, "Cascadia Mono", monospace;
     font-size: 12.5px;
