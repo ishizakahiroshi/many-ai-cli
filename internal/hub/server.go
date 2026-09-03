@@ -688,6 +688,10 @@ type Server struct {
 	// flushPendingInput が順番に再送するため、入力が黙って失われない。
 	// sessionsMu で保護。
 	pendingInput map[int][]string
+	// dismissedSessionIDs records explicit dismisses so a wrapper that was
+	// disconnected during the click cannot recreate the session on reattach.
+	// Session IDs are monotonic and are never reused.
+	dismissedSessionIDs map[int]struct{}
 
 	// submitEnter は確定 CR の送出・確認タイミング（input_gate.go）。
 	// ゼロ値は本番既定（submitEnter* 定数）を意味し、テストだけが実時間を
@@ -1063,6 +1067,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:              map[int]*wrapperConn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
 		pendingInput:          map[int][]string{},
+		dismissedSessionIDs:   map[int]struct{}{},
 		pinSessions:           map[string]pinCookieSession{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
@@ -2165,6 +2170,9 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	}
 	s.sessionsMu.Lock()
 	wc := s.wrappers[m.SessionID]
+	if wc == nil {
+		s.markSessionDismissedLocked(m.SessionID)
+	}
 	_, exists := s.sessions[m.SessionID]
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
