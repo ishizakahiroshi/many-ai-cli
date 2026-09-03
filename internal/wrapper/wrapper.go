@@ -1570,11 +1570,6 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 	return conn, reg, nil
 }
 
-func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
-	conn, sid, _, err := dialAndReattachWithPending(cfg, sessionID, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath, termCols, termRows, replay, ptyBytes)
-	return conn, sid, err
-}
-
 func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, []proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
