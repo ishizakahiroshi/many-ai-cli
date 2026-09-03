@@ -1,9 +1,14 @@
 package hub
 
 import (
+	"net/http/httptest"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
+	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/proto"
 )
 
@@ -105,5 +110,49 @@ func TestHandleDismissDuringRegisterWindow(t *testing.T) {
 
 	if s.wrapperStillRegistered(13, wc) {
 		t.Fatal("after dismiss during register window, announce must be skipped")
+	}
+}
+
+func TestHandleDismissBlocksReattachWhenWrapperIsDisconnected(t *testing.T) {
+	s := newTestServer()
+	registerTestSession(s, 21, "codex")
+	s.handleDismiss(proto.Message{Type: "session_dismiss", SessionID: 21})
+
+	server := httptest.NewServer(websocket.Handler(func(conn *websocket.Conn) {
+		s.reattachLoop(conn, proto.Message{
+			Type:      "reattach",
+			SessionID: 21,
+			Provider:  "codex",
+			CWD:       "/tmp",
+		})
+	}))
+	defer server.Close()
+	parsed, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	port, err := strconv.Atoi(parsed.Port())
+	if err != nil {
+		t.Fatalf("parse test server port: %v", err)
+	}
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	conn, err := websocket.Dial(wsURL, "", "http://127.0.0.1:"+strconv.Itoa(port))
+	if err != nil {
+		t.Fatalf("dial test server: %v", err)
+	}
+	defer conn.Close()
+
+	var got proto.Message
+	if err := websocket.JSON.Receive(conn, &got); err != nil {
+		t.Fatalf("receive reattach response: %v", err)
+	}
+	if got.Type != "reattach_reject" || got.SessionID != 21 {
+		t.Fatalf("reattach response = %+v, want dismissed-session reject", got)
+	}
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if s.sessions[21] != nil || s.wrappers[21] != nil {
+		t.Fatal("dismissed session was recreated by reattach")
 	}
 }

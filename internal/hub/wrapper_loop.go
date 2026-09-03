@@ -331,9 +331,35 @@ func reattachIdentityMatches(prev *wrapperConn, ses *session, req proto.Message)
 	return ses.Provider == req.Provider && ses.CWD == req.CWD
 }
 
+func (s *Server) markSessionDismissedLocked(id int) {
+	if id <= 0 {
+		return
+	}
+	if s.dismissedSessionIDs == nil {
+		s.dismissedSessionIDs = make(map[int]struct{})
+	}
+	s.dismissedSessionIDs[id] = struct{}{}
+}
+
+func (s *Server) sessionDismissedLocked(id int) bool {
+	_, ok := s.dismissedSessionIDs[id]
+	return ok
+}
+
 func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if req.SessionID <= 0 {
 		_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_reject", Reason: "invalid session_id"})
+		return
+	}
+	s.sessionsMu.Lock()
+	dismissed := s.sessionDismissedLocked(req.SessionID)
+	s.sessionsMu.Unlock()
+	if dismissed {
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "reattach_reject",
+			SessionID: req.SessionID,
+			Reason:    "session dismissed",
+		})
 		return
 	}
 	startedAt := time.Now()
@@ -418,6 +444,20 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 			StartedAt: startedAt,
 		}, true)
 	}
+	s.sessionsMu.Lock()
+	dismissed = s.sessionDismissedLocked(req.SessionID)
+	s.sessionsMu.Unlock()
+	if dismissed {
+		if history != nil {
+			_ = history.Close()
+		}
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "reattach_reject",
+			SessionID: req.SessionID,
+			Reason:    "session dismissed",
+		})
+		return
+	}
 	reattachSubscriptionID, reattachSubscriptionName := s.resolveSubscriptionLabel(req.Provider, req.SubscriptionID)
 	cardMeta := sessionstore.SessionCardMeta{Label: req.Label}
 	storeID := int64(0)
@@ -440,6 +480,21 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		}, cardMeta)
 	}
 	s.sessionsMu.Lock()
+	if s.sessionDismissedLocked(req.SessionID) {
+		s.sessionsMu.Unlock()
+		if history != nil {
+			_ = history.Close()
+		}
+		if storeID != 0 && s.sessionStore != nil {
+			s.sessionStore.EndSession(acceptedID, "dismissed", "", time.Now())
+		}
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "reattach_reject",
+			SessionID: req.SessionID,
+			Reason:    "session dismissed",
+		})
+		return
+	}
 	var oldHistory *sessionlog.Writer
 	// 切断前のターミナル文脈（ptyBuf / VT ミラー / 受信累計）を引き継ぐ。
 	// 以前は replay(64KB) で丸ごと置き換えていたため、再接続のたびに Hub 側の
@@ -674,29 +729,47 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		// relay 側の ID（振り直しがあれば新 ID）と board の登録を更新する。
 		s.relayNoteReattached(relayMatch, acceptedID)
 	}
-	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
-	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。
-	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
 	if oldHistory != nil {
 		_ = oldHistory.Close()
 	}
+	// ack 前に dismiss されていたら reattach を受理しない。
+	if !s.wrapperStillRegistered(acceptedID, wc) {
+		s.logger.Info("session dismissed before reattach ack; skip announce",
+			"session_id", acceptedID, "provider", req.Provider)
+		_ = wc.send(proto.Message{Type: "reattach_reject", SessionID: acceptedID, Reason: "session dismissed"})
+		return
+	}
+	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
-	// inject 中に dismiss されたら reattach 完了を UI に告知しない（wrapperLoop と同趣旨）。
+	// inject 中に dismiss されたら、ack 後なので明示的に終了を通知する。
 	if !s.wrapperStillRegistered(acceptedID, wc) {
 		s.logger.Info("session dismissed during reattach inject; skip announce",
 			"session_id", acceptedID, "provider", req.Provider)
+		_ = wc.send(proto.Message{
+			Type:      proto.TypeSessionDismissed,
+			SessionID: acceptedID,
+			Reason:    "ui_dismiss",
+		})
 		return
 	}
-	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
+	// wrapper が一時切断中に届かなかった保留入力を、reattach_ack の後に
+	// 再接続したこの wrapper へ順番に再送する。ack が handshake 中の最初の
+	// wrapper 向けフレームになるよう、ここより前に flush を開始しない。
+	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
 	announce, ok := s.reattachAnnounceMessage(acceptedID, wc)
 	if !ok {
 		s.logger.Info("session dismissed during reattach announce; skip",
 			"session_id", acceptedID, "provider", req.Provider)
+		_ = wc.send(proto.Message{
+			Type:      proto.TypeSessionDismissed,
+			SessionID: acceptedID,
+			Reason:    "ui_dismiss",
+		})
 		return
 	}
 	announce.Shell = req.Shell

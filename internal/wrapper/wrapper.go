@@ -80,6 +80,7 @@ type wrapperSession struct {
 	currentConn      *websocket.Conn
 	currentSID       int
 	sendWriteTimeout time.Duration
+	queuedMessages   []proto.Message
 	// maxProcessedInputSeq は PTY へ書き終えた pty_input の最大シーケンス番号。
 	// Hub は未 ack の入力を「元の seq のまま」再送するため、ここ以下の seq が
 	// 来たら「既に書いた分の再送」と判定して PTY へ二重に書かず ack だけ返す。
@@ -185,6 +186,26 @@ func (ws *wrapperSession) isCurrentConn(c *websocket.Conn) bool {
 	ws.stateMu.Lock()
 	defer ws.stateMu.Unlock()
 	return c != nil && ws.currentConn == c
+}
+
+// queueMessages retains Hub frames received while the reattach handshake is
+// waiting for its acknowledgement. The receive loop drains them before it
+// reads the live connection so a pty_input sent before reattach_ack is not lost.
+func (ws *wrapperSession) queueMessages(messages []proto.Message) {
+	if len(messages) == 0 {
+		return
+	}
+	ws.stateMu.Lock()
+	ws.queuedMessages = append(ws.queuedMessages, messages...)
+	ws.stateMu.Unlock()
+}
+
+func (ws *wrapperSession) takeQueuedMessages() []proto.Message {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	messages := ws.queuedMessages
+	ws.queuedMessages = nil
+	return messages
 }
 
 // abortCurrentConn closes the current connection without waiting for sendMu.
@@ -345,9 +366,9 @@ func (r *reconnectSupervisor) run() {
 				cols, rows = w, h
 			}
 			replay, ptyBytes := r.snapshotReplay()
-			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
+			newConn, newSID, queuedMessages, err := dialAndReattachWithPending(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
 			if err != nil {
-				r.logger.Debug("reconnect attempt failed", "err", err)
+				r.logger.Info("reconnect attempt failed", "err", err)
 				continue
 			}
 			if newSID == 0 {
@@ -357,6 +378,7 @@ func (r *reconnectSupervisor) run() {
 				return
 			}
 			r.logger.Info("wrapper reconnected to hub", "old_sid", r.ws.getSID(), "new_sid", newSID)
+			r.ws.queueMessages(queuedMessages)
 			if r.lastReattachAt != nil {
 				r.lastReattachAt.Store(time.Now().UnixNano())
 			}
@@ -1260,21 +1282,27 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					}
 				}
 			}()
+			queued := wses.takeQueuedMessages()
 			for {
 				var m proto.Message
-				if err := websocket.JSON.Receive(c, &m); err != nil {
-					select {
-					case <-done:
+				if len(queued) > 0 {
+					m = queued[0]
+					queued = queued[1:]
+				} else {
+					if err := websocket.JSON.Receive(c, &m); err != nil {
+						select {
+						case <-done:
+							return
+						default:
+						}
+						logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
+						wasCurrent := wses.isCurrentConn(c)
+						wses.clearConn(c)
+						if wasCurrent && !transportBroken.Load() {
+							notifyReconnect()
+						}
 						return
-					default:
 					}
-					logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
-					wasCurrent := wses.isCurrentConn(c)
-					wses.clearConn(c)
-					if wasCurrent && !transportBroken.Load() {
-						notifyReconnect()
-					}
-					return
 				}
 				switch m.Type {
 				case "pty_input":
@@ -1543,12 +1571,17 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 }
 
 func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
+	conn, sid, _, err := dialAndReattachWithPending(cfg, sessionID, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath, termCols, termRows, replay, ptyBytes)
+	return conn, sid, err
+}
+
+func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, []proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
 	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
 	conn, err := websocket.Dial(wsURL.String(), "", origin)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
@@ -1580,22 +1613,28 @@ func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, 
 		PTYBytes:          ptyBytes,
 	}); err != nil {
 		_ = conn.Close()
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
-	var resp proto.Message
-	if err := websocket.JSON.Receive(conn, &resp); err != nil {
-		_ = conn.Close()
-		return nil, 0, err
+	var queued []proto.Message
+	for {
+		var resp proto.Message
+		if err := websocket.JSON.Receive(conn, &resp); err != nil {
+			_ = conn.Close()
+			return nil, 0, nil, err
+		}
+		if resp.Type == "reattach_reject" {
+			_ = conn.Close()
+			return nil, 0, queued, nil
+		}
+		if resp.Type == "reattach_ack" {
+			if resp.SessionID <= 0 {
+				_ = conn.Close()
+				return nil, 0, nil, fmt.Errorf("unexpected reattach response: %s", resp.Type)
+			}
+			return conn, resp.SessionID, queued, nil
+		}
+		queued = append(queued, resp)
 	}
-	if resp.Type == "reattach_reject" {
-		_ = conn.Close()
-		return nil, 0, nil
-	}
-	if resp.Type != "reattach_ack" || resp.SessionID <= 0 {
-		_ = conn.Close()
-		return nil, 0, fmt.Errorf("unexpected reattach response: %s", resp.Type)
-	}
-	return conn, resp.SessionID, nil
 }
 
 func userSkillDirs() (homeDir, codexHome, claudeDir, grokHome string) {
