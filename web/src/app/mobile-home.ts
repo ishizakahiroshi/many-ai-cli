@@ -576,7 +576,12 @@ function renderMobileDrawerResults(): void {
   settings.type = 'button';
   settings.className = 'mobile-drawer-action';
   settings.textContent = t('mobile_drawer_settings_server');
-  settings.addEventListener('click', () => {
+  settings.addEventListener('click', (e) => {
+    // 設定パネルは settings.ts が document の click で「外側クリック → 閉じる」を見ている。
+    // ここで自分の click を止めないと、転送した click でパネルが開いた直後に
+    // 元の click が document まで上がって同じ dispatch 内で閉じられる（＝押しても何も起きない）。
+    // 同じ理由で usage-panel.ts の転送元も stopPropagation している。
+    e.stopPropagation();
     (window as any).closeMobileSessionDrawer?.();
     document.getElementById('settings-btn')?.click();
   });
