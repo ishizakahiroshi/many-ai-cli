@@ -391,7 +391,7 @@ func TestAuthStatus_LoopbackAuthed(t *testing.T) {
 
 // remote_exposed は遠隔公開設定（allowed_hosts / trusted_networks）の有無を返す。
 // PIN 未設定のまま公開している構成で設定画面がヒントを出すのに使う
-//（2026-09-01 監査 MAC-04 の代替。認可ゲートには使わない）。
+// （2026-09-01 監査 MAC-04 の代替。認可ゲートには使わない）。
 func TestAuthStatus_RemoteExposedFlag(t *testing.T) {
 	s := newPINTestServer(t, "123456")
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/status?token=tok", nil)
