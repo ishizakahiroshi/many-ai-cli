@@ -34,7 +34,7 @@ function normalizeValue(value: unknown, allowed: readonly string[], fallback: st
   return typeof value === 'string' && allowed.includes(value) ? value : fallback;
 }
 
-function selectedApprovalSettings(provider: string, values: SpawnDefaults): SpawnApprovalSettings {
+export function selectedApprovalSettings(provider: string, values: SpawnDefaults): SpawnApprovalSettings {
   const out: SpawnApprovalSettings = {};
   if (Object.prototype.hasOwnProperty.call(PERMISSION_MODE_VALUES, provider)) {
     if (Object.prototype.hasOwnProperty.call(values, 'permission_mode')) {

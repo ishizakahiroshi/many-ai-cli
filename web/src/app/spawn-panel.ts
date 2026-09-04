@@ -1047,20 +1047,53 @@ export function resetSpawnProviderOrder(): void {
     spawnIsolateWorktree.addEventListener('change', syncIsolateWorktreeNote);
   }
 
-  async function persistRememberApprovalSettings(): Promise<void> {
+  function currentApprovalSettings(provider: string): Record<string, string> {
+    if (providerHasPermissionSelect(provider)) {
+      return {
+        permission_mode: spawnPermissionMode?.value || DEFAULT_APPROVAL_FORM_SETTINGS.permission_mode,
+      };
+    }
+    if (provider === 'codex') {
+      const sandbox = document.getElementById('spawn-sandbox') as HTMLSelectElement | null;
+      const askForApproval = document.getElementById('spawn-ask-approval') as HTMLSelectElement | null;
+      return {
+        sandbox: sandbox?.value || DEFAULT_APPROVAL_FORM_SETTINGS.sandbox,
+        ask_for_approval: askForApproval?.value || DEFAULT_APPROVAL_FORM_SETTINGS.ask_for_approval,
+      };
+    }
+    if (provider === 'opencode') {
+      return {
+        opencode_permission_mode: spawnOpenCodeFullAllow?.checked ? 'bypassPermissions' : 'default',
+      };
+    }
+    return {};
+  }
+
+  async function persistApprovalSettings(): Promise<void> {
     if (!spawnRememberApprovalSettings) return;
     const defaults = readSpawnDefaults();
-    const provider = typeof defaults.provider === 'string' && defaults.provider
-      ? defaults.provider
-      : spawnProviderEl.value;
-    const next = mergeApprovalSettings(defaults, provider, {}, spawnRememberApprovalSettings.checked);
+    const provider = spawnProviderEl.value;
+    const next = mergeApprovalSettings(
+      defaults,
+      provider,
+      currentApprovalSettings(provider),
+      spawnRememberApprovalSettings.checked,
+    );
     setUserPref('spawn.defaults', next);
     await flushUserPrefsPut();
   }
 
+  const queueApprovalSettingsPersistence = (): void => {
+    void persistApprovalSettings();
+  };
+
   spawnRememberApprovalSettings?.addEventListener('change', () => {
-    void persistRememberApprovalSettings();
+    queueApprovalSettingsPersistence();
   });
+  spawnPermissionMode?.addEventListener('change', queueApprovalSettingsPersistence);
+  document.getElementById('spawn-sandbox')?.addEventListener('change', queueApprovalSettingsPersistence);
+  document.getElementById('spawn-ask-approval')?.addEventListener('change', queueApprovalSettingsPersistence);
+  spawnOpenCodeFullAllow?.addEventListener('change', queueApprovalSettingsPersistence);
 
   function loadSpawnSettings() {
     if (spawnRememberApprovalSettings) spawnRememberApprovalSettings.checked = true;

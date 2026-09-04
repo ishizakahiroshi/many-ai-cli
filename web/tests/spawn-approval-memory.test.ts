@@ -5,6 +5,7 @@ import {
   defaultApprovalSettings,
   isApprovalSettingsMemoryEnabled,
   restoreApprovalSettings,
+  selectedApprovalSettings,
 } from '../src/app/spawn-approval-memory.ts';
 
 describe('spawn approval memory', () => {
@@ -26,6 +27,21 @@ describe('spawn approval memory', () => {
     expect(restoreApprovalSettings('claude', {
       permission_mode: 'bypassPermissions',
     })).toEqual({ permission_mode: 'bypassPermissions' });
+  });
+
+  test('maps the current form values to the active provider', () => {
+    expect(selectedApprovalSettings('codex', {
+      permission_mode: 'bypassPermissions',
+      sandbox: 'danger-full-access',
+      ask_for_approval: 'never',
+    })).toEqual({
+      sandbox: 'danger-full-access',
+      ask_for_approval: 'never',
+    });
+    expect(selectedApprovalSettings('claude', {
+      permission_mode: 'plan',
+      sandbox: 'danger-full-access',
+    })).toEqual({ permission_mode: 'plan' });
   });
 
   test('uses safe defaults when remembering is disabled or values are invalid', () => {
