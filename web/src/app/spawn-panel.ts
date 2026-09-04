@@ -1607,7 +1607,7 @@ export function resetSpawnProviderOrder(): void {
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter)}</span>` +
         (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}" ` +
-          `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">×</button>`) +
+          `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">✕</button>`) +
         `</li>`
       );
     }
@@ -1621,7 +1621,7 @@ export function resetSpawnProviderOrder(): void {
         `<span class="cwd-dropdown-mag" aria-hidden="true">🔍</span>` +
         `<span class="cwd-dropdown-label" title="${escapeHtml(r.path)}">${buildCwdLabelHtml(r.path, parsed.query)}</span>` +
         `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(r.path)}" ` +
-        `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">×</button>` +
+        `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">✕</button>` +
         `</li>`
       );
     }

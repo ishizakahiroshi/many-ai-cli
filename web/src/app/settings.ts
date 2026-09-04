@@ -480,6 +480,16 @@ export function initUsageDropdown() {
     btn.setAttribute('aria-expanded', 'false');
   };
 
+  // ヘッダ右上の ✕。パネル外クリック・Escape と同じ closeDropdown を通す。
+  // stopPropagation は、閉じた後のクリックが背後の要素へ届かないようにするため。
+  const panelCloseBtn = dropdown.querySelector('#usage-dropdown-close');
+  if (panelCloseBtn) {
+    panelCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeDropdown();
+    });
+  }
+
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     const isOpen = !dropdown.hidden;
@@ -1906,7 +1916,7 @@ function renderStaleBinaryBanner(stale: boolean): void {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'multi-question-banner-close';
-  closeBtn.textContent = '×';
+  closeBtn.textContent = '✕';
   closeBtn.title = tr('stale_binary_banner_close_tooltip', 'Dismiss');
   closeBtn.addEventListener('click', () => { banner.hidden = true; });
   banner.appendChild(msg);

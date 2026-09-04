@@ -64,7 +64,10 @@
            付けないと terminal.ts の document レベル wheel ハンドラが背後ターミナルへ転送して
            preventDefault するため、中身がホイールで動かなくなる（isWheelTargetExcluded 参照）。 -->
       <div class="usage-dropdown" id="usage-dropdown" data-wheel-native hidden>
-        <div class="usage-dropdown-header" data-i18n="usage_dropdown_header">AI Usage Links</div>
+        <div class="usage-dropdown-header">
+          <span data-i18n="usage_dropdown_header">AI Usage Links</span>
+          <button id="usage-dropdown-close" class="usage-dropdown-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+        </div>
         <!-- 広幅（900px 以上）のみ .usage-dropdown-columns を左右 2 カラムに割る。左=契約の残量、
              右=取得不可 provider とローカル実行。狭幅はこの順で縦に積む。プロファイル行は
              renderProfiles() が data-usage-provider の直後に挿すためラッパー内で完結する。 -->
@@ -187,7 +190,7 @@
       <div class="settings-header-actions">
         <button id="settings-reset-btn" class="settings-header-btn" data-i18n="settings_reset">リセット</button>
         <button id="settings-save-btn" class="settings-header-btn" data-i18n="settings_save">保存</button>
-        <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">×</button>
+        <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">✕</button>
       </div>
     </div>
     <div class="settings-body">
@@ -1174,7 +1177,7 @@
                    autocomplete="off">
             <button id="spawn-model-clear" class="spawn-btn-browse spawn-model-clear" type="button"
                     data-i18n-tooltip="spawn_model_clear_tooltip"
-                    aria-label="Clear model" hidden>×</button>
+                    aria-label="Clear model" hidden>✕</button>
             <button id="spawn-model-refresh" class="spawn-btn-browse" type="button"
                     data-i18n-tooltip="spawn_model_refresh_tooltip"
                     aria-label="Refresh model list">↻</button>

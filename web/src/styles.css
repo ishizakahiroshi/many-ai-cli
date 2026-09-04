@@ -411,13 +411,39 @@ header {
 }
 .usage-dropdown[hidden] { display: none !important; }
 .usage-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: 7px 12px 5px;
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted-2, #666);
   border-bottom: 1px solid var(--line);
+  /* .usage-dropdown は overflow:auto。スクロールしても ✕ に手が届くようヘッダは貼り付ける。
+     z-index は .usage-info-bubble（2）より下にして、行の説明バブルを隠さない。 */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-elev, #1e2330);
 }
+/* 閉じるボタンは他パネル（.server-modal-close / .wf-modal-close）と同じ見た目に揃える。
+   ヘッダ側の uppercase / letter-spacing はグリフに掛けない。 */
+.usage-dropdown-close {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.usage-dropdown-close:hover { background: var(--danger-bg); color: var(--danger); }
 .usage-dropdown-item {
   display: flex;
   align-items: center;
@@ -946,7 +972,7 @@ body.close-left :is(
 }
 
 /* margin-left:auto で右端へ押し出しているものは、押し出す向きを逆にする。 */
-body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions) {
+body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions, .usage-dropdown-close) {
   order: -1;
   margin-left: 0;
   margin-right: auto;

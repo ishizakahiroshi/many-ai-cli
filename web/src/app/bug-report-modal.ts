@@ -256,7 +256,7 @@ async function openModal(): Promise<void> {
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'bug-report-close';
-  close.textContent = '×';
+  close.textContent = '✕';
   close.setAttribute('aria-label', t('bug_report_cancel'));
   close.addEventListener('click', closeModal);
   header.append(title, close);

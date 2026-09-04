@@ -186,7 +186,7 @@ function renderHeader(parent: HTMLElement, sessionId: number, titleText: string)
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'mas-close';
-  close.textContent = '×';
+  close.textContent = '✕';
   close.setAttribute('aria-label', t('mobile_approval_sheet_close'));
   close.addEventListener('click', () => closeApprovalSheet({ manual: true }));
 

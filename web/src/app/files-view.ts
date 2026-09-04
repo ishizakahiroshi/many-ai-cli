@@ -373,7 +373,7 @@ export const FilesTabManager = (function () {
 
     const closeBtn = document.createElement('button');
     closeBtn.className = 'main-tab-close';
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '✕';
     closeBtn.title = t('files_tab_close_tooltip');
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeFilesTab(id); });
     tabBtn.appendChild(closeBtn);
@@ -668,7 +668,7 @@ export const FilesTabManager = (function () {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'main-tab-close';
     closeBtn.type = 'button';
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '✕';
     closeBtn.title = (typeof t === 'function' ? t('files_tab_close_tooltip') : 'Close');
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeMainTab(id); });
     tabBtn.appendChild(closeBtn);
@@ -803,7 +803,7 @@ export const FilesTabManager = (function () {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'main-tab-close';
     closeBtn.type = 'button';
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '✕';
     closeBtn.title = (typeof t === 'function' ? t('files_tab_close_tooltip') : 'Close');
     closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeMainTab(id); });
     tabBtn.appendChild(closeBtn);
@@ -837,7 +837,7 @@ export const FilesTabManager = (function () {
       if (typeof window.ReviewView === 'function' && sessionId != null) {
         const body = contentEl.querySelector('[data-review-placeholder-body]');
         if (body) body.remove();
-        // ヘッダ右上の ✕ はタブバーの × と同じ closeMainTab 経路。
+        // ヘッダ右上の ✕ はタブバーの ✕ と同じ closeMainTab 経路。
         // アクティブタブを閉じるので switchToSessionView() でセッション画面へ戻る。
         tabObj.reviewView = new window.ReviewView(contentEl, {
           sessionId, gitRoot, turn: turnNo,
@@ -1467,7 +1467,7 @@ export const FilesTreeView = (function () {
     const closeTabBtn = document.createElement('button');
     closeTabBtn.className = 'files-tree-toolbar-btn';
     closeTabBtn.title = t('files_tree_close_tab_tooltip') || 'Close tab';
-    closeTabBtn.textContent = '×';
+    closeTabBtn.textContent = '✕';
 
     toolbar.appendChild(reloadBtn);
     toolbar.appendChild(openFolderBtn);
@@ -1487,7 +1487,7 @@ export const FilesTreeView = (function () {
     searchInput.placeholder = t('files_tree_search_placeholder') || 'Filter files…';
     const searchClearBtn = document.createElement('button');
     searchClearBtn.className = 'files-tree-toolbar-btn';
-    searchClearBtn.textContent = '×';
+    searchClearBtn.textContent = '✕';
     searchWrap.appendChild(searchInput);
     searchWrap.appendChild(searchClearBtn);
     toolbar.appendChild(searchWrap);
@@ -2449,7 +2449,10 @@ export const FilesPreview = (function () {
     const closeBtn = document.createElement('button');
     closeBtn.className = 'files-preview-toolbar-btn';
     closeBtn.title = t('files_preview_close_tooltip') || 'Close preview';
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '✕';
+    // path-links.ts のモーダルがこのボタンを隠して自前の閉じるへ差し替える目印。
+    // グリフ一致で探すと ✕ を変えた瞬間に静かに壊れるので属性で指す。
+    closeBtn.dataset.previewClose = '1';
     closeBtn.disabled = true;
 
     toolbar.appendChild(openExternalBtn);
@@ -2482,7 +2485,7 @@ export const FilesPreview = (function () {
     searchCountEl.className = 'files-preview-search-count';
     const searchCloseBtn = document.createElement('button');
     searchCloseBtn.className = 'files-preview-search-nav-btn';
-    searchCloseBtn.textContent = '×';
+    searchCloseBtn.textContent = '✕';
     searchCloseBtn.title = t('files_preview_search_close') || 'Close search';
     searchBar.appendChild(searchInput);
     searchBar.appendChild(searchPrevBtn);
