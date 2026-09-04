@@ -23,6 +23,7 @@ import {
   type TerminalScreenSnapshot,
 } from './terminal-history-strategy.js';
 import { canPageAltBuffer, markTerminalManualScrollIntent, scrollAltBufferPage } from './terminal.js';
+import { probe } from '../debug/probe.js';
 
 /** イベントを流す間隔（ms）。1 ドラッグでホイールを連投して TUI を壊さないための律速。 */
 const PUMP_INTERVAL_MS = 40;
@@ -48,9 +49,43 @@ interface RailEntry {
   pumpTimer: ReturnType<typeof setInterval> | null;
   /** PTY へ送信済みで、xterm の可視画面変化を待っている 1 ノッチ。 */
   pending: PendingNotch | null;
+  /** 1 回の移動要求（`↑ up` 1 クリック / 1 ドラッグ）の通し番号。観測用。 */
+  travelSeq: number;
+  /** 現在の移動要求で PTY へ送ったノッチ数。観測用。 */
+  travelSent: number;
+  /** 現在の移動要求で確定できたノッチ数。観測用。 */
+  travelConfirmed: number;
+  /** 現在の移動要求を出したときの notchesUp。観測用。 */
+  travelFrom: number;
 }
 
 const rails = new Map<number, RailEntry>();
+
+// 送信前後の可視本文が、操作方向へ何行ずれたかを測る。返すのは行数だけで、本文は返さない。
+// isConfirmedAltScreenChange() が false を返したときに「画面は動いたのに確定できなかった」
+// のか「そもそも動いていない」のかを分けるためだけに使う。probe の fields 内からのみ呼ぶ
+// （sink が無ければ 1 度も評価されない）。
+function measuredAltScreenShift(before: TerminalScreenSnapshot, after: TerminalScreenSnapshot, direction: number): number {
+  if (before.rows !== after.rows || before.cols !== after.cols) return 0;
+  const oldLines = before.lines.map(line => line.trimEnd());
+  const newLines = after.lines.map(line => line.trimEnd());
+  let bestShift = 0;
+  let bestMatches = 0;
+  for (let shift = 1; shift < oldLines.length; shift++) {
+    let matches = 0;
+    for (let i = 0; i + shift < oldLines.length; i++) {
+      const oldLine = direction < 0 ? oldLines[i] : oldLines[i + shift];
+      const newLine = direction < 0 ? newLines[i + shift] : newLines[i];
+      if (oldLine.trim().length < 4 || oldLine !== newLine) continue;
+      matches++;
+    }
+    if (matches > bestMatches) {
+      bestMatches = matches;
+      bestShift = shift;
+    }
+  }
+  return bestMatches > 0 ? bestShift : 0;
+}
 
 function displayState(entry: RailEntry): AltRailState {
   // target は「移動要求」であって現在位置ではない。入力が履歴端で空振りしても
@@ -144,6 +179,20 @@ export function requestNotches(id: number, target: number): boolean {
   // ドラッグ中に掴んだ位置へ戻す呼び出し（entry.target が既に非 null）は、動きを止める
   // ための正当な操作なのでここでは弾かない。
   if (entry.target === null && clamped === entry.state.notchesUp) return false;
+  if (entry.target === null) {
+    // 新しい移動要求の始まり。ここから timeout までを 1 本の travel として数える。
+    entry.travelSeq++;
+    entry.travelSent = 0;
+    entry.travelConfirmed = 0;
+    entry.travelFrom = entry.state.notchesUp;
+    probe('altscroll.request', () => ({
+      sessionId: id,
+      seq: entry.travelSeq,
+      from: entry.travelFrom,
+      target: clamped,
+      want: clamped - entry.travelFrom,
+    }));
+  }
   entry.target = clamped;
   markTerminalManualScrollIntent();
   renderRail(id);
@@ -230,6 +279,10 @@ export function ensureAltScrollRail(id: number, t: any): void {
     grabOffset: 0,
     pumpTimer: null,
     pending: null,
+    travelSeq: 0,
+    travelSent: 0,
+    travelConfirmed: 0,
+    travelFrom: 0,
   };
   rails.set(id, entry);
   bindPointer(id, entry);
@@ -261,10 +314,29 @@ export function beginAltScrollNotch(
     if (entry.pending !== pending) return;
     // PTY 出力が無い、または出ても可視本文が同一なら履歴端の空振り。要求を破棄し、
     // 確認済み位置からレールを動かさない。
+    probe('altscroll.timeout', () => ({
+      sessionId: id,
+      seq: entry.travelSeq,
+      from: entry.travelFrom,
+      target: entry.target ?? -1,
+      sent: entry.travelSent,
+      confirmed: entry.travelConfirmed,
+      notchesUp: entry.state.notchesUp,
+      dir: pending.direction,
+    }));
     stopUnconfirmedRequest(entry);
     renderRail(id);
   }, CONFIRM_TIMEOUT_MS);
   entry.pending = pending;
+  entry.travelSent++;
+  probe('altscroll.send', () => ({
+    sessionId: id,
+    seq: entry.travelSeq,
+    sent: entry.travelSent,
+    confirmed: entry.travelConfirmed,
+    notchesUp: entry.state.notchesUp,
+    dir: direction,
+  }));
   return 'started';
 }
 
@@ -283,8 +355,32 @@ export function confirmAltScrollNotch(id: number, after: TerminalScreenSnapshot)
   const entry = rails.get(id);
   const pending = entry?.pending;
   if (!entry || !pending) return false;
-  if (!isConfirmedAltScreenChange(pending.before, after, pending.direction)) return false;
+  if (!isConfirmedAltScreenChange(pending.before, after, pending.direction)) {
+    // 「画面は動いたのに確定できなかった」ときだけ記録する。動いていない再描画は毎フレーム
+    // 来るので出さない。shift が 0 でないのにここへ来たら、判定条件のほうが厳しすぎる。
+    probe('altscroll.reject', () => ({
+      sessionId: id,
+      seq: entry.travelSeq,
+      shift: measuredAltScreenShift(pending.before, after, pending.direction),
+      beforeRows: pending.before.rows,
+      afterRows: after.rows,
+      beforeType: pending.before.bufferType,
+      afterType: after.bufferType,
+      dir: pending.direction,
+    }));
+    return false;
+  }
   const direction = pending.direction;
+  entry.travelConfirmed++;
+  probe('altscroll.confirm', () => ({
+    sessionId: id,
+    seq: entry.travelSeq,
+    sent: entry.travelSent,
+    confirmed: entry.travelConfirmed,
+    shift: measuredAltScreenShift(pending.before, after, direction),
+    rows: after.rows,
+    dir: direction,
+  }));
   clearPending(entry);
   entry.state = altRailStep(entry.state, direction);
   renderRail(id);

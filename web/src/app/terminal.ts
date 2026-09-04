@@ -985,7 +985,11 @@ export function canPageAltBuffer(sessionId, t) {
 export function scrollAltBufferPage(sessionId, t, direction) {
   if (!canPageAltBuffer(sessionId, t)) return false;
   // pending 中は PTY へも送らず、可視行 snapshot の再作成も避ける。
-  if (hasPendingAltScrollNotch(sessionId)) return true;
+  if (hasPendingAltScrollNotch(sessionId)) {
+    // 捨てた入力の数。ホイールを速く回したときに何回ぶん落ちているかを測る。
+    probe('altscroll.drop', () => ({ sessionId, dir: direction }));
+    return true;
+  }
   const pending = beginAltScrollNotch(sessionId, direction, captureTerminalScreenSnapshot(t));
   // 1 件ずつ画面変化を確認する。同じ入力が pending 中の wheel/pump はここで吸収し、
   // PTY へ連投しない（呼び元には「代替画面経路で処理済み」と返す）。

@@ -232,6 +232,41 @@
       "artifactNeedles": [
         "approval-identity-debug-panel"
       ]
+    },
+    {
+      "id": "alt-scroll-travel",
+      "status": "active",
+      "purpose": "代替画面のセッションで『上へは一部行くが昔の内容まで遡れない』症状について、1 回の移動要求が何ノッチ送られ何ノッチ確定したか、途中で打ち切られたなら何ノッチ目か、1 ノッチで画面が実際に何行動いたかを測る",
+      "addedIn": "unreleased",
+      "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?scrolldebug=1",
+      "due": "2026-09-18",
+      "files": [
+        "internal/hub/debug_alt_scroll.go",
+        "web/src/debug/alt-scroll-travel.ts"
+      ],
+      "sharedFiles": [
+        "web/src/app/alt-scroll-rail-view.ts",
+        "web/src/app/terminal.ts"
+      ],
+      "endpoints": [
+        "/api/debug/alt-scroll"
+      ],
+      "removalCondition": "docs/local/bugfix_alt-screen-scroll-up-stalls-after-turn-end_2026-09-04.md の C2 が終わり、症状の原因が『1 操作の移動距離』『連続操作の打ち切り』『確定条件が厳しすぎる』のどれなのか確定したら撤去",
+      "reason": "セッションログ（*.jsonl）にはホイールも `↑ up` ボタンも同じ SGR バイト列で出るため、外形からは区別も計数もできない。2026-09-04 の実測で上方向の連続送信は 1〜6 連続が大半だったが、それが『ホイールを 4 回回した』のか『12 ノッチ要求が 4 個で打ち切られた』のかが分からず、距離を伸ばす修正と打ち切りを直す修正のどちらを当てるべきか決まらない。加えて 1 ノッチの移動行数はログ再生でしか測れておらず、その再生器（docs/local/tools/vt_replay_scroll.py）は全角文字を 1 桁として置くため日本語画面では信用できない。xterm の実バッファから測り直す必要がある",
+      "note": "記録するのは 5 つの記録点。altscroll.request（移動要求の開始・現在位置と目標）、altscroll.send（1 ノッチを PTY へ送った瞬間・その要求での通算送信数）、altscroll.confirm（確定・実際にずれた行数）、altscroll.timeout（350ms 以内に確定できず残りを捨てた瞬間・何ノッチ送って何ノッチ確定していたか）、altscroll.drop（確定待ちのため捨てたホイール。500ms ぶんまとめて件数だけ）。altscroll.reject は PTY flush ごとに来るので、sink 側で『画面は動いたのに確定できなかった』回（shift が 0 でない、または寸法が変わった）だけへ絞る。記録内容はセッション ID・件数・行数・方向・バッファ種別のみで、ターミナル本文・入力テキストは 1 文字も含まない。送信総数は 600 件で頭打ち。URL クエリが無い通常アクセスでは sink を 1 つも登録しないので記録点は完全な no-op",
+      "channels": [
+        "altscroll.request",
+        "altscroll.send",
+        "altscroll.confirm",
+        "altscroll.reject",
+        "altscroll.timeout",
+        "altscroll.drop"
+      ],
+      "artifactNeedles": [
+        "/api/debug/alt-scroll",
+        "debug alt scroll",
+        "scrolldebug"
+      ]
     }
   ]
 }
