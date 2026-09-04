@@ -1288,6 +1288,14 @@ The Hub decides a session's liveness solely from **whether the terminal (PTY) pr
 
 > The session-level `Running` / `Standby` state does not use provider-internal state, so this remains a known limitation of the output-based heuristic. Claude workflow progress is tracked separately from local journal metadata as described below. Even when the card reads `Standby`, you can open the terminal itself to confirm the task is still running.
 
+### A list of uncommitted files appears in the right half of the terminal (Claude Code diff panel)
+
+In a Claude Code session, the right half of the terminal may show a file list with line counts such as `5 files changed +813 -3`. **This is not a many-ai-cli rendering glitch — it is Claude Code's own diff panel, drawn into the terminal by Claude Code itself.** many-ai-cli mirrors terminal output as-is, so the panel shows up inside the dashboard too.
+
+If you have never touched the relevant setting, Claude Code opens the panel automatically when the terminal is **144 columns or wider** and the working directory is **a git repository** (condition verified in binaries from 2.1.258 onward). That is why it appears only in sessions whose tile is wide. Untracked files are listed with a `git add` hint instead of line counts.
+
+To close it, send `/diff` in that session (the same command brings it back). Making the tile narrower than 144 columns also stops it. Whether the closed state carries over to new sessions is up to Claude Code, so if the panel returns in a new session, send `/diff` again.
+
 ---
 
 ## Security / Privacy
