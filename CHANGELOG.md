@@ -32,6 +32,13 @@ Release artifacts are published at
   The PIN itself remains optional.
 
 ### Added
+- **The AI usage panel now has a close button.** The panel opened from the header
+  Usage button could only be dismissed by clicking outside it or pressing Escape.
+  It now carries a ✕ in its header, and the header sticks to the top so the
+  button stays reachable while scrolling a long panel. The button follows the
+  Settings → General "close buttons" side preference like every other panel
+  (`web/src/index.html`, `web/src/styles.css`, `web/src/app/settings.ts`).
+
 - **Spawn approval settings can be remembered when you want them.** The new-session
   form defaults to remembering the last successful provider-specific approval
   settings, while an explicit opt-out restores safe defaults. High-risk launch
@@ -138,6 +145,15 @@ Release artifacts are published at
   `web/src/app/longproc.ts`).
 
 ### Changed
+- **Close buttons all draw the same glyph.** Some close, dismiss, and clear
+  buttons used `×` (U+00D7, the multiplication sign) while others used `✕`
+  (U+2715), so they did not line up when they appeared next to each other. They
+  all use `✕` now. Dimension labels such as `2×2` are unaffected. The files
+  preview also stopped identifying its own close button by that glyph, which
+  would have broken silently on this change (`web/src/index.html`,
+  `web/src/app/files-view.ts`, `path-links.ts`, `settings.ts`,
+  `bug-report-modal.ts`, `mobile-approval-sheet.ts`, `spawn-panel.ts`).
+
 - **The Usage menu now makes room for multiple subscription profiles on wide
   screens.** From 900px upward, the menu expands to 840px, splits provider
   links into two columns, and places each provider's usage windows side by
