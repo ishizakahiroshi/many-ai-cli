@@ -66,3 +66,21 @@ test('terminal-history: resize と buffer 遷移はスクロール成功にし�
   assert.equal(isConfirmedAltScreenChange(before, screen(['older', 'old'], { cols: 100 }), -1), false);
   assert.equal(isConfirmedAltScreenChange(before, screen(['older', 'old'], { bufferType: 'normal' }), -1), false);
 });
+
+test('terminal-history: 日本語全角行を含む本文が上方向へずれた分を確定できる', () => {
+  const before = screen(['実行中', '処理中タスク', '待機状態', '終了']);
+  const after = screen(['過去ログ', '前の応答', '実行中', '処理中タスク']);
+  assert.equal(isConfirmedAltScreenChange(before, after, -1), true);
+});
+
+test('terminal-history: 行末にスクロールバーや空白の微小な差異があっても確定できる', () => {
+  const before = screen(['long-content-row-1', 'long-content-row-2│', 'bottom-status']);
+  const after = screen(['top-older-content', 'long-content-row-1│', 'long-content-row-2']);
+  assert.equal(isConfirmedAltScreenChange(before, after, -1), true);
+});
+
+test('terminal-history: スカスカな画面で1行の特徴的な行がずれた場合でも確定できる', () => {
+  const before = screen(['', 'unique-identifier-line-12345', '', '']);
+  const after = screen(['', '', 'unique-identifier-line-12345', '']);
+  assert.equal(isConfirmedAltScreenChange(before, after, -1), true);
+});

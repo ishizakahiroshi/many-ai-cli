@@ -31,6 +31,13 @@ const PUMP_INTERVAL_MS = 40;
 const MAX_QUEUED_NOTCHES = 120;
 /** 入力後に画面変化を待つ上限。履歴端の空振りで pump を回し続けないための蓋。 */
 const CONFIRM_TIMEOUT_MS = 350;
+/** 連続して画面変化が確認できなかった場合に要求を打ち切る上限回数。
+ * 1 回の遅延や微妙な画面判定ミスで残りのスクロール要求（target）を全破棄せず、
+ * リトライして昔のログまで確実に遡れるようにする。
+ * レール位置（state.notchesUp）は確認できた分しか進まないため、
+ * リトライしてもレールだけ先行するバグは起きない。
+ */
+const MAX_CONSECUTIVE_UNCONFIRMED = 3;
 
 interface PendingNotch {
   direction: number;
@@ -57,6 +64,8 @@ interface RailEntry {
   travelConfirmed: number;
   /** 現在の移動要求を出したときの notchesUp。観測用。 */
   travelFrom: number;
+  /** 連続で画面変化が確認できなかったノッチ数。MAX_CONSECUTIVE_UNCONFIRMED で打ち切る。 */
+  unconfirmedCount: number;
 }
 
 const rails = new Map<number, RailEntry>();
@@ -139,6 +148,7 @@ function clearPending(entry: RailEntry): void {
 function stopUnconfirmedRequest(entry: RailEntry): void {
   clearPending(entry);
   entry.target = null;
+  entry.unconfirmedCount = 0;
   stopPump(entry);
 }
 
@@ -185,6 +195,7 @@ export function requestNotches(id: number, target: number): boolean {
     entry.travelSent = 0;
     entry.travelConfirmed = 0;
     entry.travelFrom = entry.state.notchesUp;
+    entry.unconfirmedCount = 0;
     probe('altscroll.request', () => ({
       sessionId: id,
       seq: entry.travelSeq,
@@ -201,6 +212,17 @@ export function requestNotches(id: number, target: number): boolean {
     pump(id);
   }
   return true;
+}
+
+/**
+ * 現在の目標ノッチ（または現在位置）に deltaNotches を加算して移動をキューする。
+ * ホイール入力やボタン連打で pending 中の入力を捨てず、目標へ確実に届かせる。
+ */
+export function stepNotches(id: number, deltaNotches: number): boolean {
+  const entry = rails.get(id);
+  if (!entry) return false;
+  const currentBase = entry.target ?? entry.state.notchesUp;
+  return requestNotches(id, currentBase + deltaNotches);
 }
 
 function sliderTopFromPointer(entry: RailEntry, clientY: number): number {
@@ -283,6 +305,7 @@ export function ensureAltScrollRail(id: number, t: any): void {
     travelSent: 0,
     travelConfirmed: 0,
     travelFrom: 0,
+    unconfirmedCount: 0,
   };
   rails.set(id, entry);
   bindPointer(id, entry);
@@ -324,7 +347,13 @@ export function beginAltScrollNotch(
       notchesUp: entry.state.notchesUp,
       dir: pending.direction,
     }));
-    stopUnconfirmedRequest(entry);
+    entry.unconfirmedCount++;
+    clearPending(entry);
+    // 連続で未確認が上限に達した場合、あるいは target が空の場合は要求を打ち切る。
+    // 1 回の空振りでは残りのノッチ要求（target）を全破棄せず、次ノッチの試行へ繋ぐ。
+    if (entry.unconfirmedCount >= MAX_CONSECUTIVE_UNCONFIRMED || entry.target === null) {
+      stopUnconfirmedRequest(entry);
+    }
     renderRail(id);
   }, CONFIRM_TIMEOUT_MS);
   entry.pending = pending;
@@ -371,6 +400,7 @@ export function confirmAltScrollNotch(id: number, after: TerminalScreenSnapshot)
     return false;
   }
   const direction = pending.direction;
+  entry.unconfirmedCount = 0;
   entry.travelConfirmed++;
   probe('altscroll.confirm', () => ({
     sessionId: id,

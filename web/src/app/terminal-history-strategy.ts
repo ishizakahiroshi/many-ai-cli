@@ -55,6 +55,20 @@ export interface TerminalScreenSnapshot {
   lines: string[];
 }
 
+function isMeaningfulAltLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length >= 4) return true;
+  // 全角文字を含む場合は 2 文字以上で十分な情報量（表示幅 >= 4）を持つ
+  return /[^\x00-\x7F]/.test(trimmed) && trimmed.length >= 2;
+}
+
+function areAltLinesMatching(a: string, b: string): boolean {
+  if (a === b) return true;
+  // 全角折り返しマージンやスクロールバー記号などの末尾 1〜2 文字の揺らぎを許容
+  const diff = Math.abs(a.length - b.length);
+  return diff <= 2 && (a.startsWith(b) || b.startsWith(a));
+}
+
 /**
  * 送信前後で「同じ寸法の代替画面の本文」が操作方向へずれたときだけ履歴移動を確定する。
  * cursor 位置や PTY 出力件数は本文が同じでも変わり得るため、成功根拠に含めない。
@@ -76,15 +90,22 @@ export function isConfirmedAltScreenChange(
   // 同じ座標の差分だけを見ると spinner・status 行の再描画を成功と誤認するため、
   // 方向に沿った非空行の overlap を要求する。通常画面高では偶然一致を避けるため 2 行、
   // 極端に小さい fixture / terminal だけ 1 行を下限にする。
+  // また、十分な長さを持つ特徴的な行（日本語 4 文字以上または英数 8 文字以上）が 1 行でも
+  // 正しい方向へ shift していれば確定とする。
   const requiredMatches = oldLines.length >= 4 ? 2 : 1;
   for (let shift = 1; shift < oldLines.length; shift++) {
     let matches = 0;
+    let hasStrongMatch = false;
     for (let i = 0; i + shift < oldLines.length; i++) {
       const oldLine = direction < 0 ? oldLines[i] : oldLines[i + shift];
       const newLine = direction < 0 ? newLines[i + shift] : newLines[i];
-      if (oldLine.trim().length < 4 || oldLine !== newLine) continue;
+      if (!isMeaningfulAltLine(oldLine) || !areAltLinesMatching(oldLine, newLine)) continue;
       matches++;
-      if (matches >= requiredMatches) return true;
+      const trimmed = oldLine.trim();
+      if (trimmed.length >= 8 || (/[^\x00-\x7F]/.test(trimmed) && trimmed.length >= 4)) {
+        hasStrongMatch = true;
+      }
+      if (matches >= requiredMatches || (matches >= 1 && hasStrongMatch)) return true;
     }
   }
   return false;

@@ -18,7 +18,7 @@ import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
 import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
-import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import {
   resolveTerminalHistoryStrategy,
   terminalHistoryCapabilitiesForProvider,
@@ -1038,6 +1038,12 @@ export function isTerminalShowingHistory(id): boolean {
 }
 
 export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
+  if (!canPageAltBuffer(sessionId, t)) return false;
+  // deltaY < 0 は上方向ホイール（過去へ遡る = notchesUp を増やす）
+  const dir = deltaY < 0 ? 1 : -1;
+  if (stepNotches(sessionId, dir)) {
+    return true;
+  }
   return scrollAltBufferPage(sessionId, t, deltaY < 0 ? -1 : 1);
 }
 
@@ -1371,7 +1377,7 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
     // レール位置は近似（alt-scroll-rail.ts 冒頭のコメント参照）なので、requestNotches が
     // 「動く必要が無い」と正直に false を返しても CLI 側にはまだ余地があるかもしれない。
     // その場合は 1 回だけ直接送ってから同じ分岐に合流させる（無反応に見せない）。
-    if (!requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) + 12)) {
+    if (!stepNotches(activeSessionId, 12)) {
       scrollAltBufferPage(activeSessionId, t, -1);
     }
     t.autoScroll = false;
@@ -1395,7 +1401,7 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   const t = terminals.get(activeSessionId);
   if (!t) return;
   if (canPageAltBuffer(activeSessionId, t)) {
-    if (!requestNotches(activeSessionId, altScrollNotchesUp(activeSessionId) - 12)) {
+    if (!stepNotches(activeSessionId, -12)) {
       scrollAltBufferPage(activeSessionId, t, 1);
     }
     t.autoScroll = true;

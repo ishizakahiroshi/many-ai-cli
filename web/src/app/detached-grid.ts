@@ -13,7 +13,7 @@ import {
   releaseHiddenWebglRenderers,
   scrollAltBufferPage,
 } from './terminal.js';
-import { altScrollNotchesUp, ensureAltScrollRail, requestNotches } from './alt-scroll-rail-view.js';
+import { ensureAltScrollRail, stepNotches } from './alt-scroll-rail-view.js';
 import { sessions } from './state.js';
 import type { SessionSnapshot } from '../types/proto.js';
 
@@ -346,7 +346,7 @@ export class DetachedGridManager {
     if (!t || !t.term) return;
     if (edge === 'top') {
       if (canPageAltBuffer(sessionId, t)) {
-        if (!requestNotches(sessionId, altScrollNotchesUp(sessionId) + 12)) {
+        if (!stepNotches(sessionId, 12)) {
           scrollAltBufferPage(sessionId, t, -1);
         }
         t.autoScroll = false;
@@ -356,7 +356,7 @@ export class DetachedGridManager {
       t.term.scrollToTop();
     } else {
       if (canPageAltBuffer(sessionId, t)) {
-        if (!requestNotches(sessionId, altScrollNotchesUp(sessionId) - 12)) {
+        if (!stepNotches(sessionId, -12)) {
           scrollAltBufferPage(sessionId, t, 1);
         }
         t.autoScroll = true;

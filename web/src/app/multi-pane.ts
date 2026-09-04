@@ -1,8 +1,7 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
-import { render } from './session-list.js';
 import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
-import { altScrollNotchesUp, ensureAltScrollRail, requestNotches } from './alt-scroll-rail-view.js';
+import { ensureAltScrollRail, stepNotches } from './alt-scroll-rail-view.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -425,7 +424,7 @@ export class MultiPaneManager {
         window.markTerminalManualScrollIntent();
       }
       if (canPageAltBuffer(sessionId, t)) {
-        if (!requestNotches(sessionId, altScrollNotchesUp(sessionId) + 12)) {
+        if (!stepNotches(sessionId, 12)) {
           scrollAltBufferPage(sessionId, t, -1);
         }
         t.autoScroll = false;
@@ -436,7 +435,7 @@ export class MultiPaneManager {
       return;
     }
     if (canPageAltBuffer(sessionId, t)) {
-      if (!requestNotches(sessionId, altScrollNotchesUp(sessionId) - 12)) {
+      if (!stepNotches(sessionId, -12)) {
         scrollAltBufferPage(sessionId, t, 1);
       }
       t.autoScroll = true;
