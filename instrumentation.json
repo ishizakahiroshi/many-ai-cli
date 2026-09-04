@@ -235,11 +235,10 @@
     },
     {
       "id": "alt-scroll-travel",
-      "status": "active",
+      "status": "removed",
       "purpose": "代替画面のセッションで『上へは一部行くが昔の内容まで遡れない』症状について、1 回の移動要求が何ノッチ送られ何ノッチ確定したか、途中で打ち切られたなら何ノッチ目か、1 ノッチで画面が実際に何行動いたかを測る",
       "addedIn": "unreleased",
       "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?scrolldebug=1",
-      "due": "2026-09-18",
       "files": [
         "internal/hub/debug_alt_scroll.go",
         "web/src/debug/alt-scroll-travel.ts"
@@ -266,7 +265,9 @@
         "/api/debug/alt-scroll",
         "debug alt scroll",
         "scrolldebug"
-      ]
+      ],
+      "removedIn": "unreleased",
+      "removedOn": "2026-09-04"
     }
   ]
 }
