@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Security
+- Cap pending spawn confirmations per parent and across the Hub using the existing
+  orchestration limits. Requests over either cap return HTTP 429 without creating
+  a confirmation or broadcasting it, while same-role replacement and late human
+  decisions remain available.
+- Apply the common 1 MiB JSON body limit to `/api/approval/batch` so oversized
+  approval and auto-rule requests are rejected before any side effect.
+- Docker builds now exclude credentials, local AI state, worktrees, logs, and
+  transcripts from the build context. Base images, the Whisper source commit,
+  provider CLI versions, and Cursor archives are pinned and checked before use;
+  the provider CLIs are installed from a tracked npm lockfile.
 - Reject `hub.trusted_networks` CIDRs wider than `/24` (IPv4) / `/64` (IPv6) as
   a config error. Existing configs with a wider entry now fail at startup with
   an error naming the entry; use `hub.allowed_hosts` with the token for wider

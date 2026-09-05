@@ -32,6 +32,15 @@ func orchestrationRequest(method, path string, body any) *http.Request {
 	return req
 }
 
+func registerTestSpawnConfirmation(t *testing.T, s *Server, parent *session, body spawnChildRequest) *pendingSpawnConfirmation {
+	t.Helper()
+	pending, err := s.registerSpawnConfirmation(parent, "", body)
+	if err != nil {
+		t.Fatalf("registerSpawnConfirmation: %v", err)
+	}
+	return pending
+}
+
 func Test_handleSpawnChild_validationAndLimits(t *testing.T) {
 	tests := []struct {
 		name string
@@ -1469,7 +1478,7 @@ func Test_resolveSpawnConfirmationDecision_refusalWritesUserRefusalOnce(t *testi
 	parent := registerTestSession(s, 1, "codex")
 	parent.CWD = t.TempDir()
 
-	pending := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "tester", Provider: "codex", InitialPrompt: "hi"})
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex", InitialPrompt: "hi"})
 	s.resolveSpawnConfirmationDecision(pending, false, "", "")
 
 	select {
@@ -1510,8 +1519,8 @@ func Test_registerSpawnConfirmation_supersedesSameParentRole(t *testing.T) {
 	parent := registerTestSession(s, 1, "codex")
 	parent.CWD = t.TempDir()
 
-	first := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "tester", Provider: "codex"})
-	second := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "tester", Provider: "codex"})
+	first := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
+	second := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
 
 	select {
 	case outcome := <-first.Outcome:
@@ -1549,6 +1558,124 @@ func Test_registerSpawnConfirmation_supersedesSameParentRole(t *testing.T) {
 	}
 }
 
+func Test_registerSpawnConfirmation_enforcesParentAndGlobalLimits(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.MaxChildrenPerParent = 2
+	s.cfg.Orchestration.MaxTotalSessions = 3
+	parent := registerTestSession(s, 1, "codex")
+	otherParent := registerTestSession(s, 2, "codex")
+
+	first := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "role-a", Provider: "codex"})
+	registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "role-b", Provider: "codex"})
+	if rejected, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-c", Provider: "codex"}); err == nil || rejected != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || err.detail != "pending spawn confirmations per parent" {
+		t.Fatalf("parent limit result = pending=%v err=%v, want 429 orchestration_limit per-parent", rejected, err)
+	}
+
+	registerTestSpawnConfirmation(t, s, otherParent, spawnChildRequest{Role: "role-a", Provider: "codex"})
+	if accepted, err := s.registerSpawnConfirmation(otherParent, "", spawnChildRequest{Role: "role-b", Provider: "codex"}); err == nil || accepted != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || err.detail != "pending spawn confirmations total" {
+		t.Fatalf("global limit result = pending=%v err=%v, want 429 total", accepted, err)
+	}
+
+	// Re-registering the same parent+role replaces one slot even at the
+	// per-parent limit, while the old confirmation is closed as superseded.
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	replacement, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-a", Provider: "codex"})
+	if err != nil || replacement == nil {
+		t.Fatalf("same-role replacement = pending=%v err=%v, want success", replacement, err)
+	}
+	select {
+	case outcome := <-first.Outcome:
+		if outcome.Approved {
+			t.Fatal("superseded confirmation must not be approved")
+		}
+	default:
+		t.Fatal("superseded confirmation did not receive an outcome")
+	}
+
+	s.expireSpawnConfirmationsForParent(parent.ID, "test")
+	if reusable, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-reused", Provider: "codex"}); err != nil || reusable == nil {
+		t.Fatalf("slot reuse after expire = pending=%v err=%v, want success", reusable, err)
+	}
+}
+
+func Test_registerSpawnConfirmation_concurrentLimit(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.MaxChildrenPerParent = 4
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	parent := registerTestSession(s, 1, "codex")
+
+	const attempts = 12
+	results := make(chan *spawnHTTPError, attempts)
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{
+				Role: fmt.Sprintf("role-%d", i), Provider: "codex",
+			})
+			results <- err
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+
+	accepted := 0
+	for err := range results {
+		if err == nil {
+			accepted++
+			continue
+		}
+		if err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" {
+			t.Fatalf("unexpected concurrent registration error: %v", err)
+		}
+	}
+	if accepted != s.cfg.Orchestration.MaxChildrenPerParent {
+		t.Fatalf("concurrent accepted registrations = %d, want %d", accepted, s.cfg.Orchestration.MaxChildrenPerParent)
+	}
+	if got := len(s.pendingSpawnConfirmationMessages()); got != accepted {
+		t.Fatalf("pending confirmation messages = %d, want %d", got, accepted)
+	}
+}
+
+func Test_handleSpawnChild_pendingLimitReturns429(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	s.cfg.Orchestration.MaxChildrenPerParent = 2
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	for _, role := range []string{"role-a", "role-b"} {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", spawnChildRequest{Provider: "codex", Role: role})
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+		s.handleSessionAPI(rr, req)
+		if rr.Body.Len() != 0 {
+			t.Fatalf("accepted canceled request for %s wrote a response: status=%d body=%q", role, rr.Code, rr.Body.String())
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", spawnChildRequest{Provider: "codex", Role: "role-c"})
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	s.handleSessionAPI(rr, req)
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("rejected pending request status = %d, want %d: %s", rr.Code, http.StatusTooManyRequests, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"error":"orchestration_limit"`) || !strings.Contains(rr.Body.String(), "pending spawn confirmations per parent") {
+		t.Fatalf("rejected pending request body = %s, want orchestration_limit per-parent", rr.Body.String())
+	}
+	if got := len(s.pendingSpawnConfirmationMessages()); got != 2 {
+		t.Fatalf("pending confirmation messages after rejection = %d, want 2", got)
+	}
+}
+
 // Test_expireSpawnConfirmationsForParent_withoutUserRefusal は
 // expireSpawnConfirmationsForParent 自体（parentID が本当に消えたときの失効経路）が、
 // parent_gone で失効し user_refusal を書かないことを確認する。
@@ -1569,7 +1696,7 @@ func Test_expireSpawnConfirmationsForParent_withoutUserRefusal(t *testing.T) {
 	parent := registerTestSession(s, 1, "codex")
 	parent.CWD = t.TempDir()
 
-	pending := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "tester", Provider: "codex"})
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
 
 	s.expireSpawnConfirmationsForParent(parent.ID, "dismiss")
 
@@ -1617,7 +1744,7 @@ func Test_handleDismiss_refusesDismissWhilePendingSpawnConfirmation(t *testing.T
 	s.wrappers[parent.ID] = wc
 	s.sessionsMu.Unlock()
 
-	pending := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "tester", Provider: "codex"})
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
 
 	ui := registerTestUI(s)
 	events := make(chan proto.Message, 8)
@@ -1697,7 +1824,7 @@ func Test_hasPendingSpawnConfirmation(t *testing.T) {
 		t.Fatal("want false before any confirmation is registered")
 	}
 
-	pending := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "tester", Provider: "codex"})
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
 	if !s.hasPendingSpawnConfirmation(parent.ID) {
 		t.Fatal("want true while the confirmation is undecided")
 	}

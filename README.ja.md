@@ -1452,6 +1452,8 @@ docker compose up -d
 docker compose up -d && rm HOLD
 ```
 
+Docker をローカルビルドするときは、作業中のホームディレクトリではなく clean checkout から開始してください。Dockerfile 専用の ignore 設定が、Docker daemon へ送る前に認証情報、AI エージェントの状態、worktree メタデータ、ログ、transcript などのローカル作業物を除外します。Dockerfile は公式 base image を manifest digest で固定し、Whisper の source commit と Cursor archive の SHA-256 を展開前に検証し、provider CLI は追跡した exact version の npm lockfile からインストールします。これは Docker build input の境界を守るための検査であり、Ubuntu apt は live 更新、Cursor の hash は公式 HTTPS byte に対する literal TOFU pin のため、bit-for-bit の完全再現を意味しません。
+
 ---
 
 ## アンインストール

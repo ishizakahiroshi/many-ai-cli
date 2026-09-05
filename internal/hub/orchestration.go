@@ -334,7 +334,7 @@ func (s *Server) spawnConfirmationRequired(provider string) bool {
 // rather than left to pile up — a conductor re-issuing the same spawn while
 // the first request is still awaiting a human should not accumulate stale
 // confirmations.
-func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider string, body spawnChildRequest) *pendingSpawnConfirmation {
+func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider string, body spawnChildRequest) (*pendingSpawnConfirmation, *spawnHTTPError) {
 	pending := &pendingSpawnConfirmation{
 		ParentID:          parent.ID,
 		Role:              body.Role,
@@ -343,6 +343,7 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 		RequestedAt:       time.Now(),
 		Outcome:           make(chan spawnConfirmationOutcome, 1),
 	}
+	cfg := s.snapshotCfg().Orchestration
 	var superseded *pendingSpawnConfirmation
 	s.orchestration.mu.Lock()
 	// The sequence number is required, not cosmetic: time.Now().UnixNano()
@@ -354,15 +355,44 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 	for id, existing := range s.orchestration.spawnConfirmations {
 		if existing.ParentID == parent.ID && existing.Role == body.Role && !existing.Decided {
 			superseded = existing
+			superseded.Decided = true
 			delete(s.orchestration.spawnConfirmations, id)
 			break
+		}
+	}
+	if superseded == nil {
+		pendingForParent := 0
+		pendingTotal := 0
+		for _, existing := range s.orchestration.spawnConfirmations {
+			if existing.Decided {
+				continue
+			}
+			pendingTotal++
+			if existing.ParentID == parent.ID {
+				pendingForParent++
+			}
+		}
+		if pendingForParent >= cfg.MaxChildrenPerParent {
+			s.orchestration.mu.Unlock()
+			return nil, &spawnHTTPError{
+				status: http.StatusTooManyRequests,
+				code:   "orchestration_limit",
+				detail: "pending spawn confirmations per parent",
+			}
+		}
+		if pendingTotal >= cfg.MaxTotalSessions {
+			s.orchestration.mu.Unlock()
+			return nil, &spawnHTTPError{
+				status: http.StatusTooManyRequests,
+				code:   "orchestration_limit",
+				detail: "pending spawn confirmations total",
+			}
 		}
 	}
 	s.orchestration.spawnConfirmations[pending.ID] = pending
 	s.orchestration.mu.Unlock()
 
 	if superseded != nil {
-		superseded.Decided = true
 		select {
 		case superseded.Outcome <- spawnConfirmationOutcome{Approved: false}:
 		default:
@@ -375,7 +405,7 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 		SessionID: parent.ID, Role: body.Role, Provider: body.Provider, Model: body.Model,
 		CWD: body.CWD, InitialPrompt: body.InitialPrompt, SpawnRequestedAtMs: pending.RequestedAt.UnixMilli(),
 	})
-	return pending
+	return pending, nil
 }
 
 // waitSpawnConfirmation blocks until either a decision has been written to
@@ -974,7 +1004,11 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		return
 	}
 	if s.spawnConfirmationRequired(body.Provider) {
-		pending := s.registerSpawnConfirmation(parent, requestedProvider, body)
+		pending, registerErr := s.registerSpawnConfirmation(parent, requestedProvider, body)
+		if registerErr != nil {
+			writeJSONError(w, registerErr.status, registerErr.code, registerErr.detail)
+			return
+		}
 		outcome, ok := s.waitSpawnConfirmation(r.Context(), pending)
 		if !ok {
 			// The caller's own HTTP request died (its tool call timed out, or

@@ -1498,6 +1498,8 @@ docker compose up -d
 docker compose up -d && rm HOLD
 ```
 
+For a local Docker build, start from a clean checkout rather than a working home directory. The per-Dockerfile ignore file excludes credentials, AI-agent state, worktree metadata, logs, transcripts, and other local artifacts before the build context is sent to Docker. The Dockerfile pins official base images by manifest digest, verifies the Whisper source commit and Cursor archive SHA-256 before extraction, and installs the provider CLIs from the tracked exact-version npm lockfile. These checks protect the build input boundary; they do not claim bit-for-bit reproducibility because Ubuntu apt updates remain live and the Cursor archive hash is a literal HTTPS TOFU pin.
+
 ---
 
 ## Uninstall

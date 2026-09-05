@@ -15,18 +15,33 @@
 # - 外向きの受け口は socat（0.0.0.0:48000 → 127.0.0.1:$HUB_PORT）で、
 #   host 側 publish は 127.0.0.1 限定。外部公開はしない
 
+# --- pinned toolchain stages ---
+# These are Docker Hub manifest-list digests retrieved from the official image
+# repositories on 2026-09-05. Tags remain visible for operator readability.
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun-runtime
+FROM node:22-bookworm@sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d AS node-runtime
+
 # --- web build stage: TypeScript フロントを web/dist に生成 ---
 # bun は依存取得のみに使い、ビルドスクリプト実行は node のまま（攻撃面を最小化）
-FROM node:22-bookworm AS web-build
-COPY --from=oven/bun:1.3.14 /usr/local/bin/bun /usr/local/bin/bun
+FROM node-runtime AS web-build
+COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /src/web
 COPY web/package.json web/bun.lock web/bunfig.toml ./
 RUN bun install --frozen-lockfile
 COPY web ./
 RUN bun run build
 
+# --- provider CLI stage: exact versions from the tracked npm lockfile ---
+FROM node-runtime AS provider-cli-build
+WORKDIR /opt/provider-cli
+ARG PROVIDER_CLAUDE_CODE_VERSION=2.1.162
+ARG PROVIDER_CODEX_VERSION=0.137.0
+ARG PROVIDER_COPILOT_VERSION=1.0.59
+COPY deploy/docker/provider-cli/package.json deploy/docker/provider-cli/package-lock.json ./
+RUN npm ci --omit=dev
+
 # --- build stage: any-ai-cli バイナリ（CGO 不要・web/dist は go:embed 同梱）---
-FROM golang:1.25-bookworm AS build
+FROM golang:1.25-bookworm@sha256:3b4a11519ad929d1e1d261a12cff056f0c85b735253d7d861346b9c6f8b36437 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -39,15 +54,18 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/many-ai-cli ./cmd/
 # GGML_OPENMP=OFF で libgomp 依存を断ち（内蔵 threadpool で並列維持）、
 # BUILD_SHARED_LIBS=OFF で共有ライブラリ同梱を不要にし、GGML_NATIVE=OFF で
 # ビルドホスト固有命令への最適化を避けて他 CPU でも動くようにする。
-FROM ubuntu:24.04 AS whisper-build
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517 AS whisper-build
 ARG WHISPER_CPP_TAG=v1.8.6
+ARG WHISPER_CPP_COMMIT=23ee03506a91ac3d3f0071b40e66a430eebdfa1d
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates git build-essential cmake \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch "${WHISPER_CPP_TAG}" \
-      https://github.com/ggml-org/whisper.cpp /src/whisper.cpp
+      https://github.com/ggml-org/whisper.cpp /src/whisper.cpp \
+ && git -C /src/whisper.cpp checkout --detach "${WHISPER_CPP_COMMIT}" \
+ && test "$(git -C /src/whisper.cpp rev-parse HEAD)" = "${WHISPER_CPP_COMMIT}"
 WORKDIR /src/whisper.cpp
 RUN cmake -B build \
       -DCMAKE_BUILD_TYPE=Release \
@@ -59,8 +77,10 @@ RUN cmake -B build \
  && cp build/bin/whisper-server /usr/local/bin/whisper-server
 
 # --- runtime stage: Ubuntu 24.04 + Node.js 22 + provider CLI ---
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 ARG CURSOR_AGENT_VERSION=2026.06.03-0bbb28e
+ARG CURSOR_AGENT_X64_SHA256=f4250e91feea78bb55e1c48b5fc830a57d3dd3681b04652f629726c5b9c8f24a
+ARG CURSOR_AGENT_ARM64_SHA256=b207208ee96c9230fc19baf1457f25206430ef3b63d750f690afc20885ba812f
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8
@@ -69,32 +89,31 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # socat: Hub(loopback) への中継。curl/ca-certificates: GitHub からの定義取得
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates curl git socat openssh-client procps less nano jq \
- && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && npm install -g \
-      @anthropic-ai/claude-code@2.1.162 \
-      @openai/codex@0.137.0 \
-      @github/copilot@1.0.59 \
- && apt-get clean && rm -rf /var/lib/apt/lists/*
-# ↑ provider CLI はバージョン固定（動作確認済みの組で再ビルドを再現可能にする）。
-#   更新は「pin を上げる → 再ビルド → 承認 action-bar の検出を確認 → 全コンテナ再作成」の手順で一斉に行う。
-#   コンテナ内での self-update / 手動 update は使わない（~/.local へ入ると volume に残留し
-#   イメージ更新が効かない「亡霊バージョン」になる。詳細は manual の運用節）
+       ca-certificates curl git socat openssh-client procps less nano jq \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+COPY --from=provider-cli-build /usr/local /usr/local
+COPY --from=provider-cli-build /opt/provider-cli /opt/provider-cli
+ENV PATH="/opt/provider-cli/node_modules/.bin:${PATH}"
+# provider CLI は package.json/package-lock.json と npm ci で固定する。
+# 更新は exact version、lockfile、Docker input pin、checker、smoke を同じ変更で行う。
 
 # cursor-agent: 公式インストーラは「最新」固定のため、インストーラが参照する
 # versioned package URL を直接取得して pin する。/home/ubuntu は実行時に volume で
 # 覆われるため、全ユーザー共通の /opt へ配置する。
 RUN set -eu; \
     case "${TARGETARCH:-amd64}" in \
-      amd64) CURSOR_AGENT_ARCH="x64" ;; \
-      arm64) CURSOR_AGENT_ARCH="arm64" ;; \
+      amd64) CURSOR_AGENT_ARCH="x64"; EXPECTED_SHA256="${CURSOR_AGENT_X64_SHA256}" ;; \
+      arm64) CURSOR_AGENT_ARCH="arm64"; EXPECTED_SHA256="${CURSOR_AGENT_ARM64_SHA256}" ;; \
       *) echo "unsupported TARGETARCH for cursor-agent: ${TARGETARCH:-unset}" >&2; exit 1 ;; \
     esac; \
+    case "$EXPECTED_SHA256" in *[!0-9a-f]*|'') echo "invalid cursor-agent sha256" >&2; exit 1 ;; esac; \
+    [ "${#EXPECTED_SHA256}" -eq 64 ] || { echo "invalid cursor-agent sha256 length" >&2; exit 1; }; \
     CURSOR_AGENT_DIR="/opt/cursor-agent/versions/${CURSOR_AGENT_VERSION}"; \
     mkdir -p "$CURSOR_AGENT_DIR"; \
-    curl -fSL "https://downloads.cursor.com/lab/${CURSOR_AGENT_VERSION}/linux/${CURSOR_AGENT_ARCH}/agent-cli-package.tar.gz" \
-      | tar --strip-components=1 -xzf - -C "$CURSOR_AGENT_DIR"; \
+    curl -fSL --retry 3 -o /tmp/cursor-agent.tar.gz "https://downloads.cursor.com/lab/${CURSOR_AGENT_VERSION}/linux/${CURSOR_AGENT_ARCH}/agent-cli-package.tar.gz"; \
+    echo "$EXPECTED_SHA256  /tmp/cursor-agent.tar.gz" | sha256sum -c -; \
+    tar --strip-components=1 -xzf /tmp/cursor-agent.tar.gz -C "$CURSOR_AGENT_DIR"; \
+    rm -f /tmp/cursor-agent.tar.gz; \
     ln -sf "$CURSOR_AGENT_DIR/cursor-agent" /usr/local/bin/cursor-agent; \
     ln -sf "$CURSOR_AGENT_DIR/cursor-agent" /usr/local/bin/agent; \
     CURSOR_AGENT_ACTUAL="$(cursor-agent --version)"; \

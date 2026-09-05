@@ -1,7 +1,6 @@
 package hub
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -58,7 +57,10 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req approvalBatchRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (strings.TrimSpace(req.Signature) == "" && req.Action != "deny_session") {
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.Signature) == "" && req.Action != "deny_session" {
 		writeJSONError(w, http.StatusBadRequest, "invalid_batch_request", "signature is required")
 		return
 	}
