@@ -812,6 +812,11 @@ type OrchestrationConfig struct {
 	// ChildStartupKill: 起動失敗と確定した子セッションを Hub 側で停止するか（既定 true）。
 	// timeout 経路の子には適用しない（D6）。
 	ChildStartupKill *bool `yaml:"child_startup_kill,omitempty" json:"child_startup_kill,omitempty"`
+	// ChildFullBypass: 子セッションの承認バイパス既定（bypassPermissions /
+	// never+danger-full-access / RiskConfirmed）を自動適用するか（既定 true）。
+	// false にすると呼び出し側が明示した承認設定のみを使い、高リスク権限は
+	// 自動確認しない（自走 UX を保ちつつ安全側へ切替可能）。
+	ChildFullBypass *bool `yaml:"child_full_bypass,omitempty" json:"child_full_bypass,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
@@ -826,6 +831,11 @@ func (o OrchestrationConfig) ChildStartupFailEnabled() bool {
 // ChildStartupKillEnabled は起動失敗の子セッションを Hub 側で停止するかを返す（既定 true）。
 func (o OrchestrationConfig) ChildStartupKillEnabled() bool {
 	return o.ChildStartupKill == nil || *o.ChildStartupKill
+}
+
+// ChildFullBypassEnabled は子セッションへ全許可既定を自動適用するかを返す（既定 true）。
+func (o OrchestrationConfig) ChildFullBypassEnabled() bool {
+	return o.ChildFullBypass == nil || *o.ChildFullBypass
 }
 
 // 端末の色方針（Hub.TerminalColor）。

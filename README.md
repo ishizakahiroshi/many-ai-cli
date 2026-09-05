@@ -96,7 +96,7 @@ Want to run a CLI `many-ai-cli` does not wrap out of the box — including one i
 
 By default, child sessions run in separate git worktrees under `.many-ai-cli/worktrees/<orchestration_id>/<role>` when the parent cwd is a git repository. The Hub does not auto-merge child branches; the conductor or user decides what to merge after reviewing the board and branch.
 
-Known limits: this is intentionally lightweight. Board changes are detected by 2-second polling and delivered with an immediate Enter-backed inject, so a board notification can interrupt an active conductor turn. Completion depends on the child writing `## DONE <role> session=<child_id>`, and there is no job DAG, retry queue, or automatic merge.
+Known limits: this is intentionally lightweight. Board changes are detected by 2-second polling; delivery follows `orchestration.board_notify_mode` (`queue-until-idle` by default, `soft-notify` for badge-only, `interrupt` for immediate Enter-backed inject). Child sessions default to full permission bypass for unattended work (`orchestration.child_full_bypass`, default true); set it to `false` for safer defaults that do not auto-confirm high-risk permissions. Completion depends on the child writing `## DONE <role> session=<child_id>`, and there is no job DAG, retry queue, or automatic merge.
 
 ### Orchestration relay loop
 

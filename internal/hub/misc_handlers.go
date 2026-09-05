@@ -1,11 +1,9 @@
 package hub
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"net/http"
-	neturl "net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,7 +38,9 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	userAvatar := cfg.UserPrefs.Avatar
 	if userAvatar != "" && !strings.HasPrefix(userAvatar, "http://") && !strings.HasPrefix(userAvatar, "https://") {
-		userAvatar = fmt.Sprintf("/api/avatar?token=%s", neturl.QueryEscape(cfg.Token))
+		// token を URL に再埋め込みしない。UI は query token を strip 済みで、
+		// 同一オリジンの img は HttpOnly token cookie で /api/avatar を取れる。
+		userAvatar = "/api/avatar"
 	}
 	userDisplayName := cfg.UserPrefs.DisplayName
 	if userDisplayName == "" {
@@ -195,7 +195,11 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ct := http.DetectContentType(data)
+	if !avatarImageAllowed(ct) {
+		ct = "application/octet-stream"
+	}
 	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "max-age=3600")
 	_, _ = w.Write(data)
 }

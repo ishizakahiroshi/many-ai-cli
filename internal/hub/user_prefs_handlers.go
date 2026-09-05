@@ -48,6 +48,11 @@ func (s *Server) handleUserPrefsAvatarUpload(w http.ResponseWriter, r *http.Requ
 			writeJSONError(w, http.StatusBadRequest, "bad_request", errorDetail("read body error", err))
 			return
 		}
+		// MIME は client header を信用せず sniff する。image/*（SVG 以外）のみ許可。
+		if !avatarImageAllowed(http.DetectContentType(data)) {
+			writeJSONError(w, http.StatusUnsupportedMediaType, "bad_request", "image/png, image/jpeg, image/gif, or image/webp required")
+			return
+		}
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "write_error", errorDetail("write error", err))
 			return
@@ -182,6 +187,24 @@ func notifySoundAllowed(mime string) bool {
 	return strings.HasPrefix(mime, "audio/")
 }
 
+// avatarImageAllowed はアップロード可能なアバター MIME か判定する。
+// SVG（image/svg+xml / text/xml）は script 埋め込み面があるため拒否する。
+func avatarImageAllowed(mime string) bool {
+	mime = strings.TrimSpace(strings.ToLower(mime))
+	if mime == "" {
+		return false
+	}
+	if i := strings.Index(mime, ";"); i >= 0 {
+		mime = strings.TrimSpace(mime[:i])
+	}
+	switch mime {
+	case "image/png", "image/jpeg", "image/gif", "image/webp":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *Server) handleUserPrefsNotifySoundCustomGet(w http.ResponseWriter, _ *http.Request) {
 	path, err := notifySoundCustomPath()
 	if err != nil {
@@ -227,19 +250,12 @@ func (s *Server) handleUserPrefsNotifySoundCustomPut(w http.ResponseWriter, r *h
 		return
 	}
 	// MIME は client header を信用せず、バイト列から sniff する（http.DetectContentType
-	// は OGG/WAV/MP3 の magic byte を audio/* に判定する）。
+	// は OGG/WAV/MP3 の magic byte を audio/* に判定する）。検出結果が audio/* で
+	// ない場合は Content-Type ヘッダが audio/* でも拒否する（fail-open しない）。
 	mime := http.DetectContentType(data)
 	if !notifySoundAllowed(mime) {
-		// 万一 client header が audio/* を主張していても、検出結果が audio/* で
-		// ない場合は拒否（multimedia container 越しの polyglot 防止）。
-		hdr := strings.TrimSpace(r.Header.Get("Content-Type"))
-		if !notifySoundAllowed(hdr) {
-			writeJSONError(w, http.StatusUnsupportedMediaType, "bad_request", "audio/* MIME type required")
-			return
-		}
-		// 検出失敗だが client header が audio/* のときは header を採用（実機の magic
-		// byte が DetectContentType の table に無いコンテナへの将来互換）。
-		mime = hdr
+		writeJSONError(w, http.StatusUnsupportedMediaType, "bad_request", "audio/* MIME type required")
+		return
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "write_error", errorDetail("write error", err))

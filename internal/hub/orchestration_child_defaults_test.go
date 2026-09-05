@@ -214,3 +214,37 @@ func TestProviderConfirmationChangeNote(t *testing.T) {
 		t.Fatalf("note の内容が不足: %q", note)
 	}
 }
+
+func TestApplyChildApprovalDefaultsFullBypass(t *testing.T) {
+	claude := &spawnChildRequest{Provider: "claude"}
+	applyChildApprovalDefaults(claude, true)
+	if claude.PermissionMode != "bypassPermissions" || !claude.RiskConfirmed {
+		t.Fatalf("claude defaults = %+v", claude)
+	}
+
+	codex := &spawnChildRequest{Provider: "codex"}
+	applyChildApprovalDefaults(codex, true)
+	if codex.AskForApproval != "never" || codex.Sandbox != "danger-full-access" || !codex.RiskConfirmed {
+		t.Fatalf("codex defaults = %+v", codex)
+	}
+
+	shell := &spawnChildRequest{Provider: "shell"}
+	applyChildApprovalDefaults(shell, true)
+	if shell.PermissionMode != "" || shell.RiskConfirmed {
+		t.Fatalf("shell should stay untouched: %+v", shell)
+	}
+}
+
+func TestApplyChildApprovalDefaultsSaferPathLeavesUnset(t *testing.T) {
+	body := &spawnChildRequest{Provider: "claude"}
+	applyChildApprovalDefaults(body, false)
+	if body.PermissionMode != "" || body.RiskConfirmed {
+		t.Fatalf("safer path should not fill bypass defaults: %+v", body)
+	}
+
+	explicit := &spawnChildRequest{Provider: "claude", PermissionMode: "bypassPermissions", RiskConfirmed: true}
+	applyChildApprovalDefaults(explicit, false)
+	if explicit.PermissionMode != "bypassPermissions" || !explicit.RiskConfirmed {
+		t.Fatalf("safer path must preserve explicit values: %+v", explicit)
+	}
+}

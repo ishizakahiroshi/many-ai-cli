@@ -821,7 +821,7 @@ func (s *Server) relaySpawn(run *relayRun, role, prompt string) error {
 	deps := s.relayDep()
 	ra := run.roles[role]
 	body := spawnChildRequest{Role: role, Provider: ra.Provider, Model: ra.Model, InitialPrompt: prompt, CWD: run.childCWD, Force: true}
-	applyChildApprovalDefaults(&body)
+	applyChildApprovalDefaults(&body, s.snapshotCfg().Orchestration.ChildFullBypassEnabled())
 	prep := childSpawnPreparation{orchestrationID: run.orchestrationID, boardPath: run.boardPath, childCWD: run.childCWD}
 	parent, _, _ := s.orchestrationParentState(run.parentID)
 	if parent == nil {

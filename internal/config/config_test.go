@@ -799,3 +799,20 @@ func TestSessionOrderSurvivesSaveRoundTrip(t *testing.T) {
 		t.Fatalf("session order slice was aliased")
 	}
 }
+
+func TestChildFullBypassEnabledDefaultTrue(t *testing.T) {
+	var o OrchestrationConfig
+	if !o.ChildFullBypassEnabled() {
+		t.Fatal("nil ChildFullBypass should default to true")
+	}
+	f := false
+	o.ChildFullBypass = &f
+	if o.ChildFullBypassEnabled() {
+		t.Fatal("explicit false should disable full bypass")
+	}
+	tr := true
+	o.ChildFullBypass = &tr
+	if !o.ChildFullBypassEnabled() {
+		t.Fatal("explicit true should enable full bypass")
+	}
+}

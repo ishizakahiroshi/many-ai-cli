@@ -268,7 +268,7 @@ export function playNotificationSound() {
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
     const tk = token;
-    const customUrl = `/api/user-prefs/notify-sound-custom?token=${encodeURIComponent(tk || '')}`;
+    const customUrl = '/api/user-prefs/notify-sound-custom';
     if (customUrl) {
       try { new Audio(customUrl).play().catch(() => {}); return; } catch (_) {}
     }
@@ -1847,9 +1847,9 @@ initSettingsInformationArchitecture();
       });
       if (!res.ok) throw new Error(`PUT avatar ${res.status}`);
       // キャッシュバスター付きで更新
-      set__userAvatarUrl(`/api/avatar?token=${tk}`);
+      set__userAvatarUrl('/api/avatar');
       urlInputEl.value = '';
-      updatePreview(`/api/avatar?token=${tk}&t=${Date.now()}`, _userDisplayName);
+      updatePreview(`/api/avatar?t=${Date.now()}`, _userDisplayName);
       showToast(typeof window.t === 'function' ? t('settings_avatar_file_set') : 'アイコン画像を設定しました');
     } catch (e) {
       console.warn('[user-prefs] avatar upload failed:', e);
