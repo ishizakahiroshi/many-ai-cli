@@ -1689,13 +1689,28 @@ export function normalizeActionOptions(options) {
 
 // 折りたたみトグル（全文⇄コンパクト切替）。3 経路（単問/一括/複数選択）共通で使う。
 // position:absolute なので bar 直下に append すれば footer の有無に関わらず同じ位置に出る。
+function syncCollapseToggleButton(btn, collapsed = isActionBarCollapsed()) {
+  btn.textContent = collapsed ? '⊞' : '⊟';
+  const label = collapsed ? t('action_bar_expand') : t('action_bar_collapse');
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  // aria-expanded は「押したあとに見える全文表示」の状態を表す。
+  btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  btn.setAttribute('aria-controls', 'action-bar');
+}
+
+function syncActionBarCollapseToggle(bar) {
+  const btn = bar?.querySelector('.action-collapse-btn');
+  if (btn instanceof HTMLButtonElement) syncCollapseToggleButton(btn);
+}
+
 function appendCollapseToggle(bar, sessionId) {
   const btn = document.createElement('button');
+  btn.type = 'button';
   btn.className = 'action-collapse-btn';
-  const collapsed = isActionBarCollapsed();
-  btn.textContent = collapsed ? '⊞' : '⊟';
-  btn.title = collapsed ? t('action_bar_expand') : t('action_bar_collapse');
+  syncCollapseToggleButton(btn);
   btn.onclick = (e) => {
+    e.preventDefault();
     e.stopPropagation();
     toggleActionBarCollapsed(sessionId);
   };
@@ -1714,7 +1729,9 @@ export function toggleActionBarCollapsed(sessionId) {
     showActionBar(bar, sessionId, cached, false);
   } else {
     bar.classList.toggle('collapsed', isActionBarCollapsed());
+    // options cache が無い経路でも、見た目と状態属性を同時に更新する。
   }
+  syncActionBarCollapseToggle(bar);
   setTimeout(() => inputEl.focus(), 0);
 }
 

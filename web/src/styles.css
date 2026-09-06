@@ -948,7 +948,7 @@ header {
   body.sidebar-right #session-list { order: 2; }
 }
 
-/* パネルの閉じるボタン（✕）を左へ寄せる。閉じるボタンはどれも flex の子なので、
+/* パネルの開閉・閉じるボタン（⊟/⊞/✕）を左へ寄せる。閉じるボタンはどれも flex の子なので、
    order だけで自分の入っているヘッダの左端へ寄る（flex でないヘッダでは単に無効）。 */
 body.close-left :is(
   .review-close-btn,
