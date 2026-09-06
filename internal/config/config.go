@@ -742,9 +742,8 @@ type NotifyConfig struct {
 	IncludeBody bool `yaml:"include_body,omitempty" json:"include_body,omitempty"`
 }
 
-// BoardNotifyMode controls how board.md updates reach an orchestration conductor.
-// QueueUntilIdle is the safe default: AI turns are never interrupted just because a
-// child updated its progress.
+// BoardNotifyMode controls how progress-only board updates reach an
+// orchestration conductor. Actionable events use a separate reliable queue.
 type BoardNotifyMode string
 
 const (
@@ -761,7 +760,7 @@ func EffectiveBoardNotifyMode(raw BoardNotifyMode) BoardNotifyMode {
 	if raw.Valid() {
 		return raw
 	}
-	return BoardNotifyQueueUntilIdle
+	return BoardNotifySoft
 }
 
 // SpawnConfirmMode controls whether an orchestration child spawn waits for a
@@ -1104,7 +1103,7 @@ func defaultConfig(home string) *Config {
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
-	cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+	cfg.Orchestration.BoardNotifyMode = BoardNotifySoft
 	return cfg
 }
 
@@ -1266,7 +1265,7 @@ func (cfg *Config) applyDefaults() {
 		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")
 	}
 	if cfg.Orchestration.BoardNotifyMode == "" {
-		cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+		cfg.Orchestration.BoardNotifyMode = BoardNotifySoft
 	}
 	if cfg.Orchestration.SpawnConfirmMode == "" {
 		cfg.Orchestration.SpawnConfirmMode = SpawnConfirmOn

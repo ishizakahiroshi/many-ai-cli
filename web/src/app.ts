@@ -2161,8 +2161,8 @@ inputEl.addEventListener('blur', (e) => {
 			const res = await fetch(`/api/orchestration-config?token=${token}`);
 			if (!res.ok) return;
 			const cfg = await res.json();
-			const mode = String(cfg.board_notify_mode || 'queue-until-idle');
-			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'queue-until-idle';
+			const mode = String(cfg.board_notify_mode || 'soft-notify');
+			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'soft-notify';
 			if (spawnConfirmModeEl) {
 				const spawnMode = String(cfg.spawn_confirm_mode || 'on');
 				spawnConfirmModeEl.value = ['on', 'off', 'providers'].includes(spawnMode) ? spawnMode : 'on';

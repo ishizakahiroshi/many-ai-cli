@@ -57,11 +57,15 @@ func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
 
 func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
-	if cfg.Orchestration.BoardNotifyMode != BoardNotifyQueueUntilIdle {
-		t.Fatalf("default board notify mode = %q, want %q", cfg.Orchestration.BoardNotifyMode, BoardNotifyQueueUntilIdle)
+	if cfg.Orchestration.BoardNotifyMode != BoardNotifySoft {
+		t.Fatalf("default board notify mode = %q, want %q", cfg.Orchestration.BoardNotifyMode, BoardNotifySoft)
 	}
 	for _, mode := range []BoardNotifyMode{BoardNotifySoft, BoardNotifyQueueUntilIdle, BoardNotifyInterrupt} {
 		cfg.Orchestration.BoardNotifyMode = mode
+		cfg.applyDefaults()
+		if cfg.Orchestration.BoardNotifyMode != mode {
+			t.Fatalf("applyDefaults replaced explicit mode %q with %q", mode, cfg.Orchestration.BoardNotifyMode)
+		}
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("Validate() mode %q: %v", mode, err)
 		}

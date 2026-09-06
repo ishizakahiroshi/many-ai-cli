@@ -55,8 +55,10 @@ var safeOrchestrationToken = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 type orchestrationManager struct {
 	mu       sync.Mutex
 	appendMu sync.Mutex
-	pending  map[string]pendingChild
-	boards   map[string]*orchestrationBoard
+	// eventFlushMu serializes event delivery polls without holding mu over PTY I/O.
+	eventFlushMu sync.Mutex
+	pending      map[string]pendingChild
+	boards       map[string]*orchestrationBoard
 	// roles は C1 (plan_orchestration-spawn-ui-exposure.md) で起動時に受け取った
 	// 役割マッピングを orchestration_id ごとに保持する。conductor への instruction file
 	// 注入（C2）はここから読み出す想定。
@@ -129,6 +131,16 @@ type orchestrationBoard struct {
 	// PendingNotices は queue-until-idle の conductor ごとの最新通知。連続した
 	// board 更新はここで上書きし、idle 復帰時に Enter を 1 回だけ送る。
 	PendingNotices map[int]string
+	// PendingEvents is an overwrite-free FIFO for notices that require the
+	// conductor to act. Overflow details remain in board.md and are surfaced by
+	// EventOverflow references as queue capacity returns.
+	PendingEvents []boardEvent
+	EventOverflow map[int]uint64
+	NextEventID   uint64
+	// QuestionCursor prevents append-only QUESTION markers from being replayed
+	// whenever an unrelated later section changes board.md.
+	QuestionCursor int64
+	LastWriter     boardWriter
 }
 
 type orchestrationChild struct {
@@ -145,6 +157,10 @@ type orchestrationChild struct {
 	FilePath string
 	FileSize int64
 	FileMod  time.Time
+	// QuestionCursor is a byte offset into the append-only progress file. DONE
+	// is latched separately; questions need their own cursor so old markers are
+	// not re-delivered after every later progress update.
+	QuestionCursor int64
 	// Restart data is retained only in memory for opt-in timeout recovery.
 	RestartSpec    spawnWrappedSpec
 	InitialPrompt  string
@@ -166,6 +182,12 @@ type orchestrationChild struct {
 type boardDoneEvent struct {
 	Role      string
 	SessionID int
+}
+
+type boardQuestionEvent struct {
+	Role      string
+	SessionID int
+	Writer    boardWriter
 }
 
 type boardWriter struct {
@@ -629,7 +651,7 @@ func (s *Server) notifyBoardGoneWaiter(pending *pendingSpawnConfirmation, text s
 	if parent == nil || parent.OrchestrationID == "" {
 		return
 	}
-	s.notifyBoardSession(parent.OrchestrationID, pending.ParentID, text)
+	s.notifyBoardEvent(parent.OrchestrationID, pending.ParentID, text)
 }
 
 func (s *Server) ensureOrchestrationBoardForRefusal(parent *session, body spawnChildRequest) (string, error) {
@@ -1390,6 +1412,7 @@ func newOrchestrationBoard(id, path string) *orchestrationBoard {
 		TimedOut:       map[int]bool{},
 		StartupFailed:  map[int]bool{},
 		PendingNotices: map[int]string{},
+		EventOverflow:  map[int]uint64{},
 		LastWrite:      now,
 	}
 }
@@ -1438,6 +1461,7 @@ func (s *Server) scanOrchestrationBoards() {
 		s.checkOrchestrationChildTimers(b.ID, now, cfg)
 	}
 	s.flushQueuedBoardNotices(now)
+	s.flushBoardEvents(now)
 	s.checkRelayReconnect(now)
 }
 
@@ -1446,10 +1470,11 @@ func (s *Server) scanOrchestrationBoards() {
 // 内容を読んで DONE 検出と関係セッションへの更新通知を行う（C4: 子ごとファイル分離）。
 func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 	type childFile struct {
-		id   int
-		path string
-		size int64
-		mod  time.Time
+		id             int
+		path           string
+		size           int64
+		mod            time.Time
+		questionCursor int64
 	}
 	s.orchestration.mu.Lock()
 	b := s.orchestration.boards[boardID]
@@ -1462,15 +1487,22 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		if child.FilePath == "" {
 			continue
 		}
-		files = append(files, childFile{id: id, path: child.FilePath, size: child.FileSize, mod: child.FileMod})
+		files = append(files, childFile{
+			id:             id,
+			path:           child.FilePath,
+			size:           child.FileSize,
+			mod:            child.FileMod,
+			questionCursor: child.QuestionCursor,
+		})
 	}
 	s.orchestration.mu.Unlock()
 
 	type update struct {
-		id    int
-		info  os.FileInfo
-		text  string
-		dones []boardDoneEvent
+		id        int
+		info      os.FileInfo
+		text      string
+		dones     []boardDoneEvent
+		questions []boardQuestionEvent
 	}
 	var updates []update
 	for _, f := range files {
@@ -1485,7 +1517,16 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		if err != nil {
 			continue
 		}
-		updates = append(updates, update{id: f.id, info: info, text: string(data), dones: detectBoardDoneEvents(string(data))})
+		text := string(data)
+		appended := appendedBoardText(text, f.questionCursor)
+		questions, _ := detectBoardQuestionEvents(appended, boardWriter{SessionID: f.id})
+		updates = append(updates, update{
+			id:        f.id,
+			info:      info,
+			text:      text,
+			dones:     detectBoardDoneEvents(text),
+			questions: questions,
+		})
 	}
 	if len(updates) == 0 {
 		return
@@ -1498,9 +1539,11 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 	type notice struct {
 		sessionID int
 		text      string
+		event     bool
 	}
 	var notices []notice
 	var doneIDs []int
+	var rejectedQuestions []boardQuestionEvent
 	s.orchestration.mu.Lock()
 	b = s.orchestration.boards[boardID]
 	if b == nil {
@@ -1514,24 +1557,45 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		}
 		child.FileSize = u.info.Size()
 		child.FileMod = u.info.ModTime()
+		child.QuestionCursor = int64(len(u.text))
 		child.LastBoardWrite = now
 		if owns {
 			continue
 		}
+		becameDone := false
 		for _, ev := range u.dones {
 			// 自ファイルなので session id 表記が欠けていても本人の DONE とみなす
 			if ev.SessionID == 0 || ev.SessionID == u.id {
+				becameDone = !child.Done
 				b.Done[u.id] = true
 				child.Done = true
-				doneIDs = append(doneIDs, u.id)
+				if becameDone {
+					doneIDs = append(doneIDs, u.id)
+				}
 				break
 			}
 		}
-		for sessionID := range b.Sessions {
-			if sessionID == u.id {
+		hasAuthorizedQuestion := false
+		for _, question := range u.questions {
+			if question.SessionID != u.id || question.Role != child.Role {
+				question.Writer = boardWriter{Role: child.Role, SessionID: u.id}
+				rejectedQuestions = append(rejectedQuestions, question)
 				continue
 			}
-			notices = append(notices, notice{sessionID: sessionID, text: fmt.Sprintf("\n[orchestration] progress updated by %s (session=%d): %s\n", child.Role, u.id, child.FilePath)})
+			hasAuthorizedQuestion = true
+			notices = append(notices, notice{
+				sessionID: child.ParentID,
+				text: fmt.Sprintf("\n[orchestration] question from role=%s session=%d progress=%s\n",
+					child.Role, u.id, child.FilePath),
+				event: true,
+			})
+		}
+		if child.ParentID > 0 && (becameDone || !hasAuthorizedQuestion) {
+			text := fmt.Sprintf("\n[orchestration] progress updated by %s (session=%d): %s\n", child.Role, u.id, child.FilePath)
+			if becameDone {
+				text = fmt.Sprintf("\n[orchestration] child complete role=%s session=%d progress=%s\n", child.Role, u.id, child.FilePath)
+			}
+			notices = append(notices, notice{sessionID: child.ParentID, text: text, event: becameDone})
 		}
 	}
 	s.orchestration.mu.Unlock()
@@ -1542,7 +1606,14 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		return
 	}
 	for _, n := range notices {
-		s.notifyBoardSession(boardID, n.sessionID, n.text)
+		if n.event {
+			s.notifyBoardEvent(boardID, n.sessionID, n.text)
+		} else {
+			s.notifyBoardSession(boardID, n.sessionID, n.text)
+		}
+	}
+	for _, question := range rejectedQuestions {
+		s.recordRejectedBoardQuestion(boardID, b.Path, question)
 	}
 	for _, id := range doneIDs {
 		s.markChildState(id, "done")
@@ -1562,11 +1633,21 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 		return
 	}
 	dones := detectBoardDoneEvents(text)
+	appended := appendedBoardText(text, stored.QuestionCursor)
+	questions, lastWriter := detectBoardQuestionEvents(appended, stored.LastWriter)
+	if stored.QuestionCursor > int64(len(text)) {
+		// A rewritten/truncated legacy board establishes a new cursor without
+		// replaying old questions. Progress files are append-only by contract.
+		questions = nil
+		lastWriter = detectLastBoardWriter(text)
+	}
 	writer := detectLastBoardWriter(text)
 	writerID := s.resolveBoardWriterLocked(stored, writer)
 	stored.LastSize = info.Size()
 	stored.LastMod = info.ModTime()
 	stored.LastWrite = now
+	stored.QuestionCursor = int64(len(text))
+	stored.LastWriter = lastWriter
 	for _, child := range stored.Children {
 		if writerID == child.ID || (writerID == 0 && writer.Role == child.Role) {
 			child.LastBoardWrite = now
@@ -1578,8 +1659,13 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 	}
 	var authorizedDoneIDs []int
 	var rejectedDones []boardDoneEvent
+	var authorizedQuestions []boardQuestionEvent
+	var rejectedQuestions []boardQuestionEvent
 	for _, ev := range dones {
 		if sessionID, ok := authorizeBoardDoneLocked(stored, ev, writerID); ok {
+			if stored.Done[sessionID] {
+				continue
+			}
 			stored.Done[sessionID] = true
 			child := stored.Children[sessionID]
 			child.Done = true
@@ -1589,21 +1675,27 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 			rejectedDones = append(rejectedDones, ev)
 		}
 	}
-	sessions := map[int]string{}
-	for id, role := range stored.Sessions {
-		sessions[id] = role
+	for _, question := range questions {
+		questionWriterID := s.resolveBoardWriterLocked(stored, question.Writer)
+		if authorizeBoardQuestionLocked(stored, question, questionWriterID) {
+			authorizedQuestions = append(authorizedQuestions, question)
+		} else {
+			rejectedQuestions = append(rejectedQuestions, question)
+		}
 	}
+	parentID := boardConductorSessionIDLocked(stored)
 	s.orchestration.mu.Unlock()
 
 	updatedBy := writer.Role
 	if updatedBy == "" {
 		updatedBy = "unknown"
 	}
-	for sessionID := range sessions {
-		if writerID != 0 && sessionID == writerID {
-			continue
-		}
-		s.notifyBoardSession(boardID, sessionID, fmt.Sprintf("\n[orchestration] board updated by %s: %s\n", updatedBy, boardPath))
+	// An actionable marker already carries the board/progress reference. Do not
+	// also send the same write through an explicit interrupt progress mode,
+	// which could bypass the event delivery blockers.
+	if parentID > 0 && parentID != writerID && writer.Role != "hub" &&
+		len(authorizedQuestions) == 0 && len(authorizedDoneIDs) == 0 {
+		s.notifyBoardSession(boardID, parentID, fmt.Sprintf("\n[orchestration] board updated by %s: %s\n", updatedBy, boardPath))
 	}
 	for _, ev := range rejectedDones {
 		s.logger.Warn("orchestration DONE rejected",
@@ -1612,9 +1704,51 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 			"claimed_session_id", ev.SessionID,
 			"role", ev.Role)
 	}
+	for _, question := range rejectedQuestions {
+		s.recordRejectedBoardQuestion(boardID, boardPath, question)
+	}
+	for _, question := range authorizedQuestions {
+		if parentID > 0 {
+			s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] question from role=%s session=%d progress=%s\n",
+				question.Role, question.SessionID, boardPath))
+		}
+	}
 	for _, sessionID := range authorizedDoneIDs {
+		s.orchestration.mu.Lock()
+		child := stored.Children[sessionID]
+		role, progressPath := "", boardPath
+		if child != nil {
+			role = child.Role
+			if child.FilePath != "" {
+				progressPath = child.FilePath
+			}
+		}
+		s.orchestration.mu.Unlock()
+		if parentID > 0 {
+			s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete role=%s session=%d progress=%s\n", role, sessionID, progressPath))
+		}
 		s.markChildState(sessionID, "done")
 	}
+}
+
+// boardConductorSessionIDLocked returns the single conductor registered for a
+// board. Ambiguous or missing ownership fails closed instead of notifying an
+// arbitrary sibling. The caller holds orchestration.mu.
+func boardConductorSessionIDLocked(board *orchestrationBoard) int {
+	if board == nil {
+		return 0
+	}
+	found := 0
+	for sessionID, role := range board.Sessions {
+		if role != "conductor" {
+			continue
+		}
+		if found != 0 {
+			return 0
+		}
+		found = sessionID
+	}
+	return found
 }
 
 // authorizeBoardDoneLocked binds a shared-board DONE marker to the child that
@@ -1942,7 +2076,7 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 				s.respawnTimedOutChild(boardID, n.childID, cfg.MaxTimeoutRespawns)
 			}
 		case "idle":
-			s.injectText(n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold), true, false)
+			s.notifyBoardEvent(boardID, n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold))
 		}
 	}
 }
@@ -2061,7 +2195,7 @@ func (s *Server) completeOrchestrationChildOnSessionEnd(sessionID int, state str
 		s.relayOnChildExit(boardID, sessionID, state)
 		return
 	}
-	s.notifyBoardSession(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))
+	s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))
 }
 
 // respawnTimedOutChild retries an opted-in child once (or the configured small
@@ -2141,11 +2275,58 @@ func detectBoardDoneEvents(text string) []boardDoneEvent {
 	return events
 }
 
+// appendedBoardText returns only bytes written after cursor. If an append-only
+// file was truncated or rewritten, it returns no content so historical
+// QUESTION markers are not replayed as new alerts.
+func appendedBoardText(text string, cursor int64) string {
+	if cursor < 0 || cursor > int64(len(text)) {
+		return ""
+	}
+	return text[cursor:]
+}
+
+// detectBoardQuestionEvents associates each QUESTION marker with the ordinary
+// section header immediately preceding it. That writer identity is required
+// to authorize legacy children that still append to the shared board.
+func detectBoardQuestionEvents(text string, writer boardWriter) ([]boardQuestionEvent, boardWriter) {
+	var events []boardQuestionEvent
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "## ") {
+			continue
+		}
+		if strings.HasPrefix(line, "## QUESTION ") {
+			fields := strings.Fields(strings.TrimPrefix(line, "## QUESTION "))
+			if len(fields) == 0 {
+				continue
+			}
+			role := sanitizeRole(fields[0])
+			sessionID := parseBoardSessionID(fields[1:])
+			if role == "" || sessionID == 0 {
+				continue
+			}
+			events = append(events, boardQuestionEvent{Role: role, SessionID: sessionID, Writer: writer})
+			continue
+		}
+		if strings.HasPrefix(line, "## DONE ") || strings.HasPrefix(line, "## SUCCESS ") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(line, "## "))
+		if len(fields) > 0 {
+			writer = boardWriter{Role: sanitizeRole(fields[0]), SessionID: parseBoardSessionID(fields[1:])}
+		}
+	}
+	return events, writer
+}
+
 func detectLastBoardWriter(text string) boardWriter {
 	var writer boardWriter
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "## DONE ") || strings.HasPrefix(line, "## SUCCESS ") {
+		if !strings.HasPrefix(line, "## ") ||
+			strings.HasPrefix(line, "## DONE ") ||
+			strings.HasPrefix(line, "## SUCCESS ") ||
+			strings.HasPrefix(line, "## QUESTION ") {
 			continue
 		}
 		fields := strings.Fields(strings.TrimPrefix(line, "## "))
@@ -2154,6 +2335,34 @@ func detectLastBoardWriter(text string) boardWriter {
 		}
 	}
 	return writer
+}
+
+// authorizeBoardQuestionLocked rejects IDOR attempts by requiring the claimed
+// child identity and role to match the section's immediately preceding writer.
+// The caller holds orchestration.mu.
+func authorizeBoardQuestionLocked(board *orchestrationBoard, question boardQuestionEvent, writerID int) bool {
+	if board == nil || question.SessionID <= 0 || writerID != question.SessionID {
+		return false
+	}
+	child := board.Children[question.SessionID]
+	return child != nil && child.Role == question.Role
+}
+
+func (s *Server) recordRejectedBoardQuestion(boardID, boardPath string, question boardQuestionEvent) {
+	s.logger.Warn("orchestration QUESTION rejected",
+		"board_id", boardID,
+		"source_session_id", question.Writer.SessionID,
+		"claimed_session_id", question.SessionID,
+		"role", question.Role)
+	if boardPath == "" {
+		return
+	}
+	if err := s.appendBoardSection(boardPath, "hub", fmt.Sprintf(
+		"QUESTION rejected: source_session=%d claimed_role=%s claimed_session=%d\n",
+		question.Writer.SessionID, question.Role, question.SessionID)); err != nil {
+		s.logger.Error("orchestration QUESTION rejection record failed",
+			"board_id", boardID, "board_path", boardPath, "err", err)
+	}
 }
 
 func parseBoardSessionID(fields []string) int {
@@ -2255,7 +2464,38 @@ func copyRelayStatuses(relays []*proto.RelayStatus) []proto.RelayStatus {
 }
 
 func (s *Server) notifyOrchestrationError(parentID int, limit, detail string) {
-	s.injectText(parentID, fmt.Sprintf("\n[MANY-AI-CLI-ORCHESTRATION-ERROR] limit=%s detail=%s\n", safeToken(limit), strings.ReplaceAll(detail, "\n", " ")), true, false)
+	text := fmt.Sprintf("\n[MANY-AI-CLI-ORCHESTRATION-ERROR] limit=%s detail=%s\n", safeToken(limit), strings.ReplaceAll(detail, "\n", " "))
+	if boardID := s.orchestrationBoardForParent(parentID); boardID != "" {
+		if s.relayOwns(boardID) {
+			return
+		}
+		s.notifyBoardEvent(boardID, parentID, text)
+		return
+	}
+	s.injectText(parentID, text, true, false)
+}
+
+// orchestrationBoardForParent resolves only a conductor's own registered board.
+// The two-lock lookup fails closed on stale or inconsistent session metadata.
+func (s *Server) orchestrationBoardForParent(parentID int) string {
+	s.sessionsMu.Lock()
+	parent := s.sessions[parentID]
+	boardID := ""
+	if parent != nil && parent.ParentSessionID == 0 {
+		boardID = parent.OrchestrationID
+	}
+	s.sessionsMu.Unlock()
+	if boardID == "" {
+		return ""
+	}
+	s.orchestration.mu.Lock()
+	board := s.orchestration.boards[boardID]
+	valid := board != nil && board.Sessions[parentID] == "conductor"
+	s.orchestration.mu.Unlock()
+	if !valid {
+		return ""
+	}
+	return boardID
 }
 
 // waitForInputReady は spawn 直後の起動アニメーション（スプラッシュ・Tips バナー等）が
@@ -2655,7 +2895,7 @@ func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int
 	}
 	// 進捗・DONE は子専用ファイルへ。board.md は conductor の指示・全体状況の読み取り専用に
 	// することで、共有 board への同時書き込み競合と記帳名義ゆれを避ける（C4）。
-	b.WriteString("Read the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## " + role + " session=" + id + " <RFC3339 time>` sections, each including a `status: running|blocked|done|failed` line. When complete, append `## DONE " + role + " session=" + id + "` (or the explicit success form `## SUCCESS " + role + " session=" + id + "`) and a concise summary to your progress file. Do not write to the shared board.\n\n")
+	b.WriteString("Read the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## " + role + " session=" + id + " <RFC3339 time>` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION " + role + " session=" + id + "`; the conductor will answer with orchestrate send. When complete, append `## DONE " + role + " session=" + id + "` (or the explicit success form `## SUCCESS " + role + " session=" + id + "`) and a concise summary to your progress file. Do not write to the shared board.\n\n")
 	// base はユーザー・conductor 由来のフリーテキスト。BEL/ESC 等の C0 制御文字が
 	// 混入していると PTY 経由で子セッションの端末エコー・Hub UI レンダリングに
 	// エスケープシーケンス（タイトル詐称・画面クリア等）を注入できてしまうため
@@ -2709,6 +2949,7 @@ func buildConductorInitialPrompt(orchestrationID string, roles map[string]orches
 	// レースを構造的に防ぐ。
 	b.WriteString("Operating rules:\n")
 	b.WriteString("- To give follow-up instructions to an existing live child, run `<MANY_AI_CLI_BIN> orchestrate send --role <role> \"<text>\"` instead of spawning again. spawn is rejected (409) while a live child exists for the role; send injects the text into the child and records it on the board automatically.\n")
+	b.WriteString("- When a child reports `## QUESTION <role> session=<id>`, read its progress file and answer with `<MANY_AI_CLI_BIN> orchestrate send --role <role> \"<answer>\"`.\n")
 	b.WriteString("- When the user asks you to stop, confirm in one line whether they mean immediately or after the current work unit completes (default: after completion).\n")
 	b.WriteString("- Do not dispatch a reviewer while the implementation child is still working on fixes; wait for its `## DONE` entry on the board first.\n")
 	return b.String()

@@ -347,14 +347,14 @@
           </div>
           <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_board_notify_mode">Board update notification</span>
+            <span class="settings-label" data-i18n="settings_board_notify_mode">Progress update notification</span>
             <select id="board-notify-mode" class="settings-select">
-              <option value="queue-until-idle" data-i18n="settings_board_notify_queue">Queue until conductor is idle (recommended)</option>
-              <option value="soft-notify" data-i18n="settings_board_notify_soft">Badge only</option>
+              <option value="soft-notify" data-i18n="settings_board_notify_soft">Badge only (recommended)</option>
+              <option value="queue-until-idle" data-i18n="settings_board_notify_queue">Queue until conductor is idle</option>
               <option value="interrupt" data-i18n="settings_board_notify_interrupt">Interrupt immediately</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Applies only to orchestration conductors. Queue keeps the latest board update and sends one Enter after output is idle.</div>
+          <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Controls routine progress only. Completion, failure, questions, stalls, and delayed spawn results are always queued and delivered when the conductor's main composer is safe.</div>
           <div class="settings-row">
             <span class="settings-label">Child spawn confirmation</span>
             <select id="spawn-confirm-mode" class="settings-select">
