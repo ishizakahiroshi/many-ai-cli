@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseRelayProviderModel(t *testing.T) {
@@ -192,5 +193,41 @@ func TestRunRelayStatusAndStop(t *testing.T) {
 	want := []string{"GET /api/sessions/9/relay", "POST /api/sessions/9/relay-stop"}
 	if len(methods) != len(want) || methods[0] != want[0] || methods[1] != want[1] {
 		t.Fatalf("requests = %v, want %v", methods, want)
+	}
+}
+
+func TestPostChildAPISpawnTimeoutPendingMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a long wait that exceeds client timeout.
+		select {
+		case <-r.Context().Done():
+		case <-time.After(500 * time.Millisecond):
+		}
+	}))
+	defer server.Close()
+
+	port := server.Listener.Addr().String()
+	port = port[strings.LastIndex(port, ":")+1:]
+	t.Setenv(hubPortEnv, port)
+	t.Setenv(sessionIDEnv, "9")
+	t.Setenv(hubTokenEnv, "spawn-secret")
+	t.Setenv(spawnTimeoutEnv, "50ms")
+
+	err := runSpawn([]string{
+		"--role", "implementation",
+		"prompt text",
+	})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "spawn confirmation pending in Hub") {
+		t.Errorf("error message missing pending notice: %s", msg)
+	}
+	if !strings.Contains(msg, "DO NOT retry spawn") {
+		t.Errorf("error message missing DO NOT retry directive: %s", msg)
+	}
+	if !strings.Contains(msg, "delivered via orchestration notification") {
+		t.Errorf("error message missing notification delivery guidance: %s", msg)
 	}
 }

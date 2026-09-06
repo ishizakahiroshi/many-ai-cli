@@ -26,10 +26,13 @@ import (
 // child セッションの実 CLI プロセスにだけ設定する env（internal/wrapper/wrapper.go 参照）。
 // AI はこれらを直接読み書きする必要はなく、本コマンドが内部で消費する。
 const (
-	hubPortEnv   = "MANY_AI_CLI_HUB_PORT"
-	sessionIDEnv = "MANY_AI_CLI_SESSION_ID"
-	hubTokenEnv  = "MANY_AI_CLI_HUB_TOKEN"
+	hubPortEnv      = "MANY_AI_CLI_HUB_PORT"
+	sessionIDEnv    = "MANY_AI_CLI_SESSION_ID"
+	hubTokenEnv     = "MANY_AI_CLI_HUB_TOKEN"
+	spawnTimeoutEnv = "MANY_AI_CLI_SPAWN_TIMEOUT"
 )
+
+const defaultSpawnClientTimeout = 5 * time.Minute
 
 // Run は "many-ai-cli orchestrate <subcommand>" のエントリポイント。
 func Run(args []string) error {
@@ -439,6 +442,15 @@ func getChildAPI(url, token string) (*childAPIResponse, error) {
 // postChildAPI は orchestration API への JSON POST 共通部。
 // token は Authorization: Bearer ヘッダのみで渡し、argv / URL には一切乗せない
 // （usage-relay と同じ、procfs/ps 経由の漏洩を避けるパターン）。
+func spawnClientTimeout() time.Duration {
+	if raw := strings.TrimSpace(os.Getenv(spawnTimeoutEnv)); raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+			return d
+		}
+	}
+	return defaultSpawnClientTimeout
+}
+
 func postChildAPI(url, token string, body any) (*childAPIResponse, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -456,12 +468,13 @@ func postChildAPI(url, token string, body any) (*childAPIResponse, error) {
 	// it survives this process being killed by its own tool-call timeout.
 	// This client-side timeout only bounds how long *this* command waits; it
 	// does not cancel the confirmation itself, so its wording must not read
-	// as a refusal.
-	client := &http.Client{Timeout: 3 * time.Minute}
+	// as a refusal or prompt a duplicate spawn request.
+	timeout := spawnClientTimeout()
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return nil, fmt.Errorf("hub still holds the spawn confirmation pending (waited %s locally): open the parent session in the browser to decide it, then retry or use `orchestrate send`: %w", client.Timeout, err)
+			return nil, fmt.Errorf("spawn confirmation pending in Hub (waited %s locally): user has not yet decided in browser. DO NOT retry spawn (duplicate request will be rejected). The child will start once approved, and its session ID will be delivered via orchestration notification. Once running, instruct it via `orchestrate send`: %w", client.Timeout, err)
 		}
 		return nil, fmt.Errorf("http post: %w", err)
 	}

@@ -309,6 +309,17 @@ Release artifacts are published at
   the vendor CLI finishes or prints a sign-in success line
   (`internal/hub/subscription_login.go`, `internal/subscription/login_complete.go`).
 
+- **Waiting for child spawn approval in the browser no longer leads AI conductors into duplicate spawn loops.**
+  When a child session's spawn confirmation was left waiting in the browser past
+  the local CLI timeout, `many-ai-cli orchestrate spawn` exited with an error
+  suggesting "then retry", leading parent agents to re-submit the request and
+  encounter HTTP 409 Conflict after the child was launched. The default
+  client-side wait is extended from 3 to 5 minutes (overridable via
+  `MANY_AI_CLI_SPAWN_TIMEOUT`), and timeout errors now explicitly instruct the
+  caller not to retry, explaining that the child will start upon approval and
+  deliver its session ID via orchestration notification
+  (`internal/orchestrate/orchestrate.go`, `internal/orchestrate/orchestrate_test.go`).
+
 ## [0.7.0] - 2026-08-15
 
 ### Added
