@@ -117,6 +117,13 @@ Release artifacts are published at
   provider has two or more, so two sessions can run on two accounts at the
   same time. This is not an API key router: it spreads sessions across plans
   you already pay for.
+- **Role-based orchestration and relay spawns can pick a subscription, not
+  just a provider.** The orchestration launch panel's role table and the
+  relay dialog's role table each gain a Subscription selector next to CLI and
+  Model, shown only when the chosen provider has two or more registered
+  profiles. Hub-side, `orchestrationRoleAssignment` now carries an optional
+  `subscription` and `resolveChildSubscription` resolves it ahead of the
+  parent-provider and global-default fallbacks that already existed.
 
   Stacking extra plans works for Claude Code (`CLAUDE_CONFIG_DIR`), Codex
   (`CODEX_HOME`), Grok (`GROK_HOME`), and opencode (`XDG_DATA_HOME`). GitHub

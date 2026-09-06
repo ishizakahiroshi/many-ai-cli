@@ -80,18 +80,82 @@ func TestResolveChildSubscriptionInheritsParentThenSavedDefault(t *testing.T) {
 		"subscription_codex":  "codex-personal",
 	}
 
-	if got := s.resolveChildSubscription(parent, "claude"); got != "claude-work" {
+	if got := s.resolveChildSubscription(parent, "claude", "review"); got != "claude-work" {
 		t.Fatalf("同じ provider なら親の profile を引き継ぐはず: got %q", got)
 	}
-	if got := s.resolveChildSubscription(parent, "codex"); got != "codex-personal" {
+	if got := s.resolveChildSubscription(parent, "codex", "review"); got != "codex-personal" {
 		t.Fatalf("別 provider ではパネルの記憶を使うはず: got %q", got)
 	}
-	if got := s.resolveChildSubscription(parent, "grok"); got != "" {
+	if got := s.resolveChildSubscription(parent, "grok", "review"); got != "" {
 		t.Fatalf("記憶が無い provider は空（CLI 既定ログイン）のはず: got %q", got)
 	}
 	// 親が profile を持たないときは、同じ provider でもパネルの記憶へ落ちる。
-	if got := s.resolveChildSubscription(&session{Provider: "claude"}, "claude"); got != "claude-personal" {
+	if got := s.resolveChildSubscription(&session{Provider: "claude"}, "claude", "review"); got != "claude-personal" {
 		t.Fatalf("親に profile が無いときの解決が違う: got %q", got)
+	}
+}
+
+func TestResolveChildSubscriptionRoleAssignmentWins(t *testing.T) {
+	s := newTestServer()
+	parent := &session{
+		Provider:              "claude",
+		SubscriptionProfileID: "claude-parent",
+		OrchestrationID:       "o1",
+	}
+	s.cfg.UserPrefs.Spawn.Defaults = map[string]string{
+		"subscription_claude": "claude-default",
+	}
+	s.orchestration.roles = map[string]map[string]orchestrationRoleAssignment{
+		"o1": {
+			"review": {Provider: "claude", Subscription: "claude-review"},
+		},
+	}
+
+	if got := s.resolveChildSubscription(parent, "claude", "review"); got != "claude-review" {
+		t.Fatalf("role assignment の profile が最優先になるはず: got %q", got)
+	}
+}
+
+func TestResolveChildSubscriptionEmptyRoleAssignmentFallsBack(t *testing.T) {
+	s := newTestServer()
+	s.cfg.UserPrefs.Spawn.Defaults = map[string]string{
+		"subscription_claude": "claude-default",
+	}
+	s.orchestration.roles = map[string]map[string]orchestrationRoleAssignment{
+		"o1": {
+			"review": {Provider: "claude", Subscription: "  "},
+		},
+	}
+
+	parent := &session{
+		Provider:              "claude",
+		SubscriptionProfileID: "claude-parent",
+		OrchestrationID:       "o1",
+	}
+	if got := s.resolveChildSubscription(parent, "claude", "review"); got != "claude-parent" {
+		t.Fatalf("空のrole profileでは親を引き継ぐはず: got %q", got)
+	}
+	if got := s.resolveChildSubscription(&session{Provider: "claude", OrchestrationID: "o1"}, "claude", "review"); got != "claude-default" {
+		t.Fatalf("親profileが無いときは既定へ落ちるはず: got %q", got)
+	}
+}
+
+func TestResolveChildSubscriptionMissingRoleMapFallsBack(t *testing.T) {
+	s := newTestServer()
+	s.cfg.UserPrefs.Spawn.Defaults = map[string]string{
+		"subscription_claude": "claude-default",
+	}
+
+	if got := s.resolveChildSubscription(nil, "claude", "review"); got != "claude-default" {
+		t.Fatalf("親がnilでも既定へ落ちるはず: got %q", got)
+	}
+	parent := &session{
+		Provider:              "claude",
+		SubscriptionProfileID: "claude-parent",
+		OrchestrationID:       "missing",
+	}
+	if got := s.resolveChildSubscription(parent, "claude", "review"); got != "claude-parent" {
+		t.Fatalf("role mapが無くても親を引き継ぐはず: got %q", got)
 	}
 }
 

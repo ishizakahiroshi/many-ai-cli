@@ -92,6 +92,10 @@ type orchestrationManager struct {
 type orchestrationRoleAssignment struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
+	// Subscription は、この role に割り当てる子セッションのサブスクリプション
+	// profile ID（"auto" も可）。空文字は「role 別の指定なし」を意味し、
+	// resolveChildSubscription が親継承・グローバル既定へフォールバックする。
+	Subscription string `json:"subscription,omitempty"`
 }
 
 type pendingChild struct {
@@ -827,7 +831,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	// 認証を差し替えているのではない。検査を緩めずに意図を通すため、代入を作らない。
 	subscriptionID := strings.TrimSpace(body.SubscriptionProfileID)
 	if subscriptionID == "" {
-		subscriptionID = s.resolveChildSubscription(parent, body.Provider)
+		subscriptionID = s.resolveChildSubscription(parent, body.Provider, body.Role)
 	}
 	childID, err := s.spawnWrappedSession(spawnWrappedSpec{
 		Provider:              body.Provider,
@@ -2905,13 +2909,21 @@ func (s *Server) rememberRoleProvider(role, provider string) {
 //
 // 以前は AI 経由の spawn で常に空になり、複数契約を使い分けている利用者でも子は必ず
 // 「CLI 既定のログイン」で動いていた（`orchestrate spawn` に指定手段が無いため）。
-// 親と同じ provider なら親の profile をそのまま引き継ぎ、違う provider なら新規セッション
-// パネルがその provider 用に覚えている値（`subscription_<provider>`）を使う。
-// どちらも無ければ従来どおり空＝CLI 既定のログイン。
+// role 別の profile 指定があればそれを優先し、無ければ親と同じ provider の profile を
+// そのまま引き継ぐ。親の profile も無ければ、新規セッションパネルがその provider 用に
+// 覚えている値（`subscription_<provider>`）を使う。どれも無ければ従来どおり空＝CLI
+// 既定のログイン。
 //
 // 存在しない ID を渡すと子は起動せずエラーになる（spawnChildRequest の doc 参照）ので、
 // 黙って別アカウントへ倒れることはない。
-func (s *Server) resolveChildSubscription(parent *session, provider string) string {
+func (s *Server) resolveChildSubscription(parent *session, provider, role string) string {
+	if parent != nil {
+		if roles := s.orchestrationRolesFor(parent.OrchestrationID); roles != nil {
+			if ra, ok := roles[role]; ok && strings.TrimSpace(ra.Subscription) != "" {
+				return ra.Subscription
+			}
+		}
+	}
 	if parent != nil && parent.Provider == provider && strings.TrimSpace(parent.SubscriptionProfileID) != "" {
 		return parent.SubscriptionProfileID
 	}

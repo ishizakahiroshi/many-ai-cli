@@ -99,6 +99,21 @@ func newRelayHarnessHome(t *testing.T, home string) *relayHarness {
 	return h
 }
 
+func TestRelaySpawnPassesSubscriptionProfile(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	run := h.run(st.OrchestrationID)
+	assignment := run.roles[relayRoleImplementation]
+	assignment.Subscription = "work"
+	run.roles[relayRoleImplementation] = assignment
+	if err := h.s.relaySpawn(run, relayRoleImplementation, "prompt"); err != nil {
+		t.Fatalf("relaySpawn: %v", err)
+	}
+	if len(h.spawns) < 2 || h.spawns[len(h.spawns)-1].SubscriptionProfileID != "work" {
+		t.Fatalf("spawn subscription = %+v", h.spawns)
+	}
+}
+
 func (h *relayHarness) fakeSpawn(parentID int, parent *session, body spawnChildRequest, prep childSpawnPreparation) (childSpawnResult, error) {
 	if h.spawnErr != nil {
 		return childSpawnResult{}, h.spawnErr

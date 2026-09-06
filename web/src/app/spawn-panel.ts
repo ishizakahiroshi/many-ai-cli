@@ -206,8 +206,14 @@ export function resetSpawnProviderOrder(): void {
     return spawnSubscriptionSelect.value || '';
   }
 
-  onSubscriptionsChanged(() => refreshSubscriptionSelector());
-  void loadSubscriptions().then(() => refreshSubscriptionSelector());
+  onSubscriptionsChanged(() => {
+    refreshSubscriptionSelector();
+    syncAllRoleSubscriptionOptions();
+  });
+  void loadSubscriptions().then(() => {
+    refreshSubscriptionSelector();
+    syncAllRoleSubscriptionOptions();
+  });
 
   // ---- C1: オーケストレーション（plan_orchestration-spawn-ui-exposure.md） ----
   // 「オーケストレーション」ボタンから開いたときだけ true。同じ起動フォームを共用し、
@@ -229,17 +235,55 @@ export function resetSpawnProviderOrder(): void {
     });
   }
 
-  // role → {provider, model} | null のマッピングと、実際に設定された件数を返す。
-  function collectOrchestrationRoles(): { roles: Record<string, { provider: string; model: string } | null>; count: number } {
-    const roles: Record<string, { provider: string; model: string } | null> = {};
+  function syncRoleSubscriptionOptions(tr: Element | null): void {
+    if (!tr) return;
+    const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
+    const subscription = tr.querySelector<HTMLSelectElement>('.spawn-role-subscription');
+    if (!cli || !subscription) return;
+
+    const provider = cli.value;
+    const profiles = provider ? selectableProfiles(provider) : [];
+    const providerChanged = subscription.dataset.provider !== provider;
+    subscription.dataset.provider = provider;
+    if (profiles.length < 2) {
+      subscription.hidden = true;
+      subscription.disabled = true;
+      subscription.innerHTML = '';
+      return;
+    }
+
+    const previous = providerChanged ? '' : subscription.value;
+    const options = [`<option value="">${escapeHtml(t('spawn_subscription_default'))}</option>`];
+    options.push(`<option value="auto">${escapeHtml(t('spawn_subscription_auto'))}</option>`);
+    for (const p of profiles) {
+      const label = p.name ? `${p.name} (${p.id})` : p.id;
+      options.push(`<option value="${escapeHtml(p.id)}">${escapeHtml(label)}</option>`);
+    }
+    subscription.innerHTML = options.join('');
+    if (previous === 'auto' || (previous && profiles.some((p) => p.id === previous))) {
+      subscription.value = previous;
+    }
+    subscription.hidden = false;
+    subscription.disabled = false;
+  }
+
+  function syncAllRoleSubscriptionOptions(): void {
+    spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => syncRoleSubscriptionOptions(tr));
+  }
+
+  // role → {provider, model, subscription} | null のマッピングと、実際に設定された件数を返す。
+  function collectOrchestrationRoles(): { roles: Record<string, { provider: string; model: string; subscription: string } | null>; count: number } {
+    const roles: Record<string, { provider: string; model: string; subscription: string } | null> = {};
     let count = 0;
     spawnRoleTableBody?.querySelectorAll('tr').forEach(tr => {
       const role = (tr as HTMLElement).dataset.role;
       const cli = tr.querySelector<HTMLSelectElement>('.spawn-role-cli');
       const model = tr.querySelector<HTMLInputElement>('.spawn-role-model');
+      const subscriptionSelect = tr.querySelector<HTMLSelectElement>('.spawn-role-subscription');
       if (!role || !cli) return;
       if (!cli.value) { roles[role] = null; return; }
-      roles[role] = { provider: cli.value, model: (model?.value || '').trim() };
+      const subscription = (subscriptionSelect && !subscriptionSelect.hidden) ? subscriptionSelect.value : '';
+      roles[role] = { provider: cli.value, model: (model?.value || '').trim(), subscription };
       count++;
     });
     return { roles, count };
@@ -264,16 +308,22 @@ export function resetSpawnProviderOrder(): void {
         `<td>${escapeHtml(t(r.labelKey))}</td>` +
         `<td><select class="spawn-role-cli">${cliOptions}</select></td>` +
         `<td><input type="text" class="spawn-role-model" data-i18n-placeholder="spawn_role_model_placeholder" placeholder="${escapeHtml(t('spawn_role_model_placeholder'))}" disabled></td>` +
+        `<td><select class="spawn-role-subscription" hidden disabled></select></td>` +
         `</tr>`
       );
     }).join('');
     spawnRoleTableBody.querySelectorAll('.spawn-role-cli').forEach(sel => {
-      sel.addEventListener('change', () => { syncRoleModelDisabledState(); updateOrchestrationSummary(); });
+      sel.addEventListener('change', () => {
+        syncRoleModelDisabledState();
+        syncRoleSubscriptionOptions(sel.closest('tr'));
+        updateOrchestrationSummary();
+      });
     });
     spawnRoleTableBody.querySelectorAll('.spawn-role-model').forEach(inp => {
       inp.addEventListener('input', updateOrchestrationSummary);
     });
     syncRoleModelDisabledState();
+    syncAllRoleSubscriptionOptions();
     updateOrchestrationSummary();
   }
 

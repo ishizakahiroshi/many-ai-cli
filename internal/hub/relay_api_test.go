@@ -281,6 +281,27 @@ func TestHandleRelayStartUsesRoleMappingAndReportsNotGit(t *testing.T) {
 	}
 }
 
+func TestRelayRolesForStartMergesSubscriptionOverrides(t *testing.T) {
+	s := newTestServer()
+	s.orchestration.roles["mapped"] = map[string]orchestrationRoleAssignment{
+		relayRoleImplementation: {Provider: "codex", Model: "gpt-5", Subscription: "default"},
+	}
+
+	roles := s.relayRolesForStart(0, "mapped", map[string]*orchestrationRoleAssignment{
+		relayRoleImplementation: {Subscription: "work"},
+	})
+	if got := roles[relayRoleImplementation]; got.Subscription != "work" || got.Provider != "codex" || got.Model != "gpt-5" {
+		t.Fatalf("subscription override merged incorrectly: %+v", got)
+	}
+
+	roles = s.relayRolesForStart(0, "mapped", map[string]*orchestrationRoleAssignment{
+		relayRoleImplementation: {Provider: "claude"},
+	})
+	if got := roles[relayRoleImplementation]; got.Subscription != "default" || got.Provider != "claude" {
+		t.Fatalf("existing subscription was not preserved: %+v", got)
+	}
+}
+
 func TestRelayFinishPublishesRelayDoneSummary(t *testing.T) {
 	h := newRelayHarness(t)
 	var got proto.DoneSummary

@@ -328,6 +328,9 @@ func (s *Server) relayRolesForStart(parentID int, orchestrationID string, suppli
 		if strings.TrimSpace(assignment.Model) != "" {
 			current.Model = assignment.Model
 		}
+		if strings.TrimSpace(assignment.Subscription) != "" {
+			current.Subscription = assignment.Subscription
+		}
 		roles[role] = current
 	}
 	return roles

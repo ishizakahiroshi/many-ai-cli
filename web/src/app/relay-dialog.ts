@@ -3,10 +3,11 @@ import type { SessionSnapshot } from '../types/proto.js';
 import { sessions } from './state.js';
 import { showToast, token } from './util.js';
 import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 
 type RelayMode = 'worktree' | 'same-tree';
 type RelayRoleKey = 'implementation' | 'implementation-strong' | 'review';
-type RelayRoleValue = { provider: string; model: string };
+type RelayRoleValue = { provider: string; model: string; subscription?: string };
 
 interface RelayDialogPrefs {
   roles?: Partial<Record<RelayRoleKey, RelayRoleValue>>;
@@ -88,7 +89,8 @@ function savePrefs(): void {
     const key = row.dataset.role as RelayRoleKey | undefined;
     const provider = row.querySelector<HTMLSelectElement>('.relay-role-cli')?.value || '';
     const model = row.querySelector<HTMLInputElement>('.relay-role-model')?.value.trim() || '';
-    if (key && provider) roles[key] = { provider, model };
+    const subscription = row.querySelector<HTMLSelectElement>('.relay-role-subscription');
+    if (key && provider) roles[key] = { provider, model, subscription: subscription && !subscription.hidden ? subscription.value : '' };
   });
   const prefs: RelayDialogPrefs = {
     roles,
@@ -151,7 +153,31 @@ function buildRoleTable(prefs: RelayDialogPrefs): void {
     model.addEventListener('input', updateFormState);
     cliCell.appendChild(cli);
     modelCell.appendChild(model);
-    row.append(labelCell, cliCell, modelCell);
+    const subscriptionCell = document.createElement('td');
+    const subscription = document.createElement('select');
+    subscription.className = 'relay-role-subscription';
+    const refreshSubscription = (): void => {
+      const profiles = selectableProfiles(cli.value);
+      subscription.replaceChildren();
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = translated('spawn_subscription_default', 'Default');
+      subscription.appendChild(defaultOption);
+      profiles.forEach((profile) => {
+        const option = document.createElement('option');
+        option.value = profile.id;
+        option.textContent = profile.name ? `${profile.name} (${profile.id})` : profile.id;
+        subscription.appendChild(option);
+      });
+      subscription.hidden = profiles.length < 2;
+      const saved = prefs.roles?.[definition.key]?.subscription || '';
+      if (saved && Array.from(subscription.options).some((option) => option.value === saved)) subscription.value = saved;
+    };
+    refreshSubscription();
+    subscription.setAttribute('aria-label', `${labelCell.textContent || definition.key} subscription`);
+    cli.addEventListener('change', () => { refreshSubscription(); });
+    subscriptionCell.appendChild(subscription);
+    row.append(labelCell, cliCell, modelCell, subscriptionCell);
     roleTableBody.appendChild(row);
   });
 }
@@ -162,6 +188,7 @@ function selectedRole(key: RelayRoleKey): RelayRoleValue {
   return {
     provider: row?.querySelector<HTMLSelectElement>('.relay-role-cli')?.value || '',
     model: row?.querySelector<HTMLInputElement>('.relay-role-model')?.value.trim() || '',
+    subscription: (() => { const select = row?.querySelector<HTMLSelectElement>('.relay-role-subscription'); return select && !select.hidden ? select.value : ''; })(),
   };
 }
 
@@ -468,3 +495,9 @@ export function openRelayDialog(sessionID: number): void {
 }
 
 setupListeners();
+onSubscriptionsChanged(() => {
+  if (currentSessionID !== null) buildRoleTable(readPrefs());
+});
+void loadSubscriptions().then(() => {
+  if (currentSessionID !== null) buildRoleTable(readPrefs());
+});
