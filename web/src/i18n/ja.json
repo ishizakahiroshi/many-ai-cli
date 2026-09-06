@@ -596,6 +596,7 @@
   "spawn_role_table_role": "役割",
   "spawn_role_table_cli": "CLI",
   "spawn_role_table_model": "モデル",
+  "spawn_role_table_subscription": "サブスクリプション",
   "spawn_role_implementation": "実装役",
   "spawn_role_implementation_strong": "強い実装役",
   "spawn_role_test": "テスト役",

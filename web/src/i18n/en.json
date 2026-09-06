@@ -596,6 +596,7 @@
   "spawn_role_table_role": "Role",
   "spawn_role_table_cli": "CLI",
   "spawn_role_table_model": "Model",
+  "spawn_role_table_subscription": "Subscription",
   "spawn_role_implementation": "Implementation",
   "spawn_role_implementation_strong": "Strong implementation",
   "spawn_role_test": "Test",

@@ -40,8 +40,33 @@ Release artifacts are published at
 - The startup banner and the remote access settings panel now point out when
   `allowed_hosts` / `trusted_networks` are configured without a remote PIN.
   The PIN itself remains optional.
+- The custom notify-sound upload now rejects the file whenever the sniffed
+  content type is not `audio/*`, even if the client's `Content-Type` header
+  claims otherwise. The previous fallback that trusted the header when
+  sniffing failed reopened the polyglot-container path the sniff check was
+  meant to close.
+- Avatar uploads are now sniffed and restricted to PNG/JPEG/GIF/WebP; any
+  other binary, including SVG (script-embedding risk), is rejected with
+  HTTP 415. Previously the upload endpoint stored whatever bytes were sent
+  with no content-type check.
+- The local avatar is now served from `/api/avatar` without the Hub token in
+  the URL query string; the endpoint already required the existing
+  token/cookie guard, so the change only stops the token from leaking into
+  browser history, referrers, and logs via `/api/info` and the settings UI.
+- Add `orchestration.child_full_bypass` (default `true`, matching prior
+  behavior) so orchestration children can opt out of the automatic
+  bypass-permissions / `RiskConfirmed` defaults applied on spawn.
 
 ### Added
+- **Orchestration children now wake their conductor only for actionable
+  events.** Routine progress defaults to a dashboard badge and no longer fans
+  out to sibling children. Completion, startup failure, timeout/idle warnings,
+  delayed spawn results, and the new `## QUESTION <role> session=<id>` marker
+  use an overwrite-free bounded FIFO, wait through approvals, active work,
+  modals, and Codex side threads, then deliver to the conductor's main
+  composer. Queue overflow keeps the full event on the board and delivers a
+  board reference instead of silently dropping it.
+
 - **The AI usage panel now has a close button.** The panel opened from the header
   Usage button could only be dismissed by clicking outside it or pressing Escape.
   It now carries a ✕ in its header, and the header sticks to the top so the
