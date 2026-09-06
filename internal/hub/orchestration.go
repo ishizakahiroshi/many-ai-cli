@@ -852,7 +852,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	s.registerBoardChild(prep.orchestrationID, prep.boardPath, childID, parentID, body.Role, spawnedAt)
 	s.setChildRestartData(prep.orchestrationID, childID, spawnWrappedSpec{
 		Provider: body.Provider, CWD: prep.childCWD, Model: body.Model, ModelSelection: body.ModelSelection,
-		RiskConfirmed: true, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
+		RiskConfirmed: body.RiskConfirmed, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
 		AskForApproval: body.AskForApproval, Route: body.Route,
 		SubscriptionProfileID: subscriptionID,
 	}, body.InitialPrompt, prep.branch, 0)
@@ -903,7 +903,7 @@ func (s *Server) performSpawn(parentID int, requestedProvider, providerChangeNot
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
 	}
 	cfg := s.snapshotCfg().Orchestration
-	applyChildApprovalDefaults(&body)
+	applyChildApprovalDefaults(&body, cfg.ChildFullBypassEnabled())
 	if parent.Depth >= cfg.MaxDepth {
 		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max orchestration depth reached"}
@@ -1046,14 +1046,17 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 }
 
 // applyChildApprovalDefaults は orchestration 子セッションの承認モード既定値を埋める。
-// 子は自走が前提のため、呼び出し側（conductor）が指定しない場合はプロバイダごとの
-// 全許可（承認バイパス相当）を既定にする。子の承認プロンプトを人間が張り付いて
-// 処理する運用は自走目的と矛盾するため。危険操作の抑制は承認ではなく worktree 隔離と
-// board の禁止事項で行う。承認バイパスは spawn リスクゲート（evaluateClaudeRisk /
-// evaluateCodexRisk）で HighRisk 扱いになるが、人間の同意はオーケストレーション開始時に
-// 済んでいるため子 spawn では確認済みとして扱う
+// fullBypass が true（既定）のとき、呼び出し側が指定しない場合はプロバイダごとの
+// 全許可（承認バイパス相当）と RiskConfirmed=true を埋める。子は自走が前提で、
+// 承認プロンプトを人間が張り付いて処理する運用は自走目的と矛盾するため。危険操作の
+// 抑制は承認ではなく worktree 隔離と board の禁止事項で行う
 // （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
-func applyChildApprovalDefaults(body *spawnChildRequest) {
+// fullBypass が false（orchestration.child_full_bypass: false）のときは既定を埋めず、
+// 呼び出し側の明示値のみを使う（高リスク権限の自動確認を避ける安全側パス）。
+func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
+	if !fullBypass {
+		return
+	}
 	switch body.Provider {
 	case "shell":
 		return

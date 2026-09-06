@@ -94,7 +94,7 @@ Gemini CLI は意図的に対象外です。
 
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
 
-既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、即時 Enter 付き inject で通知されるため、進行中の指揮者ターンを割り込みで中断する可能性があります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
+既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 true）。高リスク権限の自動確認を避けたい場合は `false` にしてください。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
 
 ### Orchestration relay loop
 

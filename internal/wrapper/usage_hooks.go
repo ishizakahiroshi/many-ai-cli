@@ -170,8 +170,8 @@ type ClaudeSettingsOptions struct {
 	// Claude Code v2.1.224+ の cross-session messaging は、受信側が
 	// bypassPermissions クラスのとき既定で全メッセージを承認待ちに hold し、
 	// PTY 上に承認ダイアログを出す（送信側も bypass の場合のみ素通し）。
-	// orchestration の子は applyChildApprovalDefaults により必ず
-	// bypassPermissions で起動する。人間が張り付かない自走前提なので、
+	// orchestration の子は applyChildApprovalDefaults（child_full_bypass 既定 true）
+	// により bypassPermissions で起動する。人間が張り付かない自走前提なので、
 	// hold されるとダイアログが dialogExpiry（既定 5 分）まで放置され、
 	// board にも何も残らないまま停止する。accept を明示してこれを避ける。
 	// 公式: https://code.claude.com/docs/en/cross-session-messaging
