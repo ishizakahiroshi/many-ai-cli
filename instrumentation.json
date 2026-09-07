@@ -147,11 +147,10 @@
     },
     {
       "id": "mobile-lite-empty",
-      "status": "active",
+      "status": "removed",
       "purpose": "スマホ幅でチャットビュー（mobile-terminal-lite）が空のまま表示される症状で、モバイル判定・xterm バッファ・scanBuffer の行数・DOM 寸法のどこで 0 になるかを実機から観測する",
       "addedIn": "unreleased",
       "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?mtldebug=1",
-      "due": "2026-09-07",
       "files": [
         "internal/hub/debug_mobile_view.go",
         "web/src/debug/mobile-view.ts"
@@ -169,7 +168,9 @@
       "artifactNeedles": [
         "/api/debug/mobile-view",
         "debug mobile view sample"
-      ]
+      ],
+      "removedIn": "unreleased",
+      "removedOn": "2026-09-07"
     },
     {
       "id": "terminal-grid-divergence",
