@@ -12,4 +12,3 @@
 // 対応する module ファイルを削除する。
 
 import './approval-identity.js';
-import './terminal-geometry.js';

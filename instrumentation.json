@@ -174,11 +174,10 @@
     },
     {
       "id": "terminal-grid-divergence",
-      "status": "active",
+      "status": "removed",
       "purpose": "承認ポップアップ表示中にスクロールすると画面が重なって描かれ、直前の内容が読めなくなる症状で、xterm の格子（cols/rows）が PTY へ通知した寸法から外れる瞬間を特定する。fit・sendResize の結果（sent/dedup/ws-closed）・Hub からの pty_resize 反映・PgUp 送信・レビューのターン完了カードの出し入れの 5 点と、2 秒ごとの突き合わせサンプルを残す",
       "addedIn": "unreleased",
       "gate": "opt-in: ビルドは MAI_DEBUG=1 / -tags maidebug、runtime は URL クエリ ?geodebug=1",
-      "due": "2026-09-07",
       "files": [
         "internal/hub/debug_terminal_geometry.go",
         "web/src/debug/terminal-geometry.ts"
@@ -203,7 +202,9 @@
       "artifactNeedles": [
         "/api/debug/terminal-geometry",
         "debug terminal geometry"
-      ]
+      ],
+      "removedIn": "unreleased",
+      "removedOn": "2026-09-07"
     },
     {
       "id": "approval-identity-debug-panel",
