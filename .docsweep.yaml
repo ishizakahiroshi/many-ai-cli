@@ -2,3 +2,12 @@
 # ルート archive/ は使わない（誤って git 管理に載るのを防ぐ）。
 # 過去のリリース系 archive も v0.4.x / v0.6.x / v0.7.x と `.x` 付きで揃えてある。
 archive_dir: docs/local/archive/v0.8.x
+
+# plan を作った瞬間に「利用者に見える C は CHANGELOG 行を完了条件に含める」を本文へ出す
+# （2026-09-07 制定。plan に C を後から足したとき CHANGELOG が完了条件から抜け、commit 直前に気づいた）。
+template_sections:
+  plan:
+    - heading: 利用者向け文書（CHANGELOG / README）
+      body: |
+        <TODO: 利用者に見える変更を含む C を列挙し、各 C の完了条件に CHANGELOG Unreleased の 1 行（必要なら README / 設計書）を入れる。無ければ「該当なし」と理由を 1 行>
+

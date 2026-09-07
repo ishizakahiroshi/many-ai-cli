@@ -35,6 +35,7 @@
     "  10. 観測コードに付随するテストファイルも files に書く。_test.go を検査対象外にすることと、台帳へ登録しないことは別である",
     "  11. 観測コードの撤去は単独コミットにする。restore は撤去コミットの逆 diff を path 限定で適用する",
     "  12. 再導入は node scripts/debug-restore.mjs --id=<id> --dry-run で対象を確認してから行い、--purge は sharedFiles に触れず sink だけを片付ける",
+    "  13. --purge は --id=<id> で 1 件ずつ（ルール 11 の単独コミットのため）。--id 無しは止まる。active 全件を消すときだけ --all を明示する（2026-09-07 追加。撤去前に手元ログの記録件数を数えておく）",
     "検査: node scripts/check-instrumentation.mjs（release の前提チェックから呼ぶ）"
   ],
   "entries": [

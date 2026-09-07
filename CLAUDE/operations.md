@@ -23,6 +23,10 @@
   - `docs: 設計書 v2 を追加し v1 を archive へ移動`
 - **AI作成の場合：** 末尾に `Co-Authored-By: Claude <model> <noreply@anthropic.com>` を付与
 
+## push 前の検査（2026-09-07 制定）
+
+正本は `.githooks/pre-push`（`core.hooksPath = .githooks` で有効。第三者 clone 時は `scripts/install-hooks.sh` / `.ps1`）。push のたびに `node scripts/check-instrumentation.mjs` を、push 範囲に `.go` があるときだけ staticcheck（`.github/workflows/validate.yml` と同じ固定タグ）を回す。CI の Validate で先に赤になる 2 種（未使用関数の U1000・観測コード台帳の due 当日）をローカルで止めるため。検査自体が壊れているときだけ `MANY_AI_CLI_SKIP_PREPUSH=1` で飛ばす（CI 側は飛ばない）。
+
 ## セキュリティ
 
 設計書 §8（ローカルサーバの設計上の配慮）と §21-5（ローカルサーバが立つことの透明性）に準拠：

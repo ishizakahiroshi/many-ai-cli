@@ -1,0 +1,79 @@
+#!/usr/bin/env sh
+# pre-push — CI の Validate より先に、ローカルで落ちるものを落とす。
+#
+# なぜ要るか:
+#   1. staticcheck の U1000（未使用関数）は go vet / go test では出ない。呼び出し元を
+#      新関数へ移した後に残した薄いラッパーで、2026-09-03（dialAndReattach）と
+#      2026-09-07（providerApprovalRuleTargetsWithCodexHome）の 2 回 CI が赤になった。
+#   2. instrumentation.json の due は UTC の暦日で比較され、due 当日はコードと無関係な
+#      push でも Validate の instrumentation job が赤になる（2026-09-07）。その job は
+#      先頭で止まるので後続の 7 検査も走らない。
+#   文章で「push 前に回す」と書いても vet / test が緑のときには読まれないので hook にする。
+#
+# 何をするか:
+#   - 常に node scripts/check-instrumentation.mjs（数十 ms）
+#   - push 範囲に .go があるときだけ staticcheck（1 分弱。版は validate.yml と同じ固定タグ）
+#   - 削除 push（local sha が全 0）は素通し
+#   pre-commit ではなく pre-push なのは、staticcheck が 1 分弱かかり、docs だけの commit
+#   でも走ると commit の粒度が粗くなるため。
+#
+# 逃げ道: MANY_AI_CLI_SKIP_PREPUSH=1 git push ...
+#   検査自体の不具合（staticcheck の取得失敗等）で push できないときだけ使う。CI 側の
+#   検査は飛ばないので、赤になるものは結局 CI で止まる。
+#
+# 手動実行（git push --dry-run は pre-push を呼ばない）:
+#   printf 'refs/heads/develop <local sha> refs/heads/develop <remote sha>\n' | sh .githooks/pre-push origin <url>
+#
+# 正本: .github/workflows/validate.yml（staticcheck job / instrumentation job）
+# 有効化: core.hooksPath = .githooks（scripts/install-hooks.sh / scripts/install-hooks.ps1）
+
+if [ "${MANY_AI_CLI_SKIP_PREPUSH:-}" = "1" ]; then
+  echo "pre-push: MANY_AI_CLI_SKIP_PREPUSH=1 のため検査を飛ばします（CI では走ります）"
+  exit 0
+fi
+
+zero='0000000000000000000000000000000000000000'
+staticcheck_version='v0.7.0'
+go_changed=0
+
+# 標準入力: <local ref> <local sha> <remote ref> <remote sha> が push する ref ごとに 1 行。
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_sha" ] && continue
+  if [ "$local_sha" = "$zero" ]; then
+    continue
+  fi
+  if [ "$remote_sha" = "$zero" ]; then
+    # 新規 branch: どのリモートにも無いコミットが触ったファイル
+    range_files=$(git log --format='' --name-only "$local_sha" --not --remotes 2>/dev/null) || range_files=''
+    range_ok=$?
+  else
+    range_files=$(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null)
+    range_ok=$?
+  fi
+  if [ "$range_ok" -ne 0 ]; then
+    # 範囲が取れない（remote sha のオブジェクトが手元に無い等）ときは安全側に倒す
+    go_changed=1
+    continue
+  fi
+  if printf '%s\n' "$range_files" | grep -q '\.go$'; then
+    go_changed=1
+  fi
+done
+
+echo "pre-push: node scripts/check-instrumentation.mjs"
+node scripts/check-instrumentation.mjs || {
+  echo "pre-push: 観測コードの台帳検査で止めました。撤去するか due を更新してから push してください"
+  exit 1
+}
+
+if [ "$go_changed" -eq 1 ]; then
+  echo "pre-push: push 範囲に .go があるので staticcheck@$staticcheck_version を実行します（1 分弱）"
+  go run "honnef.co/go/tools/cmd/staticcheck@$staticcheck_version" ./... || {
+    echo "pre-push: staticcheck で止めました。直してから push してください（CI でも同じ検査が走ります）"
+    exit 1
+  }
+else
+  echo "pre-push: push 範囲に .go が無いので staticcheck は飛ばします"
+fi
+
+exit 0

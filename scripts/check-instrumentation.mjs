@@ -87,13 +87,17 @@ function daysUntil(due) {
   return Math.round(ms / 86400000);
 }
 
+// purge は --id=<id> で 1 件ずつが既定。--id 無しの --purge は 2026-09-07 まで active 全件を
+// 消していたが、1 件だけ消すつもりで打てる自然な形なので止める（全件は --all を明示させる）。
+// 台帳ルール 11「撤去は単独コミット」とも整合する（全件消しは単独コミットにできない）。
 function parseArgs() {
   const args = process.argv.slice(2);
   const purge = args.includes('--purge');
+  const all = args.includes('--all');
   const idArgs = args.filter(arg => arg.startsWith('--id='));
-  const unknown = args.filter(arg => arg !== '--purge' && !arg.startsWith('--id='));
+  const unknown = args.filter(arg => arg !== '--purge' && arg !== '--all' && !arg.startsWith('--id='));
   if (unknown.length > 0) {
-    console.error(`使い方: node scripts/check-instrumentation.mjs [--purge [--id=<id>]]`);
+    console.error(`使い方: node scripts/check-instrumentation.mjs [--purge (--id=<id> | --all)]`);
     console.error(`BLOCKED: 未知の引数: ${unknown.join(', ')}`);
     return null;
   }
@@ -108,6 +112,18 @@ function parseArgs() {
   }
   if (id !== null && !purge) {
     console.error('BLOCKED: --id は --purge と一緒に指定してください');
+    return null;
+  }
+  if (all && !purge) {
+    console.error('BLOCKED: --all は --purge と一緒に指定してください');
+    return null;
+  }
+  if (purge && all && id !== null) {
+    console.error('BLOCKED: --id と --all は同時に指定できません');
+    return null;
+  }
+  if (purge && !all && id === null) {
+    console.error('BLOCKED: --purge は --id=<id> で 1 件ずつ撤去する（1 件 1 commit）。active 全件を消すときだけ --all を明示する');
     return null;
   }
   return { purge, id };
@@ -198,6 +214,7 @@ function purge(ledger, requestedId) {
   }
 
   console.log('補足: これはリリース前の必須作業ではありません（成果物への混入は build tag と check-artifact-clean.mjs が防ぎます）。');
+  console.log('確認: 撤去前に手元ログの記録件数を数えたか（hub ログを artifactNeedles で grep）。生きている観測を消すなら、その事実と未再現の理由を commit message に残す。');
   const removedFiles = new Map(selected.map(entry => [entry.id, []]));
   const missingFiles = new Map(selected.map(entry => [entry.id, []]));
   for (const entry of selected) {
