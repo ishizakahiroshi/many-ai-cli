@@ -186,6 +186,13 @@ Release artifacts are published at
   prompts, source fragments, and credentials (`internal/hub/transcript_stall.go`,
   `web/src/app/longproc.ts`).
 
+- **Subscription profiles mirror a linked rule file instead of copying it.**
+  When your default `CLAUDE.md` (or `AGENTS.md` for Codex/Grok) is itself a
+  symlink, the profile now gets a symlink to the same resolved target so
+  editing the original reaches every profile with no re-seed; it falls back
+  to a copy, recorded as degraded, when the link cannot be created
+  (`internal/subscription/seed.go`'s `SeedMirrorFile`).
+
 ### Changed
 - **Close buttons all draw the same glyph.** Some close, dismiss, and clear
   buttons used `×` (U+00D7, the multiplication sign) while others used `✕`
@@ -236,6 +243,16 @@ Release artifacts are published at
   Normal long-running, 1M, and branch metadata no longer use filled warning chips,
   while severe and stalled long-running states keep their danger treatment
   (`web/src/app/session-list.ts`, `web/src/styles.css`).
+
+- **`many-ai-cli doctor` now flags a stale or unlinked rule-file copy.** A
+  profile whose `CLAUDE.md` / `AGENTS.md` stayed a plain copy while the
+  default became a symlink, or whose copy has drifted from the current
+  default, gets a WARN naming the profile and file — never the contents
+  (`internal/doctor/subscriptions.go`'s `subscriptionRuleFileCheck`). The
+  blocks many-ai-cli writes into that file itself — the approval-rules import
+  line and the delegation block — are stripped before the comparison, so a
+  profile the Hub has already written to is not reported as drifted
+  (`internal/wrapper/approval_rules.go`'s `StripInjectedBlocks`).
 
 ### Security
 - **Reading a file outside the allowed roots no longer hands over modern SSH
@@ -319,6 +336,16 @@ Release artifacts are published at
   caller not to retry, explaining that the child will start upon approval and
   deliver its session ID via orchestration notification
   (`internal/orchestrate/orchestrate.go`, `internal/orchestrate/orchestrate_test.go`).
+
+- **The Claude approval-rules import line now lands in the profile's own `CLAUDE.md`.**
+  For a session running under a subscription profile, the line was always
+  written to `~/.claude/CLAUDE.md`, which that session never reads because
+  `CLAUDE_CONFIG_DIR` points at the profile. The target is now resolved from
+  the session's registered config dir, then `CLAUDE_CONFIG_DIR`, then
+  `~/.claude`, and the same target is used when the line is removed at session
+  end or dismiss. A profile whose `CLAUDE.md` is a symlink to the default gets
+  the line once, not once per path
+  (`internal/hub/approval_handler.go`'s `claudeRulesPath`).
 
 ## [0.7.0] - 2026-08-15
 

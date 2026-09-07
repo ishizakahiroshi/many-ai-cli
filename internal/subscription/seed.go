@@ -41,7 +41,10 @@ import (
 //
 // Directories are linked rather than copied so that adding a skill later shows
 // up in every profile without a re-seed; files are copied because the vendor
-// CLI rewrites them and a link would write back into the default profile.
+// CLI rewrites them and a link would write back into the default profile. Rule
+// files (CLAUDE.md, AGENTS.md) are the one exception: the vendor CLI does not
+// rewrite them, so when the user's own default copy is itself a symlink, the
+// profile mirrors it as a symlink too instead of taking a snapshot.
 type SeedKind int
 
 const (
@@ -58,6 +61,13 @@ const (
 	// identity with a few genuine preferences; copying the file whole would
 	// carry the default account's identity into the profile.
 	SeedJSONKeys
+	// SeedMirrorFile mirrors a rule file: if the user's default copy is itself a
+	// symlink, the profile gets a symlink to the same resolved target so both
+	// always read one file; otherwise it is copied like SeedCopyFile. Used only
+	// for rule files (CLAUDE.md, AGENTS.md) that the vendor CLI does not
+	// rewrite — never for settings.json/config.toml, where a link would let a
+	// profile's login write back into the user's default configuration.
+	SeedMirrorFile
 )
 
 // SeedEntry is one thing carried from the user's default configuration into a
@@ -92,10 +102,17 @@ type SeedResult struct {
 	Applied []string
 	// Failed holds the Dest of every entry that could not be carried in.
 	Failed []string
+	// Degraded holds the Dest of every SeedMirrorFile entry that wanted to be a
+	// symlink but had to fall back to a copy (e.g. Windows without Developer
+	// Mode). The entry still counts as Applied; this is only for surfacing why
+	// a profile's rule file will not track later edits to the default.
+	Degraded []string
 }
 
 // Any reports whether the pass did anything worth logging.
-func (r SeedResult) Any() bool { return len(r.Applied) > 0 || len(r.Failed) > 0 }
+func (r SeedResult) Any() bool {
+	return len(r.Applied) > 0 || len(r.Failed) > 0 || len(r.Degraded) > 0
+}
 
 // errNothingToSeed means the source existed but held nothing worth writing.
 // Treated as "skip", not as a failure.
@@ -153,6 +170,7 @@ func SeedProfileDir(provider, profileDir string) SeedResult {
 	for _, entry := range PendingSeedEntries(provider, profileDir) {
 		dest := filepath.Join(profileDir, entry.Dest)
 		var err error
+		var degraded bool
 		switch entry.Kind {
 		case SeedCopyFile:
 			err = copySeedFile(entry.Source, dest)
@@ -160,6 +178,8 @@ func SeedProfileDir(provider, profileDir string) SeedResult {
 			err = linkSeedDir(entry.Source, dest)
 		case SeedJSONKeys:
 			err = writeSeedJSONKeys(entry.Source, dest, entry.Keys)
+		case SeedMirrorFile:
+			degraded, err = mirrorSeedFile(entry.Source, dest)
 		default:
 			continue
 		}
@@ -170,6 +190,9 @@ func SeedProfileDir(provider, profileDir string) SeedResult {
 			result.Failed = append(result.Failed, entry.Dest)
 		default:
 			result.Applied = append(result.Applied, entry.Dest)
+			if degraded {
+				result.Degraded = append(result.Degraded, entry.Dest)
+			}
 		}
 	}
 	return result
@@ -209,6 +232,47 @@ func linkSeedDir(src, dst string) error {
 		return err
 	}
 	return linkDir(src, dst)
+}
+
+// IsLinkedRuleFile reports whether src is a symlink. Exported so `many-ai-cli
+// doctor` can tell a profile's plain copy of a rule file apart from a case
+// where there is nothing to compare (the default itself is a symlink and the
+// profile correctly mirrors it as one).
+func IsLinkedRuleFile(src string) bool {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeSymlink != 0
+}
+
+// symlinkFile is a package variable so tests can force the fallback path
+// without needing an environment that denies real symlinks.
+var symlinkFile = os.Symlink
+
+// mirrorSeedFile carries a rule file into dst. If src is a symlink it makes
+// dst a symlink to the same resolved absolute target, so the default and
+// every profile read one physical file with no re-seed needed after an edit.
+// If src is a regular file, or the symlink cannot be created (Windows without
+// Developer Mode: junctions do not apply to files), it falls back to a plain
+// copy and reports that as degraded.
+func mirrorSeedFile(src, dst string) (degraded bool, err error) {
+	if !IsLinkedRuleFile(src) {
+		return false, copySeedFile(src, dst)
+	}
+	target, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		// A dangling or unreadable link: fall back to the copy path, which will
+		// itself fail informatively via os.Stat/os.ReadFile.
+		return true, copySeedFile(src, dst)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), config.DirMode); err != nil {
+		return false, err
+	}
+	if err := symlinkFile(target, dst); err != nil {
+		return true, copySeedFile(src, dst)
+	}
+	return false, nil
 }
 
 // writeSeedJSONKeys writes dst holding only the named top-level keys of src.

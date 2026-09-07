@@ -117,7 +117,7 @@ func (claudeAdapter) SeedEntries() []SeedEntry {
 	}
 	entries := []SeedEntry{
 		{Source: filepath.Join(dir, "CLAUDE.md"), Dest: "CLAUDE.md",
-			Kind: SeedCopyFile, Label: "共通ルール（CLAUDE.md）"},
+			Kind: SeedMirrorFile, Label: "共通ルール（CLAUDE.md）"},
 		{Source: filepath.Join(dir, "settings.json"), Dest: "settings.json",
 			Kind: SeedCopyFile, Label: "ユーザー設定（settings.json・承認設定 / hooks を含む）"},
 		{Source: filepath.Join(dir, "commands"), Dest: "commands",

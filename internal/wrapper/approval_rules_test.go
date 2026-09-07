@@ -155,6 +155,53 @@ func TestInjectRulesMigratesLegacyNamedBlock(t *testing.T) {
 	}
 }
 
+// StripInjectedBlocks は doctor のハッシュ比較（sha256File）の前段で使われる。
+// 3 種のブロックが揃って入っていても、地の文だけが残ることを確認する（C5）。
+func TestStripInjectedBlocksRemovesAllThreeKinds(t *testing.T) {
+	body := strings.Join([]string{
+		"before",
+		"",
+		sharedBlockStart,
+		"shared block content",
+		sharedBlockEnd,
+		"",
+		legacySharedBlockStart,
+		"legacy block content",
+		legacySharedBlockEnd,
+		"",
+		delegationBlockStart,
+		"delegation block content",
+		delegationBlockEnd,
+		"",
+		"after",
+	}, "\n")
+
+	got := string(StripInjectedBlocks([]byte(body)))
+
+	for _, marker := range []string{
+		sharedBlockStart, sharedBlockEnd,
+		legacySharedBlockStart, legacySharedBlockEnd,
+		delegationBlockStart, delegationBlockEnd,
+		"shared block content", "legacy block content", "delegation block content",
+	} {
+		if strings.Contains(got, marker) {
+			t.Fatalf("StripInjectedBlocks left %q behind:\n%s", marker, got)
+		}
+	}
+	if !strings.Contains(got, "before") || !strings.Contains(got, "after") {
+		t.Fatalf("StripInjectedBlocks removed surrounding content:\n%s", got)
+	}
+}
+
+// ブロックが無い入力は byte 単位でそのまま返る（除去し過ぎない）。
+func TestStripInjectedBlocksReturnsInputUnchangedWhenNoBlocksPresent(t *testing.T) {
+	body := []byte("plain content with no injected blocks\n")
+	got := StripInjectedBlocks(body)
+	if string(got) != string(body) {
+		t.Fatalf("StripInjectedBlocks changed a block-free input:\nwant: %q\ngot:  %q", body, got)
+	}
+}
+
 func TestInjectRulesClaudeImportIsIdempotent(t *testing.T) {
 	withTempHome(t)
 	path := filepath.Join(t.TempDir(), "CLAUDE.md")

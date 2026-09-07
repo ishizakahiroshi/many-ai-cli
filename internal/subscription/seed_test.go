@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -124,6 +125,186 @@ func TestSeedIsAdditiveOnly(t *testing.T) {
 	}
 	if again.Any() {
 		t.Errorf("second pass changed something: applied=%v failed=%v", again.Applied, again.Failed)
+	}
+
+	// A profile that already has a symlink at CLAUDE.md (from a previous
+	// SeedMirrorFile pass, or from the user replacing the copy by hand) must not
+	// be touched either. PendingSeedEntries decides "already present" with
+	// Lstat, which sees the link itself without following it.
+	outsideTarget := filepath.Join(t.TempDir(), "profile-owned-rules.md")
+	writeFile(t, outsideTarget, "# profile owns this\n")
+	linkedProfile := filepath.Join(t.TempDir(), "claude", "linked")
+	if err := os.MkdirAll(linkedProfile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideTarget, filepath.Join(linkedProfile, "CLAUDE.md")); err != nil {
+		t.Skipf("cannot create a symlink in this environment: %v", err)
+	}
+	linkedResult, err := EnsureProfileDir("claude", linkedProfile)
+	if err != nil {
+		t.Fatalf("EnsureProfileDir(linkedProfile): %v", err)
+	}
+	if appliedContains(linkedResult, "CLAUDE.md") {
+		t.Error("an existing CLAUDE.md symlink was overwritten")
+	}
+	resolved, err := filepath.EvalSymlinks(filepath.Join(linkedProfile, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	wantTarget, err := filepath.EvalSymlinks(outsideTarget)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(outsideTarget): %v", err)
+	}
+	if resolved != wantTarget {
+		t.Errorf("CLAUDE.md symlink target = %q, want %q", resolved, wantTarget)
+	}
+}
+
+// When the user's default CLAUDE.md is itself a symlink (e.g. synced from a
+// different real path), the profile must get a symlink to the same resolved
+// target rather than a snapshot copy, so later edits to the default reach the
+// profile with no re-seed.
+func TestSeedLinksRuleFileWhenDefaultIsSymlink(t *testing.T) {
+	home := isolateVendorHome(t)
+	claudeDir := filepath.Join(home, ".claude")
+
+	realTarget := filepath.Join(t.TempDir(), "real-claude-md", "CLAUDE.md")
+	writeFile(t, realTarget, "# the one true rules file\n")
+
+	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	linked := true
+	if err := os.Symlink(realTarget, filepath.Join(claudeDir, "CLAUDE.md")); err != nil {
+		linked = false
+	}
+
+	profile := filepath.Join(t.TempDir(), "claude", "work")
+	result, err := EnsureProfileDir("claude", profile)
+	if err != nil {
+		t.Fatalf("EnsureProfileDir: %v", err)
+	}
+	if !appliedContains(result, "CLAUDE.md") {
+		t.Fatalf("CLAUDE.md was not seeded; applied=%v failed=%v", result.Applied, result.Failed)
+	}
+
+	dest := filepath.Join(profile, "CLAUDE.md")
+	info, err := os.Lstat(dest)
+	if err != nil {
+		t.Fatalf("Lstat(profile CLAUDE.md): %v", err)
+	}
+
+	if !linked {
+		// This environment cannot create file symlinks at all (os.Symlink itself
+		// failed on the default side), so mirrorSeedFile never saw a symlink
+		// source and behaved like a plain copy. Confirm that instead.
+		if info.Mode()&os.ModeSymlink != 0 {
+			t.Fatal("profile CLAUDE.md is a symlink even though this environment could not create one")
+		}
+		body, err := os.ReadFile(dest)
+		if err != nil || string(body) != "# the one true rules file\n" {
+			t.Fatalf("CLAUDE.md copy = %q, %v", body, err)
+		}
+		return
+	}
+
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("profile CLAUDE.md must be a symlink when the default is a symlink")
+	}
+	resolved, err := filepath.EvalSymlinks(dest)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(profile CLAUDE.md): %v", err)
+	}
+	wantTarget, err := filepath.EvalSymlinks(realTarget)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(realTarget): %v", err)
+	}
+	if resolved != wantTarget {
+		t.Errorf("profile CLAUDE.md resolves to %q, want %q", resolved, wantTarget)
+	}
+	body, err := os.ReadFile(dest)
+	if err != nil || string(body) != "# the one true rules file\n" {
+		t.Fatalf("reading through the profile symlink = %q, %v", body, err)
+	}
+	if appliedContains(result, "CLAUDE.md") && slices.Contains(result.Degraded, "CLAUDE.md") {
+		t.Error("a successful symlink must not also be reported as degraded")
+	}
+}
+
+// A plain, non-symlinked default CLAUDE.md must still be copied, unchanged
+// from the behavior before SeedMirrorFile existed.
+func TestSeedCopiesRuleFileWhenDefaultIsRegular(t *testing.T) {
+	home := isolateVendorHome(t)
+	writeFile(t, filepath.Join(home, ".claude", "CLAUDE.md"), "# plain rules\n")
+
+	profile := filepath.Join(t.TempDir(), "claude", "work")
+	result, err := EnsureProfileDir("claude", profile)
+	if err != nil {
+		t.Fatalf("EnsureProfileDir: %v", err)
+	}
+	if !appliedContains(result, "CLAUDE.md") {
+		t.Fatalf("CLAUDE.md was not seeded; applied=%v failed=%v", result.Applied, result.Failed)
+	}
+	if slices.Contains(result.Degraded, "CLAUDE.md") {
+		t.Error("copying a regular file must never be reported as degraded")
+	}
+	dest := filepath.Join(profile, "CLAUDE.md")
+	info, err := os.Lstat(dest)
+	if err != nil {
+		t.Fatalf("Lstat: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("profile CLAUDE.md must be a plain file when the default is a plain file")
+	}
+	body, err := os.ReadFile(dest)
+	if err != nil || string(body) != "# plain rules\n" {
+		t.Fatalf("CLAUDE.md = %q, %v", body, err)
+	}
+}
+
+// When creating the symlink fails (Windows without Developer Mode, or any
+// other environment-specific restriction), mirrorSeedFile must fall back to a
+// plain copy and report the entry as degraded rather than failing outright.
+func TestSeedFallsBackToCopyWhenSymlinkFails(t *testing.T) {
+	home := isolateVendorHome(t)
+	claudeDir := filepath.Join(home, ".claude")
+
+	realTarget := filepath.Join(t.TempDir(), "real-claude-md", "CLAUDE.md")
+	writeFile(t, realTarget, "# the one true rules file\n")
+	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realTarget, filepath.Join(claudeDir, "CLAUDE.md")); err != nil {
+		t.Skipf("cannot create the default-side symlink this test needs: %v", err)
+	}
+
+	original := symlinkFile
+	symlinkFile = func(string, string) error { return errors.New("simulated: no privilege to create a file symlink") }
+	t.Cleanup(func() { symlinkFile = original })
+
+	profile := filepath.Join(t.TempDir(), "claude", "work")
+	result, err := EnsureProfileDir("claude", profile)
+	if err != nil {
+		t.Fatalf("EnsureProfileDir: %v", err)
+	}
+	if !appliedContains(result, "CLAUDE.md") {
+		t.Fatalf("CLAUDE.md was not seeded even via the fallback; applied=%v failed=%v", result.Applied, result.Failed)
+	}
+	if !slices.Contains(result.Degraded, "CLAUDE.md") {
+		t.Errorf("a failed symlink attempt must be reported as degraded; degraded=%v", result.Degraded)
+	}
+
+	dest := filepath.Join(profile, "CLAUDE.md")
+	info, err := os.Lstat(dest)
+	if err != nil {
+		t.Fatalf("Lstat: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("profile CLAUDE.md must be a regular file after the symlink fallback, not a symlink")
+	}
+	body, err := os.ReadFile(dest)
+	if err != nil || string(body) != "# the one true rules file\n" {
+		t.Fatalf("CLAUDE.md copy after fallback = %q, %v", body, err)
 	}
 }
 

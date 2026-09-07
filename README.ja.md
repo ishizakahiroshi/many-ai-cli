@@ -151,6 +151,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 
 - **既にあるものは絶対に上書きしません。** profile 側で変えた値はそのまま残り、足りないものだけが足されます
 - **フォルダはリンク**（Windows では junction）で繋ぐので、あとからスキルを 1 つ足せば全 profile に届きます。ファイルはコピーです（CLI 自身が書き換えるため、リンクにすると profile の編集が既定側へ逆流します）
+- **ただし rule ファイルだけは例外です**: 既定側の `CLAUDE.md`（Codex / Grok は `AGENTS.md`）自体が symlink のときは、profile 側もコピーではなく同じ実体へのリンクにします。既定側を編集すれば再 seed なしで全 profile に届きます。リンクを張れない環境（Windows で開発者モード未設定など）ではコピーへ自動でフォールバックし、`many-ai-cli doctor` が知らせます。profile ごとに rule を変えたい場合はリンクを消して実ファイルに置き換えれば、そのまま上書きされずに残ります
 - **認証ファイルは運びません。** `.credentials.json` や `auth.json` は対象外です。Claude の `.claude.json` はアカウント識別と好みが同居しているため、ファイルごとではなく名指しした 2 キー（ブラウザ操作の既定）だけを移します <!-- secrets-scan: allow .credentials.json -->
 - 書き込み先は `~/.many-ai-cli/subscriptions/` の中だけで、あなたの `~/.claude` / `~/.codex` / `~/.grok` は読むだけです。`many-ai-cli uninstall` で全部消えます
 - あとから既定側を変えた分は自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教えます

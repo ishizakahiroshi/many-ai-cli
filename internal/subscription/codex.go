@@ -95,7 +95,7 @@ func (codexAdapter) SeedEntries() []SeedEntry {
 	}
 	return []SeedEntry{
 		{Source: filepath.Join(dir, "AGENTS.md"), Dest: "AGENTS.md",
-			Kind: SeedCopyFile, Label: "共通ルール（AGENTS.md）"},
+			Kind: SeedMirrorFile, Label: "共通ルール（AGENTS.md）"},
 		{Source: filepath.Join(dir, "config.toml"), Dest: "config.toml",
 			Kind: SeedCopyFile, Label: "設定（config.toml・承認ポリシー / 信頼済みフォルダを含む）"},
 		{Source: filepath.Join(dir, "prompts"), Dest: "prompts",

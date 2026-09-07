@@ -1090,7 +1090,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
-	var endedProvider, endedCWD, endedCodexHome string
+	var endedProvider, endedCWD, endedCodexHome, endedClaudeDir string
 	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
 	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
 		s.stopAgentChatTailLocked(cur)
@@ -1107,6 +1107,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
 		endedCodexHome = cur.CodexHome
+		endedClaudeDir = cur.ClaudeDir
 	}
 	// 旧 wrapper（ack 未対応）では従来どおり未送信の保留入力を捨てる。
 	// ack 対応 wrapper の場合は in-flight と既存 pending を次の reattach へ残す。
@@ -1156,7 +1157,10 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	if s.sessionStore != nil {
 		s.sessionStore.EndSession(id, endState, endReason, time.Now())
 	}
-	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithCodexHome(endedProvider, endedCWD, endedCodexHome))
+	// dismiss 経路（server.go handleDismiss）と同じく profile の claudeDir も渡す。
+	// 渡さなくても knownApprovalTargets 経由で profile 側の宛先は外れるが、候補に
+	// 既定の ~/.claude/CLAUDE.md を混ぜる理由が無い（C6 レビュー、2026-09-07）。
+	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithHomes(endedProvider, endedCWD, endedCodexHome, endedClaudeDir))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	// usage 集計マップから当該セッションのエントリを掃除する。dismiss 経路だけでなく

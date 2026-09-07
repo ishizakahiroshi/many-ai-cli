@@ -388,9 +388,10 @@ func RemoveRules(provider, path string) error {
 		newContent = strings.Join(kept, "\n")
 	case providerUsesSharedBlock(provider):
 		// 旧名 any-ai-cli マーカーのブロックも除去対象（旧バイナリからの移行）。
-		blockRe := regexp.MustCompile(`(?s)\n?(?:` +
-			regexp.QuoteMeta(sharedBlockStart) + `.*?` + regexp.QuoteMeta(sharedBlockEnd) + `|` +
-			regexp.QuoteMeta(legacySharedBlockStart) + `.*?` + regexp.QuoteMeta(legacySharedBlockEnd) + `)\n?`)
+		blockRe := regexp.MustCompile(blockRemovalPattern(
+			[2]string{sharedBlockStart, sharedBlockEnd},
+			[2]string{legacySharedBlockStart, legacySharedBlockEnd},
+		))
 		newContent = blockRe.ReplaceAllString(string(content), "")
 	default:
 		return fmt.Errorf("unknown provider: %s", provider)
@@ -399,4 +400,38 @@ func RemoveRules(provider, path string) error {
 		return nil
 	}
 	return os.WriteFile(path, []byte(newContent), 0o644) // #nosec G703 G306 -- provider 既知の instruction file パスのみ（HTTP 入力なし）。共有ドキュメントのため 0644 が意図
+}
+
+// blockRemovalPattern はブロック除去用の正規表現本体を組み立てる。start/end の
+// 各ペアを alternation で束ね、ブロック前後の改行を 1 個ずつ含めて除くことで、
+// 除去後に空行が積み残らないようにする。RemoveRules（本ファイル）と
+// RemoveDelegation（delegation_inject.go の removeBlock）が個別に組み立てていた
+// のと同じ形の正規表現を、ここへ 1 箇所へまとめる（重複定義防止）。
+func blockRemovalPattern(pairs ...[2]string) string {
+	alts := make([]string, len(pairs))
+	for i, pair := range pairs {
+		alts[i] = regexp.QuoteMeta(pair[0]) + `.*?` + regexp.QuoteMeta(pair[1])
+	}
+	return `(?s)\n?(?:` + strings.Join(alts, "|") + `)\n?`
+}
+
+// StripInjectedBlocks は many-ai-cli 自身が rule ファイルへ注入する 3 種のブロック
+// （共有ブロック・旧名 any-ai-cli ブロック・delegation ブロック）を取り除く。
+//
+// doctor の subscriptionRuleFileCheck（internal/doctor/subscriptions.go の
+// sha256File）がハッシュ比較の前にこれを通す。共有ブロック方式の provider
+// （codex 等）はセッションが動いている間だけ profile 側の AGENTS.md にこれらの
+// ブロックが入り、既定側には入らないため、除かずに比べると常に「内容が違います」
+// が誤検知される（C5、2026-09-07 plan_subscription-claude-md-symlink-seed.md）。
+//
+// 除去する範囲は RemoveRules / RemoveDelegation と同じ正規表現（blockRemovalPattern
+// 経由）なので、それらが「除去済み」とみなす範囲と食い違わない。ブロックが
+// 無い入力は byte 単位でそのまま返る。
+func StripInjectedBlocks(data []byte) []byte {
+	blockRe := regexp.MustCompile(blockRemovalPattern(
+		[2]string{sharedBlockStart, sharedBlockEnd},
+		[2]string{legacySharedBlockStart, legacySharedBlockEnd},
+		[2]string{delegationBlockStart, delegationBlockEnd},
+	))
+	return blockRe.ReplaceAll(data, []byte{})
 }

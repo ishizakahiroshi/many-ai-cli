@@ -2,10 +2,12 @@ package doctor
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/subscription"
 )
 
 func subsDoctorConfig(t *testing.T) *config.Config {
@@ -93,5 +95,39 @@ func TestSubscriptionsCheckOutputHasNoSecrets(t *testing.T) {
 		if strings.Contains(c.Message+c.Fix, cfg.Token) {
 			t.Fatalf("doctor output leaked the hub token: %#v", c)
 		}
+	}
+
+	// The rule-file drift check reads two files' content to compare them by
+	// hash. Wiring a fully realistic signed-in profile through
+	// subscription.List/config.ResolveSubscriptionProfileDir is impractical
+	// here (subscriptions_test.go's other cases never reach that far either),
+	// so this calls subscriptionRuleFileCheck directly — the same style
+	// subscription_seed_test.go uses for its checks — and confirms the
+	// embarrassing-looking file content, and the profile's absolute path,
+	// never reach the message or fix text.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+	const secretLooking = "api-key-should-not-leak"
+	writeSeedFile(t, filepath.Join(home, ".claude", "CLAUDE.md"), "# default\n"+secretLooking+"\n")
+	profileDir := filepath.Join(t.TempDir(), "claude", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "CLAUDE.md"), "# profile copy\n"+secretLooking+" but different\n")
+
+	check := subscriptionRuleFileCheck("claude", "claude / work", subscription.Entry{
+		Provider: "claude", ID: "work", ProfileDir: profileDir, Exists: true,
+	})
+	if check == nil {
+		t.Fatal("expected the drifted rule file to produce a row")
+	}
+	combined := check.Message + check.Fix
+	if strings.Contains(combined, secretLooking) {
+		t.Fatalf("doctor output leaked rule file content: %#v", check)
+	}
+	if strings.Contains(combined, profileDir) {
+		t.Fatalf("doctor output leaked the profile's absolute path: %#v", check)
+	}
+	if strings.Contains(combined, home) {
+		t.Fatalf("doctor output leaked the default config's absolute path: %#v", check)
 	}
 }

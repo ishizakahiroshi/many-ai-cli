@@ -147,7 +147,7 @@ func (s *Server) subscriptionLaunch(provider, profileID string) ([]string, *subs
 		// 「なぜ profile にこのファイルがあるのか」を後から辿れるようにする。
 		s.logger.Info("subscription profile seeded",
 			"provider", provider, "id", resolved.ID,
-			"applied", seeded.Applied, "failed", seeded.Failed)
+			"applied", seeded.Applied, "failed", seeded.Failed, "degraded", seeded.Degraded)
 	}
 	env := append([]string(nil), resolved.Env...)
 	// wrapper がこの値を register で申告し、Hub が「実際に何で起動したか」を記録する。

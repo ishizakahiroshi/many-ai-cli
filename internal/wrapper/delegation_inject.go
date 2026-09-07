@@ -151,7 +151,10 @@ func removeBlock(path, startMarker, endMarker string) error {
 		}
 		return fmt.Errorf("read %s: %w", path, err)
 	}
-	blockRe := regexp.MustCompile(`(?s)\n?` + regexp.QuoteMeta(startMarker) + `.*?` + regexp.QuoteMeta(endMarker) + `\n?`)
+	// 正規表現の形は approval_rules.go の blockRemovalPattern に一本化する。
+	// doctor の StripInjectedBlocks が「除去済み」とみなす範囲と、ここで実際に
+	// 外す範囲が食い違わないようにするため（C5）。
+	blockRe := regexp.MustCompile(blockRemovalPattern([2]string{startMarker, endMarker}))
 	newContent := blockRe.ReplaceAllString(string(content), "")
 	if newContent == string(content) {
 		return nil

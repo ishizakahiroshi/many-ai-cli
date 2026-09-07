@@ -2,13 +2,16 @@ package doctor
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/subscription"
+	"many-ai-cli/internal/wrapper"
 )
 
 // subscriptionStatusTimeout は 1 profile あたりの公式 CLI 呼び出し上限。
@@ -54,6 +57,9 @@ func subscriptions(ctx context.Context, cfg *config.Config) []Check {
 			default:
 				checks = append(checks, subscriptionProfileCheck(ctx, adapter, name, p))
 				if drift := subscriptionSeedCheck(entry.Provider, name, p); drift != nil {
+					checks = append(checks, *drift)
+				}
+				if drift := subscriptionRuleFileCheck(entry.Provider, name, p); drift != nil {
 					checks = append(checks, *drift)
 				}
 			}
@@ -135,4 +141,89 @@ func subscriptionSeedCheck(provider, name string, p subscription.Entry) *Check {
 		fmt.Sprintf("%s: 既定の設定のうち %d 件がこの profile にありません（%s%s）",
 			name, len(labels), strings.Join(shown, " / "), suffix),
 		"次回このプロファイルでセッションを起動すると自動で持ち込まれます。すぐ入れたい場合は既定側から手でコピーしてください（既にあるものは上書きされません）"}
+}
+
+// subscriptionRuleFileCheck reports when a profile's rule file (CLAUDE.md /
+// AGENTS.md) cannot track the user's default configuration: either because
+// the default is a symlink but this profile still holds an old-style plain
+// copy, or because both are plain files and their content has since diverged.
+// A profile whose rule file is itself a symlink is skipped — it always reads
+// whatever the default currently says, so it cannot drift.
+//
+// Message and fix name only the profile and the entry's Label, never file
+// contents, a hash, or an absolute path — this mirrors subscriptionSeedCheck's
+// rule that doctor output must stay safe to paste anywhere.
+func subscriptionRuleFileCheck(provider, name string, p subscription.Entry) *Check {
+	if !p.Exists || p.ProfileDir == "" {
+		return nil
+	}
+	adapter, ok := subscription.AdapterFor(provider)
+	if !ok {
+		return nil
+	}
+	seeder, ok := adapter.(subscription.ProfileSeeder)
+	if !ok {
+		return nil
+	}
+	for _, entry := range seeder.SeedEntries() {
+		if entry.Kind != subscription.SeedMirrorFile {
+			continue
+		}
+		dest := filepath.Join(p.ProfileDir, entry.Dest)
+		destInfo, err := os.Lstat(dest)
+		if err != nil {
+			// Not seeded yet; subscriptionSeedCheck already reports this.
+			continue
+		}
+		if destInfo.Mode()&os.ModeSymlink != 0 {
+			// The profile mirrors the default as a link; it cannot drift.
+			continue
+		}
+		if subscription.IsLinkedRuleFile(entry.Source) {
+			return &Check{"subscription", Warn,
+				fmt.Sprintf("%s: %s は既定側がリンクなのに profile はコピーです。既定側の変更が届きません", name, entry.Label),
+				fmt.Sprintf("profile 側の %s を削除して次回起動すると、リンクとして持ち込まれます。profile 専用の内容にしたい場合はこのままで構いません", entry.Dest)}
+		}
+		srcInfo, err := os.Stat(entry.Source)
+		if err != nil || srcInfo.IsDir() {
+			continue
+		}
+		same, err := ruleFilesIdentical(entry.Source, dest)
+		if err != nil || same {
+			continue
+		}
+		return &Check{"subscription", Warn,
+			fmt.Sprintf("%s: %s は既定側と内容が違います", name, entry.Label),
+			fmt.Sprintf("意図した差分でなければ profile 側の %s を削除して次回起動で再取得。意図した差分ならこのままで構いません", entry.Dest)}
+	}
+	return nil
+}
+
+// ruleFilesIdentical compares two rule files by content hash, never by
+// surfacing either file's bytes in a doctor message.
+func ruleFilesIdentical(a, b string) (bool, error) {
+	ah, err := sha256File(a)
+	if err != nil {
+		return false, err
+	}
+	bh, err := sha256File(b)
+	if err != nil {
+		return false, err
+	}
+	return ah == bh, nil
+}
+
+// sha256File hashes a rule file after stripping the blocks many-ai-cli itself
+// injects (shared approval-rules block, its legacy any-ai-cli name, and the
+// delegation block). Without this, a session that is currently running
+// injects one of these blocks into the profile's copy but never into the
+// default side, and ruleFilesIdentical would report a false "内容が違います"
+// for the whole time that session is alive (C5,
+// plan_subscription-claude-md-symlink-seed.md).
+func sha256File(path string) ([32]byte, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- path comes from an adapter's fixed entry list or a profile dir this process manages
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return sha256.Sum256(wrapper.StripInjectedBlocks(data)), nil
 }

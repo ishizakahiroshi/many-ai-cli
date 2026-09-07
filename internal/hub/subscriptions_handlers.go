@@ -134,7 +134,7 @@ func (s *Server) handleSubscriptionAdd(w http.ResponseWriter, r *http.Request) {
 	if seeded.Any() {
 		s.logger.Info("subscription profile seeded",
 			"provider", provider, "id", id,
-			"applied", seeded.Applied, "failed", seeded.Failed)
+			"applied", seeded.Applied, "failed", seeded.Failed, "degraded", seeded.Degraded)
 	}
 	if err := s.persistConfig(); err != nil {
 		s.removeSubscriptionEntry(provider, id)

@@ -29,6 +29,7 @@ type approvalRuleSessionSnap struct {
 	provider  string
 	cwd       string
 	codexHome string
+	claudeDir string
 }
 
 func (t approvalRuleTarget) wrapperProvider() string {
@@ -166,6 +167,23 @@ func codexAgentsPath(codexHome string) string {
 	return filepath.Join(codexHome, "AGENTS.md")
 }
 
+// claudeRulesPath は Claude の import 行を書き込む CLAUDE.md を決める。
+// codexAgentsPath と同じ契約で、セッションが register 時に報告した claudeDir
+// （profile の CLAUDE_CONFIG_DIR）→ Hub 自身の $CLAUDE_CONFIG_DIR → ~/.claude
+// の順に解決する。固定で ~/.claude/CLAUDE.md へ書いていた頃は、profile 側の
+// CLAUDE.md がコピーだと import 行が届かず、承認マーカーのルールは cwd の祖先に
+// 既定側の実体があるときだけ偶然読まれていた。
+func claudeRulesPath(claudeDir string) string {
+	home, _ := os.UserHomeDir()
+	if strings.TrimSpace(claudeDir) == "" {
+		claudeDir = os.Getenv("CLAUDE_CONFIG_DIR")
+	}
+	if strings.TrimSpace(claudeDir) == "" {
+		claudeDir = filepath.Join(home, ".claude")
+	}
+	return filepath.Join(claudeDir, "CLAUDE.md")
+}
+
 func projectAgentsApprovalRuleTarget(provider, cwd string) []approvalRuleTarget {
 	root := instructionRootForCWD(cwd)
 	if root == "" {
@@ -179,15 +197,23 @@ func projectAgentsApprovalRuleTarget(provider, cwd string) []approvalRuleTarget 
 }
 
 func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
-	return providerApprovalRuleTargetsWithCodexHome(provider, cwd, "")
+	return providerApprovalRuleTargetsWithHomes(provider, cwd, "", "")
 }
 
+// providerApprovalRuleTargetsWithCodexHome は codexHome だけを渡していた頃の呼び出し
+// 元のための薄いラッパー（claudeDir を知らない経路は従来どおり既定の ~/.claude を使う）。
 func providerApprovalRuleTargetsWithCodexHome(provider, cwd, codexHome string) []approvalRuleTarget {
-	home, _ := os.UserHomeDir()
+	return providerApprovalRuleTargetsWithHomes(provider, cwd, codexHome, "")
+}
+
+// providerApprovalRuleTargetsWithHomes は provider ごとの注入先を返す。claude と
+// codex はセッションが報告した profile ディレクトリ（claudeDir / codexHome）を
+// 優先するので、profile セッションのルールが既定側にだけ入る取りこぼしが起きない。
+func providerApprovalRuleTargetsWithHomes(provider, cwd, codexHome, claudeDir string) []approvalRuleTarget {
 	switch provider {
 	case "claude":
 		return []approvalRuleTarget{{
-			Path:      filepath.Join(home, ".claude", "CLAUDE.md"),
+			Path:      claudeRulesPath(claudeDir),
 			Providers: []string{"claude"},
 			Mode:      approvalRuleModeClaudeImport,
 		}}
@@ -228,7 +254,7 @@ func (s *Server) activeApprovalRuleTargets() []approvalRuleTarget {
 
 	targets := make([]approvalRuleTarget, 0, len(snaps))
 	for _, snap := range snaps {
-		targets = append(targets, providerApprovalRuleTargetsWithCodexHome(snap.provider, snap.cwd, snap.codexHome)...)
+		targets = append(targets, providerApprovalRuleTargetsWithHomes(snap.provider, snap.cwd, snap.codexHome, snap.claudeDir)...)
 	}
 	return mergeApprovalRuleTargets(targets)
 }
@@ -257,7 +283,7 @@ func (s *Server) activeApprovalRuleSessionSnaps() []approvalRuleSessionSnap {
 		if !isAIProvider(ses.Provider) {
 			continue
 		}
-		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD, codexHome: ses.CodexHome})
+		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD, codexHome: ses.CodexHome, claudeDir: ses.ClaudeDir})
 	}
 	s.sessionsMu.Unlock()
 	return snaps

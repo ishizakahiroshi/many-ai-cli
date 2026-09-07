@@ -152,6 +152,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 
 - **Nothing that already exists in a profile is ever overwritten.** A value you changed inside a profile stays; only what is missing gets added.
 - **Directories are linked** (a junction on Windows), so a skill you add later reaches every profile at once. Files are copied, because the CLI rewrites them and a link would push a profile's edits back into your default directory.
+- **Rule files are the one exception**: if your default `CLAUDE.md` (or `AGENTS.md` for Codex/Grok) is itself a symlink, a profile gets a symlink to the same resolved target instead of a copy, so editing the original reaches every profile with no re-seed. If the link cannot be made (Windows without Developer Mode), it falls back to a copy and `many-ai-cli doctor` says so. Replace the link with a regular file if you want that profile's rules to diverge from the default — it is never overwritten.
 - **Credentials are never carried.** `.credentials.json` and `auth.json` are excluded. Claude's `.claude.json` mixes account identity with preferences, so two named keys are copied rather than the file. <!-- secrets-scan: allow .credentials.json -->
 - Writes land only under `~/.many-ai-cli/subscriptions/`; your `~/.claude`, `~/.codex` and `~/.grok` are read and never written, and `many-ai-cli uninstall` removes everything this creates.
 - Later changes to your default directory are not followed automatically. `many-ai-cli doctor` reports what your default has that a profile does not.

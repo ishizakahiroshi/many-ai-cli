@@ -78,7 +78,7 @@ func (grokAdapter) SeedEntries() []SeedEntry {
 	}
 	return []SeedEntry{
 		{Source: filepath.Join(dir, "AGENTS.md"), Dest: "AGENTS.md",
-			Kind: SeedCopyFile, Label: "共通ルール（AGENTS.md）"},
+			Kind: SeedMirrorFile, Label: "共通ルール（AGENTS.md）"},
 		{Source: filepath.Join(dir, "config.toml"), Dest: "config.toml",
 			Kind: SeedCopyFile, Label: "設定（config.toml・既定モデルを含む）"},
 		{Source: filepath.Join(dir, "trusted_folders.toml"), Dest: "trusted_folders.toml",

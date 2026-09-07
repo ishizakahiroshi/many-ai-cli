@@ -2176,7 +2176,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	_, exists := s.sessions[m.SessionID]
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
-	var endedProvider, endedCWD, endedCodexHome string
+	var endedProvider, endedCWD, endedCodexHome, endedClaudeDir string
 	var endedWorktree normalWorktree
 	var endedWorktreeCleanup string
 	var endedUsageProbe bool
@@ -2189,6 +2189,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		endedProvider = ses.Provider
 		endedCWD = ses.CWD
 		endedCodexHome = ses.CodexHome
+		endedClaudeDir = ses.ClaudeDir
 		endedUsageProbe = ses.UsageProbe
 		endedWorktree = ses.NormalWorktree
 		endedWorktreeCleanup = ses.WorktreeCleanup
@@ -2258,7 +2259,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
-	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithCodexHome(endedProvider, endedCWD, endedCodexHome))
+	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithHomes(endedProvider, endedCWD, endedCodexHome, endedClaudeDir))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	if err := cleanupNormalWorktree(endedWorktree, endedWorktreeCleanup); err != nil {
 		s.logger.Warn("worktree retained after session dismissal", "path", endedWorktree.Path, "err", err)
