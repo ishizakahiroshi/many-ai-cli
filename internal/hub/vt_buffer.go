@@ -487,6 +487,8 @@ func (b *vtBuffer) processEscape(seq string) {
 		b.eraseDisplay(p(0, 0))
 	case 'K':
 		b.eraseLine(p(0, 0))
+	case 'X':
+		b.eraseChars(p(0, 1))
 	case 's':
 		b.savedRow, b.savedCol = b.row, b.col
 	case 'u':
@@ -622,6 +624,22 @@ func (b *vtBuffer) eraseLine(mode int) {
 	default:
 		b.clearRow(b.row, b.col, b.cols-1)
 	}
+}
+
+// eraseChars は ECH（CSI n X）。カーソル位置から右へ n セルを空白にし、カーソルは動かさない。
+//
+// Claude Code の Ink と Grok の TUI は、短くなった新フレームの下に残る旧フレームの行を
+// これで消す。未実装だと旧世代の終了マーカー断片がミラーにだけ残り、承認ブロックの抽出
+// （最後の CLOSE と、その手前の最後の OPEN で挟む）が旧 CLOSE を拾って marker_leak と
+// 判定し、承認バーの代わりに抑止バナーが出る。2026-09-01〜09-07 の approval-corrupt
+// ダンプ 4 件のうち marker_leak 3 件（claude 1 / grok 2）がこれで、記録寸法へ流し直すと
+// 決定的に再現し、ECH を入れると 3 件とも正常ブロックになる
+// （docs/local/bugfix_vt-mirror-ech-unimplemented-marker-leak_2026-09-07.md）。
+func (b *vtBuffer) eraseChars(n int) {
+	if n < 1 {
+		n = 1
+	}
+	b.clearRow(b.row, b.col, b.col+n-1)
 }
 
 func (b *vtBuffer) clearAll() {

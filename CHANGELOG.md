@@ -359,6 +359,17 @@ Release artifacts are published at
   the line once, not once per path
   (`internal/hub/approval_handler.go`'s `claudeRulesPath`).
 
+- **Approval prompts are no longer suppressed after the TUI erases its previous
+  frame with ECH.** The Hub's VT mirror ignored `CSI n X` (erase characters), so
+  when Claude Code or Grok redrew a shorter approval block and cleared the
+  leftover rows with ECH, a fragment of the old closing marker stayed in the
+  mirror only. The extractor then took that stale marker as the end of the
+  block, the structure check rejected it as `marker_leak`, and the user saw a
+  suppression banner instead of the approval bar. Replaying the four dumps
+  recorded between 2026-09-01 and 2026-09-07 reproduced all three `marker_leak`
+  cases deterministically, and all three pass with ECH implemented
+  (`internal/hub/vt_buffer.go`'s `eraseChars`).
+
 ## [0.7.0] - 2026-08-15
 
 ### Added
