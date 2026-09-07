@@ -200,12 +200,6 @@ func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
 	return providerApprovalRuleTargetsWithHomes(provider, cwd, "", "")
 }
 
-// providerApprovalRuleTargetsWithCodexHome は codexHome だけを渡していた頃の呼び出し
-// 元のための薄いラッパー（claudeDir を知らない経路は従来どおり既定の ~/.claude を使う）。
-func providerApprovalRuleTargetsWithCodexHome(provider, cwd, codexHome string) []approvalRuleTarget {
-	return providerApprovalRuleTargetsWithHomes(provider, cwd, codexHome, "")
-}
-
 // providerApprovalRuleTargetsWithHomes は provider ごとの注入先を返す。claude と
 // codex はセッションが報告した profile ディレクトリ（claudeDir / codexHome）を
 // 優先するので、profile セッションのルールが既定側にだけ入る取りこぼしが起きない。
