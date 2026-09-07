@@ -804,10 +804,10 @@ func TestSessionOrderSurvivesSaveRoundTrip(t *testing.T) {
 	}
 }
 
-func TestChildFullBypassEnabledDefaultTrue(t *testing.T) {
+func TestChildFullBypassEnabledDefaultFalse(t *testing.T) {
 	var o OrchestrationConfig
-	if !o.ChildFullBypassEnabled() {
-		t.Fatal("nil ChildFullBypass should default to true")
+	if o.ChildFullBypassEnabled() {
+		t.Fatal("nil ChildFullBypass should default to false")
 	}
 	f := false
 	o.ChildFullBypass = &f

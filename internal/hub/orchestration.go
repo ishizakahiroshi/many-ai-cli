@@ -1083,13 +1083,14 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 }
 
 // applyChildApprovalDefaults は orchestration 子セッションの承認モード既定値を埋める。
-// fullBypass が true（既定）のとき、呼び出し側が指定しない場合はプロバイダごとの
-// 全許可（承認バイパス相当）と RiskConfirmed=true を埋める。子は自走が前提で、
-// 承認プロンプトを人間が張り付いて処理する運用は自走目的と矛盾するため。危険操作の
-// 抑制は承認ではなく worktree 隔離と board の禁止事項で行う
+// fullBypass が true（orchestration.child_full_bypass: true）のとき、呼び出し側が
+// 指定しない場合はプロバイダごとの全許可（承認バイパス相当）と RiskConfirmed=true
+// を埋める。自走向けのオプトイン: 承認プロンプトを人間が張り付いて処理する運用は
+// 自走目的と矛盾するため。危険操作の抑制は承認ではなく worktree 隔離と board の
+// 禁止事項で行う
 // （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
-// fullBypass が false（orchestration.child_full_bypass: false）のときは既定を埋めず、
-// 呼び出し側の明示値のみを使う（高リスク権限の自動確認を避ける安全側パス）。
+// fullBypass が false（既定 / unset）のときは既定を埋めず、呼び出し側の明示値のみ
+// を使う（高リスク権限の自動確認を避ける安全側パス）。
 func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
 	if !fullBypass {
 		return

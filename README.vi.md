@@ -105,7 +105,7 @@ Gemini CLI **cố ý ngoài phạm vi**.
 
 Mặc định session con chạy worktree git riêng dưới `.many-ai-cli/worktrees/<orchestration_id>/<role>` khi cwd cha là repo git. Hub **không** auto-merge nhánh con; conductor/người dùng quyết sau khi xem board và nhánh.
 
-Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây + inject Enter ngay có thể ngắt lượt conductor đang chạy. Hoàn tất phụ thuộc con ghi `## DONE ...`; không có job DAG, hàng đợi retry, hay merge tự động.
+Giới hạn đã biết: cơ chế cố ý nhẹ. Board poll 2 giây; giao tiếp theo `orchestration.board_notify_mode`. Session con không tự bypass quyền (`orchestration.child_full_bypass`, mặc định `false`); đặt `true` nếu cần unattended bypass. Hoàn tất phụ thuộc con ghi `## DONE ...`; không có job DAG, hàng đợi retry, hay merge tự động.
 
 - **Launcher thống nhất (Windows / Linux / macOS)** — `many-ai-cli-launcher` nối Hub theo profile đã lưu và mở trình duyệt: profile SSH `serve` / `tunnel` mọi OS; profile WSL khởi Hub trong WSL trên Windows
 - **Tài sản remote server / Docker** — một container Hub / user từ GHCR, publish port chỉ loopback, script auto-update opt-in

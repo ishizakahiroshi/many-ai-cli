@@ -422,8 +422,11 @@ func TestRelay_startRelay_preparationAndSecondRelay(t *testing.T) {
 		t.Fatalf("board not created: %v", err)
 	}
 	body := h.spawns[0]
-	if body.Role != relayRoleImplementation || body.Provider != "codex" || body.Model != "gpt-5-mini" || !body.Force || body.AskForApproval != "never" || !body.RiskConfirmed {
-		t.Fatalf("spawn body = %+v, want implementation/codex with approval defaults", body)
+	if body.Role != relayRoleImplementation || body.Provider != "codex" || body.Model != "gpt-5-mini" || !body.Force {
+		t.Fatalf("spawn body = %+v, want implementation/codex", body)
+	}
+	if body.AskForApproval != "" || body.Sandbox != "" || body.RiskConfirmed {
+		t.Fatalf("safer default must not auto-fill approval bypass: %+v", body)
 	}
 	if !strings.Contains(body.InitialPrompt, "Relay task: implement the plan at "+h.request().PlanPath) || !strings.Contains(body.InitialPrompt, "final=true") || !strings.Contains(body.InitialPrompt, "Ignore any [strong] marks") {
 		t.Fatalf("implementation prompt = %q", body.InitialPrompt)
@@ -454,6 +457,20 @@ func TestRelay_startRelay_preparationAndSecondRelay(t *testing.T) {
 	}
 	if !h.s.relayOwns(first.OrchestrationID) || !h.s.relayOwns(second.OrchestrationID) || h.s.relayOwns("s1") {
 		t.Fatal("relayOwns does not follow the relays map")
+	}
+}
+
+func TestRelay_startRelay_childFullBypassOptInAppliesDefaults(t *testing.T) {
+	h := newRelayHarness(t)
+	tr := true
+	h.s.cfg.Orchestration.ChildFullBypass = &tr
+	_ = h.start()
+	if len(h.spawns) != 1 {
+		t.Fatalf("spawns = %d, want 1", len(h.spawns))
+	}
+	body := h.spawns[0]
+	if body.AskForApproval != "never" || body.Sandbox != "danger-full-access" || !body.RiskConfirmed {
+		t.Fatalf("child_full_bypass true should apply codex approval defaults: %+v", body)
 	}
 }
 

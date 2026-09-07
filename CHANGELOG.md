@@ -11,6 +11,12 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Security
+- Change the default of `orchestration.child_full_bypass` from `true` to
+  `false`. Unset configs no longer auto-fill bypass-permissions /
+  `never`+`danger-full-access` / `RiskConfirmed` on orchestration child spawn.
+  Set `orchestration.child_full_bypass: true` explicitly to restore the prior
+  unattended UX. Board/event conductor delivery remains gated by
+  `board_notify_mode` and the existing idle/approval flush path.
 - Cap pending spawn confirmations per parent and across the Hub using the existing
   orchestration limits. Requests over either cap return HTTP 429 without creating
   a confirmation or broadcasting it, while same-role replacement and late human
@@ -53,9 +59,9 @@ Release artifacts are published at
   the URL query string; the endpoint already required the existing
   token/cookie guard, so the change only stops the token from leaking into
   browser history, referrers, and logs via `/api/info` and the settings UI.
-- Add `orchestration.child_full_bypass` (default `true`, matching prior
-  behavior) so orchestration children can opt out of the automatic
-  bypass-permissions / `RiskConfirmed` defaults applied on spawn.
+- Add `orchestration.child_full_bypass` so orchestration children can opt into
+  the automatic bypass-permissions / `RiskConfirmed` defaults on spawn. The
+  default is now `false` (safer); see the Security note above.
 
 ### Added
 - **Orchestration children now wake their conductor only for actionable
