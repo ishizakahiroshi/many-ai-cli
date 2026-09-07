@@ -282,6 +282,18 @@ Release artifacts are published at
   `--skip=before` (`.github/workflows/release.yml`, `.goreleaser.yaml`).
 
 ### Fixed
+- **Claude child sessions no longer stall with their first instruction sitting
+  unsent in the composer.** The Hub injected the initial prompt after a 300 ms
+  output lull, which on Claude Code v2.1.263 happens *before* the CLI has even
+  drawn its composer or enabled bracketed paste; the text was picked up once the
+  CLI started reading stdin, but the confirming Enter was lost, and the startup
+  watchdog then killed the child 60 s later with a message blaming the CLI's
+  model or auth settings. The Hub now waits for Claude Code's composer footer
+  (`(shift+tab to cycle)`) before injecting, treats the prompt as delivered only
+  once it has left the composer, resends Enter exactly once if it has not, and
+  reports "still sitting in the composer" to the conductor instead of guessing
+  at auth. The startup-failure notice now states only what was observed (idle
+  seconds, no progress file, screen tail).
 - **The session database no longer grows without bound.** Every chunk of
   terminal output was written as its own row in the `events` table, which on the
   author's machine reached 4.7 GB and over 21 million rows even with the 7-day

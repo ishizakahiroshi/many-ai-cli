@@ -20,11 +20,11 @@ import (
 )
 
 // TestWaitForComposerReady_NoSignalForUnknownProvider は、providerComposerSignals に
-// 登録の無い provider（claude）では、ポーリングせず即座に composerNoSignal を返すことを
-// 確認する。
+// 登録の無い provider（grok）では、ポーリングせず即座に composerNoSignal を返すことを
+// 確認する。claude は 2026-09-07 に登録されたので、ここでは使わない。
 func TestWaitForComposerReady_NoSignalForUnknownProvider(t *testing.T) {
 	s := newTestServer()
-	ses := registerTestSession(s, 1, "claude")
+	ses := registerTestSession(s, 1, "grok")
 	ses.vt = newVTBuffer(80, 24)
 
 	start := time.Now()
@@ -39,6 +39,57 @@ func TestWaitForComposerReady_NoSignalForUnknownProvider(t *testing.T) {
 	}
 	if elapsed >= time.Second {
 		t.Fatalf("took %v, want to return immediately (no polling for a provider with no registered signals)", elapsed)
+	}
+}
+
+// TestWaitForComposerReady_ClaudeSplashOnlyIsNotReady は 2026-09-07 の #32 の起動直後を
+// 再現する。Claude Code はタイトル設定と画面クリアの後 0.7 秒ほど無音になり、その間に
+// 300ms 静止待ちが注入を決めていた。入力欄の footer が無い画面では ready を返さず、
+// deadline まで待って composerUnknown になることを確認する。
+func TestWaitForComposerReady_ClaudeSplashOnlyIsNotReady(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	ses.vt = newVTBuffer(130, 35)
+	ses.vt.Write([]byte("\x1b[2J\x1b[H\x1b]0;claude\x07"))
+
+	const maxWait = 200 * time.Millisecond
+	start := time.Now()
+	res, blocker := s.waitForComposerReady(1, maxWait)
+	elapsed := time.Since(start)
+
+	if res != composerUnknown {
+		t.Fatalf("result = %v, want composerUnknown (no footer means no composer yet)", res)
+	}
+	if blocker != "" {
+		t.Fatalf("blocker = %q, want empty", blocker)
+	}
+	if elapsed < maxWait {
+		t.Fatalf("took %v, want >= maxWait %v", elapsed, maxWait)
+	}
+}
+
+// TestWaitForComposerReady_ClaudeFooterIsReadySignal は、Claude Code の入力欄と同じフレームで
+// 描かれる footer `(shift+tab to cycle)` を陽性シグナルとして composerReady を返すことを
+// 確認する（実測: claude 生ログ 87/87 本に存在・2026-09-07）。
+func TestWaitForComposerReady_ClaudeFooterIsReadySignal(t *testing.T) {
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	ses.vt = newVTBuffer(130, 35)
+	ses.vt.Write([]byte("──────────────────────────────\r\n❯ \r\n──────────────────────────────\r\n$0.0000  Sonnet 5  ↑0 ↓0\r\n⏵⏵ bypass permissions on (shift+tab to cycle)\r\n"))
+
+	const maxWait = 5 * time.Second
+	start := time.Now()
+	res, blocker := s.waitForComposerReady(1, maxWait)
+	elapsed := time.Since(start)
+
+	if res != composerReady {
+		t.Fatalf("result = %v, want composerReady", res)
+	}
+	if blocker != "" {
+		t.Fatalf("blocker = %q, want empty", blocker)
+	}
+	if elapsed < orchestrationComposerStableFor || elapsed > 5*orchestrationComposerStableFor {
+		t.Fatalf("took %v, want close to stableFor %v", elapsed, orchestrationComposerStableFor)
 	}
 }
 

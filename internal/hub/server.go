@@ -697,6 +697,10 @@ type Server struct {
 	// ゼロ値は本番既定（submitEnter* 定数）を意味し、テストだけが実時間を
 	// 待たずに経路を検証するために埋める。
 	submitEnter submitEnterTiming
+	// injectSubmitConfirm は初期プロンプト注入後に「入力欄から本文が消えた」を待つ上限
+	// （orchestration.go の confirmInitialPromptSubmitted）。ゼロ値は本番既定
+	// orchestrationSubmitConfirmWait を意味し、テストだけが短縮する。
+	injectSubmitConfirm time.Duration
 
 	// inputChain はセッションごとの入力処理を FIFO で直列化するバトン。
 	// uiLoop は pty_input を同期処理せず、この鎖に繋いだ goroutine へ渡す

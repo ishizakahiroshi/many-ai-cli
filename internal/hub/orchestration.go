@@ -50,6 +50,17 @@ const (
 	orchestrationInjectEchoPoll    = 100 * time.Millisecond
 )
 
+// orchestrationSubmitConfirmWait は、エコー観測後に入力欄から本文が消える（＝確定 CR が
+// 効いてターンが始まった）のを待つ上限。実測（2026-09-07 #34）では手で Enter を押してから
+// 同じ秒のうちに入力欄が空になり transcript へ流れたので、5 秒は十分な余裕。超えても
+// 入力欄に残っていれば Enter を 1 回だけ送り直す（confirmInitialPromptSubmitted）。
+// テストは Server.injectSubmitConfirm で短縮する（ゼロ値 = この既定）。
+const orchestrationSubmitConfirmWait = 5 * time.Second
+
+// orchestrationComposerClearStableFor は「入力欄が空になった」を確定させるまでの継続時間。
+// Ink の差分再描画の途中で入力欄の行が一瞬空に見えることがあるため、瞬間値では取らない。
+const orchestrationComposerClearStableFor = 300 * time.Millisecond
+
 var safeOrchestrationToken = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 type orchestrationManager struct {
@@ -2142,7 +2153,15 @@ const childStartupFailureScreenTailMaxLines = 5
 // (relayOwns / snapshotCfg) so this does not pay for a second lookup.
 func (s *Server) handleChildStartupFailed(boardID, boardPath string, childID int, role string, parentID int, owns bool, cfg config.OrchestrationConfig) {
 	tail := sanitizeInjectText(strings.Join(s.childStartupFailureScreenTail(childID, childStartupFailureScreenTailMaxLines), "\n"))
-	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("startup failed: role=%s id=%d never produced any progress after its initial prompt was delivered. screen tail:\n%s\n", role, childID, tail))
+	grace := cfg.ChildStartupGraceSeconds
+	if grace <= 0 {
+		grace = 60
+	}
+	// 文面は観測した事実（無音の秒数・進捗ファイル未作成・画面末尾）だけを書く。以前は
+	// 「子 CLI の model/auth/provider を確認せよ」と原因を断定していたが、2026-09-07 の #32 は
+	// 初期プロンプトが入力欄に残っていただけで、その断定が指揮者の判断を誤らせた
+	// （docs/local/bugfix_claude-child-initial-prompt-enter-lost_2026-09-07.md）。
+	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("startup failed: role=%s id=%d went idle for %ds after its initial prompt was delivered and never wrote its progress file. screen tail:\n%s\n", role, childID, grace, tail))
 
 	s.orchestration.mu.Lock()
 	if board := s.orchestration.boards[boardID]; board != nil {
@@ -2156,7 +2175,7 @@ func (s *Server) handleChildStartupFailed(boardID, boardPath string, childID int
 	if owns {
 		s.relayOnChildStartupFailed(boardID, childID)
 	} else {
-		detail := fmt.Sprintf("role=%s id=%d: the child never produced any progress after its initial prompt was delivered; the child CLI itself needs attention (check its model/auth/provider settings) before retrying the same role/provider. screen tail: %s", role, childID, tail)
+		detail := fmt.Sprintf("role=%s id=%d: the child went idle for %ds after its initial prompt was delivered and never wrote its progress file. Hub has no other evidence of why it stopped; read the screen tail below before retrying the same role/provider. screen tail: %s", role, childID, grace, tail)
 		s.notifyOrchestrationError(parentID, "startup_failed", detail)
 		s.markChildState(childID, "error")
 	}
@@ -2540,6 +2559,19 @@ func (s *Server) waitForInputReady(sessionID int, quiet, maxWait time.Duration) 
 var providerComposerSignals = map[string][]string{
 	// 実測: logs/sessions/codex_2026-09-01_*_s{11,12,14}.log（通常セッション・到達時）
 	"codex": {"AskCodextodoanything"},
+	// claude: 入力欄の直下に出る footer `⏵⏵ bypass permissions on (shift+tab to cycle)` /
+	// `⏵⏵ auto mode on (shift+tab to cycle)`。2026-09-07 に手元の claude 生ログ 87 本
+	// （v2.1.251〜v2.1.263）を数え、87 本すべてに `(shift+tab to cycle)` があり、入力欄
+	// （`❯`）と同じフレームで描かれていた（logs/sessions/claude_2026-09-07_125754_docs_s32.jsonl
+	// の 12:57:55 の 3015 バイト）。`? for shortcuts` は 1/87 で本文中の言及だったので使わない。
+	//
+	// これが無い間は claude を「合図なし」扱いで 300ms 静止待ちへ落としていた。Claude Code
+	// v2.1.263 は登録から 0.7 秒の無音の後にやっと alt screen と bracketed paste を有効化する
+	// ため、静止待ちがその無音に当たり、入力欄が無い PTY へ本文と確定 CR を書き込んでいた。
+	// 本文は起動後にまとめて読まれて入力欄に載るが確定 CR だけが効かず、子は入力欄に
+	// 指示を載せたまま止まる（2026-09-07 の #29 / #32 / #34 で 3 回中 3 回。
+	// docs/local/bugfix_claude-child-initial-prompt-enter-lost_2026-09-07.md）。
+	"claude": {"shift+tabtocycle"},
 }
 
 // providerBlockingSignals は「モーダルが出ていて入力を受け付けない」ことのシグナル。
@@ -2550,6 +2582,81 @@ var providerBlockingSignals = map[string][]string{
 		"Updateavailable!",                     // 自己更新メニュー
 		"Pressentertocontinue",                 // 上記 2 つの共通フッター
 	},
+	// claude: 未登録。保持している claude 生ログ 87 本にモーダルで止まった画面が 1 つも
+	// 無く、文言を実測で確かめられない（2026-09-07）。モーダル中は footer が描かれないので
+	// ready 側の合図が出ず、composerUnknown として従来の静止待ちへ落ちる。実際に止まった
+	// 画面を観測したら、その文言をここへ足す。
+}
+
+// providerComposerRegion は「入力欄に今なにが載っているか」を画面から切り出す provider 別の
+// 関数。エコー観測（waitForInjectEcho）は本文が画面のどこかに現れたことしか言えず、
+// 「入力欄に貼り付いたまま」と「確定されて transcript に流れた」を区別できない。
+// 2026-09-07 の #32 はこの区別が無かったため、入力欄に載ったままの本文を配送成功と記録し、
+// 起動失敗の見張りが 82 秒後に子を殺した。未登録の provider は従来どおりエコー＝配送成功。
+var providerComposerRegion = map[string]func(screen []string) (text string, ok bool){
+	"claude": claudeComposerText,
+}
+
+// claudeComposerText は Claude Code の入力欄の中身を空白除去済みで返す。
+//
+// レイアウト（v2.1.263 実測 2026-09-07 s32 の VT 画面）:
+//
+//	[transcript ...]
+//	──────────────  区切り線
+//	❯ 入力欄（長文は次行以降へ折り返す）
+//	──────────────  区切り線
+//	$0.0000  Fable 5.1  ↑0 ↓0        statusline
+//	⏵⏵ bypass permissions on (shift+tab to cycle)   footer
+//
+// transcript 側のユーザー発言も `❯ ` で始まるが常に入力欄より上にあるので、画面で最後の
+// `❯` 行を入力欄の先頭とみなし、そこから次の区切り線か footer までを入力欄とする。
+// `❯` が画面に無ければ ok=false（判定不能。呼び出し側は従来どおりの扱いへ倒す）。
+func claudeComposerText(screen []string) (string, bool) {
+	start := -1
+	for i := len(screen) - 1; i >= 0; i-- {
+		if strings.HasPrefix(strings.TrimSpace(screen[i]), "❯") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", false
+	}
+	var b strings.Builder
+	for i := start; i < len(screen); i++ {
+		line := strings.TrimSpace(screen[i])
+		if i > start && (isTUIRuleLine(line) || isClaudeFooterLine(line)) {
+			break
+		}
+		if i == start {
+			line = strings.TrimPrefix(line, "❯")
+		}
+		b.WriteString(line)
+	}
+	return collapseWhitespace(b.String()), true
+}
+
+// isTUIRuleLine は罫線だけの行（Claude Code の入力欄の上下に引かれる `─` の連続）か。
+// 8 文字未満は箇条書きの `─` 等と区別できないので罫線とみなさない。
+func isTUIRuleLine(line string) bool {
+	n := 0
+	for _, r := range line {
+		switch r {
+		case '─', '━', '═', ' ':
+		default:
+			return false
+		}
+		if r != ' ' {
+			n++
+		}
+	}
+	return n >= 8
+}
+
+// isClaudeFooterLine は入力欄の下の footer 行か（モード表示 `⏵⏵ ... (shift+tab to cycle)`）。
+// statusline は利用者設定で無いこともあるので、footer だけを終端の目印にする。
+func isClaudeFooterLine(line string) bool {
+	return strings.HasPrefix(line, "⏵") || strings.Contains(collapseWhitespace(line), "shift+tabtocycle")
 }
 
 // composerWaitResult は waitForComposerReady の判定結果。
@@ -2778,7 +2885,7 @@ func (s *Server) injectInitialPromptNotify(sessionID int, prompt string, notice 
 		if attempt > 1 && s.waitForInjectEcho(sessionID, marker, 0) {
 			// 前回注入分のエコーが遅れて描画された場合は再注入しない（二重送信防止）
 			s.logger.Info("initial prompt echo observed late", "session_id", sessionID, "attempt", attempt)
-			s.markChildPromptDelivered(sessionID, time.Now())
+			s.finishInitialPromptDelivery(sessionID, marker, notice)
 			return
 		}
 		if !s.injectRawBypassGate(sessionID, text) {
@@ -2792,7 +2899,7 @@ func (s *Server) injectInitialPromptNotify(sessionID int, prompt string, notice 
 			if attempt > 1 {
 				s.logger.Info("initial prompt injected after retry", "session_id", sessionID, "attempt", attempt)
 			}
-			s.markChildPromptDelivered(sessionID, time.Now())
+			s.finishInitialPromptDelivery(sessionID, marker, notice)
 			return
 		}
 		s.logger.Warn("initial prompt echo not observed; retrying", "session_id", sessionID, "attempt", attempt)
@@ -2803,6 +2910,130 @@ func (s *Server) injectInitialPromptNotify(sessionID int, prompt string, notice 
 	// C1 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md): 上と同じ理由で
 	// 配送失敗を記録する。
 	s.markChildPromptFailed(sessionID)
+}
+
+// finishInitialPromptDelivery はエコー観測後の締め。確定 CR が効いたところまで確かめられれば
+// 配送成功、入力欄に本文が残ったままなら（Enter を 1 回送り直しても消えなければ）配送失敗
+// として記録する。どちらか一方だけを 1 回記録する。
+func (s *Server) finishInitialPromptDelivery(sessionID int, marker string, notice injectNotice) {
+	if s.confirmInitialPromptSubmitted(sessionID, marker, notice) {
+		s.markChildPromptDelivered(sessionID, time.Now())
+		return
+	}
+	s.markChildPromptFailed(sessionID)
+}
+
+// injectSubmitConfirmWait は confirmInitialPromptSubmitted の待ち上限（ゼロ値 = 本番既定）。
+func (s *Server) injectSubmitConfirmWait() time.Duration {
+	if s.injectSubmitConfirm > 0 {
+		return s.injectSubmitConfirm
+	}
+	return orchestrationSubmitConfirmWait
+}
+
+// confirmInitialPromptSubmitted はエコー観測後に「確定 CR が効いたか」を入力欄の中身で確かめる。
+//
+// エコーは本文が画面に現れたことしか言えない。2026-09-07 の #29 / #32 / #34 では、起動前に
+// 書き込んだ本文が Claude Code の起動後に入力欄へ載り、確定 CR だけが捨てられていた。
+// エコー検証はこれを配送成功と記録し、確定 CR の再送判定（confirmOrResendSubmitEnter）は
+// 起動時のスプラッシュ描画を「動き出した」と誤認して再送しなかった。入力欄が空になった
+// ことまで見れば、この 2 つの誤認は起きない。
+//
+// 入力欄に残っていれば Enter を 1 回だけ送り直す。1 回に限るのは、確定 CR を 2 回入れると
+// 後続の承認プロンプトへ誤承認が当たりうるため（deferred-enter.ts と同じ規約）。承認待ちが
+// 見えている間は送らない。それでも残っていれば配送失敗として board と親へ出す。
+// 戻り値 true は「配送成功として記録してよい」。入力欄を判定できない provider（未登録）や
+// 画面に入力欄が見つからないときは、従来どおりエコー＝配送成功に倒す。
+func (s *Server) confirmInitialPromptSubmitted(sessionID int, marker string, notice injectNotice) bool {
+	wait := s.injectSubmitConfirmWait()
+	cleared, known := s.waitForComposerClear(sessionID, marker, wait)
+	if !known || cleared {
+		return true
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	approvalVisible := ses != nil && ses.approvalVisible
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return true
+	}
+	if approvalVisible {
+		s.logger.Warn("initial prompt still in composer but an approval prompt is visible; not resending Enter",
+			"session_id", sessionID)
+		return true
+	}
+	s.logger.Warn("initial prompt still in composer after Enter; resending Enter once", "session_id", sessionID)
+	if !s.injectRawBypassGate(sessionID, "\r") {
+		// 保留キューへ回った。ゲート解除時の flush が届けるので、ここで重ねて送らない。
+		s.logger.Warn("Enter resend deferred to pending queue", "session_id", sessionID)
+		return true
+	}
+	cleared, known = s.waitForComposerClear(sessionID, marker, wait)
+	if !known || cleared {
+		s.logger.Info("initial prompt submitted after Enter resend", "session_id", sessionID)
+		return true
+	}
+	s.logger.Warn("initial prompt still in composer after Enter resend; giving up", "session_id", sessionID)
+	s.reportInjectFailure(sessionID, notice,
+		"the initial prompt is still sitting in the child's composer and two Enters did not submit it; it was NOT delivered. Open the child session and press Enter once, then instruct it with orchestrate send")
+	return false
+}
+
+// waitForComposerClear は入力欄から本文（marker）が消えるまで待つ。
+// cleared は「消えたことを orchestrationComposerClearStableFor 続けて観測した」、
+// known は「この provider・この画面で入力欄の判定ができた」。known=false のときは
+// 呼び出し側が従来どおりの扱い（エコー＝配送成功）へ倒す。
+func (s *Server) waitForComposerClear(sessionID int, marker string, maxWait time.Duration) (cleared, known bool) {
+	deadline := time.Now().Add(maxWait)
+	var clearSince time.Time
+	for {
+		stuck, ok := s.promptStuckInComposer(sessionID, marker)
+		if !ok {
+			return false, false
+		}
+		if stuck {
+			clearSince = time.Time{}
+			if time.Now().After(deadline) {
+				return false, true
+			}
+		} else {
+			if clearSince.IsZero() {
+				clearSince = time.Now()
+			}
+			if time.Since(clearSince) >= orchestrationComposerClearStableFor {
+				return true, true
+			}
+		}
+		time.Sleep(orchestrationInjectEchoPoll)
+	}
+}
+
+// promptStuckInComposer は注入した本文の末尾（marker）がまだ入力欄に載っているかを返す。
+// ok=false は判定不能（provider に入力欄の切り出しが無い・セッション消滅・画面に入力欄なし）。
+func (s *Server) promptStuckInComposer(sessionID int, marker string) (stuck, ok bool) {
+	if marker == "" {
+		return false, false
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	provider := ""
+	var screen []string
+	if ses != nil {
+		provider = ses.Provider
+		if ses.vt != nil {
+			screen = ses.vt.Lines()
+		}
+	}
+	s.sessionsMu.Unlock()
+	extract := providerComposerRegion[provider]
+	if ses == nil || extract == nil {
+		return false, false
+	}
+	text, found := extract(screen)
+	if !found {
+		return false, false
+	}
+	return strings.Contains(text, marker), true
 }
 
 // clearInitialInjectGate は初期注入ゲートを解除し、ゲート中に溜まったユーザー入力を flush する。
