@@ -7,7 +7,7 @@ import (
 )
 
 // ECH（CSI n X）: カーソル位置から n セルを空白にし、カーソルは動かさない。
-// bugfix_vt-mirror-ech-unimplemented-marker-leak_2026-09-07.md
+// docs/local/archive/v0.8.x/bugfix_vt-mirror-ech-unimplemented-marker-leak_2026-09-07.md
 
 func TestVTBufferEraseCharsClearsCellsAndKeepsCursor(t *testing.T) {
 	vt := newVTBuffer(10, 2)

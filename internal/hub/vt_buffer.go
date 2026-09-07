@@ -634,7 +634,7 @@ func (b *vtBuffer) eraseLine(mode int) {
 // 判定し、承認バーの代わりに抑止バナーが出る。2026-09-01〜09-07 の approval-corrupt
 // ダンプ 4 件のうち marker_leak 3 件（claude 1 / grok 2）がこれで、記録寸法へ流し直すと
 // 決定的に再現し、ECH を入れると 3 件とも正常ブロックになる
-// （docs/local/bugfix_vt-mirror-ech-unimplemented-marker-leak_2026-09-07.md）。
+// （docs/local/archive/v0.8.x/bugfix_vt-mirror-ech-unimplemented-marker-leak_2026-09-07.md）。
 func (b *vtBuffer) eraseChars(n int) {
 	if n < 1 {
 		n = 1
