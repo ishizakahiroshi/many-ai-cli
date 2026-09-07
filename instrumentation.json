@@ -116,11 +116,10 @@
     },
     {
       "id": "hub-input-deliver-trace",
-      "status": "active",
+      "status": "removed",
       "purpose": "セッション 1 本だけが、ある時点から Web の入力を PTY へ通さなくなる症状で、Hub の保留判定（gate）・wrapper への送信（sent）・保留の吐き出し（flush）・wrapper の PTY 書き込み（pty_write）の 4 点を刻み、どこで止まっているかを切り分ける",
       "addedIn": "unreleased",
       "gate": "opt-in: ビルドは -tags maidebug、runtime は log.session_enabled",
-      "due": "2026-09-09",
       "files": [
         "internal/hub/input_deliver_trace.go",
         "internal/wrapper/input_deliver_trace.go"
@@ -143,7 +142,9 @@
       "artifactNeedles": [
         "input_deliver",
         "input_deliver_wrapper"
-      ]
+      ],
+      "removedIn": "unreleased",
+      "removedOn": "2026-09-07"
     },
     {
       "id": "mobile-lite-empty",
