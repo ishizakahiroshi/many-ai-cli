@@ -158,15 +158,19 @@ func TestSubmitEnterSettleHonorsProviderMinWait(t *testing.T) {
 
 // TestSubmitEnterSettleGivesUpAtMaxWait は、出力が永久に止まらない病的ケースでも
 // 必ず送出することを固定する（保険が無いと確定 \r が一生撃たれない）。
+//
+// 「止まらない出力」は goroutine で lastOutputAt を刻み続ける形にしない。2ms 周期の
+// goroutine が idleSettle（10ms）以上スケジュールから外れると静止判定が先に成立し、
+// maxWait に届く前に返ってしまう（2026-09-07 CI macOS で 24.8ms、ローカルでも 50 回中
+// 1 回）。outputQuietFor は time.Since(lastOutputAt) >= quiet で判定するので、
+// lastOutputAt を未来に置けば経過時間は負のまま静止にならず、maxWait で諦める経路
+// だけを決定的に踏む。
 func TestSubmitEnterSettleGivesUpAtMaxWait(t *testing.T) {
 	const sessionID = 1
 	s := submitEnterServer(t, sessionID, "claude")
-	stop := make(chan struct{})
-	wait := streamTestOutput(s, sessionID, stop)
+	s.setTestLastOutput(sessionID, time.Now().Add(time.Hour))
 
 	waited := s.waitForSubmitEnterSettle(sessionID)
-	close(stop)
-	wait()
 
 	maxWait := submitEnterTestTiming().maxWait
 	if waited < maxWait {
