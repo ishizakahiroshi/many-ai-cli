@@ -91,6 +91,30 @@ func TestFilesDeleteDir_RejectAllowedRoot(t *testing.T) {
 	}
 }
 
+func TestFilesDeleteDir_RejectsCanonicalAllowedRootAlias(t *testing.T) {
+	realRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(realRoot, "keep.txt"), []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	aliasParent := t.TempDir()
+	alias := filepath.Join(aliasParent, "cwd-alias")
+	if err := os.Symlink(realRoot, alias); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+
+	s := newTestRenameServer(t, alias)
+	code, resp := callDeleteDir(t, s, realRoot)
+	if code != http.StatusConflict || resp.OK {
+		t.Fatalf("expected canonical-root conflict, got code=%d resp=%+v", code, resp)
+	}
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "allowed root") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+	if data, err := os.ReadFile(filepath.Join(realRoot, "keep.txt")); err != nil || string(data) != "keep" {
+		t.Fatalf("allowed root content changed: data=%q err=%v", data, err)
+	}
+}
+
 func TestFilesDeleteDir_RejectOutsideAllowedRoot(t *testing.T) {
 	tmp := t.TempDir()
 	outside := t.TempDir()

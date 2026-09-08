@@ -18,7 +18,18 @@ func TestEvaluateKeepsHardBlocksManual(t *testing.T) {
 		"find . -execdir chown user {} +",
 		"ls $(cat cmd.txt)",
 		"cat `cat cmd.txt`",
+		"cat /dev/null > ./important.txt",
+		"git branch -D feature",
 	} {
+		if got := p.Evaluate(command, ".", proto.ApprovalRiskLow); got.Allowed {
+			t.Fatalf("%q was allowed: %+v", command, got)
+		}
+	}
+}
+
+func TestEvaluateKeepsWriteRedirectAndBranchMutationManual(t *testing.T) {
+	p := &Policy{Rules: []compiledRule{{rule: Rule{ID: "all"}, re: mustRegexp(`.*`)}}}
+	for _, command := range []string{"cat /dev/null > ./important.txt", "git branch -D feature"} {
 		if got := p.Evaluate(command, ".", proto.ApprovalRiskLow); got.Allowed {
 			t.Fatalf("%q was allowed: %+v", command, got)
 		}
@@ -103,6 +114,34 @@ func TestAddRuleReusesDuplicate(t *testing.T) {
 	}
 	if len(p.Rules) != 1 {
 		t.Fatalf("rules = %d, want 1", len(p.Rules))
+	}
+}
+
+func TestAddRuleEscapesWorkingDirAsLiteral(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	workingDir := `C:\work\project.(demo)`
+	rule, err := AddRule("git status", workingDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPattern := `^C:\\work\\project\.\(demo\)$`
+	if rule.WorkingDir != wantPattern {
+		t.Fatalf("working_dir = %q, want %q", rule.WorkingDir, wantPattern)
+	}
+	p, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Evaluate("git status", workingDir, proto.ApprovalRiskLow); !got.Allowed {
+		t.Fatalf("exact working directory was not allowed: %+v", got)
+	}
+	for _, cwd := range []string{`C:\work\project`, `C:\work\project.(demo)\child`} {
+		if got := p.Evaluate("git status", cwd, proto.ApprovalRiskLow); got.Allowed {
+			t.Fatalf("working directory %q unexpectedly matched: %+v", cwd, got)
+		}
 	}
 }
 

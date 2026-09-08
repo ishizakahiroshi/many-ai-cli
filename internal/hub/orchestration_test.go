@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -330,7 +331,10 @@ func Test_notifyBoardSession_softNotifyDoesNotQueueEnter(t *testing.T) {
 func Test_prepareChildWorktree_nonGit(t *testing.T) {
 	s := newTestServer()
 	cwd := t.TempDir()
-	gotCWD, branch, note := s.prepareChildWorktree(cwd, "s1", "tester", config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"})
+	gotCWD, branch, note, err := s.prepareChildWorktree(cwd, "s1", "tester", config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"})
+	if err != nil {
+		t.Fatalf("prepareChildWorktree non-git: %v", err)
+	}
 	if gotCWD != cwd {
 		t.Fatalf("cwd = %q, want %q", gotCWD, cwd)
 	}
@@ -350,7 +354,10 @@ func Test_prepareChildWorktree_gitRepo(t *testing.T) {
 	repo := newRelayTestRepo(t)
 	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
 
-	gotCWD, branch, note := s.prepareChildWorktree(repo, "o1", "review", cfg)
+	gotCWD, branch, note, err := s.prepareChildWorktree(repo, "o1", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree create: %v", err)
+	}
 	wantCWD := filepath.Join(repo, ".many-ai-cli", "worktrees", "o1", "review")
 	if gotCWD != wantCWD {
 		t.Fatalf("cwd = %q, want %q", gotCWD, wantCWD)
@@ -365,12 +372,95 @@ func Test_prepareChildWorktree_gitRepo(t *testing.T) {
 		t.Fatalf("worktree directory was not created: %v", err)
 	}
 
-	gotCWD2, branch2, note2 := s.prepareChildWorktree(repo, "o1", "review", cfg)
+	gotCWD2, branch2, note2, err := s.prepareChildWorktree(repo, "o1", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree reuse: %v", err)
+	}
 	if gotCWD2 != wantCWD || branch2 != branch {
 		t.Fatalf("reuse mismatch: cwd=%q branch=%q, want %q / %q", gotCWD2, branch2, wantCWD, branch)
 	}
 	if !strings.Contains(note2, "worktree reuse") {
 		t.Fatalf("note2 = %q, want worktree reuse", note2)
+	}
+}
+
+func Test_prepareChildWorktree_rejectsChangedBranch(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path, branch, _, err := s.prepareChildWorktree(repo, "identity", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree create: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repo, "worktree", "remove", "--force", path) })
+	runWorktreeTestGit(t, path, "switch", "-c", "manual-child-branch")
+	before, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil {
+		t.Fatalf("read reused worktree before rejection: %v", err)
+	}
+	_, gotBranch, note, err := s.prepareChildWorktree(repo, "identity", "review", cfg)
+	if !errors.Is(err, errWorktreeIdentityMismatch) {
+		t.Fatalf("changed branch error = %v, want identity mismatch", err)
+	}
+	if gotBranch != "" || !strings.Contains(note, "worktree reuse rejected") {
+		t.Fatalf("changed branch result = branch=%q note=%q, want rejected reuse", gotBranch, note)
+	}
+	if got := strings.TrimSpace(gitOutput(t, path, "branch", "--show-current")); got != "manual-child-branch" {
+		t.Fatalf("branch after rejected reuse = %q, want manual-child-branch", got)
+	}
+	after, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("worktree content changed on rejected reuse: before=%q after=%q err=%v", before, after, err)
+	}
+	runWorktreeTestGit(t, path, "switch", branch)
+}
+
+func Test_prepareChildWorktree_rejectsUnregisteredDirectory(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path := filepath.Join(repo, ".many-ai-cli", "worktrees", "ordinary", "review")
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, note, err := s.prepareChildWorktree(repo, "ordinary", "review", cfg); !errors.Is(err, errWorktreeIdentityMismatch) || !strings.Contains(note, "worktree reuse rejected") {
+		t.Fatalf("ordinary directory result = note=%q err=%v, want identity mismatch", note, err)
+	}
+}
+
+func Test_prepareChildWorktree_rejectsForeignWorktree(t *testing.T) {
+	s := newTestServer()
+	repoA := newRelayTestRepo(t)
+	repoB := newRelayTestRepo(t)
+	cfgA := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path, _, _, err := s.prepareChildWorktree(repoA, "foreign", "review", cfgA)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree in repo A: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repoA, "worktree", "remove", "--force", path) })
+	cfgB := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: filepath.Join(repoA, ".many-ai-cli", "worktrees")}
+	_, _, note, err := s.prepareChildWorktree(repoB, "foreign", "review", cfgB)
+	if !errors.Is(err, errWorktreeIdentityMismatch) || !strings.Contains(note, "worktree reuse rejected") {
+		t.Fatalf("foreign worktree result = note=%q err=%v, want identity mismatch", note, err)
+	}
+}
+
+func Test_prepareChildWorktree_acceptsCanonicalAlias(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	alias := filepath.Join(t.TempDir(), "repo-alias")
+	if err := os.Symlink(repo, alias); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path, branch, _, err := s.prepareChildWorktree(alias, "alias", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree through alias: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repo, "worktree", "remove", "--force", path) })
+	path2, branch2, note, err := s.prepareChildWorktree(repo, "alias", "review", cfg)
+	if err != nil || path2 != filepath.Join(repo, ".many-ai-cli", "worktrees", "alias", "review") || branch2 != branch || !strings.Contains(note, "worktree reuse") {
+		t.Fatalf("canonical alias reuse = path=%q branch=%q note=%q err=%v", path2, branch2, note, err)
 	}
 }
 
@@ -383,8 +473,14 @@ func Test_prepareChildWorktree_differentRepoRoots(t *testing.T) {
 	repoB := newRelayTestRepo(t)
 	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
 
-	cwdA, _, _ := s.prepareChildWorktree(repoA, "o2", "review", cfg)
-	cwdB, _, _ := s.prepareChildWorktree(repoB, "o2", "review", cfg)
+	cwdA, _, _, err := s.prepareChildWorktree(repoA, "o2", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree repoA: %v", err)
+	}
+	cwdB, _, _, err := s.prepareChildWorktree(repoB, "o2", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree repoB: %v", err)
+	}
 	if !strings.HasPrefix(cwdA, repoA) {
 		t.Fatalf("cwdA = %q, want under repoA %q", cwdA, repoA)
 	}
@@ -422,6 +518,32 @@ func Test_preparePromptAndWorktree_defaultUsesWorktree(t *testing.T) {
 	}
 	if prep.branch == "" {
 		t.Fatal("branch は空でないはず（worktree が作られている）")
+	}
+}
+
+func Test_preparePromptAndWorktree_rejectsChangedWorktree(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = repo
+	parent.OrchestrationID = "identity"
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	body := spawnChildRequest{Role: "review", CWD: repo}
+
+	prep, err := s.preparePromptAndWorktree(parent.ID, parent, body, cfg)
+	if err != nil {
+		t.Fatalf("preparePromptAndWorktree create: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repo, "worktree", "remove", "--force", prep.childCWD) })
+	runWorktreeTestGit(t, prep.childCWD, "switch", "-c", "manual-prompt-branch")
+
+	_, err = s.preparePromptAndWorktree(parent.ID, parent, body, cfg)
+	var prepErr *spawnPreparationError
+	if !errors.As(err, &prepErr) || prepErr.status != http.StatusConflict || prepErr.code != "worktree_identity_mismatch" {
+		t.Fatalf("changed worktree preparation error = %v, want HTTP 409 identity mismatch", err)
+	}
+	if got := strings.TrimSpace(gitOutput(t, prep.childCWD, "branch", "--show-current")); got != "manual-prompt-branch" {
+		t.Fatalf("branch after rejected prompt preparation = %q, want manual-prompt-branch", got)
 	}
 }
 
@@ -1561,7 +1683,10 @@ func Test_registerSpawnConfirmation_supersedesSameParentRole(t *testing.T) {
 func Test_registerSpawnConfirmation_enforcesParentAndGlobalLimits(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Orchestration.MaxChildrenPerParent = 2
-	s.cfg.Orchestration.MaxTotalSessions = 3
+	// The shared admission ledger counts live parent sessions as well as
+	// pending child slots: two parents + three pending confirmations exactly
+	// fill a total budget of five.
+	s.cfg.Orchestration.MaxTotalSessions = 5
 	parent := registerTestSession(s, 1, "codex")
 	otherParent := registerTestSession(s, 2, "codex")
 
@@ -1596,6 +1721,55 @@ func Test_registerSpawnConfirmation_enforcesParentAndGlobalLimits(t *testing.T) 
 	if reusable, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-reused", Provider: "codex"}); err != nil || reusable == nil {
 		t.Fatalf("slot reuse after expire = pending=%v err=%v, want success", reusable, err)
 	}
+}
+
+func TestSpawnConfirmationAdmissionReleasedOnDecision(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	s.cfg.Orchestration.MaxChildrenPerParent = 2
+	parent := registerTestSession(s, 1, "codex")
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "refuse", Provider: "codex"})
+	if got := len(s.orchestration.childAdmissions); got != 1 {
+		t.Fatalf("admissions after confirmation = %d, want 1", got)
+	}
+	s.resolveSpawnConfirmationDecision(pending, false, "", "")
+	if got := len(s.orchestration.childAdmissions); got != 0 {
+		t.Fatalf("admissions after refusal = %d, want 0", got)
+	}
+
+	pending = registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "expire", Provider: "codex"})
+	s.expireSpawnConfirmationsForParent(parent.ID, "test")
+	if got := len(s.orchestration.childAdmissions); got != 0 {
+		t.Fatalf("admissions after expiry = %d, want 0", got)
+	}
+	select {
+	case outcome := <-pending.Outcome:
+		if outcome.Approved {
+			t.Fatal("expired confirmation must not be approved")
+		}
+	default:
+		t.Fatal("expired confirmation did not receive an outcome")
+	}
+}
+
+func TestPerformSpawnAdmissionReleasedAfterPreparationFailure(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.MaxDepth = 1
+	s.cfg.Orchestration.MaxChildrenPerParent = 1
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = filepath.Join(t.TempDir(), "missing")
+	body := spawnChildRequest{Role: "tester", Provider: "codex", Model: "gpt-5-mini"}
+	if _, err := s.performSpawn(parent.ID, "", "", body); err == nil {
+		t.Fatal("spawn with a missing cwd unexpectedly succeeded")
+	}
+	id, err := s.reserveOrchestrationChildren(parent.ID, 1, s.cfg.Orchestration, "test-after-failure")
+	if err != nil {
+		t.Fatalf("reservation after failed spawn = %v, want released slot", err)
+	}
+	s.releaseOrchestrationChildren(id)
 }
 
 func Test_registerSpawnConfirmation_concurrentLimit(t *testing.T) {

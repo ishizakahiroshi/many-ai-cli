@@ -193,3 +193,38 @@ func TestApprovalBatchApproveSkipsMidHigh(t *testing.T) {
 		t.Fatalf("low fixture risk = %q", low.Summary.Risk)
 	}
 }
+
+func TestApprovalBatchApproveSkipsWriteRedirectAndBranchMutation(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Token = "test-token"
+	cwd := t.TempDir()
+	write := installBatchApproval(t, s, 23, "codex", cwd, "cat /dev/null > ./important.txt")
+	if write.Summary.Risk != proto.ApprovalRiskMid {
+		t.Fatalf("write redirect risk = %q, want mid", write.Summary.Risk)
+	}
+	w := callApprovalBatch(t, s, approvalBatchRequest{
+		Signature: approvalBatchSignature("codex", cwd, write.Summary),
+		Action:    "approve",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("write redirect approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if s.sessions[23].nativeApprovalSig == "" {
+		t.Fatal("write redirect approval was cleared by batch approve")
+	}
+
+	branch := installBatchApproval(t, s, 24, "codex", cwd, "git branch -D feature")
+	if branch.Summary.Risk != proto.ApprovalRiskMid {
+		t.Fatalf("branch mutation risk = %q, want mid", branch.Summary.Risk)
+	}
+	w = callApprovalBatch(t, s, approvalBatchRequest{
+		Signature: approvalBatchSignature("codex", cwd, branch.Summary),
+		Action:    "approve",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("branch mutation approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if s.sessions[24].nativeApprovalSig == "" {
+		t.Fatal("branch mutation approval was cleared by batch approve")
+	}
+}

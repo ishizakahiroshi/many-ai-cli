@@ -112,6 +112,11 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 	s.pinSessionsMu.Lock()
 	s.pinSessions = map[string]pinCookieSession{}
 	s.pinSessionsMu.Unlock()
+	// The persisted rotation is the revocation boundary. Invalidate browser
+	// WebSockets only after persistence succeeds; a failed save must leave the
+	// old token and its active UI connections usable. Provider wrappers have a
+	// separate lifecycle and are intentionally preserved.
+	s.invalidateAllUI()
 	port := s.currentHubPort()
 	// 新 token を含むためキャッシュ禁止。
 	w.Header().Set("Cache-Control", "no-store")

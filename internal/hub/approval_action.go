@@ -203,6 +203,7 @@ var (
 	errOneTapHighRisk            = errors.New("high-risk approval requires in-app confirmation")
 	errOneTapNoApproval          = errors.New("approval is not pending")
 	errOneTapNoInput             = errors.New("approval action input is unavailable")
+	errApprovalActionBusy        = errors.New("approval action is already in progress")
 	errApprovalActionRuleChanged = errors.New("approval rule no longer matches")
 )
 
@@ -229,8 +230,8 @@ type nativeApprovalActionResult struct {
 }
 
 // sendNativeApprovalAction validates the live native prompt while holding the
-// session's input lock, then sends only that validated option. Callers commit
-// the consumed state after this returns successfully.
+// session's input lock, reserves it through the send/commit boundary, then
+// sends only that validated option. Callers must commit or release the result.
 func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nativeApprovalActionResult, error) {
 	if req.sessionID <= 0 || strings.TrimSpace(req.approvalSig) == "" || !validOneTapAction(req.action) {
 		return nativeApprovalActionResult{}, errOneTapNoApproval
@@ -248,11 +249,26 @@ func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nati
 
 	inputMu.Lock()
 	defer inputMu.Unlock()
+	reserved := false
+	releaseOnError := func(err error) (nativeApprovalActionResult, error) {
+		if reserved {
+			s.sessionsMu.Lock()
+			if s.sessions[req.sessionID] == ses {
+				clearNativeApprovalActionReservationLocked(ses)
+			}
+			s.sessionsMu.Unlock()
+		}
+		return nativeApprovalActionResult{}, err
+	}
 
 	s.sessionsMu.Lock()
 	if s.sessions[req.sessionID] != ses || ses.vt == nil || ses.nativeApprovalSig != req.approvalSig {
 		s.sessionsMu.Unlock()
 		return nativeApprovalActionResult{}, errOneTapNoApproval
+	}
+	if ses.nativeApprovalActionReserved {
+		s.sessionsMu.Unlock()
+		return nativeApprovalActionResult{}, errApprovalActionBusy
 	}
 	approval := detectNativeApproval(ses.Provider, ses.vt.Lines())
 	if approval == nil || approval.Sig != req.approvalSig {
@@ -284,19 +300,25 @@ func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nati
 	}
 	command, cwd, risk := approval.Summary.Command, ses.CWD, approval.Summary.Risk
 	provider := ses.Provider
+	ses.nativeApprovalActionReserved = true
+	ses.nativeApprovalActionSig = approval.Sig
+	ses.nativeApprovalActionCandidateKey = candidateKey
+	ses.nativeApprovalActionSourceEpoch = sourceEpoch
+	ses.nativeApprovalActionWrapper = wc
+	reserved = true
 	s.sessionsMu.Unlock()
 
 	if req.ruleID != "" {
 		if !s.autoApprovalEnabled() {
-			return nativeApprovalActionResult{}, errApprovalActionRuleChanged
+			return releaseOnError(errApprovalActionRuleChanged)
 		}
 		decision := s.evaluateAutoApprovalPolicy(command, cwd, risk)
 		if !decision.Allowed || decision.RuleID != req.ruleID {
-			return nativeApprovalActionResult{}, errApprovalActionRuleChanged
+			return releaseOnError(errApprovalActionRuleChanged)
 		}
 	}
 	if !s.nativeApprovalActionStillCurrent(req.sessionID, ses, req.approvalSig, candidateKey, sourceEpoch, wc) {
-		return nativeApprovalActionResult{}, errOneTapNoApproval
+		return releaseOnError(errOneTapNoApproval)
 	}
 	var input string
 	if req.action == oneTapApprove {
@@ -305,16 +327,59 @@ func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nati
 		input = oneTapRejectInput(approval.Options)
 	}
 	if input == "" {
-		return nativeApprovalActionResult{}, errOneTapNoInput
+		return releaseOnError(errOneTapNoInput)
 	}
 	result := nativeApprovalActionResult{
 		sessionID: req.sessionID, approvalSig: approval.Sig, candidateKey: candidateKey,
 		sourceEpoch: sourceEpoch, provider: provider, wrapper: wc, approval: *approval, input: input,
 	}
 	if rem := s.trySendInputToWrapper(req.sessionID, result.wrapper, result.input); rem != "" {
-		return nativeApprovalActionResult{}, errOneTapNoInput
+		return releaseOnError(errOneTapNoInput)
 	}
 	return result, nil
+}
+
+func clearNativeApprovalActionReservationLocked(ses *session) {
+	if ses == nil {
+		return
+	}
+	ses.nativeApprovalActionReserved = false
+	ses.nativeApprovalActionSig = ""
+	ses.nativeApprovalActionCandidateKey = ""
+	ses.nativeApprovalActionSourceEpoch = 0
+	ses.nativeApprovalActionWrapper = nil
+}
+
+func nativeApprovalActionReservationMatchesLocked(ses *session, result nativeApprovalActionResult) bool {
+	return ses != nil && ses.nativeApprovalActionReserved &&
+		ses.nativeApprovalActionSig == result.approvalSig &&
+		ses.nativeApprovalActionCandidateKey == result.candidateKey &&
+		ses.nativeApprovalActionSourceEpoch == result.sourceEpoch &&
+		ses.nativeApprovalActionWrapper == result.wrapper
+}
+
+// releaseNativeApprovalAction abandons a successful send whose caller could
+// not complete the consume/commit step. It deliberately leaves the live
+// approval untouched so the same token can be retried after a send failure or
+// a failed one-shot consume.
+func (s *Server) releaseNativeApprovalAction(result nativeApprovalActionResult) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[result.sessionID]
+	var inputMu *sync.Mutex
+	if ses != nil {
+		inputMu = ses.inputMu
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil || inputMu == nil {
+		return
+	}
+	inputMu.Lock()
+	s.sessionsMu.Lock()
+	if s.sessions[result.sessionID] == ses && nativeApprovalActionReservationMatchesLocked(ses, result) {
+		clearNativeApprovalActionReservationLocked(ses)
+	}
+	s.sessionsMu.Unlock()
+	inputMu.Unlock()
 }
 
 func (s *Server) nativeApprovalActionStillCurrent(sessionID int, expectedSession *session, approvalSig, candidateKey string, sourceEpoch uint64, expectedWrapper *wrapperConn) bool {
@@ -333,9 +398,25 @@ func (s *Server) commitNativeApprovalAction(result nativeApprovalActionResult) b
 	now := time.Now()
 	s.sessionsMu.Lock()
 	ses := s.sessions[result.sessionID]
-	if ses == nil || ses.nativeApprovalSig != result.approvalSig ||
+	var inputMu *sync.Mutex
+	if ses != nil {
+		inputMu = ses.inputMu
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil || inputMu == nil {
+		return false
+	}
+	inputMu.Lock()
+	defer inputMu.Unlock()
+
+	s.sessionsMu.Lock()
+	if s.sessions[result.sessionID] != ses || !nativeApprovalActionReservationMatchesLocked(ses, result) ||
+		ses.nativeApprovalSig != result.approvalSig ||
 		(ses.nativeApprovalCandidateKey != "" && ses.nativeApprovalCandidateKey != result.candidateKey) ||
 		(ses.nativeApprovalSourceEpoch != 0 && ses.nativeApprovalSourceEpoch != result.sourceEpoch) || s.wrappers[result.sessionID] != result.wrapper {
+		if s.sessions[result.sessionID] == ses && nativeApprovalActionReservationMatchesLocked(ses, result) {
+			clearNativeApprovalActionReservationLocked(ses)
+		}
 		s.sessionsMu.Unlock()
 		return false
 	}
@@ -346,6 +427,7 @@ func (s *Server) commitNativeApprovalAction(result nativeApprovalActionResult) b
 	ses.nativeApprovalCandidateShape = ""
 	ses.nativeApprovalSourceEpoch = 0
 	ses.nativeApprovalClearMisses = 0
+	clearNativeApprovalActionReservationLocked(ses)
 	clearMsg := proto.Message{
 		Type: "approval_cleared", SessionID: result.sessionID, Provider: provider,
 		ApprovalSig: result.approvalSig, ApprovalCandidateKey: result.candidateKey,
@@ -373,9 +455,11 @@ func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
 		return err
 	}
 	if err := s.oneTapApprovals.consume(claim); err != nil {
+		s.releaseNativeApprovalAction(result)
 		return err
 	}
 	if !s.commitNativeApprovalAction(result) {
+		s.releaseNativeApprovalAction(result)
 		return errOneTapNoApproval
 	}
 	return nil

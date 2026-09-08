@@ -68,6 +68,9 @@ func (s *Server) prepareRelayWorktree(parentCWD, orchestrationID string, cfg con
 	path = filepath.Join(root, token, "relay")
 	branch = proto.RelayBranchPrefix + token
 	if _, statErr := os.Stat(path); statErr == nil {
+		if err := validateWorktreeIdentity(parentCWD, path, branch); err != nil {
+			return "", "", "", fmt.Errorf("relay worktree reuse rejected: %w", err)
+		}
 		return path, branch, "", nil
 	}
 	baseOut, err := exec.CommandContext(ctx, "git", "-C", parentCWD, "rev-parse", "HEAD").Output()

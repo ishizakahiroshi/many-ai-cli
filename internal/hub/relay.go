@@ -227,13 +227,17 @@ type relayRun struct {
 	seq uint64 // start order across all relays of the Hub process
 
 	orchestrationID string
-	boardPath       string
-	boardDir        string
-	parentID        int
-	planPath        string
-	mode            string
-	maxRounds       int
-	escalateAfter   int
+	// admissionID holds the relay's implementation/review reservation while
+	// the run is active. Each successful child consumes one slot; a terminal
+	// run releases whatever remains.
+	admissionID   string
+	boardPath     string
+	boardDir      string
+	parentID      int
+	planPath      string
+	mode          string
+	maxRounds     int
+	escalateAfter int
 
 	// Parent identity for re-identification after a Hub restart
 	// (relay_store.go). parentAttached is false for a restored relay until the
@@ -688,21 +692,28 @@ func (s *Server) startRelay(parentID int, req relayStartRequest) (*proto.RelaySt
 		}
 		roles[role] = ra
 	}
-	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
 		return nil, errRelayParentNotFound
 	}
 	cfg := s.snapshotCfg().Orchestration
-	running, reserved := s.relayBudgetForParent(parentID, nil)
+	running, _ := s.relayBudgetForParent(parentID, nil)
 	if parent.Depth >= cfg.MaxDepth {
 		return nil, errOrchestrationLimit{Limit: "depth", Running: running, Max: cfg.MaxDepth}
 	}
-	if childCount+reserved+relayChildrenPerRun > cfg.MaxChildrenPerParent {
-		return nil, errOrchestrationLimit{Limit: "children_per_parent", Running: running, Max: cfg.MaxChildrenPerParent}
+	admissionID, admissionErr := s.reserveOrchestrationChildren(parentID, relayChildrenPerRun, cfg, "relay-start")
+	if admissionErr != nil {
+		if errors.Is(admissionErr, errOrchestrationAdmissionParentNotFound) {
+			return nil, errRelayParentNotFound
+		}
+		return nil, admissionErr
 	}
-	if totalSessions+reserved+relayChildrenPerRun > cfg.MaxTotalSessions {
-		return nil, errOrchestrationLimit{Limit: "total_sessions", Running: running, Max: cfg.MaxTotalSessions}
-	}
+	admissionKept := false
+	defer func() {
+		if !admissionKept {
+			s.releaseOrchestrationChildren(admissionID)
+		}
+	}()
 
 	now := deps.now()
 	// The relay allocates its own orchestration ID (D-21). The parent's
@@ -737,6 +748,7 @@ func (s *Server) startRelay(parentID int, req relayStartRequest) (*proto.RelaySt
 
 	run := &relayRun{
 		orchestrationID: orchestrationID,
+		admissionID:     admissionID,
 		boardPath:       boardPath,
 		boardDir:        filepath.Dir(boardPath),
 		parentID:        parentID,
@@ -792,6 +804,7 @@ func (s *Server) startRelay(parentID int, req relayStartRequest) (*proto.RelaySt
 		return &st, fmt.Errorf("relay spawn: %w", err)
 	}
 	s.relayTransitionLocked(run, relayStateImplementing, "")
+	admissionKept = true
 	st := run.statusLocked()
 	return &st, nil
 }
@@ -818,6 +831,22 @@ func (s *Server) stopRelay(parentID int, orchestrationID, reason string) error {
 // conductor mode); the branch line of buildChildInitialPrompt is left out and
 // the relay prompt names the branch itself.
 func (s *Server) relaySpawn(run *relayRun, role, prompt string) error {
+	admissionID := run.admissionID
+	if !s.orchestrationAdmissionMatches(admissionID, run.parentID, 1) {
+		var err error
+		admissionID, err = s.reserveOrchestrationChildren(run.parentID, 1, s.snapshotCfg().Orchestration, "relay-child")
+		if err != nil {
+			return err
+		}
+	}
+	if err := s.relaySpawnWithAdmission(run, role, prompt, admissionID); err != nil {
+		s.releaseOrchestrationChildren(admissionID)
+		return err
+	}
+	return nil
+}
+
+func (s *Server) relaySpawnWithAdmission(run *relayRun, role, prompt, admissionID string) error {
 	deps := s.relayDep()
 	ra := run.roles[role]
 	body := spawnChildRequest{Role: role, Provider: ra.Provider, Model: ra.Model, InitialPrompt: prompt, CWD: run.childCWD, Force: true, SubscriptionProfileID: ra.Subscription}
@@ -830,6 +859,9 @@ func (s *Server) relaySpawn(run *relayRun, role, prompt string) error {
 	res, err := deps.spawnChild(run.parentID, parent, body, prep)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(admissionID) != "" {
+		s.consumeOrchestrationChildren(admissionID, 1)
 	}
 	label := s.sessionLabel(res.ID)
 	switch role {
@@ -1261,21 +1293,22 @@ func (s *Server) relayHandToStrong(run *relayRun, kind string, v relayVerdict) b
 	}
 	if run.strongID == 0 {
 		cfg := s.snapshotCfg().Orchestration
-		_, childCount, totalSessions := s.orchestrationParentState(run.parentID)
-		_, reservedOthers := s.relayBudgetForParent(run.parentID, run)
-		selfReserved := 0
-		if run.reviewID == 0 {
-			selfReserved = 1
-		}
-		if childCount+reservedOthers+selfReserved+1 > cfg.MaxChildrenPerParent {
-			s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: child limit (children=%d reserved=%d max=%d reason=%s)", childCount, reservedOthers+selfReserved, cfg.MaxChildrenPerParent, reason))
+		strongAdmissionID, admissionErr := s.reserveOrchestrationChildren(run.parentID, 1, cfg, "relay-strong")
+		if admissionErr != nil {
+			var limit errOrchestrationLimit
+			if errors.As(admissionErr, &limit) {
+				if limit.Limit == "total_sessions" {
+					s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: total session limit (max=%d reason=%s)", cfg.MaxTotalSessions, reason))
+				} else {
+					s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: child limit (max=%d reason=%s)", cfg.MaxChildrenPerParent, reason))
+				}
+				return false
+			}
+			s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: admission error (%v) reason=%s", admissionErr, reason))
 			return false
 		}
-		if totalSessions+reservedOthers+selfReserved+1 > cfg.MaxTotalSessions {
-			s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: total session limit (sessions=%d reserved=%d max=%d reason=%s)", totalSessions, reservedOthers+selfReserved, cfg.MaxTotalSessions, reason))
-			return false
-		}
-		if err := s.relaySpawn(run, relayRoleImplementationStrong, s.relayStrongPrompt(run, kind, v)); err != nil {
+		if err := s.relaySpawnWithAdmission(run, relayRoleImplementationStrong, s.relayStrongPrompt(run, kind, v), strongAdmissionID); err != nil {
+			s.releaseOrchestrationChildren(strongAdmissionID)
 			s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: spawn error (%v) reason=%s", err, reason))
 			return false
 		}
@@ -1396,6 +1429,10 @@ func (s *Server) relayFinishLocked(run *relayRun, state, reason, detail string) 
 	run.reason = reason
 	if reason == relayReasonBlocked && detail != "" {
 		run.reason = reason + ": " + detail
+	}
+	if run.admissionID != "" {
+		s.releaseOrchestrationChildren(run.admissionID)
+		run.admissionID = ""
 	}
 	run.updatedAt = deps.now()
 	kind := relayEventStopped

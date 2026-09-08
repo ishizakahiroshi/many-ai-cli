@@ -359,3 +359,39 @@ func TestRelayStore_resumeRelay(t *testing.T) {
 		t.Fatalf("resume with missing worktree = %v, want errRelayWorktreeMissing", err)
 	}
 }
+
+func TestRelayStore_resumeRelayRejectsChangedWorktreeIdentity(t *testing.T) {
+	h := newRelayHarness(t)
+	repo := newRelayTestRepo(t)
+	h.parent.CWD = repo
+	req := h.request()
+	req.Mode = relayModeWorktree
+	st, err := h.s.startRelay(h.parent.ID, req)
+	if err != nil {
+		t.Fatalf("startRelay(worktree): %v", err)
+	}
+	run := h.run(st.OrchestrationID)
+	path, branch := st.WorktreePath, st.Branch
+	t.Cleanup(func() { _ = h.s.cleanupRelayWorktree(repo, path, branch, true) })
+	if !h.s.relayFinish(run, relayStateStopped, relayReasonChildExited, "") {
+		t.Fatal("relayFinish returned false")
+	}
+	runWorktreeTestGit(t, path, "switch", "-c", "manual-resume-branch")
+	before, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil {
+		t.Fatalf("read resumed worktree before rejection: %v", err)
+	}
+	if err := h.s.resumeRelay(h.parent.ID, st.OrchestrationID); !errors.Is(err, errWorktreeIdentityMismatch) {
+		t.Fatalf("changed worktree resume error = %v, want identity mismatch", err)
+	}
+	if len(h.spawns) != 1 {
+		t.Fatalf("resume spawned %d children after identity rejection, want 1 initial child", len(h.spawns))
+	}
+	if got := strings.TrimSpace(gitOutput(t, path, "branch", "--show-current")); got != "manual-resume-branch" {
+		t.Fatalf("branch after rejected resume = %q, want manual-resume-branch", got)
+	}
+	after, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("worktree content changed on rejected resume: before=%q after=%q err=%v", before, after, err)
+	}
+}

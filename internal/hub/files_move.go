@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -35,6 +36,11 @@ type fileMovePlan struct {
 	SrcClean string
 	NewPath  string
 	SrcInfo  os.FileInfo
+}
+
+type rollbackFailure struct {
+	plan fileMovePlan
+	err  error
 }
 
 // processSingleMove は src → dstDir への移動を実行する。
@@ -163,8 +169,18 @@ func (s *Server) processMultiMove(srcs []string, dstDirClean, cwd, gitRoot strin
 			}
 			rollbackErrs := rollbackMoves(completed)
 			errMsg := results[i].Error
-			if len(rollbackErrs) > 0 {
-				errMsg += "; rollback failed: " + strings.Join(rollbackErrs, "; ")
+			for _, rollbackErr := range rollbackErrs {
+				for completedIndex, completedPlan := range completed {
+					if completedPlan.SrcClean != rollbackErr.plan.SrcClean || completedPlan.NewPath != rollbackErr.plan.NewPath {
+						continue
+					}
+					// The original source was recreated before rollback. Keep the
+					// moved data at NewPath and expose both locations to the caller.
+					results[completedIndex].NewAbs = completedPlan.NewPath
+					results[completedIndex].Error = fmt.Sprintf("rollback failed; source was recreated at %s and moved data remains at %s: %v", completedPlan.SrcClean, completedPlan.NewPath, rollbackErr.err)
+					break
+				}
+				errMsg += "; rollback failed: " + fmt.Sprintf("%s -> %s: %v", rollbackErr.plan.NewPath, rollbackErr.plan.SrcClean, rollbackErr.err)
 			}
 			return filesMoveResp{OK: false, Error: "rename_failed", Detail: errMsg, Results: results}
 		}
@@ -177,12 +193,12 @@ func (s *Server) processMultiMove(srcs []string, dstDirClean, cwd, gitRoot strin
 	return filesMoveResp{OK: true, Results: results}
 }
 
-func rollbackMoves(plans []fileMovePlan) []string {
-	errs := []string{}
+func rollbackMoves(plans []fileMovePlan) []rollbackFailure {
+	errs := []rollbackFailure{}
 	for i := len(plans) - 1; i >= 0; i-- {
 		plan := plans[i]
-		if err := os.Rename(plan.NewPath, plan.SrcClean); err != nil {
-			errs = append(errs, plan.NewPath+" -> "+plan.SrcClean+": "+err.Error())
+		if err := atomicRenameNoReplace(plan.NewPath, plan.SrcClean); err != nil {
+			errs = append(errs, rollbackFailure{plan: plan, err: err})
 		}
 	}
 	return errs

@@ -97,8 +97,12 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 					expectedCandidateKey: item.candidateKey, expectedSourceEpoch: item.sourceEpoch,
 					expectedWrapper: item.wrapper, action: oneTapReject,
 				})
-				if err == nil && s.commitNativeApprovalAction(result) {
-					applied++
+				if err == nil {
+					if s.commitNativeApprovalAction(result) {
+						applied++
+					} else {
+						s.releaseNativeApprovalAction(result)
+					}
 				}
 			}
 			writeJSON(w, map[string]any{"ok": true, "matched": len(matched), "applied": applied})
@@ -119,8 +123,12 @@ func (s *Server) handleApprovalBatch(w http.ResponseWriter, r *http.Request) {
 			expectedCandidateKey: item.candidateKey, expectedSourceEpoch: item.sourceEpoch,
 			expectedWrapper: item.wrapper, action: oneTapApprove, lowRiskOnly: true,
 		})
-		if err == nil && s.commitNativeApprovalAction(result) {
-			applied++
+		if err == nil {
+			if s.commitNativeApprovalAction(result) {
+				applied++
+			} else {
+				s.releaseNativeApprovalAction(result)
+			}
 		}
 	}
 	writeJSON(w, map[string]any{"ok": true, "matched": len(matched), "applied": applied})

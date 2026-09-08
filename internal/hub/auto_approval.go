@@ -205,6 +205,7 @@ func (s *Server) maybeAutoApprove(id int, approval *nativeApproval) bool {
 		return false
 	}
 	if !s.commitNativeApprovalAction(result) {
+		s.releaseNativeApprovalAction(result)
 		s.logger.Warn("auto approval skipped: approval changed after send", "session_id", id, "rule_id", decision.RuleID)
 		return false
 	}

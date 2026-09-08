@@ -11,6 +11,50 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Security
+- **"Revoke all access" now disconnects dashboards that were already connected.**
+  Revoking rotated the token and PIN sessions but left open WebSocket
+  connections attached, so a browser that had the old dashboard open could keep
+  sending input and receiving output until it reconnected. UI registration,
+  the receive loop, broadcasts, and the queued-input path are now tied to an
+  authentication generation; a successful revoke advances it and closes every
+  existing UI connection. Wrapper connections are untouched, so running CLIs
+  are not interrupted (`internal/hub/auth_handlers.go`, `server.go`,
+  `ui_broadcast.go`).
+- **Files save compares the base mtime at full precision.** The conflict check
+  truncated both sides to whole seconds, so an external edit made in the same
+  second as the dashboard's last read was silently overwritten. The 409
+  response also carries the current mtime at full precision
+  (`internal/hub/files_save.go`).
+- **A failed multi-file move no longer overwrites files while rolling back.**
+  Rollback used a plain rename, so a file another process had just created at
+  the original location was replaced. Rollback now uses the same no-replace
+  rename as the forward move; on a collision both files are kept and the
+  result names where the moved data remains (`internal/hub/files_move.go`).
+- **Folder-limited auto-approval rules added from the dashboard now match the
+  folder literally.** The working directory was stored as a raw regular
+  expression, so `C:\work\project` never matched on Windows while `/work/app`
+  also matched `/work/application`. The dashboard now stores an anchored,
+  escaped pattern; hand-written `working_dir` regexes in the YAML are unchanged
+  (`internal/autoapproval/policy.go`, `internal/hub/approval_batch.go`).
+- **One approval, one keystroke.** Concurrent one-tap, batch, and auto
+  approvals of the same prompt could each send their own answer to the CLI,
+  because the send and the consume/commit step were not held under one
+  reservation. The reservation now spans send through commit for the same
+  signature, candidate, generation, and wrapper; a second answer for the same
+  prompt is not sent, while a clean send failure can still be retried
+  (`internal/hub/approval_action.go`).
+- **Write redirects and branch mutations are no longer classified as low
+  risk.** `cat x > file` and `git branch -D name` started with a read-only
+  prefix and slipped into low-only batch and auto approval. Unquoted output
+  redirects and branch create/delete/move now classify as mid; quoted or
+  escaped `>`, `2>/dev/null`, and `2>&1` stay read-only
+  (`internal/approval/summary.go`, `internal/autoapproval/policy.go`).
+- **The delete API rejects the workspace root reached through a symlink or
+  junction alias.** The root guard compared a resolved path against the lexical
+  root, so passing the real path while the session's cwd was an alias removed
+  the root itself. Root protection now compares canonical paths and file
+  identity, and refuses the operation when the identity cannot be resolved
+  (`internal/hub/files_delete.go`).
 - **The child spawn confirmation now shows what the child is being granted.**
   The dialog named only role, provider, model, working directory, and prompt, so
   approving a codex child silently granted `--sandbox danger-full-access
@@ -66,6 +110,16 @@ Release artifacts are published at
 - Add `orchestration.child_full_bypass` (default `true`, matching prior
   behavior) so orchestration children can opt out of the automatic
   bypass-permissions / `RiskConfirmed` defaults applied on spawn.
+- **Relay child admission now reserves the shared session budget atomically.**
+  Concurrent relay starts can no longer pass separate snapshots and exceed
+  the per-parent or global child limit. The reservation covers ordinary
+  orchestration spawns, pending confirmations, relay resume, timeout retry,
+  and strong escalation, and is released when preparation or launch fails.
+- **Worktree-backed child and relay reuse now verifies its identity.** Before
+  reusing a directory, the Hub checks the parent Git common directory, the
+  registered worktree path, and the recorded branch. A manually changed
+  branch, unregistered directory, or worktree from another repository stops
+  spawn or resume while preserving the user's checkout and files.
 
 ### Added
 - **Added the on-disk record store for the upcoming session handoff board**

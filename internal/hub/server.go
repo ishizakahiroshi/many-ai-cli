@@ -404,6 +404,16 @@ type session struct {
 	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
 	inputMu *sync.Mutex
 
+	// JSON 外: native approval の送信成功から commit 完了まで保持する予約。
+	// sendNativeApprovalAction は wrapper への送信後に呼び出し元へ戻るため、
+	// inputMu だけでは send と commit の間に同じ承認を別経路が送れてしまう。
+	// 予約の確認・解放は inputMu の内側で sessionsMu を取得する順序に統一する。
+	nativeApprovalActionReserved     bool
+	nativeApprovalActionSig          string
+	nativeApprovalActionCandidateKey string
+	nativeApprovalActionSourceEpoch  uint64
+	nativeApprovalActionWrapper      *wrapperConn
+
 	// JSON 外: 直前に PTY へ書いたのがブラケットペースト本文で、その確定 CR を
 	// 別フレームで待っている状態。UI はチャット本文を「本文」「確定 CR」の 2 通に
 	// 分けて送ってくるため、Hub 側から見ると 1 通に見えない。この印が無いと確定 CR に
@@ -528,11 +538,20 @@ func gitChangeStats(cwd string) (files, added, deleted int) {
 type uiConn struct {
 	ws     *websocket.Conn
 	sendMu sync.Mutex
+	// authMu serializes the lifetime of an authenticated operation with
+	// revoke-all. A revoke waits for an operation already in progress, then
+	// prevents any later send or queued UI action from using this connection.
+	authMu      sync.RWMutex
+	authRevoked bool
 	// sendFunc is test-only transport injection. Production UI connections
 	// leave it nil and write to ws through websocket.JSON.Send.
-	sendFunc        func(any) error
+	sendFunc func(any) error
+	// closeFunc is test-only transport injection for zero-value websocket
+	// fixtures. Production connections leave it nil and close ws directly.
+	closeFunc       func()
 	closeOnce       sync.Once
 	activeSessionID int
+	authEpoch       uint64
 	ptySizes        map[int]ptySize
 	// priming prevents live broadcasts from overtaking the snapshot and PTY
 	// replay sent by handleWS. draining keeps the same ordering while the
@@ -561,6 +580,11 @@ func newUIConn(ws *websocket.Conn) *uiConn {
 func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	c.authMu.RLock()
+	defer c.authMu.RUnlock()
+	if c.authRevoked {
+		return errors.New("ui connection revoked")
+	}
 	if c.sendFunc != nil {
 		return c.sendFunc(m)
 	}
@@ -571,7 +595,38 @@ func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
 }
 
 func (c *uiConn) close() {
-	c.closeOnce.Do(func() { _ = c.ws.Close() })
+	c.closeOnce.Do(func() {
+		if c.closeFunc != nil {
+			c.closeFunc()
+			return
+		}
+		if c.ws != nil {
+			_ = c.ws.Close()
+		}
+	})
+}
+
+func (c *uiConn) invalidate() {
+	c.authMu.Lock()
+	c.authRevoked = true
+	c.authMu.Unlock()
+	c.close()
+}
+
+// runIfAuthorized runs one operation while revoke-all holds off. The
+// operation may enqueue follow-up work; queued UI input uses this same gate at
+// execution time so a revoke between receive and execution drops it.
+func (c *uiConn) runIfAuthorized(fn func()) bool {
+	if c == nil || fn == nil {
+		return false
+	}
+	c.authMu.RLock()
+	defer c.authMu.RUnlock()
+	if c.authRevoked {
+		return false
+	}
+	fn()
+	return true
 }
 
 // wrapperConn wraps a single wrapper WebSocket connection and serialises all
@@ -675,11 +730,15 @@ type Server struct {
 	instanceID          string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
-	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
+	// uis, authEpoch, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
 	// Lock ordering: the two locks are never held simultaneously — snapshot cfg
 	// (snapshotCfg / snapshotLocalModels / idleTimeoutMin) and release cfgMu
 	// before taking sessionsMu.
 	sessionsMu sync.Mutex
+	// authEpoch advances only after a persisted revoke-all rotation. It is
+	// checked while registering and processing UI WebSockets; wrappers are
+	// intentionally outside this lifecycle and remain connected.
+	authEpoch uint64
 	// subscriptionRRMu guards subscriptionRR, the per-provider round-robin cursor
 	// used when a spawn asks for the "auto" subscription. It is intentionally not
 	// covered by cfgMu: choosing a profile must not block on config I/O, and a
@@ -752,6 +811,10 @@ type Server struct {
 	notifyMgr         *notify.Manager
 	oneTapApprovals   *oneTapApprovalManager
 	orchestration     *orchestrationManager
+	// orchestrationAdmissionMu serializes the session snapshot with child-slot
+	// reservations. Preparation and wrapper startup happen after this lock is
+	// released; only admission and reservation-map mutations use it.
+	orchestrationAdmissionMu sync.Mutex
 	// relay holds the replaceable side effects of the relay state machine
 	// (relay.go). Zero value means the production implementations.
 	relay relayDeps
@@ -1815,6 +1878,7 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		return
 	}
 	if m.Role == "ui" {
+		authEpoch := s.currentAuthEpoch()
 		// SEC-C: リモートからの UI 接続を記録し、未知デバイスなら本人へ通知する。
 		s.noteRemoteDevice(req, "ws")
 		if m.Cols > 0 && m.Rows > 0 {
@@ -1822,7 +1886,11 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 			s.sessionsMu.Unlock()
 		}
-		uc, historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
+		uc, historyItems := s.addUIWithHistoryAtEpoch(conn, m.UIActiveSessionID, authEpoch)
+		if uc == nil {
+			// revoke-all won the handshake-to-registration race.
+			return
+		}
 		s.claimResizeOwnership(conn, m.UIActiveSessionID, m.Cols, m.Rows)
 		s.sendSnapshot(uc)
 		replaySessionIDs := make([]int, 0, len(historyItems))
@@ -1853,7 +1921,7 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		s.safeGo("ui_ping_loop", func() { s.pingLoop(ctx, uc) })
-		s.uiLoop(conn)
+		s.uiLoopAtEpoch(conn, authEpoch)
 		cancel()
 		return
 	}
@@ -1887,17 +1955,26 @@ func limitWSReceive(conn *websocket.Conn) {
 // extractBannerModel / applyDetectedModel) は C4 追加分割で
 // internal/hub/model_detect.go へ移動した。
 
-func (s *Server) uiLoop(conn *websocket.Conn) {
+// uiLoopAtEpoch は UI WebSocket の受信ループ。認証世代（authEpoch）が進んだら
+// （全アクセス失効）、その接続からのメッセージを処理せず抜ける。
+func (s *Server) uiLoopAtEpoch(conn *websocket.Conn, authEpoch uint64) {
 	for {
+		uc, ok := s.currentUIForAuth(conn, authEpoch)
+		if !ok {
+			return
+		}
 		var m proto.Message
 		if err := websocket.JSON.Receive(conn, &m); err != nil {
 			s.logger.Info("ui WS closed", "err", err)
 			s.removeUI(conn)
 			return
 		}
+		if !s.isCurrentUI(conn, authEpoch) {
+			return
+		}
 		switch m.Type {
 		case "pty_resize":
-			s.handleResizeFromUI(conn, m)
+			uc.runIfAuthorized(func() { s.handleResizeFromUI(conn, m) })
 		case "pty_input":
 			// handleInput は Git ターン開始スナップショット（captureGitTurnStart）を
 			// 同期で回すため、大きい worktree では数秒返らない。ここで直接呼ぶと
@@ -1907,16 +1984,23 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 			// 内側 CLI に吸収される（2026-08-30 実測: 記事・画像を抱えた作業用 repo で
 			// 3.4 秒。本文と CR と Ctrl+U が 2ms 以内に着弾して送信が消えた）。
 			// セッション単位の FIFO へ渡し、受信ループは即座に次を読む。
-			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
-			s.enqueueInputWork(m.SessionID, func() { s.handleInput(m) })
+			uc.runIfAuthorized(func() { s.claimResizeOwnership(conn, m.SessionID, 0, 0) })
+			s.enqueueInputWork(m.SessionID, func() {
+				if !s.isCurrentUI(conn, authEpoch) {
+					return
+				}
+				uc.runIfAuthorized(func() { s.handleInput(m) })
+			})
 		case "ui_active_session":
-			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
+			uc.runIfAuthorized(func() { s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows) })
 		case "session_hint":
-			s.handleHint(m)
+			uc.runIfAuthorized(func() { s.handleHint(m) })
 		case "approval_consumed":
-			s.handleConsumed(m)
+			uc.runIfAuthorized(func() { s.handleConsumed(m) })
 		case "session_history_reset":
-			if s.handleHistoryReset(m) {
+			reset := false
+			uc.runIfAuthorized(func() { reset = s.handleHistoryReset(m) })
+			if reset {
 				continue
 			}
 		case "session_dismiss":
@@ -1930,11 +2014,15 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				uiUA = req.UserAgent()
 			}
 			s.logger.Info("ui session_dismiss received", "session_id", m.SessionID, "ui_addr", uiAddr, "ui_ua", uiUA)
-			if s.handleDismiss(m) {
+			dismissed := false
+			uc.runIfAuthorized(func() { dismissed = s.handleDismiss(m) })
+			if dismissed {
 				continue
 			}
 		case "attach_request":
-			if s.handleAttachRequest(m) {
+			attached := false
+			uc.runIfAuthorized(func() { attached = s.handleAttachRequest(m) })
+			if attached {
 				continue
 			}
 		}

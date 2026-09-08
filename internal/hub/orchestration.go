@@ -81,6 +81,12 @@ type orchestrationManager struct {
 	// HTTP request that registered it
 	// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
 	spawnConfirmations map[string]*pendingSpawnConfirmation
+	// childAdmissions is the shared reservation ledger for every future child
+	// session: ordinary spawn, confirmation wait, relay start/resume, and
+	// strong escalation. The map is protected by mu; callers also hold
+	// Server.orchestrationAdmissionMu while comparing it with sessions.
+	childAdmissions   map[string]orchestrationChildAdmission
+	childAdmissionSeq uint64
 	// relays holds every relay loop (relay.go) keyed by its own orchestration
 	// ID. The map is guarded by mu; each relayRun has its own mutex for its
 	// transitions so mu is never held across spawn / inject / git calls.
@@ -98,6 +104,12 @@ type orchestrationManager struct {
 	spawnConfirmSeq uint64
 	stopOnce        sync.Once
 	stopCh          chan struct{}
+}
+
+type orchestrationChildAdmission struct {
+	ParentID int
+	Slots    int
+	Kind     string
 }
 
 // orchestrationRoleAssignment は起動フォームの「子役割の詳細設定」アコーディオンで
@@ -283,6 +295,10 @@ type pendingSpawnConfirmation struct {
 	// supersede). It is buffered so that write never blocks on a waiter that
 	// stopped listening.
 	Outcome chan spawnConfirmationOutcome
+	// AdmissionID reserves this confirmation's future child slot until the
+	// browser refuses it, it is superseded/expired, or performSpawn consumes
+	// it after approval.
+	AdmissionID string
 }
 
 // spawnConfirmationOutcome is written to pendingSpawnConfirmation.Outcome
@@ -328,6 +344,125 @@ func newOrchestrationManager() *orchestrationManager {
 		relayMeta:          map[string]relayMeta{},
 		stopCh:             make(chan struct{}),
 	}
+}
+
+var errOrchestrationAdmissionParentNotFound = errors.New("orchestration parent session not found")
+
+// reserveOrchestrationChildren atomically checks the live session snapshot
+// together with every outstanding child admission. The admission mutex is
+// held only for this check and the tiny ledger update; worktree preparation,
+// board I/O, and wrapper startup happen after it is released.
+func (s *Server) reserveOrchestrationChildren(parentID, slots int, cfg config.OrchestrationConfig, kind string) (string, error) {
+	if slots <= 0 {
+		return "", nil
+	}
+	s.orchestrationAdmissionMu.Lock()
+	defer s.orchestrationAdmissionMu.Unlock()
+	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	if parent == nil {
+		return "", errOrchestrationAdmissionParentNotFound
+	}
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	return s.reserveOrchestrationChildrenLocked(parentID, childCount, totalSessions, cfg, slots, kind, "")
+}
+
+// reserveOrchestrationChildrenLocked is the lock-holding half of
+// reserveOrchestrationChildren. The caller holds both
+// orchestrationAdmissionMu and orchestration.mu. excludeID is used when a
+// same-role confirmation is replaced in one admission transaction.
+func (s *Server) reserveOrchestrationChildrenLocked(parentID, childCount, totalSessions int, cfg config.OrchestrationConfig, slots int, kind, excludeID string) (string, error) {
+	parentReserved, totalReserved := 0, 0
+	for id, admission := range s.orchestration.childAdmissions {
+		if id == excludeID || admission.Slots <= 0 {
+			continue
+		}
+		totalReserved += admission.Slots
+		if admission.ParentID == parentID {
+			parentReserved += admission.Slots
+		}
+	}
+	running := 0
+	for _, meta := range s.orchestration.relayMeta {
+		if meta.parentID == parentID && meta.attached && meta.active {
+			running++
+		}
+	}
+	if childCount+parentReserved+slots > cfg.MaxChildrenPerParent {
+		return "", errOrchestrationLimit{Limit: "children_per_parent", Running: running, Max: cfg.MaxChildrenPerParent}
+	}
+	if totalSessions+totalReserved+slots > cfg.MaxTotalSessions {
+		return "", errOrchestrationLimit{Limit: "total_sessions", Running: running, Max: cfg.MaxTotalSessions}
+	}
+	if s.orchestration.childAdmissions == nil {
+		s.orchestration.childAdmissions = map[string]orchestrationChildAdmission{}
+	}
+	s.orchestration.childAdmissionSeq++
+	id := fmt.Sprintf("oa-%d", s.orchestration.childAdmissionSeq)
+	s.orchestration.childAdmissions[id] = orchestrationChildAdmission{ParentID: parentID, Slots: slots, Kind: kind}
+	return id, nil
+}
+
+func (s *Server) releaseOrchestrationChildren(admissionID string) {
+	if strings.TrimSpace(admissionID) == "" {
+		return
+	}
+	s.orchestrationAdmissionMu.Lock()
+	s.orchestration.mu.Lock()
+	delete(s.orchestration.childAdmissions, admissionID)
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
+}
+
+// consumeOrchestrationChildren commits slots that have become live sessions.
+// A missing admission is tolerated for restored/direct unit-test runs that
+// predate the ledger; new admission paths always pass a live ID here.
+func (s *Server) consumeOrchestrationChildren(admissionID string, slots int) bool {
+	if strings.TrimSpace(admissionID) == "" || slots <= 0 {
+		return false
+	}
+	s.orchestrationAdmissionMu.Lock()
+	defer s.orchestrationAdmissionMu.Unlock()
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	admission, ok := s.orchestration.childAdmissions[admissionID]
+	if !ok || admission.Slots <= 0 {
+		return false
+	}
+	if slots >= admission.Slots {
+		delete(s.orchestration.childAdmissions, admissionID)
+	} else {
+		admission.Slots -= slots
+		s.orchestration.childAdmissions[admissionID] = admission
+	}
+	return true
+}
+
+func (s *Server) orchestrationAdmissionMatches(admissionID string, parentID, slots int) bool {
+	if strings.TrimSpace(admissionID) == "" || slots <= 0 {
+		return false
+	}
+	s.orchestrationAdmissionMu.Lock()
+	defer s.orchestrationAdmissionMu.Unlock()
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	admission, ok := s.orchestration.childAdmissions[admissionID]
+	return ok && admission.ParentID == parentID && admission.Slots >= slots
+}
+
+func (s *Server) releaseSpawnConfirmationAdmission(pending *pendingSpawnConfirmation) {
+	if pending == nil {
+		return
+	}
+	s.orchestrationAdmissionMu.Lock()
+	s.orchestration.mu.Lock()
+	if current := s.orchestration.spawnConfirmations[pending.ID]; current == pending {
+		pending.Decided = true
+		delete(s.orchestration.spawnConfirmations, pending.ID)
+	}
+	delete(s.orchestration.childAdmissions, pending.AdmissionID)
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
 }
 
 // reserveOrchestrationConductor は「オーケストレーション」ボタン経由の起動リクエストを
@@ -389,6 +524,9 @@ func (s *Server) spawnConfirmationRequired(provider string) bool {
 // the first request is still awaiting a human should not accumulate stale
 // confirmations.
 func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider string, body spawnChildRequest) (*pendingSpawnConfirmation, *spawnHTTPError) {
+	if parent == nil {
+		return nil, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+	}
 	pending := &pendingSpawnConfirmation{
 		ParentID:          parent.ID,
 		Role:              body.Role,
@@ -399,6 +537,12 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 	}
 	cfg := s.snapshotCfg().Orchestration
 	var superseded *pendingSpawnConfirmation
+	s.orchestrationAdmissionMu.Lock()
+	liveParent, childCount, totalSessions := s.orchestrationParentState(parent.ID)
+	if liveParent == nil {
+		s.orchestrationAdmissionMu.Unlock()
+		return nil, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+	}
 	s.orchestration.mu.Lock()
 	// The sequence number is required, not cosmetic: time.Now().UnixNano()
 	// alone has produced identical values for two calls a few microseconds
@@ -406,45 +550,37 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 	// confirmations collide on the same ID.
 	s.orchestration.spawnConfirmSeq++
 	pending.ID = fmt.Sprintf("sc-%d-%d", pending.RequestedAt.UnixNano(), s.orchestration.spawnConfirmSeq)
-	for id, existing := range s.orchestration.spawnConfirmations {
+	excludeAdmissionID := ""
+	for _, existing := range s.orchestration.spawnConfirmations {
 		if existing.ParentID == parent.ID && existing.Role == body.Role && !existing.Decided {
 			superseded = existing
-			superseded.Decided = true
-			delete(s.orchestration.spawnConfirmations, id)
+			excludeAdmissionID = existing.AdmissionID
 			break
 		}
 	}
-	if superseded == nil {
-		pendingForParent := 0
-		pendingTotal := 0
-		for _, existing := range s.orchestration.spawnConfirmations {
-			if existing.Decided {
-				continue
+	admissionID, admissionErr := s.reserveOrchestrationChildrenLocked(parent.ID, childCount, totalSessions, cfg, 1, "spawn-confirmation", excludeAdmissionID)
+	if admissionErr != nil {
+		s.orchestration.mu.Unlock()
+		s.orchestrationAdmissionMu.Unlock()
+		var limit errOrchestrationLimit
+		if errors.As(admissionErr, &limit) {
+			detail := "pending spawn confirmations total"
+			if limit.Limit == "children_per_parent" {
+				detail = "pending spawn confirmations per parent"
 			}
-			pendingTotal++
-			if existing.ParentID == parent.ID {
-				pendingForParent++
-			}
+			return nil, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: detail}
 		}
-		if pendingForParent >= cfg.MaxChildrenPerParent {
-			s.orchestration.mu.Unlock()
-			return nil, &spawnHTTPError{
-				status: http.StatusTooManyRequests,
-				code:   "orchestration_limit",
-				detail: "pending spawn confirmations per parent",
-			}
-		}
-		if pendingTotal >= cfg.MaxTotalSessions {
-			s.orchestration.mu.Unlock()
-			return nil, &spawnHTTPError{
-				status: http.StatusTooManyRequests,
-				code:   "orchestration_limit",
-				detail: "pending spawn confirmations total",
-			}
-		}
+		return nil, &spawnHTTPError{status: http.StatusInternalServerError, code: "orchestration_limit", detail: admissionErr.Error()}
 	}
+	if superseded != nil {
+		superseded.Decided = true
+		delete(s.orchestration.spawnConfirmations, superseded.ID)
+		delete(s.orchestration.childAdmissions, superseded.AdmissionID)
+	}
+	pending.AdmissionID = admissionID
 	s.orchestration.spawnConfirmations[pending.ID] = pending
 	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
 
 	if superseded != nil {
 		select {
@@ -530,6 +666,7 @@ func (s *Server) hasPendingSpawnConfirmation(parentID int) bool {
 // is actually removed (C5): a session must never be deleted while leaving a
 // confirmation permanently unanswerable.
 func (s *Server) expireSpawnConfirmationsForParent(parentID int, trigger string) {
+	s.orchestrationAdmissionMu.Lock()
 	s.orchestration.mu.Lock()
 	var expired []*pendingSpawnConfirmation
 	for id, p := range s.orchestration.spawnConfirmations {
@@ -539,8 +676,10 @@ func (s *Server) expireSpawnConfirmationsForParent(parentID int, trigger string)
 		p.Decided = true
 		expired = append(expired, p)
 		delete(s.orchestration.spawnConfirmations, id)
+		delete(s.orchestration.childAdmissions, p.AdmissionID)
 	}
 	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
 	for _, p := range expired {
 		select {
 		case p.Outcome <- spawnConfirmationOutcome{Approved: false}:
@@ -569,21 +708,28 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "confirmation_id is required")
 		return
 	}
+	s.orchestrationAdmissionMu.Lock()
 	s.orchestration.mu.Lock()
 	pending := s.orchestration.spawnConfirmations[body.ConfirmationID]
 	if pending == nil {
 		s.orchestration.mu.Unlock()
+		s.orchestrationAdmissionMu.Unlock()
 		writeJSONError(w, http.StatusNotFound, "not_found", "spawn confirmation is no longer pending")
 		return
 	}
 	if pending.Decided {
 		s.orchestration.mu.Unlock()
+		s.orchestrationAdmissionMu.Unlock()
 		writeJSONError(w, http.StatusConflict, "already_decided", "spawn confirmation has already been decided")
 		return
 	}
 	pending.Decided = true
 	delete(s.orchestration.spawnConfirmations, body.ConfirmationID)
+	if !body.Approved {
+		delete(s.orchestration.childAdmissions, pending.AdmissionID)
+	}
 	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
 
 	writeJSON(w, map[string]bool{"ok": true})
 	decidedProvider := strings.TrimSpace(body.Provider)
@@ -605,6 +751,7 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 // connected browser closes its dialog.
 func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmation, approved bool, decidedProvider, decidedModel string) {
 	if !approved {
+		s.releaseSpawnConfirmationAdmission(pending)
 		if parent, _, _ := s.orchestrationParentState(pending.ParentID); parent != nil {
 			if boardPath, err := s.ensureOrchestrationBoardForRefusal(parent, pending.Body); err == nil {
 				_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("refused: role=%s reason=user_refusal\n", pending.Role))
@@ -617,6 +764,7 @@ func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmat
 		s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: pending.ID, SessionID: pending.ParentID, Reason: "refused"})
 		return
 	}
+	defer s.releaseOrchestrationChildren(pending.AdmissionID)
 
 	body := pending.Body
 	if decidedProvider != "" {
@@ -632,7 +780,7 @@ func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmat
 			"requested_provider", pending.Body.Provider, "decided_provider", body.Provider)
 		providerChangeNote = note
 	}
-	result, spawnErr := s.performSpawn(pending.ParentID, pending.RequestedProvider, providerChangeNote, body)
+	result, spawnErr := s.performSpawnWithAdmission(pending.ParentID, pending.RequestedProvider, providerChangeNote, body, pending.AdmissionID)
 
 	s.orchestration.mu.Lock()
 	waiterGone := pending.WaiterGone
@@ -823,14 +971,18 @@ func (s *Server) preparePromptAndWorktree(parentID int, parent *session, body sp
 	// tri-state。nil のときだけ config の worktree_auto を見る（既定どおり worktree が
 	// 勝つ）。明示 true は worktree を使わず、要求 cwd をそのまま子 cwd にする。
 	var childCWD, branch, worktreeNote string
+	var worktreeErr error
 	if body.SameTree != nil && *body.SameTree {
 		childCWD = cwd
 		worktreeNote = "worktree skip: requested by --same-tree"
 	} else {
-		childCWD, branch, worktreeNote = s.prepareChildWorktree(cwd, orchestrationID, body.Role, cfg)
+		childCWD, branch, worktreeNote, worktreeErr = s.prepareChildWorktree(cwd, orchestrationID, body.Role, cfg)
 	}
 	if worktreeNote != "" {
 		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("%s\n", worktreeNote))
+	}
+	if worktreeErr != nil {
+		return childSpawnPreparation{}, &spawnPreparationError{status: http.StatusConflict, code: "worktree_identity_mismatch", detail: worktreeNote}
 	}
 	return childSpawnPreparation{orchestrationID: orchestrationID, boardPath: boardPath, childCWD: childCWD, branch: branch, absoluteCWD: cwd}, nil
 }
@@ -938,13 +1090,17 @@ func (e *spawnHTTPError) Error() string { return e.detail }
 // the board exists (used when a confirmation decision changed the provider
 // from what was requested).
 func (s *Server) performSpawn(parentID int, requestedProvider, providerChangeNote string, body spawnChildRequest) (childSpawnResult, *spawnHTTPError) {
+	return s.performSpawnWithAdmission(parentID, requestedProvider, providerChangeNote, body, "")
+}
+
+func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, providerChangeNote string, body spawnChildRequest, existingAdmissionID string) (childSpawnResult, *spawnHTTPError) {
 	if !validOrchestrationProvider(body.Provider) {
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusBadRequest, code: "bad_request", detail: invalidProviderDetail(body.Provider)}
 	}
 	if !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusBadRequest, code: "bad_request", detail: "invalid model selected for child"}
 	}
-	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
 	}
@@ -954,14 +1110,27 @@ func (s *Server) performSpawn(parentID int, requestedProvider, providerChangeNot
 		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max orchestration depth reached"}
 	}
-	if childCount >= cfg.MaxChildrenPerParent {
-		s.notifyOrchestrationError(parentID, "children_per_parent", "max children per parent reached")
-		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max children per parent reached"}
+	admissionID := strings.TrimSpace(existingAdmissionID)
+	if !s.orchestrationAdmissionMatches(admissionID, parentID, 1) {
+		var err error
+		admissionID, err = s.reserveOrchestrationChildren(parentID, 1, cfg, "spawn")
+		if err != nil {
+			if errors.Is(err, errOrchestrationAdmissionParentNotFound) {
+				return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+			}
+			var limit errOrchestrationLimit
+			if errors.As(err, &limit) {
+				detail := "max children per parent reached"
+				if limit.Limit == "total_sessions" {
+					detail = "max total sessions reached"
+				}
+				s.notifyOrchestrationError(parentID, limit.Limit, detail)
+				return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: detail}
+			}
+			return childSpawnResult{}, &spawnHTTPError{status: http.StatusInternalServerError, code: "orchestration_limit", detail: err.Error()}
+		}
 	}
-	if totalSessions >= cfg.MaxTotalSessions {
-		s.notifyOrchestrationError(parentID, "total_sessions", "max total sessions reached")
-		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max total sessions reached"}
-	}
+	defer s.releaseOrchestrationChildren(admissionID)
 	// 同 role の生存子がいる場合の重複 spawn ガード。conductor が修正指示・再確認指示を
 	// 毎回 spawn で出すと生存子数が max_children_per_parent に到達して詰まる実測があった
 	// （plan_orchestration-conductor-improvements.md C2）。既存子への指示は send を使わせる。
@@ -2301,6 +2470,12 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 		label := fmt.Sprintf("orch-%s-%s-retry-%d", safeToken(boardID), child.Role, time.Now().UnixNano())
 		spec := child.RestartSpec
 		spec.Label = label
+		admissionID, admissionErr := s.reserveOrchestrationChildren(child.ParentID, 1, s.snapshotCfg().Orchestration, "timeout-respawn")
+		if admissionErr != nil {
+			s.notifyOrchestrationError(child.ParentID, "timeout_respawn", fmt.Sprintf("role=%s id=%d: %v", child.Role, sessionID, admissionErr))
+			return
+		}
+		defer s.releaseOrchestrationChildren(admissionID)
 		meta := pendingChild{ParentSessionID: child.ParentID, Role: child.Role, Auto: true, Depth: 1, OrchestrationID: boardID, BoardPath: board.Path, WorktreeBranch: child.WorktreeBranch, SpawnedAt: time.Now()}
 		s.orchestration.mu.Lock()
 		s.orchestration.pending[label] = meta
@@ -2313,6 +2488,7 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 			s.notifyOrchestrationError(child.ParentID, "timeout_respawn", fmt.Sprintf("role=%s id=%d: %v", child.Role, sessionID, err))
 			return
 		}
+		s.consumeOrchestrationChildren(admissionID, 1)
 		s.registerBoardChild(boardID, board.Path, newID, child.ParentID, child.Role, time.Now())
 		s.setChildRestartData(boardID, newID, child.RestartSpec, child.InitialPrompt, child.WorktreeBranch, child.TimeoutRetries+1)
 		_ = s.appendBoardSection(board.Path, "hub", fmt.Sprintf("timeout retry spawned: role=%s old_session=%d session=%d\n", child.Role, sessionID, newID))
@@ -3243,14 +3419,14 @@ func buildConductorInitialPrompt(orchestrationID string, roles map[string]orches
 	return b.String()
 }
 
-func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg config.OrchestrationConfig) (string, string, string) {
+func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg config.OrchestrationConfig) (string, string, string, error) {
 	if !cfg.WorktreeEnabled() {
-		return cwd, "", "worktree skip: disabled by config"
+		return cwd, "", "worktree skip: disabled by config", nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Run(); err != nil {
-		return cwd, "", "worktree skip: parent cwd is not a git repository"
+		return cwd, "", "worktree skip: parent cwd is not a git repository", nil
 	}
 	branch := "orch/" + safeToken(orchestrationID) + "/" + safeToken(role)
 	root := cfg.WorktreeDirRoot
@@ -3259,10 +3435,14 @@ func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg con
 	}
 	childDir := filepath.Join(root, safeToken(orchestrationID), safeToken(role))
 	if err := os.MkdirAll(filepath.Dir(childDir), sessionlog.PrivateDirMode); err != nil {
-		return cwd, "", "worktree skip: " + err.Error()
+		return cwd, "", "worktree skip: " + err.Error(), nil
 	}
 	if _, err := os.Stat(childDir); err == nil {
-		return childDir, branch, "worktree reuse: " + childDir + " branch=" + branch
+		if err := validateWorktreeIdentity(cwd, childDir, branch); err != nil {
+			note := "worktree reuse rejected: " + err.Error()
+			return cwd, "", note, err
+		}
+		return childDir, branch, "worktree reuse: " + childDir + " branch=" + branch, nil
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel2()
@@ -3271,9 +3451,9 @@ func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg con
 	// session cwd（ユーザー本人が指定した自マシンのパス）。
 	cmd := exec.CommandContext(ctx2, "git", "-C", cwd, "worktree", "add", "-b", branch, childDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return cwd, "", "worktree skip: " + strings.TrimSpace(string(out)) + " " + err.Error()
+		return cwd, "", "worktree skip: " + strings.TrimSpace(string(out)) + " " + err.Error(), nil
 	}
-	return childDir, branch, "worktree created: " + childDir + " branch=" + branch
+	return childDir, branch, "worktree created: " + childDir + " branch=" + branch, nil
 }
 
 func (s *Server) appendBoardSection(path, role, text string) error {

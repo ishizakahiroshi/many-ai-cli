@@ -620,12 +620,11 @@ func (s *Server) resumeRelay(parentID int, orchestrationID string) error {
 			return errRelayAmbiguous
 		}
 	}
-	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
 		return errRelayParentNotFound
 	}
 	cfg := s.snapshotCfg().Orchestration
-	running, reserved := s.relayBudgetForParent(parentID, run)
 
 	run.mu.Lock()
 	defer run.mu.Unlock()
@@ -639,13 +638,22 @@ func (s *Server) resumeRelay(parentID int, orchestrationID string) error {
 		if info, err := os.Stat(run.worktreePath); err != nil || !info.IsDir() {
 			return errRelayWorktreeMissing
 		}
+		parentCWD := strings.TrimSpace(run.parentCWD)
+		if parentCWD == "" {
+			parentCWD = parent.CWD
+		}
+		if err := validateWorktreeIdentity(parentCWD, run.worktreePath, run.branch); err != nil {
+			return err
+		}
 	}
-	if childCount+reserved+relayChildrenPerRun > cfg.MaxChildrenPerParent {
-		return errOrchestrationLimit{Limit: "children_per_parent", Running: running, Max: cfg.MaxChildrenPerParent}
+	admissionID, admissionErr := s.reserveOrchestrationChildren(parentID, relayChildrenPerRun, cfg, "relay-resume")
+	if admissionErr != nil {
+		if errors.Is(admissionErr, errOrchestrationAdmissionParentNotFound) {
+			return errRelayParentNotFound
+		}
+		return admissionErr
 	}
-	if totalSessions+reserved+relayChildrenPerRun > cfg.MaxTotalSessions {
-		return errOrchestrationLimit{Limit: "total_sessions", Running: running, Max: cfg.MaxTotalSessions}
-	}
+	run.admissionID = admissionID
 	if !run.parentAttached || run.parentID != parentID {
 		old := run.parentID
 		run.parentID = parentID

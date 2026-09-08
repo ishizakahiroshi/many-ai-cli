@@ -19,7 +19,7 @@ import (
 	"many-ai-cli/internal/proto"
 )
 
-// addUIWithHistory atomically registers c in the broadcast set and captures a
+// addUIWithHistoryAtEpoch atomically registers c in the broadcast set and captures a
 // snapshot of every session's ptyBuf at the same instant, then returns those
 // snapshots as ready-to-send messages. The connection remains in priming mode
 // until handleWS has sent the snapshot, history, and replay completion frames;
@@ -27,11 +27,18 @@ import (
 // cannot overtake the initial state.
 // activeSessionID は UI が現在表示中のセッション ID。このセッションは全量 replay し、
 // 他は replayTailForNonActive バイトの tail のみ送信する（UI 接続時のメモリ・帯域削減）。
-func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiConn, []proto.Message) {
+// authEpoch は handshake 時点の認証世代。登録までの間に全アクセス失効が挟まって
+// 世代が進んでいたら、この接続は登録せず nil を返す（失効直後の取りこぼし防止）。
+func (s *Server) addUIWithHistoryAtEpoch(c *websocket.Conn, activeSessionID int, authEpoch uint64) (*uiConn, []proto.Message) {
 	var items []proto.Message
 	s.sessionsMu.Lock()
+	if s.authEpoch != authEpoch {
+		s.sessionsMu.Unlock()
+		return nil, nil
+	}
 	uc := newUIConn(c)
 	uc.activeSessionID = activeSessionID
+	uc.authEpoch = authEpoch
 	uc.priming = true
 	s.uis[c] = uc
 	s.stopIdleTimerLocked()
@@ -97,6 +104,54 @@ func (s *Server) addUIWithHistory(c *websocket.Conn, activeSessionID int) (*uiCo
 	return uc, items
 }
 
+func (s *Server) currentAuthEpoch() uint64 {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	return s.authEpoch
+}
+
+func (s *Server) currentUIForAuth(c *websocket.Conn, authEpoch uint64) (*uiConn, bool) {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	uc := s.uis[c]
+	return uc, uc != nil && s.authEpoch == authEpoch && uc.authEpoch == authEpoch
+}
+
+func (s *Server) isCurrentUI(c *websocket.Conn, authEpoch uint64) bool {
+	_, ok := s.currentUIForAuth(c, authEpoch)
+	return ok
+}
+
+// invalidateAllUI advances the authentication boundary and removes every UI
+// connection from the live broadcast set. The wrapper set is deliberately not
+// touched: revoking browser access must not interrupt running provider CLIs.
+func (s *Server) invalidateAllUI() {
+	idleMin := s.idleTimeoutMin()
+	s.sessionsMu.Lock()
+	s.authEpoch++
+	connections := make([]*uiConn, 0, len(s.uis))
+	for c, uc := range s.uis {
+		delete(s.uis, c)
+		uc.priming = false
+		uc.draining = false
+		uc.queued = nil
+		s.releaseResizeOwnershipLocked(c)
+		connections = append(connections, uc)
+	}
+	count := len(s.uis)
+	if count == 0 {
+		s.startIdleTimerLocked(idleMin)
+	}
+	s.sessionsMu.Unlock()
+
+	for _, uc := range connections {
+		uc.invalidate()
+	}
+	if len(connections) > 0 {
+		s.logger.Info("UI connections invalidated", "ui_count", len(connections), "ui_count_remaining", count)
+	}
+}
+
 func (s *Server) removeUI(c *websocket.Conn) {
 	idleMin := s.idleTimeoutMin()
 	s.sessionsMu.Lock()
@@ -117,7 +172,7 @@ func (s *Server) removeUI(c *websocket.Conn) {
 	s.sessionsMu.Unlock()
 	// Ensure the underlying TCP connection is closed so that any goroutine
 	// blocked on Receive (e.g. uiLoop) unblocks and exits.
-	uc.close()
+	uc.invalidate()
 	s.logger.Info("UI disconnected", "ui_count", count)
 }
 

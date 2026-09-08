@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -182,5 +183,43 @@ func TestApprovalActionDoesNotClearReplacementPrompt(t *testing.T) {
 	}
 	if current.nativeApprovalSig != "replacement-sig" || current.nativeApprovalCandidateKey != "replacement-key" {
 		t.Fatalf("replacement prompt changed after failed commit: sig=%q key=%q", current.nativeApprovalSig, current.nativeApprovalCandidateKey)
+	}
+}
+
+func TestApprovalActionReservationBlocksSecondSendBeforeCommit(t *testing.T) {
+	s := newTestServer()
+	ses := installBatchApproval(t, s, 14, "codex", t.TempDir(), "git status")
+	s.sessionsMu.Lock()
+	current := s.sessions[14]
+	key := current.nativeApprovalCandidateKey
+	epoch := current.nativeApprovalSourceEpoch
+	wc := s.wrappers[14]
+	var sends atomic.Int32
+	wc.sendFunc = func(any) error {
+		sends.Add(1)
+		return nil
+	}
+	s.sessionsMu.Unlock()
+
+	req := nativeApprovalActionRequest{
+		sessionID: 14, approvalSig: ses.Sig, expectedCandidateKey: key,
+		expectedSourceEpoch: epoch, expectedWrapper: wc, action: oneTapReject,
+	}
+	first, err := s.sendNativeApprovalAction(req)
+	if err != nil {
+		t.Fatalf("first sendNativeApprovalAction = %v", err)
+	}
+	if got := sends.Load(); got == 0 {
+		t.Fatal("first approval action did not reach wrapper")
+	}
+
+	if _, err := s.sendNativeApprovalAction(req); !errors.Is(err, errApprovalActionBusy) {
+		t.Fatalf("second sendNativeApprovalAction = %v, want busy", err)
+	}
+	if got := sends.Load(); got != 1 {
+		t.Fatalf("wrapper send count = %d, want exactly one before commit", got)
+	}
+	if !s.commitNativeApprovalAction(first) {
+		t.Fatal("first approval action did not commit")
 	}
 }

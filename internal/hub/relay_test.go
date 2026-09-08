@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -399,6 +400,133 @@ func TestRelay_startRelay_childBudget(t *testing.T) {
 	h.s.cfg.Orchestration.MaxDepth = 0
 	if _, err := h.s.startRelay(h.parent.ID, h.request()); !errors.As(err, &limit) || limit.Limit != "depth" {
 		t.Fatalf("depth err = %v", err)
+	}
+}
+
+func TestOrchestrationChildAdmissionConcurrentLimit(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	cfg := s.cfg.Orchestration
+	const attempts = 12
+	start := make(chan struct{})
+	ids := make(chan string, attempts)
+	errs := make(chan error, attempts)
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			id, err := s.reserveOrchestrationChildren(parent.ID, 1, cfg, "test")
+			if err == nil {
+				ids <- id
+			} else {
+				errs <- err
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(ids)
+	close(errs)
+
+	admissionIDs := make([]string, 0, cfg.MaxChildrenPerParent)
+	for id := range ids {
+		admissionIDs = append(admissionIDs, id)
+	}
+	accepted := len(admissionIDs)
+	if accepted != cfg.MaxChildrenPerParent {
+		t.Fatalf("concurrent admissions = %d, want %d", accepted, cfg.MaxChildrenPerParent)
+	}
+	for err := range errs {
+		var limit errOrchestrationLimit
+		if !errors.As(err, &limit) || limit.Limit != "children_per_parent" {
+			t.Fatalf("unexpected rejected admission: %v", err)
+		}
+	}
+	s.orchestration.mu.Lock()
+	if got := len(s.orchestration.childAdmissions); got != accepted {
+		t.Fatalf("admission ledger entries = %d, want %d", got, accepted)
+	}
+	s.orchestration.mu.Unlock()
+	for _, id := range admissionIDs {
+		s.releaseOrchestrationChildren(id)
+	}
+}
+
+func TestRelayAdmissionReleasedAfterSpawnFailure(t *testing.T) {
+	h := newRelayHarness(t)
+	h.s.cfg.Orchestration.MaxChildrenPerParent = relayChildrenPerRun
+	h.spawnErr = errors.New("synthetic relay spawn failure")
+	if _, err := h.s.startRelay(h.parent.ID, h.request()); err == nil {
+		t.Fatal("failed relay start unexpectedly succeeded")
+	}
+	h.spawnErr = nil
+	status, err := h.s.startRelay(h.parent.ID, h.request())
+	if err != nil {
+		t.Fatalf("relay start after failed admission cleanup: %v", err)
+	}
+	if status.State != relayStateImplementing {
+		t.Fatalf("second relay state = %q, want %q", status.State, relayStateImplementing)
+	}
+	if len(h.spawns) != 1 {
+		t.Fatalf("successful child spawns = %d, want 1", len(h.spawns))
+	}
+}
+
+func TestRelayAdmissionSerializesConcurrentStarts(t *testing.T) {
+	h := newRelayHarness(t)
+	h.s.cfg.Orchestration.MaxChildrenPerParent = 3
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, err := h.s.startRelay(h.parent.ID, h.request())
+			results <- err
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	accepted := 0
+	for err := range results {
+		if err == nil {
+			accepted++
+			continue
+		}
+		var limit errOrchestrationLimit
+		if !errors.As(err, &limit) || limit.Limit != "children_per_parent" {
+			t.Fatalf("concurrent relay start error = %v, want child limit", err)
+		}
+	}
+	if accepted != 1 || len(h.spawns) != 1 {
+		t.Fatalf("concurrent relay starts accepted=%d child_spawns=%d, want one each", accepted, len(h.spawns))
+	}
+}
+
+func TestRelayAdmissionCountsGlobalAcrossParents(t *testing.T) {
+	h := newRelayHarness(t)
+	h.s.cfg.Orchestration.MaxChildrenPerParent = 4
+	h.s.cfg.Orchestration.MaxTotalSessions = 4 // two parents plus one relay's two slots
+	other := registerTestSession(h.s, 2, "claude")
+	other.CWD = h.parent.CWD
+	if _, err := h.s.startRelay(h.parent.ID, h.request()); err != nil {
+		t.Fatalf("first parent relay: %v", err)
+	}
+	request := h.request()
+	request.PlanPath = filepath.Join(other.CWD, "docs", "other-plan.md")
+	if _, err := h.s.startRelay(other.ID, request); err == nil {
+		t.Fatal("second parent relay exceeded global admission budget")
+	} else {
+		var limit errOrchestrationLimit
+		if !errors.As(err, &limit) || limit.Limit != "total_sessions" {
+			t.Fatalf("global admission error = %v, want total_sessions limit", err)
+		}
 	}
 }
 
@@ -1240,6 +1368,45 @@ func TestRelay_prepareRelayWorktree(t *testing.T) {
 	}
 	if n, err := relayGitChangedFiles(repo, ""); err != nil || n != 0 {
 		t.Fatalf("changed files on clean tree = %d err=%v", n, err)
+	}
+}
+
+func TestRelay_prepareRelayWorktree_rejectsChangedBranch(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{}
+	path, branch, _, err := s.prepareRelayWorktree(repo, "r1-identity", cfg)
+	if err != nil {
+		t.Fatalf("prepareRelayWorktree create: %v", err)
+	}
+	t.Cleanup(func() { _ = s.cleanupRelayWorktree(repo, path, branch, true) })
+	runWorktreeTestGit(t, path, "switch", "-c", "manual-relay-branch")
+	before, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil {
+		t.Fatalf("read reused worktree before rejection: %v", err)
+	}
+	if _, _, _, err := s.prepareRelayWorktree(repo, "r1-identity", cfg); !errors.Is(err, errWorktreeIdentityMismatch) {
+		t.Fatalf("changed branch error = %v, want identity mismatch", err)
+	}
+	if got := strings.TrimSpace(gitOutput(t, path, "branch", "--show-current")); got != "manual-relay-branch" {
+		t.Fatalf("branch after rejected reuse = %q, want manual-relay-branch", got)
+	}
+	after, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("worktree content changed on rejected reuse: before=%q after=%q err=%v", before, after, err)
+	}
+	runWorktreeTestGit(t, path, "switch", branch)
+}
+
+func TestRelay_prepareRelayWorktree_rejectsUnregisteredDirectory(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	path := filepath.Join(repo, ".many-ai-cli", "worktrees", "r1-ordinary", "relay")
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := s.prepareRelayWorktree(repo, "r1-ordinary", config.OrchestrationConfig{}); !errors.Is(err, errWorktreeIdentityMismatch) {
+		t.Fatalf("ordinary directory error = %v, want identity mismatch", err)
 	}
 }
 
