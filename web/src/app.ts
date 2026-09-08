@@ -16,7 +16,7 @@ import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js
 import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, cancelApprovalLedgerRestore, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -1674,6 +1674,7 @@ export function clearSessionTimerEntry(timerMap, id) {
 export function cleanupRemovedSessionState(id) {
   try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
   try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
+  try { cancelApprovalLedgerRestore(id); } catch (_) {}
   try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}

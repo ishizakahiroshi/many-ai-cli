@@ -25,6 +25,8 @@ export interface ApprovalSourceState {
   candidateKey?: string;
   sourceEpoch?: number;
   shape?: string;
+  /** Hub 側の供給元ラベル（approval_marker の approval_source。'transcript' / 'go_vt'）。 */
+  hubSource?: string;
 }
 
 export interface ApprovalCandidateIdentity {

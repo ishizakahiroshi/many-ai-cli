@@ -365,6 +365,22 @@ Release artifacts are published at
   `--skip=before` (`.github/workflows/release.yml`, `.goreleaser.yaml`).
 
 ### Fixed
+- **A `[MANY-AI-CLI]` question in a Claude or Codex session no longer disappears
+  from the dashboard until you press ↻.** The Hub delivers these questions from
+  the CLI's own transcript, which can run more than a minute ahead of what the
+  terminal has painted. The browser then judged "is this still on screen?" by
+  matching option labels against the terminal text, and Ink's partial repaints
+  made that check fail, so it closed an unanswered question and nothing
+  re-delivered it. For transcript-sourced questions the browser now leaves
+  closing to the Hub: the Hub closes the question when the transcript shows
+  your next message (including answers typed straight into the terminal) and
+  tells every open dashboard. Switching to a session or reconnecting also
+  restores a still-pending question from the approval ledger, the same path the
+  ↻ button already used. Marker approvals answered from the dashboard are now
+  recorded as resolved in the approval ledger; previously the lookup used a
+  browser-side signature that never matched, so every such row stayed
+  `pending` (`internal/hub/approval_marker_transcript.go`,
+  `internal/hub/approval_native.go`, `web/src/app/approval.ts`).
 - **Claude child sessions no longer stall with their first instruction sitting
   unsent in the composer.** The Hub injected the initial prompt after a 300 ms
   output lull, which on Claude Code v2.1.263 happens *before* the CLI has even

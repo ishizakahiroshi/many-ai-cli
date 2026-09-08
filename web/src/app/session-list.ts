@@ -10,7 +10,7 @@ import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickT
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { detectApproval, isAIOrCustomProvider, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
+import { detectApproval, isAIOrCustomProvider, releaseActionBarIfOwnedByOther, scheduleApprovalLedgerRestore, setActionBarFocus } from './approval.js';
 import { getSessionAgentInfo, getSessionCtxPct, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
@@ -228,6 +228,9 @@ export function activateSession(id) {
   requestAnimationFrame(() => {
     if (activeSessionId !== id) return;
     detectApproval(id);
+    // claude / codex で、上の detectApproval が何も出せなかったときの最後の砦。
+    // Hub 配信を一度取りこぼした保留承認を台帳から出し直す（「↻ 承認」と同じ経路）。
+    scheduleApprovalLedgerRestore(id);
     refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   });
   refitAndStickTerminalToBottomAfterLayoutSettles(id, {

@@ -8,7 +8,7 @@ import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
 import { approvalUiAdapter, clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { actionBarNeedsRepaint, actionBarOwnedByOther, releaseActionBarOwnership } from './approval-owner.js';
-import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
+import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, isTranscriptBackedProvider, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
@@ -173,10 +173,21 @@ function resetBgApprovalMisses(id) {
   }
 }
 
+// Hub のトランスクリプト経路が立てた承認か。true の間、ブラウザは端末画面の文字照合
+// （下の trackBgApprovalMiss と detectApproval の H9 復元）でこの承認を閉じない。
+// 閉じる合図は Hub の approval_cleared（回答を UI から送ったとき、または Hub が
+// トランスクリプトで次の user メッセージを観測したとき）。理由は
+// internal/hub/approval_marker_transcript.go の scanTranscriptApprovalMarkers のコメント。
+function isHubAuthoritativeMarkerApproval(id) {
+  const src = approvalSourceCache.get(id);
+  return !!(src && src.source === 'hub_marker' && src.hubSource === 'transcript');
+}
+
 function trackBgApprovalMiss(id, tailLines) {
   const cached = approvalRawOptionsCache.get(id);
   // cache が無い（multiQ 等で visible だけ立った）場合は画面照合できないため対象外
   if (!cached || cached.length === 0) return;
+  if (isHubAuthoritativeMarkerApproval(id)) return;
   if (cachedOptionsOnScreen(tailLines, cached)) {
     resetBgApprovalMisses(id);
     return;
@@ -962,6 +973,7 @@ export function handleHubApprovalMarker(message) {
     candidateKey: identity.candidateKey,
     sourceEpoch: identity.sourceEpoch,
     shape: approvalCandidateShape(id, markerOpts, 'marker'),
+    hubSource: String(message.approval_source || ''),
   });
 
   const wasVisible = !!approvalVisibleCache.get(id);
@@ -976,10 +988,23 @@ export function handleGoApprovalCleared(message) {
   const id = message && message.session_id;
   if (!id) return;
   const src = approvalSourceCache.get(id);
-  if (!src || src.source !== 'go_vt') return;
-  if (message.approval_sig && src.sig && message.approval_sig !== src.sig) return;
-  if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
-  if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
+  if (!src) return;
+  if (src.source === 'hub_marker') {
+    // マーカー承認の取り下げ。Hub がトランスクリプトで次の user メッセージを観測した
+    // （端末へ直接答えた）か、別の UI が回答したときに届く。sig は Hub 側の値なので
+    // 見ず、candidateKey + sourceEpoch だけで同一性を取る。
+    if (message.approval_kind !== 'marker') return;
+    if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
+    if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
+    // 台帳復元・replay で同じ質問が出戻らないよう回答済みとして記録する。
+    const cached = approvalRawOptionsCache.get(id);
+    if (Array.isArray(cached) && cached.length > 0) recordAnsweredApprovalCandidate(id, cached, 'marker');
+  } else {
+    if (src.source !== 'go_vt') return;
+    if (message.approval_sig && src.sig && message.approval_sig !== src.sig) return;
+    if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
+    if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
+  }
   approvalSourceCache.delete(id);
   approvalUiAdapter.clearApprovalOptions(id);
   approvalSwitchCandidates.delete(id);
@@ -1353,6 +1378,16 @@ export function detectApproval(id) {
           hideActionBar(id);
           return;
         }
+        // Hub のトランスクリプト経路が立てた承認は、画面に選択肢が見えるかで閉じない。
+        // Ink の差分再描画で本文が欠けた 3 回の照合で未回答の承認を閉じ、閉じた後は
+        // 再配信が無いので戻せなかった（bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
+        // 閉じるのは Hub の approval_cleared（handleGoApprovalCleared）。
+        if (isHubAuthoritativeMarkerApproval(id)) {
+          h9RestoreMisses.delete(id);
+          cancelH9Revalidate(id);
+          approvalUiAdapter.showOptions(bar, id, cached);
+          return;
+        }
         // C3: 復元前に scanBuffer 妥当性を検証する（保留中バッジ固着対応）。
         // active セッションでキャッシュ済み選択肢が描画済み行から消えた状態が
         // 連続 H9_RESTORE_MISS_LIMIT 回続いたら、ターミナル直接入力で解決済みと
@@ -1639,9 +1674,13 @@ async function restoreApprovalFromLedger(id) {
     if (!block) return;
     const options = extractHubMarkerApproval(markerLinesFromTail(block));
     if (!options || options.length === 0) return;
+    // 台帳には答え終わった古い世代の行も残りうる（旧 Hub は台帳を resolved にできて
+    // いなかった）。今の世代より古い行は「止まっている質問」ではないので出さない。
+    const rowEpoch = Number(row.source_epoch || 0);
+    if (rowEpoch > 0 && rowEpoch < getApprovalSourceEpoch(id)) return;
     const identity = {
       candidateKey: String(row.candidate_key || ''),
-      sourceEpoch: Number(row.source_epoch || 0) || getApprovalSourceEpoch(id),
+      sourceEpoch: rowEpoch || getApprovalSourceEpoch(id),
       shape: approvalCandidateShape(id, options, 'marker'),
     };
     if (identity.candidateKey) annotateApprovalIdentity(options, identity);
@@ -1657,12 +1696,47 @@ async function restoreApprovalFromLedger(id) {
       candidateKey: identity.candidateKey,
       sourceEpoch: identity.sourceEpoch,
       shape: identity.shape,
+      hubSource: String(row.source || ''),
     });
     approvalUiAdapter.setApprovalVisible(id, true);
     approvalUiAdapter.showOptions(bar, id, options, true);
   } catch (_) {
     // 取れなければ従来どおり何も出さない（押しても無反応なのは変わらないが、悪化はしない）
   }
+}
+
+// セッション切替・再接続のあとに、表示できていない保留承認を台帳から出し直す。
+// claude / codex は Hub 配信が唯一の供給元で、ブラウザが一度落とすと（配信中の切断・
+// リロード・旧版の画面照合）取り直す材料が無い。「↻ 承認」の台帳経路を自動で通す。
+// detectApproval（切替後 300ms）が先に走って通常経路で出せたら、ここでは何もしない。
+const approvalLedgerRestoreTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const APPROVAL_LEDGER_RESTORE_DELAY_MS = 600;
+
+export function scheduleApprovalLedgerRestore(id) {
+  if (id === undefined || id === null) return;
+  const prev = approvalLedgerRestoreTimers.get(id);
+  if (prev) clearTimeout(prev);
+  approvalLedgerRestoreTimers.set(id, setTimeout(() => {
+    approvalLedgerRestoreTimers.delete(id);
+    maybeRestorePendingApprovalFromLedger(id);
+  }, APPROVAL_LEDGER_RESTORE_DELAY_MS));
+}
+
+export function cancelApprovalLedgerRestore(id) {
+  const timer = approvalLedgerRestoreTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    approvalLedgerRestoreTimers.delete(id);
+  }
+}
+
+function maybeRestorePendingApprovalFromLedger(id) {
+  if (id !== activeSessionId) return;
+  if (!isTranscriptBackedProvider(sessions.get(id)?.provider || '')) return;
+  if (approvalVisibleCache.get(id)) return;
+  if (manualHideState.has(id)) return; // ✕ で消したものは「↻ 承認」を押すまで戻さない
+  if (isApprovalReplayPending(id)) return;
+  void restoreApprovalFromLedger(id);
 }
 
 export function normalizeActionOptions(options) {

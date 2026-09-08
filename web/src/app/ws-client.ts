@@ -7,7 +7,7 @@ import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, 
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, scheduleApprovalLedgerRestore, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
@@ -371,6 +371,9 @@ export function _connectWs() {
     if (!id) return;
     if (finishApprovalReplay(id, m.replay_epoch, m.approval_source_epoch, m.approval_consumed ? String(m.approval_candidate_key || '') : '', String(m.approval_candidate_shape || '')) && id === activeSessionId) {
       scheduleApprovalCheck(id);
+      // 再接続の replay は保留中の承認を運ばない（pty_data と reattach_replay_done だけ）。
+      // claude / codex はローカル走査で立て直せないので、台帳から出し直す。
+      scheduleApprovalLedgerRestore(id);
     }
     return;
   }

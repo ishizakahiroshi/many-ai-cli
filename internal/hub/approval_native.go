@@ -269,19 +269,54 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 			ApprovalSource:         approvalSourceGoVT,
 		}
 	}
+	ledgerSig := m.ApprovalSig
 	if candidateKey != "" && ses.approvalMarkerCandidateKey == candidateKey && ses.approvalMarkerSourceEpoch == sourceEpoch {
-		ses.approvalMarkerCandidateKey = ""
-		ses.approvalMarkerCandidateShape = ""
-		ses.approvalMarkerSourceEpoch = 0
-		ses.approvalMarkerSig = ""
+		// 台帳の行は Hub がブロック本文から取った sig で引く。ブラウザが送ってくる
+		// approval_sig は選択肢から計算した別の値なので、それで UPDATE しても
+		// 1 行も当たらず、回答済みの承認が台帳に pending のまま残っていた
+		// （bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
+		if ses.approvalMarkerSig != "" {
+			ledgerSig = ses.approvalMarkerSig
+		}
+		cleared := clearApprovalMarkerCandidateLocked(ses, m.SessionID, m.ApprovalSource)
+		if clearMsg == nil {
+			clearMsg = &cleared
+		}
 	}
 	s.sessionsMu.Unlock()
-	if s.sessionStore != nil && m.ApprovalSig != "" {
-		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
+	if s.sessionStore != nil && ledgerSig != "" {
+		s.sessionStore.StoreApprovalConsumed(m.SessionID, ledgerSig, m.SentText, now)
 	}
 	if clearMsg != nil {
 		s.broadcast(*clearMsg)
 	}
+}
+
+// clearApprovalMarkerCandidateLocked は保留中のマーカー承認を session から下ろし、
+// ブラウザへ流す approval_cleared を組み立てる。ネイティブ承認の approval_cleared と
+// 同じ型で、ApprovalKind が "marker" のときだけマーカー候補の取り下げを意味する。
+// 呼び出し側は sessionsMu を持ち、返り値の broadcast は解放後に行う。
+//
+// これまでマーカー候補の取り下げはブラウザに知らせていなかった。回答した UI は
+// 自分で閉じるが、同じ Hub を見ている別の UI や、トランスクリプト側で答えが
+// 観測された（端末へ直接入力した）場合は、閉じる合図が無いと承認パネルが残る。
+func clearApprovalMarkerCandidateLocked(ses *session, id int, source string) proto.Message {
+	cleared := proto.Message{
+		Type:                   "approval_cleared",
+		SessionID:              id,
+		Provider:               ses.Provider,
+		ApprovalSig:            ses.approvalMarkerSig,
+		ApprovalKind:           "marker",
+		ApprovalCandidateKey:   ses.approvalMarkerCandidateKey,
+		ApprovalCandidateShape: ses.approvalMarkerCandidateShape,
+		ApprovalSourceEpoch:    ses.approvalMarkerSourceEpoch,
+		ApprovalSource:         source,
+	}
+	ses.approvalMarkerCandidateKey = ""
+	ses.approvalMarkerCandidateShape = ""
+	ses.approvalMarkerSourceEpoch = 0
+	ses.approvalMarkerSig = ""
+	return cleared
 }
 
 // evaluateReplayApproval performs the single approval evaluation allowed at

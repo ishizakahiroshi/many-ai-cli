@@ -89,28 +89,82 @@ func approvalMarkerFromTranscriptText(text string) *approvalMarkerBlock {
 // （Hub 再起動後の初回登録・--resume でパスが変わったとき・セッションの初回登録）。
 // 捨てられるのは prime のバッチ、つまり下の「最後のメッセージだけは復元する」が
 // いちばん効いてほしい場面そのものだった。poll がその場で持っている値を渡す。
+//
+// 質問を立てるのと同じ経路で、質問を下ろす（2026-09-08 追記・
+// bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）:
+// トランスクリプトに次の user メッセージが現れたら、その前に立っていたマーカー承認は
+// 答えられている（または捨てられている）。ブラウザ経由の回答なら approval_consumed で
+// 先に下りているので何も起きない。端末へ直接答えたときはこの経路だけが閉じる合図になる。
+// 供給元をトランスクリプトへ移した以上、「答えたかどうか」も端末の画面ではなく
+// トランスクリプトで判定する。画面の文字照合で閉じる旧経路（ブラウザ側の H9 / bg）は、
+// Ink の差分再描画で本文が欠けると未回答の承認まで閉じてしまい、閉じた承認を
+// 再配信する経路が無いので、この供給元では使わない。
 func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath string, messages []agentChatMessage, prime bool, detectedAt time.Time) {
 	if len(messages) == 0 || transcriptPath == "" || !isAgentChatProvider(provider) {
 		return
 	}
 	if prime {
 		last := messages[len(messages)-1]
-		if last.Role != "assistant" {
-			return
-		}
-		if marker := approvalMarkerFromTranscriptText(last.Text); marker != nil {
-			s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
+		switch last.Role {
+		case "assistant":
+			if marker := approvalMarkerFromTranscriptText(last.Text); marker != nil {
+				s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
+			}
+		case "user":
+			// 最後が user なら、それより前に立っていた質問はもう止まっていない。
+			s.closeApprovalMarkerOnTranscriptUserMessage(id, last.Text, detectedAt)
 		}
 		return
 	}
 	for _, message := range messages {
-		if message.Role != "assistant" || message.Text == "" {
+		if message.Text == "" {
 			continue
 		}
-		if marker := approvalMarkerFromTranscriptText(message.Text); marker != nil {
-			s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
+		switch message.Role {
+		case "user":
+			s.closeApprovalMarkerOnTranscriptUserMessage(id, message.Text, detectedAt)
+		case "assistant":
+			if marker := approvalMarkerFromTranscriptText(message.Text); marker != nil {
+				s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
+			}
 		}
 	}
+}
+
+// transcriptAnswerTextLimit は台帳の selected_text に残す user メッセージの上限。
+// 一覧表示用なので先頭だけあればよい。
+const transcriptAnswerTextLimit = 200
+
+// closeApprovalMarkerOnTranscriptUserMessage は、トランスクリプトに user メッセージが
+// 現れた時点で保留中のマーカー承認を回答済みにする。ブラウザからの approval_consumed
+// （markNativeApprovalConsumed）と同じ状態遷移を Hub 自身の判断で起こすので、
+// 遅延フレーム向けの世代ずれ判定は通さない。保留中の候補が無ければ何もしない。
+func (s *Server) closeApprovalMarkerOnTranscriptUserMessage(id int, answer string, now time.Time) bool {
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || ses.approvalMarkerCandidateKey == "" {
+		s.sessionsMu.Unlock()
+		return false
+	}
+	sig := ses.approvalMarkerSig
+	markApprovalConsumedAtEpochLocked(ses, ses.approvalMarkerCandidateKey, sig, ses.approvalMarkerSourceEpoch)
+	cleared := clearApprovalMarkerCandidateLocked(ses, id, approvalSourceTranscript)
+	provider := ses.Provider
+	s.sessionsMu.Unlock()
+
+	answer = strings.TrimSpace(answer)
+	if runes := []rune(answer); len(runes) > transcriptAnswerTextLimit {
+		answer = string(runes[:transcriptAnswerTextLimit])
+	}
+	if s.sessionStore != nil && sig != "" {
+		s.sessionStore.StoreApprovalConsumed(id, sig, answer, now)
+	}
+	if s.logger != nil {
+		s.logger.Info("approval marker closed by transcript user message",
+			"session_id", id, "provider", provider, "sig", shortSig(sig))
+	}
+	s.broadcast(cleared)
+	return true
 }
 
 // approvalMarkerCloseBytes は PTY チャンクを走査するための終了マーカー。
