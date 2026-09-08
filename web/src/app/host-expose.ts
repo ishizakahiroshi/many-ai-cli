@@ -200,7 +200,9 @@ function reflectDot(): void {
   const webBtn = webMenuBtnEl();
   if (webBtn) {
     const base = t('web_menu_tooltip');
-    webBtn.dataset.tooltip = (!busy && st === 'ready') ? `${label} — ${base}` : base;
+    const isReady = !busy && st === 'ready';
+    webBtn.dataset.tooltip = isReady ? `${label} — ${base}` : base;
+    webBtn.classList.toggle('expose-on', isReady);
   }
 }
 

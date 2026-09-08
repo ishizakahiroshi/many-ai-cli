@@ -833,6 +833,18 @@ header {
   border-color: var(--line);
   background: var(--bg-elev);
 }
+/* 外部公開中はボタン全体を色付けし、ドロップダウンを開かなくても常時気づけるようにする。 */
+.web-menu-btn.expose-on {
+  color: var(--green-text);
+  border-color: color-mix(in srgb, var(--green-text) 35%, transparent);
+  background: color-mix(in srgb, var(--green-bg) 45%, transparent);
+}
+.web-menu-btn.expose-on:hover,
+.web-menu-btn.expose-on[aria-expanded="true"] {
+  color: var(--green-text);
+  border-color: var(--green-text);
+  background: color-mix(in srgb, var(--green-bg) 65%, transparent);
+}
 .web-menu-icon,
 .web-menu-chevron {
   flex-shrink: 0;
