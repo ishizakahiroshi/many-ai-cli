@@ -7,7 +7,7 @@ import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
-import { DEFAULT_APPROVAL_FORM_SETTINGS, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, restoreApprovalSettings } from './spawn-approval-memory.js';
+import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
@@ -153,18 +153,12 @@ export function resetSpawnProviderOrder(): void {
     } catch (_) { return {}; }
   }
 
-  // 保存済みのサブスクリプション既定を provider ごとに全部返す。起動時の保存は
-  // オブジェクトを作り直すので、これを混ぜないと他 provider の記憶が消える。
-  function savedSubscriptionDefaults(): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(readSpawnDefaults())) {
-      if (k.startsWith(SUBSCRIPTION_PREF_PREFIX) && typeof v === 'string') out[k] = v;
-    }
-    return out;
-  }
-
   function savedSubscriptionFor(provider: string): string {
-    const v = readSpawnDefaults()[SUBSCRIPTION_PREF_PREFIX + provider];
+    const defaults = readSpawnDefaults();
+    // C3 (plan_spawn-form-per-provider-memory.md): 記憶 OFF のときは、過去に書かれた
+    // 値が残っていても復元しない（許可設定・worktree・委譲の記憶と同じ扱い）。
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return '';
+    const v = defaults[SUBSCRIPTION_PREF_PREFIX + provider];
     return typeof v === 'string' ? v : '';
   }
 
@@ -212,6 +206,24 @@ export function resetSpawnProviderOrder(): void {
     if (!spawnSubscriptionRow || spawnSubscriptionRow.hidden || !spawnSubscriptionSelect) return '';
     return spawnSubscriptionSelect.value || '';
   }
+
+  // C3 (plan_spawn-form-per-provider-memory.md): サブスクリプション選択を変更した時点で
+  // 保存する。以前は spawn 成功時にしか保存されず、選び直してから起動をやめると忘れていた。
+  // 行が隠れている（profile が 0〜1 件、または shell）ときは「選ばなかった」だけなので保存
+  // しない（既存の判断・spawn 成功時の分岐と同じ）。記憶 OFF のあいだも保存しない
+  // （persistProviderBooleanSetting と同じ理由: OFF のまま起動しても記憶が復活しないため）。
+  async function persistSubscriptionSelection(): Promise<void> {
+    if (!spawnSubscriptionRow || spawnSubscriptionRow.hidden || !spawnSubscriptionSelect) return;
+    const defaults = readSpawnDefaults();
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return;
+    const provider = spawnProviderEl.value;
+    const next = { ...defaults, [SUBSCRIPTION_PREF_PREFIX + provider]: spawnSubscriptionSelect.value || '' };
+    setUserPref('spawn.defaults', next);
+    await flushUserPrefsPut();
+  }
+  spawnSubscriptionSelect?.addEventListener('change', () => {
+    void persistSubscriptionSelection();
+  });
 
   onSubscriptionsChanged(() => {
     refreshSubscriptionSelector();
@@ -1048,7 +1060,9 @@ export function resetSpawnProviderOrder(): void {
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
     clearIncompatibleModelForProvider(p);
-    refreshSubscriptionSelector();
+    // C2 (plan_spawn-form-per-provider-memory.md): 許可設定・worktree・委譲・
+    // サブスクリプションの記憶を、切り替えた先の provider のぶんへ差し替える。
+    restoreProviderMemory(p);
     updateDetachedPreview();
   });
   updateSpawnProviderIcon();
@@ -1100,8 +1114,48 @@ export function resetSpawnProviderOrder(): void {
     isolateWorktreeInlineHelp.setOpen(!!spawnIsolateWorktree?.checked);
   }
 
+  // C2 (plan_spawn-form-per-provider-memory.md): worktree / 委譲を変更した時点で、
+  // 許可設定の queueApprovalSettingsPersistence と同じ形で即座に保存する。
+  // C3: 記憶 OFF のあいだは保存もしない（OFF のまま起動しても記憶が復活しないため）。
+  async function persistProviderBooleanSetting(name: ProviderBooleanSettingName, checked: boolean): Promise<void> {
+    const defaults = readSpawnDefaults();
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return;
+    const provider = spawnProviderEl.value;
+    const values = { [name]: checked } as Partial<Record<ProviderBooleanSettingName, boolean>>;
+    const next = mergeProviderBooleanSetting(defaults, provider, values);
+    setUserPref('spawn.defaults', next);
+    await flushUserPrefsPut();
+  }
+
   if (spawnIsolateWorktree) {
-    spawnIsolateWorktree.addEventListener('change', syncIsolateWorktreeNote);
+    spawnIsolateWorktree.addEventListener('change', () => {
+      syncIsolateWorktreeNote();
+      void persistProviderBooleanSetting('isolate_worktree', spawnIsolateWorktree.checked);
+    });
+  }
+  if (spawnDelegation) {
+    spawnDelegation.addEventListener('change', () => {
+      void persistProviderBooleanSetting('delegation', spawnDelegation.checked);
+    });
+  }
+
+  // C2: 許可設定・worktree・委譲・サブスクリプションの復元をこの 1 本の入口へ通す。
+  // パネルを開いたとき（loadSpawnSettings）と provider を切り替えたとき（change ハンドラ）の
+  // 両方から呼ぶ。どちらか一方にしか配線しないと、同じ症状（前の provider の値が画面に
+  // 残る）が別の欄で再発する。
+  function restoreProviderMemory(provider: string): void {
+    const defaults = readSpawnDefaults();
+    applySpawnApprovalSettings(provider, defaults);
+    if (spawnIsolateWorktree) {
+      spawnIsolateWorktree.checked = restoreProviderBooleanSetting('isolate_worktree', provider, defaults);
+      syncIsolateWorktreeNote();
+    }
+    if (spawnDelegation) {
+      spawnDelegation.checked = restoreProviderBooleanSetting('delegation', provider, defaults);
+    }
+    // パネルを開き直したときと同じ「前回起動したときの選択」に戻す（開きっぱなしで
+    // いじった一時的な選択ではなく保存値が正）。
+    refreshSubscriptionSelector({ restoreSaved: true });
   }
 
   function currentApprovalSettings(provider: string): Record<string, string> {
@@ -1171,7 +1225,9 @@ export function resetSpawnProviderOrder(): void {
       if (spawnRememberApprovalSettings) {
         spawnRememberApprovalSettings.checked = isApprovalSettingsMemoryEnabled(s);
       }
-      applySpawnApprovalSettings(spawnProviderEl.value, s);
+      // C2: 許可設定・worktree・委譲・サブスクリプションの復元は 1 本の入口に通す
+      // （restoreProviderMemory は provider の change ハンドラからも呼ばれる）。
+      restoreProviderMemory(spawnProviderEl.value);
       // C2: Detached 設定を復元
       if (s.open_target) {
         const radio = document.getElementById(`spawn-target-${s.open_target}`) as HTMLInputElement | null;
@@ -1189,19 +1245,8 @@ export function resetSpawnProviderOrder(): void {
       if (s.detached_preset && spawnDetachedPreset) {
         spawnDetachedPreset.value = s.detached_preset;
       }
-      // spawn.defaults は map[string]string なので 'true' / 'false' の文字列で往復する
-      if (spawnIsolateWorktree) {
-        spawnIsolateWorktree.checked = (s.isolate_worktree === 'true');
-        syncIsolateWorktreeNote();
-      }
-      if (spawnDelegation) {
-        spawnDelegation.checked = (s.delegation === 'true');
-      }
       updateSpawnProviderIcon();
       syncSpawnProviderFields(spawnProviderEl.value);
-      // パネルを開き直したときは「前回起動したときの選択」に戻す（開きっぱなしで
-      // いじった一時的な選択ではなく保存値が正）。
-      refreshSubscriptionSelector({ restoreSaved: true });
       updateDetachedPreview();
       return !!s.cwd;
     } catch (_) { return false; }
@@ -2563,11 +2608,18 @@ export function resetSpawnProviderOrder(): void {
       const bodyObj: any = { provider, cwd, label };
       if (!skipsAIFields) bodyObj.model = model;
       if (utf8Session) bodyObj.utf8_session = true;
-      // チェック時のみ送る。未チェックでは省略し、config の user_prefs.spawn.worktree_auto
-      // を Hub 側の既定として温存する（設定ファイルで常時 ON にしている利用者を壊さない）。
-      if (spawnIsolateWorktree?.checked) bodyObj.isolate_worktree = true;
-      // 同上。未チェックでは省略し、config の user_prefs.spawn.delegation_auto を温存する。
-      if (spawnDelegation?.checked) bodyObj.delegation = true;
+      // C2 (plan_spawn-form-per-provider-memory.md): この provider の記憶がある場合だけ
+      // 明示的に true/false を送る。記憶が無い provider ではキーごと省略し、config の
+      // user_prefs.spawn.worktree_auto / delegation_auto を Hub 側の既定として温存する
+      // （internal/hub/spawn_handler.go は *bool の nil を「設定に従う」と解釈するため、
+      // 常時 false を送ると設定ファイルで常時 ON にしている利用者の既定が壊れる）。
+      const providerMemoryDefaults = readSpawnDefaults();
+      if (hasProviderBooleanSetting('isolate_worktree', provider, providerMemoryDefaults)) {
+        bodyObj.isolate_worktree = !!spawnIsolateWorktree?.checked;
+      }
+      if (hasProviderBooleanSetting('delegation', provider, providerMemoryDefaults)) {
+        bodyObj.delegation = !!spawnDelegation?.checked;
+      }
       // plan_session-handoff-board_c4_prompted-spawn.md C2: 空欄なら initial_prompt キー自体を
       // 送らない（Hub 側は空文字と省略を同じ「何も注入しない」として扱うが、送信 JSON の形も
       // 従来と同一に保つ）。
@@ -2688,27 +2740,32 @@ export function resetSpawnProviderOrder(): void {
         const openTarget = getSpawnOpenTarget();
         const gridLayout = getSpawnGridLayout();
         const detachedPreset = spawnDetachedPreset ? spawnDetachedPreset.value : 'single';
-        // サブスクリプション選択は provider ごとに記憶する。行が隠れている
-        // （profile が 0〜1 件 / shell）ときは「選ばなかった」だけなので、既存の
-        // 記憶を空で上書きしない。
-        const subscriptionDefaults = savedSubscriptionDefaults();
-        if (spawnSubscriptionRow && !spawnSubscriptionRow.hidden) {
-          subscriptionDefaults[SUBSCRIPTION_PREF_PREFIX + provider] = subscriptionID;
-        }
-        const savedDefaults = {
-          ...subscriptionDefaults,
+        // C2 (plan_spawn-form-per-provider-memory.md): 既存の記憶（readSpawnDefaults()）を
+        // 土台にして今回の値だけ上書きする。まっさらなオブジェクトを作ると、ここに列挙して
+        // いない provider 別キー（他 provider の許可設定・worktree・委譲・サブスクリプション）
+        // が保存のたびに全部消えてしまう。
+        const baseDefaults: Record<string, unknown> = {
+          ...readSpawnDefaults(),
           provider,
           cwd,
           model: persistedModel,
           open_target: openTarget,
           grid_layout: gridLayout,
           detached_preset: detachedPreset,
-          isolate_worktree: spawnIsolateWorktree?.checked ? 'true' : 'false',
-          delegation: spawnDelegation?.checked ? 'true' : 'false',
         };
+        // サブスクリプション選択は provider ごとに記憶する。行が隠れている
+        // （profile が 0〜1 件 / shell）ときは「選ばなかった」だけなので、既存の
+        // 記憶を空で上書きしない。
+        if (spawnSubscriptionRow && !spawnSubscriptionRow.hidden) {
+          baseDefaults[SUBSCRIPTION_PREF_PREFIX + provider] = subscriptionID;
+        }
+        const withProviderBooleans = mergeProviderBooleanSetting(baseDefaults, provider, {
+          isolate_worktree: !!spawnIsolateWorktree?.checked,
+          delegation: !!spawnDelegation?.checked,
+        });
         const rememberApprovalSettings = spawnRememberApprovalSettings?.checked ?? true;
         const persistedDefaults = mergeApprovalSettings(
-          savedDefaults,
+          withProviderBooleans,
           provider,
           { ...bodyObj, opencode_permission_mode: bodyObj.permission_mode },
           rememberApprovalSettings,

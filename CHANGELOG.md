@@ -189,10 +189,19 @@ Release artifacts are published at
   Settings → General "close buttons" side preference like every other panel
   (`web/src/index.html`, `web/src/styles.css`, `web/src/app/settings.ts`).
 
-- **Spawn approval settings can be remembered when you want them.** The new-session
-  form defaults to remembering the last successful provider-specific approval
-  settings, while an explicit opt-out restores safe defaults. High-risk launch
-  confirmation still appears every time.
+- **Spawn approval settings, subscription, worktree isolation, and delegation
+  are now remembered per AI, not shared across them.** The new-session form
+  used to keep one shared approval-setting memory, so picking
+  `bypassPermissions` for Claude could leak into Grok, and starting a Codex
+  session could silently erase Claude's remembered permission mode and
+  subscription. Each provider's approval settings, subscription pick, worktree
+  isolation, and delegation choice are now stored and restored independently,
+  and switching providers with the panel still open updates them live instead
+  of leaving the previous provider's values on screen. Turning "Remember" off
+  now clears all four for every provider, not just approval settings, and
+  nothing new is recorded while it stays off. The model field is unaffected —
+  it is still never pre-filled by design. High-risk launch confirmation still
+  appears every time.
 
 - **Orchestration relay loop.** `internal/hub/relay.go`, `relay_worktree.go`,
   `relay_store.go`, and `relay_api.go` run each plan C through implementation,

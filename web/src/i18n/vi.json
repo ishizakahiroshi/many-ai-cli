@@ -535,7 +535,7 @@
   "spawn_model_fetch_failed": "Không lấy được danh sách model",
   "spawn_model_provider_mismatch": "Model này không khả dụng với provider đã chọn.",
   "spawn_remember_approval_label": "Ghi nhớ",
-  "spawn_remember_approval_tooltip": "Ghi nhớ cài đặt phê duyệt gần nhất cho provider này",
+  "spawn_remember_approval_tooltip": "Ghi nhớ cài đặt phê duyệt, gói đăng ký, cô lập worktree và lựa chọn giao việc cho provider này (tắt sẽ xóa bộ nhớ của mọi provider)",
   "spawn_permission_default": "Chế độ phê duyệt: Mặc định",
   "spawn_permission_plan": "plan (xác nhận trước khi thay đổi)",
   "spawn_permission_accept_edits": "acceptEdits (tự cho phép chỉ chỉnh sửa)",
