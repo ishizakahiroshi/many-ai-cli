@@ -8,6 +8,9 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, restoreApprovalSettings } from './spawn-approval-memory.js';
+import { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
+
+export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -21,6 +24,8 @@ export function resetSpawnProviderOrder(): void {
 
 // ---- 新規セッション spawn panel ----
 (function () {
+  // node:test が純関数だけ import するとき document は無い。配線を走らせない。
+  if (typeof document === 'undefined') return;
   const newSessionBtn   = document.getElementById('new-session-btn');
   const orchestrationBtn = document.getElementById('orchestration-btn');
   const newSessionPanel = document.getElementById('new-session-panel');
@@ -1315,25 +1320,6 @@ export function resetSpawnProviderOrder(): void {
   // 全件表示だったリストが 0〜1 件へ絞られて「押した瞬間に閉じた」ように見えるため。
   let cwdActiveFilter = '';
 
-  // パス文字列を「親ディレクトリ」「末尾セグメント（basename）」に分割する。
-  // 区切りは \ と / の両対応。末尾が区切り文字の場合は手前のセグメントを basename とする。
-  function splitCwdPath(value) {
-    const v = String(value);
-    // 末尾の区切り文字は無視して basename 境界を探す。
-    let end = v.length;
-    while (end > 0 && (v[end - 1] === '/' || v[end - 1] === '\\')) end--;
-    let start = end;
-    while (start > 0 && v[start - 1] !== '/' && v[start - 1] !== '\\') start--;
-    return { parent: v.slice(0, start), basename: v.slice(start) };
-  }
-
-  // お気に入り表示順: 最終フォルダ名（basename）昇順。同名時はフルパスで安定化。
-  function compareCwdByBasename(a: string, b: string): number {
-    const ba = splitCwdPath(a).basename;
-    const bb = splitCwdPath(b).basename;
-    return ba.localeCompare(bb) || a.localeCompare(b);
-  }
-
   // 生テキスト raw を escapeHtml した上で、filter にマッチする部分のみ <mark> で囲む。
   // ⚠️ XSS: 分割は raw（未エスケープ）の小文字比較で位置だけ求め、出力は必ず
   //         escapeHtml 済みの各断片に対してのみ span/mark を組み立てる。
@@ -1597,6 +1583,7 @@ export function resetSpawnProviderOrder(): void {
     const subItems: string[] = subdirsCurrent
       ? subdirsCurrent.items.map(name => subdirsCurrent!.parent + subdirsCurrent!.sep + name)
       : [];
+    const sortedSubItems = sortCwdSubdirItems(subItems, favSet);
 
     // ---- chip 行 ----
     // お気に入りが 0 件で roots も空のときは chip 行を出さない。
@@ -1739,9 +1726,9 @@ export function resetSpawnProviderOrder(): void {
     }
 
     // subdirs セクション（末尾区切り入力時）。
-    if (subItems.length > 0) {
+    if (sortedSubItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_subdirs'))}</li>`;
-      html += subItems.map(v => renderRow(v, false, true)).join('');
+      html += sortedSubItems.map(v => renderRow(v, favSet.has(v), true)).join('');
     }
 
     // 検索結果セクション（isPath でないとき）。
@@ -2007,7 +1994,7 @@ export function resetSpawnProviderOrder(): void {
         listEl.appendChild(empty);
         return;
       }
-      for (const name of subdirs) {
+      for (const name of [...subdirs].sort(compareCwdByBasename)) {
         const li = document.createElement('li');
         li.className = 'spawn-web-dir-item';
         li.setAttribute('role', 'option');

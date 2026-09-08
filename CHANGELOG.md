@@ -264,6 +264,12 @@ Release artifacts are published at
   stays undetectable, same as before.
 
 ### Changed
+- **The spawn cwd subfolder dropdown now sorts folders by name, with favorites
+  pinned to the top.** Previously, a trailing path separator listed subdirectories
+  in `os.ReadDir` byte order (uppercase before lowercase), so `PlainSheet` appeared
+  above `ai-audit-prompts`. Favorites stay first and both groups use the same
+  basename `localeCompare` as the favorites section. The web folder browser uses
+  the same name order (`web/src/app/spawn-panel.ts`).
 - **The README now spells out what `orchestration.child_full_bypass` actually grants.**
   The default (`true`) starts codex children with `--sandbox danger-full-access
   --ask-for-approval never` and the other providers in their own bypass-permissions
