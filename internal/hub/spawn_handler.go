@@ -379,6 +379,15 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
 		Orchestration      bool                                    `json:"orchestration"`
 		OrchestrationRoles map[string]*orchestrationRoleAssignment `json:"orchestration_roles"`
+		// InitialPrompt (plan_session-handoff-board_c4_prompted-spawn.md C1):
+		// 画面から渡す最初の指示。空文字（省略）は「従来どおり何も注入しない」で、
+		// この分岐に一切入らない。配送は spawn-child が使っている
+		// injectInitialPrompt を共有する（新しい配送方式を作らない）。
+		InitialPrompt string `json:"initial_prompt"`
+		// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3):
+		// 引き継ぎ元セッションの ID。看板 UI からの起動でのみ渡され、それ以外の
+		// /api/spawn 呼び出しは省略（0）のままで従来と 1 バイトも変わらない。
+		HandoffFrom int `json:"handoff_from"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -415,6 +424,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validWorktreeCleanup(body.WorktreeCleanup) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid worktree cleanup policy")
+		return
+	}
+	if body.HandoffFrom < 0 {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid handoff_from")
 		return
 	}
 	cwd := body.CWD
@@ -545,6 +558,28 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			body.Label = fmt.Sprintf("orch-conductor-%d", time.Now().UnixNano())
 		}
 		orchestrationID = s.reserveOrchestrationConductor(body.Label, roles)
+	}
+
+	// C1 (plan_session-handoff-board_c4_prompted-spawn.md): initial_prompt が
+	// 空文字なら spawnPendingLabelForInitialPrompt が "" を返し、この if に
+	// 入らない。label の生成も pending への書き込みも一切起きないので、
+	// 従来の /api/spawn（initial_prompt を知らない呼び出し元）と 1 バイトも
+	// 挙動が変わらない。
+	initialPrompt := sanitizeSpawnInitialPrompt(body.InitialPrompt)
+	if lbl := spawnPendingLabelForInitialPrompt(body.Label, initialPrompt, time.Now()); lbl != "" {
+		body.Label = lbl
+		s.orchestration.mu.Lock()
+		// isolate_worktree や orchestration=true が同じ label で既に pending
+		// entry を作っていることがあるので、reserveOrchestrationConductor と
+		// 同じく上書きせずマージする。
+		meta := s.orchestration.pending[body.Label]
+		meta.InitialPrompt = initialPrompt
+		meta.HandoffFrom = body.HandoffFrom
+		if meta.SpawnedAt.IsZero() {
+			meta.SpawnedAt = time.Now()
+		}
+		s.orchestration.pending[body.Label] = meta
+		s.orchestration.mu.Unlock()
 	}
 
 	exe, err := os.Executable()
@@ -1100,6 +1135,47 @@ func spawnRecordsLastModel(spec spawnWrappedSpec, resolvedModel, effectiveRoute 
 		return false
 	}
 	return !isLocalRoute(effectiveRoute)
+}
+
+// spawnInitialPromptMaxLen bounds the initial_prompt a plain /api/spawn can
+// carry. jsonBodyMaxBytes already caps the whole request; this caps the
+// prompt itself, the same way gitCommitBodyMaxLen caps a commit body
+// (git_commit.go) — a separate, smaller ceiling on the one free-text field
+// that gets typed into a running CLI.
+const spawnInitialPromptMaxLen = 8192
+
+// sanitizeSpawnInitialPrompt trims, strips control bytes, and caps the length
+// of a spawn request's initial_prompt. It reuses sanitizeInjectText — the
+// same filter the spawn-child injection path (orchestration.go) runs before
+// writing to a PTY — so both callers agree on what "safe to inject" means
+// instead of each carrying its own filter. An empty or all-whitespace input
+// returns "", which callers treat as "no prompt was requested" (plan_
+// session-handoff-board_c4_prompted-spawn.md C1: empty must not change
+// spawn behavior at all).
+func sanitizeSpawnInitialPrompt(raw string) string {
+	s := strings.TrimSpace(sanitizeInjectText(raw))
+	if s == "" {
+		return ""
+	}
+	return truncateUTF8Bytes(s, spawnInitialPromptMaxLen)
+}
+
+// spawnPendingLabelForInitialPrompt decides the label to key
+// s.orchestration.pending by when a spawn request carries a non-empty
+// initial prompt, generating one if the caller (and no earlier step, such as
+// isolate_worktree or orchestration=true) already assigned a label. It
+// returns "" when there is nothing to deliver, in which case the caller must
+// leave label handling and the pending map untouched entirely — this is the
+// single choke point that keeps an empty initial_prompt byte-for-byte
+// identical to a request that never mentions the field.
+func spawnPendingLabelForInitialPrompt(label, initialPrompt string, now time.Time) string {
+	if initialPrompt == "" {
+		return ""
+	}
+	if label != "" {
+		return label
+	}
+	return fmt.Sprintf("spawn-%d", now.UnixNano())
 }
 
 // spawnValidModelLabel は model / label / label_prefix 値が安全かを検証する。

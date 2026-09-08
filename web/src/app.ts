@@ -1879,6 +1879,7 @@ inputEl.addEventListener('blur', (e) => {
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
   const terminalColorEl   = document.getElementById('terminal-color') as HTMLSelectElement | null;
+  const handoffIntentModeEl = document.getElementById('handoff-intent-mode') as HTMLSelectElement | null;
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
 	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
 	const spawnConfirmModeEl = document.getElementById('spawn-confirm-mode') as HTMLSelectElement | null;
@@ -1913,6 +1914,29 @@ inputEl.addEventListener('blur', (e) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ terminal_color: terminalColorEl.value }),
+      });
+    } catch (_) {}
+  }
+
+  // 看板の意図層モード（done-only / turn-summary、既定 done-only）。
+  // docs/local/plan_session-handoff-board_c3_intent-layer.md 内部 C3。
+  async function loadHandoffIntentMode() {
+    if (!handoffIntentModeEl) return;
+    try {
+      const res = await fetch(`/api/handoff-intent-mode?token=${token}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      if (cfg && typeof cfg.intent_mode === 'string') handoffIntentModeEl.value = cfg.intent_mode;
+    } catch (_) {}
+  }
+
+  async function saveHandoffIntentMode() {
+    if (!handoffIntentModeEl) return;
+    try {
+      await fetch(`/api/handoff-intent-mode?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent_mode: handoffIntentModeEl.value }),
       });
     } catch (_) {}
   }
@@ -2436,6 +2460,7 @@ inputEl.addEventListener('blur', (e) => {
   document.getElementById('settings-btn').addEventListener('click', () => {
     if (!document.getElementById('settings-panel').hidden) {
       loadTerminalColor();
+      loadHandoffIntentMode();
       loadIdleTimeout();
       loadReconnectGrace();
 		loadBoardNotifyMode();
@@ -2451,6 +2476,7 @@ inputEl.addEventListener('blur', (e) => {
 
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
   if (terminalColorEl) terminalColorEl.addEventListener('change', saveTerminalColor);
+  if (handoffIntentModeEl) handoffIntentModeEl.addEventListener('change', saveHandoffIntentMode);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
 	if (boardNotifyModeEl) boardNotifyModeEl.addEventListener('change', saveBoardNotifyMode);
 	if (spawnConfirmModeEl) spawnConfirmModeEl.addEventListener('change', () => { if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers'; void saveBoardNotifyMode(); });

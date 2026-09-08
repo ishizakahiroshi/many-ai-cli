@@ -21,6 +21,58 @@ func TestClassifyDoneSummary(t *testing.T) {
 	}
 }
 
+// TestExtractIntentFromDoneText covers the C2 extraction (子 plan
+// docs/local/plan_session-handoff-board_c3_intent-layer.md 内部 C2): both
+// labels, either alone, and neither present ("空の行を作らない" → ok=false).
+func TestExtractIntentFromDoneText(t *testing.T) {
+	cases := []struct {
+		name           string
+		text           string
+		wantNext       string
+		wantUnverified string
+		wantOK         bool
+	}{
+		{
+			name:           "both labels",
+			text:           "作業完了。 次: 次のPRをレビューする。 未検証: DBスキーマ変更の影響範囲",
+			wantNext:       "次のPRをレビューする。",
+			wantUnverified: "DBスキーマ変更の影響範囲",
+			wantOK:         true,
+		},
+		{
+			name:     "next only",
+			text:     "作業完了。 次: 次のPRをレビューする。",
+			wantNext: "次のPRをレビューする。",
+			wantOK:   true,
+		},
+		{
+			name:           "unverified only",
+			text:           "作業完了。 未検証: DBスキーマ変更の影響範囲",
+			wantUnverified: "DBスキーマ変更の影響範囲",
+			wantOK:         true,
+		},
+		{
+			name:   "neither label",
+			text:   "作業完了しました",
+			wantOK: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			next, unverified, ok := extractIntentFromDoneText(tc.text)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if next != tc.wantNext {
+				t.Errorf("next = %q, want %q", next, tc.wantNext)
+			}
+			if unverified != tc.wantUnverified {
+				t.Errorf("unverified = %q, want %q", unverified, tc.wantUnverified)
+			}
+		})
+	}
+}
+
 func TestLastUsefulDoneLine(t *testing.T) {
 	screen := []string{
 		"⏺ 調べています",

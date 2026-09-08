@@ -18,6 +18,37 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+// TestNormalizeHandoffIntentModeDefaultsUnknownValues is the C3 completion
+// criterion for the config half of 案 3 (docs/local/plan_session-handoff-board_c3_intent-layer.md
+// 内部 C3): an empty or unrecognized value falls back to done-only, and the
+// one recognized alternative round-trips unchanged.
+func TestNormalizeHandoffIntentModeDefaultsUnknownValues(t *testing.T) {
+	cases := map[string]string{
+		"":             HandoffIntentModeDoneOnly,
+		"done-only":    HandoffIntentModeDoneOnly,
+		"turn-summary": HandoffIntentModeTurnSummary,
+		"bogus":        HandoffIntentModeDoneOnly,
+		"TURN-SUMMARY": HandoffIntentModeDoneOnly, // 大文字小文字は丸めない（TerminalColor と同じ厳密一致）
+	}
+	for in, want := range cases {
+		if got := NormalizeHandoffIntentMode(in); got != want {
+			t.Errorf("NormalizeHandoffIntentMode(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHandoffConfigTurnSummaryEnabled(t *testing.T) {
+	if (HandoffConfig{}).TurnSummaryEnabled() {
+		t.Fatal("zero-value HandoffConfig must default to done-only (turn-summary disabled)")
+	}
+	if !(HandoffConfig{IntentMode: HandoffIntentModeTurnSummary}).TurnSummaryEnabled() {
+		t.Fatal("intent_mode=turn-summary must enable TurnSummaryEnabled")
+	}
+	if (HandoffConfig{IntentMode: "bogus"}).TurnSummaryEnabled() {
+		t.Fatal("an unknown intent_mode must not enable turn-summary")
+	}
+}
+
 func TestUsageProbeModelDefaultsAndRejectsUnsafeValues(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if cfg.UserPrefs.UsageProbeModel != DefaultUsageProbeModel {

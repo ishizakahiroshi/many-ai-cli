@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"many-ai-cli/internal/config"
 )
@@ -285,6 +286,124 @@ func TestResolveSpawnModel(t *testing.T) {
 	}
 	if got := resolveSpawnModel("", true); got != "" {
 		t.Fatalf("resolveSpawnModel(\"\", true) = %q, want empty", got)
+	}
+}
+
+// TestSanitizeSpawnInitialPromptEmptyStaysEmpty は
+// plan_session-handoff-board_c4_prompted-spawn.md C1 の中心不変条件を固定する。
+// 空文字・空白のみは "" のままで、以降の呼び出し元（spawnPendingLabelForInitialPrompt）
+// が pending への書き込みを一切起こさない。
+func TestSanitizeSpawnInitialPromptEmptyStaysEmpty(t *testing.T) {
+	for _, raw := range []string{"", "   ", "\t\n  \r\n"} {
+		if got := sanitizeSpawnInitialPrompt(raw); got != "" {
+			t.Errorf("sanitizeSpawnInitialPrompt(%q) = %q, want \"\"", raw, got)
+		}
+	}
+}
+
+// TestSanitizeSpawnInitialPromptTrimsAndStripsControlBytes は前後空白の除去と、
+// sanitizeInjectText 経由の C0 制御文字除去（spawn-child 経路と同じフィルタ）を確認する。
+func TestSanitizeSpawnInitialPromptTrimsAndStripsControlBytes(t *testing.T) {
+	got := sanitizeSpawnInitialPrompt("  hello\x07\x1bworld  \n")
+	if strings.ContainsAny(got, "\x07\x1b") {
+		t.Fatalf("sanitizeSpawnInitialPrompt left control bytes: %q", got)
+	}
+	if got != "helloworld" {
+		t.Fatalf("sanitizeSpawnInitialPrompt = %q, want %q", got, "helloworld")
+	}
+}
+
+// TestSanitizeSpawnInitialPromptCapsLength は spawnInitialPromptMaxLen を超える
+// 入力が切り詰められることを確認する（子 plan C1: 長さ上限）。
+func TestSanitizeSpawnInitialPromptCapsLength(t *testing.T) {
+	long := strings.Repeat("a", spawnInitialPromptMaxLen+500)
+	got := sanitizeSpawnInitialPrompt(long)
+	if len(got) > spawnInitialPromptMaxLen {
+		t.Fatalf("sanitizeSpawnInitialPrompt kept %d bytes, want <= %d", len(got), spawnInitialPromptMaxLen)
+	}
+}
+
+// TestSpawnPendingLabelForInitialPromptEmptyNeverGeneratesLabel は「initial_prompt が
+// 空のときは label の生成すら起きない」ことを直接固定する。既存の label がどうであれ
+// 常に "" を返す＝呼び出し元は pending map に触れない。
+func TestSpawnPendingLabelForInitialPromptEmptyNeverGeneratesLabel(t *testing.T) {
+	now := time.Now()
+	for _, label := range []string{"", "already-set"} {
+		if got := spawnPendingLabelForInitialPrompt(label, "", now); got != "" {
+			t.Errorf("spawnPendingLabelForInitialPrompt(%q, \"\", now) = %q, want \"\"", label, got)
+		}
+	}
+}
+
+// TestSpawnPendingLabelForInitialPromptReusesOrGeneratesLabel は非空プロンプトのとき、
+// 既存 label を優先し、無ければ生成することを確認する。
+func TestSpawnPendingLabelForInitialPromptReusesOrGeneratesLabel(t *testing.T) {
+	now := time.Now()
+	if got := spawnPendingLabelForInitialPrompt("existing", "do the thing", now); got != "existing" {
+		t.Fatalf("spawnPendingLabelForInitialPrompt with existing label = %q, want %q", got, "existing")
+	}
+	got := spawnPendingLabelForInitialPrompt("", "do the thing", now)
+	if got == "" {
+		t.Fatal("spawnPendingLabelForInitialPrompt with empty label generated \"\", want a non-empty generated label")
+	}
+	if !strings.HasPrefix(got, "spawn-") {
+		t.Fatalf("spawnPendingLabelForInitialPrompt generated %q, want spawn-<ts> shape", got)
+	}
+}
+
+// TestHandleSpawnEmptyInitialPromptCreatesNoPendingEntry は C1 の完了条件そのもの:
+// initial_prompt を省略した POST /api/spawn は、この機能が無かった頃と同じく
+// s.orchestration.pending へ一切書き込まない。opencode + bypassPermissions で
+// risk_confirmation_required に倒し、実プロセスを起動せずに検証する
+// （TestHandleSpawnAcceptsCommandCodeProvider と同じ手法）。
+func TestHandleSpawnEmptyInitialPromptCreatesNoPendingEntry(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	before := len(s.orchestration.pending)
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider":        "opencode",
+		"cwd":             s.hubCWD,
+		"permission_mode": "bypassPermissions",
+	}))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "risk_confirmation_required") {
+		t.Fatalf("code = %d, body = %s, want 400 risk_confirmation_required", w.Code, w.Body.String())
+	}
+	s.orchestration.mu.Lock()
+	after := len(s.orchestration.pending)
+	s.orchestration.mu.Unlock()
+	if after != before {
+		t.Fatalf("pending entries = %d, want unchanged from %d (empty initial_prompt must not touch pending state)", after, before)
+	}
+}
+
+// TestHandleSpawnInitialPromptStoredInPending は非空 initial_prompt が
+// sanitizeSpawnInitialPrompt 済みで s.orchestration.pending へ届くことを確認する
+// （画面から見て「配送された」の手前までを自動テストで固定する。実際の PTY 注入
+// ＝入力欄への到達は Claude/Codex を使った手動確認がこの C の完了条件）。
+func TestHandleSpawnInitialPromptStoredInPending(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider":        "opencode",
+		"cwd":             s.hubCWD,
+		"permission_mode": "bypassPermissions",
+		"initial_prompt":  "  do the thing  \x07",
+	}))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "risk_confirmation_required") {
+		t.Fatalf("code = %d, body = %s, want 400 risk_confirmation_required", w.Code, w.Body.String())
+	}
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	found := false
+	for _, meta := range s.orchestration.pending {
+		if meta.InitialPrompt == "do the thing" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no pending entry carries the sanitized initial_prompt; pending = %+v", s.orchestration.pending)
 	}
 }
 

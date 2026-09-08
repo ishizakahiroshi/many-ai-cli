@@ -2,6 +2,7 @@ package hub
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -50,6 +51,15 @@ func (s *Server) publishDoneSummaryInternal(summary proto.DoneSummary, captureGi
 		// 完了 snapshot を「処理中」と同期的に確定してから UI へ通知する。
 		// Git I/O 自体は captureGitTurnEnd が内部 goroutine で行う。
 		s.captureGitTurnEnd(summary.SessionID, summary.At)
+	}
+	// handoff は log.session_enabled とも通知設定とも無関係（handoff.go 参照）。
+	// 外部通知が off の利用者でも看板には残す。
+	s.recordHandoffDone(summary)
+	// 子 plan C3 内部 C2（docs/local/plan_session-handoff-board_c3_intent-layer.md）:
+	// DONE の任意行「次:」「未検証:」を拾えたときだけ kind=intent を追記する。
+	// 切り出せなかったターンは何も書かない（空の意図行を作らない）。
+	if next, unverified, ok := extractIntentFromDoneText(summary.Text); ok {
+		s.recordHandoffIntent(summary.SessionID, next, unverified)
 	}
 	s.broadcast(proto.Message{Type: "done_summary", SessionID: summary.SessionID, Provider: summary.Provider, DoneSummary: &summary})
 
@@ -113,6 +123,34 @@ func (s *Server) hasPushSubscription() bool {
 		return false
 	}
 	return s.push.status().Subscriptions > 0
+}
+
+// intentNextPattern / intentUnverifiedPattern pull the DONE format's optional
+// "次:" / "未検証:" lines (internal/wrapper/approval_rules.go rulesFileContent,
+// version 21) out of an already-sanitized summary.Text. By the time this runs,
+// truncateDoneSummary has already joined every original line into a single
+// space-separated string (strings.Fields + Join), so both labels are matched
+// as a token preceded by the string start or whitespace, captured up to the
+// next label or the end of the line — there are no newlines left to split on.
+var (
+	intentNextPattern       = regexp.MustCompile(`(?:^|\s)次:\s*(.+?)(?:\s+未検証:|$)`)
+	intentUnverifiedPattern = regexp.MustCompile(`(?:^|\s)未検証:\s*(.+)$`)
+)
+
+// extractIntentFromDoneText 子 plan C3 内部 C2 の切り出し本体。ラベルが 1 つも
+// 見つからなければ ok=false を返す。呼び出し側はこれで「今回は意図なし」を
+// 判定し、空文字の kind=intent を看板へ書かない（子 plan 「空の行を作らない」）。
+func extractIntentFromDoneText(text string) (next, unverified string, ok bool) {
+	if m := intentNextPattern.FindStringSubmatch(text); m != nil {
+		next = strings.TrimSpace(m[1])
+	}
+	if m := intentUnverifiedPattern.FindStringSubmatch(text); m != nil {
+		unverified = strings.TrimSpace(m[1])
+	}
+	if next == "" && unverified == "" {
+		return "", "", false
+	}
+	return next, unverified, true
 }
 
 func classifyDoneSummary(text string) string {

@@ -122,6 +122,23 @@ type pendingChild struct {
 	NormalWorktree  normalWorktree
 	WorktreeCleanup string
 	SpawnedAt       time.Time
+	// InitialPrompt (plan_session-handoff-board_c4_prompted-spawn.md C1): an
+	// ordinary /api/spawn (OrchestrationID == "") carries this straight
+	// through to wrapperLoop's registration handshake, which injects it once
+	// the session registers — the same injectInitialPrompt used for
+	// orchestration sessions, just without the board/role framing text
+	// buildConductorInitialPrompt / buildChildInitialPrompt add. Already
+	// sanitized and length-capped by sanitizeSpawnInitialPrompt before it
+	// lands here.
+	InitialPrompt string
+	// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3): the
+	// predecessor session's ID when this /api/spawn request is starting a
+	// handoff successor, or 0 for an ordinary spawn. wrapperLoop's
+	// registration handshake reads this and passes it straight to
+	// recordHandoffSessionStart — nothing else consumes it, and it never
+	// creates a UI parent/child relationship (the successor is a new peer
+	// session, not this one's child).
+	HandoffFrom int
 }
 
 type orchestrationBoard struct {

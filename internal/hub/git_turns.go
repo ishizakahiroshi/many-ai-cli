@@ -205,6 +205,15 @@ func (s *Server) captureGitTurnEndWorker(sessionID int, endedAtText string, ses 
 	live.gitTurnStartedAt = time.Time{}
 	s.sessionsMu.Unlock()
 
+	// handoff は sessionsMu を離してから書く（Git I/O をロック内に持ち込まない）。
+	// log.session_enabled とは無関係の独立ゲート（handoff.go 参照）。この 100 件
+	// 上限・Hub 再起動で消える live.gitTurns とは別に、jsonl 側は保持期間まで残る。
+	s.recordHandoffGitTurn(sessionID, gitRoot, turn, diff.Files)
+	// 案 3（turn-summary、既定 off）: 有効な利用者だけ、このターンの終わりへ
+	// 要約プロンプトを注入する。handoff.go 側の 2 段ゲート（記録 on かつ
+	// intent_mode=turn-summary）を通らなければ即 return する軽量呼び出し。
+	s.maybeInjectHandoffTurnSummary(sessionID, turn.Turn)
+
 	// A compact event lets the active session show its completion card without
 	// polling. Reloaded clients recover the same state from /api/git-turns.
 	s.broadcast(map[string]any{

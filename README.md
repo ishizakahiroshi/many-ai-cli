@@ -84,7 +84,7 @@ Want to run a CLI `many-ai-cli` does not wrap out of the box — including one i
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
-- **Spawn new sessions** from the UI (`/api/spawn`)
+- **Spawn new sessions** from the UI (`/api/spawn`), optionally with an initial instruction typed into the new-session panel so the CLI starts with a task already in hand
 - **Launch OpenCode with approvals off** — the spawn panel can start an OpenCode session that runs unattended, and the spawn risk summary says so before you confirm
 - **Stale-binary warning** — if you replace the executable while the Hub is running, the dashboard tells you the process is still on the old build instead of leaving you to wonder why a fix did not take effect
 - **Live workflow progress** — agents done/total, elapsed time and the agent tree are computed by the Hub and shown on the session card and in the workflow view, with an optional Web Push when a run finishes
@@ -126,7 +126,7 @@ Six AI coding CLIs share one dashboard. Four of them — Claude Code, Codex CLI,
 
 This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for. It is also not a way around a plan's usage limit — before stacking several of your own accounts with one vendor, read the warning under [Security / Privacy](#security--privacy).
 
-**Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting.
+**Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page — Cursor Agent CLI in particular has no local file or command that reports remaining quota (checked on the Free tier), so it cannot be detected. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting.
 
 **How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<id>` and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, plan label, and enabled flag.
 
@@ -1317,6 +1317,14 @@ Workflow-completion Web Push is a separate opt-in (`user_prefs.workflow_completi
 ### Local instruction file writes
 
 When **Approval Buttons** is enabled, `many-ai-cli` writes only its marked approval-rules block to AI instruction files for active wrapped sessions: `~/.claude/CLAUDE.md` for Claude Code, `$CODEX_HOME/AGENTS.md` or `~/.codex/AGENTS.md` for Codex, and the project instruction root `AGENTS.md` for GitHub Copilot, Cursor Agent, and Grok (Grok reads both `CLAUDE.md` and `AGENTS.md` natively as a Claude Code-compatible harness). The block is idempotent and is removed when the last active wrapped session using that file ends, when Approval Buttons is disabled, or when the Hub stops.
+
+### Session handoff records
+
+`many-ai-cli` records a "handoff board" for every session (unless disabled) so that a session which hits its usage limit can hand its work off to a different AI CLI. What is allowed into a record is decided by a fixed, allowlisted Go type, not by scanning free text for secrets afterward: there is no field a PTY transcript, a file's contents, a diff, or an environment variable could be put into. The free-text fields it does carry — a completion summary, an optional one-line "next step" note — are passed through the same secret-masking used elsewhere before they are written.
+
+Records live at `~/.many-ai-cli/handoff/s<id>.jsonl` under your home directory (directory `0700` / file `0600`), never inside a repository, and are removed after `handoff.retention_days` (default 14 days) by the Hub's regular maintenance sweep regardless of whether recording is enabled. Set `handoff.enabled: false` to stop new writes entirely. `many-ai-cli doctor` reports the directory's file count and oldest file age.
+
+Handing a session off is always something you press, never something that happens on its own. Two ways to start it: a corner notice appears once a session's remaining quota drops below `handoff.notify_remaining_percent` (default 10%), and the "handoff list" button (↪) in the sidebar opens every recorded session — including ones that already ended, or that predate the current Hub process, since the list reads the on-disk board directly instead of the live session state. Either way, the Hub renders that session's board into a one-screen markdown (identity, recent completions, recent changes, any "next step" note) and shows it to you before it goes anywhere. Choosing to start from there launches a brand-new session on a **different** provider — never the same provider's other subscription profile — using that markdown as its initial instruction. The new session's own board records which session it continues; the two sessions are not linked in the UI beyond that.
 
 ### Outbound network traffic
 

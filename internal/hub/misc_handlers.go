@@ -93,6 +93,11 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"env_host_label":   env.HostLabel,
 		"userAvatar":       userAvatar,
 		"userDisplayName":  userDisplayName,
+		// plan_session-handoff-board_c5_handoff-md.md 内部 C2: 経路 1（残量が
+		// 近いときの通知）の閾値。UI 側はこの値未満（usage_stat が既に broadcast
+		// している RateLimit5hPct/7dPct 等から計算した残量）を見て、セッション
+		// ごとに 1 回だけ通知を出す。
+		"handoff_notify_remaining_percent": cfg.Handoff.NotifyRemainingPercentOrDefault(),
 	})
 }
 

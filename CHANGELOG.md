@@ -68,6 +68,57 @@ Release artifacts are published at
   bypass-permissions / `RiskConfirmed` defaults applied on spawn.
 
 ### Added
+- **Added the on-disk record store for the upcoming session handoff board**
+  (`internal/handoff`). Nothing writes to it yet from a running session — this
+  is only the foundation: a fixed, allowlisted record type and a jsonl append
+  path at `~/.many-ai-cli/handoff/s<id>.jsonl`. What can go into a record is
+  decided by the Go type, not by scanning free text afterward — there is no
+  field a PTY transcript, a file's contents, a diff, or an environment
+  variable could be put into; the one free-text field is passed through the
+  existing secret-masking before it is written.
+- Handoff records are retained for 14 days by default (`handoff.retention_days`)
+  and cleaned up by the Hub's existing periodic maintenance sweep regardless of
+  whether the feature is enabled; `handoff.enabled: false` stops any new
+  writes. `many-ai-cli doctor` now reports the handoff directory's file count
+  and oldest file age.
+- **The handoff board now records intent, not just what finished.** The DONE
+  summary format gains two optional lines — `次: <next step>` and
+  `未検証: <unverified assumption>` — that a session can add to its own
+  completion marker; when present, the Hub writes them as a separate
+  `kind=intent` line so a successor reads what to do next, not only what was
+  done. Neither line is required and nothing changes if you never write them.
+- **Turn-by-turn summaries are now a settings toggle** (`handoff.intent_mode`,
+  Settings → Session → "Handoff recording"). The default (`done-only`) records
+  only completion summaries and intent lines, at no extra cost. Choosing "Also
+  record a summary of every turn" (`turn-summary`) asks the session itself for
+  a one-line summary after every turn, using the same injected-prompt +
+  marker mechanism as the Git tab's AI commit message, and writes it as
+  `kind=turn_summary`; it spends the session's own tokens on every turn, so it
+  stays off by default.
+
+- **A new session can now be launched with an initial instruction from the
+  screen.** The new-session panel has an "Initial instruction (optional)"
+  textarea; whatever is typed there is delivered to the freshly started CLI
+  the same way `orchestrate spawn`'s `--initial-prompt` already is, once the
+  session's input is actually ready (the same fix that stopped the confirming
+  Enter from being dropped on Claude children applies here too). Leaving it
+  empty launches exactly as before. This is a general-purpose way to start a
+  session with a task already in hand — pass a plan file's path, say — not
+  specific to any one workflow.
+
+- **The handoff board can now hand a stuck session off to a new one.** A
+  one-screen markdown is built from a session's own board (identity, recent
+  completions, recent changes, its intent lines) and, once you review it, used
+  as the initial instruction for a brand-new peer session on a different
+  provider — never the same provider's other subscription profile, and never
+  started automatically. Two entry points: a corner notice when a session's
+  remaining quota drops below a threshold (`handoff.notify_remaining_percent`,
+  default 10%), and a "handoff list" button (↪) in the session sidebar that
+  reads the on-disk board directly, so it still works after the Hub restarts
+  or the original session has already ended. The successor's own board records
+  which session it continues; nothing about the two sessions is linked in the
+  UI beyond that.
+
 - **Orchestration children now wake their conductor only for actionable
   events.** Routine progress defaults to a dashboard badge and no longer fans
   out to sibling children. Completion, startup failure, timeout/idle warnings,
@@ -202,6 +253,15 @@ Release artifacts are published at
   editing the original reaches every profile with no re-seed; it falls back
   to a copy, recorded as degraded, when the link cannot be created
   (`internal/subscription/seed.go`'s `SeedMirrorFile`).
+- **Which providers can report remaining quota is now a single table**
+  (`internal/subscription/usage_source.go`) instead of provider names
+  hand-written into several switch statements. Adding a provider means adding
+  one row there plus its own file parser, not hunting every place a provider
+  id was compared. No behavior changes: the Usage panel's JSON is unaffected.
+  We also checked whether Cursor Agent CLI exposes remaining quota anywhere
+  locally — it does not (checked on the Free tier: no usage/quota field in its
+  `about`/`status` output, and no such file under its config directory), so it
+  stays undetectable, same as before.
 
 ### Changed
 - **The README now spells out what `orchestration.child_full_bypass` actually grants.**

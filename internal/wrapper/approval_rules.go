@@ -24,8 +24,11 @@ const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
 // 完了サマリ・orchestration エラー行の解釈）。機能の案内は載せない。
 // version 19 で子セッション委譲の案内を足したが、責務が違ううえ全セッションの常駐文脈を
 // 恒久的に消費するため 20 で撤去した。委譲の案内は internal/wrapper/delegation.go が
-// セッション単位の一時ファイルとして渡す。
-const rulesVersion = "20"
+// セッション単位の一時ファイルとして渡す。version 21 で DONE 要約に「次:」「未検証:」の
+// 任意 1 行を足した（docs/local/plan_session-handoff-board_c3_intent-layer.md C1。看板の
+// intent 層 kind=intent の材料。internal/hub/done_summary.go の extractIntentFromDoneText
+// が拾う）。
+const rulesVersion = "21"
 
 // ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
 // 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
@@ -153,6 +156,8 @@ var rulesFileContent = strings.Join([]string{
 	"",
 	"- 条件: `MANY_AI_CLI=1` の場合のみ出力する（承認マーカーと同じ確認済みの値を使用）。",
 	"- 1 文目は必ず結論にする（完了内容・失敗・中断・ユーザー判断待ちのいずれか）。2 文目は変更ファイル、テスト結果、残作業を短く補足する。",
+	"- 任意: 完了サマリーの後ろに `次: <次にやること 1 行>` を足してよい。書かなくてもよい（省略しても機械層の記録は残る）。",
+	"- 任意: 未検証の前提があれば `未検証: <前提 1 行>` も足してよい。",
 	"- Good（成功）: [MANY-AI-CLI-DONE] files タブの検索バグを修正しました。変更: web/src/app/files-view.ts。テスト: bun run check は成功しました。 [/MANY-AI-CLI-DONE]",
 	"- Good（失敗）: [MANY-AI-CLI-DONE] テスト追加は未完了です。internal/hub/server_test.go の既存失敗 3 件を確認しました。 [/MANY-AI-CLI-DONE]",
 	"- Good（要判断）: [MANY-AI-CLI-DONE] 実装は停止しています。破壊的な migration の適用可否についてユーザー判断が必要です。 [/MANY-AI-CLI-DONE]",

@@ -13,6 +13,7 @@ import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
+import { checkHandoffNotifyFromUsageStat } from './handoff.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 import { dropDoneSummary, setDoneSummary } from './done-summary.js';
 import { clearAllSpawnConfirmationsForHubRestart, closeSpawnConfirmation, noteSpawnConfirmationRequested, openNextSpawnConfirmationFor } from './spawn-confirm.js';
@@ -376,6 +377,7 @@ export function _connectWs() {
 
   if (m.type === 'usage_stat') {
     handleUsageStatMessage(m);
+    checkHandoffNotifyFromUsageStat(m);
     return;
   }
 

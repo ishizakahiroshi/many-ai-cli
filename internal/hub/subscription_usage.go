@@ -171,6 +171,16 @@ func (s *subscriptionUsageStore) recordSession(provider, id string, stat *usageS
 	if stat == nil || strings.TrimSpace(id) == "" {
 		return
 	}
+	// A provider absent from the usage-source table (子 plan: docs/local/plan_session-handoff-board_c6_usage-dispatch.md)
+	// cannot be reasoned about at all, so it is rejected before the
+	// provider-specific parsing below even starts. This does not narrow which
+	// of claude/codex the switch accepts today — Codex's table Kind is
+	// local-file, not pushed, but it still keeps a pushed channel here for a
+	// session whose CLI hook posts rate_limits directly — the table only
+	// answers "is this a real provider", not "which of its channels exist".
+	if subscription.UsageSourceFor(provider).Kind == subscription.UsageSourceNone {
+		return
+	}
 	value := subscriptionUsageValue{}
 	switch provider {
 	case "claude":
@@ -255,7 +265,12 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 		return
 	}
 	for provider, profiles := range cfg.Subscriptions {
-		if provider != "codex" && provider != "grok" {
+		// Which providers get a local file resolved and read at all now comes
+		// from the usage-source table (子 plan: docs/local/plan_session-handoff-board_c6_usage-dispatch.md
+		// 内部 C1), not a hand-written provider comparison. Adding a
+		// local-file provider means adding its row there plus its parsing
+		// case in usagelocal.ReadProfile — this loop needs no further edit.
+		if subscription.UsageSourceFor(provider).Kind != subscription.UsageSourceLocalFile {
 			continue
 		}
 		if _, ok := subscription.AdapterFor(provider); !ok {
@@ -273,35 +288,30 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 			if err != nil {
 				continue
 			}
-			switch provider {
-			case "codex":
-				if usage, ok := usagelocal.ReadCodexProfile(dir); ok {
-					if !usage.RateLimitsPresent {
-						// Older rollout records may contain token_count without a
-						// rate_limits field. That is not an explicit empty
-						// observation, so retain any previous value.
-						continue
-					}
-					fetched := at
-					if !usage.ObservedAt.IsZero() {
-						fetched = usage.ObservedAt
-					}
-					s.putLocal(provider, id, subscriptionUsageValue{codex: codexUsageFromLocal(usage)}, fetched)
-				}
-			case "grok":
-				if usage, ok := usagelocal.ReadGrokProfile(dir); ok {
-					fetched := at
-					if !usage.FetchedAt.IsZero() {
-						fetched = usage.FetchedAt
-					}
-					s.putLocal(provider, id, subscriptionUsageValue{grok: &grokSubscriptionUsage{
-						UsedPercent:      clampUsagePercent(usage.UsedPercent),
-						RemainingPercent: 100 - clampUsagePercent(usage.UsedPercent),
-						PeriodStart:      usage.PeriodStart,
-						PeriodEnd:        usage.PeriodEnd,
-						PeriodType:       usage.PeriodType,
-					}}, fetched)
-				}
+			local, ok := usagelocal.ReadProfile(provider, dir)
+			if !ok {
+				continue
+			}
+			fetched := at
+			if !local.ObservedAt.IsZero() {
+				fetched = local.ObservedAt
+			}
+			// The switch below only decides which of the Hub's own JSON
+			// shapes (codexSubscriptionUsage / grokSubscriptionUsage) to
+			// fill in — it branches on which field ReadProfile populated,
+			// not on the provider id, so it stays correct even though the
+			// participation decision above no longer names providers.
+			switch {
+			case local.Codex != nil:
+				s.putLocal(provider, id, subscriptionUsageValue{codex: codexUsageFromLocal(*local.Codex)}, fetched)
+			case local.Grok != nil:
+				s.putLocal(provider, id, subscriptionUsageValue{grok: &grokSubscriptionUsage{
+					UsedPercent:      clampUsagePercent(local.Grok.UsedPercent),
+					RemainingPercent: 100 - clampUsagePercent(local.Grok.UsedPercent),
+					PeriodStart:      local.Grok.PeriodStart,
+					PeriodEnd:        local.Grok.PeriodEnd,
+					PeriodType:       local.Grok.PeriodType,
+				}}, fetched)
 			}
 		}
 	}

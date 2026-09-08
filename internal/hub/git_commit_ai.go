@@ -137,6 +137,16 @@ func (s *Server) handleCommitMsgChunk(id int, cleanText string) {
 // 注入プロンプトのエコーはマーカー語を文中（日本語/英語の文の途中）にインラインで含むため
 // 行頭一致せず、AI の本応答が届く前の中間状態でもプロンプト指示文を subject に取り違えない。
 func extractCommitMarker(buf string) (subject, body string, ok bool) {
+	return extractMarkerBlock(buf, commitMsgMarkerOpen, commitMsgMarkerClose)
+}
+
+// extractMarkerBlock is extractCommitMarker's marker-agnostic core. It is the
+// single window this package uses to pull one AI-written block out of a
+// PTY output buffer bounded by an [OPEN]...[/CLOSE] marker pair — anything
+// that injects a prompt and waits for a marker (git_commit_ai.go's commit
+// message, internal/hub/handoff.go's turn-summary intent) should call this
+// rather than re-implementing the same TUI-reflow tolerance twice.
+func extractMarkerBlock(buf, open, closeMarker string) (subject, body string, ok bool) {
 	rawLines := strings.Split(buf, "\n")
 	lines := make([]string, len(rawLines))
 	for i, ln := range rawLines {
@@ -145,7 +155,7 @@ func extractCommitMarker(buf string) (subject, body string, ok bool) {
 	// 最後の「OPEN マーカーで始まる行」を基点にする。
 	openIdx := -1
 	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), commitMsgMarkerOpen) {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), open) {
 			openIdx = i
 			break
 		}
@@ -154,12 +164,23 @@ func extractCommitMarker(buf string) (subject, body string, ok bool) {
 		return "", "", false
 	}
 	// OPEN マーカー語より後ろのテキスト（連結された subject 先頭。単独行なら空文字）。
-	openRemainder := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[openIdx]), commitMsgMarkerOpen))
+	openRemainder := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(lines[openIdx]), open))
+	// OPEN と CLOSE が同一行に連結している場合（1 行に収めるよう指示した要約プロンプト
+	// の応答が、TUI に折り返される前の生ストリームでそのまま 1 行になったケース）。
+	// この分岐が無いと、下の「次行以降から CLOSE を探す」ループは同じ行を見に行かず
+	// 一致しないまま ok=false になる。
+	if idx := strings.Index(openRemainder, closeMarker); idx >= 0 {
+		subject = strings.TrimSpace(openRemainder[:idx])
+		if subject == "" {
+			return "", "", false
+		}
+		return subject, "", true
+	}
 	// その後ろの最初の「CLOSE マーカーを含む行」までを inner とする。
 	closeIdx := -1
 	closeLeading := ""
 	for i := openIdx + 1; i < len(lines); i++ {
-		if idx := strings.Index(lines[i], commitMsgMarkerClose); idx >= 0 {
+		if idx := strings.Index(lines[i], closeMarker); idx >= 0 {
 			closeIdx = i
 			closeLeading = strings.TrimSpace(lines[i][:idx])
 			break

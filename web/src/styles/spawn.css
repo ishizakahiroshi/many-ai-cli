@@ -443,6 +443,18 @@
 .spawn-input:focus { border-color: var(--accent); }
 .spawn-input { font-family: Consolas, monospace; font-size: 0.78rem; }
 
+/* plan_session-handoff-board_c4_prompted-spawn.md C2: 最初に渡す指示（任意）欄。
+   spawn-input の見た目を引き継ぎつつ、複数行入力向けに resize と行間だけ足す。 */
+.spawn-initial-prompt-row { display: flex; flex-direction: column; gap: 4px; }
+.spawn-field-label { font-size: 0.76rem; color: var(--muted); }
+.spawn-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 3.4em;
+  line-height: 1.4;
+}
+
 /* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
    セッション作成パネルを開いた瞬間（spawnCwdInput.focus()）に画面が拡大して
    使いにくくなる。ターミナル入力欄 #input と同じく mobile 時は 16px を確保する。 */

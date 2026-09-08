@@ -364,6 +364,16 @@ type session struct {
 	// マーカー検出（あるいは十分な余白蓄積）でリセットする。
 	doneMsgBuf strings.Builder
 
+	// JSON 外: 看板の意図層・厚い記録（案3 turn-summary、既定 off）の待ち受け状態。
+	// commitMsgAwait と同型（docs/local/plan_session-handoff-board_c3_intent-layer.md
+	// 内部 C3）。reattach で引き継がなくても、待ち受け中のまま置き去りになるだけで
+	// commitMsgAwait 系と同じくタイムアウトで自然に収束するため、
+	// reattach_state.go への追加はしていない。
+	turnSummaryAwait    bool            // マーカー待ち受け中
+	turnSummaryDeadline time.Time       // 待ち受けの打ち切り時刻
+	turnSummaryTurn     int             // 対象の gitTurns 番号（Record.Turn へ載せる）
+	turnSummaryBuf      strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
+
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
 	initialModelScanBytes int
@@ -1246,6 +1256,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
 	mux.HandleFunc("/api/terminal-color", s.handleTerminalColor)
+	mux.HandleFunc("/api/handoff-intent-mode", s.handleHandoffIntentMode)
+	mux.HandleFunc("/api/handoff", s.handleHandoffList)
+	mux.HandleFunc("/api/handoff/", s.handleHandoffItem)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
 	mux.HandleFunc("/api/input-config", s.handleInputConfig)
 	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
@@ -1475,6 +1488,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
 	s.safeGo("clean_orchestration_artifacts", s.cleanOrchestrationArtifacts)
+	s.safeGo("clean_handoff", s.cleanHandoff)
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })

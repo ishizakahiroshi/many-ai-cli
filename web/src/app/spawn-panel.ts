@@ -48,6 +48,8 @@ export function resetSpawnProviderOrder(): void {
   const spawnIsolateWorktreeNote = document.getElementById('spawn-isolate-worktree-note');
   const spawnIsolateWorktreeHelp = document.getElementById('spawn-isolate-worktree-help');
   const spawnDelegation = document.getElementById('spawn-delegation') as HTMLInputElement | null;
+  // plan_session-handoff-board_c4_prompted-spawn.md C2: 最初に渡す指示（任意）。
+  const spawnInitialPrompt = document.getElementById('spawn-initial-prompt') as HTMLTextAreaElement | null;
   const spawnModelInput = document.getElementById('spawn-model');
   const spawnModelDatalist = document.getElementById('spawn-model-datalist');
   const spawnModelClearBtn = document.getElementById('spawn-model-clear');
@@ -2550,6 +2552,11 @@ export function resetSpawnProviderOrder(): void {
       if (spawnIsolateWorktree?.checked) bodyObj.isolate_worktree = true;
       // 同上。未チェックでは省略し、config の user_prefs.spawn.delegation_auto を温存する。
       if (spawnDelegation?.checked) bodyObj.delegation = true;
+      // plan_session-handoff-board_c4_prompted-spawn.md C2: 空欄なら initial_prompt キー自体を
+      // 送らない（Hub 側は空文字と省略を同じ「何も注入しない」として扱うが、送信 JSON の形も
+      // 従来と同一に保つ）。
+      const initialPrompt = spawnInitialPrompt?.value.trim() || '';
+      if (initialPrompt) bodyObj.initial_prompt = initialPrompt;
       if (!skipsAIFields && route) bodyObj.route = route;
       // 「Default CLI login」を選んだときはキーごと送らない（従来リクエストと同一）。
       const subscriptionID = selectedSubscriptionID();
@@ -2692,6 +2699,8 @@ export function resetSpawnProviderOrder(): void {
         );
         await saveSpawnSettings(persistedDefaults);
         document.getElementById('spawn-label').value = '';
+        // 一度届けたら消す。label と同じく「次回また送られる」を避ける一回性の欄。
+        if (spawnInitialPrompt) spawnInitialPrompt.value = '';
         codexModelSelection  = null;
         claudeModelSelection = null;
         newSessionPanel.hidden = true;

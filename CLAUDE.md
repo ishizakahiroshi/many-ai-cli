@@ -84,8 +84,8 @@ docs/local/               設計書・plan 等（非公開）
 | relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `internal/hub/relay.go` / `internal/hub/relay_worktree.go` | `TestRelay_*`（`internal/hub/`） |
 | サイドバーの配置は 1 本の木から導く（兄弟順と折りたたみ以外でノードが器を越えない） | `web/src/app/sidebar-tree.ts` | `sidebar-tree-fixtures.ts` |
 | 観測コードはリリース成果物に入れない（build tag オプトイン＋成果物検査） | `web/src/debug/probe.ts` / `docs/local/archive/v0.8.x/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs` / `scripts/check-artifact-clean.mjs` |
-
-残量の経路は、**問い合わせて取る**（CLI/API から直接取れないので `ReadUsage` を足さない）、**押し出されてくる**（Claude の statusLine）、**ローカルに落ちている**（Codex の rollout JSONL / Grok の課金ログ）を分ける。取得手段のない provider に `Unknown` 欄は作らない。正本は `internal/subscription/adapter.go` と `internal/hub/subscription_usage.go`。
+| 引き継ぎ看板は入れてよいものだけを型で受け、それ以外は入れる口を作らない（伏字化は最後の網） | `internal/handoff/handoff.go` の冒頭コメント | `internal/handoff/handoff_test.go` の allowlist フィールド固定テスト |
+| 残量ソースは provider 直書きの switch/slice ではなく 1 本の表で持つ。問い合わせて取る経路は作らない（`ReadUsage` を Adapter に足さない） | `internal/subscription/usage_source.go` | `internal/subscription/usage_source_test.go` |
 
 **新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
 

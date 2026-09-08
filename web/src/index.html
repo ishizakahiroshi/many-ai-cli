@@ -337,6 +337,14 @@
           </div>
           <div class="settings-note" data-i18n="settings_terminal_color_desc">Applies to newly started sessions. "Follow the launch environment" honors NO_COLOR from the shell that started the Hub; "No colors" turns colors off even if that shell asks for them.</div>
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_handoff_intent_mode">Handoff recording</span>
+            <select id="handoff-intent-mode" class="settings-select">
+              <option value="done-only" data-i18n="settings_handoff_intent_mode_done_only">Completion summaries only (recommended)</option>
+              <option value="turn-summary" data-i18n="settings_handoff_intent_mode_turn_summary">Also record a summary of every turn</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_handoff_intent_mode_desc">"Also record a summary of every turn" asks the AI for a one-line summary after each turn and uses more of the session's own tokens. Off by default; turn on only if you have tokens to spare.</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
             <input type="number" id="idle-timeout-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>
@@ -1127,6 +1135,9 @@
             <path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path>
           </svg>
         </button>
+        <!-- C5: plan_session-handoff-board_c5_handoff-md.md — 経路2「一覧のボタンから」の
+             入口。看板ディレクトリを直接読むので、Hub 再起動後・セッション終了後も開ける。 -->
+        <button id="handoff-list-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">↪</button>
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
       </div>
       <div id="new-session-panel" class="aac-wheel-overlay" hidden>
@@ -1265,6 +1276,17 @@
             <button id="spawn-delegation-help" class="spawn-inline-help-btn" type="button"
                     data-i18n-tooltip="spawn_delegation_note"
                     aria-label="What does delegation do?">?</button>
+          </div>
+
+          <!-- 最初に渡す指示（任意・全 provider 共通）。
+               plan_session-handoff-board_c4_prompted-spawn.md C2: 空のまま起動しても従来と
+               同じ（送信 JSON から initial_prompt キー自体を省く）。引き継ぎ（別 plan の C5）は
+               この欄を看板 md で埋めて開く専用画面を作らず、この欄をそのまま共用する。 -->
+          <div class="spawn-initial-prompt-row">
+            <label for="spawn-initial-prompt" class="spawn-field-label" data-i18n="spawn_initial_prompt_label">Initial instruction (optional)</label>
+            <textarea id="spawn-initial-prompt" class="spawn-input spawn-textarea" rows="3"
+                      data-i18n-placeholder="spawn_initial_prompt_placeholder"
+                      placeholder="e.g. &lt;path to plan.md&gt; do this"></textarea>
           </div>
 
           <!-- C2: Detached 設定セクション -->

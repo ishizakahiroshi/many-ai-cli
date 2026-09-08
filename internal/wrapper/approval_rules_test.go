@@ -202,6 +202,27 @@ func TestStripInjectedBlocksReturnsInputUnchangedWhenNoBlocksPresent(t *testing.
 	}
 }
 
+// TestRulesFileContentHasIntentOptionalLines is the C1 completion criterion
+// (docs/local/plan_session-handoff-board_c3_intent-layer.md 内部 C1): the DONE
+// format section gains the two optional "次:" / "未検証:" lines without
+// dropping any existing wording, and the version stamp matches rulesVersion.
+func TestRulesFileContentHasIntentOptionalLines(t *testing.T) {
+	if !strings.Contains(rulesFileContent, "<!-- version: "+rulesVersion+" -->") {
+		t.Fatalf("rulesFileContent version stamp does not match rulesVersion %q:\n%s", rulesVersion, rulesFileContent)
+	}
+	for _, want := range []string{
+		"次: <次にやること 1 行>",
+		"未検証: <前提 1 行>",
+		// 既存の必須書式が消えていないことも合わせて確認する。
+		"1 文目は必ず結論にする",
+		"[MANY-AI-CLI-DONE] <1〜2 文の完了サマリー> [/MANY-AI-CLI-DONE]",
+	} {
+		if !strings.Contains(rulesFileContent, want) {
+			t.Errorf("rulesFileContent missing %q", want)
+		}
+	}
+}
+
 func TestInjectRulesClaudeImportIsIdempotent(t *testing.T) {
 	withTempHome(t)
 	path := filepath.Join(t.TempDir(), "CLAUDE.md")

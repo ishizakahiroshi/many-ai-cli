@@ -198,9 +198,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		customProviderSession: customProviderSession,
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
-	if childMeta.OrchestrationID != "" {
+	if childMeta.OrchestrationID != "" || childMeta.InitialPrompt != "" {
 		// orchestration セッションは登録直後に初期プロンプト注入（conductor は本関数末尾、
-		// 子は handleSpawnChild の injectInitialPrompt）が走る。注入完了までユーザー入力を
+		// 子は handleSpawnChild の injectInitialPrompt）が走る。通常の /api/spawn が
+		// initial_prompt を渡した場合（plan_session-handoff-board_c4_prompted-spawn.md C1）
+		// も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を
 		// 保留し、起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
 		ses.initialInjectPending = true
 		ses.initialInjectGateAt = time.Now()
@@ -261,6 +263,14 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
 		prompt := buildConductorInitialPrompt(childMeta.OrchestrationID, roles)
 		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
+	} else if childMeta.OrchestrationID == "" && childMeta.InitialPrompt != "" {
+		// C1 (plan_session-handoff-board_c4_prompted-spawn.md): 通常の /api/spawn
+		// が画面から渡した文面。orchestration 経路のような board/role の枠組み文は
+		// 付けず、sanitizeSpawnInitialPrompt 済みの文面をそのまま注入する。
+		// 同じ safeGo + injectInitialPrompt を使うので、Enter が消える不具合の
+		// 再発防止（confirmInitialPromptSubmitted 等）もそのまま効く。
+		prompt := childMeta.InitialPrompt
+		s.safeGo("inject_initial_prompt_spawn", func() { s.injectInitialPrompt(id, prompt) })
 	}
 	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
 	// sessionUpdateMessage は approvalSourceEpoch を読むため、ここだけは
@@ -302,6 +312,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 			"subscription_profile_id": subscriptionID,
 		})
 		s.startAgentChatTail(id)
+		// handoff は log.session_enabled とは無関係の独立ゲート
+		// （handoff.go の handoffEnabled 参照）。writeHistory の分岐に相乗り
+		// しているのは「usage probe を除く」判定を再利用するためだけで、
+		// SessionEnabled には依存しない。
+		s.recordHandoffSessionStart(id, reg.Provider, reg.CWD, branch, reg.Model, subscriptionID, childMeta.HandoffFrom)
 	}
 	s.wrapperMessageLoop(wc, id)
 }
@@ -487,6 +502,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		}
 		if storeID != 0 && s.sessionStore != nil {
 			s.sessionStore.EndSession(acceptedID, "dismissed", "", time.Now())
+		}
+		if !req.UsageProbe {
+			s.recordHandoffSessionEnd(acceptedID, "dismissed", "")
 		}
 		_ = websocket.JSON.Send(conn, proto.Message{
 			Type:      "reattach_reject",
@@ -1024,6 +1042,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				s.handleDoneSummaryMarker(id, doneSnap)
 			}
 			s.handleCommitMsgChunk(id, cleanText)
+			s.handleHandoffTurnSummaryChunk(id, cleanText)
 		case "pty_input_ack":
 			s.handlePTYInputAck(wc, id, m.InputSeq)
 		case "session_end":
@@ -1091,6 +1110,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
 	var endedProvider, endedCWD, endedCodexHome, endedClaudeDir string
+	var endedUsageProbe bool
 	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
 	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
 		s.stopAgentChatTailLocked(cur)
@@ -1108,6 +1128,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endedCWD = cur.CWD
 		endedCodexHome = cur.CodexHome
 		endedClaudeDir = cur.ClaudeDir
+		endedUsageProbe = cur.UsageProbe
 	}
 	// 旧 wrapper（ack 未対応）では従来どおり未送信の保留入力を捨てる。
 	// ack 対応 wrapper の場合は in-flight と既存 pending を次の reattach へ残す。
@@ -1156,6 +1177,12 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	}
 	if s.sessionStore != nil {
 		s.sessionStore.EndSession(id, endState, endReason, time.Now())
+	}
+	if !endedUsageProbe {
+		// wrapper 切断の全経路（正常終了・session_end 未送信の kill・Hub 側 WS 断）を
+		// ここ 1 箇所に集約している上の EndSession 呼び出しに相乗りする。handoff は
+		// log.session_enabled と独立（handoff.go 参照）。
+		s.recordHandoffSessionEnd(id, endState, endReason)
 	}
 	// dismiss 経路（server.go handleDismiss）と同じく profile の claudeDir も渡す。
 	// 渡さなくても knownApprovalTargets 経由で profile 側の宛先は外れるが、候補に

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/handoff"
 	"many-ai-cli/internal/sessionlog"
 )
 
@@ -146,7 +147,24 @@ func (s *Server) maintenanceLoop(ctx context.Context) {
 			s.cleanSpawnLogs()
 			s.cleanSessionLogs()
 			s.cleanOrchestrationArtifacts()
+			s.cleanHandoff()
 		}
+	}
+}
+
+// cleanHandoff removes handoff jsonl files (~/.many-ai-cli/handoff) older than
+// cfg.Handoff.retention_days (default 14). This runs regardless of
+// cfg.Handoff.EnabledOrDefault(): disabling the feature stops new writes, but
+// files written while it was enabled must not linger forever. Retention here
+// is intentionally separate from cfg.Log.SessionRetentionDays — see
+// config.HandoffConfig's doc comment for why.
+func (s *Server) cleanHandoff() {
+	s.cfgMu.Lock()
+	retentionDays := s.cfg.Handoff.RetentionDaysOrDefault()
+	s.cfgMu.Unlock()
+	cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
+	if err := handoff.PruneOlderThan(cutoff); err != nil {
+		s.logger.Warn("handoff cleanup failed", "err", err)
 	}
 }
 

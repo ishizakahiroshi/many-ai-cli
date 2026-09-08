@@ -8,7 +8,55 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"many-ai-cli/internal/subscription"
 )
+
+// LocalProfile is the provider-agnostic result of ReadProfile: exactly one of
+// Codex/Grok is set when a local-file usage record was found, and neither is
+// when it was not.
+type LocalProfile struct {
+	Codex      *CodexUsage
+	Grok       *GrokUsage
+	ObservedAt time.Time
+}
+
+// ReadProfile is this package's single provider fan-out point (子 plan:
+// docs/local/plan_session-handoff-board_c6_usage-dispatch.md 内部 C1
+// 「usagelocal の呼び分けを、この表を引く形に置き換える」). It first asks
+// subscription.UsageSourceFor whether provider even has a local file to read;
+// a provider absent from that table, or present with a different Kind, never
+// touches disk. The byte-level parsing for each supported provider stays in
+// its own file (codex.go / grok.go) — that part is deliberately not
+// table-driven, only the decision to attempt it is.
+func ReadProfile(provider, profileDir string) (LocalProfile, bool) {
+	if subscription.UsageSourceFor(provider).Kind != subscription.UsageSourceLocalFile {
+		return LocalProfile{}, false
+	}
+	switch provider {
+	case "codex":
+		usage, ok := ReadCodexProfile(profileDir)
+		if !ok || !usage.RateLimitsPresent {
+			// Mirrors the caller's previous behavior: a token_count record
+			// without an explicit rate_limits value is not a new observation,
+			// so it must not overwrite a previously cached one.
+			return LocalProfile{}, false
+		}
+		return LocalProfile{Codex: &usage, ObservedAt: usage.ObservedAt}, true
+	case "grok":
+		usage, ok := ReadGrokProfile(profileDir)
+		if !ok {
+			return LocalProfile{}, false
+		}
+		return LocalProfile{Grok: &usage, ObservedAt: usage.FetchedAt}, true
+	default:
+		// A provider can only reach here if usageSources and this switch
+		// disagree about which providers are UsageSourceLocalFile — treated
+		// as "not acquired" rather than a panic, matching every other
+		// not-found path in this package.
+		return LocalProfile{}, false
+	}
+}
 
 // RateLimitWindow is one provider-reported usage window. A pointer to this
 // type is used by callers so 0% remains distinguishable from an absent window.

@@ -102,6 +102,90 @@ type LogConfig struct {
 	AttachmentMaxTotalMB int `yaml:"attachment_max_total_mb" json:"attachment_max_total_mb"`
 }
 
+// HandoffConfig controls the session handoff record store
+// (internal/handoff). See that package's doc comment for what a record can
+// and cannot contain.
+//
+// This is a separate config block from LogConfig on purpose: LogConfig's
+// SessionRetentionDays governs the raw PTY/session log (kept local,
+// off by default, may contain secrets in plain text), while a handoff record
+// is meant to leave the machine — a different AI CLI reads it later — so it
+// gets its own, independently configured retention
+// (docs/local/plan_session-handoff-board.md 方針 B2 = 14 days).
+type HandoffConfig struct {
+	// Enabled: 既定 true（未設定時）。false にすると Append は一切呼ばれず、
+	// 1 バイトも書かれない。ポインタなのは Orchestration.WorktreeAuto と同じ理由
+	// （yaml 上で「未設定」と「false」を区別するため。bool のゼロ値は false なので、
+	// 素の bool だと空の handoff: {} セクションが意図せず無効化してしまう）。
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// RetentionDays: 既定 14。この日数を過ぎた handoff ファイルは Hub の定期処理
+	// （internal/hub/maintenance.go の cleanHandoff）が削除する。Enabled が false
+	// でも削除自体は動く（無効化後に残った古いファイルを永久に残さないため）。
+	RetentionDays int `yaml:"retention_days,omitempty" json:"retention_days,omitempty"`
+	// IntentMode: 既定 HandoffIntentModeDoneOnly（案 2）。
+	// HandoffIntentModeTurnSummary（案 3）にすると、ターンが終わるたびに現在の
+	// セッションへ短い要約プロンプトを注入し、専用マーカーで拾って
+	// kind=turn_summary として看板へ書く（internal/hub/handoff.go）。
+	// **既定 off の理由**: 同じセッションのトークンを消費し、ターンごとに 1
+	// 往復増えるため。トークンに余裕のある利用者だけが on にする
+	// （docs/local/plan_session-handoff-board.md 方針 A1 案 3）。
+	IntentMode string `yaml:"intent_mode,omitempty" json:"intent_mode,omitempty"`
+	// NotifyRemainingPercent: 残量がこの % を下回ったら、そのセッションについて
+	// 1 回だけ引き継ぎの通知を出す（子 plan: docs/local/plan_session-handoff-board_c5_handoff-md.md
+	// 内部 C2）。既定 10（未設定・0 以下）。方針 B1「人が起動を押す」の入口の
+	// ひとつで、通知はあくまで promptで、自動では何も起動しない。RetentionDays
+	// と同じ「0 以下は既定」の扱いにする（明示的な無効化スイッチは別に持たない
+	// — 誤発火の実害が出たら、この 1 値を上げるだけで足りる）。
+	NotifyRemainingPercent int `yaml:"notify_remaining_percent,omitempty" json:"notify_remaining_percent,omitempty"`
+}
+
+// Handoff intent_mode の 2 値。文字列を直書きさせず、この定数と
+// NormalizeHandoffIntentMode 経由でだけ扱う（TerminalColor と同じ扱い）。
+const (
+	HandoffIntentModeDoneOnly    = "done-only"
+	HandoffIntentModeTurnSummary = "turn-summary"
+)
+
+// NormalizeHandoffIntentMode は未知の値・空を既定（done-only）へ丸める。
+func NormalizeHandoffIntentMode(v string) string {
+	if v == HandoffIntentModeTurnSummary {
+		return HandoffIntentModeTurnSummary
+	}
+	return HandoffIntentModeDoneOnly
+}
+
+// TurnSummaryEnabled reports whether the thicker per-turn recording (案 3) is
+// on. This is the single choke point internal/hub/handoff.go reads before
+// injecting a turn-summary prompt.
+func (h HandoffConfig) TurnSummaryEnabled() bool {
+	return NormalizeHandoffIntentMode(h.IntentMode) == HandoffIntentModeTurnSummary
+}
+
+// EnabledOrDefault returns whether handoff recording is enabled, defaulting
+// to true when unset.
+func (h HandoffConfig) EnabledOrDefault() bool {
+	return h.Enabled == nil || *h.Enabled
+}
+
+// RetentionDaysOrDefault returns the configured retention in days, defaulting
+// to 14 when unset or non-positive.
+func (h HandoffConfig) RetentionDaysOrDefault() int {
+	if h.RetentionDays <= 0 {
+		return 14
+	}
+	return h.RetentionDays
+}
+
+// NotifyRemainingPercentOrDefault returns the configured threshold,
+// defaulting to 10 when unset or non-positive (子 plan 内部 C2「既定は保守的
+// にする」).
+func (h HandoffConfig) NotifyRemainingPercentOrDefault() int {
+	if h.NotifyRemainingPercent <= 0 {
+		return 10
+	}
+	return h.NotifyRemainingPercent
+}
+
 // ApprovalConfig は Hub 承認ボタン機能の設定。
 type ApprovalConfig struct {
 	Enabled          bool `yaml:"enabled"`
@@ -929,6 +1013,8 @@ type Config struct {
 	Voice         VoiceConfig         `yaml:"voice,omitempty" json:"voice,omitempty"`
 	Notify        NotifyConfig        `yaml:"notify,omitempty" json:"notify,omitempty"`
 	Orchestration OrchestrationConfig `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
+	// Handoff controls the session handoff record store (internal/handoff).
+	Handoff HandoffConfig `yaml:"handoff,omitempty" json:"handoff,omitempty"`
 	// Subscriptions は provider ごとのサブスクリプション profile 一覧。
 	// **認証情報は入らない**（実体は各 profile ディレクトリ内で vendor CLI が持つ）。
 	// 未設定なら nil で、従来どおり各 CLI の既定ログイン環境がそのまま使われる。
@@ -1028,6 +1114,7 @@ func LoadOrCreate() (*Config, error) {
 		cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
 	cfg.Hub.TerminalColor = NormalizeTerminalColor(cfg.Hub.TerminalColor)
+	cfg.Handoff.IntentMode = NormalizeHandoffIntentMode(cfg.Handoff.IntentMode)
 	cfg.SlashCmdSources = EffectiveSlashCmdSources(cfg.SlashCmdSources)
 	cfg.ApprovalPatternSources = EffectiveApprovalPatternSources(cfg.ApprovalPatternSources)
 	cfg.ApprovalProfiles = EffectiveApprovalProfiles(cfg.ApprovalProfiles)
@@ -1208,6 +1295,10 @@ func (cfg *Config) Clone() *Config {
 		c.Orchestration.ChildStartupKill = &v
 	}
 	c.Orchestration.SpawnConfirmProviders = cloneStringSlice(cfg.Orchestration.SpawnConfirmProviders)
+	if cfg.Handoff.Enabled != nil {
+		v := *cfg.Handoff.Enabled
+		c.Handoff.Enabled = &v
+	}
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
 	}
@@ -1269,6 +1360,9 @@ func (cfg *Config) applyDefaults() {
 	}
 	if cfg.Orchestration.SpawnConfirmMode == "" {
 		cfg.Orchestration.SpawnConfirmMode = SpawnConfirmOn
+	}
+	if cfg.Handoff.RetentionDays <= 0 {
+		cfg.Handoff.RetentionDays = 14
 	}
 }
 

@@ -59,6 +59,7 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 		tailscale(cfg),
 		logs(cfg),
 		sessionLog(cfg),
+		handoffCheck(cfg),
 	}
 	// 置き去り検査とサブスクリプション検査は「該当があるときにしか出さない」。
 	// 使っていない機能で診断出力が伸びると、本当に見るべき行が埋もれる。
