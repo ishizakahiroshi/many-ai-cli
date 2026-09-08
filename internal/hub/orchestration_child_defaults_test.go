@@ -312,3 +312,57 @@ func TestApplyChildApprovalDefaultsSaferPathLeavesUnset(t *testing.T) {
 		t.Fatalf("safer path must preserve explicit values: %+v", explicit)
 	}
 }
+
+// 承認ダイアログに出す実効権限は、applyChildApprovalDefaults を実際に通して作る。
+// 対応表を書き写すと、既定を変えたときにダイアログだけ古い表示のまま残るため。
+func TestChildApprovalPreviewMatchesAppliedDefaults(t *testing.T) {
+	preview := childApprovalPreview(spawnChildRequest{Provider: "codex"}, true)
+	for _, provider := range orchestrationProviders {
+		want := &spawnChildRequest{Provider: provider}
+		applyChildApprovalDefaults(want, true)
+		got, ok := preview[provider]
+		if !ok {
+			t.Fatalf("provider %q が preview に無い", provider)
+		}
+		if got.PermissionMode != want.PermissionMode || got.Sandbox != want.Sandbox ||
+			got.AskForApproval != want.AskForApproval || got.RiskConfirmed != want.RiskConfirmed {
+			t.Fatalf("provider %q: preview = %+v, applied = %+v", provider, got, want)
+		}
+	}
+	if codex := preview["codex"]; codex.Sandbox != "danger-full-access" || codex.AskForApproval != "never" || !codex.RiskConfirmed {
+		t.Fatalf("codex はサンドボックス無効で起動するのに preview に出ていない: %+v", codex)
+	}
+}
+
+// child_full_bypass が off のときは Hub が何も埋めない。ダイアログもそれを
+// そのまま出せるよう、全 provider が空のまま返る。
+func TestChildApprovalPreviewEmptyWhenBypassOff(t *testing.T) {
+	preview := childApprovalPreview(spawnChildRequest{Provider: "codex"}, false)
+	for provider, got := range preview {
+		if got.PermissionMode != "" || got.Sandbox != "" || got.AskForApproval != "" || got.RiskConfirmed {
+			t.Fatalf("provider %q: bypass off なのに埋まっている: %+v", provider, got)
+		}
+	}
+}
+
+// ダイアログは承認前に provider を差し替えられる。resolveSpawnConfirmationDecision は
+// Provider / Model だけを置き換えて他は持ち越すので、呼び出し側が明示した値は
+// 差し替え後の provider でも残る。preview もそのとおりに見せる。
+func TestChildApprovalPreviewKeepsExplicitValuesAcrossProviders(t *testing.T) {
+	preview := childApprovalPreview(spawnChildRequest{Provider: "codex", PermissionMode: "acceptEdits"}, true)
+	if got := preview["claude"].PermissionMode; got != "acceptEdits" {
+		t.Fatalf("明示値が provider 差し替え後も残るはず: %q", got)
+	}
+}
+
+// 未知の provider もダイアログでは選択肢に残る。preview に入っていないと、
+// その選択の間だけ権限欄が空白になる。
+func TestChildApprovalPreviewCoversUnknownRequestedProvider(t *testing.T) {
+	preview := childApprovalPreview(spawnChildRequest{Provider: "made-up-cli"}, true)
+	if _, ok := preview["made-up-cli"]; !ok {
+		t.Fatalf("未知の provider が preview に無い: %+v", preview)
+	}
+	if _, ok := preview["codex"]; !ok {
+		t.Fatalf("既知の provider が落ちている: %+v", preview)
+	}
+}

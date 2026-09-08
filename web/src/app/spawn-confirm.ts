@@ -25,6 +25,7 @@ import {
   selectOldestPendingConfirmationFor,
   spawnConfirmDecisionFromHttp,
   unregisterDialogController,
+  type ChildApproval,
   type SpawnConfirmationRecord,
 } from './spawn-confirm-store.js';
 
@@ -80,6 +81,24 @@ function cwdDisplayHtml(record: SpawnConfirmationRecord, parent: any): string {
     return `${escapeHtml(parentCwd)} <span class="spawn-confirm-inherit-note">(${escapeHtml(t('spawn_confirm_cwd_inherited_note'))})</span>`;
   }
   return escapeHtml(t('spawn_confirm_cwd_inherit'));
+}
+
+// 承認する人に「この子に何を渡すのか」を見せる欄。これが無いと、role / provider /
+// model / cwd / 指示文しか出ないまま codex の子が --sandbox danger-full-access で
+// 起動する（docs/local/bugfix_spawn-confirm-permission-disclosure_2026-09-08.md）。
+// 値は Hub が applyChildApprovalDefaults を通して作ったものをそのまま出す。ここで
+// provider から権限を組み立て直すと、Hub 側の既定を変えたときに表示だけ古くなる。
+function approvalDisplayHtml(approval: ChildApproval | undefined): string {
+  const flags: string[] = [];
+  if (approval?.sandbox) flags.push(`--sandbox ${approval.sandbox}`);
+  if (approval?.askForApproval) flags.push(`--ask-for-approval ${approval.askForApproval}`);
+  if (approval?.permissionMode) flags.push(`--permission-mode ${approval.permissionMode}`);
+  if (!flags.length) {
+    return `<span class="spawn-confirm-approval-none">${escapeHtml(t('spawn_confirm_approval_none'))}</span>`;
+  }
+  const code = `<code class="spawn-confirm-approval-flags">${escapeHtml(flags.join(' '))}</code>`;
+  if (!approval?.riskConfirmed) return code;
+  return `${code} <span class="spawn-confirm-approval-risk">${escapeHtml(t('spawn_confirm_approval_risk'))}</span>`;
 }
 
 function outcomeMessage(reason: string, m: any): string {
@@ -145,6 +164,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       <dd>${escapeHtml(spawnConfirmRoleLabel(record.role))}</dd>
       <dt>${escapeHtml(t('spawn_confirm_cwd'))}</dt>
       <dd class="spawn-confirm-path">${cwdDisplayHtml(record, parent)}</dd>
+      <dt>${escapeHtml(t('spawn_confirm_approval'))}</dt>
+      <dd class="spawn-confirm-approval" data-spawn-confirm-approval>${approvalDisplayHtml(record.approval[provider])}</dd>
       <dt>${escapeHtml(t('spawn_confirm_elapsed_label'))}</dt>
       <dd data-spawn-confirm-elapsed>${escapeHtml(formatElapsed(record.requestedAtMs))}</dd>
     </dl>
@@ -183,9 +204,13 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const statusEl = dialog.querySelector('[data-spawn-confirm-status]') as HTMLElement | null;
   const actionsEl = dialog.querySelector('[data-spawn-confirm-actions]') as HTMLElement | null;
 
-  if (providerSelect && providerIcon) {
+  const approvalEl = dialog.querySelector('[data-spawn-confirm-approval]');
+  if (providerSelect && (providerIcon || approvalEl)) {
     providerSelect.addEventListener('change', () => {
-      providerIcon.innerHTML = providerIconHtml(providerSelect.value);
+      if (providerIcon) providerIcon.innerHTML = providerIconHtml(providerSelect.value);
+      // provider を差し替えたら渡る権限も変わる。アイコンだけ追従して権限欄が
+      // 前の provider のまま残ると、承認する人が見ている情報が実物と食い違う。
+      if (approvalEl) approvalEl.innerHTML = approvalDisplayHtml(record.approval[providerSelect.value]);
     });
   }
 

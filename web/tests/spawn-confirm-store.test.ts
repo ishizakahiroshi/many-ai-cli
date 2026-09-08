@@ -8,6 +8,7 @@ import {
   registerDialogController,
   selectOldestPendingConfirmation,
   selectOldestPendingConfirmationFor,
+  recordFromMessage,
   spawnConfirmDecisionFromHttp,
   SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
   unregisterDialogController,
@@ -168,3 +169,41 @@ describe('spawn confirm HTTP 200 without WS close', () => {
   });
 });
 
+// The dialog is the one place a human sees what the child is being granted, so
+// the approval preview has to survive the trip through the store. Missing or
+// malformed input must degrade to "nothing added" rather than throwing — an
+// older Hub does not send the field at all.
+describe('spawn_child_approval', () => {
+  test('is parsed per provider', () => {
+    const rec = recordFromMessage(
+      requestedMessage({
+        spawn_child_approval: {
+          codex: { sandbox: 'danger-full-access', ask_for_approval: 'never', risk_confirmed: true },
+          claude: { permission_mode: 'bypassPermissions', risk_confirmed: true },
+        },
+      }),
+    );
+    expect(rec.approval.codex).toEqual({
+      permissionMode: '',
+      sandbox: 'danger-full-access',
+      askForApproval: 'never',
+      riskConfirmed: true,
+    });
+    expect(rec.approval.claude.permissionMode).toBe('bypassPermissions');
+  });
+
+  test('is empty when the Hub sends nothing', () => {
+    expect(recordFromMessage(requestedMessage()).approval).toEqual({});
+  });
+
+  test('ignores a malformed payload instead of throwing', () => {
+    expect(recordFromMessage(requestedMessage({ spawn_child_approval: 'nope' })).approval).toEqual({});
+    const partial = recordFromMessage(requestedMessage({ spawn_child_approval: { codex: null } }));
+    expect(partial.approval.codex).toEqual({
+      permissionMode: '',
+      sandbox: '',
+      askForApproval: '',
+      riskConfirmed: false,
+    });
+  });
+});

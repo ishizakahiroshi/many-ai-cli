@@ -437,11 +437,7 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 		s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: superseded.ID, SessionID: superseded.ParentID, Reason: "superseded"})
 	}
 
-	s.broadcast(proto.Message{
-		Type: "spawn_confirmation_requested", SpawnConfirmationID: pending.ID,
-		SessionID: parent.ID, Role: body.Role, Provider: body.Provider, Model: body.Model,
-		CWD: body.CWD, InitialPrompt: body.InitialPrompt, SpawnRequestedAtMs: pending.RequestedAt.UnixMilli(),
-	})
+	s.broadcast(s.spawnConfirmationRequestedMessage(pending))
 	return pending, nil
 }
 
@@ -481,11 +477,7 @@ func (s *Server) pendingSpawnConfirmationMessages() []proto.Message {
 	sort.Slice(pending, func(i, j int) bool { return pending[i].RequestedAt.Before(pending[j].RequestedAt) })
 	msgs := make([]proto.Message, 0, len(pending))
 	for _, p := range pending {
-		msgs = append(msgs, proto.Message{
-			Type: "spawn_confirmation_requested", SpawnConfirmationID: p.ID,
-			SessionID: p.ParentID, Role: p.Body.Role, Provider: p.Body.Provider, Model: p.Body.Model,
-			CWD: p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
-		})
+		msgs = append(msgs, s.spawnConfirmationRequestedMessage(p))
 	}
 	return msgs
 }
@@ -1113,6 +1105,54 @@ func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
 		}
 	}
 	body.RiskConfirmed = true
+}
+
+// childApprovalPreview reports, per provider, the approval settings the child in
+// body would actually start with. The spawn confirmation carries it so the human
+// approving a child can see what they are granting: without it the dialog names
+// only role / provider / model / cwd / prompt, and a codex child silently starts
+// with --sandbox danger-full-access
+// (docs/local/bugfix_spawn-confirm-permission-disclosure_2026-09-08.md).
+//
+// It runs applyChildApprovalDefaults itself rather than restating the mapping, so
+// the dialog cannot drift from what the spawn actually does. Every provider is
+// computed from the same body because the dialog lets the approver switch
+// provider before deciding, and resolveSpawnConfirmationDecision then replaces
+// Provider/Model and nothing else — so a field the caller set explicitly stays
+// set across that switch, exactly as these entries show.
+func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]proto.ChildApproval {
+	providers := orchestrationProviders
+	if p := strings.TrimSpace(body.Provider); p != "" && !validOrchestrationProvider(p) {
+		// The dialog keeps an unknown requested provider as a selectable option,
+		// so describe it too instead of leaving that selection blank.
+		providers = append(append([]string(nil), providers...), p)
+	}
+	out := make(map[string]proto.ChildApproval, len(providers))
+	for _, provider := range providers {
+		b := body
+		b.Provider = provider
+		applyChildApprovalDefaults(&b, fullBypass)
+		out[provider] = proto.ChildApproval{
+			PermissionMode: b.PermissionMode,
+			Sandbox:        b.Sandbox,
+			AskForApproval: b.AskForApproval,
+			RiskConfirmed:  b.RiskConfirmed,
+		}
+	}
+	return out
+}
+
+// spawnConfirmationRequestedMessage builds the one message shape both the
+// initial broadcast and the resend to a (re)connecting UI use. Keeping it in one
+// place is what stops the resend from quietly lacking a field the fresh request
+// has — the approval preview was added here for exactly that reason.
+func (s *Server) spawnConfirmationRequestedMessage(p *pendingSpawnConfirmation) proto.Message {
+	return proto.Message{
+		Type: "spawn_confirmation_requested", SpawnConfirmationID: p.ID,
+		SessionID: p.ParentID, Role: p.Body.Role, Provider: p.Body.Provider, Model: p.Body.Model,
+		CWD: p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
+		SpawnChildApproval: childApprovalPreview(p.Body, s.snapshotCfg().Orchestration.ChildFullBypassEnabled()),
+	}
 }
 
 // isTerminalSessionState は再起動・追加指示の対象にしない終端状態。

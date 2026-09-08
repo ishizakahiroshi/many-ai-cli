@@ -10,6 +10,16 @@
 //
 // plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3。
 
+// 子が実際に起動する承認設定。Hub 側で applyChildApprovalDefaults を通して作った
+// ものが provider ごとに入っている（internal/hub/orchestration.go の
+// childApprovalPreview）。全項目が空なら「Hub は何も足さない」＝ CLI 既定のまま。
+export interface ChildApproval {
+  permissionMode: string;
+  sandbox: string;
+  askForApproval: string;
+  riskConfirmed: boolean;
+}
+
 export interface SpawnConfirmationRecord {
   id: string;
   parentId: number;
@@ -19,6 +29,9 @@ export interface SpawnConfirmationRecord {
   cwd: string;
   initialPrompt: string;
   requestedAtMs: number;
+  // provider をキーにするのは、ダイアログが承認前に provider を差し替えられるため。
+  // 選び直した瞬間に、その provider の実効権限へ表示を切り替える。
+  approval: Record<string, ChildApproval>;
 }
 
 export interface SpawnConfirmationClosedController {
@@ -43,7 +56,27 @@ export function recordFromMessage(m: any): SpawnConfirmationRecord {
     cwd: String(m?.cwd || ''),
     initialPrompt: String(m?.initial_prompt || ''),
     requestedAtMs: Number(m?.spawn_requested_at_ms || 0) || Date.now(),
+    approval: approvalsFromMessage(m?.spawn_child_approval),
   };
+}
+
+// 旧 Hub から届いた（このフィールドを持たない）メッセージでも落ちないよう、
+// 欠けていれば空の表として扱う。呼び出し側は「エントリが無い＝不明」ではなく
+// 「何も足されない」と読める形に寄せている。
+function approvalsFromMessage(raw: any): Record<string, ChildApproval> {
+  const out: Record<string, ChildApproval> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [provider, value] of Object.entries(raw as Record<string, any>)) {
+    const key = String(provider || '').trim();
+    if (!key) continue;
+    out[key] = {
+      permissionMode: String(value?.permission_mode || ''),
+      sandbox: String(value?.sandbox || ''),
+      askForApproval: String(value?.ask_for_approval || ''),
+      riskConfirmed: Boolean(value?.risk_confirmed),
+    };
+  }
+  return out;
 }
 
 // spawn_confirmation_requested を受けたらストアへ積む。同じ ID の再送（UI 再接続時の

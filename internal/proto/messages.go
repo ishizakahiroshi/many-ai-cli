@@ -209,6 +209,14 @@ type Message struct {
 	// was first requested. Carried on both spawn_confirmation_requested (for
 	// the elapsed-time display) and its resend on UI connect.
 	SpawnRequestedAtMs int64 `json:"spawn_requested_at_ms,omitempty"`
+	// SpawnChildApproval carries, per provider, the approval settings the child
+	// would actually start with — what the human is granting by approving. It
+	// is keyed by provider because the dialog lets the approver change the
+	// provider before deciding, so the UI picks the entry for whatever is
+	// selected at that moment. Display only: the Hub does not read it back.
+	// Sent on spawn_confirmation_requested and on its resend to a (re)connecting
+	// UI (pending_spawn-confirm-permission-disclosure.md).
+	SpawnChildApproval map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
 	// spawn_confirmation_closed: Hub → UI. Tells every browser that a spawn
 	// confirmation is no longer open, so any dialog showing it can close.
 	// Reason is one of exactly five values (C2,
@@ -540,4 +548,17 @@ type ApprovalOption struct {
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	SendText      string `json:"send_text,omitempty"`
 	PreserveOrder bool   `json:"preserve_order,omitempty"`
+}
+
+// ChildApproval is one provider's effective approval configuration for an
+// orchestration child, as carried by Message.SpawnChildApproval. Empty fields
+// mean the Hub fills nothing in for that provider and the child starts with its
+// CLI's own defaults (this is what orchestration.child_full_bypass: false does).
+type ChildApproval struct {
+	PermissionMode string `json:"permission_mode,omitempty"`
+	Sandbox        string `json:"sandbox,omitempty"`
+	AskForApproval string `json:"ask_for_approval,omitempty"`
+	// RiskConfirmed reports that the child skips the high-risk confirmation the
+	// same settings would trigger on a normal /api/spawn request.
+	RiskConfirmed bool `json:"risk_confirmed,omitempty"`
 }

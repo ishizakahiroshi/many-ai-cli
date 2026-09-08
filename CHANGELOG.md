@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Security
+- **The child spawn confirmation now shows what the child is being granted.**
+  The dialog named only role, provider, model, working directory, and prompt, so
+  approving a codex child silently granted `--sandbox danger-full-access
+  --ask-for-approval never` (and a bypass-permissions equivalent on the other CLIs)
+  whenever `orchestration.child_full_bypass` was left at its default. The Hub now
+  sends the effective settings per provider — computed by running the same code the
+  spawn uses, so the dialog cannot drift from it — and the dialog updates them when
+  the approver switches provider. No permission changed; only what you are told
+  before you approve. Relay children skip this confirmation by design and are
+  unaffected.
 - Cap pending spawn confirmations per parent and across the Hub using the existing
   orchestration limits. Requests over either cap return HTTP 429 without creating
   a confirmation or broadcasting it, while same-role replacement and late human

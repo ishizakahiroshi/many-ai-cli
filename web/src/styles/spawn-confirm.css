@@ -104,6 +104,22 @@
   color: var(--muted);
   font-style: italic;
 }
+/* 承認する人に「この子に何を渡すのか」を見せる欄。フラグはコマンドラインに
+   実際に渡る形のまま出すので、等幅で折り返す。 */
+.spawn-confirm-approval-flags {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+.spawn-confirm-approval-none {
+  color: var(--muted);
+}
+/* 高リスク権限の確認を自動で通す旨。危険側の情報なので警告色に寄せる。 */
+.spawn-confirm-approval-risk {
+  color: var(--danger);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
 /* C4: 親セッションが既に消えている場合の警告文。 */
 .spawn-confirm-parent-gone {
   margin: 0;
