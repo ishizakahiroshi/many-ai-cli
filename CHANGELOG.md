@@ -453,6 +453,18 @@ Release artifacts are published at
   cases deterministically, and all three pass with ECH implemented
   (`internal/hub/vt_buffer.go`'s `eraseChars`).
 
+- **The working-directory box now filters its folder list as you type.** Typing
+  a path separator listed that directory's subfolders, but the list vanished
+  the moment you typed the first letter of the folder you were heading for.
+  Characters after the last separator are now a filter over that same list:
+  `…\public\o` keeps the subfolder section and leaves the folders whose name
+  contains `o`, ordered prefix matches first, then favorites, then name, with
+  the matched part highlighted. Nothing is fetched again while you type — the
+  list already loaded for that parent is filtered in the browser. A bare drive
+  root (`D:\`) now lists its folders too; it previously sent `D:` to the Hub,
+  which is not an absolute path on Windows and was rejected. Paths shown in the
+  subfolder section are no longer repeated under Favorites or History.
+
 ## [0.7.0] - 2026-08-15
 
 ### Added

@@ -514,6 +514,7 @@
   "spawn_cwd_section_search": "🔍 Kết quả tìm",
   "spawn_cwd_chip_label": "Lọc theo root",
   "spawn_cwd_no_match_hint": "Không khớp. Thử tiền tố (vd. public:)",
+  "spawn_cwd_no_subdir_match": "Không có thư mục con nào khớp",
   "spawn_cwd_clear_history": "Xóa lịch sử",
   "spawn_cwd_clear_history_confirm": "Xóa toàn bộ lịch sử tìm kiếm? Không thể hoàn tác.",
   "spawn_cwd_clear_favorites": "Xóa ★",

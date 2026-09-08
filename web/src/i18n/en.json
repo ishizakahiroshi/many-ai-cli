@@ -514,6 +514,7 @@
   "spawn_cwd_section_search": "🔍 Search results",
   "spawn_cwd_chip_label": "Filter by root",
   "spawn_cwd_no_match_hint": "No match. Try a prefix (e.g. public:)",
+  "spawn_cwd_no_subdir_match": "No subfolder here matches what you typed",
   "spawn_cwd_clear_history": "Clear history",
   "spawn_cwd_clear_history_confirm": "Delete all search history? This cannot be undone.",
   "spawn_cwd_clear_favorites": "Clear ★",

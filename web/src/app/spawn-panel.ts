@@ -8,7 +8,7 @@ import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, restoreApprovalSettings } from './spawn-approval-memory.js';
-import { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
+import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
@@ -1341,28 +1341,23 @@ export function resetSpawnProviderOrder(): void {
   }
 
   // 2トーン（親=muted / 末尾=強調）＋ filter マッチハイライトのラベル HTML を組み立てる。
-  function buildCwdLabelHtml(value, filter) {
+  // baseOnlyFilter は「フォルダ名にだけ効くフィルタ」。サブフォルダ行は打ちかけセグメントに
+  // 一致した部分だけをフォルダ名の中で光らせたく、フルパスの filter を渡すと親側まで光るため。
+  function buildCwdLabelHtml(value, filter, baseOnlyFilter = '') {
     const { parent, basename } = splitCwdPath(value);
     const parentHtml = parent
       ? `<span class="cwd-dropdown-path-parent">${highlightCwdSegment(parent, filter)}</span>`
       : '';
-    const baseHtml = `<span class="cwd-dropdown-path-base">${highlightCwdSegment(basename, filter)}</span>`;
+    const baseHtml = `<span class="cwd-dropdown-path-base">${highlightCwdSegment(basename, baseOnlyFilter || filter)}</span>`;
     return parentHtml + baseHtml;
   }
 
-  // 末尾が `\` または `/` のとき、その親パス直下のサブフォルダ一覧を保持する。
+  // 入力値に区切りが含まれるとき、最後の区切りより前（＝親）の直下サブフォルダ一覧を保持する。
   // input 値が変わるたびに更新され、renderCwdDropdown が先頭セクションとして描画する。
+  // 打ちかけセグメント（区切りより後ろ）はここに持たない。理由は maybeUpdateSubdirs のコメント参照。
   const subdirsCache = new Map<string, string[]>();
   let subdirsCurrent: { parent: string; sep: string; items: string[] } | null = null;
 
-  function detectPathSep(v: string): string {
-    if (v.includes('\\')) return '\\';
-    if (v.includes('/')) return '/';
-    return '\\';
-  }
-  function endsWithSep(v: string): boolean {
-    return v.endsWith('\\') || v.endsWith('/');
-  }
   function stripTrailingSep(v: string): string {
     let end = v.length;
     while (end > 0 && (v[end - 1] === '\\' || v[end - 1] === '/')) end--;
@@ -1391,13 +1386,17 @@ export function resetSpawnProviderOrder(): void {
     }
   }
 
+  // 親の解決と取得だけを担当する。打ちかけセグメント（`...\public\o` の `o`）は
+  // ここで捨て、renderCwdDropdown が filter から毎回導出する。状態として持つと、
+  // 絞り込み済みの入力欄へフォーカスし直したとき（focus/click ハンドラは
+  // renderCwdDropdown('') を呼ぶ）に全件へ戻れず 0 件へ落ちるため。
   function maybeUpdateSubdirs(value: string): void {
-    if (!value || !endsWithSep(value)) {
+    const ta = value ? splitCwdTypeahead(value) : null;
+    if (!ta) {
       subdirsCurrent = null;
       return;
     }
-    const sep = detectPathSep(value);
-    const parent = stripTrailingSep(value);
+    const { parent, sep } = ta;
     if (!parent) { subdirsCurrent = null; return; }
     if (subdirsCurrent && subdirsCurrent.parent === parent) return;
     subdirsCurrent = { parent, sep, items: subdirsCache.get(parent) ?? [] };
@@ -1579,11 +1578,29 @@ export function resetSpawnProviderOrder(): void {
     // chip 行は出してもよいが検索結果セクションは出さない。
     const isPathMode = parsed.isPath;
 
-    // subdirs 展開（末尾区切り文字入力時）。
-    const subItems: string[] = subdirsCurrent
-      ? subdirsCurrent.items.map(name => subdirsCurrent!.parent + subdirsCurrent!.sep + name)
+    // subdirs 展開（入力値に区切りが含まれるとき）。
+    // ドライブ直下 / POSIX ルートでは parent が区切りで終わる（`C:\` `/`）ので、素朴に
+    // parent + sep + name と書くと `C:\\name` になる。連結は joinCwdChild に任せる
+    // （区切りが混在した入力では parent の末尾と sep が一致しないため、sep との比較では足りない）。
+    const subCur = subdirsCurrent;
+    // 打ちかけセグメントは状態に持たず filter から導出する。
+    const typeahead = splitCwdTypeahead(filter ?? '');
+    // filter が '' の描き直し（focus / click / 行の追加削除の後）では、入力欄が区切りで
+    // 終わっているときだけサブフォルダ節を出す。確定したパスが入っているだけの状態で
+    // 兄弟フォルダを並べると、パネルを開いた既定の見え方（お気に入り・履歴）が変わり、
+    // しかも下の重複除去でお気に入り行がサブフォルダ節へ移動してしまうため。
+    const showSubdirs = !!subCur && (
+      typeahead
+        ? typeahead.parent === subCur.parent
+        : /[\\/]$/.test(String((spawnCwdInput as HTMLInputElement).value).trim())
+    );
+    const subItems: string[] = showSubdirs && subCur
+      ? subCur.items.map(name => joinCwdChild(subCur.parent, subCur.sep, name))
       : [];
-    const sortedSubItems = sortCwdSubdirItems(subItems, favSet);
+    const subPartial = (typeahead && subCur && typeahead.parent === subCur.parent)
+      ? typeahead.partial
+      : '';
+    const sortedSubItems = filterCwdSubdirItems(subItems, favSet, subPartial);
 
     // ---- chip 行 ----
     // お気に入りが 0 件で roots も空のときは chip 行を出さない。
@@ -1625,26 +1642,33 @@ export function resetSpawnProviderOrder(): void {
       ? hist.filter(v => !favSet.has(v) && !searchPathSet.has(v) && v.toLowerCase().includes(filter.toLowerCase()))
       : hist.filter(v => !favSet.has(v) && !searchPathSet.has(v)));
 
+    // サブフォルダ節に出したパスは fav/hist 節から除く（同じ行が 2 度出ないように）。
+    // 検索結果節が searchPathSet でやっているのと同じ手法。
+    const subPathSet = new Set(sortedSubItems);
+
     // isPath モードのときは検索結果を出さないので fav/hist の除外も不要にリセット。
-    const effectiveFavItems = isPathMode
+    const effectiveFavItems = (isPathMode
       ? (filter ? favs.filter(v => v.toLowerCase().includes(filter.toLowerCase())) : favs.slice())
           .sort(compareCwdByBasename)
-      : favItems;
-    const effectiveHistItems = isPathMode
+      : favItems).filter(v => !subPathSet.has(v));
+    const effectiveHistItems = (isPathMode
       ? (filter ? hist.filter(v => !favSet.has(v) && v.toLowerCase().includes(filter.toLowerCase())) : hist.filter(v => !favSet.has(v)))
-      : histItems;
+      : histItems).filter(v => !subPathSet.has(v));
 
-    const allItems = [...subItems, ...(isPathMode ? [] : searchItems.map(r => r.path)), ...effectiveFavItems, ...effectiveHistItems];
+    // 絞り込みで落ちた行は描画されないので、存在確認も絞り込み後の集合に対して行う。
+    const allItems = [...sortedSubItems, ...(isPathMode ? [] : searchItems.map(r => r.path)), ...effectiveFavItems, ...effectiveHistItems];
     const hasAny = allItems.length > 0 || hasRoots;
     if (!hasAny) { cwdDropdown.hidden = true; return; }
 
     function renderRow(v: string, fav: boolean, isSub = false) {
       const labelFilter = isSub ? '' : filter;
+      // サブフォルダ行は親側を光らせず、打ちかけセグメントに一致した部分だけをフォルダ名で光らせる。
+      const baseOnlyFilter = isSub ? subPartial : '';
       return (
         `<li class="cwd-dropdown-item${fav ? ' is-favorite' : ''}${isSub ? ' is-subdir' : ''}" tabindex="-1" data-value="${escapeHtml(v)}">` +
         `<button class="cwd-dropdown-fav${fav ? ' is-on' : ''}" tabindex="-1" data-value="${escapeHtml(v)}" ` +
         `title="${escapeHtml(t(fav ? 'spawn_cwd_unfavorite' : 'spawn_cwd_favorite'))}">${fav ? '★' : '☆'}</button>` +
-        `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter)}</span>` +
+        `<span class="cwd-dropdown-label" title="${escapeHtml(v)}">${buildCwdLabelHtml(v, labelFilter, baseOnlyFilter)}</span>` +
         (isSub ? '' : `<button class="cwd-dropdown-del" tabindex="-1" data-value="${escapeHtml(v)}" ` +
           `title="${escapeHtml(t('spawn_cwd_remove_entry'))}">✕</button>`) +
         `</li>`
@@ -1665,7 +1689,8 @@ export function resetSpawnProviderOrder(): void {
       );
     }
 
-    const noMatch = !isPathMode && searchItems.length === 0 && effectiveFavItems.length === 0 && effectiveHistItems.length === 0 && subItems.length === 0;
+    // 0 件判定は絞り込み後の件数で行う（打ちかけで全部落ちたときに「該当なし」を出すため）。
+    const noMatch = !isPathMode && searchItems.length === 0 && effectiveFavItems.length === 0 && effectiveHistItems.length === 0 && sortedSubItems.length === 0;
 
     let html = '';
 
@@ -1725,10 +1750,14 @@ export function resetSpawnProviderOrder(): void {
       html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
     }
 
-    // subdirs セクション（末尾区切り入力時）。
+    // subdirs セクション（入力値に区切りが含まれるとき）。
     if (sortedSubItems.length > 0) {
       html += `<li class="cwd-dropdown-header" aria-hidden="true">${escapeHtml(t('spawn_cwd_section_subdirs'))}</li>`;
       html += sortedSubItems.map(v => renderRow(v, favSet.has(v), true)).join('');
+    } else if (subPartial && subCur && subCur.items.length > 0) {
+      // 一覧は届いているのに打ちかけセグメントで全部落ちた、と分かるときだけ出す。
+      // 取得前（items が空）は「該当なし」ではなく「まだ来ていない」なので出さない。
+      html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_subdir_match'))}</li>`;
     }
 
     // 検索結果セクション（isPath でないとき）。

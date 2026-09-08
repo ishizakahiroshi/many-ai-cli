@@ -7,7 +7,14 @@
 
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
+import {
+  compareCwdByBasename,
+  filterCwdSubdirItems,
+  joinCwdChild,
+  sortCwdSubdirItems,
+  splitCwdPath,
+  splitCwdTypeahead,
+} from './cwd-path.js';
 
 // 合成データ。実在のパスは書かない（公開ファイルの層 1 防御）。
 const PARENT = 'C:\\dev\\public';
@@ -120,4 +127,101 @@ test('sortCwdSubdirItems: 元の配列を破壊しない', () => {
 
 test('sortCwdSubdirItems: 空配列を安全に処理する', () => {
   assert.deepEqual(sortCwdSubdirItems([], new Set()), []);
+});
+
+// ---- splitCwdTypeahead ----
+// 由来: docs/local/plan_spawn-cwd-subdir-typeahead.md
+
+test('splitCwdTypeahead: 入力値を親・区切り・打ちかけセグメントに分割する', () => {
+  // 末尾が区切りでない: 最後の区切りの位置で parent と partial に分ける
+  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\o'), { parent: 'C:\\dev\\public', sep: '\\', partial: 'o' });
+  assert.deepEqual(splitCwdTypeahead('/srv/work/y'), { parent: '/srv/work', sep: '/', partial: 'y' });
+
+  // 末尾が区切り: partial は空文字、parent は末尾の区切りを落とした値
+  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\'), { parent: 'C:\\dev\\public', sep: '\\', partial: '' });
+  // 区切りが 2 つ連続して終わる場合も全部落とす
+  assert.deepEqual(splitCwdTypeahead('C:\\dev\\public\\\\'), { parent: 'C:\\dev\\public', sep: '\\', partial: '' });
+
+  // ドライブ直下の特別扱い: 落とした結果が "D:" 形式になったら区切りを 1 つ残す
+  assert.deepEqual(splitCwdTypeahead('C:\\o'), { parent: 'C:\\', sep: '\\', partial: 'o' });
+  assert.deepEqual(splitCwdTypeahead('C:\\'), { parent: 'C:\\', sep: '\\', partial: '' });
+
+  // POSIX ルートの特別扱い: 落とした結果が空文字になったら "/" にする
+  assert.deepEqual(splitCwdTypeahead('/y'), { parent: '/', sep: '/', partial: 'y' });
+  assert.deepEqual(splitCwdTypeahead('/'), { parent: '/', sep: '/', partial: '' });
+
+  // 区切り文字を 1 つも含まない値は null
+  assert.equal(splitCwdTypeahead('proj'), null);
+});
+
+// ---- filterCwdSubdirItems ----
+// 由来: docs/local/plan_spawn-cwd-subdir-typeahead.md
+
+const TYPEAHEAD_PARENT = 'C:\\dev\\public';
+const TYPEAHEAD_SUBDIRS = ['orbit', 'omega', 'motor', 'zephyr'].map(n => TYPEAHEAD_PARENT + '\\' + n);
+
+test('filterCwdSubdirItems: partial が空文字なら sortCwdSubdirItems と一致する（不変条件）', () => {
+  const favSet = new Set([TYPEAHEAD_PARENT + '\\zephyr']);
+  assert.deepEqual(
+    filterCwdSubdirItems(TYPEAHEAD_SUBDIRS, favSet, ''),
+    sortCwdSubdirItems(TYPEAHEAD_SUBDIRS, favSet),
+  );
+});
+
+test('filterCwdSubdirItems: 前方一致が部分一致より前に来る', () => {
+  // "orbit" は "or" に前方一致、"motor" は "or" を途中に含むだけ
+  const paths = [TYPEAHEAD_PARENT + '\\motor', TYPEAHEAD_PARENT + '\\orbit'];
+  const result = filterCwdSubdirItems(paths, new Set(), 'or');
+  assert.deepEqual(result, [TYPEAHEAD_PARENT + '\\orbit', TYPEAHEAD_PARENT + '\\motor']);
+});
+
+test('filterCwdSubdirItems: 同ランク内はお気に入りが先頭に来る', () => {
+  // "omega" と "onyx" はどちらも "o" に前方一致。basename 昇順なら omega が先だが、
+  // onyx をお気に入りにすると omega より前に来る
+  const omega = TYPEAHEAD_PARENT + '\\omega';
+  const onyx = TYPEAHEAD_PARENT + '\\onyx';
+  const favSet = new Set([onyx]);
+  const result = filterCwdSubdirItems([omega, onyx], favSet, 'o');
+  assert.deepEqual(result, [onyx, omega]);
+});
+
+test('filterCwdSubdirItems: 同グループ内は compareCwdByBasename 順である', () => {
+  // 3 件とも "o" に前方一致・お気に入りなし → basename 昇順のまま
+  const paths = ['oscar', 'omega', 'onyx'].map(n => TYPEAHEAD_PARENT + '\\' + n);
+  const result = filterCwdSubdirItems(paths, new Set(), 'o');
+  assert.deepEqual(result, ['omega', 'onyx', 'oscar'].map(n => TYPEAHEAD_PARENT + '\\' + n));
+});
+
+test('filterCwdSubdirItems: 大文字小文字を無視して一致する', () => {
+  const paths = [TYPEAHEAD_PARENT + '\\Orbit', TYPEAHEAD_PARENT + '\\Motor'];
+  const result = filterCwdSubdirItems(paths, new Set(), 'OR');
+  assert.deepEqual(result, [TYPEAHEAD_PARENT + '\\Orbit', TYPEAHEAD_PARENT + '\\Motor']);
+});
+
+test('filterCwdSubdirItems: 入力配列を破壊しない', () => {
+  const paths = TYPEAHEAD_SUBDIRS.slice();
+  const original = paths.slice();
+  filterCwdSubdirItems(paths, new Set([paths[0]]), 'o');
+  assert.deepEqual(paths, original, '入力配列は変更されない');
+});
+
+test('filterCwdSubdirItems: 一致 0 件で空配列を返す', () => {
+  assert.deepEqual(filterCwdSubdirItems(TYPEAHEAD_SUBDIRS, new Set(), 'xyz123'), []);
+});
+
+// ---- joinCwdChild ----
+// 由来: docs/local/plan_spawn-cwd-subdir-typeahead.md
+
+test('joinCwdChild: 親が区切りで終わっていなければ区切りを 1 つ挟む', () => {
+  assert.equal(joinCwdChild('C:\\dev\\public', '\\', 'orbit'), 'C:\\dev\\public\\orbit');
+  assert.equal(joinCwdChild('/srv/work', '/', 'orbit'), '/srv/work/orbit');
+});
+
+test('joinCwdChild: 親が区切りで終わっていれば二重に置かない', () => {
+  // splitCwdTypeahead はドライブ直下・POSIX ルートで区切りを残した parent を返す。
+  // ここで素朴に連結すると C:\\orbit になり、表示もお気に入りの完全一致も崩れる。
+  assert.equal(joinCwdChild('C:\\', '\\', 'orbit'), 'C:\\orbit');
+  assert.equal(joinCwdChild('/', '/', 'orbit'), '/orbit');
+  // 区切りが混在した入力（parent は \ 終わり、sep は /）でも二重にしない
+  assert.equal(joinCwdChild('C:\\', '/', 'orbit'), 'C:\\orbit');
 });

@@ -514,6 +514,7 @@
   "spawn_cwd_section_search": "🔍 検索結果",
   "spawn_cwd_chip_label": "ルートで絞り込み",
   "spawn_cwd_no_match_hint": "該当なし。プレフィックス（例: public:）で試せます",
+  "spawn_cwd_no_subdir_match": "このフォルダに一致するサブフォルダはありません",
   "spawn_cwd_clear_history": "履歴消去",
   "spawn_cwd_clear_history_confirm": "検索履歴をすべて削除します。この操作は取り消せません。よろしいですか？",
   "spawn_cwd_clear_favorites": "★消去",
