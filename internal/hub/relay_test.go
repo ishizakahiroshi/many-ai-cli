@@ -457,6 +457,26 @@ func TestRelay_startRelay_preparationAndSecondRelay(t *testing.T) {
 	}
 }
 
+// relaySpawn は spawn body に承認系フィールドを一切入れず、承認の既定は
+// orchestration.child_full_bypass だけで決まる。だから既定を off へ倒すと、relay の
+// 子は承認プロンプトを出したまま止まり、無人で回すという relay の前提が崩れる。
+// 既定反転の提案は見送っている（docs/local/reference/reference_declined-directions.md
+// の D-12）。本テストは「その設定が relay に何を起こすか」を実物で固定しておくもので、
+// 再提案するときはここが何を守っているかを先に読むこと。
+func TestRelay_startRelay_childFullBypassOffLeavesApprovalUnset(t *testing.T) {
+	h := newRelayHarness(t)
+	off := false
+	h.s.cfg.Orchestration.ChildFullBypass = &off
+	_ = h.start()
+	if len(h.spawns) != 1 {
+		t.Fatalf("spawns = %d, want 1", len(h.spawns))
+	}
+	body := h.spawns[0]
+	if body.AskForApproval != "" || body.Sandbox != "" || body.PermissionMode != "" || body.RiskConfirmed {
+		t.Fatalf("child_full_bypass=false must not fill approval defaults: %+v", body)
+	}
+}
+
 func TestRelay_startRelay_spawnError(t *testing.T) {
 	h := newRelayHarness(t)
 	h.spawnErr = errors.New("wrapper did not register")

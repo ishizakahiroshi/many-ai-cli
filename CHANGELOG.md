@@ -194,6 +194,13 @@ Release artifacts are published at
   (`internal/subscription/seed.go`'s `SeedMirrorFile`).
 
 ### Changed
+- **The README now spells out what `orchestration.child_full_bypass` actually grants.**
+  The default (`true`) starts codex children with `--sandbox danger-full-access
+  --ask-for-approval never` and the other providers in their own bypass-permissions
+  equivalent; a conductor's spawn is still gated by `orchestration.spawn_confirm_mode`
+  (default `on`) while relay children skip that confirmation by design. Behavior is
+  unchanged — only the documentation was vague (`README.md`, `README.ja.md`).
+
 - **Close buttons all draw the same glyph.** Some close, dismiss, and clear
   buttons used `×` (U+00D7, the multiplication sign) while others used `✕`
   (U+2715), so they did not line up when they appeared next to each other. They

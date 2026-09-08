@@ -94,7 +94,7 @@ Gemini CLI は意図的に対象外です。
 
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
 
-既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 true）。高リスク権限の自動確認を避けたい場合は `false` にしてください。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
+既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 `true`）。具体的には codex の子が `--sandbox danger-full-access --ask-for-approval never` で、それ以外は各 CLI の全許可指定に変換されて起動します。指揮者からの spawn は人間の確認を待ちます（`orchestration.spawn_confirm_mode`、既定 `on`）が、relay の子は設計上この確認を通りません。`child_full_bypass` を `false` にすると高リスク権限の自動確認は避けられますが、relay の子は答える人のいない承認プロンプトで止まります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
 
 ### Orchestration relay loop
 
