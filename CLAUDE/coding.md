@@ -95,6 +95,23 @@
 - **Web:** `bun run check`（TypeScript）+ `bun run test`（approval-parser fixtures）。Hub 起動 → モックラッパー → UI 操作の E2E は未整備のため、フロント大変更後は手動ブラウザ確認が必要。
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
 
+### `go test ./...` の赤は、切り分けてから自分の変更を疑う
+
+**このリポジトリの `internal/hub` は重い。** 全体実行では並列に走る他パッケージと CPU を奪い合い、hub だけで 148〜181 秒かかる。時間予算を持つテスト（`TestSubmitEnterSettleWaitsForOutputToStop` / `TestHandleAgentChatUsesBoundedBackwardCursorPages` 等）は**そこで落ちる**。個別パッケージで回すと通る。**実行するたびに落ちるテストが変わるのが目印。**
+
+疑わしいときは **HEAD の worktree で同じコマンドを回して比較する**。変更の有無で結果が変わらなければ、原因は自分の変更ではない。
+
+```powershell
+git worktree add --detach <tmp> HEAD
+Copy-Item -Recurse -Force web\dist <tmp>\web\dist   # 忘れると go:embed が解決できず [setup failed]
+cd <tmp>; go test -count=1 -p 1 ./internal/hub/...
+git worktree remove --force <tmp>
+```
+
+**`web/dist` のコピーを忘れない。** gitignore されているので clean な worktree には存在せず、`internal/hub` は `go:embed` で参照するため、テストではなくパッケージの setup が落ちる（`FAIL ... [setup failed]`）。
+
+2026-09-08、引き継ぎ看板の実装後に `go test ./...` が落ち、実行ごとに違うテストが落ちた。HEAD の worktree で同じコマンドを回したところ同じテストが落ちたため、変更起因ではないと確定できた。
+
 ### build tag で OS を分けたコードを足したら、staticcheck を GOOS 別に走らせる
 
 **staticcheck の結果は GOOS で変わる。** build tag で分離したファイルは、解析対象になっている OS のものしかコンパイルされないため、**別 OS 側でだけ未使用（U1000）になるコードを手元で検出できない**。Windows で開発していると `!windows` 側が丸ごと見えない。

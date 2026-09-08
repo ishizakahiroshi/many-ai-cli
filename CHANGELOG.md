@@ -408,7 +408,7 @@ Release artifacts are published at
   that mix settings and credentials in one place were not covered either. The
   check now recognises every default OpenSSH key name and additionally denies
   `.netrc`, `_netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `.htpasswd`,
-  `authorized_keys`, and `known_hosts`. Files inside the allowed roots are
+  SSH authorization and host-key records. Files inside the allowed roots are
   unaffected (`internal/hub/files_scope.go`).
 
 - **Bug reports could carry three of this tool's own secrets through

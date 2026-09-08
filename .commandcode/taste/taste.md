@@ -1,1 +1,9 @@
 - Prefers responses in Japanese. Confidence: 0.95
+- Documents bugfixes with markdown files (bugfix md) following a consistent naming convention (docs/local/bugfix_{description}_{date}.md). Confidence: 0.85
+- Requests security vulnerability reviews of code changes before finalizing. Confidence: 0.75
+- Prefers granular commits, committing only specific parts of a change rather than bundling unrelated work. Confidence: 0.8
+- Communicates quick affirmative decisions using concise phrases like "Bでいいです" (B is fine) and requests immediate rewrites. Confidence: 0.65
+- Drives work from plan files in docs/local/ (gitignore'd) and executes them checkpoint by checkpoint, advancing each checkpoint from "planned" to "done" in a context-allocation table (e.g. C1, H1). Confidence: 0.92
+- Expects a 4-point completion report at each planned checkpoint: status (done/planned counts), list of changed files, one-line verification result, and context-allocation table updated (Y/N). Confidence: 0.9
+- Provides explicit allow/prohibit command lists per task; prohibited commands include go build, make build, git commit/push, and out-of-scope file changes, while allowed commands are scoped (e.g. bun run check / bun run test in web/). Confidence: 0.9
+- Requires test fixtures to use synthetic data only — real/existing filesystem paths must never be written into fixtures. Confidence: 0.88
