@@ -964,7 +964,16 @@ header {
   font-size: var(--header-font-size);
   white-space: nowrap;
 }
-#settings-btn:hover { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
+#settings-btn:hover,
+#settings-btn[aria-expanded="true"] { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
+.settings-chevron {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.15s;
+}
+#settings-btn[aria-expanded="true"] .settings-chevron {
+  transform: rotate(180deg);
+}
 
 @media (max-width: 720px) {
   .usage-menu-btn span { display: none; }

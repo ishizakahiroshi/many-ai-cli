@@ -925,6 +925,19 @@ export function applyLang(lang) {
   if (sel) sel.value = l;
 }
 
+export function setSettingsPanelOpen(open: boolean): void {
+  const panel = document.getElementById('settings-panel');
+  if (!panel) return;
+  panel.hidden = !open;
+  document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(open));
+}
+
+function syncSettingsPanelButton(): void {
+  const panel = document.getElementById('settings-panel');
+  if (!panel) return;
+  document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(!panel.hidden));
+}
+
 (function () {
   applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
   applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
@@ -944,12 +957,14 @@ export function applyLang(lang) {
   const usageLinksResetBtn = document.getElementById('usage-links-reset-btn');
   const providerOrderResetBtn = document.getElementById('provider-order-reset-btn');
 
+  syncSettingsPanelButton();
   fontsizeEl.value = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) {
+    const open = panel.hidden === true;
+    setSettingsPanelOpen(open);
+    if (open) {
       // 開いた瞬間に全セクションの畳み状態サマリを最新値で描画。
       // 個別 input の change を 1 つ 1 つ拾わなくても、ここと <details> の toggle で十分。
       attachSummaryToggleListeners();
@@ -960,7 +975,7 @@ export function applyLang(lang) {
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      panel.hidden = true;
+      setSettingsPanelOpen(false);
       maybeAutoSwitchToNextApproval();
     });
   }
@@ -977,7 +992,7 @@ export function applyLang(lang) {
 
   document.addEventListener('click', (e) => {
     if (!panel.hidden && !panel.contains(e.target)) {
-      panel.hidden = true;
+      setSettingsPanelOpen(false);
       maybeAutoSwitchToNextApproval();
     }
     if (pathPopupEl && !pathPopupEl.hidden && !pathPopupEl.contains(e.target)) {
@@ -1035,7 +1050,7 @@ export function applyLang(lang) {
     );
   });
   licensesBtn.addEventListener('click', () => {
-    panel.hidden = true;
+    setSettingsPanelOpen(false);
     aboutPanel.hidden = false;
   });
   if (usageLinksResetBtn) {
@@ -1112,7 +1127,7 @@ function initSettingsInformationArchitecture(): void {
   const openDeepLink = () => {
     const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
     if (!match) return;
-    panel.hidden = false;
+    setSettingsPanelOpen(true);
     const sectionId = match[1];
     if (!sectionId) { apply(); return; }
     const section = sections.find((item) => item.dataset.section === sectionId);

@@ -8,6 +8,7 @@
 
 import { t } from '../i18n.js';
 import { token } from './util.js';
+import { setSettingsPanelOpen } from './settings.js';
 
 interface ServerProfile {
   name: string;
@@ -495,8 +496,7 @@ export function initServerModal(): void {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
     // 設定パネルの上に重ねず、閉じてからモーダルを開く（About パネルと同じ流儀）。
-    const settingsPanel = document.getElementById('settings-panel');
-    if (settingsPanel) settingsPanel.hidden = true;
+    setSettingsPanelOpen(false);
     openServerModal();
   });
 
