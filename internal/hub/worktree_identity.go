@@ -78,7 +78,7 @@ func worktreeIdentityMismatch(path, expectedBranch, detail string) error {
 
 func gitCommonDir(ctx context.Context, cwd string) (string, error) {
 	command := func(args ...string) ([]byte, error) {
-		return exec.CommandContext(ctx, "git", append([]string{"-C", cwd, "rev-parse"}, args...)...).Output()
+		return exec.CommandContext(ctx, "git", append([]string{"-C", cwd, "rev-parse"}, args...)...).Output() // #nosec G702 -- cwd is the parent session's own directory or a worktree Stat-validated by validateWorktreeIdentity; args are fixed literals and everything is passed as argv without a shell.
 	}
 	out, err := command("--path-format=absolute", "--git-common-dir")
 	if err != nil {
@@ -129,7 +129,7 @@ func gitWorktreeRegistered(ctx context.Context, parentCWD, target string) (bool,
 }
 
 func gitWorktreeBranch(ctx context.Context, worktreePath string) (string, error) {
-	out, err := exec.CommandContext(ctx, "git", "-C", worktreePath, "branch", "--show-current").Output()
+	out, err := exec.CommandContext(ctx, "git", "-C", worktreePath, "branch", "--show-current").Output() // #nosec G702 -- worktreePath is Stat-validated as an existing directory by validateWorktreeIdentity and is passed as one argv element without a shell.
 	if err != nil {
 		return "", err
 	}
