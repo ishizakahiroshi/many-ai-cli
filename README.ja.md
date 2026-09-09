@@ -6,7 +6,7 @@
 
 ![many-ai-cli デモ: 指揮者 AI が子 AI を 2 本立ち上げていいか聞き、承認すると子が動き、1 本が質問で止まり、1 クリックで答えると 2 本とも完了報告を出す](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
 
-**6 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ Usage メニューに出ます。
+**7 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` / `Command Code` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ Usage メニューに出ます。
 
 [English README](README.md) · [README tiếng Việt](README.vi.md)
 
@@ -40,7 +40,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok` / `opencode`）を実行できます。図では例として2つを示しています。
+各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok` / `opencode` / `command-code`）を実行できます。図では例として2つを示しています。
 
 ---
 
@@ -56,6 +56,7 @@ Terminal pane #1              Terminal pane #2
 | Cursor Agent CLI | `cursor-agent` | 公式 CLI。事前にサインインが必要 |
 | Grok Build CLI | `grok` | xAI 公式のターミナル型コーディングエージェント。事前にサインインが必要（**SuperGrok** または **X Premium+** のサブスクリプションが必要。base の X Premium では使えません） |
 | opencode | `opencode` | コミュニティ CLI。事前にサインインが必要。承認プロンプトのスクレイプではなく、Hub が `opencode.json` の `permission` を書き換えて制御します（通常セッションは `ask` で Hub UI へ、オーケストレーション子セッションは `allow` でバイパス）。元の `opencode.json` はセッション終了時に復元します |
+| Command Code | `command-code` | **ターミナルと spawn は対応済み。承認統合は fixture 検証待ち。** セッションは起動し承認モードの選択も各フラグへ対応しますが、承認検出は実機プロンプトの採取と突き合わせがまだで、アクションバーが拾わないときはターミナル側で答えてください。複数サブスクリプションは未対応です。OS 側のエイリアス `cmd` / `cmdc` はサブコマンドに使いません（Windows の cmd.exe と衝突するため） |
 
 **Ollama** は独立したラッパーではありません。`claude` または `codex` のラッパー経由で Ollama のモデルを使います（spawn フォームのモデルピッカーで **Ollama Cloud / Ollama Local** を選ぶと、Hub が Anthropic / OpenAI 互換エンドポイントを Ollama に向けます。「主な機能」の「モデルピッカー + Ollama route 自動切替」参照）。
 
@@ -117,11 +118,11 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 - **言語切替**（英語 / 日本語 / ベトナム語）
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
 - **リモートアクセス保護**: 設定の「リモートアクセス保護」から、token と認証 cookie を一括再生成する**全アクセス失効**（紛失時のキルスイッチ）、非 loopback アクセス時のみ要求する**任意 PIN**（既定 OFF・ロックアウト付き）、**新規デバイス接続の通知**が使えます
-- **1 つの CLI に複数のサブスクリプション**: 6 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。Usage メニューには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
+- **1 つの CLI に複数のサブスクリプション**: 7 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。Usage メニューには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
 
 ## 1 つの CLI に複数のサブスクリプション
 
-6 つの AI コーディング CLI が 1 つのダッシュボードを共有します。そのうち 4 つ — Claude Code / Codex CLI / Grok Build CLI / opencode — は、同じ CLI の契約を複数付けて、セッションごとに使い分けられます。Copilot と Cursor はログイン 1 つのままです（認証の置き場が環境変数で移りません）。公式 CLI の「既定の記憶」は今も 1 ログインで、Hub がセッションごとに設定ディレクトリを指します。
+7 つの AI コーディング CLI が 1 つのダッシュボードを共有します。そのうち 4 つ — Claude Code / Codex CLI / Grok Build CLI / opencode — は、同じ CLI の契約を複数付けて、セッションごとに使い分けられます。Copilot と Cursor はログイン 1 つのままです（認証の置き場が環境変数で移りません）。公式 CLI の「既定の記憶」は今も 1 ログインで、Hub がセッションごとに設定ディレクトリを指します。
 
 **これは API キーのルーターではありません。** 従量課金の API キーを束ねて安く回すためのものではなく、既に払っている月額契約の枠へ、既に走らせているセッションを割り振るための機能です。**プランの利用上限を回避する手段でもありません。** 同じベンダーのアカウントを複数積んで使う前に、「セキュリティ」節の注意書きを読んでください。
 
@@ -137,6 +138,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 | opencode | `XDG_DATA_HOME` | 対応（下記の注記あり） |
 | GitHub Copilot CLI | — | **未対応**: token が OS の資格情報ストアにあり、`COPILOT_HOME` は設定は移せてもログインは移せません |
 | Cursor Agent CLI | — | **未対応**: token が `~/.cursor/cli-config.json` にあり、これを移す環境変数がありません |
+| Command Code | — | **未対応**: profile ディレクトリの配線が無く、残量の読み取りもありません |
 
 **使い方**
 
@@ -759,6 +761,8 @@ many-ai-cli codex       # 同上
 many-ai-cli copilot     # 同上（インストール済み GitHub Copilot CLI を使用）
 many-ai-cli cursor-agent # 同上（インストール済み Cursor Agent CLI を使用）
 many-ai-cli grok        # 同上（インストール済み Grok Build CLI を使用）
+many-ai-cli opencode    # 同上（インストール済み opencode を使用）
+many-ai-cli command-code # 同上（インストール済み Command Code を使用）
 ```
 
 `many-ai-cli serve` を事前に実行しておく必要はありません。
@@ -853,6 +857,8 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `copilot [args...]` | GitHub Copilot CLI を Hub 経由で起動 |
 | `cursor-agent [args...]` | Cursor Agent CLI を Hub 経由で起動 |
 | `grok [args...]` | Grok Build CLI を Hub 経由で起動 |
+| `opencode [args...]` | opencode を Hub 経由で起動 |
+| `command-code [args...]` | Command Code を Hub 経由で起動 |
 | `wrap <provider> [args...]` | 任意 provider をラップ（デバッグ用） |
 | `shell-init` | 透過モード用のシェル関数スニペットを出力 |
 | `status` | Hub の起動状態を表示 |

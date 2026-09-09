@@ -6,7 +6,7 @@
 
 ![many-ai-cli demo: a conductor AI asks to spawn two child AI sessions, you approve, one child pauses with a question, you answer with one click, and both report done](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
 
-**Six AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, and `opencode` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Usage menu.
+**Seven AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, `opencode`, and `Command Code` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Usage menu.
 
 [日本語版 README はこちら](README.ja.md) · [README tiếng Việt](README.vi.md)
 
@@ -40,7 +40,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-Each pane can run any supported provider — `claude`, `codex`, `copilot`, `cursor-agent`, `grok`, or `opencode`; two are shown for illustration.
+Each pane can run any supported provider — `claude`, `codex`, `copilot`, `cursor-agent`, `grok`, `opencode`, or `command-code`; two are shown for illustration.
 
 ---
 
@@ -56,6 +56,7 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 | Cursor Agent CLI | `cursor-agent` | official CLI; sign in first |
 | Grok Build CLI | `grok` | xAI's official terminal coding agent; sign in first (requires a **SuperGrok** or **X Premium+** subscription — base X Premium does not include it) |
 | opencode | `opencode` | community CLI; sign in first. Instead of pattern-scraping approval prompts, the Hub writes `opencode.json` (`permission: ask` for interactive sessions, `permission: allow` for orchestration children) into the session cwd and restores the original file on session end |
+| Command Code | `command-code` | **terminal and spawn supported; approval integration pending fixture validation.** The session runs and the approval-mode select maps onto its own flags, but the approval detector has not been validated against captures of the real prompt yet — answer approvals in the terminal if the action bar does not pick them up. Multiple subscriptions are not supported. The OS aliases `cmd` / `cmdc` are not used as the subcommand, because `cmd` collides with the Windows shell |
 
 **Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
 
@@ -118,11 +119,11 @@ A relay stops for a round limit, timeout, missing verdict or review file, blocke
 - **Language switching** (English / Japanese / Vietnamese)
 - **Local-first UI** — Hub HTTP/WebSocket server binds to `127.0.0.1` only; no telemetry from `many-ai-cli` itself
 - **Remote access protection** — Settings → "Remote access protection" offers a **Revoke all access** kill switch (regenerates the token and auth cookie when a device is lost), an **optional PIN** required only for non-loopback access (off by default, with lockout), and **new-device connection notifications**
-- **Multiple subscriptions per provider** — six CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Usage menu shows remaining quota per profile for Claude, Codex, and Grok (see below)
+- **Multiple subscriptions per provider** — seven CLIs in one Hub; Claude, Codex, Grok, and opencode can stack extra paid plans per session. The Usage menu shows remaining quota per profile for Claude, Codex, and Grok (see below)
 
 ## Multiple subscriptions per provider
 
-Six AI coding CLIs share one dashboard. Four of them — Claude Code, Codex CLI, Grok Build CLI, and opencode — can attach more than one subscription each, so two sessions can use two plans at the same time. Copilot and Cursor stay on a single login (their credentials are not relocatable). The official CLIs still remember one *default* login; the Hub points each session at a different config directory.
+Seven AI coding CLIs share one dashboard. Four of them — Claude Code, Codex CLI, Grok Build CLI, and opencode — can attach more than one subscription each, so two sessions can use two plans at the same time. Copilot and Cursor stay on a single login (their credentials are not relocatable). The official CLIs still remember one *default* login; the Hub points each session at a different config directory.
 
 This is **not an API key router**. It does not pool metered API keys to make requests cheaper; it spreads the sessions you already run across the monthly subscriptions you already pay for. It is also not a way around a plan's usage limit — before stacking several of your own accounts with one vendor, read the warning under [Security / Privacy](#security--privacy).
 
@@ -138,6 +139,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 | opencode | `XDG_DATA_HOME` | supported — see the note below |
 | GitHub Copilot CLI | — | **not supported**: the token lives in the OS credential store, so `COPILOT_HOME` moves the config but not the login |
 | Cursor Agent CLI | — | **not supported**: the token lives in `~/.cursor/cli-config.json` and no environment variable relocates it |
+| Command Code | — | **not supported**: no profile directory is wired up, so it has no remaining-quota reading either |
 
 **Using it**
 
@@ -169,7 +171,7 @@ If you never open this section, nothing changes: sessions launch with the enviro
 
 ## Custom providers (power users)
 
-Beyond the [six built-in CLIs](#supported-providers), you can register your own AI CLI as a spawn option by hand-editing `custom_providers:` in `config.yaml`. There is no "Add provider" button anywhere in the Hub UI — writing `config.yaml` yourself is the only way in, and the only way to change or remove an entry too. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection.
+Beyond the [seven built-in CLIs](#supported-providers), you can register your own AI CLI as a spawn option by hand-editing `custom_providers:` in `config.yaml`. There is no "Add provider" button anywhere in the Hub UI — writing `config.yaml` yourself is the only way in, and the only way to change or remove an entry too. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection.
 
 ```yaml
 custom_providers:
@@ -805,6 +807,8 @@ many-ai-cli codex       # same
 many-ai-cli copilot     # same, using the installed GitHub Copilot CLI
 many-ai-cli cursor-agent # same, using the installed Cursor Agent CLI
 many-ai-cli grok        # same, using the installed Grok Build CLI
+many-ai-cli opencode    # same, using the installed opencode
+many-ai-cli command-code # same, using the installed Command Code
 ```
 
 You do not need to run `many-ai-cli serve` first.
@@ -899,6 +903,8 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `copilot [args...]` | Launch GitHub Copilot CLI through the Hub |
 | `cursor-agent [args...]` | Launch Cursor Agent CLI through the Hub |
 | `grok [args...]` | Launch Grok Build CLI through the Hub |
+| `opencode [args...]` | Launch opencode through the Hub |
+| `command-code [args...]` | Launch Command Code through the Hub |
 | `wrap <provider> [args...]` | Wrap an arbitrary provider (for debugging) |
 | `shell-init` | Emit shell function snippets for transparent mode |
 | `status` | Show whether the Hub is running |
