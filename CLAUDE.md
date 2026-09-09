@@ -18,7 +18,7 @@
 
 **設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
 
-v0.7.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプロキシを撤去、v0.5.0 で `setup` / `doctor` / autoapproval、v0.6.0 で transcript ベースのチャット本文、v0.7.0 で承認同一性の一本化とトレイ常駐を追加した。
+v0.8.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプロキシを撤去、v0.5.0 で `setup` / `doctor` / autoapproval、v0.6.0 で transcript ベースのチャット本文、v0.7.0 で承認同一性の一本化とトレイ常駐、v0.8.0 で引き継ぎ看板・複数サブスクリプション・relay ループ・Command Code provider を追加した。
 
 ## 用語・名称
 
@@ -30,7 +30,7 @@ v0.7.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプ�
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt` |
 | 透過化環境変数 | `MANY_AI_CLI_AUTO=1` |
-| Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok`（`gemini` は対象外・見送り台帳 D-01） |
+| Provider | `claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok` / `command-code`（`command-code` は承認検出が未検証・`gemini` は対象外で見送り台帳 D-01・任意の CLI は `config.yaml` の `custom_providers`） |
 
 > **grep 注意**: 旧名 `any-ai-cli` は新名 `many-ai-cli` の部分文字列（`m` + `any-ai-cli`）。旧名マーカーの残骸を新名パターンで grep すると **0 件に見える**。旧名側のパターンで grep すれば新旧どちらにも当たる。また `docs/local` と `docs/obsidian` はジャンクションで、AI の Glob / Grep ツールは中を辿らず同じく **0 件に見える**。この 2 つの列挙・検索は PowerShell で行う。
 
