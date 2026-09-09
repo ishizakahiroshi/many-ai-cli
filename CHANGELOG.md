@@ -10,6 +10,17 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Security
+- **The Claude Code bundled in the Docker image is updated to 2.1.163.** 2.1.162
+  carried two advisories: a sandbox escape through git worktree path confusion
+  that allowed unsandboxed code execution, and out-of-band data exfiltration via
+  a pre-approved HuggingFace domain in WebFetch. This only affects people who run
+  `many-ai-cli` from the Docker image, which ships the provider CLIs inside it;
+  installs from the binary, npm, Homebrew, or winget use your own Claude Code and
+  are unaffected. The pin is kept in step across all four places that carry it
+  (`deploy/docker/provider-cli/package.json` and its lockfile,
+  `deploy/docker/Dockerfile`, and `scripts/check-docker-build-inputs.mjs`).
+
 ## [0.8.0] - 2026-09-09
 
 ### Added
