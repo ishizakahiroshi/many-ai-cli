@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6d3ddced3b3ba6c088ef0c111d84d6edb6cbe828b3d7b24acace7eece8870397",
+  "claims": [
+    {
+      "id": "claim_a12d2b62df2247308830e8d78296bbba",
+      "statement": "POST /api/sessions/:id/spawn-child creates ~/.many-ai-cli/orchestration/<orchestration_id>/board.md, injects the board path into the new child's prompt, and watches the board for appended progress plus a ## DONE <role> session=<child_id> completion marker; by default each child runs in its own git worktree under .many-ai-cli/worktrees/<orchestration_id>/<role> when the parent cwd is a git repository, and the Hub never auto-merges a child's branch.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L80-L80",
+          "version": "repo-lines-v1:sha256:ad3361a7ed5776bb3a7346d7d53d64ac319ce7b1b3a51b5dd0ac2e3ee015e9fd:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWQzMzYxYTdlZDU3NzZiYjNhNzM0NmQ3ZDUzZDY0YWMzMTljZTdiMWIzYTUxYjVkZDBhYzJlM2VlMDE1ZTlmZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWQzMzYxYTdlZDU3NzZiYjNhNzM0NmQ3ZDUzZDY0YWMzMTljZTdiMWIzYTUxYjVkZDBhYzJlM2VlMDE1ZTlmZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNkM2Y4MTQyOTU3ZWYyMDFlN2ZmMzBlOTEyNzBlOGYzMmZmZGMyNzhhZDBjOTk1ZDU1NmM4MTFiMWQ5MmQxYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTdkOGZiMGU0NmNkMDRhMzRhMDYzMDljNzM1OTVhMzhkODE0Mjk4ZDQwZGIwOTM4NjQxMTI4OWVjYmQ2ZDA4MCJ9"
+        },
+        {
+          "resource": "repo://README.md#L95-L95",
+          "version": "repo-lines-v1:sha256:15f7b75723dd63d73b70dff2598ced88bc0a6923e3e8e99b69811561f2643847:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTVmN2I3NTcyM2RkNjNkNzNiNzBkZmYyNTk4Y2VkODhiYzBhNjkyM2UzZThlOTliNjk4MTE1NjFmMjY0Mzg0NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTVmN2I3NTcyM2RkNjNkNzNiNzBkZmYyNTk4Y2VkODhiYzBhNjkyM2UzZThlOTliNjk4MTE1NjFmMjY0Mzg0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTkxZDIzOGUyNTc1NzA3ZjE1OTM1YjMzNDkzYjZjZGE1MDE3MTBkNTg1NmQ0OWI1YjFlOGEzYzVlOTFhMTgwOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzg1ZWNjYzY2OTBhOTljNjQ5MzBmYmFlNTllZDhhYWRkNGViNTA5NzMyZTJmNzIwOGYxMzlkZjkwZDI5MGE5MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_60d9505a5e7e42848cf3b3aa61269528",
+      "statement": "Child sessions default to full permission bypass (orchestration.child_full_bypass, default true) for unattended work: a Codex child starts with --sandbox danger-full-access --ask-for-approval never and the others start in their own CLI's bypass-permissions equivalent; a conductor's own spawn action still waits for human confirmation by default (orchestration.spawn_confirm_mode), but relay children skip that confirmation by design, and completion depends on the child writing the DONE marker with no job DAG, retry queue, or automatic merge.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L99-L99",
+          "version": "repo-lines-v1:sha256:8d050f04335d89760339a4fac6267899fe61de2250d2e7510457cac7010c6e4f:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGQwNTBmMDQzMzVkODk3NjAzMzlhNGZhYzYyNjc4OTlmZTYxZGUyMjUwZDJlNzUxMDQ1N2NhYzcwMTBjNmU0ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOGQwNTBmMDQzMzVkODk3NjAzMzlhNGZhYzYyNjc4OTlmZTYxZGUyMjUwZDJlNzUxMDQ1N2NhYzcwMTBjNmU0ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzg1ZWNjYzY2OTBhOTljNjQ5MzBmYmFlNTllZDhhYWRkNGViNTA5NzMyZTJmNzIwOGYxMzlkZjkwZDI5MGE5MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzNjY2MwZjJlYjhmZGM4MDE2NmU3YzNiNDFkOGM4OWQ5OTZmMTUwMWQ2OWZhOTQyMGI1ZmIxOGI2OTMyOWQwNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ffe2326b7bc647719294dc1e7a4dfac1",
+      "statement": "The default board_notify_mode for ordinary (non-relay) orchestration progress notifications is soft-notify (badge-only), set both in defaultConfig() and as EffectiveBoardNotifyMode's fallback when no value is configured.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1193-L1193",
+          "version": "repo-lines-v1:sha256:ef45435cbf4cab3c068eae1a716190ca3fd3e731776075303401641e16739217:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWY0NTQzNWNiZjRjYWIzYzA2OGVhZTFhNzE2MTkwY2EzZmQzZTczMTc3NjA3NTMwMzQwMTY0MWUxNjczOTIxNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWY0NTQzNWNiZjRjYWIzYzA2OGVhZTFhNzE2MTkwY2EzZmQzZTczMTc3NjA3NTMwMzQwMTY0MWUxNjczOTIxNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTVjODg3ZGE1ZGU3YjQzMjY5OWRmZmEyYzJkNDY1OGE2YjcxMTQyMTA4MmIwOWQwNTBmZDE0NTkxYmE4OTlmMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTIwMDAwMTI2NTNhYjhlNmYzYmIwMzQ3NDM1YWZjYTc2NDFlMzU2MzU4YTVlMGY1YmE1Mjk4NjAzMDQ0MzJmNiJ9"
+        },
+        {
+          "resource": "repo://internal/config/config.go#L843-L847",
+          "version": "repo-lines-v1:sha256:3707e4a6b7f6fcbebcdf9fda03c1d1c22e731c0958069742893c7efbfad54501:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGIwYTljZmExMTJmMWJkNDZiODQxODVjZjViM2FkMjFhZmYyZjZjYWY4MWEwZjMyMWI3ZTllNWE2MmQxMzJiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQxNmE3YjE5ZjY0MzcwMjFjZjlmNDFjMzE5ODg2MzEyNTJiMzI5ZmUwNTM3NGY1MzMwN2IwNzgzMmYwYThhOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzZiZDNlNTFkNWE2NjE4ZmQ4YmI4OGMxODYwNTk4NTE2MGNkN2Y2MTRlNDY2YzNhNDQ0MDRjYjQxMTY1MGI4MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzdjMDY0OTk5NGRjZWY2MmIyMDhiYWI0MjE5Y2ViZDAxN2I5YTNkNzE1ZGZmYWIyNDJiMDA5NmMxZmU5OWRmOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f5989f3268364c96b5c4ed98ae5dc8be",
+      "statement": "internal/orchestrate's package doc states its purpose is letting the AI inside a conductor session spawn or message a child session without ever handling curl or the Hub token directly; authentication and self-session-id resolution are closed inside the command via wrapper-injected environment variables (MANY_AI_CLI_HUB_PORT, MANY_AI_CLI_SESSION_ID, MANY_AI_CLI_HUB_TOKEN), and the AI itself only ever supplies role/prompt and optionally provider/model.",
+      "evidence": [
+        {
+          "resource": "repo://internal/orchestrate/orchestrate.go#L1-L30",
+          "version": "repo-lines-v1:sha256:a00c01ef5da5f23a8b8fdf2894eede15175b5b88fe31bda2daac6313c4ae90fd:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjZjRhMGY4MDFlM2I5YmQ0Zjk4MDgxN2QxOTI0MTEzNDlmMjAwNDNhZTFjN2ZkM2I5ZjY5NmUyZjFlNzg0MWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZWYyYmQyNDIzZDExZGUyZGMzNTEyMDk5YzljYmU2OTNkMTY3MzE1ZWE5ZmQ3OGUyMDI5ODIwY2YzMjY1OGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5OTdkYWViYjVmNGQyYzhhNmYwZjRkNDYyOWI3OTM3NDUzYjQyMTZkMWZjMjQ4YTAyYzQ1OWIyNjA4NzVmZDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0c88afa3b53c4612ae4c8841c4989409",
+      "statement": "relay.go's header comment states the relay's goal is to drive plan -> implementation -> adversarial review -> fix -> next C without an AI conductor deciding any step; the Hub advances the state machine from exactly two signals: the count of ## DONE <role> lines in a child's progress file (a count, not mere presence, so one child can complete several Cs in sequence) and the reviewer's verdict: line, with every side-effecting action routed through an injectable relayDeps interface so the state machine can be unit tested without a real process.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/relay.go#L1-L13",
+          "version": "repo-lines-v1:sha256:515ed9ae4896dcd4750801f2764ff75ea9282d84c5b5cdca73ad13f4f67c050a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZGZlYjZlMmYxM2NmMDFiNzEzNjk3NDE2OWVmZWVmMzI3N2E4MTE3ZDhlMzgxMmM0MTE3MTRhMTBlYmFhZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWE5ZTJiYTk5MTg3OWU0MTcxNTU5MTE0Zjg4ZmZjYjNlYjRiYzQxYzhkZWYxOWY4Mzg2Zjg1OWVhMDIyODQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjNmNiODU5NjhhMDNkYThhM2JmMmZlZDlmNmFlZmU3ZmE2YzhlOTQ1YjY5NTk4MTI4ZjZlZWQyNWQ1ODljMzUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bd3f1923109748eaafeb305226744287",
+      "statement": "The relay state machine defines exactly five states in source: implementing, reviewing, fixing, completed, and stopped.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/relay.go#L56-L60",
+          "version": "repo-lines-v1:sha256:7d6056f0c7fc1d28b17820554495a5292079151f8986508cb169abd07dda2a3f:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODVmMTRkMjYxODRhYzQ4MjViMGZkYzI2ZTg2NzdiMTAzMThmZjQ5ZjBkZWM2MTkwNzVhNDdmYWRkOWVlYTdkOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTIzNDFhZDViOTgyYjg5MDg4ZWM0MTM1ODYzZWEwMDE4Y2I3MDlmNmJiMTIwYTk4ZTI1NDdlOGMyY2RjNjFhNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjQ3NjY3ZTdhMGUwY2YxOTg0YjA1NWU5ODlmYmEyN2M3NmIwMTIzNzc5OWVlZjdhMzIyZTk3NTljMzY2NmQwMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjM1YjcyZjJhYmEyM2YwZGEzZDY1NTI3ZTA0YjJhNWY5OTNhNDUzOTE1MTNiMWU5ZDMxZWE1YjczM2Q3ODM4ZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_80da0a0292354baebbf837dc315f44f8",
+      "statement": "Relay escalation to the optional implementation-strong role is one C at a time and is triggered only by the review result or the plan's own [strong] annotation combined with the cheap implementer's own escalate=true report, never by the Hub judging difficulty itself; the next C after an escalated one always reverts to the cheap implementation role. Every message the Hub injects into a relay child or sends to the parent is prefixed with [relay <short id> <plan basename>] so multiple concurrent relays are never confused with each other.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/relay.go#L14-L24",
+          "version": "repo-lines-v1:sha256:e2d27fdaf75fc05c00fe3f452ae51b0130314aba8b3487d655c996d271d43ce6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMWVhZDkzNmEyMjgxZDUzZGNjMDY0YjdlMmEyYWIwZDUzYjkyZWYzZWY3YjM0YjY2ODY3MzAwNzg5NWM4NjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3OTZmMjZlODRmOWJiZGI2MjdjNjBjNjZlMGRiMTgxNTUyM2NmNGY1MjQ4ZTc3YTRhYzJkYzk2Yjc5YzNlZjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ0NGM2YWY2NjM0MGNjMjJjYjZkNThiOGNkZjYzYWMwNTE4NzA0NTBkZTlkYzQzMjU1ZDI0MzJhZDdlNDFiNTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkMmE4NmQ3OGRjNWQ0NTAwNWUyZGI4YmI1MTI3NjhlY2ZiYTQ3ZWZkMmQyNjVjZDIwOTUxYTQ3ZjhiZmM0NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0d6b505785fb4b4f868decbd30fac3f5",
+      "statement": "relay.json is rewritten on every state transition and is the relay's source of truth for surviving a Hub restart, recording state, round counters, completed Cs, child session IDs, roles, branch, worktree path, last verdict, and a timeline; the working relay files (board.md, child-<id>.md, review-c<k>-r<r>.md, relay.json) live under ~/.many-ai-cli/orchestration/<orchestration_id>/, and a relay stops for a round limit, timeout, missing verdict/review file, blocked verdict, child exit, or the Stop button, resuming only when the stop reason is resumable.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L114-L114",
+          "version": "repo-lines-v1:sha256:2d4b1b9e79d6b94e96dd5758f266b757681fb1c417613275dcf5fb9d7e27fd95:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQ0YjFiOWU3OWQ2Yjk0ZTk2ZGQ1NzU4ZjI2NmI3NTc2ODFmYjFjNDE3NjEzMjc1ZGNmNWZiOWQ3ZTI3ZmQ5NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQ0YjFiOWU3OWQ2Yjk0ZTk2ZGQ1NzU4ZjI2NmI3NTc2ODFmYjFjNDE3NjEzMjc1ZGNmNWZiOWQ3ZTI3ZmQ5NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTE2ODAzNjViYmYwZDZlNDkyYTVhODYxMjg3ODI0YThiYTk1MmI0NzljMGU3OWJiYzk5MTE4MmQ1MDFjNjUxYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWRhMzRjNzE4MDRkMmVkZGQ2ZGI4ODZkZTJmM2U5MDMyMzYyZTViY2JjMmYwNDVjY2Y4MTEyOTdkNTdhOTJmZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_2155ced5b60a41809021939d24b21f9b",
+      "statement": "relay_worktree.go's header comment states that in worktree mode a relay's implementation and review children share one worktree (<parent cwd>/<worktree_dir_root>/<orchestration id>/relay on branch many-ai-cli/relay/<orchestration id>, forked from the parent's HEAD at start), the user's own checkout is never touched, the implementer commits each C to the relay branch for the user to merge later, and the worktree is never removed automatically — cleanup happens via a user dashboard action or a doctor residue finding, both routed through cleanupRelayWorktree.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/relay_worktree.go#L1-L14",
+          "version": "repo-lines-v1:sha256:52b1bad420003338b88c98f38021cd60480a7cbdf00f46b440c4165e65dbdb52:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZGZlYjZlMmYxM2NmMDFiNzEzNjk3NDE2OWVmZWVmMzI3N2E4MTE3ZDhlMzgxMmM0MTE3MTRhMTBlYmFhZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyZjk5OWQxODg3NGU1YTE2MzUzOTdhOGNlZGVlYzUzMGEyMWNkNTlhOTQzZjg4NzA0MWE2Y2E1ZTM5OWYyMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyYzk0ZDZlYzk0NjYxYzY2NjU2OWZiZjMyYzExN2JkMWVlMDY1NTE0YmY1MjdiZjRjNzlmZTljNjdiNjhkZjYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_69ecfd833f7f438b9492903a37701863",
+      "statement": "orchestration.max_children_per_parent defaults to 4 when unset or non-positive, enforced in applyDefaults-equivalent logic in internal/config/config.go.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1334-L1335",
+          "version": "repo-lines-v1:sha256:705aaa19e7e52214b5304e5cfda650522dfef63d14fdbbca54e650b213040556:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzMzODA0NzQ2NzhiNDMzOGY1MTE5ODJhMDRkNmExNTRlZjYxZDQxMDVkZGIzMmJlMDExMWFlMmQ0OGI3ZjBkMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDBiZGY3MDkwYjEzM2U0YzNkMjRiZjBmYWZjODkwOWJhZmFhMjZlNDlhOGI5NzBhNThiNmMzZjE1NDZmZjkyOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTVlNWRlYTFjM2UzZTFkMzBiY2I0YjcyZjA3MTUwMjQ0MWNiNzUwZjQ1ZDY2YjQwNTQ5NGY5MWJkMGI0MDQwYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmI0OTJkODkxZTgxM2QwMzNkMTVmMjE2NmFhZThhNWVlNDEzNWEwZmZjNzA0ZjgwNjAzZTQ3NzgxMmUyMmFhYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_41541f6d99fc448abd524deb22e5386c",
+      "statement": "internal/handoff's package doc states that what is allowed into a Record is decided by the Go type itself rather than by scanning free text for secrets afterward: the struct exposes fields only for a commit hash/subject, changed file paths (never contents or diffs), session metadata, and exactly one free-text field, with sessionlog.MaskSecrets applied only to that one free-text field; widening the Record type is treated as a deliberate design decision, and a test-enforced allowlist in handoff_test.go fails on purpose if a new field is added without also being added there.",
+      "evidence": [
+        {
+          "resource": "repo://internal/handoff/handoff.go#L1-L20",
+          "version": "repo-lines-v1:sha256:9eabd9200af3e55e8b2bb83d4c2adc789accc31ffbd624333c0c483cfdf45f47:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkODQ5MGQyODE4YjQ0MDU5ZjM2Y2U4OTVkMDBjMzU5ZWZjYjcyZTZiNzQ0NTBjNWI1YjQ5MGI4NzA3NGNkMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMWVhZDkzNmEyMjgxZDUzZGNjMDY0YjdlMmEyYWIwZDUzYjkyZWYzZWY3YjM0YjY2ODY3MzAwNzg5NWM4NjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmNzk0NzI4OTRjMzQyNjEwYzE5NTAwZGQ5ODk2ZWQ2N2JjZjQxMDBiMjJhNTY2ZmYxYWZiY2NmYzY5ODI5MzYifQ"
+        },
+        {
+          "resource": "repo://internal/handoff/handoff.go#L63-L83",
+          "version": "repo-lines-v1:sha256:28c5a30b61f77ba7ed8f8789758129f5e0521b32eb4fa88af2248e2b0e91e034:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4OWYwMzA0ZTUxODY3NTJhNGZiYzFkMGU1N2JiNzkyZmZkZDNkNDE2ZWFmODBiZDlmYTI0MDAyYTMyNzFiNGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4YWQ3ZTYzMzQ0NjU2Y2M5ZjExNmM5NWRhODc4NDM0ZGE5ZjZkYzk5NGZlZDcyNWRmNWFmNGY3MWJlY2E0ODMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwNzAxMTJlOTBiMTU5OTllODliNzRmOThmMWNjMDkxMmUzZGY2OTk2NDdjZmNkZGNhMWI4NWYyNjIwYjJiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEzZWUyMzJjYzNlNmI0NDFhNWU0MjlkNTY1Nzc1OTAzYThhNmViNTNjMTgxODJjMTI3MWM5MDhjODYzMjU5YmMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f712e356ee71577a9082ee48aeb333270c672c2cfab2509c077be07017289f1f",
+  "claims": [
+    {
+      "id": "claim_ff6e618ad7314b7a827095a915d250f8",
+      "statement": "audit_dbless_2026_06_15_test.go locks two specific findings against regression: sanitizeCommitMessage must never split a multi-byte UTF-8 rune when truncating to a max length (TestSanitizeCommitMessageUTF8Boundary, using a 70-character Japanese string whose 210-byte length exceeds a 200-byte cap to force the boundary case), and it must strip C0 control characters and DEL while preserving tab/newline, specifically to prevent terminal-escape-sequence injection into git history and WebSocket delivery (TestSanitizeCommitMessageStripsControl).",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/audit_dbless_2026_06_15_test.go#L15-L45",
+          "version": "repo-lines-v1:sha256:400a52d0768ad8e5031658270fda3aa2eb7278b9f3e1077bbc12ec175a624999:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhNGI3NDI1YWY0NjQ4ZTA4YTczMDhlYTU5NWFkZWRhZmY1MDZkZDcwZWQ3NDc5Mjg0ZjU1NzFkNGY0YTM2ZWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyNzAwYWE1ZDBiNmYwY2RjMzQxZGE2MDU1YTI0ZmUyYzQxZWQ0Yjg5Y2Q3MTI2ODIwNjk4NjU0N2MyMDkzZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVlYzVlZjE3NWEwMzM3ODc3MWVkMWNjZTk4ZDg3MzU2N2NiOGVkM2I3ZjFlOGRkMzA4MjUyYzEzNGE1ZjExMGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg1MTBhYTExZjdkN2RhMzdmYjQ2OGZhZjA3MWFiYjQxODkzZWJkNjNlOTRlNWYxNjc3ZmUyYTY3NDQ2OWU4MmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4ce11fc94a184fada251c169a7010ec4",
+      "statement": "instrumentation.json's header states the ledger exists because the same class of mistake happened three times before it was built: a v0.5.1 debug endpoint that recorded an approval's raw answer text verbatim (removed in v0.5.2), a v0.5.x wrapper input trace that persisted every keystroke byte unmasked at world-readable 0644 permissions with no retention limit (caught by a pre-release audit and removed in v0.6.0), and a v0.6.0 debug endpoint left enabled by default until immediately before release.",
+      "evidence": [
+        {
+          "resource": "repo://instrumentation.json#L2-L10",
+          "version": "repo-lines-v1:sha256:7a6e746378e1057a65f5d20850a4f77a30c83a2262a8b6c403e70af0100f663f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDEzNzc2NzQ2OGQzZTM3MWU0ZDhjNWQ2MGQyNTA2NDUxMGI2MDZhMWExN2M5Mzk4YzM0ZTc2MjQ1YzI5YWM4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDJiZDhmNTQ1Mzg0MmY0NGIxN2U1YzRjODE3NzkwMTA1ZjRjMjVlMjMyODYxNmY3NzFhZmJkYWNlY2M2ZDIzZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjEsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTZmYjA4ZmRhMWFjYjk1N2I2MTE2YmQzNzgxMWExZmU0MWEwMTYxMWMwNjMxZWRiZjc4NmQ2ODg5YTI3YTU1YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWRiNmJmMDE1YTEwZWEzNGY2MTI0ZThjNmQwZDg1MjBiOWMyMGVkMzc0ZmM1NTFjOWY0OTAwNmE1MDk3OWZkNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1a7491a7b00c41e28675c3606736e299",
+      "statement": "instrumentation.json's rules require registering observability code in the same commit that adds it, require an active entry to carry a hard UTC-calendar due date rather than being tied to a version number (a version-based scheme was tried first and abandoned because nothing in release.yml or the release manual actually advanced the recorded version, leaving two releases with the same stale marker), require a gate on every entry with always-on gates disallowed especially for anything persisting user-input-derived bytes, and require a removed entry to record removedIn with its files verified actually gone.",
+      "evidence": [
+        {
+          "resource": "repo://instrumentation.json#L12-L21",
+          "version": "repo-lines-v1:sha256:b0dc533315aaa1d8627abf6be7775eb733fd96ba2c9efd1e0d8ff4f02b4de23c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmMzU0MWE4MGFlNWUzMDAxOGMxNTQ0OTAxYjljOTcwM2ZmNTJmZmI1OWIxZGJlMWQzN2EyZmQ5MTNiYzY3YjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZTA3NWM4YTg1MDZlZTA5Zjk5NmQ0MTc2OTAyNDM0OTEzNjFmYTZhOTYxNTY3Y2NlODI0MjljMzMzOTM3YmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4YTJmZTdiOTY3MDk4NWYzOGFlNmQyYjJlY2EwMDdiNzE2ZTg3MTBmZDQwYmM5ZTk3ZTYzMGU3OWJkNWUxMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5YTBmNGM2NTFkMmZlMmZlNGE2NjJmYjAzYTJhZThmYTYxM2RiNGYxNmNmNTAyMWRmZjAzM2NkZTg0MjkxN2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2415c70d123847a0a35ce0487b187332",
+      "statement": "instrumentation.json separates a files field (an observability feature's own dedicated file, which disappears entirely on removal) from a sharedFiles field (a shared file like server.go the feature only borrows space in) because collapsing the two into one field forces a choice between registering making removal unverifiable or removal being checkable but unenforced, and two entries (ui-input-trace, hub-input-trace) picked the unenforced option before the split existed and were consequently forgotten during cleanup.",
+      "evidence": [
+        {
+          "resource": "repo://instrumentation.json#L22-L29",
+          "version": "repo-lines-v1:sha256:eebb15eeca87658739c31dc60e192658c05a3d4a1d52d053cfbb4f0ba102f9a7:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTA3YmUxYzk3OTAzZDYzYTc1NGE0MTYwNzk2NDgzZDg3ZDE5YjNlZmIxMWQwNWJjYzQyMGE2ZmU2ZmEwMmM1NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGI0NjIwMWUyMmVmODMzZWVjMTU3Y2ZjMGQ2ZWZmMTkxYjg1YWUxYWY2NTMzM2Q1ZmIwOTczMjdiNWFlOWExYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTg2MWUxMWVmZTIwMGIzNTliMGVhY2E3YjUyNGVhNDZiZDZhOTc1YTJjOGIwNGU0ZTNlMjZlN2NmNWE4NTk5MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTBlYWJlMTRjMDA5ZGZiMGFkOWRkMzliZWM1NmZhNzgzOWExNTBjZGI0MTQ5NDMzYjk4ZjAzNmI3ZGVjZmU4OCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ff28d4c3fffc4bdfb68953ba2d3b6095",
+      "statement": "scripts/check-instrumentation.mjs runs six checks: unregistered observability-shaped files/patterns not in the ledger; an active entry's due date having passed; a removed entry whose files were not actually deleted; bidirectional mismatch between web/src/debug/index.ts's actual imports and the ledger's active entries; every ledger-listed Go file carrying the //go:build maidebug build tag as the primary guarantee instrumentation cannot compile into a release build; and every active entry carrying artifactNeedles for the release-artifact-cleanliness check, with a removed entry's removedOn date format also validated when present.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/check-instrumentation.mjs#L7-L21",
+          "version": "repo-lines-v1:sha256:9c256863ba44cada612017c98fdb7bb8c19b49e4572f500b388079589295029e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxZjNjMDliZWM1ZmI4NzQyYTk3NDQ1YWQzYWJmZDA2ZWMzYmQ5Mzg2NDc1MWI1ODcwNzE1YjUxOTA1MTMwMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiNTIxMGIwYTU3ODc2N2FmYWY2OTE5MmY1MDkyOGFkMTYyOGRhNTA5NDIyYTI0NWQ1YzIwNmY3OWMyYjYwNjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhhMWJhNDZhNTMyYzA3ZWQzYmVkZTgxNzc2MzM3NTUzNjYxN2IwYmM3MzBmZDMyYmJjYzIxNzViZDAzNDFhMjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwYjg0MmVmZWE3NTY4MmI3YzJiYWYxMmEzMzg1NzE3YjdkZDJjNzkwZmJjMmRiNjQ4NDQzM2YzZmM0NDBiN2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e2fce59d1d834d21a512e2f9513d489a",
+      "statement": "check-claude-md.mjs's header states CLAUDE.md grew from 129 to 269 lines in five weeks (by 2026-08-19) purely from seven dated established-rule sections that each duplicated content with a canonical home elsewhere, and that promoting content into CLAUDE.md is an established practice with no corresponding demotion mechanism, making the file a one-way ratchet without deliberate counter-pressure.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/check-claude-md.mjs#L2-L15",
+          "version": "repo-lines-v1:sha256:7c8bdcafda35d995eae404dee55fd6a62602d1929a01aa6afcfa8fa52e827e47:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMzYzIzZjdlYWNlMGU5MGFlZmM5ODY0NzVlZmU2YTQyMjc0NTcyYjQzMmMzYmYzZTVkMTBkYmY4N2ZmMmM3ZDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoxLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUxODdkZGUzNTQ2Njk1YTk0MzIyN2FiMjJiNmIwMzYwOTQ4YTA2YTg1ZmVjMjYxZmQ1NDRmNzBmNWQxODU5MmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk1MTU3MGY3OGU5OTA4NWYxYzFjODdiMmUxM2IzZjY3ZWMzMTM3NGRhZjdjMWQyOGNjMjJkYjllY2NiY2ViYzMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fb9f253cd4394090997a73265adb20a0",
+      "statement": "check-claude-md.mjs checks three things (total line count against a budget, whether any single section is too long, and whether a dated established section names its canonical source) and prescribes a fix order when the budget is exceeded: first check whether the rule can be machine-enforced by a script or Go test, second whether it concerns a specific file and can move into that file's own header comment, and third whether it is a yes/no adoption decision belonging as one row in the declined-directions reference ledger; only a rule matching none of the three may keep its full text in CLAUDE.md.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/check-claude-md.mjs#L16-L28",
+          "version": "repo-lines-v1:sha256:f4d342ff2261080a198f791f867647c83dfc7236ee15a7d5b5710c2f2c4c0c92:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwMzY1MDgzNDEyNWYyNGFjYmJhMzUxYmI2OGY1ZmZlMTIyNmVhY2NhYWZhZmJlNmUzMWIxYjgzODYwOTc2M2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZWQyN2VkZGY1YzcyZmI0NjE0ODk5MzA5OTY4MDc0YzY3ZmI2ZmY1YWUyZTFmZDJlMTAyMzQ4YjYzYjZlOWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzYzI4Y2M4NDMwYjlmOWNkNmQwMGZjMzE3MDk4ZTZlZDExOTlkN2RiZGE2NWJiODMxMzc2ZjMxZmY2OWRhZjIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVmNjczMDY3NDQ2YTRmMzNjNWNhYTk0YzgyODNhYzQwN2Y1Nzk1Yzg0MTgwNWViMzQ0Y2EyZmI3OTliMTAyYjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_eb260b9f4d5a4fa894231081e0afa9d9",
+      "statement": "The Validate workflow's go-check job is matrixed across operating systems (name: Go (${{ matrix.os }})) and its jobs block begins with an instrumentation-ledger check job whose comment references the same three near-incident pattern (v0.5.1, v0.5.x, v0.6.0) as instrumentation.json's own header, replacing a 'remove it once the cause is confirmed' comment-only convention with a machine check.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/validate.yml#L16-L20",
+          "version": "repo-lines-v1:sha256:cd829e5d92e8ccdc7c420ecc76c252a0f78e3045eaa6fabd14763e7cb2a87d64:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjUwYTYwNmRlZDIwOGE3NzAxYWZlNTllODYyNDNhZDgzYTIyODQyOWY1MzMyOTgwM2VkZTUwMGU4ZjZjYzk4NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzA1ZDZiNDhjZTI1MWIyNTljOTYxOWZjMmUwM2VhZmY3MDg4MzI5Y2NkYTUyZDc4N2Y0MWQxY2I4OWQ0ZTNlNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDRmNzk0OGU4NjJmNWY5ZmJlOGZmMTVlYmYyNTdiNTc0MjY4M2VhZWFiNWYyNWZhMTk3OWFhZjk3OWNmZWE1MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmExN2ZlNjU1MGVkZDBjZjU4ZmI2OWY4ZDU3NmJkZGViOTZmZGI3M2E2OTJlZmVlY2YzOGE4MjRjNjQwNjNhZCJ9"
+        },
+        {
+          "resource": "repo://.github/workflows/validate.yml#L60-L66",
+          "version": "repo-lines-v1:sha256:470b05491beb728090412ca178bdd4fb600a5f59785110b11bf980c0cb076c87:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGIzNWZmMWQ5NDY5ZjI5YmUwZThlNjg1OGYwYmRlNWFmZjlhYmYyM2I3NWVhMGUyZmUyNzExZjE0MjhhZjM4MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzhiY2JlYTMyNzVlZTc5YWNlMDU3ZjkzY2QxZTBmMDNkYWJjMGMzMjgwYzE4MzUwMDRiOGFkNGY4ZjQ2ZmQxYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjRkZmI1Y2VkOTFjNTRhZmQyYjQ1YmU1ZGE5MmQyMTQ4ZGNjYmU5N2QwZTBmZWVhYTc2ODhiOTM3YzQ5NzIxZSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

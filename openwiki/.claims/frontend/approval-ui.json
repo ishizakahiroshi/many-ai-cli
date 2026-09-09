@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:070bc62eafebad1efd5e75e56b11fd6618bd936755c4a6b4cc28e57be44c2347",
+  "claims": [
+    {
+      "id": "claim_3edbb5a9502845e4891aa13ffb7f867c",
+      "statement": "approval-answered.ts previously split approval identity across three separate state mechanisms (a timer-expiring signature, a permanent full-block-hash mark, and a manual-dismiss question key) with different definitions of 'same question,' and the mismatches between them caused already-answered approvals to reappear; the current design uses exactly one candidateKey + sourceEpoch pair per candidate.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/approval-answered.ts#L1-L16",
+          "version": "repo-lines-v1:sha256:53c6afa39ae455cf9a420dfb8d668a9f2a5ef86eff3bd61acc43d6b70912e5cc:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiNjczZGUxYTE3NjkyYWI3NjA3YTIyYjQ3NmJlNGZlYTZiNTMwM2RlNTI5ZTFkY2RhNjY4YTdmMjA5MTMzMjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiMmI4MGYwZmZjN2JkNzhjNTIwMDZjNDdmMTc2MTEyN2E5ZWRlMTU5MGIwMmFkYTNlMjI1YTc3MGM1ZDhkOTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5NDc2ZWU5ZmJkMTJjNTQxNGEwMzJjZjVhZjQ4ODIwMTI5OGMwN2QzMTQ5YmMyYThmZjc4YTc2MDRiYjIxZjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_527ce5ea8e6e47bcaa5d39ee7f0c4a5f",
+      "statement": "candidateKey is built from provider, approval kind, normalized question text, and sorted optionNumber:sendText pairs, deliberately excluding label whitespace, box-drawing characters, and line-wrap differences so a TUI redraw does not change the key; sourceEpoch is a live-prompt generation counter that replay and terminal reflow do not advance, so an intentional re-ask in a new generation is shown while the same content replayed within the same generation is recognized as already-answered.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/approval-answered.ts#L89-L114",
+          "version": "repo-lines-v1:sha256:cac278a7e3e8310e4ef208048162f63487dc5379b97e98c06a71aac7964d7626:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjMThmYzI4NjAxMTA3ZjVjNTAyOGRhYmQyNDJhMWUzZWZhZTgwNWMxOWNiNTU5NjE5MGU3ZjQ5Y2E5MDQ2YjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJlZWZhZmI3ZGRhMzZhOWM0MDk0MWRhNTI1Y2M1MGViMmU0MGFjYmY3YmNhNmNjOWQ5YWI0YjEwNTRhNmQ1YTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA5NjQ0ODcxNDJiNzk5ZmJlNDQzZTdhMDdiNTBhOTkzMGEwZGY1NzdiYzUwM2FjODlmYzExMTRlYzc4Njk4ZWUifQ"
+        },
+        {
+          "resource": "repo://web/src/app/approval-answered.ts#L9-L13",
+          "version": "repo-lines-v1:sha256:ba12ddce64d9b90567c3dd2f76baa3a8355699f6bc306b4333b51d6337dc7fbb:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODM2ZjA2ZDY3NGE5NmE5NTg2YjhmMmFiOTE5YTQ0OGNmNGY0MTFmMjQ0OTcyYWQyZmE3YjhiMjJiZGNiZjNiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWE0Yjg1ODFiNjgxZWJkZDhmOTExOWQ0ZTBlYjg0NjQ0MTk4ZTdhZGFkNjZhYWU2NTJlZDEwOWYxNDEzMWY5MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDlhODI3NjZhZDAxOTBjMzdhODU4MTdjMjI1MTQ0OWUzZjkyNjZhNzQ4NzlkOGI0MWEyZDNiMTAwOTU0MzZmNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDUxNjQ2NjMxOTlkZTBjN2VhNTgzNTNmZTc0ZjZhODYwMTFmZDY2MTg4NzVhOTZmMjFmZWYxNzM4NjhiZTMyZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_803b73a92e664fce93fd77be87d430ec",
+      "statement": "isHubMarkerAuthoritative() suppresses the browser's local text-tail approval scan from raising a new candidate whenever the Hub's server-side marker detection has already delivered a candidate for the current generation, because the local scan works off a naively concatenated PTY byte stream that can miss characters an Ink-style differential redraw never re-sent; a 2026-08-26 incident had a re-parse turn 'SSH して' into 'SSH て' six seconds after the user answered, producing a different candidate key that escaped the answered ledger.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/approval-answered.ts#L296-L327",
+          "version": "repo-lines-v1:sha256:a16beb021a1c05431ba5a55990e39b55124be7ee5510955615470e3340bafe08:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1ZDVhYmFjYTIyNjgwYWU5NTMzNjcwMGRmNzY2MzYxOTdhN2NiNmMwMDRmNGNkNzlhYzFiMWZkMmYwYWM0YTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiOGRhOGFkYmVmZGZkMWQ0OWMyNWM0NDEwZTU4ZTYyMjk1NzVkN2NkODg5NzE4OTdlMzBmMzkyZTkxOWVmMjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEzOGQyMjI3YTkxYTdhNTg4NmMyNTI0NDFkZDJiMTllNTU2OGU0MjRmN2MzNmIwYjMyYmE2OGM3NTkzMGVhMzUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_692d4f1210e94f9cb48d02914208552c",
+      "statement": "isAnsweredApprovalShapeAcrossEpochs performs a generation-blind lookup over the same answered-candidate ledger, used only to detect a stale-history repaint (content already answered, redrawn by the CLI's own scrollback paging) rather than to decide whether to show a genuinely new prompt.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/approval-answered.ts#L273-L294",
+          "version": "repo-lines-v1:sha256:d3e969f1bb7f311347ae3e4f5bcc57a14c3cd5899b17937738dca37dd9ac7d16:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1ZDVhYmFjYTIyNjgwYWU5NTMzNjcwMGRmNzY2MzYxOTdhN2NiNmMwMDRmNGNkNzlhYzFiMWZkMmYwYWM0YTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEwMTdkN2Y2Zjk3NDI2M2VlNTZhN2Y0MmZiZWVkYTRlYTYyNDdhYjM3YmU1MzYyOGRkMDdjMjk5YjExZTYwMTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkMWU2MGQzMmI2YThiNDFkZGY2OWVlNTk0YmYyYjljZjVkZDA5YzZlMTAwYmJlZTkyZDQyMzk0ODNlNzJmMjYifQ"
+        },
+        {
+          "resource": "repo://web/src/app/approval-answered.ts#L329-L343",
+          "version": "repo-lines-v1:sha256:c4b2481fdab10750025db7a4a8df12d02580b81b0436f6818c5e5ed49173bfbe:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1ZDVhYmFjYTIyNjgwYWU5NTMzNjcwMGRmNzY2MzYxOTdhN2NiNmMwMDRmNGNkNzlhYzFiMWZkMmYwYWM0YTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ0NWM3Y2M1YWE1OWNjNmYzMTM2ZjY5MTUxNmExMjU4NWY5YzQxOTY2MzUxYzY4ZWIzNDM4NjhiZTFmOTg4ODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkYWFkNjlhZTcyMDgyMWYwMjI3NTE0OWE2ZjRkZTBiNTU4MmQ5ZDAxOTIwNjdhNzkxNzE0M2ExMTA1NzY4N2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8a6a69fa133b40eebaaaaf7d0274c7c2",
+      "statement": "approval-owner.ts centralizes the single ownership check for the shared #action-bar DOM element (actionBarOwnedByOther, backed by dataset.approvalSessionId stamped by approval.ts's showActionBar) because having the check duplicated in two call sites previously let them drift out of sync and reintroduce a bug where switching sessions could show another session's approval panel; an action bar with no stamped owner is treated as unknown rather than as belonging to another session.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/approval-owner.ts#L1-L40",
+          "version": "repo-lines-v1:sha256:9a4719220197049f4592e28468c6d407c176e6b631ae27c2bda63db90597beb1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmZGE1MmU5OWExMDRjMTNhOGE5MTUwZmI3YTI3OGMyYTU4NmJiYmU1ZTFhMTNiNjAzZDQwYjY1NjhkNDlkMWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmODI1MmQxZWI3MmMzODg0MGM5ZGFkMTRmNDU5ODEzOWU0YzE2YTRlZWUzOTMyZDBiNTM4NDUyYzQ1ZDRjOTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b01440be55c4ef686c03850aee22fce",
+      "statement": "The approval parser's isBatchOptions() detects a multi-question batch payload by checking that the value is a non-empty array whose first element carries an options array, distinguishing it from a single flat list of options.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/approval-parser.ts#L79-L82",
+          "version": "repo-lines-v1:sha256:02ee3879c9246a4d82ddfef9c2141a8460abb8ae2085160a5d62e4afca7652da:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2EzODA5MmUzYzExYmI0ZmVlMWM4YzU2MTNmZWU0MTRiNTE3Mzc5NjZmYWYwMGUzYzhlODE0MzE0NmQ0NTM1NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzEzNDUxODAxMDViMGM2NmE3N2RhZDUxYmIzNzkwMWEzNzMyYzk2NTRiYTRkZTM5ODFmODFlMTgxNzUyNDhiZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmQ5NDFlZDFmZTUyOTA0MWZiYjJkN2I1YTc3NTFhNmY5N2Y2NWM4Yzg5YjQ0YjA1MzNlYWJlOGZhYzg5NzM4OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjZiNjliYWUyNzFjZDA3YmI5Y2NjOGZjMTUzYzU0ZmU1M2M3NDYyZTUwOTBlZmE5ZDM2NjViMTQwOWUyNGJkYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b2ac97a55328442798bf3469223cd8c4",
+      "statement": "hub-marker-filter.ts's pre-'案 H' designs (案 E/F/G) buffered a marker block's body, stripped ANSI escapes, and rewrote it at the current cursor position (or dropped it entirely for DONE blocks); this corrupted the display against a CLI using an alternate-screen buffer with absolute-coordinate cell addressing (such as Claude Code's Ink UI), because the rewritten text landed on cells outside the CLI's own redraw bookkeeping and was never cleaned up by later redraws, reproduced line-for-line against real user screenshots in a 2026-08-26 replay of session logs.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/hub-marker-filter.ts#L7-L43",
+          "version": "repo-lines-v1:sha256:aec6f206ec669775baeae44a68ec6eab58254599f7513b7148c5bfc86b4561f4:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI2ZTA1ZTNkMWYzZTY0NjljZTIzYTk0MTFlZDVmY2RiODkzZDdkMmY3Mjg1YThkOGFlMDNmOWZiYjlhODJlYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRiMmQ2NDljNTJmNWVjMTRkMmU0ZTY1NTY0NTFkZTY4YzAyNGI2M2MzN2UxMTI5YTcxN2ZmYTg2NmZkMGM5ZTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6e7e808a13024b199ad3142431a6e3fc",
+      "statement": "'案 H' (2026-08-26) settled on stripping only the OPEN/CLOSE tag literals for approval blocks and passing the body and the CLI's own cursor-position escape sequences through unmodified, since the CLI has already drawn the body correctly itself.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/hub-marker-filter.ts#L44-L62",
+          "version": "repo-lines-v1:sha256:9a62d484c431d5448e64d904eae51dcd91acfd9c618b13077a6bdef4ec8d16c5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4ZjllNjQyOTdiZTA5ZDdhZGU2MjlhNDM0MDY0ZDViZmViYzc0YjY3MjVmMWIxOGRiNzA4MTBhNGYwNmJhZWIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiZTAzNjBhYzY2ZGI5Nzg5YmIwYTBiOGNjNjVhMWE5NDAwNzYyYjQzZmU5ZGQ4MThjNzA0YmU2OTIzZmNhNzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MjUxYjBhNzY3NDFiNWYwMzRhOWZhOTJjN2RlYTc2ZjZmMTM3YzM1YmUwMzk5ZTMwZmI3YjgyYTNkNDJiN2MifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cb2f9cbb7e8d4fad9b4fb656114a6ee6",
+      "statement": "'案 I' (2026-09-02) found that a marker tag literal can itself be split across a terminal line-wrap boundary, causing a strict contiguous-byte match to miss the CLOSE tag, latch the parser into 'inside a block' indefinitely, and silently drop up to roughly 31% of a session's terminal output until a 32KB safety-valve forced a reset; the fix (matchMarkerAllowingWrap) matches marker characters while skipping CR/LF/space/tab/complete ANSI escape sequences between them but treats any interposed printable character as a non-match.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/hub-marker-filter.ts#L63-L84",
+          "version": "repo-lines-v1:sha256:d88761cd3642cee2f7f97c9cb45d96fe39fd67c1cbf038d749047e1a82b84e1b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZjZhMjUzOGEyNGQ2OGEyOTJjMDViNzlhNDU0ZWEwMjAwMjUyMjE2NWMwOTVmZTg2ZWQyMGM3ZDViNDQwNmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc3ZGZkNWVhOGNhOTRkNzE4NjFiZmNkMTVmMGU2NTY5MTFlMjI2ZDQ5NzU0NzlmNTJhOWNhZDFmYTAwMzRiODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5YWVlMThiYTJiODRjNjlmNmY0ZGE0YjljYThkNGU0ZGRmODkyMzQ5Y2EzN2ZhMDZkYWMzM2UxYzdmNWNiNDQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_306a001abac442abab67261988e8206e",
+      "statement": "'案 J' (2026-09-03) removed the last 'discard output until CLOSE is seen' state machine after finding that on an alternate screen a redraw can contain an OPEN tag whose matching CLOSE is never drawn at all in that frame (not wrapped, genuinely absent), which no wrap-tolerant matching could find; after this change there is no code path that buffers and discards terminal output, so display can never freeze waiting for a CLOSE that never arrives.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/hub-marker-filter.ts#L85-L113",
+          "version": "repo-lines-v1:sha256:fc36a1af2c0f637cf2db4e922cbd032940c1be67f38a3e01ec5658a2ae63cf2d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEzZWZmOWU2Zjg0ZjE4NGNlOTE3MGQ4Y2NiNzMzZjFjMzAzNDJjODQ4YWIwMWJjMTRmNzU0MzA4ODUyY2MxN2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4ZjgyZGRlZGFmMThhM2IyZGQ5ZTFjNjUwZDUxZTc0OWMzNjlmNGRmMDhhODQxYmUzYWIxNDU0NzczODY4NDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5YjMwOTk1M2RmYTFmYjdhMGM3YTdhYjliNmUyYTBiMTY2NzRiZWUxMTk2N2RjMDU3NzFiYjllZTFhYWExZTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwMjg4NGFjNTk5MjA5OWE1ZmRkZTlhYzRlN2MwZjM3N2VjYTgxMDBkNmI3YWFhMGQxNDIzZjdhYjhiZTRiYWQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

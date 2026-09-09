@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:4a37b660cc111348e4c40ee3fbc768a96234d51024816ca4876d54c2eeaf6e0c",
+  "claims": [
+    {
+      "id": "claim_10116c5bfe2946509c842014e8e6f27c",
+      "statement": "filesScopeRestricted confines read-scope only for a logically remote caller (Tailscale serve, a trusted_networks peer, a phone); a direct-loopback caller's Files API reads are not confined to cwd/git root, because a direct-loopback connection is treated as equivalent to the OS user themself, who can already read any file via Explorer or through the wrapped AI CLI's own OS-level permissions, and POST /api/spawn already accepts provider=\"shell\" with only drive-root/home-directory rejected, so confining only Hub reads would not be a real boundary for that caller.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/files_scope.go#L1-L28",
+          "version": "repo-lines-v1:sha256:4c5ad023a6424f34c384896cc8958d5630019d9194d984f324c0add44573ac8d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZGZlYjZlMmYxM2NmMDFiNzEzNjk3NDE2OWVmZWVmMzI3N2E4MTE3ZDhlMzgxMmM0MTE3MTRhMTBlYmFhZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1N2I0YTMyYzVkMzBjMTM3NGQ5MWU5ZDZjM2QxZWU3N2U1OWUwMzFkZjY2MjMzNGNkZTlkZWI0OWM2OWQwODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4NzBiNDJkMjBkMWVjZjIwMWI5OTkzZDZhYzZlMjNhYTQ5MjU1Nzg3YWEzZTE3M2E0YjBkNTFjZGUxYmZiMDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c24c6b9deeef47119f6f036fa54617c9",
+      "statement": "Write operations (files-save/files-create/mkdir/move/rename/delete) never use filesScopeRestricted and stay confined to cwd/git-root regardless of connection kind, because the risk there is accidental corruption outside the user's own repository rather than a confidentiality boundary; secretReadDeniedExtensions (.pem, .key) and secretReadDeniedBasenames are blocked outright even within the allowed-roots read path.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/files_scope.go#L26-L48",
+          "version": "repo-lines-v1:sha256:5f49bbdf609f73977d6f571d3e923bd94f8f66c670bb64018ec3e044f657c3a3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkODVmMzIzYTdjMDJlMzRjMTVkZTY3YjA4MDc4ZDI2OWZjZWMzNGU5M2NiOTViYjliYWNkNDg0ZTYyMmI4MWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhOGJkNDJhOTQ0MzA5YzU5ODhlZjU2OGQ2YTVjZGE0ZDQ4ZDY2YWJjODEwMGRhMDdkMzk1MzdlN2JlMmQ2M2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgyMDVhOTcwOWU4Njg2YTYzMGVkZWQyYWE2M2UwMWZjZWRmM2QwYzVkZDg4YTBhZDM4YjBjY2QwMGMzNWFhNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhMTBiYWVlNzdjMmRkZTU0Y2ZkNzdmYjI4YzQ0NGMyNjBjMDQ4N2E0ZmIxOTI0YTRkOWU1NzRiYzYzYTVjYjcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_df79383371494edba1daabea7f4f76d6",
+      "statement": "/api/files-content enforces a fixed allowlist of previewable text extensions and a 1 MiB size cap (filesContentMaxSize), and its response's ReadOnly flag distinguishes a normal in-scope read from one permitted only because the path was mentioned in chat and fell back to read-only access outside the allowed roots.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/files_content.go#L16-L30",
+          "version": "repo-lines-v1:sha256:ea7c0f2370cef4ef10daf92b15a6d808c90d1f89559d62dbe363449a08af57e9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmZmY2EyMWU4YmI1Mzc4MTAyZWQyYjIyZTkzOTc3MDU2MTIxMWI5MzQ4ZDgyYmNkMmExNWYwYzk0ZGVkNmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2N2Y3MTVjZTIyMWNjOGY0ODYzMmNiZTM2ODZiYmI4MDQ4ODFiODBhZDM1MjFhOTgxMzhmZDdjNzQwZWQ5NTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0ZjIzOWE1ZmYwMTE3OWQ4Y2YyNTI4ZDIwMjhjODdkMzY2Y2RmZjYxNzI4ZGU2ZmE0ZjI3ZWM0ODQzOGU0ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhjZTNiOTc4OGU3ZTIyMzQ3ZTgyYTRhM2U5MjRjY2MyMDhlOTM0YzI4ZWFhMWJhNjlhNTM1NDY2NzQyMmE4YmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ada10dbd43644c6b85a463fa9071a648",
+      "statement": "POST /api/files-save validates in order: token+method, absolute-path plus allowed-root scope, extension allowlist, a 1 MiB content size cap, that the target file exists and is not a directory (the endpoint never creates a new file), and finally, only if an optional baseMtime was supplied, compares it against the file's current on-disk mtime and returns 409 Conflict on a mismatch; the request body itself is separately capped at 2 MiB (filesSaveBodyMaxBytes) ahead of the narrower content check.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/files_save.go#L12-L23",
+          "version": "repo-lines-v1:sha256:49933101534b4c9f7a46078d3908969194120285ecc12355de11225a8ef95e5c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzOTA3M2M2YTViYzEyNTYxZTExM2Q5OTI5NGRlNGUzZjQ0ZmY2MWVhNzc2ODkyMWU5MDM2YTgxYjI5NWZkZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0MzNhZDllOTQyNWVjYTVhNGMyOWRmNTdlOTkxMDU3OGI1NjRmOTJkOWVkMTg2ZjkxZmUyYzA4NGQ1MzVjZGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0ZjIzOWE1ZmYwMTE3OWQ4Y2YyNTI4ZDIwMjhjODdkMzY2Y2RmZjYxNzI4ZGU2ZmE0ZjI3ZWM0ODQzOGU0ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEwNGJjNTNjNGZlYjNkZjUwMWRjMmQxY2M0N2RjOTFjMDZiZGM0NWQ0N2E3ZmJhYTllMmRhMDY1NDQyM2U4YjAifQ"
+        },
+        {
+          "resource": "repo://internal/hub/files_save.go#L36-L55",
+          "version": "repo-lines-v1:sha256:7ddf0ea57e2a6fffd6dae9a940ad083d46a6b69ab9d65c25618caa25931c0acf:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMzNjM1ODYyNTIyYjFjYmU2MWUxYTcxMTFiOWYzZjQ0NjliZGY3M2QxNDIzOTk5OTE2M2VmMGMyYTJlODM4NTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNmZGUwNWFmNmU4YWM5YWUwYzkzNzcyOGUyMzIzNWQyNjk4ZGQ5ZDFjMmQxMTRkZjkzMjNmYjdkMDU3YWZmNmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1ZjYyNGQ5NDBiYmQ3ZjdlYjQ1ODU1NzY0Mzk1MDY4YzVmZTA0ZjRhNDhlMDg5NDZmYjc0ZjY5ZmY3NTExYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjllZjBlZmE5OTJiMmQ4OWVjZmFjZDc5YTVkMDZjOGJiZTQ5MTYzMzY3ZGViYjFhMzg1YTMyNTQxYTA0MmE5MWIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fcc62ef085714636aa1daccac910a2dd",
+      "statement": "atomicRenameNoReplace exists to fix a tracked defect (HUB-5) where a plain os.Rename succeeds even when the destination already exists, meaning files_move.go/files_rename.go's separate existence check before renaming left a TOCTOU gap that a concurrent writer could race, silently overwriting a destination created in between; the fix uses OS-specific fail-if-exists rename primitives so the check and rename become one atomic operation, and isRenameTargetExistsErr lets a caller map that specific failure to HTTP 409 Conflict.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/atomic_rename.go#L1-L15",
+          "version": "repo-lines-v1:sha256:852e68657a3a69b55f7ab31058cf01abfbe67823a0b0ca8612672b2510cf5032:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhmNGMzMTMyNTRiNTYwNzg5YWE2YzVmMDU1NjM4ODJkZGRiMDg2NTUwYjIyMzA0YjczNGU0Y2VjZDk5MWNjNzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZjgyNTRlMzkzZDMzNjhhNzc4ZGRjOWVmNDRjOGNkNGNkM2RkNTYzYzU2Y2NlYWE0MmZjZTI5MmY4OGYxZTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1a6e411fe2f94b1fa96418c547dcfc22",
+      "statement": "The git-commit-all flow enforces bounded inputs: a commit subject capped at 200 characters (gitCommitSubjectMaxLen), a body capped at 8192 characters (gitCommitBodyMaxLen), and the diff shown for review truncated at 48 KiB (gitCommitDiffMaxBytes) when it exceeds that size.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/git_commit.go#L17-L19",
+          "version": "repo-lines-v1:sha256:83941ad7b2616192bf54e0ec1980fa45a829c250ab48d4839ace1a17d10b6151:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjQ4NDUyOWEzMDQ3YjUzMzQyMzdiNWI2Y2NiNGIwMTg2NWNiNDNlMDE4MWM5Y2Q3NjQyNTVmMDQzMmYyODAxZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDkxYzUzN2Y2NWMyNTZlNDg5YzRkYjUzMjY2MTExZmUzYjhkMmQwNmRjZGE1MmJlOWIzOWIyZTUyZDFjYTNiYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjcwOTU2YTdjNDczY2M3NmJmZDNlYzRjY2M5NzRlNjI3YWYzMDg0NGY3YTI0ZDkxMDQ1ZmViNDM2NTcxODEzOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2MwZTcwZmEyYmI3YjY2OTJjNTFkODRhMDE0ZDViYmY1ZmM1NWUxODc0MDkwNzkyMjgwNmExMGQ2ZjBlNmZmYiJ9"
+        },
+        {
+          "resource": "repo://internal/hub/git_commit.go#L181-L183",
+          "version": "repo-lines-v1:sha256:78b24ebef5587e7b8c21e7e696faf477027ebd17546bd527a07131835adaf8d0:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTNjZjMyYmM2YTVjMTk1MjYwNTU3YjdjN2EyODE0MTcwNWFlODM4NjNiODE1OGQ1ZDkyMjMyNGMwODgwNjczNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjg5YWI2ZWRiNDA1ZGNhZGE1NWJhMGY1N2JiODNjOWE4MGZjOWI5YjYwYWFkNmU1Y2RiMWIxYTIyOGZhMGNlNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjE0OGMyYjUyYTk3ZDI5NTQ3MTQwZTIwYWM2NGY2Mzg0ZjBmNGQyNGMxMDVhOWI3MzMwNDNiMGU3ZDhlMTQyNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODc2NmNiYzA2NzRhYmNmMjViYjc1NWU5NWYwMmI2ZTkwY2ZmN2IyYTFkZjBlZTVmYjNmNjUxMTM5OTg4NGEwMyJ9"
+        },
+        {
+          "resource": "repo://internal/hub/git_commit.go#L60-L61",
+          "version": "repo-lines-v1:sha256:133c704148db103ad38e586538a7f11717b7ce957054ab7e81043ec70f7952e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzdhMWFiNDJlNzdhYjllMDRlMjI1OTk4NDhkODc3MWYzY2YxOTBkMGIwZWU2M2FmMzBlMmRhN2I0ODlmNWQ5MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmZjN2E3ZDBjNmFhMWYwNmMzZTljOGM4ZWY0NDhlZDkyNzdjZTZhZDgxYjViYzIzZWEyYWVmZTM2YWIzYzJlMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2Y3ZWFmOTg5NTM4MTU4ZTUyYmE3OWI2MGMzMDZiMjJkYjQ5NGRjNTAzMTRlYzU2Njc3ZWY1OWY1NjYwYWZlOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTVkZDgxYTE4N2RiNjJlMzUxODA5NGE1YTdmODc4YTIzN2M4NWFmZGM4YWNmOTM0MGY3ZThjMGY2NjFkZGM2ZSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

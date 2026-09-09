@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b6e235f4fb09247f6077fa382a00f48bd92c37a0f27073f905f13435903d5f9c",
+  "claims": [
+    {
+      "id": "claim_842e0b9199da4f8aa3ba6f64308e46f7",
+      "statement": "publishDoneSummary's own doc comment states it makes completion information visible in the Hub UI even when external notifications are disabled, treating external delivery as a separate explicit opt-in preference layered on top of always-on in-UI visibility.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/done_summary.go#L23-L28",
+          "version": "repo-lines-v1:sha256:084f25d470d5c6eb77bd3135d6c094864e03a3b590c54c6e20904e46a41a12b9:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGRkZmI2NDBjOTRlZTVhZDRiNDczNmQ5NGM0MzdkNjg5MWFiYWM5ZWM1MzM0MWJhYjAwN2M3NTExNDBhZTYwYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDM4Yzc0MWI4MTdjNDA2ZjgyMWZmMmQ3NzNlNjI3ZDk2ZjE2MTlhODA4Njg5NTk3MjRkNDBhZDk2NGI3NTUxOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2NjYWI0Y2E0YzMyOGE2YjlhNmI2ZWRiNjFjOWU2NzI2YjgwZDY4NjJmMTRkODg2OGY5YmMyMDA3MWIzOGEyYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_2b2d4db3ed994242a2efe0cf04086e62",
+      "statement": "publishDoneSummaryInternal masks secrets in the summary text via sessionlog.MaskSecrets and truncates it to doneSummaryMaxRunes (320 runes) before it is stored or sent anywhere; publishRelayDoneSummary reuses the same internal path but deliberately skips starting a git-turn snapshot for the parent session because relay work already has its own worktree or shared-tree representation.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/done_summary.go#L16-L39",
+          "version": "repo-lines-v1:sha256:ccf89324d53af49bda824bc3a72e1dea072b2e5baf40dce6a551c3aed0f7f86f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE0YTNmYTBmMGRhNjc5OTQyODIyMTdmYmE3NmUwMTBmYjJiNzlkZjhjZmFlMDUzNGI1ZGZjOWIxMzIzMjg4Y2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ODllZDVkZDQ4MDczNDUwNzMyMzBiN2E3N2ZmMTVlYmU0NDMyYTZjN2Q3NmU0YWViZGIxMjc0NDc1MTg4YzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3NGFiODJmM2U2NzAyODU4ZTliNzk2MjBmMjY0MDVmZjYxMmVhMDQ1Zjk3MGRkMjkyZTJiMGE3M2RmYjMyY2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjZjE3MzViMGUyZjk4MTZjMTBkNDZiZWE4NGViOGJkMjE3YzE0YzcyZjMzZjdiODI5ZTA3YmI4YTFlMGVkMmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8119a6598a7f427fb312878642e5da68",
+      "statement": "approvalPushURL builds a click-through URL containing only /?session_id=<id> with no token= query parameter at all, and this is locked in by a regression test, TestApprovalPushURLDoesNotIncludeToken.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/push.go#L588-L590",
+          "version": "repo-lines-v1:sha256:e9dc194f3ea8dc58a41f21640da7a73505f538f895210e4206cea0db904dd34c:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTc2ZDJkZDJlZjUxNDk1NmJhNjc1NmU3NGE1NTdjMjdjNjI1N2E3N2YwYWI3ZmUxMzM5ZWRiYzNiYjhmZTliNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDA1NTcwZjhkOTIwODUwNmVkNjUwMDUyZDY3ZGJlNjdmZGE2ZGUyZTk0MTI4YmIyNTc5M2IyZTg3NjNkN2I0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODI4ODEyNjFjZjg0OGJhMjFkZTJiYTExYTBhNWYxZWU5MDNjNTFhNzljYzc5Yzc4NDFiMTNiNDU0ZmQyNjVmMiJ9"
+        },
+        {
+          "resource": "repo://internal/hub/push_test.go#L9-L9",
+          "version": "repo-lines-v1:sha256:42488ecac4ccc809c6380f580303bf212c936a3c0d588d53195d544473bc2777:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDI0ODhlY2FjNGNjYzgwOWM2MzgwZjU4MDMwM2JmMjEyYzkzNmEzYzBkNTg4ZDUzMTk1ZDU0NDQ3M2JjMjc3NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDI0ODhlY2FjNGNjYzgwOWM2MzgwZjU4MDMwM2JmMjEyYzkzNmEzYzBkNTg4ZDUzMTk1ZDU0NDQ3M2JjMjc3NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTRkNGQ5YzM3Y2I2NjYxNzI1ZWU4ZWQ5YWJiNGYyYTg5NzViZDkxNjE0NGEyYWFiYTFmNGJlNGNmNWJjMGU3ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmVmN2RjNWM4MjgxOTZkYzRmZDIwYjRhMzBiMzRiMmZmMWJlNmNhNGM4NDFjMjY5Y2UzMzA3MzA3ZDIyMzZkNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1395e33deb4d436f8f8fe020abaf5dba",
+      "statement": "VAPID keys and Web Push subscriptions are stored in ~/.many-ai-cli/push_store.json rather than in config.yaml, generated once at Hub startup by newPushManager() calling webpush.GenerateVAPIDKeys() and reused across restarts if a key pair already exists.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/push.go#L123-L123",
+          "version": "repo-lines-v1:sha256:bea8f6bece53173ba66ecdf8af567e4cf21542705eb34d7fdde505cfb44b6d52:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmVhOGY2YmVjZTUzMTczYmE2NmVjZGY4YWY1NjdlNGNmMjE1NDI3MDVlYjM0ZDdmZGRlNTA1Y2ZiNDRiNmQ1MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmVhOGY2YmVjZTUzMTczYmE2NmVjZGY4YWY1NjdlNGNmMjE1NDI3MDVlYjM0ZDdmZGRlNTA1Y2ZiNDRiNmQ1MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2MzYzYxYjZhYThlN2M5MmI1MWQzMGYzOTJkZjFiOTlhNTk0YzJjOTlhMjFlMjEzNGFlZmZjNWZmZTk3NGZlOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjc2N2M1NGU4MmJlYWRjNDUxZDc2NTIyMzk3ZmFhYzM2ZTU4Y2VkZTUxZGU1YmJjYjE1ODU2ODEzYTgwNGFjYyJ9"
+        },
+        {
+          "resource": "repo://internal/hub/push.go#L29-L29",
+          "version": "repo-lines-v1:sha256:740182b1f500bf3b4bde3ac48fe8b321f3719cbdf0a8ea6cce368a0184ccf3eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQwMTgyYjFmNTAwYmYzYjRiZGUzYWM0OGZlOGIzMjFmMzcxOWNiZGYwYThlYTZjY2UzNjhhMDE4NGNjZjNlYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQwMTgyYjFmNTAwYmYzYjRiZGUzYWM0OGZlOGIzMjFmMzcxOWNiZGYwYThlYTZjY2UzNjhhMDE4NGNjZjNlYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjcwOTU2YTdjNDczY2M3NmJmZDNlYzRjY2M5NzRlNjI3YWYzMDg0NGY3YTI0ZDkxMDQ1ZmViNDM2NTcxODEzOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODhlODRmMTZkM2VmNDhmZGM4NDg1NTAwN2EyYmRhY2ZkY2YwMmE5ZGNjMTYyZjBhY2FiMDk2Nzk2Mjc0NWI0ZSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/push.go#L87-L87",
+          "version": "repo-lines-v1:sha256:6034f7f02049e1366de8339589e1c4a9fcd0e3ba6c22668d5213e8e2457350ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjAzNGY3ZjAyMDQ5ZTEzNjZkZTgzMzk1ODllMWM0YTlmY2QwZTNiYTZjMjI2NjhkNTIxM2U4ZTI0NTczNTBjZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjAzNGY3ZjAyMDQ5ZTEzNjZkZTgzMzk1ODllMWM0YTlmY2QwZTNiYTZjMjI2NjhkNTIxM2U4ZTI0NTczNTBjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjI0M2YwNjEwZDFlMjgzZmZlOTA2ODk2NmI0ZThmZjdlNTA4OTg5MDU3ZmJjNGJiOTk0YjU1MTgxYjczOWY2NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTljMTI0NGE3NTY1ZWNjY2UyYTQ3ZDU2YjY3ZDEyZTk5M2ZlZjA0YWQ1ZTNmNTI5N2QxYzc2NWExMDdiOTdjMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_beb2bc0faa7c4ced8d9725bdbefe16b6",
+      "statement": "internal/notify's package doc states each outbound backend (ntfy/webhook) is fire-and-forget, logging errors but never propagating them to the caller, and that all its methods are safe to call concurrently.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notify/notify.go#L1-L3",
+          "version": "repo-lines-v1:sha256:9ac27d2375dc41cf548d362c66eab23d3bf701db0a57cad3506922e99da29344:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTBhMzUwNGQ3NWMzN2VlNzdiNTg1NzJjMjM4YjdmNDIwYzQ5M2RkOTAyYWM2YjQ3YTc5NDljODEyODMzNmM4NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODdiMGQxNzZjMmM5NzM0MTVlNjZhYTc4ZGZkZTc2MTdmNmQ0ZjViMzIyZmY2NjM4NzBhMTAzN2E1OWE0Yjc2MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjAyYjU3MmNkN2RjZDU1ZjVlMTk3OGI2MzlhNGMwNDRkYTA3ZGQ3YjEyODNlNzkzODAwYjkxYTM5Y2I1N2U3MCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_b686ec937d594f099fbec2711a3e0577",
+      "statement": "internal/notify's configuration carries an Events list ([]string, config key events), so outbound notifications for ntfy/webhook are sent only for event kinds explicitly listed there, with an empty list (the default) sending nothing.",
+      "evidence": [
+        {
+          "resource": "repo://internal/notify/notify.go#L41-L41",
+          "version": "repo-lines-v1:sha256:3ba170034de9b2d4651c9e4fc02337670f60753d41cfac7899b1f91a86f7f19d:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2JhMTcwMDM0ZGU5YjJkNDY1MWM5ZTRmYzAyMzM3NjcwZjYwNzUzZDQxY2ZhYzc4OTliMWY5MWE4NmY3ZjE5ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2JhMTcwMDM0ZGU5YjJkNDY1MWM5ZTRmYzAyMzM3NjcwZjYwNzUzZDQxY2ZhYzc4OTliMWY5MWE4NmY3ZjE5ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTQ1YjUxMjIxYWFlYzk1NmZjMDExNzE3MmY3ZWE0NDk2NmFiN2VlY2NkZjVkOTgzZTI5OGFiM2RjMTFkN2YwOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWFjZDlhMTAzMjEzNjY1NzhlODQyYTEyMzJlMzUxYWQ2NGE0OTc4NjMyYWRkOGZkZGVkY2U0NzRmYjlkMGFmNCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:672a2c69fd6ff8494a35cc10d115365f0de5d39bd44f3859259b0f735335e81b",
+  "claims": [
+    {
+      "id": "claim_846e141943d34ea2a3b4582cbbfb5cb8",
+      "statement": "The Makefile's build-windows target depends on build-web, runs go-winres make to bake Windows executable resources, and builds with GO_LDFLAGS injecting main.version/gitCommit/buildTime from `git describe --tags --always --dirty`, the short commit SHA, and the HEAD commit's ISO-8601 date.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L23-L47",
+          "version": "repo-lines-v1:sha256:ba39088e7bef08873b86f365cabdf8431cd554984fbbe8918e064dfef2ab1ef6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwMjY3NDFiMjI0M2FlNTkyZGIyMWZlM2MxOWMyZTZmZTY3MGM5ODVmNjIwYzJjZDI4YTNiYmFkNGY3MTY4YWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2MjA1MTU3ZDI4YWEwOWQ1ZWI1Y2MyOGIzZmY1NzZiM2QwYmZjODQ5ZTZjMmY0NTYwOWFjMGMyYzdlYzBjNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY3ODI5OWNhMDljZmEzNzRkNjU2NTkxZjc2YzY2Mjc1NmQzYTNhMDA3MmE5MzI2NTE3YTRkMGIwZjgwYjBiNDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1MTJkYWE5YjNlODAxMzBkOGEwMTkxNDY4YjgwYjQzYTk3OTBhZTBlOTE0YmVmYWJlZGViNTUxODY2YTVmYTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_13010f8636b74744bb30102e85eda9ea",
+      "statement": "A local `make build` deliberately embeds `git describe --tags --always --dirty` (e.g. v0.3.3-21-g3664cac) rather than a bare release version, so a build behind the latest tag or built from uncommitted changes is visually distinguishable in the Hub's version display; this was added after a bug where develop had not merged main's latest tag and silently displayed a stale version.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L7-L26",
+          "version": "repo-lines-v1:sha256:0a2ffb81727b364c1dede6987168daec7cf2c1130776f2e3d9abf66e6095f6a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE5NDAwODhhYjY2OGJmMTBkMWU0ZDJjOTY1Y2ZhODE0MTEyY2NkOTVlZGEyM2ZhMjdjNTEyMzViNmU1ZTM1NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE3ZDBlMzU4YmMxODZjNTI4M2ZmYmFkOTQxZWI4Yzc4NWE5NGU1ODY1ZWE0YTVjYTU2YjcxOGE4ZTMxMjdiYTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIzMTIyNjczNjljYmYxYjA2YWYwNWI2ODQ0OTEyZTc2ZmQxOTE4NTZjNmRjMzg0OTFjYzk3MGNjMWFlZGQ4YjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJkMmQ4NGZiZWUzMmU2MzdjZmFhNzgwOWI2NTkyNmM3ZjFiOGY5MGFmYjNkM2JlODU2ZTU3YzI2ZDc5NTE0ZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_08a6d0cfad9641f48a2045b4f8bba68d",
+      "statement": "fmt-check/fmt delegate to scripts/check-gofmt.mjs rather than invoking gofmt directly in the Makefile, because that script needs to scope which files are checked and normalize CRLF before comparing, which a one-line Makefile rule cannot express.",
+      "evidence": [
+        {
+          "resource": "repo://Makefile#L35-L36",
+          "version": "repo-lines-v1:sha256:3ac30faa927a29932738325fd7663661f97bd65ed04e79734d008d8e9036c60a:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjRjNTQ2MDA1OThhNWQ0NGNmOWYwMzVkNWMwYWNjNWI3OTY2ZWJlMTBmMzllMGI3ZjI4NDYwMDQ5NjBhNmRlNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTMwNTM5OWViMmE4OTM0MTI1MTg3OGZjMTUyMGJkMjcxZGYwOTA2MzY3Y2FkOTczZDYxZjJlY2ZkYTk5NmU3YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmYxYjBkZTIwNmY0ZTUxY2IxYWRhMzE3OTMyMTg4Y2I4NDFkMzFmNmE0NmE0YTZkMGIwNzJjNTdiMDYwY2NkZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWVmMzQwNjc2ZWM2NWRmZmRmNmE2NzIxMzQ3YmQ3NGEwMzk4Njk2ZTY2NWU5YjFhM2UwNjZhYjY3ZTNmYTlmMyJ9"
+        },
+        {
+          "resource": "repo://Makefile#L66-L70",
+          "version": "repo-lines-v1:sha256:0be77a0507c52858368b57c520e77dba80676cf3aba5d8ccd87d0501d6d1de00:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDQzM2M0OTU5ODk2MDJmZTMyNzljNDAyY2QzMzkwNzZhOWYyNDlmM2Q3ZGQ5ZTk2YjBkZjhhNzhlYjQwZTg3MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjcyZDRjMzBiYzkyYjZjNzExMzljZjM1YjE4ZTM5YjZmZTJkM2EyYmFkMWIyNDdhNDI5ZDRiZDk3ODg2NDQxNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTM1MjllNGJlNzVhOGMxODFmMDk3NTMzNjAwYjI1Y2NhMTBlZjQ2OGNlZTI0ZWFhZjI1YjgxNTk1OGUzNjkzYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDFjMGY5MmI0NDFhYjAzMGRhOTI1MjBhYzUwMDcyNTRhYzBjZThiNzM3ZWVjN2JiY2QxMWFjNjRmNTZiMDU4MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_8d8ee529121142d1987d248d8028694c",
+      "statement": "Three files (npm/many-ai-cli/package.json, each npm/many-ai-cli-<platform>/package.json, and winres/winres.json) are the only version-bearing files in the repository, and all three are expected to sit stale between releases because CI overwrites them from the pushed git tag on every release rather than a human editing them.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/check-version-sources.mjs#L1-L16",
+          "version": "repo-lines-v1:sha256:3f694abcbd60e9e19a2ec9c882d5ff3bb89ac98d40dd5b0006b10a026606aa02:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxODdkZGUzNTQ2Njk1YTk0MzIyN2FiMjJiNmIwMzYwOTQ4YTA2YTg1ZmVjMjYxZmQ1NDRmNzBmNWQxODU5MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY2MzIxMTY1YjFiMTYzMDJjMmFhNjY5MDBlYzRkZTI2YjU5MzU1MjM3MzY3MzY2OTY1NDE0ODZiZjgxZmM3MDQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5YzI2MDhiOTNmY2M1MDZiNWNlZTY4NzAxMWI5MmVmYzFiZTNkZDUwZThiNmU5MjUxMTRlZGU4NDkzYzM2MmMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_78c198597aa04dd5a022ed0e8669e7b7",
+      "statement": "scripts/sync-npm-version.mjs syncs npm/many-ai-cli/package.json's version and optionalDependencies plus each platform package's own version, pinning the root package's optionalDependencies to the exact same version so a published root package can never resolve a mismatched platform binary.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/sync-npm-version.mjs#L1-L30",
+          "version": "repo-lines-v1:sha256:10f30265a5f65d8b922a4c6b40e89ef43b633b5edb879072d020c99d31a97569:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxODdkZGUzNTQ2Njk1YTk0MzIyN2FiMjJiNmIwMzYwOTQ4YTA2YTg1ZmVjMjYxZmQ1NDRmNzBmNWQxODU5MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4YzNiMzRjMDkxMzRmOTc3MGU5OGMzNTBmZjJiNjE2YmRjNjQ0MTgzOWQ2OGJiZjRhYmQyMjkzMTZlN2Y4NzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmMTJjN2Y3NTdmNmY1MWNhYmM0NGVlODZjOGExNDQ5ZDE4ZDg0Y2U3ZTEwYmYzZjNkZjdiODI0ZTI2MzljYzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c125f9e5e76a4c2f975f7adf234482de",
+      "statement": "scripts/check-version-sources.mjs is a CI gate that verifies the release workflow still wires sync-npm-version.mjs (the version-overwriting mechanism) rather than checking whether the in-repo version strings currently match the latest tag, since staleness between releases is the expected correct state.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/check-version-sources.mjs#L1-L17",
+          "version": "repo-lines-v1:sha256:b5fa8fde4b6c2ef4a6de3c830474bcaa00415ef5dc0029643883ec690c86b869:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxODdkZGUzNTQ2Njk1YTk0MzIyN2FiMjJiNmIwMzYwOTQ4YTA2YTg1ZmVjMjYxZmQ1NDRmNzBmNWQxODU5MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlYjcwMjU3NTkzZGEwNmY2ODJhM2RkZGE1NGE5ZDI2MGQ0ZmM1MTRmNjQ1MjM3ZjVjYTc0YjA4ZjhkYTYxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2NmIzN2Q1ZWUyYWRmZThmZDQ3OTgzMDFjMGVjNmM2ZDk1OWUzYzMzMTk1NzcyODhmMDIyN2Y2Y2IwYTgzYWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ed7776d8685d4460ae686e8463f00ee5",
+      "statement": "The published many-ai-cli npm package's bin/many-ai-cli.mjs is a thin shim that resolves an OS/arch-specific optionalDependencies package (many-ai-cli-windows-x64/-linux-x64/-macos-intel/-macos-apple-silicon) and execs that package's bundled native binary, forwarding argv, stdio, and the exit code/signal, rather than shipping the binary itself in the root package.",
+      "evidence": [
+        {
+          "resource": "repo://npm/many-ai-cli/bin/many-ai-cli.mjs#L1-L45",
+          "version": "repo-lines-v1:sha256:d2aeca7dd297d1a4e9e7c990a94f094d9f5f2ac2042c72b36fe10bc3d65ab04c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxODdkZGUzNTQ2Njk1YTk0MzIyN2FiMjJiNmIwMzYwOTQ4YTA2YTg1ZmVjMjYxZmQ1NDRmNzBmNWQxODU5MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjNmU5MTM3NTVmMDFkMGNhODRjNDJhZmM5NDM0MTZhOTE4ZWVkMjkyYzQ1M2EyNzc0OTM2OGU4MDI1ZmI5YjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkZWFkNDllNTgzNTE4YzMxZGVmYTJhZTZhZTUxYzUwOTc5NzcyNDdiODJiZGFjYmRlZDc3NTZiZDRmYjliZjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ab963ef06e74e5caa41087345b0b776",
+      "statement": ".github/workflows/release.yml triggers on pushing a v*.*.* tag or via workflow_dispatch for an npm-only re-publish, and its release job downloads and cosign-verifies a pinned goreleaser binary before running `goreleaser release --clean`, which drives the GitHub Release, winget-pkgs PR, and Homebrew tap publish per .goreleaser.yaml.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L1-L30",
+          "version": "repo-lines-v1:sha256:359f580a2d829b9d2f0f7bd6a366e66b415c292c6cded96ea0bec71e34a349ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdjZjlhYTgwOGUwY2QwOTkxYWRkY2I3MTFiM2Y3MGU5MmYzM2Q2MWE0ZTU1YTQyMDM0ODRkNzEyM2EzMzM5OTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1MGE2MDZkZWQyMDhhNzcwMWFmZTU5ZTg2MjQzYWQ4M2EyMjg0MjlmNTMzMjk4MDNlZGU1MDBlOGY2Y2M5ODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI5NDBlYTJhM2RhMTU0MTMxM2E4NmFmNjA5ZjhlNzI4MWVjODU3Y2FkMDlmMTMyY2JkZTEzNTcwZTZjOTcyNTMifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/release.yml#L219-L262",
+          "version": "repo-lines-v1:sha256:6c0a4c5ceb8978b1b006b34e7c6a536912b1541b95d69f9c08e136618bdb02d8:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzMTFjMTJkM2ExNWY3NzljOWMxOGZiMGNjODY0YmE2ZGE2Nzc5NjEzYzUzMWE3Y2EyZTY2NTk2MjkwYWYzNzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmN2QxMDc5YTUwNmIxNGFhYWY2OWJmNjIwNTMzYmU4M2ZlYTNjYjc1NmNjY2FjZWI5MmU5NmQ2MDUxYjY2N2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmMDRiZTM1YmEzNjVjYmQyMGRkZjRlMjBiNmY1OWE4MmU5ZGMxOTZlZDhjMDlhOWMwNzcyYTJkYWRhNDQ2ZmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI3MGU0NDQwMDU4NzY3NGM1ZTdmMWI2OTMzZTExNzg3YTVhNWY2MjNlZjY0OTZmZTY0NjUxOGQwM2NhYjI4ODEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_494c2b3a3f114d40865bc88bd7dc9d01",
+      "statement": "The release workflow's winget-pkgs fork sync step is explicitly allowed to fail without blocking the rest of the release: a sync failure only leaves the winget PR based on a stale fork, while the GitHub Release, Homebrew tap, and npm publish are unaffected.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L135-L156",
+          "version": "repo-lines-v1:sha256:7993311751ac47e42e135dca86d1acd0be00e90a041f86da281b029f2c046fb7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJlOTY3Y2ZjMDE1YzA4M2I5NzJhMjViOTc2MGVjYjAxOGFkYzVlNWFkNzdmYmM1ZjdhNDdiOGFkODY4M2QwMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMWM3ZDYwYjU3NzFkMzg3NWEzZGE1NzFhNTU1YzkwOWYwZGViNWE3OTk5NjQ0NjNlYTQ2MDJiODZjMTZlNWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViMDAxMWIyMjFmMjM1OTdmODIyYTVlYjAxN2NhMjdkODlkYmIzZmM3ZTVkODg1MjBjNWU5MGFjZDQ3Yjc3ZGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRmZmUwN2Q1NTYyNDY0OTJkY2JkOTQzOTA0ZWM4ZGM5Zjk5OWY5M2ZiYzI3ZDVlNmQxZTQyZWE4YjY4OTMwMmEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_da5038831ca84d3f94027c69a2211a01",
+      "statement": "For an npm-only re-run (workflow_dispatch with npm_only=true), the workflow does not re-run goreleaser (to avoid colliding with the existing GitHub Release) and instead stages npm binaries by extracting them from the already-published, cosign-signed release zips and verifying their SHA256 against the release checksums.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L11-L16",
+          "version": "repo-lines-v1:sha256:6ccac1fd8db6b7df91139bca3d8317026b5cfc68602721748507aa31ebf23cfb:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2Y1ZDk5MzBiZDI0MDI5OWUyMTkwZTM5YWRkNWIxMThlM2I1YzljNWQ4MDg3Y2FlOThiYzNlNjRmZGUwZDBkZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDY2MjMyZWE1YzFjZjgxNmJmMGFhMjU1ODQzNWQwNmU3MDk2ZjI4Yjc5ZjY4YWNmZmM2MWI5ZmQ5ZjlhMDk0ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGE5NDY4OTI3ZDRhYjkyOGQ4MTNmNGQxYmM5ODBmZWMxYTMzOTJiMDI2ZGY4N2NlNTM5MWIzZjE3N2VjMzg4ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTgxNDI5ZmVkNjk1ZmJjOWRmMWRhMGU5MTBlNTNmZGY1NTQzNjJkNTI0Y2IyMWQyZmVlYjRhMjkxZjg4N2U3ZCJ9"
+        },
+        {
+          "resource": "repo://.github/workflows/release.yml#L294-L336",
+          "version": "repo-lines-v1:sha256:0b76f9cdd5067f03c7d353c0a1892c93696e09562109548fbe181bca6a703001:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ0ZmVlNzFjNmU4NGEzM2JhODNhOTRhM2Y0YzlhMzAxZDhlZTM3YWE0NGQ4ZWFiM2IzNzllNmRkYjExOGIxNGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmMDUxM2I0ZTE3ZGI1NjJhYzQ2Zjc5YWM4MDY1N2M0NWU2MzI5Njg1M2I2ZjNiNWRlN2FmOGE2OTE2MWEyYmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFhNTM0YmZmNDcxYTk4NGM5Nzc1MTNjNDYwMjZkZWM5OGMzY2M1OWMzYzZhZGI0YjA2NGY1MTFiZjU4NjBjYTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzMWM2MjIzYmUxYmZjYjZjYmZkMzhmM2UwMDQxYjdhMGJlOTFiOTQwMzI3M2JiMjkwNjQzYTRhYjdiOWI3MTMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

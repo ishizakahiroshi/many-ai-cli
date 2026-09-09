@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:83520e8442d0695ae8cc0a046116ed9c68474eb110c3eeed5f72e2d7405c4a6a",
+  "claims": [
+    {
+      "id": "claim_95b14fe7396c439d88fe7a4caad0a151",
+      "statement": "Hand-editing custom_providers: in config.yaml is the only way to add, change, or remove a custom provider entry — the Hub UI only displays a configured entry and lets a session spawn with it, and never writes, edits, or deletes one itself.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/custom_provider.go#L55-L61",
+          "version": "repo-lines-v1:sha256:ce25ee5fec7ab79f23ca124426159581e9ada0209df0b9bd588af7ee6022742a:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDcxNmZjYjUxZTZlMDQ2Y2Y0NzkwZGJjYzIyYTUwNmRhZDc3MWFhYzI3Yjc1YWE2OWM3MGVlYTBlNzYwMzYzOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOGY0NTBjNGQ1YzRlZTEyZDViZjMxOTQ5OTQzZTU0ODhjYzdlMjVkNzE4OWNhMzEyODE5NGI0NjEzZDczZTcxMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGQ1ZTNlYWNmODA4NjE2YjZkYWQ2YTE5MWU1NmI2OTY0YjI5YzhjMWE2Mzk5ZjhmZTUxNGU3OWRkY2UyNjEwZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTJkODMyMzkwZjBkZGJlNWU4ZjNhYjVjODZmMjk2NDdmZmM5NjY1ZmIxMWQxYmJkYTAzNmQzMzhlNGE0MzU0MSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4b396fcae3734827b1bc3a84069b7aad",
+      "statement": "CustomProviders.UnmarshalYAML decodes tolerantly: a YAML node that fails to decode into a CustomProvider, or that decodes but is missing id or command, is silently dropped rather than failing the whole config file's parse.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/custom_provider.go#L89-L122",
+          "version": "repo-lines-v1:sha256:58ad2e261438d6254cacc15bf5461cd5035ca1bd8712a8abc49c6ed9c9efc0c6:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwMTg0NWY0YWY0M2UzNGFhMDE1NzY0NmFlZTNiY2ViZTc0YjllNTYxMGQ2NjYxOWY2OTFjYWRkMGFhYzM4N2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJlNTM5YjI3ZTNlODYwOWM2ZjlmMDFmNWJmMTg1YWFhNGI0NDdmNmFkYTdhNTBhM2QyZGRkODY3ODZiYjU4NTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2YmNkZWM1OTYyMjcwZWUyZWQzNTU3Yjk1NzJmMDdmNzZmYjZiNTQ0YzkyZWY2MGE3ZmIxNDU5NDgyN2Y1MTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3ba1e96892db4825a14a34f28cbf1149",
+      "statement": "Built-in-id collision and duplicate-id checks for custom providers happen later in EffectiveCustomProviders/Warnings(), not during UnmarshalYAML, specifically so cfg.CustomProviders still reflects exactly what the user wrote and Save() round-trips a mistyped entry instead of silently deleting it.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/custom_provider.go#L164-L217",
+          "version": "repo-lines-v1:sha256:fbedc99c3eac52b81fb94852204bbe4c44fd6abd2b001c4f62c60ef0bffbc67a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkOGRhZDAwMWU4MDk3NWM0MTYwOWZlOWIwMzU0YmM4MjNkMmEwZjJjZmMzYmM1NWFjNWQ1YmE4MzVhNGFhNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNjU5NzA4NjNkNTgxM2JmOTcwYjAyZTM0YjU1YTIxMDIyZmY5MWZiYjM3NjAwYmM5ZjZhNzY2NzkwZWVkMjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://internal/config/custom_provider.go#L95-L98",
+          "version": "repo-lines-v1:sha256:f4eb165d2470eab527f3900df7f481c1720d39315cf567c7514e60260c1f3cb8:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzNlMmEzY2EyODdlY2Y2YzQ5OTc2YzdhNzNhYWNiY2Q5MTc1ZDcwYjRmYWE0NTgwMDQ4NWE4YzAxMzQxYzc0ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTZjMmZlOTljMzg5ZDE2NGIyYWE5MmJlNDA3ZTBhZDAxMGZhZmI5ZGJmNjNhYjYxOTY5YTliM2FlMWNhNjI2NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDc1NzFlOWQ3M2RhZmJiMmVkMTIzM2YwNzY4ZWY3NjE5YTY1NmVlZTM1MDRkZmMyMGYyZjczNmU0N2MyZTFiMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjIzMmYzYzMwYWZmYmVlOTA1NzM0NzNkMjAxOTdlMGY1MTRjMDczNjJmZDM3NDY0NTBlNjFiYTE5OWRiYzljNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7ac428c79dd64e71a2fcf0eaa9a19cea",
+      "statement": "ValidateCustomProviderID rejects an id that is empty, longer than 64 characters, contains characters other than lowercase letters/digits/dot/underscore/hyphen, or matches IsReservedProviderID, which is the set of built-in provider ids plus the extra reserved id \"shell\" (reserved even though it is not a built-in provider) because the wrapper's dispatch has a dedicated \"shell\" branch that would silently swallow a custom provider's Command if a custom entry could claim that id.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/custom_provider.go#L124-L141",
+          "version": "repo-lines-v1:sha256:d47c04429514978eacc550e91349188f588698dc6b58bc618a32419d02fb0617:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmMjU3ZGNmZmMyOTVlYmEwYzdhZGIxNjVkNjE5ZmNlN2VjYWFjYThmOGE1NmQxYjU5NGU4MTIwODZkMDcwODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MzFiNmUyY2EwN2Q4YmFmMGViNDRlNzQ5ZGJmNDkwYjM5MmUzYTUzNGVmNjEwMjI3NzExNDZjZGY5YWYxYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0NWE1YWY1ZmM5MjdkNjIwNGRlMjBhZmQ0MjhlZTllZDUzMDE5M2RjNjYwZGQ2ZjNlNjdlMDg0NzQ3NDA0ZDYifQ"
+        },
+        {
+          "resource": "repo://internal/config/custom_provider.go#L38-L53",
+          "version": "repo-lines-v1:sha256:1e879425ca2c1611d742e0acf4dd168e2ae5c3ffb4619d60db95c1a8b3178d15:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMjE5ZTdkN2UyMjc2NzlmMjBmY2I2NGRkNTJiYTkxZmZkMzFkMjNhOWFiYzZkYWRiOWU2MDNkM2YxMTJmNGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNjU5NzA4NjNkNTgxM2JmOTcwYjAyZTM0YjU1YTIxMDIyZmY5MWZiYjM3NjAwYmM5ZjZhNzY2NzkwZWVkMjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0NTM1MDY5MWVjMDgzZGNmZTFkZDYxZTFhN2Y4NTM2OWUyZmFkZDZjMGYzMDU4NDlhOWJkMWUwNDcxYjM3OWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2a0c2dd139c743b7892f6d26e5d45850",
+      "statement": "internal/config.SplitCommandLine is the single source of truth for parsing a custom provider's command: string into argv, used identically by internal/wrapper for process launch and internal/doctor for its PATH-existence probe, and its own doc comment requires README.md's Custom providers section to be kept in sync with the same rules.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/custom_provider_command.go#L8-L13",
+          "version": "repo-lines-v1:sha256:60afdba7392fc816e97dde0f6dd93b35552fd597b9c9c1ee557424e4cb78afbd:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTUyMjNhNGVlMDQ2ZGU1ZDM3NzBhYzBkMmE4NTAxZTIzNDFkM2E5NjEwYmRmMDA5Y2RiNWZjZmZiMDNhYmM1NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWI1ZmVmY2U2NGZkMTE0YjJhODEzYjE2ZDE1NmRlYjExYmMwYWZjYzAwOTc0ZGEzZDBiNTRlZTAxMTZiMWNiZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ1ZGU2NzM5MGNlMzJiZmZlZjBkZTk2NGMxYzcyMDA5OTVkNjhjYTNlZWNhZGViM2RkMDliODcyYTU0ZWI3NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODVlNDBlN2JhMmRiNDUyOGVkZGI4NmYzM2MzNmRjZGY5MDQ5MTU3NWUyYzM4ZGVhZmJlM2MzMjU1OGEzNTJlYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_950f6c0e7ed345409e94c93a1f921586",
+      "statement": "SplitCommandLine's parsing rules include: space/tab delimit tokens with runs collapsing to one; a double-quoted span can start and end mid-token with the quotes stripped from the result; doubled quotes inside a quoted span decode to one literal quote character; backslash is always a literal character and never an escape; single-quote has no special meaning; environment variables, tilde, globs, and shell operators all pass through as literal text since the string never reaches a shell; and an unterminated quote, a stray control character, or zero resulting tokens are parse errors.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/custom_provider_command.go#L14-L29",
+          "version": "repo-lines-v1:sha256:533faab88a6d81ec8cc6e286e06f6d14416f27e02849d717439f296db36db439:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMWVhZDkzNmEyMjgxZDUzZGNjMDY0YjdlMmEyYWIwZDUzYjkyZWYzZWY3YjM0YjY2ODY3MzAwNzg5NWM4NjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhYWRjYmQ0ZDYxODlhZDg1MzlhMjE2ZGJkZjU1YjczYmQ5OGJkMTZlZGUyYjU0MTc4NDIxZjJmMTUxODUxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk1OTEyZWMyOWEyN2IzYmFlMzg3NmQ4ZTA4M2Q1NjViZDQzMThkOTg5MTY1ODdmNWNjN2VlMzQ1OWEyN2I5MGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzMzIzNmYwNzU1NGQ1ZWNmNWU3YzQwZWRhNDNmOWNkODZkZDVlYjEwZTU4OGQ1MjBlZTdiMzRhZTE3ZWIyODYifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

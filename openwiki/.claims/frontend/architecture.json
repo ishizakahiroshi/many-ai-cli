@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:5bf48c8e1a3c7ae82bae17679a004ab0f957bbe97760060dab75f135240690cd",
+  "claims": [
+    {
+      "id": "claim_461293fdfdf64017b3262cde965a5dfd",
+      "statement": "web/scripts/build.mjs builds the frontend with esbuild's bundle:false, transpiling every .ts/.js file under web/src (excluding vendor/ and, unless opted in, web/src/debug/) individually into a matching file under web/dist that still contains real import/export statements rather than merging everything into one bundle.",
+      "evidence": [
+        {
+          "resource": "repo://web/scripts/build.mjs#L82-L94",
+          "version": "repo-lines-v1:sha256:b5cff90ed0eb46d38dbaab95fac99c50da0ac17f53f21b3e6e482d16fe4e76f2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3MmU1YThkOTQxZGFjOGM0ZWZlMjQ5NWYzMDM4MjY4NDk0MWI1MThhYjM3ZDVlYTU5MTIxMGYyZDRhZWVhNmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmZTExYTcxMmI4YzczYzA5N2U4YTFmMGFjYmE5YzQyMjYxNWMzYjllZTc3ZjdhNzBiMTZhZGYxMTk3MTNlMGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzMjViOGVhZWNjNTI3NWE0MmNhMDdlYjk3ZGIxZDU4MWI2ZDRhNGQ4NzlhMDA3ODI2NmFhYzZlZmE5NzQxYzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0ZWNiN2Y5MDVjMmRmOWU0MzE3MjA4OTlhNzY2NTIyODE0ZjE3MWY4YmVkZTE4NTEwZmQzNzRlOGIwNzZjYjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a1a5dddecd45471dbf9976bb3ced6fa3",
+      "statement": "web/src/app-entry.ts is the generated ESM entry point that imports every top-level module in a fixed load order for side effects, followed by explicit init*() calls for features that must run after the DOM is ready.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app-entry.ts#L1-L47",
+          "version": "repo-lines-v1:sha256:110c392d87551052c1dfe217ba4184b6e59771709232889e96f0e33d20ce96dd:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmMDYwOGVkMTAzNmU1OWM5NmFiODlhMTJlMTVlNzBkZjNiZDJhYjE4MGVhYjhiNDQ5YTliYTI4NjZmMzAxZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNjU1NGFjZWU0YzQzZDNmODdlNTg3MWYyZTMzMjI2NmUzMGU2OWJjNWM3OWJiNjI2NjcyMTRjMDVjMTI4MjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxNzgwMmY3ZmMzMjFkYjExZmVlYmFhZDA5ZDNiOGE3MDIxYTBmYTIxYTk4NjAwNTgxNGJlZDA1YmRlMzQ1MDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_be6008d8f4c54c0fb67762f51ec21885",
+      "statement": "web/src/debug/probe.ts is always emitted even in a non-debug build because product code imports it directly and, with bundle:false, a missing import target would be a hard build error rather than merely dead code; the non-debug build instead makes the probe's body a no-op via an esbuild define (__MAI_DEBUG__).",
+      "evidence": [
+        {
+          "resource": "repo://web/scripts/build.mjs#L66-L79",
+          "version": "repo-lines-v1:sha256:6525aa45a394ea2e37b29344ea05b11f12f504562fa625863cd5ba6d6be65ea1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjNjllN2Y4Yzc5YjExZjE2YWE4MjNmYjA3YTY0MjZkZDZlZWJlZTFhZWUwN2ZlZjIzMTJlYzg5MjJlMzYxNzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhODg2YWJmYWY3ODE3MzlmNTBlODc2YThlODgyMThjOWEyNmZmMDJiMmRkNzYyYjY1ZDY2MjA1MmViZWMxYzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjViMDNjYTZlZGU4OWJiMDQyNTZkZGQ2YzRiZjYxZjJlMWM3ZDVhZWE5ZjkwZTMwMjE5YTQyNjBmNjI5N2JkNTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3OGFjZmNkNWU2OTI4ZjgyOTFlMTAxMmY1ZDQwMmUwY2VmZGU2ZmNiZTNmMjUzYzk5ZGMxOWEyZWMzZjU1MjQifQ"
+        },
+        {
+          "resource": "repo://web/scripts/build.mjs#L84-L94",
+          "version": "repo-lines-v1:sha256:82e122ed4b9e09938216f7ef4b77241ee8a4bc7e697466f35d0abb3e46359cc8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5NjBlYTgwNGEwNzE2N2U5YjZhMzhmODhmZTJiMzY3YTNiMDY0ZGFlNjQwNzg2Yzg4YTZjMmNlYTY5ZmM3Y2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJmZTExYTcxMmI4YzczYzA5N2U4YTFmMGFjYmE5YzQyMjYxNWMzYjllZTc3ZjdhNzBiMTZhZGYxMTk3MTNlMGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIxNDE1MTVjZTZmNWViODQ0OGJhYTJlNzNjY2M3YzA5YjgyMzQxZGQzMmVlOGNhNjAzMWUxYTVjOGQ0ZDY4Y2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0ZWNiN2Y5MDVjMmRmOWU0MzE3MjA4OTlhNzY2NTIyODE0ZjE3MWY4YmVkZTE4NTEwZmQzNzRlOGIwNzZjYjkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b03bf16318624114a37e56cb7b92570a",
+      "statement": "state.ts is explicitly commented as extracted from app.js to run in classic-script global scope with no module wrapper, and holds cross-cutting TypeScript interfaces (TerminalEntry, ApprovalOptionLike, SequentialChoicePrompt) plus shared Map-based session/terminal registries that other modules read and mutate directly, rather than a single reactive store.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app/state.ts#L1-L60",
+          "version": "repo-lines-v1:sha256:06fbc2e7d81d92e58a20956d7aef4bd7ed44bcd8b7b46e2b01256b776de91968:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhOGM5ZDgwNDdlMzExMjFhOTFkZTJiNWFmNmQ3OGI4MjAzMGE0MGFhZmZlMjhiMjI1YzUzMDQyM2QzMWQ1ODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5MGE1NDY4NzRiMzlkNGE2NTI0NTI1OWNlYWU2ZTcyODNjOTQ5YzMyMWE1N2YzNmQyZmIyMzc0ODhhMGEyNWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5ZTc1NzRmMTM4NThlZTdlMWEyNTkzMmIzYjgxYjIzZmNmYWY3MmYyZWNjMmRhNGFlODZhZTA3OWUyNGU2YTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4711e1dc4d3249468a147a40dae5c6bb",
+      "statement": "i18n.ts resolves the active language at load time from localStorage's ai_cli_hub_lang key, falling back to navigator.language (matched against vi/en/ja, defaulting to ja for anything unsupported), sets document.documentElement.lang, and then fetches /i18n/<lang>.json to populate a global window.t() translation function used by its own late-bound t()/setLang() wrappers.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/i18n.ts#L1-L26",
+          "version": "repo-lines-v1:sha256:71ab0b3a01e1ab635c63a2c7da5b6664e802af9eb3e50f45b05908248bb71ec5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM1MGIyOGQzMjk3ZGNhY2ViYmRhNzNmN2FhMzMwMzMyYTc0MmI3YTFkMDU1MTcxNzYxYjUyNjA5OWI0MjZlOWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4ZWJhNmVkZDAyZDg0MmFkMWVkOTBkNTc2OTE3MmE4NzM0MjkxNTlhMjc3MDc5MjFiYmVmYTA4ZjY2MDFhMWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMxNWM0ZDVjYTExNDk2MTMxMGE5OWViNzRjNjliYzFlZmEyMjZmY2E4YWJkYzgwYWIyN2NhNmFkZjFjNjgzZGMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0eaf9c08fdf145b0b06d9ae08de97d6a",
+      "statement": "app.ts installs a plain identity fallback for window.t (returning the key unchanged) before i18n.js has finished loading its dictionary, so translated text does not break visibly during the brief async dictionary fetch.",
+      "evidence": [
+        {
+          "resource": "repo://web/src/app.ts#L28-L31",
+          "version": "repo-lines-v1:sha256:f809a4655c9f287cf8c1653cf80552e88021d04d29bacc44ca68d05f947c2599:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjJiNmUwNGIwMTU4NDI5ZjBhZjA0NmJiZWJhMDZhZjYyNzY5NDYxOGI0NWU2ZmJiYWZlYWVkZmJlOWUwYmVhNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjNjZDRiZWQwNjc5OWNhOGY4NmIzYTZhMzMxOTdjMTVmODZiMDM5MzU3MjIzMGIyZDdjMjhhYTE3MmE1OTBlMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGIwYzlkOWQ0MDE5M2ZjNTQxZTQ4ZDE2M2E3YjQyMTg0YWRkY2ZkMWI0NTdkZDFiYzhmZDg5ZjQ3YmE5NmMxNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGI5ZDliN2JhNWQ2YjkwYzlkZTgzMzM4NWVkNTNlNDllNTc2NDQyNWJiYmJlNWZlNjljYjA0NjUwZDA1YjZjZCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

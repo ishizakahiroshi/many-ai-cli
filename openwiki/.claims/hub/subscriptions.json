@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6fc5801bd523a4cc56e39465c73dbf547195c7a27958ccaf575d97a45b5b87bf",
+  "claims": [
+    {
+      "id": "claim_674508e03cec4549a35bdee414d792de",
+      "statement": "internal/subscription's package doc states the entire multi-profile design rests on one confirmed fact: every supported vendor CLI selects its configuration directory from an environment variable, and many-ai-cli only ever creates a directory and sets that one variable, never reading, writing, parsing, or storing the credential itself.",
+      "evidence": [
+        {
+          "resource": "repo://internal/subscription/adapter.go#L1-L9",
+          "version": "repo-lines-v1:sha256:0d062c986dd6bd6db5cdcf5c0f27645448f7b1a0702f1756483d1f59757f1274:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjNiOWE3ZWQ5OWM4ZDJlMGI0OTlkYmRmNWI5YTUyYjllMTdkYTFjZmI5OGQ0YTYyMDNjNzNjMDU1ODUzYTdjYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzllZDJmNTQwZTMzNTJkZDdjZDFmNjNmM2NjZWI2ZTJhYTI3ODI4MzY3MzhmZWZkMWZlZTkxMTkxOTQ0NDZkYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTFiZTM0MmUyMTBhZTQzZWI4NjkxZWVmZWJkYTNiYWNjM2Q5NTc0MmJhZjBhMjVlYzJkZThkMTEzOGQ1ODk4OCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e981afbc10e04d29bf97d221cfc2d761",
+      "statement": "A spawn with no subscription profile selected must produce a byte-for-byte identical environment to an unmodified spawn (enforced by TestSubscriptionLaunchWithoutProfileLeavesEnvUnchanged), and a live session's credentials are never swapped mid-session, enforced by TestLiveSessionAuthIsNeverSwapped scanning the source for such an assignment rather than relying only on a runtime test.",
+      "evidence": [
+        {
+          "resource": "repo://internal/subscription/adapter.go#L21-L27",
+          "version": "repo-lines-v1:sha256:9e05174ad19294963a876e4a9b500cdec7064b8ad38f6c0bd5f6b75618e9d864:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU0ZDY1NTk4MjliM2E1NTE3N2I2OTgyZWQ3ZWE4ZWUyOWZmNzYwOGZkNTYxZTFkMDIzOTkyZTk3YjBjNzdlNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWU1ZTZmODE3NTVmNTY1OGRiZWFiYmU0YjBhNmJhZjA3MmEwOWQ3NThiMDA2YTM3ZTQ4YTJiZmFlZDQxNDhlOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzRiYTgwMTIzNzljNmE4ZmJhNWIwZDUyYzA5YzhkZDU2NmY3ZjI5ZDdlNzIwMWY2MThiZTg1MjQxNTBlMjI0MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjIwY2NjODQ5MDQ0M2I0MDMyMTllMjdhYTgzM2VmMmNkNmVjNGM3MjU2MzI1ZGIyOTYzNmM0MTc4MmZmOWZiMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_229c7b55f0cb40d4aa43af4469ec19b8",
+      "statement": "internal/subscription's package doc states remaining usage quota cannot be queried from any vendor CLI (measured 2026-08-17), so there is deliberately no ReadUsage method on the provider Adapter interface; this is stated as distinct from whether usage data exists at all, since three separate local-file data paths do exist and are read by the Hub.",
+      "evidence": [
+        {
+          "resource": "repo://internal/subscription/adapter.go#L28-L37",
+          "version": "repo-lines-v1:sha256:e8facbee4f083b8a15305957e2902c3c83d605945dee6eef855cd15f414bdc17:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjNDIxYzM3N2Y5Y2JlZmNjZmMyOTc1NjU3ODkyZGYzNzU2YjczYzc1Njg0ODA2NWI1NmE3MDUxNzllOTZiMzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlYjcwMjU3NTkzZGEwNmY2ODJhM2RkZGE1NGE5ZDI2MGQ0ZmM1MTRmNjQ1MjM3ZjVjYTc0YjA4ZjhkYTYxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5MTZkMWY0ZDk4ZmM2ZDViZDBkZjA1ODdlYjMwNmNiOTg0Yjk4YWZkZTNkYWY0ZWRiMzM5NjdlYzkyOTFkZjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk4ZjExOTc2NDhiMWVhNjIwYWYyMTcyYzgxOWQ0NmM4NzNkYWFjNDE5NmM2OWY3MTI2YzUzYjdiMjdlYmI1MDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1094e2ce83b442c8a4bc1f6b2e022c42",
+      "statement": "seed.go's package doc states three rules bound what a fresh subscription profile inherits: entries are carried in only additively (never overwriting, renaming, merging, or deleting something already present in the profile), every seed write lands only under ~/.many-ai-cli/subscriptions/ so the user's real ~/.claude/~/.codex/~/.grok are read but never written, and each provider adapter lists exactly which entries to carry by name rather than copying an entire directory wholesale.",
+      "evidence": [
+        {
+          "resource": "repo://internal/subscription/seed.go#L30-L40",
+          "version": "repo-lines-v1:sha256:6a55a79d0e71e7b779c57cd7eb687c603006f354cbd9b5860457d9e0aed6c706:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliODhlOGZhYTY5NTk4YjM3MzFkNzYwZjVlYTNjNWFlMzBmNTc2ODM5YTA2ZDdkNzdhODYzZTQwZTRkOGE5ZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhZjFjNmE3OWMzZTNhZTg0MDRiZDM1N2JmMWZlMWRiOWYxNTQ3YWE0Nzk3NmQyODJkN2UxODkwYjkxNWQyY2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwZjE4MzNhNjkyOTY2N2QxMjRlNDMyOTk4ZTVhZWYzZjdjY2U2YjY2NThiZTdjMzliZDFiMzU5NDk4MjJlNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhYmMyZWIwODYyYzAyNWQyNWYwYzA1ZmEwNzA1OWUwNmViNzhhMTYwNzNkNzlmYjMzZmRhNzJlYWE0ZjA1MzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_be4a8db5fbf94be1be3e4b10ba89f754",
+      "statement": "SeedCopyFile copies a file as-is and is used for files the vendor CLI itself rewrites (settings.json, config.toml), because a symlink there would push the profile's own edits back into the user's default configuration; SeedLinkDir instead links a whole directory (symlink, or a junction on Windows) for content the user maintains in one place, such as skills, slash commands, and prompts, so a later addition reaches every profile without a re-seed.",
+      "evidence": [
+        {
+          "resource": "repo://internal/subscription/seed.go#L52-L59",
+          "version": "repo-lines-v1:sha256:e2164776ea323c4e75fc90ff66a8ee1fcb274a3a688dc78f6102197e6c6bca49:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjc1NzJmODNmYTU0ZjlhYTliNzI3ZjNjYjkyZGI3Njg4ZDAyOGQ1MDllNjVlYjA3OWFiZTRjMzBiMTU5OTdjYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWNkMGIzNzMxYTdmNWRkZWU3OWQ1MmEzYjc1YWVjNGU1NDQ5MDVhYzI5ODYxNGYwOTc0Njg5MTQyMzY0YTFkOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTMyZTAzNDQ4MWE5NDQzY2JlYTQxOWE2NzM1YTdkM2Q1MmRlNGFiYjg0YThlYjRiNDlmOTUyZjViNzM1NjMxZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDU4YmFhZWVlOTVkYmM1ZDUwMjZhZGZmYTMyYzllY2Q3OThhOThkYmQxYTE1NDQzNmQ2MmUzZjQ4MTIzODcwNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f541f046fc1542a5aeb5ff65f6ae48f2",
+      "statement": "usagerelay's package doc states a hard security requirement: only numeric metadata (token counts, cost, model name, elapsed time) from Claude's statusLine hook or Codex's Stop hook is ever sent to the Hub's /api/session-usage endpoint; for Codex's rollout JSONL specifically, only the numeric fields of token_count events are extracted and conversation-body lines are read and discarded without ever being held in memory, and an HTTP send failure logs a stderr warning but still exits 0 so the vendor CLI's own hook is never broken.",
+      "evidence": [
+        {
+          "resource": "repo://internal/usagerelay/usagerelay.go#L1-L13",
+          "version": "repo-lines-v1:sha256:f22b5fe77425b379d76bfb1688af4154f74f33f97b8e6da0cf7128c2be36a8ff:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0ZmRiZDFhYmU0OTBkZjU4ZjdkOGMwODFjZmU0NmRhZmUwMDg4YmNiYjk5NTUyMzc3MWJiYmY3M2E0MDBlZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE0NzNiNjhhYWMwNzNiOGMxZTk4MmZhMDgwYjBhZGU0NWM1YmY5YjQyODQ2MzRhZTlhOWJkNmI3OTM4NjE3ZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5OTllYTRiMDFmYTgxYTgyMjY2ZTkzZGQwMDBjN2EzZTIzY2Q4YzBhYjJkZjQ2OTgwYjM2YzQ3MGI0ZGY5ZGMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

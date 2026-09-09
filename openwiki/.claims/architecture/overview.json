@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:9dc35390d789b6d3a163a0eef70203cc1a6209ca35fef31f6d976bc272223a4f",
+  "claims": [
+    {
+      "id": "claim_c40b8337230943bea1f39a5dbb15a9ee",
+      "statement": "The Hub exposes a single WebSocket route, /ws, whose handler (Server.handleWS) branches on the first received proto.Message: Role \"ui\" registers a browser tab as a uiConn and replays a state/PTY-output snapshot before entering a per-connection UI read loop, Type \"register\" creates a new session record and enters wrapperLoop, and Type \"reattach\" reconnects to an existing session via reattachLoop instead of creating a duplicate.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/server.go#L1856-L1936",
+          "version": "repo-lines-v1:sha256:d50fe0877b1518c15dfe3611e918c7d3e35b69fa9714a6ee1e24cf7e8a6ebc7c:eyJzZWxlY3RlZExpbmVDb3VudCI6ODEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmYWU2MDE4YmRjNDU5MGQ1YzE1M2I0MGY3YzgxZDk5OTgyOTAwNzgwNzE1YjdhZTliNjMyMDlhM2JhNWZmOWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY3NjFkMTY1MGVhOWZkOWYxNzA3ODAyMTA0YzNmOGM2ZGY2MjVjYTM3M2RlY2FmOTMzNmE1ZmY1OGM5YWRiMzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdjYjRlZDE1NGM2ZGI2MTYyMjQxOWZhNGMyNDRjYzY2MDhlMzBlZjQzMDdhNzdlMjA4ZmU0N2IxNWI2ZGEwNmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_85a9242e23ec4b4b8c5a7fcfff626e9e",
+      "statement": "Every /ws connection, whether UI or wrapper role, is authenticated before role-specific logic runs: it must present a valid token or qualify for the hub.allow_loopback_without_token exception, and if remote-PIN protection applies to the caller, a valid PIN cookie is also required.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/server.go#L1863-L1879",
+          "version": "repo-lines-v1:sha256:fdd0e267eea7f70a5609418885a1b48e95d29863220386ea9903dbe5cb544430:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiODczYTAwZWE1MjY0NTYzOWU5MDk3MjlmOTA1OTUxZGUwNWYzM2Y4NGJmYWEzOGZlN2M5ZjE2NDNmZGYwN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjODk5NmJjN2E4MmE0MzE2MjI2YTA4MmRmMmJlZDU1MWI1ZmMzMDJkYjQ5YjUzOTBlZmUxYTFmYzllMWJhNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNiMzdkMGE3ZmI1YWM3OTY2YzI5YWQ0N2IxYWI3MDY5NzhhYzRjZDhkNDgyMGI5M2Q0MjkyNWQyODgxNGViZDEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cecae3821aea4d11b386942ddfd71d57",
+      "statement": "internal/wrapper's ensureHub skips probing for or starting a Hub entirely when MANY_AI_CLI=1 is set in its own environment (meaning it was itself spawned by a Hub), because starting a second Hub in that situation risks killing the real Hub via a stale PID file.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L1677-L1694",
+          "version": "repo-lines-v1:sha256:73afb42c7eb202db3d9115cabc53170506bb727b5d3aa290d77c15a0bd3b9c9c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExN2Y4NzU3Zjg1NDA1NDBkYTRhNzIzZWQzMTc1MGRmN2I0MTNjNzExMzNlZTM1ODUyNDdmMmFlZGM1NGFjMmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhmNWYyYTUyNTQyOTIzOTM5YWI3MjBkMTM0NmViYzQ5MzAyOWQwMDg2Y2Q3YjM0MTYwY2M4ZGU1NWFiMmQ3NWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMzZWQwMGEyMjEzMGI4NmEzMzcxNzQ1YjlmOTE1MmMwNzQ5MDliM2QwYWQzZmQ3NjkwN2NlNGVlM2VmMzAzZDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_41d19ed89d9e4108bfed56d342d0bb45",
+      "statement": "When ensureHub finds no reachable Hub on the configured port, it selects a free port near the configured one via findFreePort, launches `many-ai-cli serve --port <port>` as a detached child process, and waits up to a fixed timeout for it to become ready before the wrap continues, killing the spawned process if it does not become ready in time.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L1696-L1723",
+          "version": "repo-lines-v1:sha256:4ba91ad60828246a54853c4e1c7ccdefd660e17ac327563d6e7d274d857c68d7:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2NmZjYjYyMDI0OTQ2NmJlZGJiMGE1NjU5MDU1OTBiNGUyMTg0NGQxOTgwMDJhNGNkYWQwOTk5YzBhYjEyMDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkYTFkNzkxNDgwOWUzNDk5ZDQ1NzNlOGJmZTU4MjZhZTA4MmVhMmUyYTE0ZGI3Y2MxNDE3MjU3N2M2YTczNWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwNzNkMDE2ZTM1MzBjZWQ1ZDU2NzIyNDUzNTZmNTkxYWRmMmRjNTRjNDRiMDAzMDlmNWUwZWNmMTJkMWIwMmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE1MjFiZWZiY2RjNDAyZGE2ZGJhZGNjYTAwOTk0MTc5MTYyMDI2MzdkMTI1NWJiM2I4OTQ2NGVjYjRkZGQ1MTYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_26d9dea358b14215988836b672fed862",
+      "statement": "A wrapped provider CLI process communicates with the Hub only through the wrapper's own WebSocket connection to /ws; many-ai-cli does not modify, proxy, or intercept the wrapped CLI's own network calls, config files, or credentials.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L894-L935",
+          "version": "repo-lines-v1:sha256:fd18ee80ad1a41f67770f758085a33f26e884f881bc0d69fd6658e59f505a9f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhNWYxZDgzYTExNWIzNWY1NjFjZGU1MTNhY2E5ODQxMzY2M2RlOWFiZjQwYWFiOGNiNGE0NWQzYWIyNzk5MWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQwZmE2OGQwNDI3ZGM5YTZjYzRjZTBhM2E0YTM0MTcyMDUwYTUyYzkxYWM1NWE0YTI5YTU3ZDE1Y2YxN2IwOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwYWRiMjZjMGUzMmJjMWQ3N2FkM2ViZGM2OWRmNTQzOWM1NWRkMTk5M2NmYTVjMWE4ZTdiZTUzZTM1NDAzYzQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

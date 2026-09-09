@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:49531da637d1825dad31892680db2174d578fa9ea60017c5506645b8a8952415",
+  "claims": [
+    {
+      "id": "claim_ee095f1fbcba4ca4bdff72e0b0f406b2",
+      "statement": "many-ai-cli's Go module is declared as \"many-ai-cli\" and it wraps six AI coding CLI providers (claude, codex, copilot, cursor-agent, opencode, grok) as its supported built-in provider set.",
+      "evidence": [
+        {
+          "resource": "repo://go.mod#L1-L1",
+          "version": "repo-lines-v1:sha256:fe482b434f053f63bc8e824beb368e82e79cbd286d39be42bd3c5b5bfea36118:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmU0ODJiNDM0ZjA1M2Y2M2JjOGU4MjRiZWIzNjhlODJlNzljYmQyODZkMzliZTQyYmQzYzViNWJmZWEzNjExOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmU0ODJiNDM0ZjA1M2Y2M2JjOGU4MjRiZWIzNjhlODJlNzljYmQyODZkMzliZTQyYmQzYzViNWJmZWEzNjExOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmIzNTZjMjkyZDIzYjdlMWVkYzFhNjFmMzE5OTk2Zjg0ODFhNjk3ZDY2YjZiMTljNDA5OWUwNDZkZDc2ZmRhOSJ9"
+        },
+        {
+          "resource": "repo://internal/config/custom_provider.go#L22-L24",
+          "version": "repo-lines-v1:sha256:89f2053c887300aea63e4302e20ab4b30441e25b258b500e5cad90237e5d9c6f:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzE4MmRkMGY3YjkyYWQ5OWNkNTZlNmNiMGRjYzk0N2I1YzBkYWFiNDMyOTZkOTI0MTdhNjU5NTYxYWUxZTE3MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjY1YzY0OTEyMDhiNDliZGFjNTQ5N2MyY2IzOTkwMGQ5NWViNWZiZWNkYjk0YTUwZGQ3MzM5ZmY1NmM5NmZiMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2IwNWQ4YjMwOWM5ZDllZGU1MTVlNjg0ZjQ3ZWY5ZTI4MmI2Y2RlYzYzMjI4YjFiYzkxZTI5NGViYTRlZWY2OCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

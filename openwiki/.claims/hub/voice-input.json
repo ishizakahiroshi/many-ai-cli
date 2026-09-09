@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b8bf24d006f37b61df63717f3b1df7f8d86258875928e90fdc13bdb46c308856",
+  "claims": [
+    {
+      "id": "claim_ae1812a9a53242b78529352063ab69cd",
+      "statement": "The voice engine setting (off/browser/whisper) is stored per-device in localStorage and deliberately excluded from server-side user-preference sync, so a PC can use browser recognition while an iPhone on the same account simultaneously uses whisper.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L648-L649",
+          "version": "repo-lines-v1:sha256:59cefcb9fad5ec951c1f837f61e92c0c1adab1c5205fc3731e3f7f8f9dddad57:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjRkN2QzY2IzOTVlZmYwZTczYmQ5NjJjMGQ2MWJjY2EzNmI1YjNkMGU2NDM4OWYxNGFlYjdiY2RmY2E4YjI5OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2UxMDNiNjAzNGVmODM2ODVjYTVkMDE0MWI3YzA5NjA0OGU0ZjIwMmU1ZTc1MzA3YmY3ZDczM2EwZTdlYWQyOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGNmMTE0NGIzOTE4NDQ0MjMwNjg1OGRhNmQ4OThlMGU0MzMxNTUzOWFmMGMyODRlNGI2MzhkYzViMWUzZGNkYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_95d04be13aa2436e88bb081229d5f85f",
+      "statement": "Because iOS Safari's WebKit-forced WebSpeech implementation is not usable quality, the mobile voice path separates capture from inference: an iPhone captures 16kHz PCM via AudioWorklet, WAV-encodes it client-side, and posts it to /api/voice/transcribe, which the Hub relays to a Whisper server running on a PC or remote server, without replacing the desktop browser's own built-in recognition.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L649-L649",
+          "version": "repo-lines-v1:sha256:7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ2MmM2OTE2MjUzN2RmYTVjNzdiZTM4YTA4YmQ3NTU0MjcwNjlmOWFjNzcyN2ZhOWY4MDM5MWY5NjlhMzdkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGNmMTE0NGIzOTE4NDQ0MjMwNjg1OGRhNmQ4OThlMGU0MzMxNTUzOWFmMGMyODRlNGI2MzhkYzViMWUzZGNkYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ec4e545881f54b5c8e6572207e60d961",
+      "statement": "Recording deliberately avoids MediaRecorder in favor of WebAudio/AudioWorklet uniformly across browsers specifically to avoid iOS's AAC-only recording output and the server-side ffmpeg dependency that format would otherwise require; the mobile-relay logic was added as a new voice-whisper.ts module rather than modifying the existing voice.ts, to keep the working browser-recognition path untouched.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L649-L649",
+          "version": "repo-lines-v1:sha256:7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ2MmM2OTE2MjUzN2RmYTVjNzdiZTM4YTA4YmQ3NTU0MjcwNjlmOWFjNzcyN2ZhOWY4MDM5MWY5NjlhMzdkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGNmMTE0NGIzOTE4NDQ0MjMwNjg1OGRhNmQ4OThlMGU0MzMxNTUzOWFmMGMyODRlNGI2MzhkYzViMWUzZGNkYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_39f0bd98386a48c78e49eb1bc23b2a50",
+      "statement": "The Whisper path's automatic-send-on-trailing-phrase trigger defaults to off and activates only on explicit opt-in with an exact-match requirement; two client-side filters run before a recording is sent (a near-silent-volume pre-check via AnalyserNode, and a fixed hallucination-phrase filter that discards a known filler phrase only on a full exact match of the entire result, not a partial match), and every discard is surfaced as a toast explaining why rather than being silent.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L652-L657",
+          "version": "repo-lines-v1:sha256:ce87bc90027f4e4bbae5e571dab16b899916be7450b43e257ed5c7c7bacfa939:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjVlOTc0MDE1NTQzMjZlNjQzYzkwNGI5YmQ1MTU1MmYwYmJhZDlkOWU4MzM0MzEwYTEwMDhmZDRhY2FkYmUyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTlhNzllMzQ2MWMxZDNjMzBiZDE1ZWYxYzY0ZTNjNDc2MjU5ZGIyNmQ1Y2MwNzMxMmMxOTM0ZDM5OGQxY2MwZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2RhZmZlMmZlMjE5NDM3YTExMjNkZGI4MzliMWU3OGE3NTIxMDk5MGIzOGMzMGM0NDkwMDQ2MmY4YmM1ZmFjYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ca867938fe514be4bca835469d50d160",
+      "statement": "A server_url pointed at an OpenAI-compatible external API is allowed but treated as an explicit opt-in requiring a UI disclosure that audio leaves the machine; the default configuration only permits a local (127.0.0.1/localhost) server URL.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L657-L657",
+          "version": "repo-lines-v1:sha256:7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzVhYzI1YmEyZTkyZDE0ZmIyZTNlNTQ0OGJjMDE1MmEyMWE5YjI5OGVlMGQxN2NiNWFhMTQxYTc5M2FkZGQzNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2RhZmZlMmZlMjE5NDM3YTExMjNkZGI4MzliMWU3OGE3NTIxMDk5MGIzOGMzMGM0NDkwMDQ2MmY4YmM1ZmFjYyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_564f91efdd5242a9b56c441462ccce66",
+      "statement": "On first use of the whisper engine (or at Hub startup if already configured) the Hub spawns whisper-server as a child process on an auto-selected free port; it is guaranteed killed on Hub exit or many-ai-cli stop via a Windows Job Object with KILL_ON_JOB_CLOSE, Setpgid plus explicit kill on Linux/macOS, and tini-as-PID1 (init: true) in Docker, and an orphaned whisper-server left from a prior run is detected and reclaimed on Hub restart.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L658-L659",
+          "version": "repo-lines-v1:sha256:776f476a79f6ec5b421ec149e5b6cbddf71b2aebe80dd91e2ec74c9c419b9747:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWNkODMyMmJjZGQ3ZDk5ZWY3YjhkYThmZTFkNGNhNTNkMDE0MDRlMTQ0ZTQ3ZmVjMTMzN2JiMjhkNWFkNzE3YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjNhZDBkNDFhZTFlMTQwMmI1OGJhNmQ4YWU2MzQ0M2IyNWE4MmVmY2MxOTE2ZmNkY2M0MzExNDk1NjhiNzMyNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDNlMzFhMjE3ODU1ZjhhN2RmYTIzYWM3OGZlOThkZjdjYjQyNGE1Zjk3ZTUwNDc1MjVlNTEzNGM4ZGNmNWM3MiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_90d112404b534a08a73328fbc5efba63",
+      "statement": "Managed Whisper install ships for Windows x64 only in its initial version, with macOS/Linux steered to a manually configured external server URL; everything it installs lands under ~/.many-ai-cli/whisper/{bin,models,tmp}/, downloads are preceded by a free-disk-space check and verified against a SHA256 checksum before extraction, a failed/partial download is deleted so a retry starts clean, and uninstall is a plain os.RemoveAll of that directory tree leaving no trace elsewhere such as System32.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L662-L665",
+          "version": "repo-lines-v1:sha256:76b0c5f3c1bb355c719333fb96458e82753e5d29173383868f298460d312c0f9:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzgwMzczOTRiMzBiZDc1YTJkZWQxYTdmMzhlNTRiOGY2MTU3YjU3MmQwODA2ODliYTc1MWI0MzhkM2I3NjhhOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjNmNDAwYTA4ZDJhMTdjNDNkNDE4MGY2Mzk2NTdmMDc1ZjcyYmUyOTA1ZGE0NGIwNGFiNzZiOTFjYWFmYmU3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjg5YTYwNmM2N2MyOTc5NDQzMDAzZDkxMDMwYTkwOTUyNzg4ZTdkMTBlYTRhMDUwZmE2ZTlkZTlkZWM5YmRiOCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ed586aadd89a43efb2440f145fff4059",
+      "statement": "internal/whisperruntime's package doc states it embeds the Windows VC++ runtime DLLs whisper-server links against via go:embed and lays them down next to the managed binary so install needs no System32 write and no machine-wide runtime dependency, everything living under ~/.many-ai-cli/whisper/ so uninstall's RemoveAll leaves zero trace; because the real signed DLLs are gitignored, files/ ships placeholder READMEs so go:embed always finds at least one file and a from-source build succeeds before the real DLLs are added at release/CI time, until which Ensure copies nothing.",
+      "evidence": [
+        {
+          "resource": "repo://internal/whisperruntime/embed.go#L1-L10",
+          "version": "repo-lines-v1:sha256:65bc5837938f03f55062ab8eb8dad114f9ac0c6cab9fba572213e2d108772587:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2NzRjOGFjODkwNmEyOTEzNDEzZWRjODY4OTg5NzA4OGU0NWRmMjVhM2RmZTgzMjUzNzBlZTlhZjdhODU0NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMDI5MmM3ZjMzNWU4YmJjZGYwZWY4YzBmOWE2YmE2NWMwMTgwYWM5MGNlYjkwODg5NDE1NmYzYThkZGI5MGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY4ZThjZGYyZmY3MjI5NzVmOTQxZDczOWNmOWFiOGJkN2VlMjJlNGQ4YWU2ZDc5ODQzNmViNjQ3YWE5MzFkY2YifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_97a1779bb562448c94c7d548540bf5c9",
+      "statement": "fetch_windows_runtime.ps1 deliberately never pulls the four VC++ runtime DLLs from a third-party distribution site: it searches a local Visual Studio Redist folder located via vswhere first, then falls back to Microsoft-signed servicing copies in System32, and validates every selected DLL has a valid Authenticode signature naming Microsoft Corporation as the subject and an x64 (0x8664) PE machine type before accepting it.",
+      "evidence": [
+        {
+          "resource": "repo://internal/whisperruntime/fetch_windows_runtime.ps1#L12-L17",
+          "version": "repo-lines-v1:sha256:629bb9888ae41d8694b2abf418c9b6cd05648e156d16cdeb683450b81017c7ff:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmRlNGNkN2Y2ZTlhODQwMzg3NmJjYjg0N2I4NzZkYjc0MWFjOTMwY2U1ZTE2MzAxZmVlY2M3ZmU2MjM3OTkwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTBjYTAwYTI4NzZiYjk0NmUzODQ3NmNiM2ZlZmJmYTQzN2IzMGI1MGI2NTljY2JiMzI0NjkyMGEyN2JmZDZkMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjBiMWRiODNhNGZkZTk3MzY5YWE5MWM3NGI1NGI3MDVlOTM1NjdiZjc5M2NlN2Q4YjNhNWM1NWJjNDk0YTAzZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTNhNjk0MmNkN2FiOTZiZTAwODRhMTc4MjZiNjkwN2E1MmQ3MTUzMWJhZTgwMGQ4Mjc0NGUyYWJiNzYwMzg4MyJ9"
+        },
+        {
+          "resource": "repo://internal/whisperruntime/fetch_windows_runtime.ps1#L49-L59",
+          "version": "repo-lines-v1:sha256:182eb28d1d8fc42ac8a0c0e0c7fef6ee03ea58e53f86882f619512afda022424:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwMWJlZDkyNTgxOTg1M2YyMzEyMWRhODY0NmI1YjA0MTdjMGFjZDM2YjAwM2ZkNDFjNThlYjg4YmFhM2E2YjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NjJkNzdhYjg1NGJmMTliYzQxYWI5NGZhOTE3MTY1N2E5M2IyNGM0YWI1NGVkMTVlODMwMTA1MTI4NDVjYTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3NTliNzVlOTExYTY1NzdlNWU1ODlmYWZmZDA1MmI3ZTRiMDYzZDlkMmRlYmU3NDM0MDVkNzJjMTUwZGI0ZTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliN2RiY2E5NjhhYmI1YTg4MmE1YjU0NGJjOWU3ZDRiNjczY2U4Zjg1MjI5YzJjNWY4MDhjNDU3YTM4OWZjMzAifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}
