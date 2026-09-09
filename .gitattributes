@@ -16,5 +16,11 @@ web/src/vendor/THIRD_PARTY_LICENSES.txt text eol=lf
 # every platform so `while ... do` / variable assignments do not pick up CR.
 .githooks/* text eol=lf
 
+# The Docker build context ignore list is asserted line-by-line by
+# scripts/check-docker-build-inputs.test.mjs, which splits on LF. Under
+# `* text=auto` a Windows checkout gives it CRLF, so those assertions match
+# nothing and the test fails locally while passing on the Linux runners.
+deploy/docker/Dockerfile.dockerignore text eol=lf
+
 # Windows-only PowerShell scripts; let CRLF be the working-tree default.
 *.ps1 text eol=crlf
