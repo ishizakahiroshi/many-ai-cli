@@ -16,7 +16,7 @@ func TestUsageHookQuotePOSIX_WrapsAndEscapes(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"D:/dev/foo/many-ai-cli.exe", `'D:/dev/foo/many-ai-cli.exe'`},
+		{"C:/tools/foo/many-ai-cli.exe", `'C:/tools/foo/many-ai-cli.exe'`},
 		{"C:/Program Files/many-ai-cli/many-ai-cli.exe", `'C:/Program Files/many-ai-cli/many-ai-cli.exe'`},
 		{"a'b", `'a'\''b'`},
 	}
@@ -71,5 +71,45 @@ func TestCodexStopHookBlock_QuotesSpaceyExePath(t *testing.T) {
 		if !strings.Contains(block, frag) {
 			t.Errorf("expected structural fragment %q in codex block:\n%s", frag, block)
 		}
+	}
+}
+
+// claudeStatusLineCmd がスペース入り exe パスをシングルクォートで 1 引数化し、
+// 続く relay フラグはクォート外に残す（語分割で壊れない）ことを確認する。
+func TestClaudeStatusLineCmd_QuotesSpaceyExePath(t *testing.T) {
+	p := UsageHookParams{
+		HubURL:    "http://127.0.0.1:47777",
+		Token:     "deadbeef",
+		SessionID: 7,
+		ExePath:   `C:\Program Files\many-ai-cli\many-ai-cli.exe`,
+	}
+	cmd := claudeStatusLineCmd(p)
+
+	// exe パスはシングルクォートで囲まれ、スペースが内側に収まる。
+	wantQuoted := `'C:/Program Files/many-ai-cli/many-ai-cli.exe'`
+	if !strings.Contains(cmd, wantQuoted) {
+		t.Fatalf("claude statusline does not quote exe path:\n%s", cmd)
+	}
+
+	// relay の固定フラグはクォートの外（語分割される側）に出る。
+	if !strings.Contains(cmd, "' usage-relay --provider claude") {
+		t.Errorf("relay flags not placed outside the quoted exe path:\n%s", cmd)
+	}
+
+	// HubURL / SessionID は引き続き無クォートで埋め込まれる（現行構造維持）。
+	// Token は env プレフィックス（MANY_AI_CLI_HUB_TOKEN=...）として出力される。
+	for _, frag := range []string{
+		"--hub http://127.0.0.1:47777",
+		"MANY_AI_CLI_HUB_TOKEN=deadbeef",
+		"--session 7",
+	} {
+		if !strings.Contains(cmd, frag) {
+			t.Errorf("expected fragment %q in claude cmd:\n%s", frag, cmd)
+		}
+	}
+
+	// Token が --token CLI 引数として出ていないことを確認（argv 経由 leak の防止）。
+	if strings.Contains(cmd, "--token ") {
+		t.Errorf("token must not be passed as --token CLI arg (argv leak):\n%s", cmd)
 	}
 }

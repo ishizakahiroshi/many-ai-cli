@@ -30,6 +30,7 @@ import { initDetachedGridMode } from './app/detached-grid.js';
 import { initServerModal } from './app/server-modal.js';
 import { initWorkflowProgress } from './app/workflow-modal.js';
 import { initLiveStatusColor } from './app/live-status-color.js';
+import { initWebMenu } from './app/web-menu.js';
 import { initMobileConnect } from './app/mobile-connect.js';
 import { initHostExpose } from './app/host-expose.js';
 import { initRemoteAuth } from './app/remote-auth.js';
@@ -41,6 +42,9 @@ import { initHistoryLite } from './app/history-lite.js';
 import { initMobileShortNudge } from './app/mobile-short-nudge.js';
 import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initBugReportModal } from './app/bug-report-modal.js';
+import { initSubscriptions } from './app/subscriptions.js';
+import { initTabBarOrder } from './app/tab-bar-order.js';
+import { initUiSide } from './app/ui-side.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -51,6 +55,8 @@ initServerModal();
 initWorkflowProgress();
 // ライブステータス帯の配色パレット（右端ボタン）を構築 + 保存色を適用
 initLiveStatusColor();
+// ヘッダーの Web メニュー（Hub 自体への操作）を初期化
+initWebMenu();
 // 📱 モバイル接続ウィザード（QR）の配線
 initMobileConnect();
 // 🌐 外部公開（Tailscale serve）トグル＋状態ドットの配線
@@ -67,3 +73,9 @@ initHistoryLite();
 initMobileShortNudge();
 initMobileApprovalOnly();
 initBugReportModal();
+// Settings > Subscriptions（複数サブスクリプションの登録・ログイン・有効/無効）
+initSubscriptions();
+// 統合タブバーのタブをドラッグ&ドロップで並べ替え（順序は localStorage 保存）
+initTabBarOrder();
+// 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）
+initUiSide();

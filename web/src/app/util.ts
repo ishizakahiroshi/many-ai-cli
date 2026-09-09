@@ -45,6 +45,13 @@ function initToken(): string | null {
 // 空文字なら `?token=` となりサーバーが認証 cookie へ正しくフォールバックする。
 export const token = initToken() ?? '';
 
+// 未認証のページ遷移に対して Hub が返す再認証ページ（internal/hub/server.go の
+// writeReauthPage）は、往復ループを防ぐため sessionStorage に 1 回きりのガードを張る。
+// このモジュールが評価された ＝ 本体アプリの HTML が返った ＝ 認証は通っているので、
+// ここでガードを外して次の cold launch でまた 1 回試せるようにする。
+// キー名は writeReauthPage 側の reauthGuardKey と同じ値。片方だけ変えないこと。
+try { sessionStorage.removeItem('many-ai-cli-reauth'); } catch (_) { /* private mode 等は無視 */ }
+
 // apiFetch は Hub の `/api/*` を Cookie 主体で呼ぶための共通ヘルパ。
 // 同一 origin では credentials 既定値 'same-origin' で Cookie は既に送られるが、
 // 将来 credentials を厳しく設定する箇所（PWA fallback / manifest 経由 fetch 等）でも

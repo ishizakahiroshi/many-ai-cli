@@ -19,12 +19,46 @@ import (
 	"many-ai-cli/internal/sessionstore"
 )
 
+// enqueueInputWork はセッション単位の FIFO へ入力処理を積む。呼び出し元
+// （uiLoop の pty_input 分岐）は即座に戻り、次の WebSocket メッセージを読める。
+//
+// なぜ worker goroutine + channel ではなくバトン渡しなのか: worker 方式は
+// 「いつ止めるか」の寿命管理が要り、セッション削除の取りこぼしがそのまま
+// goroutine と入力の滞留になる。ここでは各入力が「直前の入力の完了 channel」を
+// 待つだけなので、鎖が尽きれば goroutine は自然に消える。生成順 = 実行順が
+// goroutine の起動順に依存しないのも要点で、待ち先は enqueue 時点で確定する。
+func (s *Server) enqueueInputWork(sessionID int, fn func()) {
+	s.inputChainMu.Lock()
+	if s.inputChain == nil {
+		s.inputChain = map[int]chan struct{}{}
+	}
+	prev := s.inputChain[sessionID]
+	done := make(chan struct{})
+	s.inputChain[sessionID] = done
+	s.inputChainMu.Unlock()
+
+	go func() {
+		if prev != nil {
+			<-prev
+		}
+		defer func() {
+			close(done)
+			// 自分が最後尾のままなら鎖を畳む（セッションが消えても残骸を持たない）。
+			s.inputChainMu.Lock()
+			if s.inputChain[sessionID] == done {
+				delete(s.inputChain, sessionID)
+			}
+			s.inputChainMu.Unlock()
+		}()
+		fn()
+	}()
+}
+
 // handleInput は pty_input メッセージを wrapper へ届ける。
 // Enter 確定時はセッション概要（FirstMessage/LastMessage）を更新し、
 // ユーザーターン境界マーカーを ptyBuf に注入する。
 func (s *Server) handleInput(m proto.Message) {
 	s.sessionsMu.Lock()
-	wc := s.wrappers[m.SessionID]
 	ses := s.sessions[m.SessionID]
 	combined := m.Text
 	var firstMsgBroadcast *proto.Message
@@ -66,7 +100,7 @@ func (s *Server) handleInput(m proto.Message) {
 				// orchestration の識別子も兼ねるため書き換えず、UI では手動
 				// label を優先して AutoTitle をフォールバックとして使う。
 				if ses.AutoTitle == "" {
-					ses.AutoTitle = normalizeSessionMetaText(maskedText, 40)
+					ses.AutoTitle = autoTitleFromInput(maskedText)
 					meta := sessionStoreMeta(ses)
 					autoTitleMeta = &meta
 				}
@@ -89,16 +123,7 @@ func (s *Server) handleInput(m proto.Message) {
 		// Review Phase 2: AI へ入力を渡す前の作業ツリーを、このターンの開始点として
 		// 記録する。既に開始点がある場合（承認回答などターン途中の追加入力）は
 		// captureGitTurnStart 側で維持し、途中までの編集を取りこぼさない。
-		// 入力経路の診断。captureGitTurnStart は
-		// 意図的に同期（git_turns.go）で、git add -A を含む 4 本のコマンドを
-		// uiLoop の中で走らせる。ここが長いと、その間 同じ UI 接続から届く
-		// 確定 \r を Hub が受信できない。実測値が無いと切り分けられない。
-		gitCaptureStart := time.Now()
 		s.captureGitTurnStart(m.SessionID)
-		s.logger.Info("input_trace",
-			"stage", "git_capture",
-			"session_id", m.SessionID,
-			"elapsed_ms", time.Since(gitCaptureStart).Milliseconds())
 		s.broadcast(proto.Message{Type: "pty_data", SessionID: m.SessionID, Data: []byte(chatHistoryUserTurnMarker)})
 		// ターン完了カードの自動消去用。ターン境界マーカーは ptyBuf 経由で attach
 		// リプレイにも再配信されるため信号に使えない。State("running") は PTY 出力
@@ -106,7 +131,7 @@ func (s *Server) handleInput(m proto.Message) {
 		// ここ（確定ユーザー入力の provider 送達）だけがライブ限定の正確な境界。
 		s.broadcast(proto.Message{Type: "user_turn_started", SessionID: m.SessionID, ApprovalSourceEpoch: userTurnEpoch})
 	}
-	s.submitInput(wc, m.SessionID, combined)
+	s.submitInput(m.SessionID, combined)
 	s.writeHistory(m.SessionID, map[string]any{
 		"ts":         time.Now().Format(time.RFC3339),
 		"type":       "user_input",
@@ -358,16 +383,21 @@ func sessionInjectGated(ses *session, now time.Time) bool {
 // 末尾へ積んで順序を保つ。
 //
 // per-session inputMu (#18) により、複数 UI が同一セッションへ同時に入力しても
-// hasPending チェック〜trySendInput（50ms sleep 含む bracketd-paste 二段送信）が
-// 直列化され、bracketed-paste 本文と確定 CR のインターリーブが起きない。
-// sessionsMu は inputMu の外側でのみ取得し、50ms sleep 中に保持しない。
-func (s *Server) submitInput(wc *wrapperConn, sessionID int, combined string) {
-	s.submitInputWithGate(wc, sessionID, combined, false)
+// hasPending チェック〜trySendInput（確定 CR の静止待ちを含む bracketd-paste
+// 二段送信）が直列化され、bracketed-paste 本文と確定 CR のインターリーブが
+// 起きない。sessionsMu は inputMu の外側でのみ取得し、待機中に保持しない。
+func (s *Server) submitInput(sessionID int, combined string) {
+	s.submitInputWithGate(sessionID, combined, false)
 }
 
 // submitInputWithGate は submitInput の実体。bypassGate=true は初期プロンプト注入
 // （injectInitialPrompt）専用で、注入ゲート中でも wrapper へ直接送る。
-func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined string, bypassGate bool) {
+//
+// 戻り値 delivered は「Hub が wrapper へ書けたか」であって「CLI が受理したか」ではない。
+// 呼び出し側（injectInitialPrompt）が「送っていない」と「送ったが画面にまだ出ない」を
+// 区別するために要る。false は保留キューへ積んだ（＝ゲート解除時の flush が 1 通だけ
+// 届ける）ことを意味するので、同じ本文を送り直してはいけない。
+func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate bool) (delivered bool) {
 	// session ポインタを短期間だけ sessionsMu で取得する。
 	// session が既に削除済みの場合は nil になるので早期リターンする。
 	s.sessionsMu.Lock()
@@ -377,7 +407,7 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 	if ses == nil {
 		// セッションが既に終了している場合は入力を捨てる（黙って失わない挙動は
 		// 存在するセッションへの入力に限る）。
-		return
+		return false
 	}
 
 	// per-session 入力直列化ロック: hasPending チェック〜trySendInput 完了まで保持。
@@ -387,67 +417,315 @@ func (s *Server) submitInputWithGate(wc *wrapperConn, sessionID int, combined st
 
 	s.sessionsMu.Lock()
 	gated := !bypassGate && sessionInjectGated(ses, time.Now())
+	if s.sessions[sessionID] == nil {
+		s.sessionsMu.Unlock()
+		return false
+	}
+	// Keep the trace state from the current registration. trySendInput resolves
+	// the wrapper again at the actual delivery boundary below.
+	wrapperConnected := s.wrappers[sessionID] != nil
 	pendingLen := len(s.pendingInput[sessionID])
 	hasPending := pendingLen > 0
-	if gated || hasPending {
+	// bypassGate=true（初期プロンプト注入）は保留キューも追い越す。ゲートが保留させたのは
+	// 「注入より先に流してはいけない入力」なので、注入自身がその後ろへ並ぶと本末転倒になる。
+	// 実害（2026-08-31 session #14）: 子の登録直後に board 通知がゲートで 1 件積まれ、以降の
+	// 注入が全て保留へ回って PTY に 1 バイトも出ず、呼び出し側のエコー検証が空振りして
+	// 同じ本文を 4 通積み増した。ゲート解除時に 4 通まとめて flush され、子が同じ指示を
+	// 4 回受け取った。
+	deferInput := gated || (hasPending && !bypassGate)
+	if deferInput {
 		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], combined)
 	}
 	s.sessionsMu.Unlock()
-	// 入力経路の診断は内容を記録せず、状態だけを残す。保留された事実は既存 WARN で
-	// 分かるが、「保留されずに直送された」側が無記録だったため、本文だけ通って
-	// 確定 \r が来ていないのか、両方通ったのかが判別できなかった。
-	s.logger.Info("input_trace",
-		"stage", "gate",
-		"session_id", sessionID,
-		"bytes", len(combined),
-		"gated", gated,
-		"has_pending", hasPending,
-		"pending_len", pendingLen)
-	if gated || hasPending {
+	// 記録点は sessionsMu の外で呼ぶ。sink が cfgMu を取るため、2 つのロックを
+	// 同時に保持しないという Server の規約を守る。
+	s.probe("input.gate", "session_id", sessionID,
+		"bytes", len(combined), "gated", gated, "has_pending", hasPending, "pending_len", pendingLen,
+		"bypass", bypassGate, "deferred", deferInput)
+	if deferInput {
 		s.notifyInputDeferred(sessionID)
-		return
+		return false
 	}
-	if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
-		s.sessionsMu.Lock()
-		s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
-		s.sessionsMu.Unlock()
+	rem := s.trySendInput(sessionID, combined)
+	s.probe("input.sent", "session_id", sessionID,
+		"bytes", len(combined), "remaining", len(rem), "wrapper_connected", wrapperConnected)
+	if rem != "" {
+		if bypassGate {
+			// 注入の未送信分は保留キューの先頭へ戻す。末尾へ積むと、ゲートが先に
+			// 保留した入力より後ろに回り、順序が入れ替わる。
+			s.requeuePendingInput(sessionID, []string{rem})
+		} else {
+			s.sessionsMu.Lock()
+			s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
+			s.sessionsMu.Unlock()
+		}
 		s.notifyInputDeferred(sessionID)
+		return false
 	}
+	return true
 }
 
 // trySendInput は combined を wrapper へ送る。届けられなかった残り（未送信部分）を返す
 // （"" = 全て送信済み）。各フレームは送信前に in-flight へ記録し、wrapper の ack が
-// 届くまで保持する。bracketed-paste の確定 \r は別書き込み + 50ms 遅延で送る従来挙動を保つ。
+// 届くまで保持する。bracketed-paste の確定 \r は別書き込みで送り、送出タイミングは
+// 固定遅延ではなく PTY 出力の静止待ちで決める（waitForSubmitEnterSettle）。
 // first まで送れて delayed(\r) だけ失敗した場合は \r のみを残りとして返し、本文の二重送信を避ける。
-func (s *Server) trySendInput(wc *wrapperConn, sessionID int, combined string) (remaining string) {
+func (s *Server) trySendInput(sessionID int, combined string) (remaining string) {
+	// Reattach can replace the wrapper while the caller is waiting. Resolve the
+	// registration immediately before creating the wire frame.
+	wc := s.currentWrapperForInput(sessionID)
+	return s.trySendInputToWrapper(sessionID, wc, combined)
+}
+
+// trySendInputToWrapper sends to a wrapper that was validated by a caller
+// holding the session input lock. The current-registration checks prevent a
+// reattach that happened while waiting from receiving an approval answer meant
+// for the previous connection.
+func (s *Server) trySendInputToWrapper(sessionID int, wc *wrapperConn, combined string) (remaining string) {
 	if wc == nil {
 		s.logger.Warn("pty_input deferred: no wrapper connected", "session_id", sessionID)
 		return combined
 	}
+	if s.currentWrapperForInput(sessionID) != wc {
+		return combined
+	}
 	first, delayed := splitBracketedPasteSubmit(combined)
-	sendStart := time.Now()
+	// 直前がブラケットペースト本文で、今回が確定 CR 単体なら、UI が 2 通に分けて
+	// 送ってきた同じ 1 回の送信とみなす。1 通で来た場合（下の delayed 分岐）と同じく
+	// 出力静止を待ってから撃ち、動き出さなければ 1 回だけ再送する。
+	// この分岐が無いと、本文の配送が遅れた分だけ CR が本文へ密着し、内側 CLI が
+	// ペースト取り込み中に CR を吸収して送信が成立しない。
+	awaiting := s.takeAwaitingSubmitEnter(sessionID)
+	if awaiting && delayed == "" && first == "\r" {
+		s.waitForSubmitEnterSettle(sessionID)
+		if s.currentWrapperForInput(sessionID) != wc {
+			// 送れずに差し戻すので印も戻す。再送時にも確定 CR として扱えるようにする。
+			s.setAwaitingSubmitEnter(sessionID)
+			return combined
+		}
+		if err := s.sendPTYInputFrame(wc, sessionID, first); err != nil {
+			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "split_enter", "err", err)
+			s.setAwaitingSubmitEnter(sessionID)
+			return combined
+		}
+		s.confirmOrResendSubmitEnter(sessionID, wc, first)
+		return ""
+	}
 	if err := s.sendPTYInputFrame(wc, sessionID, first); err != nil {
 		s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "first", "err", err)
 		return combined
 	}
+	if delayed == "" && strings.HasSuffix(first, bracketedPasteEnd) {
+		// 次に来る 1 バイトの CR を「この本文の確定」として扱う印。
+		s.setAwaitingSubmitEnter(sessionID)
+	}
 	if delayed != "" {
-		time.Sleep(bracketedPasteSubmitDelay)
+		// 固定遅延では取り込み・再描画の最中に撃ってしまい、CLI が確定 CR を
+		// 吸収する。出力が静止するまで待ってから 1 回だけ撃つ（C1）。
+		s.waitForSubmitEnterSettle(sessionID)
+		if s.currentWrapperForInput(sessionID) != wc {
+			return delayed
+		}
 		if err := s.sendPTYInputFrame(wc, sessionID, delayed); err != nil {
 			s.logger.Warn("pty_input deferred: send failed", "session_id", sessionID, "stage", "delayed", "err", err)
 			return delayed
 		}
+		// 送れたことは確定した証拠にならない。動き出したかを見て、
+		// 動いていなければ 1 回だけ再送する（C2）。
+		s.confirmOrResendSubmitEnter(sessionID, wc, delayed)
 	}
-	// 入力経路の診断は内容を記録せず、送信状態だけを残す。wc.send は wrapper からの ack が
-	// 無く write deadline も持たないため、err=nil でも wrapper に届いた保証は無い。
-	// 送信状態と経過時間だけを残し、入力内容は記録しない。
-	s.logger.Info("input_trace",
-		"stage", "sent",
-		"session_id", sessionID,
-		"bytes", len(combined),
-		"split", delayed != "",
-		"elapsed_ms", time.Since(sendStart).Milliseconds(),
-		"ts_ns", time.Now().UnixNano())
+	// wc.send は wrapper からの ack が無く write deadline も持たないため、err=nil でも
+	// wrapper に届いた保証は無い。到達確認が要る経路は inputAckCapable 側で扱う。
 	return ""
+}
+
+// setAwaitingSubmitEnter はブラケットペースト本文を送った直後に印を立てる。
+func (s *Server) setAwaitingSubmitEnter(sessionID int) {
+	s.sessionsMu.Lock()
+	if ses := s.sessions[sessionID]; ses != nil {
+		ses.awaitingSubmitEnter = true
+	}
+	s.sessionsMu.Unlock()
+}
+
+// takeAwaitingSubmitEnter は印を読んで必ず下ろす。本文以外が挟まれば、その入力が
+// 印を消費して false になるため、無関係な CR が確定 CR として扱われることはない。
+func (s *Server) takeAwaitingSubmitEnter(sessionID int) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return false
+	}
+	was := ses.awaitingSubmitEnter
+	ses.awaitingSubmitEnter = false
+	return was
+}
+
+// submitEnterTiming は確定 \r の送出・確認タイミング。ゼロ値は本番既定
+// （server.go の submitEnter* 定数）を意味し、テストだけが実時間を待たずに経路を
+// 検証するために埋める（relayDeps と同じ「ゼロ値 = 本番」方式）。
+type submitEnterTiming struct {
+	idleSettle    time.Duration
+	minWait       time.Duration
+	slowMinWait   time.Duration
+	maxWait       time.Duration
+	poll          time.Duration
+	confirmWindow time.Duration
+}
+
+// resolved はゼロのフィールドだけを既定値で埋める（部分上書きを許す）。
+func (t submitEnterTiming) resolved() submitEnterTiming {
+	if t.idleSettle <= 0 {
+		t.idleSettle = submitEnterIdleSettle
+	}
+	if t.minWait <= 0 {
+		t.minWait = submitEnterMinWait
+	}
+	if t.slowMinWait <= 0 {
+		t.slowMinWait = submitEnterSlowMinWait
+	}
+	if t.maxWait <= 0 {
+		t.maxWait = submitEnterMaxWait
+	}
+	if t.poll <= 0 {
+		t.poll = submitEnterPoll
+	}
+	if t.confirmWindow <= 0 {
+		t.confirmWindow = submitEnterConfirmWindow
+	}
+	return t
+}
+
+// minWaitFor は provider 別の最低待機を返す。codex / opencode は大きいペーストを
+// プレースホルダへほぼ無出力で畳み込み、静止が瞬時に成立して早撃ちになるため長く取る。
+// web/src/app/deferred-enter.ts の deferredEnterMinWaitFor と同じ規準・同じ値。
+func (t submitEnterTiming) minWaitFor(provider string) time.Duration {
+	switch provider {
+	case "codex", "opencode":
+		return t.slowMinWait
+	default:
+		return t.minWait
+	}
+}
+
+// waitForSubmitEnterSettle は本文を送ってから確定 \r を撃つまで待つ。固定遅延では
+// ペースト長・環境速度に依存して当たり外れがあるため、PTY 出力が一定時間静止した
+// （= 取り込み・再描画が落ち着いた）ことを待つ。provider 別の最低待機を先に確保し、
+// 出力が止まらない病的ケースは maxWait で打ち切って必ず送出する。
+// 戻り値は実際に待った時間（テスト・ログ用）。
+func (s *Server) waitForSubmitEnterSettle(sessionID int) time.Duration {
+	t := s.submitEnter.resolved()
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	var provider string
+	if ses != nil {
+		provider = ses.Provider
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return 0
+	}
+	minWait := t.minWaitFor(provider)
+	start := time.Now()
+	for {
+		elapsed := time.Since(start)
+		if elapsed >= t.maxWait {
+			s.logger.Warn("submit enter settle timed out; sending anyway",
+				"session_id", sessionID, "provider", provider, "waited_ms", elapsed.Milliseconds())
+			return elapsed
+		}
+		if elapsed >= minWait && s.outputQuietFor(sessionID, t.idleSettle) {
+			return elapsed
+		}
+		sleep := t.poll
+		if remain := minWait - elapsed; remain > 0 && remain < sleep {
+			sleep = remain
+		}
+		time.Sleep(sleep)
+	}
+}
+
+// outputQuietFor は直近の PTY 出力から quiet 以上経過しているかを返す。セッションが
+// 消えていれば待つ相手がいないので true。lastOutputAt がゼロ（まだ一度も出力していない）
+// も、待つべき再描画が存在しないので true とする。
+func (s *Server) outputQuietFor(sessionID int, quiet time.Duration) bool {
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	var last time.Time
+	if ses != nil {
+		last = ses.lastOutputAt
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil || last.IsZero() {
+		return true
+	}
+	return time.Since(last) >= quiet
+}
+
+// confirmOrResendSubmitEnter は確定 \r の後に CLI が動き出したかを見て、動いていなければ
+// 1 回だけ再送する。
+//
+// 「送れた」は「確定した」ではない。wc.send は ack を持たず、届いた \r を CLI が
+// ペースト取り込み中に吸収すると本文が入力欄に載ったまま止まる。Hub 側からは成功と
+// 区別できないため警告も出ず、relay が無人で止まっていた（2026-08-29 実測 4 回中 3 回）。
+//
+// 判定は「\r を書いた後に新しい PTY 出力が来たか」だけで行う。出力が 1 バイトも来て
+// いないなら画面は送出前から一切変わっていないので、再送が送出後に現れた別のプロンプトへ
+// 当たることは原理的に起きない。再送は 1 回だけにして、二重確定による後続プロンプトの
+// 誤承認を避ける（web/src/app/deferred-enter.ts の「\r は必ず 1 回」を Go 側でも守る）。
+func (s *Server) confirmOrResendSubmitEnter(sessionID int, wc *wrapperConn, enter string) {
+	t := s.submitEnter.resolved()
+	if s.waitForOutputAfter(sessionID, time.Now(), t.confirmWindow, t.poll) {
+		return
+	}
+	if s.currentWrapperForInput(sessionID) != wc {
+		return
+	}
+	s.logger.Warn("submit enter had no effect; resending once", "session_id", sessionID)
+	if err := s.sendPTYInputFrame(wc, sessionID, enter); err != nil {
+		s.logger.Warn("submit enter resend failed", "session_id", sessionID, "err", err)
+		return
+	}
+	if s.waitForOutputAfter(sessionID, time.Now(), t.confirmWindow, t.poll) {
+		s.logger.Info("submit enter confirmed after resend", "session_id", sessionID)
+		return
+	}
+	s.logger.Warn("submit enter still not confirmed after resend", "session_id", sessionID)
+}
+
+// waitForOutputAfter は since より後の PTY 出力が現れるまで window だけ待つ。
+// セッションが消えた場合は待つ意味が無いので true（＝再送しない）で打ち切る。
+func (s *Server) waitForOutputAfter(sessionID int, since time.Time, window, poll time.Duration) bool {
+	deadline := since.Add(window)
+	for {
+		s.sessionsMu.Lock()
+		ses := s.sessions[sessionID]
+		var last time.Time
+		if ses != nil {
+			last = ses.lastOutputAt
+		}
+		s.sessionsMu.Unlock()
+		if ses == nil {
+			return true
+		}
+		if last.After(since) {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(poll)
+	}
+}
+
+func (s *Server) currentWrapperForInput(sessionID int) *wrapperConn {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if s.sessions[sessionID] == nil {
+		return nil
+	}
+	return s.wrappers[sessionID]
 }
 
 // flushPendingInput は wrapper の (再)接続後に保留入力を順番に再送する。
@@ -482,6 +760,10 @@ func (s *Server) flushPendingInput(sessionID int) {
 	ses.resendInput = nil
 	wc := s.wrappers[sessionID]
 	s.sessionsMu.Unlock()
+	// 保留が積まれたセッションで、この記録が一度も出なければ「吐き出す機会が来ていない」
+	// ことの直接の証拠になる（呼び出し元は wrapper の再接続と orchestration の 2 箇所のみ）。
+	s.probe("input.flush", "session_id", sessionID,
+		"pending", len(pending), "resend", len(resend), "wrapper_connected", wc != nil)
 	if len(pending) == 0 && len(resend) == 0 {
 		return
 	}
@@ -502,7 +784,7 @@ func (s *Server) flushPendingInput(sessionID int) {
 	}
 	var remainder []string
 	for i, combined := range pending {
-		if rem := s.trySendInput(wc, sessionID, combined); rem != "" {
+		if rem := s.trySendInput(sessionID, combined); rem != "" {
 			remainder = append(remainder, rem)
 			remainder = append(remainder, pending[i+1:]...)
 			break

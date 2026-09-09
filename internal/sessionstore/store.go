@@ -18,10 +18,49 @@ import (
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
 
 const defaultTimeout = 3 * time.Second
+
+// busy_timeout は必ず先頭に置く。既定は 0（待たずに即 SQLITE_BUSY）なので、
+// 後ろに置くと それより前の pragma だけがロック競合で即エラーになる。
+// init() は journal_mode=WAL を流す（-wal ファイルの作成を伴う）ため、
+// 同じ DB を別プロセスが開いている状況で競合しうる。
+var sqliteConnectionPragmas = []string{
+	`PRAGMA busy_timeout=3000`,
+	`PRAGMA synchronous=NORMAL`,
+	`PRAGMA foreign_keys=ON`,
+}
+
+func init() {
+	// database/sql may discard and recreate the single physical connection.
+	// These PRAGMAs are connection-local, so applying them only once through
+	// Store.init leaves a replacement connection with driver defaults.
+	sqlite.RegisterConnectionHook(func(conn sqlite.ExecQuerierContext, _ string) error {
+		for _, pragma := range sqliteConnectionPragmas {
+			if _, err := conn.ExecContext(context.Background(), pragma, nil); err != nil {
+				return fmt.Errorf("sqlite connection pragma %q: %w", pragma, err)
+			}
+		}
+		return nil
+	})
+}
+
+// initTimeout は init（スキーマ初期化）専用のタイムアウト。
+//
+// init は 1 本の ctx で pragma 5 本（WAL ファイルの作成を含む）・CREATE TABLE 群・
+// fts5 の仮想テーブル・ensureSessionColumns の ALTER TABLE 移行を全部覆う。定常クエリの
+// fail-fast（defaultTimeout）とは性質が違い、ディスクと DB の大きさで所要時間が桁違いに
+// 振れるため、同じ 3 秒を共用すると環境依存で起動に失敗する。
+//
+// 実測（2026-08-17）: 手元（Windows / SSD）は 20〜50ms。同じコードが GitHub Actions の
+// windows-latest では 3 秒を超え、TestSessionCardMetaPersistsAcrossReattach が
+// `sqlite pragma: context deadline exceeded` で落ちた（同テストは store を 1 個だけ
+// t.TempDir() 配下に開くだけで、パッケージ内に t.Parallel() は無い）。
+//
+// 上限を外さないのは、DB が本当に壊れているときに起動が無限に待たないため。
+const initTimeout = 30 * time.Second
 
 // resetTimeout は ResetHistory（UI の「履歴を全削除」）専用のタイムアウト。
 // 利用者が明示的に押す保守操作なので、肥大化した DB でも完走できるよう長めに取る。
@@ -58,6 +97,10 @@ type Store struct {
 	asyncDone    chan struct{}
 	asyncDropped atomic.Int64
 	closeOnce    sync.Once
+	// historyMu は StoreEvent の書き込みと ResetHistory の境界を直列化する。
+	// generation により、reset 前に queue へ入った event は reset 後に復活しない。
+	historyMu         sync.RWMutex
+	historyGeneration atomic.Uint64
 	// onWriteError は非同期書き込みの失敗通知（writer goroutine と競合するため atomic）。
 	onWriteError atomic.Pointer[func(liveSessionID int, err error)]
 }
@@ -65,6 +108,7 @@ type Store struct {
 type asyncEvent struct {
 	liveSessionID int
 	event         map[string]any
+	generation    uint64
 }
 
 type SessionStart struct {
@@ -88,6 +132,10 @@ type SessionStart struct {
 	OrchestrationID string
 	BoardPath       string
 	WorktreeBranch  string
+	// SubscriptionID は起動に使ったサブスクリプション profile の ID（空 = CLI 既定
+	// ログイン）。ID だけを残し表示名は保存しない。profile を rename しても過去
+	// セッションの追跡が壊れないようにするため。認証情報は含まない。
+	SubscriptionID string
 }
 
 // SessionCardMeta はライブセッションに紐づくカード識別情報。カードの並び替え・
@@ -117,6 +165,31 @@ type AttachmentRef struct {
 	Path     string `json:"path,omitempty"`
 	Filename string `json:"filename,omitempty"`
 	Kind     string `json:"kind,omitempty"`
+}
+
+// ApprovalRow は承認台帳の 1 行。UI へそのまま JSON で返す。
+//
+// Block はマーカー由来の承認の原文で、選択肢はブラウザ側の既存パーサが解く。
+// Options は VT ミラー由来の承認だけが持つ。どちらか一方しか埋まらないのが正常。
+type ApprovalRow struct {
+	ID            int64                  `json:"id"`
+	SessionDBID   int64                  `json:"session_db_id"`
+	LiveSessionID int                    `json:"session_id"`
+	Provider      string                 `json:"provider,omitempty"`
+	CWD           string                 `json:"cwd,omitempty"`
+	Sig           string                 `json:"sig"`
+	Source        string                 `json:"source,omitempty"`
+	Kind          string                 `json:"kind,omitempty"`
+	Question      string                 `json:"question,omitempty"`
+	Context       string                 `json:"context,omitempty"`
+	Block         string                 `json:"block,omitempty"`
+	CandidateKey  string                 `json:"candidate_key,omitempty"`
+	SourceEpoch   uint64                 `json:"source_epoch,omitempty"`
+	Options       []proto.ApprovalOption `json:"options,omitempty"`
+	SelectedText  string                 `json:"selected_text,omitempty"`
+	State         string                 `json:"state"`
+	DetectedAt    string                 `json:"detected_at,omitempty"`
+	ResolvedAt    string                 `json:"resolved_at,omitempty"`
 }
 
 type SearchResult struct {
@@ -167,6 +240,7 @@ type SessionOverview struct {
 	OrchestrationID string   `json:"orchestration_id,omitempty"`
 	BoardPath       string   `json:"board_path,omitempty"`
 	WorktreeBranch  string   `json:"worktree_branch,omitempty"`
+	SubscriptionID  string   `json:"subscription_profile_id,omitempty"`
 	MessageCount    int      `json:"message_count,omitempty"`
 	EventCount      int      `json:"event_count,omitempty"`
 	ApprovalCount   int      `json:"approval_count,omitempty"`
@@ -307,7 +381,11 @@ func (s *Store) StoreEventAsync(liveSessionID int, event map[string]any) int64 {
 		return 0
 	}
 	select {
-	case s.asyncCh <- asyncEvent{liveSessionID: liveSessionID, event: event}:
+	case s.asyncCh <- asyncEvent{
+		liveSessionID: liveSessionID,
+		event:         event,
+		generation:    s.historyGeneration.Load(),
+	}:
 		return 0
 	default:
 		return s.asyncDropped.Add(1)
@@ -321,7 +399,14 @@ func (s *Store) asyncWriter() {
 		case <-s.asyncQuit:
 			return
 		case ev := <-s.asyncCh:
-			if err := s.StoreEvent(ev.liveSessionID, ev.event); err != nil {
+			s.historyMu.RLock()
+			if ev.generation != s.historyGeneration.Load() {
+				s.historyMu.RUnlock()
+				continue
+			}
+			err := s.storeEvent(ev.liveSessionID, ev.event)
+			s.historyMu.RUnlock()
+			if err != nil {
 				if fn := s.onWriteError.Load(); fn != nil && *fn != nil {
 					(*fn)(ev.liveSessionID, err)
 				}
@@ -331,18 +416,18 @@ func (s *Store) asyncWriter() {
 }
 
 func (s *Store) init() error {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 	defer cancel()
-	pragmas := []string{
+	// sqliteConnectionPragmas を先に流す。先頭の busy_timeout がここで効いていないと、
+	// 続く auto_vacuum / journal_mode がロック競合の瞬間に SQLITE_BUSY で即死する。
+	pragmas := append([]string{}, sqliteConnectionPragmas...)
+	pragmas = append(pragmas,
 		// 新規 DB はここで incremental に確定する。既存 DB（auto_vacuum=NONE）には
 		// 即時効果は無いが、設定は pending になり次回 VACUUM（ResetHistory 実行時）で
 		// 反映される。incremental になると incremental_vacuum で空きページを OS へ返せる。
 		`PRAGMA auto_vacuum=INCREMENTAL`,
 		`PRAGMA journal_mode=WAL`,
-		`PRAGMA synchronous=NORMAL`,
-		`PRAGMA foreign_keys=ON`,
-		`PRAGMA busy_timeout=3000`,
-	}
+	)
 	for _, q := range pragmas {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("sqlite pragma: %w", err)
@@ -379,6 +464,7 @@ func (s *Store) init() error {
 			orchestration_id TEXT,
 			board_path TEXT,
 			worktree_branch TEXT,
+			subscription_id TEXT,
 			pinned INTEGER NOT NULL DEFAULT 0,
 			color TEXT,
 			note TEXT,
@@ -417,6 +503,10 @@ func (s *Store) init() error {
 			state TEXT NOT NULL,
 			detected_at TEXT,
 			resolved_at TEXT,
+			provider TEXT,
+			candidate_key TEXT,
+			source_epoch INTEGER NOT NULL DEFAULT 0,
+			block TEXT,
 			UNIQUE(session_id, sig)
 		)`,
 		`CREATE TABLE IF NOT EXISTS attachments (
@@ -442,16 +532,28 @@ func (s *Store) init() error {
 	if err := s.ensureSessionColumns(ctx); err != nil {
 		return err
 	}
+	if err := s.ensureApprovalColumns(ctx); err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(ctx, `CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(text, raw_text, content='messages', content_rowid='id')`); err == nil {
 		s.ftsEnabled = true
 	}
 	return nil
 }
 
-func (s *Store) ensureSessionColumns(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(sessions)`)
+// columnMigration は既存 DB へ後から足す 1 列ぶんの移行。
+// CREATE TABLE IF NOT EXISTS は既存テーブルに列を足さないので、列を増やしたら
+// 必ずここへ 1 行足す（新規 DB は CREATE 側、既存 DB はこちらが担当する）。
+type columnMigration struct {
+	name string
+	sql  string
+}
+
+// ensureColumns は table に足りない列だけを ALTER TABLE で追加する。
+func (s *Store) ensureColumns(ctx context.Context, table string, add []columnMigration) error {
+	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
 	if err != nil {
-		return fmt.Errorf("inspect sessions schema: %w", err)
+		return fmt.Errorf("inspect %s schema: %w", table, err)
 	}
 	defer rows.Close()
 	have := map[string]bool{}
@@ -469,10 +571,19 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	add := []struct {
-		name string
-		sql  string
-	}{
+	for _, col := range add {
+		if have[col.name] {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, col.sql); err != nil {
+			return fmt.Errorf("migrate %s.%s: %w", table, col.name, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) ensureSessionColumns(ctx context.Context) error {
+	return s.ensureColumns(ctx, "sessions", []columnMigration{
 		{"title", `ALTER TABLE sessions ADD COLUMN title TEXT`},
 		{"tags_json", `ALTER TABLE sessions ADD COLUMN tags_json TEXT`},
 		{"summary", `ALTER TABLE sessions ADD COLUMN summary TEXT`},
@@ -488,16 +599,22 @@ func (s *Store) ensureSessionColumns(ctx context.Context) error {
 		{"note", `ALTER TABLE sessions ADD COLUMN note TEXT`},
 		{"auto_title", `ALTER TABLE sessions ADD COLUMN auto_title TEXT`},
 		{"archived", `ALTER TABLE sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0`},
-	}
-	for _, col := range add {
-		if have[col.name] {
-			continue
-		}
-		if _, err := s.db.ExecContext(ctx, col.sql); err != nil {
-			return fmt.Errorf("migrate sessions.%s: %w", col.name, err)
-		}
-	}
-	return nil
+		{"subscription_id", `ALTER TABLE sessions ADD COLUMN subscription_id TEXT`},
+	})
+}
+
+// ensureApprovalColumns は承認台帳へ後から足した同一性まわりの列を補う。
+// provider / candidate_key / source_epoch は承認の同一性（approval_identity.go の
+// 1 本ルール）を台帳側でも保つため、block はマーカー承認の本文をそのまま持つため。
+// マーカーブロックから選択肢を組み立てるパーサは Go 側に無く、ブラウザ側の
+// extractHubMarkerApproval が唯一の解釈器なので、台帳は解釈せず原文を持つ。
+func (s *Store) ensureApprovalColumns(ctx context.Context) error {
+	return s.ensureColumns(ctx, "approvals", []columnMigration{
+		{"provider", `ALTER TABLE approvals ADD COLUMN provider TEXT`},
+		{"candidate_key", `ALTER TABLE approvals ADD COLUMN candidate_key TEXT`},
+		{"source_epoch", `ALTER TABLE approvals ADD COLUMN source_epoch INTEGER NOT NULL DEFAULT 0`},
+		{"block", `ALTER TABLE approvals ADD COLUMN block TEXT`},
+	})
 }
 
 func (s *Store) StartSession(st SessionStart) (int64, error) {
@@ -517,8 +634,8 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 	err := s.db.QueryRowContext(ctx, `INSERT INTO sessions (
 		live_session_id, provider, display_name, cwd, branch, label, model, route, shell,
 		state, started_at, log_path, jsonl_path, parent_session_id, role, auto, depth,
-		orchestration_id, board_path, worktree_branch, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		orchestration_id, board_path, worktree_branch, subscription_id, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(jsonl_path) DO UPDATE SET
 		live_session_id=excluded.live_session_id,
 		provider=excluded.provider,
@@ -540,6 +657,7 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		orchestration_id=excluded.orchestration_id,
 		board_path=excluded.board_path,
 		worktree_branch=excluded.worktree_branch,
+		subscription_id=excluded.subscription_id,
 		updated_at=excluded.updated_at,
 		ended_at=NULL,
 		end_reason=NULL
@@ -547,7 +665,7 @@ func (s *Store) StartSession(st SessionStart) (int64, error) {
 		st.LiveSessionID, st.Provider, st.Display, st.CWD, st.Branch, st.Label, st.Model,
 		st.Route, st.Shell, state, st.StartedAt, st.LogPath, st.JSONLPath,
 		st.ParentSessionID, st.Role, boolInt(st.Auto), st.Depth, st.OrchestrationID,
-		st.BoardPath, st.WorktreeBranch, time.Now().Format(time.RFC3339),
+		st.BoardPath, st.WorktreeBranch, st.SubscriptionID, time.Now().Format(time.RFC3339),
 	).Scan(&id)
 	return id, err
 }
@@ -696,18 +814,27 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 	if s == nil || s.db == nil {
 		return nil
 	}
+	s.historyMu.RLock()
+	defer s.historyMu.RUnlock()
+	return s.storeEvent(liveSessionID, event)
+}
+
+func (s *Store) storeEvent(liveSessionID int, event map[string]any) error {
 	sessionID, err := s.sessionIDForLive(liveSessionID)
 	if err != nil || sessionID == 0 {
-		return err
-	}
-	payload, err := json.Marshal(slimEventPayload(event))
-	if err != nil {
 		return err
 	}
 	ts := stringValue(event["ts"])
 	typ := stringValue(event["type"])
 	if typ == "" {
 		typ = "event"
+	}
+	var payload []byte
+	if eventNeedsRow(typ) {
+		payload, err = json.Marshal(event)
+		if err != nil {
+			return err
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
@@ -716,8 +843,10 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO events(session_id, ts, type, payload_json) VALUES (?, ?, ?, ?)`, sessionID, ts, typ, string(payload)); err != nil {
-		return err
+	if eventNeedsRow(typ) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO events(session_id, ts, type, payload_json) VALUES (?, ?, ?, ?)`, sessionID, ts, typ, string(payload)); err != nil {
+			return err
+		}
 	}
 	if err := s.storeMessageForEvent(ctx, tx, sessionID, ts, typ, event, payload); err != nil {
 		return err
@@ -728,27 +857,54 @@ func (s *Store) StoreEvent(liveSessionID int, event map[string]any) error {
 	return tx.Commit()
 }
 
-func (s *Store) StoreApprovalDetected(liveSessionID int, sig, source, kind, question, contextText string, options []proto.ApprovalOption, detectedAt time.Time) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
-	if err != nil || sessionID == 0 || sig == "" {
+// ApprovalDetected は台帳へ記録する 1 件ぶんの承認。
+//
+// Options は VT ミラー由来の承認（Go 側にパーサがある）だけが埋める。マーカー由来は
+// Block に原文を入れ、選択肢の解釈はブラウザ側の既存パーサに任せる（解釈器を 2 本に
+// しないため）。CandidateKey / SourceEpoch は承認の同一性で、復元時に回答済みかどうかを
+// 判定するのに要る。
+type ApprovalDetected struct {
+	LiveSessionID int
+	Sig           string
+	Source        string
+	Kind          string
+	Provider      string
+	Question      string
+	Context       string
+	Block         string
+	CandidateKey  string
+	SourceEpoch   uint64
+	Options       []proto.ApprovalOption
+	DetectedAt    time.Time
+}
+
+func (s *Store) StoreApprovalDetected(d ApprovalDetected) {
+	sessionID, err := s.sessionIDForLive(d.LiveSessionID)
+	if err != nil || sessionID == 0 || d.Sig == "" {
 		return
 	}
+	detectedAt := d.DetectedAt
 	if detectedAt.IsZero() {
 		detectedAt = time.Now()
 	}
-	optionsJSON, _ := json.Marshal(options)
-	_ = s.exec(`INSERT INTO approvals(session_id, sig, source, kind, question, context, options_json, state, detected_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+	optionsJSON, _ := json.Marshal(d.Options)
+	_ = s.exec(`INSERT INTO approvals(session_id, sig, source, kind, provider, question, context, options_json, block, candidate_key, source_epoch, state, detected_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
 		ON CONFLICT(session_id, sig) DO UPDATE SET
 			source=excluded.source,
 			kind=excluded.kind,
+			provider=excluded.provider,
 			question=excluded.question,
 			context=excluded.context,
 			options_json=excluded.options_json,
+			block=excluded.block,
+			candidate_key=excluded.candidate_key,
+			source_epoch=excluded.source_epoch,
 			state='pending',
 			detected_at=excluded.detected_at,
 			resolved_at=NULL`,
-		sessionID, sig, source, kind, question, contextText, string(optionsJSON), detectedAt.Format(time.RFC3339))
+		sessionID, d.Sig, d.Source, d.Kind, d.Provider, d.Question, d.Context, string(optionsJSON),
+		d.Block, d.CandidateKey, int64(d.SourceEpoch), detectedAt.Format(time.RFC3339))
 }
 
 func (s *Store) StoreApprovalConsumed(liveSessionID int, sig, selectedText string, resolvedAt time.Time) {
@@ -763,11 +919,128 @@ func (s *Store) StoreApprovalConsumed(liveSessionID int, sig, selectedText strin
 		selectedText, resolvedAt.Format(time.RFC3339), sessionID, sig)
 }
 
+// approvalSelectSQL は承認台帳の読み出し 3 経路で共有する SELECT。
+// provider はセッション行にもあるので、台帳側が空の古い行でも表示名が出るよう
+// COALESCE で拾う。NULL 許容の列はここで空文字へ潰し、Scan 側を単純に保つ。
+const approvalSelectSQL = `SELECT a.id, a.session_id, se.live_session_id,
+		COALESCE(NULLIF(a.provider, ''), COALESCE(se.provider, '')),
+		COALESCE(se.cwd, ''), a.sig, COALESCE(a.source, ''), COALESCE(a.kind, ''),
+		COALESCE(a.question, ''), COALESCE(a.context, ''), COALESCE(a.options_json, ''),
+		COALESCE(a.block, ''), COALESCE(a.candidate_key, ''), COALESCE(a.source_epoch, 0),
+		COALESCE(a.selected_text, ''), a.state, COALESCE(a.detected_at, ''),
+		COALESCE(a.resolved_at, '')
+	FROM approvals a JOIN sessions se ON se.id = a.session_id`
+
+const (
+	approvalRowsDefaultLimit = 100
+	approvalRowsMaxLimit     = 500
+)
+
+func (s *Store) queryApprovals(where string, args []any, limit int) ([]ApprovalRow, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = approvalRowsDefaultLimit
+	}
+	if limit > approvalRowsMaxLimit {
+		limit = approvalRowsMaxLimit
+	}
+	query := approvalSelectSQL
+	if where != "" {
+		query += " WHERE " + where
+	}
+	query += " ORDER BY a.detected_at DESC, a.id DESC LIMIT ?"
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	rows, err := s.db.QueryContext(ctx, query, append(append([]any{}, args...), limit)...)
+	if err != nil {
+		return nil, fmt.Errorf("query approvals: %w", err)
+	}
+	defer rows.Close()
+	out := []ApprovalRow{}
+	for rows.Next() {
+		var r ApprovalRow
+		var optionsJSON string
+		var epoch int64
+		if err := rows.Scan(&r.ID, &r.SessionDBID, &r.LiveSessionID, &r.Provider, &r.CWD,
+			&r.Sig, &r.Source, &r.Kind, &r.Question, &r.Context, &optionsJSON,
+			&r.Block, &r.CandidateKey, &epoch, &r.SelectedText, &r.State,
+			&r.DetectedAt, &r.ResolvedAt); err != nil {
+			return nil, fmt.Errorf("scan approval: %w", err)
+		}
+		if epoch > 0 {
+			r.SourceEpoch = uint64(epoch)
+		}
+		if optionsJSON != "" && optionsJSON != "null" {
+			_ = json.Unmarshal([]byte(optionsJSON), &r.Options)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ApprovalsByLiveSession は稼働中セッションの承認を新しい順で返す。
+func (s *Store) ApprovalsByLiveSession(liveSessionID, limit int, pendingOnly bool) ([]ApprovalRow, error) {
+	sessionID, err := s.sessionIDForRead(liveSessionID)
+	if err != nil || sessionID == 0 {
+		return []ApprovalRow{}, err
+	}
+	return s.ApprovalsBySessionID(sessionID, limit, pendingOnly)
+}
+
+// ApprovalsBySessionID は保存済みセッション（sessions.id）の承認を新しい順で返す。
+// live_session_id は Hub プロセス内でしか一意でないため、履歴 UI から開くときは
+// こちらを使う（chat 読み出しと同じ理由・同じ 2 系統）。
+func (s *Store) ApprovalsBySessionID(dbID int64, limit int, pendingOnly bool) ([]ApprovalRow, error) {
+	if dbID <= 0 {
+		return []ApprovalRow{}, nil
+	}
+	where := "a.session_id=?"
+	if pendingOnly {
+		where += " AND a.state='pending'"
+	}
+	return s.queryApprovals(where, []any{dbID}, limit)
+}
+
+// RecentApprovals は全セッション横断で承認を新しい順に返す（承認タブの履歴用）。
+func (s *Store) RecentApprovals(limit int, pendingOnly bool) ([]ApprovalRow, error) {
+	where := ""
+	if pendingOnly {
+		where = "a.state='pending'"
+	}
+	return s.queryApprovals(where, nil, limit)
+}
+
 func (s *Store) ChatMessagesByLiveSession(liveSessionID, limit int) ([]ChatMessage, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return nil, err
 	}
+	return s.chatMessagesBySessionID(sessionID, liveSessionID, limit)
+}
+
+// ChatMessagesBySessionID returns messages for one persistent sessions.id.
+// History UIs must use this method when opening a saved row because
+// live_session_id is only unique while a Hub process is running.
+func (s *Store) ChatMessagesBySessionID(sessionID int64, limit int) ([]ChatMessage, error) {
+	if s == nil || s.db == nil || sessionID <= 0 {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	var liveSessionID int
+	err := s.db.QueryRowContext(ctx, `SELECT live_session_id FROM sessions WHERE id=?`, sessionID).Scan(&liveSessionID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.chatMessagesBySessionID(sessionID, liveSessionID, limit)
+}
+
+func (s *Store) chatMessagesBySessionID(sessionID int64, liveSessionID, limit int) ([]ChatMessage, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 400
 	}
@@ -841,7 +1114,7 @@ func (s *Store) SearchMessages(query string, limit int) ([]SearchResult, error) 
 // （read-only バイパスの悪用経路）。正規 UX（ユーザーがチャットで言及したファイルを開く）は
 // role='user' のみで維持される。
 func (s *Store) MessagesMentionText(liveSessionID int, variants []string) (bool, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return false, err
 	}
@@ -888,7 +1161,7 @@ func (s *Store) ListSessions(limit int, includeArchived bool) ([]SessionOverview
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
 			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
 			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
-			COALESCE(se.worktree_branch, ''),
+			COALESCE(se.worktree_branch, ''), COALESCE(se.subscription_id, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -903,10 +1176,23 @@ func (s *Store) ListSessions(limit int, includeArchived bool) ([]SessionOverview
 }
 
 func (s *Store) SessionOverviewByLiveSession(liveSessionID int) (SessionOverview, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return SessionOverview{}, err
 	}
+	return s.sessionOverviewByID(sessionID)
+}
+
+// SessionOverviewBySessionID returns one persisted session row by its stable
+// database ID. This is the unambiguous lookup used by saved-history views.
+func (s *Store) SessionOverviewBySessionID(sessionID int64) (SessionOverview, error) {
+	if s == nil || s.db == nil || sessionID <= 0 {
+		return SessionOverview{}, nil
+	}
+	return s.sessionOverviewByID(sessionID)
+}
+
+func (s *Store) sessionOverviewByID(sessionID int64) (SessionOverview, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 	rows, err := s.db.QueryContext(ctx, `SELECT
@@ -918,7 +1204,7 @@ func (s *Store) SessionOverviewByLiveSession(liveSessionID int) (SessionOverview
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
 			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
 			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
-			COALESCE(se.worktree_branch, ''),
+			COALESCE(se.worktree_branch, ''), COALESCE(se.subscription_id, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -947,11 +1233,11 @@ func (s *Store) UpdateSessionMeta(liveSessionID int, title string, tags []string
 		title, string(tagsJSON), summary, boolInt(archived), time.Now().Format(time.RFC3339), sessionID); err != nil {
 		return SessionOverview{}, err
 	}
-	return s.SessionOverviewByLiveSession(liveSessionID)
+	return s.SessionOverviewBySessionID(sessionID)
 }
 
 func (s *Store) TimelineByLiveSession(liveSessionID, limit int) ([]TimelineEvent, error) {
-	sessionID, err := s.sessionIDForLive(liveSessionID)
+	sessionID, err := s.sessionIDForRead(liveSessionID)
 	if err != nil || sessionID == 0 {
 		return nil, err
 	}
@@ -1036,7 +1322,7 @@ func (s *Store) StaleSessions(cutoff time.Time, limit int) ([]SessionOverview, e
 			COALESCE(se.archived, 0), COALESCE(se.log_path, ''), COALESCE(se.jsonl_path, ''),
 			COALESCE(se.parent_session_id, 0), COALESCE(se.role, ''), COALESCE(se.auto, 0),
 			COALESCE(se.depth, 0), COALESCE(se.orchestration_id, ''), COALESCE(se.board_path, ''),
-			COALESCE(se.worktree_branch, ''),
+			COALESCE(se.worktree_branch, ''), COALESCE(se.subscription_id, ''),
 			(SELECT COUNT(*) FROM messages m WHERE m.session_id=se.id),
 			(SELECT COUNT(*) FROM events e WHERE e.session_id=se.id),
 			(SELECT COUNT(*) FROM approvals a WHERE a.session_id=se.id),
@@ -1282,6 +1568,11 @@ func (s *Store) ResetHistory(preserveLiveIDs []int) (ResetResult, error) {
 	if s == nil || s.db == nil {
 		return ResetResult{}, nil
 	}
+	// 進行中の event write を完了させてから世代を進める。以後、旧世代の
+	// queued event は writer が破棄し、新世代の event は reset 完了まで待つ。
+	s.historyMu.Lock()
+	s.historyGeneration.Add(1)
+	defer s.historyMu.Unlock()
 	out, err := s.resetHistorySQL(preserveLiveIDs)
 	if err != nil {
 		_ = s.ScheduleFileReset()
@@ -1476,30 +1767,26 @@ func (s *Store) vacuumAfterReset() bool {
 	return true
 }
 
-// eventPayloadTextLimit は events.payload_json に残す text の上限（rune 数）。
-// UI のタイムラインは payload の先頭 180 文字しか表示せず、全文は .jsonl / messages
-// 側にあるため、events には参照用の冒頭だけ残せば足りる。
-const eventPayloadTextLimit = 2000
-
-// slimEventPayload は events.payload_json 用に PTY 出力イベントを間引く。
-// pty_output は出力量が膨大（TUI の再描画を全チャンク含む）な一方、
-// data_b64 は .log/.jsonl に全量残る複製のため SQLite には保存しない。
-// chat 履歴（messages テーブル）は元の event map から作るので影響しない。
-func slimEventPayload(event map[string]any) map[string]any {
-	if stringValue(event["type"]) != "pty_output" {
-		return event
-	}
-	slim := make(map[string]any, len(event))
-	for k, v := range event {
-		if k == "data_b64" {
-			continue
-		}
-		slim[k] = v
-	}
-	if text, ok := slim["text"].(string); ok {
-		slim["text"] = trimRunes(text, eventPayloadTextLimit)
-	}
-	return slim
+// eventNeedsRow は events テーブルへ 1 行残す種別かを返す。
+//
+// pty_output は残さない。TUI の再描画を 1 チャンク 1 行で受けるため桁が違い、
+// events を実質そのテーブルにしてしまう。2026-08-28 実測（作者環境）:
+//
+//	any-ai-cli.db  4,745,457,664 バイト（1 週間前は 3,801,001,984）
+//	events         rowid 範囲 28,920,767〜50,489,940（保持 7 日で最大 2,157 万行）
+//	内訳           pty_output が 99.9%（次点 user_input は 3 桁下）
+//
+// この量は保持 7 日の prune では追いつかず、既定 3 秒のタイムアウトを
+// 読み書き両方で超える。書き込み側が超えるとイベントを取りこぼし、
+// 読み出し側が超えると /api/session-history が 500 を返す（実際に両方起きた）。
+//
+// 消しても失われるものは無い。events の pty_output 行を読む製品コードは無く
+// （EventCount は算出のみで UI が使わず、TimelineByLiveSession はテスト専用）、
+// 表示用の本文は messages テーブル、生バイトは logs/sessions の .log / .jsonl に
+// それぞれ全量が残る。data_b64 の除去と text の切り詰めで凌いでいた前の実装は、
+// 行そのものを止めないため効かなかった。
+func eventNeedsRow(typ string) bool {
+	return typ != "pty_output"
 }
 
 func (s *Store) storeMessageForEvent(ctx context.Context, tx *sql.Tx, sessionID int64, ts, typ string, event map[string]any, payload []byte) error {
@@ -1694,7 +1981,7 @@ func scanSessionOverviews(rows *sql.Rows) ([]SessionOverview, error) {
 			&item.LastOutputAt, &item.EndedAt, &item.FirstMessage, &item.LastMessage,
 			&item.EndReason, &item.Title, &tagsJSON, &item.Summary, &archived, &item.LogPath,
 			&item.JSONLPath, &item.ParentSessionID, &item.Role, &item.Auto, &item.Depth,
-			&item.OrchestrationID, &item.BoardPath, &item.WorktreeBranch,
+			&item.OrchestrationID, &item.BoardPath, &item.WorktreeBranch, &item.SubscriptionID,
 			&item.MessageCount, &item.EventCount, &item.ApprovalCount, &item.PendingCount,
 		); err != nil {
 			return nil, err
@@ -1715,6 +2002,26 @@ func (s *Store) sessionIDForLive(liveSessionID int) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions
 		WHERE live_session_id=? AND ended_at IS NULL
+		ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return id, err
+}
+
+// sessionIDForRead resolves the newest persisted row for a live ID without
+// applying the active-session condition. Reads need to be able to open ended
+// history, while writes must continue using sessionIDForLive so a stale or
+// reused live ID cannot mutate an older session.
+func (s *Store) sessionIDForRead(liveSessionID int) (int64, error) {
+	if s == nil || s.db == nil || liveSessionID <= 0 {
+		return 0, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM sessions
+		WHERE live_session_id=?
 		ORDER BY id DESC LIMIT 1`, liveSessionID).Scan(&id)
 	if err == sql.ErrNoRows {
 		return 0, nil

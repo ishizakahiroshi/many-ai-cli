@@ -6,8 +6,39 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
+
+// removeAutostart は setup がスタートアップフォルダに置いたトレイのショートカットを消す。
+// 残したままバイナリを消すと、ログインのたびに存在しない exe を起動しようとする
+// 置き去りになる（利用者のファイルへ書く機能は回収経路まで持つ、の一環）。
+// 場所の解決は setupcmd.resolveWindowsStartup と揃える（GetFolderPath 優先・%APPDATA% 予備）。
+func removeAutostart() {
+	dir := ""
+	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+		"[Environment]::GetFolderPath('Startup')").Output()
+	if err == nil {
+		dir = strings.TrimSpace(string(out))
+	}
+	if dir == "" {
+		if appData := os.Getenv("APPDATA"); appData != "" {
+			dir = filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+		}
+	}
+	if dir == "" {
+		return
+	}
+
+	// 現行名と 0.7.0 の旧名の両方を消す。片方だけだと、setup を挟まず
+	// 旧バイナリのまま残った .lnk がログインのたびに動く。
+	for _, name := range []string{"MANY-AI-CLI.lnk", "Many AI Hub.lnk"} {
+		lnk := filepath.Join(dir, name)
+		if err := os.Remove(lnk); err == nil { // #nosec G703 -- fixed file names under the current user's own Startup folder, which is exactly what setup wrote.
+			fmt.Printf("削除しました: %s\n", lnk)
+		}
+	}
+}
 
 // removeSelf は PowerShell の遅延削除で実行中バイナリ自体を消す。
 // Windows ではプロセスが保持するファイルは即時削除できないため、

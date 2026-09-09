@@ -75,8 +75,8 @@ func (p *conPtyProcess) Resize(cols, rows uint16) error {
 	return p.pty.Resize(int(cols), int(rows))
 }
 
-func startProcess(provider string, args []string, cwd string, cols, rows int, extraEnv []string) (processSession, error) {
-	cmdName, cmdArgs := resolveCmd(provider, args)
+func startProcess(provider string, customArgv []string, args []string, cwd string, cols, rows int, extraEnv []string, terminalColor string) (processSession, error) {
+	cmdName, cmdArgs := resolveCmd(provider, customArgv, args)
 
 	pt, err := gopty.New()
 	if err != nil {
@@ -90,8 +90,11 @@ func startProcess(provider string, args []string, cwd string, cols, rows int, ex
 
 	cmd := pt.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1")
-	cmd.Env = append(cmd.Env, extraEnv...)
+	// 子へ渡す環境の組み立て（TERM/COLORTERM の上書き・色の強制・NO_COLOR の扱い）は
+	// childEnv に集約した。方針（force / inherit / off）と実測値、設定画面から変えられる
+	// ことは
+	// env_color.go のコメント参照。
+	cmd.Env = append(childEnv(os.Environ(), terminalColor), extraEnv...)
 
 	if err := cmd.Start(); err != nil {
 		_ = pt.Close()
@@ -101,7 +104,23 @@ func startProcess(provider string, args []string, cwd string, cols, rows int, ex
 	return &conPtyProcess{pty: pt, cmd: cmd, waitDone: make(chan struct{})}, nil
 }
 
-func resolveCmd(provider string, args []string) (string, []string) {
+// resolveCmd picks the executable and final argv for this session.
+// customArgv (non-nil only for a config.yaml custom_providers entry — see
+// wrapper.customProviderFor) takes priority: its first element is the
+// executable to resolve (through the same npm-shim unwrapping as any other
+// provider, via resolveExecutablePath), the rest is prepended to args.
+// Custom providers never reach the shell/copilot special cases below, and
+// never fall into the bare exec.LookPath(provider) fallback either —
+// provider there is a config.yaml id, not necessarily a real binary name.
+func resolveCmd(provider string, customArgv []string, args []string) (string, []string) {
+	if len(customArgv) > 0 {
+		combined := append(append([]string{}, customArgv[1:]...), args...)
+		exePath, err := exec.LookPath(customArgv[0])
+		if err != nil {
+			return customArgv[0], combined
+		}
+		return resolveExecutablePath(exePath, combined)
+	}
 	if provider == "shell" {
 		return resolveDefaultShell(), args
 	}

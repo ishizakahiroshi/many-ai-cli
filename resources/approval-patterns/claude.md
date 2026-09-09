@@ -6,3 +6,6 @@
 - `do you want to`
 - `esc to cancel`
 - `press enter to confirm or esc to go back`
+- `to review`
+- `to send`
+- `to dismiss`

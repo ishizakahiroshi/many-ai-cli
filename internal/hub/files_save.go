@@ -112,8 +112,11 @@ func (s *Server) handleFilesSave(w http.ResponseWriter, r *http.Request) {
 
 	// baseMtime が指定されている場合、競合検出
 	if !req.BaseMtime.IsZero() {
-		currentMtime := info.ModTime().UTC().Truncate(time.Second)
-		baseMtime := req.BaseMtime.UTC().Truncate(time.Second)
+		// Keep the full timestamp. Filesystems commonly retain sub-second
+		// precision, and rounding both values to seconds can overwrite an
+		// edit made later in the same second.
+		currentMtime := info.ModTime().UTC()
+		baseMtime := req.BaseMtime.UTC()
 		if !currentMtime.Equal(baseMtime) {
 			writeSaveErr(w, http.StatusConflict, "conflict", "file was modified by another process", currentMtime)
 			return

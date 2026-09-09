@@ -41,7 +41,10 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), gitPullTimeout)
 	defer cancel()
-	out, runErr := runGitCombined(ctx, cwd, "pull", "--ff-only")
+	// push と同様に資格情報の対話プロンプトを抑止する。付けないと認証が要る
+	// リモートで git が端末入力待ちになり、timeout(30s) まで固まってから汎用
+	// エラーになる。
+	out, runErr := runGitCombinedEnv(ctx, cwd, gitPushNonInteractiveEnv(), "pull", "--ff-only")
 	if runErr != nil {
 		code, status := classifyGitPullError(string(out))
 		s.logger.Warn("git pull failed", "session_id", sid, "err", runErr, "output", sessionlog.MaskSecrets(string(out)))

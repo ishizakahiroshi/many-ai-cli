@@ -24,8 +24,8 @@ import (
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/setupcmd"
 	"many-ai-cli/internal/shell"
-	"many-ai-cli/internal/uninstall"
 	"many-ai-cli/internal/tray"
+	"many-ai-cli/internal/uninstall"
 	"many-ai-cli/internal/usagerelay"
 	"many-ai-cli/internal/wrapper"
 )
@@ -52,7 +52,7 @@ func buildInfo() hub.BuildInfo {
 // waitForShutdownSignal は SIGINT/SIGTERM を待ち受ける context を返す。
 // 起動ログ（"MANY-AI-CLI started"）と対になる終了ログを、シグナルが実際に
 // 届いた時点で reason="signal" ＋ 具体的なシグナル名付きで残す
-//（plan_hub-lifecycle-logging.md C1）。返り値の cancel は defer で必ず呼ぶこと
+// （plan_hub-lifecycle-logging.md C1）。返り値の cancel は defer で必ず呼ぶこと
 // （シグナル未着のまま return するパスでも goroutine と signal.Notify 登録を解放する）。
 func waitForShutdownSignal(logger *slog.Logger, instanceID string) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -367,7 +367,7 @@ func run(args []string) error {
 			return errors.New("wrap <provider>")
 		}
 		return wrapper.Run(cfg, logger, args[1], args[2:])
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
+	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code":
 		return wrapper.Run(cfg, logger, cmd, args[1:])
 	case "usage-relay":
 		// 隠しサブコマンド: Claude statusLine / Codex Stop フックから呼び出される。
@@ -386,11 +386,18 @@ func run(args []string) error {
 	case "-h", "--help", "help":
 		return usage()
 	default:
+		// custom_providers: の id は built-in のような専用 case を持てない（起動時の
+		// config 次第で変わる）ので、既知の verb に一致しなかったときだけ config を
+		// 照合する。built-in と同じ「id を直接叩けば起動する」体験を揃える
+		// （plan_custom-provider-extension-triage.md C4）。`wrap <id>` は従来どおり動く。
+		if cfg.IsCustomProviderID(cmd) {
+			return wrapper.Run(cfg, logger, cmd, args[1:])
+		}
 		return fmt.Errorf("unknown command: %s", cmd)
 	}
 }
 
 func usage() error {
-	fmt.Println("many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>")
+	fmt.Println("many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|command-code|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>")
 	return nil
 }

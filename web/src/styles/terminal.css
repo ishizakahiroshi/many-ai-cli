@@ -192,6 +192,30 @@
   border-color: rgba(217, 119, 6, 0.45);
   border-top-color: rgba(251, 191, 36, 0.9);
 }
+/* 完了サマリー(done): 待機中に「直前のターンで何が終わったか」を出す。端末へ本文を
+   書かなくなった（hub-marker-filter.ts の案 G）ぶんの表示口なので、idle より前に出す。
+   スピナーは idle と同じく止める。 */
+#terminal-live-status.done {
+  color: rgba(148, 163, 184, 0.9);
+  border-color: rgba(100, 116, 139, 0.42);
+}
+#terminal-live-status.done .live-spinner {
+  animation: none;
+  border-color: rgba(100, 116, 139, 0.45);
+  border-top-color: rgba(100, 116, 139, 0.45);
+}
+#terminal-live-status.done .live-status-text {
+  /* サマリーは 1 行に収め、溢れたら省略する（帯の高さを増やして端末を狭めない） */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); border-color: rgba(34, 197, 94, 0.42); }
+#terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); border-color: rgba(239, 68, 68, 0.5); }
+#terminal-live-status.done-aborted  { color: rgba(203, 213, 225, 0.9);  border-color: rgba(100, 116, 139, 0.5); }
+#terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); border-color: rgba(217, 119, 6, 0.5); }
+/* unknown = Hub のフォールバック。異常ではないので警告色を使わず、いちばん弱く出す。 */
+#terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); border-color: rgba(100, 116, 139, 0.35); }
 /* hidden 属性より id セレクタが強いため、:not([hidden]) でのみ flex 化して非表示を保つ */
 #terminal-live-status:not([hidden]) {
   display: flex;
@@ -270,6 +294,17 @@
   padding: 0 6px;
 }
 .live-status-longproc[hidden] { display: none; }
+/* 段階表示（longproc.ts の LongprocLevel）。カードの .card-longproc と同じ意味・同じ色。 */
+.live-status-longproc.is-severe {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 30%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.live-status-longproc.is-stalled {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
+  border-color: var(--danger);
+}
 /* 配色パレット: 帯の右端に置く。帯は pointer-events:none なので操作要素だけ復活させる。 */
 .live-status-palette-btn {
   flex: 0 0 auto;
@@ -562,6 +597,15 @@
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.waiting {
     color: rgba(251, 191, 36, 0.95);
   }
+  /* モバイル帯は枠を持たないので、完了サマリーも色だけで区別する。 */
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done {
+    color: rgba(148, 163, 184, 0.85);
+    opacity: 1;
+  }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-success  { color: rgba(134, 239, 172, 0.95); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-failure  { color: rgba(252, 165, 165, 0.95); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-needs-action { color: rgba(251, 191, 36, 0.95); }
+  body.mobile-has-session:not(.mobile-home-view) #terminal-live-status.done-unknown  { color: rgba(148, 163, 184, 0.85); }
   body.mobile-has-session:not(.mobile-home-view) #terminal-live-status .live-spinner {
     width: 10px;
     height: 10px;
@@ -592,23 +636,61 @@
 }
 
 .xterm { height: 100%; }
-.xterm-viewport {
-  overflow-y: scroll !important;
-  scrollbar-width: thin;
-  scrollbar-color: #4f5bd5 #172033;
+/* ターミナルのスクロールバー — xterm 6.0 世代のオーバーレイスクロールバーを常時表示にする。
+   xterm 5.x までは .xterm-viewport がネイティブスクロールしていたので
+   ::-webkit-scrollbar で色と幅を指定できたが、6.0 で VS Code 由来の
+   .xterm-scrollable-element > .scrollbar > .slider へ置き換わり、その指定は効かなくなった
+   （viewport は残っているがスクロールしないので ::-webkit-scrollbar 指定は無意味）。
+   xterm はこのスクロールバーを ScrollbarVisibility.Auto でハードコードしており
+   オプションで常時表示にできないため、フェードアウト状態を CSS で打ち消す。
+   対象を .invisible.fade に限るのが要点。ScrollbarVisibilityController は
+   「スクロール不要」なら .invisible（fade なし）、「必要だがフェードアウト中」なら
+   .invisible.fade を付ける。前者まで表示すると、スクロールできない端末に
+   トラック全長のスライダーが出てしまう。
+   初回 reveal（.fade が付く前）は terminal.ts の primeScrollbarVisibility が起こす。
+   slider の色は terminal.ts の theme.scrollbarSlider*Background 側で指定する。 */
+.xterm .xterm-scrollable-element > .scrollbar.invisible.fade {
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
 }
-.xterm-viewport::-webkit-scrollbar {
-  width: 6px;
+.xterm .xterm-scrollable-element > .scrollbar > .slider {
+  border-radius: var(--radius-sm);
 }
-.xterm-viewport::-webkit-scrollbar-track {
-  background: #172033;
+
+/* 代替画面バッファ（Claude / opencode の TUI）用の疑似スクロールレール。
+   代替画面はスクロールバックを持たないため xterm のスクロールバーは
+   ScrollbarVisibility の isNeeded が立たず、上の常時表示上書きも効かない。
+   同じ幅（xterm の verticalScrollbarSize = 14px）・同じ紫で自前に描き、
+   操作は PgUp / PgDn として CLI へ転送する（alt-scroll-rail-view.ts）。
+   色は terminal.ts の theme.scrollbarSlider*Background と同じ値を使う。 */
+.xterm .alt-scroll-rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  z-index: 11;
+  cursor: default;
+  touch-action: none;
 }
-.xterm-viewport::-webkit-scrollbar-thumb {
+/* [hidden] は UA スタイルの display:none でしか効かない。上の display 指定と
+   衝突しないよう、ここで明示的に打ち消す（メインバッファでは出さないため必須）。 */
+.xterm .alt-scroll-rail[hidden] {
+  display: none;
+}
+.xterm .alt-scroll-rail-slider {
+  position: absolute;
+  left: 0;
+  width: 14px;
   background: #4f5bd5;
   border-radius: var(--radius-sm);
 }
-.xterm-viewport::-webkit-scrollbar-thumb:hover {
+.xterm .alt-scroll-rail:hover .alt-scroll-rail-slider {
   background: #6b74ff;
+}
+.xterm .alt-scroll-rail:active .alt-scroll-rail-slider {
+  background: #8b92ff;
 }
 
 
@@ -675,6 +757,8 @@
 .slash-item.selected { background: var(--accent-soft); }
 .slash-item .slash-cmd { color: var(--accent); font-family: Consolas, monospace; font-size: 13px; min-width: 120px; }
 .slash-item .slash-desc { color: var(--muted-2); font-size: 12px; }
+.slash-item.slash-unsupported-notice { cursor: default; color: var(--muted-2); font-size: 12px; }
+.slash-item.slash-unsupported-notice:hover { background: none; }
 
 /* 入力バー */
 #input-bar {

@@ -72,7 +72,7 @@ func TestKillStalePid_RemovesInvalidFile(t *testing.T) {
 
 // gracefulStop はポートが不明（<=0）なら HTTP を叩かず即 false を返し、
 // stopWithPIDPath 側の force-kill フォールバックに委ねる
-//（plan_hub-lifecycle-logging.md C2）。
+// （plan_hub-lifecycle-logging.md C2）。
 func TestGracefulStop_NoPortFallsBackImmediately(t *testing.T) {
 	if gracefulStop(12345, 0, "tok", nil) {
 		t.Fatal("gracefulStop with port<=0 should return false")
@@ -80,7 +80,7 @@ func TestGracefulStop_NoPortFallsBackImmediately(t *testing.T) {
 }
 
 // /api/shutdown 相当が 200 以外を返したら gracefulStop は false を返す
-//（force kill へのフォールバック対象）。
+// （force kill へのフォールバック対象）。
 func TestGracefulStop_NonOKStatusFallsBack(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

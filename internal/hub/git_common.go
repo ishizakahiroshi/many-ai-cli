@@ -119,7 +119,23 @@ var (
 // stderr は ExitError から拾ってエラーメッセージに含める（呼び出し側のロギング用）。
 // ctx の timeout / cancel で確実に終了する。
 func runGit(ctx context.Context, cwd string, args ...string) ([]byte, error) {
-	full := append([]string{"-C", cwd}, args...)
+	// core.quotePath=false: keep non-ASCII (e.g. Japanese) paths as raw UTF-8 in
+	// name-status / numstat output instead of octal-escaped quoted form. Quoted
+	// paths break both the UI display and pathspec reuse (`git show <hash> -- "\343..."`
+	// matches nothing and returns an empty, exit-0 diff). -z commands are
+	// unaffected (they never quote).
+	full := append([]string{"-C", cwd, "-c", "core.quotePath=false"}, args...)
+	// #nosec G702 -- argv 直渡しで shell を介さないので、シェル注入は成立しない。
+	// 残る危険は「引数がオプションに化ける」形（--upload-pack= 等）だが、可変値を
+	// 渡す呼び出しは全て手前で塞いである。2026-08-28 に全呼び出しを確認した:
+	//   - git_log.go の ref と git_show.go の hash は validRevision() を通る。
+	//     同関数は先頭 "-" を明示的に拒否する（このファイルの validRevision）
+	//   - git_diff.go / git_show.go のファイルパスは "--" より後ろに置く
+	//   - それ以外の引数はコード中のリテラル
+	//   - cwd は自ホストの session cwd であって外部入力ではない
+	// gosec の taint 解析はこの検査を追えず、しかも判定が run ごとに揺れる
+	// （同一コミットで 1 件 / 2 件が交互に出るのを 2026-08-28 に実測）。
+	// 抑制して CI の結果を決定的にする。呼び出しを増やすときは上の 4 条件を守ること。
 	cmd := exec.CommandContext(ctx, "git", full...)
 	out, err := cmd.Output()
 	if err != nil {
@@ -142,7 +158,8 @@ func runGitCombined(ctx context.Context, cwd string, args ...string) ([]byte, er
 // runGitCombinedEnv は stdout/stderr をまとめて返しつつ、必要な追加環境変数を
 // git プロセスへ渡す。push のように認証プロンプトを抑止したい場合に使う。
 func runGitCombinedEnv(ctx context.Context, cwd string, extraEnv []string, args ...string) ([]byte, error) {
-	full := append([]string{"-C", cwd}, args...)
+	// See runGit: keep non-ASCII paths raw so parsers and pathspec reuse work.
+	full := append([]string{"-C", cwd, "-c", "core.quotePath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", full...)
 	if len(extraEnv) > 0 {
 		cmd.Env = append(os.Environ(), extraEnv...)
@@ -206,12 +223,15 @@ type gitRef struct {
 
 // parseDecorate は `%D` (refs decorate) を gitRef スライスに変換する。
 //
-// 例:
+// 例（短縮表示）:
 //
 //	"HEAD -> develop, origin/develop, tag: v0.1.3"
 //	→ [{local, develop}, {remote, origin/develop}, {tag, v0.1.3}]
 //
 // "HEAD" / "HEAD -> X" の HEAD 部分はスキップ（head_hash は別フィールド）。
+// git log/show は --decorate=full を使うため、refs/heads・refs/remotes・
+// refs/tags の種別を優先する。短縮表示で slash を含む名前は種別を復元できない
+// ので local とし、従来の origin/ だけは後方互換で remote として扱う。
 func parseDecorate(decorate string) []gitRef {
 	decorate = strings.TrimSpace(decorate)
 	if decorate == "" {
@@ -232,13 +252,29 @@ func parseDecorate(decorate string) []gitRef {
 			continue
 		}
 		switch {
-		case strings.HasPrefix(p, "tag:"):
-			name := strings.TrimSpace(strings.TrimPrefix(p, "tag:"))
+		case strings.HasPrefix(p, "refs/heads/"):
+			name := strings.TrimPrefix(p, "refs/heads/")
+			if name != "" {
+				refs = append(refs, gitRef{Kind: "local", Name: name})
+			}
+		case strings.HasPrefix(p, "refs/remotes/"):
+			name := strings.TrimPrefix(p, "refs/remotes/")
+			if name != "" {
+				refs = append(refs, gitRef{Kind: "remote", Name: name})
+			}
+		case strings.HasPrefix(p, "refs/tags/"):
+			name := strings.TrimPrefix(p, "refs/tags/")
 			if name != "" {
 				refs = append(refs, gitRef{Kind: "tag", Name: name})
 			}
-		case strings.HasPrefix(p, "origin/") || strings.Contains(p, "/"):
-			// remote 名は "<remote>/<branch>" 形式
+		case strings.HasPrefix(p, "tag:"):
+			name := strings.TrimSpace(strings.TrimPrefix(p, "tag:"))
+			name = strings.TrimPrefix(name, "refs/tags/")
+			if name != "" {
+				refs = append(refs, gitRef{Kind: "tag", Name: name})
+			}
+		case strings.HasPrefix(p, "origin/"):
+			// Backward-compatible short decoration for the conventional remote.
 			refs = append(refs, gitRef{Kind: "remote", Name: p})
 		default:
 			refs = append(refs, gitRef{Kind: "local", Name: p})

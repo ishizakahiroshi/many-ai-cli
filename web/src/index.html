@@ -34,88 +34,154 @@
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
       <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
-        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 14" width="80" height="14" aria-hidden="true">
+        <!-- 図形の使い分け（丸＝単体で起動できるもの / 角丸＝Claude・Codex からラップして使う route。
+             ローカルかクラウドかではない）の正本は web/src/app/session-list.ts の providerIconHtml。
+             ここはその図形を静的 SVG で複製しているだけなので、形を変えるときは両方を揃える。 -->
+        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 14" width="90" height="14" aria-hidden="true">
           <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
           <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
           <text class="prov-letter codex" x="15" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">X</text>
-          <circle class="prov-shape copilot" cx="25" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter copilot" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
-          <circle class="prov-shape cursor-agent" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter cursor-agent" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
-          <circle class="prov-shape opencode" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter opencode" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <circle class="prov-shape grok" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter grok" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
-          <rect class="prov-shape ollama" x="60.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter ollama" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <rect class="prov-shape lm-studio" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter lm-studio" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
+          <circle class="prov-shape grok" cx="25" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter grok" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
+          <circle class="prov-shape opencode" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter opencode" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
+          <circle class="prov-shape command-code" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter command-code" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">M</text>
+          <circle class="prov-shape copilot" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter copilot" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
+          <circle class="prov-shape cursor-agent" cx="65" cy="7" r="4.5" stroke-width="1.6"/>
+          <text class="prov-letter cursor-agent" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
+          <rect class="prov-shape ollama" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter ollama" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
+          <rect class="prov-shape lm-studio" x="80.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
+          <text class="prov-letter lm-studio" x="85" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
         </svg>
         <span data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      <div class="usage-dropdown" id="usage-dropdown" hidden>
-        <div class="usage-dropdown-header" data-i18n="usage_dropdown_header">AI Usage Links</div>
-        <a id="usage-link-claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
+      <!-- data-wheel-native: このドロップダウンは overflow:auto の自前スクロール領域を持つ。
+           付けないと terminal.ts の document レベル wheel ハンドラが背後ターミナルへ転送して
+           preventDefault するため、中身がホイールで動かなくなる（isWheelTargetExcluded 参照）。 -->
+      <div class="usage-dropdown" id="usage-dropdown" data-wheel-native hidden>
+        <div class="usage-dropdown-header">
+          <span data-i18n="usage_dropdown_header">AI Usage Links</span>
+          <button id="usage-dropdown-close" class="usage-dropdown-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+        </div>
+        <!-- 広幅（900px 以上）のみ .usage-dropdown-columns を左右 2 カラムに割る。左=契約の残量、
+             右=取得不可 provider とローカル実行。狭幅はこの順で縦に積む。プロファイル行は
+             renderProfiles() が data-usage-provider の直後に挿すためラッパー内で完結する。 -->
+        <div class="usage-dropdown-columns">
+        <div class="usage-dropdown-col">
+        <div class="usage-dropdown-section-title" data-i18n="usage_contract_group">契約の残量</div>
+        <a id="usage-link-claude" data-usage-provider="claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">C</text></svg>
           <span class="usage-item-name">Claude</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
+        <a id="usage-link-codex" data-usage-provider="codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">X</text></svg>
           <span class="usage-item-name">Codex</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">P</text></svg>
-          <span class="usage-item-name">Copilot</span>
-          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
-        <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">r</text></svg>
-          <span class="usage-item-name">Cursor Agent</span>
-          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
-        <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
-          <span class="usage-item-name">OpenCode</span>
-          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
-        <a id="usage-link-grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
+        <a id="usage-link-grok" data-usage-provider="grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
           <span class="usage-item-name">Grok Build</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
-        <a id="usage-link-ollama" class="usage-dropdown-item" href="http://localhost:11434" target="_blank" rel="noopener noreferrer">
+        </div>
+        <div class="usage-dropdown-col">
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">P</text></svg>
+          <span class="usage-item-name">Copilot</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">r</text></svg>
+          <span class="usage-item-name">Cursor Agent</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
+          <span class="usage-item-name">OpenCode</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
+          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">M</text></svg>
+          <span class="usage-item-name">Command Code</span>
+          <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-unavailable-row">
+        <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
           <span class="usage-item-name">Ollama</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
-        </a>
+        </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
+        </div>
+        <div class="usage-dropdown-section-title" data-i18n="usage_local_group">ローカル実行 — 上限が無いので数字は出ない</div>
         <a id="usage-link-lm-studio" class="usage-dropdown-item" href="http://localhost:1234" target="_blank" rel="noopener noreferrer">
           <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape lm-studio" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter lm-studio" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">L</text></svg>
           <span class="usage-item-name">LM Studio</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
+        </div>
+        </div>
       </div>
     </div>
-    <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。ホスト直下から tailnet 公開を on/off。bind は 127.0.0.1 不変。 -->
-    <button id="expose-btn" data-i18n-tooltip="expose_tooltip" aria-haspopup="dialog" aria-pressed="false">🌐 <span data-i18n="expose_btn">Expose</span><span id="expose-dot" class="expose-dot expose-dot-off"></span></button>
     <button id="global-wakeword-btn" hidden>🎧</button>
     <span id="mic-status-chip" class="status-chip" hidden></span>
-    <!-- 📱 モバイル接続（QR ウィザード）。SSH ローカルフォワード / VPN 前提で 127.0.0.1 URL の QR を出す。bind は 127.0.0.1 不変。 -->
-    <button id="mobile-connect-btn" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false">📱</button>
-    <button id="bug-report-btn" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog">
-      <span aria-hidden="true">🐞</span><span data-i18n="bug_report_button">バグ報告</span>
-    </button>
-    <button id="shutdown-btn" data-i18n-tooltip="shutdown_tooltip">⏻</button>
-    <button id="settings-btn">
+    <div id="web-menu" class="web-menu">
+      <button class="web-menu-btn" id="web-menu-btn" data-i18n-tooltip="web_menu_tooltip" aria-haspopup="true" aria-expanded="false" aria-controls="web-menu-dropdown">
+        <svg class="web-menu-icon" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <rect x="2" y="2"  width="20" height="8" rx="2"/>
+          <rect x="2" y="14" width="20" height="8" rx="2"/>
+          <line class="web-menu-lamp" x1="6" y1="6"  x2="6.01" y2="6"/>
+          <line x1="6" y1="18" x2="6.01" y2="18"/>
+        </svg>
+        <span data-i18n="web_menu_btn">Hub</span>
+        <svg class="web-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="web-menu-dropdown" id="web-menu-dropdown" data-wheel-native hidden role="menu" aria-labelledby="web-menu-btn">
+        <!-- 🌐 外部公開（Tailscale serve）トグル＋状態ドット。bind は 127.0.0.1 不変。 -->
+        <button id="expose-btn" class="web-menu-item" type="button" aria-haspopup="dialog" aria-pressed="false" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">🌐</span>
+          <span class="web-menu-item-label" data-i18n="expose_btn">外部公開</span>
+          <span id="expose-state" class="web-menu-item-state"></span>
+          <span id="expose-dot" class="expose-dot expose-dot-off" aria-hidden="true"></span>
+        </button>
+        <!-- 📱 モバイル接続（QR ウィザード）。bind は 127.0.0.1 不変。 -->
+        <button id="mobile-connect-btn" class="web-menu-item" type="button" data-i18n-tooltip="mobile_connect_tooltip" aria-haspopup="dialog" aria-expanded="false" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">📱</span>
+          <span class="web-menu-item-label" data-i18n="mobile_connect_tooltip">スマホで接続（QR）</span>
+        </button>
+        <button id="shutdown-btn" class="web-menu-item" type="button" data-i18n-tooltip="shutdown_tooltip" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">⏻</span>
+          <span class="web-menu-item-label" data-i18n="shutdown_tooltip">Hub を停止</span>
+        </button>
+        <div class="web-menu-divider" role="separator"></div>
+        <button id="bug-report-btn" class="web-menu-item" type="button" data-i18n-tooltip="bug_report_tooltip" aria-haspopup="dialog" role="menuitem">
+          <span class="web-menu-item-icon" aria-hidden="true">🐞</span>
+          <span class="web-menu-item-label" data-i18n="bug_report_button">バグ報告</span>
+        </button>
+      </div>
+    </div>
+    <button id="settings-btn" aria-expanded="false" aria-controls="settings-panel">
       <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       <span data-i18n="settings">Settings</span>
+      <svg class="settings-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
   </header>
 
-  <div id="settings-panel" hidden>
+  <div id="settings-panel" class="aac-wheel-overlay" hidden>
     <div class="settings-header">
       <img src="/icon.svg" class="settings-app-icon" alt="">
       <div>
@@ -125,7 +191,7 @@
       <div class="settings-header-actions">
         <button id="settings-reset-btn" class="settings-header-btn" data-i18n="settings_reset">リセット</button>
         <button id="settings-save-btn" class="settings-header-btn" data-i18n="settings_save">保存</button>
-        <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">×</button>
+        <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">✕</button>
       </div>
     </div>
     <div class="settings-body">
@@ -174,6 +240,49 @@
             </select>
           </div>
           <div class="settings-note" data-i18n="settings_locked_mode_desc">新規セッション/リロード時に選択したモードで開きます。途中で切替えることは可能です。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_tab_order_label">タブの並び順</span>
+            <button type="button" id="tab-order-reset-btn" class="settings-inline-btn" data-i18n="settings_tab_order_reset">既定に戻す</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_provider_order_label">新規セッションの並び順</span>
+            <button type="button" id="provider-order-reset-btn" class="settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_provider_order_desc">新規セッションの provider はドラッグで並べ替えできます。並び順はこのブラウザにのみ保存されます。タッチ端末では並べ替えできません。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_cards_label">操作系の左右: セッションカード</span>
+            <select id="ui-side-cards-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
+              <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_tools_label">操作系の左右: 入力欄のツール群</span>
+            <select id="ui-side-tools-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
+              <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_close_label">操作系の左右: 開閉・閉じるボタン</span>
+            <select id="ui-side-close-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_opt_default">既定（従来どおり）</option>
+              <option value="left" data-i18n="settings_ui_side_opt_left">左に置く</option>
+              <option value="right" data-i18n="settings_ui_side_opt_right">右に置く</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_ui_side_approval_label">確認ポップアップの位置</span>
+            <select id="ui-side-approval-select" class="settings-select">
+              <option value="" data-i18n="settings_ui_side_approval_default">下（従来どおり）</option>
+              <option value="right" data-i18n="settings_ui_side_approval_right">右カラム</option>
+              <option value="left" data-i18n="settings_ui_side_approval_left">左カラム</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。「既定」は更新前と同じ配置です。入力欄の ⇄ ボタンはこれらをまとめて反対側へ倒します（下ドックの確認ポップアップは動きません）。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
         </div>
       </details>
       <details class="settings-section" data-section="appearance">
@@ -220,6 +329,23 @@
         <summary class="settings-section-title"><span data-i18n="settings_session">Session</span><span class="settings-section-current" data-section="session"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_terminal_color">Terminal colors</span>
+            <select id="terminal-color" class="settings-select">
+              <option value="force" data-i18n="settings_terminal_color_force">Always show colors (recommended)</option>
+              <option value="inherit" data-i18n="settings_terminal_color_inherit">Follow the launch environment</option>
+              <option value="off" data-i18n="settings_terminal_color_off">No colors</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_terminal_color_desc">Applies to newly started sessions. "Follow the launch environment" honors NO_COLOR from the shell that started the Hub; "No colors" turns colors off even if that shell asks for them.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_handoff_intent_mode">Handoff recording</span>
+            <select id="handoff-intent-mode" class="settings-select">
+              <option value="done-only" data-i18n="settings_handoff_intent_mode_done_only">Completion summaries only (recommended)</option>
+              <option value="turn-summary" data-i18n="settings_handoff_intent_mode_turn_summary">Also record a summary of every turn</option>
+            </select>
+          </div>
+          <div class="settings-note" data-i18n="settings_handoff_intent_mode_desc">"Also record a summary of every turn" asks the AI for a one-line summary after each turn and uses more of the session's own tokens. Off by default; turn on only if you have tokens to spare.</div>
+          <div class="settings-row">
             <span class="settings-label" data-i18n="settings_idle_timeout">Idle timeout (min)</span>
             <input type="number" id="idle-timeout-min" min="0" max="1440" value="60" class="settings-input-number">
           </div>
@@ -230,14 +356,14 @@
           </div>
           <div class="settings-note" data-i18n="settings_reconnect_grace_desc">0 = disable reconnect. How long wrappers wait for the Hub to come back after a crash before terminating their PTY. Applies to NEW sessions only — running sessions keep the value at the time they were spawned.</div>
           <div class="settings-row">
-            <span class="settings-label" data-i18n="settings_board_notify_mode">Board update notification</span>
+            <span class="settings-label" data-i18n="settings_board_notify_mode">Progress update notification</span>
             <select id="board-notify-mode" class="settings-select">
-              <option value="queue-until-idle" data-i18n="settings_board_notify_queue">Queue until conductor is idle (recommended)</option>
-              <option value="soft-notify" data-i18n="settings_board_notify_soft">Badge only</option>
+              <option value="soft-notify" data-i18n="settings_board_notify_soft">Badge only (recommended)</option>
+              <option value="queue-until-idle" data-i18n="settings_board_notify_queue">Queue until conductor is idle</option>
               <option value="interrupt" data-i18n="settings_board_notify_interrupt">Interrupt immediately</option>
             </select>
           </div>
-          <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Applies only to orchestration conductors. Queue keeps the latest board update and sends one Enter after output is idle.</div>
+          <div class="settings-note" data-i18n="settings_board_notify_mode_desc">Controls routine progress only. Completion, failure, questions, stalls, and delayed spawn results are always queued and delivered when the conductor's main composer is safe.</div>
           <div class="settings-row">
             <span class="settings-label">Child spawn confirmation</span>
             <select id="spawn-confirm-mode" class="settings-select">
@@ -271,6 +397,15 @@
           <div class="settings-note" data-i18n="settings_server_manage_desc">SSH / WSL 先の Hub への接続プロファイルの追加・接続・切断を行います。</div>
         </div>
       </details>
+      <details class="settings-section" data-section="subscriptions">
+        <summary class="settings-section-title"><span data-i18n="settings_subscriptions">サブスクリプション</span><span class="settings-section-current" data-section="subscriptions"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_subscriptions_desc">Keep more than one signed-in account per AI CLI and pick which one a session uses. many-ai-cli only points the official CLI at a separate config directory — it never reads or stores your tokens.</div>
+          <div id="subs-list" class="subs-list"></div>
+          <div id="subs-error" class="settings-note settings-note-warn" hidden></div>
+          <div class="settings-note" data-i18n="settings_subscriptions_isolation_note">A profile switches the CLI's whole config directory, so per-profile sessions do not see the global memory file, skills, or past conversations of your default profile.</div>
+        </div>
+      </details>
       <details class="settings-section" data-section="remote-auth">
         <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
         <div class="settings-section-body">
@@ -293,6 +428,7 @@
             <button id="remote-pin-clear-btn" class="settings-inline-btn danger" data-i18n="settings_remote_pin_clear" hidden>解除</button>
           </div>
           <div class="settings-note" data-i18n="settings_remote_pin_desc">既定 OFF。設定すると非 loopback（スマホ/VPN）からのアクセス時に PIN ログインを要求します。loopback（このPC）は従来どおり token のみで通ります。VPN 専用で SSH を置かない運用の追加の鍵向けです。</div>
+          <div id="remote-pin-exposed-hint" class="settings-note settings-note-warn" data-i18n="settings_remote_pin_exposed_hint" hidden>allowed_hosts / trusted_networks が設定されていますが PIN は未設定です。遠隔経路は token だけで通ります。</div>
         </div>
       </details>
       <details class="settings-section" data-section="doctor">
@@ -430,6 +566,7 @@
               <option value="cursor-agent" data-i18n="settings_approval_patterns_cursor_agent">Cursor Agent</option>
               <option value="opencode" data-i18n="settings_approval_patterns_opencode">OpenCode</option>
               <option value="grok" data-i18n="settings_approval_patterns_grok">Grok Build</option>
+              <option value="command-code" data-i18n="settings_approval_patterns_command_code">Command Code</option>
               <option value="common" data-i18n="settings_approval_patterns_common">共通</option>
             </select>
           </div>
@@ -797,6 +934,11 @@
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_usage_links_desc">Header usage links. Leave blank to use the default URL.</div>
           <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_usage_probe_model_label">Usage probe model</span>
+            <input type="text" id="usage-probe-model" class="settings-input-text" data-i18n-placeholder="settings_usage_probe_model_placeholder" placeholder="Default: claude-haiku-4-5">
+          </div>
+          <div class="settings-note" data-i18n="settings_usage_probe_model_desc">Only the one-turn Claude usage check uses this model; ordinary sessions are unchanged.</div>
+          <div class="settings-row">
             <span class="settings-label">Claude</span>
             <input type="text" id="usage-link-claude-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_claude_placeholder" placeholder="Default Claude usage URL">
           </div>
@@ -819,6 +961,10 @@
           <div class="settings-row">
             <span class="settings-label">Grok Build</span>
             <input type="text" id="usage-link-grok-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_grok_placeholder" placeholder="Default: https://grok.com/?_s=usage">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Command Code</span>
+            <input type="text" id="usage-link-command-code-url" class="settings-input-url" data-i18n-placeholder="settings_usage_links_command_code_placeholder" placeholder="Default: https://commandcode.ai/usage">
           </div>
           <div class="settings-row">
             <span class="settings-label">Ollama</span>
@@ -854,6 +1000,10 @@
             <input type="text" id="slash-src-cursor-agent" class="settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
+            <span class="settings-label">Command Code</span>
+            <input type="text" id="slash-src-command-code" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
             <button id="slash-src-save-btn" class="slash-src-save-btn" data-i18n="settings_slash_src_save">保存</button>
           </div>
         </div>
@@ -868,7 +1018,7 @@
   </div>
   <!-- 🖥 Server モーダル（内蔵リモート接続）。設計は settings-panel / workflow-modal に準拠。
        一覧（接続/切断/Open）はサーバから取得して server-modal.ts が動的描画。追加フォームは静的。 -->
-  <div id="server-modal" hidden>
+  <div id="server-modal" class="aac-wheel-overlay" hidden>
     <div class="server-modal-box" role="dialog" aria-modal="true" aria-labelledby="server-modal-title">
       <div class="server-modal-header">
         <span class="server-modal-title" id="server-modal-title" data-i18n="server_modal_title">Servers / Remote Connections</span>
@@ -986,20 +1136,29 @@
             <path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path>
           </svg>
         </button>
+        <!-- C5: plan_session-handoff-board_c5_handoff-md.md — 経路2「一覧のボタンから」の
+             入口。看板ディレクトリを直接読むので、Hub 再起動後・セッション終了後も開ける。 -->
+        <button id="handoff-list-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">↪</button>
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
       </div>
-      <div id="new-session-panel" hidden>
+      <div id="new-session-panel" class="aac-wheel-overlay" hidden>
         <div class="new-session-form">
           <div class="spawn-provider-row">
             <select id="spawn-provider" class="spawn-select spawn-provider-native" aria-hidden="true" tabindex="-1">
               <option value="claude">Claude Code</option>
               <option value="codex">Codex CLI</option>
+              <option value="grok">Grok Build</option>
+              <option value="opencode">OpenCode</option>
+              <option value="command-code">Command Code</option>
               <option value="copilot">GitHub Copilot</option>
               <option value="cursor-agent">Cursor Agent</option>
-              <option value="opencode">OpenCode</option>
-              <option value="grok">Grok Build</option>
               <option value="shell">Shell</option>
             </select>
+            <label id="spawn-remember-approval-label" class="spawn-remember-approval-label"
+                   data-i18n-tooltip="spawn_remember_approval_tooltip">
+              <input id="spawn-remember-approval-settings" type="checkbox" checked>
+              <span data-i18n="spawn_remember_approval_label">Remember</span>
+            </label>
             <div id="spawn-provider-combobox" class="spawn-provider-combobox">
               <button id="spawn-provider-trigger" class="spawn-provider-trigger" type="button"
                       aria-haspopup="listbox" aria-expanded="false" aria-controls="spawn-provider-list">
@@ -1009,6 +1168,9 @@
               </button>
               <ul id="spawn-provider-list" class="spawn-provider-list" role="listbox" aria-labelledby="spawn-provider-trigger" hidden></ul>
             </div>
+            <button id="spawn-provider-note-help" class="spawn-inline-help-btn" type="button"
+                    aria-controls="spawn-claude-note" aria-expanded="false"
+                    aria-label="What does this provider option do?">?</button>
           </div>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
@@ -1019,13 +1181,6 @@
           </div>
           <!-- label input (optional) -->
           <input type="text" id="spawn-label" class="spawn-input" data-i18n-placeholder="spawn_label_placeholder">
-          <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
-               未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
-          <label class="spawn-risk-label">
-            <input id="spawn-isolate-worktree" type="checkbox">
-            <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
-          </label>
-          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Only applies when the working directory is a git repository. Creates an isolated checkout under &lt;repo&gt;/.git-worktrees/ on a new many-ai/ branch. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling.</div>
           <!-- model input (shared between providers) -->
           <div class="spawn-model-row">
             <input type="text" id="spawn-model" class="spawn-input"
@@ -1034,7 +1189,7 @@
                    autocomplete="off">
             <button id="spawn-model-clear" class="spawn-btn-browse spawn-model-clear" type="button"
                     data-i18n-tooltip="spawn_model_clear_tooltip"
-                    aria-label="Clear model" hidden>×</button>
+                    aria-label="Clear model" hidden>✕</button>
             <button id="spawn-model-refresh" class="spawn-btn-browse" type="button"
                     data-i18n-tooltip="spawn_model_refresh_tooltip"
                     aria-label="Refresh model list">↻</button>
@@ -1045,9 +1200,17 @@
           </div>
           <datalist id="spawn-model-datalist"></datalist>
 
-          <!-- Claude-only options -->
+          <!-- subscription selector: profile が 2 件以上ある provider でのみ出す。
+               0〜1 件のときは行ごと隠し、送信 JSON も従来と同一に保つ。 -->
+          <div class="spawn-subscription-row" id="spawn-subscription-row" hidden>
+            <select id="spawn-subscription" class="spawn-select"></select>
+          </div>
+
+          <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent / command-code. -->
           <div id="spawn-claude-opts">
             <button id="spawn-claude-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
+          </div>
+          <div id="spawn-permission-opts">
             <select id="spawn-permission-mode" class="spawn-select">
               <option value="default" data-i18n="spawn_permission_default">Approval mode: Default</option>
               <option value="plan" data-i18n="spawn_permission_plan">plan (confirm before changes)</option>
@@ -1083,7 +1246,49 @@
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
           <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
           <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
+          <div id="spawn-command-code-note" class="settings-note" data-i18n="spawn_command_code_note" hidden>Uses the installed Command Code CLI. Authentication and permissions are managed by Command Code. Permission mode is passed only when you choose it here.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
+
+          <!-- git worktree 隔離（全プロバイダ共通・opt-in）。チェック時のみ isolate_worktree を送り、
+               未チェックのときは config の user_prefs.spawn.worktree_auto を既定として尊重する。 -->
+          <div class="spawn-inline-help-row">
+            <label class="spawn-risk-label">
+              <input id="spawn-isolate-worktree" type="checkbox">
+              <span data-i18n="spawn_isolate_worktree">Run this session in a dedicated git worktree</span>
+            </label>
+            <!-- 説明はチェック後にしか出せないと「押してみるまで何か分からない」ため、
+                 チェック前でも読める ? を置く。label の外に出すのは、label 内の button は
+                 クリックがチェックボックスのトグルに吸われるため。 -->
+            <button id="spawn-isolate-worktree-help" class="spawn-inline-help-btn" type="button"
+                    aria-controls="spawn-isolate-worktree-note" aria-expanded="false"
+                    aria-label="What does the dedicated git worktree option do?">?</button>
+          </div>
+          <div id="spawn-isolate-worktree-note" class="settings-note" data-i18n="spawn_isolate_worktree_note" hidden>Keeps parallel sessions in the same repository from fighting over the same files. All work stays on a dedicated many-ai/ branch, so you can throw the whole branch away if you dislike the result. Only applies when the working directory is a git repository; the isolated checkout is created under &lt;repo&gt;/.git-worktrees/. Untracked files such as node_modules and .env are not carried over, so dependencies may need reinstalling. The worktree is not deleted automatically when the session ends.</div>
+
+          <!-- 子セッションへの委譲を AI へ伝えるか（opt-in）。止めているのは「AI が知るかどうか」
+               だけで、orchestrate サブコマンド自体は全セッションで動く＝安全策ではない
+               （実際の歯止めは spawn 時の確認ダイアログ側）。理由の正本は
+               internal/wrapper/delegation.go の冒頭。 -->
+          <div class="spawn-inline-help-row">
+            <label class="spawn-risk-label">
+              <input id="spawn-delegation" type="checkbox">
+              <span data-i18n="spawn_delegation">Let this session know it can delegate work to child sessions</span>
+            </label>
+            <button id="spawn-delegation-help" class="spawn-inline-help-btn" type="button"
+                    data-i18n-tooltip="spawn_delegation_note"
+                    aria-label="What does delegation do?">?</button>
+          </div>
+
+          <!-- 最初に渡す指示（任意・全 provider 共通）。
+               plan_session-handoff-board_c4_prompted-spawn.md C2: 空のまま起動しても従来と
+               同じ（送信 JSON から initial_prompt キー自体を省く）。引き継ぎ（別 plan の C5）は
+               この欄を看板 md で埋めて開く専用画面を作らず、この欄をそのまま共用する。 -->
+          <div class="spawn-initial-prompt-row">
+            <label for="spawn-initial-prompt" class="spawn-field-label" data-i18n="spawn_initial_prompt_label">Initial instruction (optional)</label>
+            <textarea id="spawn-initial-prompt" class="spawn-input spawn-textarea" rows="3"
+                      data-i18n-placeholder="spawn_initial_prompt_placeholder"
+                      placeholder="e.g. &lt;path to plan.md&gt; do this"></textarea>
+          </div>
 
           <!-- C2: Detached 設定セクション -->
           <div id="spawn-detached-section" class="spawn-detached-section">
@@ -1170,6 +1375,7 @@
                     <th data-i18n="spawn_role_table_role">役割</th>
                     <th data-i18n="spawn_role_table_cli">CLI</th>
                     <th data-i18n="spawn_role_table_model">モデル</th>
+                    <th data-i18n="spawn_role_table_subscription">サブスクリプション</th>
                   </tr>
                 </thead>
                 <tbody id="spawn-role-table-body"></tbody>
@@ -1183,6 +1389,71 @@
             <button id="spawn-launch-btn" class="spawn-btn-launch" data-i18n="spawn_launch">Launch</button>
           </div>
         </div>
+      </div>
+      <div id="relay-dialog" class="aac-wheel-overlay" hidden>
+        <section class="relay-dialog-box" role="dialog" aria-modal="true" aria-labelledby="relay-dialog-title">
+          <div class="relay-dialog-header">
+            <h2 id="relay-dialog-title" data-i18n="relay_dialog_title">Start relay</h2>
+            <button id="relay-dialog-close" class="relay-dialog-close" type="button" data-i18n-tooltip="settings_close" aria-label="Close">✕</button>
+          </div>
+          <div class="relay-dialog-target"><span data-i18n="relay_target_session">Target session</span><strong id="relay-target-session"></strong></div>
+
+          <div class="relay-dialog-field">
+            <label for="relay-plan-path" data-i18n="relay_plan_path">Plan path</label>
+            <input id="relay-plan-path" type="text" autocomplete="off" data-i18n-placeholder="relay_plan_path_placeholder" placeholder="docs/local/plan_...md">
+          </div>
+          <div class="relay-dialog-field relay-dialog-candidates">
+            <label for="relay-plan-candidates" data-i18n="relay_plan_candidates">Plan candidates</label>
+            <select id="relay-plan-candidates"><option value="" data-i18n="relay_plan_candidates_empty">Select a plan file…</option></select>
+          </div>
+
+          <div class="relay-dialog-section-title" data-i18n="spawn_orchestration_roles_title">Roles</div>
+          <table class="spawn-role-table relay-role-table" id="relay-role-table">
+            <thead>
+              <tr>
+                <th data-i18n="spawn_role_table_role">Role</th>
+                <th data-i18n="spawn_role_table_cli">CLI</th>
+                <th data-i18n="spawn_role_table_model">Model</th>
+                <th data-i18n="spawn_role_table_subscription">Subscription</th>
+              </tr>
+            </thead>
+            <tbody id="relay-role-table-body"></tbody>
+          </table>
+          <div class="settings-note relay-strong-note" data-i18n="relay_strong_note">The strong implementer only takes over C items that keep failing review or are marked [strong] in the plan.</div>
+
+          <div class="relay-dialog-options">
+            <label class="relay-dialog-field"><span data-i18n="relay_max_rounds">Max rounds</span><select id="relay-max-rounds">
+              <option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
+            </select></label>
+            <label class="relay-dialog-field"><span data-i18n="relay_escalate_after">Hand off after</span><select id="relay-escalate-after">
+              <option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            </select></label>
+          </div>
+          <div id="relay-remaining-slots" class="settings-note relay-remaining-slots" data-i18n="relay_remaining_slots_unknown">Checking relay capacity…</div>
+
+          <fieldset class="relay-dialog-field relay-mode-field">
+            <legend data-i18n="relay_workplace">Workplace</legend>
+            <label class="relay-radio-label"><input type="radio" name="relay-mode" value="worktree" checked><span data-i18n="relay_mode_worktree_label">Relay worktree (recommended)</span></label>
+            <label class="relay-radio-label"><input type="radio" name="relay-mode" value="same-tree"><span data-i18n="relay_mode_same_tree_label">Same tree as parent</span></label>
+          </fieldset>
+          <div id="relay-same-tree-warning" class="settings-note settings-note-warn relay-same-tree-warning" data-i18n="relay_same_tree_warning" hidden>Child sessions write directly to the parent working tree. Do not edit it in parallel; uncommitted changes before starting are also reviewed.</div>
+
+          <div class="relay-dialog-field">
+            <label for="relay-extra-impl" data-i18n="relay_extra_impl">Extra implementation instructions</label>
+            <textarea id="relay-extra-impl" rows="2"></textarea>
+          </div>
+          <div class="relay-dialog-field">
+            <label for="relay-extra-review" data-i18n="relay_extra_review">Extra review instructions</label>
+            <textarea id="relay-extra-review" rows="2"></textarea>
+          </div>
+          <div class="settings-note" data-i18n="spawn_orchestration_bypass_note">⚠ Orchestration child sessions launch with approvals skipped (full access). Control comes from worktree isolation and your instructions.</div>
+          <div id="relay-dialog-error" class="settings-note settings-note-warn" hidden></div>
+
+          <div class="relay-dialog-actions">
+            <button id="relay-cancel" class="spawn-btn-cancel" type="button" data-i18n="spawn_cancel">Cancel</button>
+            <button id="relay-start" class="spawn-btn-launch" type="button" data-i18n="relay_start" disabled>Start relay</button>
+          </div>
+        </section>
       </div>
       <div id="sessions"></div>
     </aside>
@@ -1284,7 +1555,7 @@
     </div>
     <div id="input-bar-outer">
         <div id="slash-menu" hidden></div>
-        <div id="slash-picker" hidden>
+        <div id="slash-picker" class="aac-wheel-overlay" hidden>
           <div class="slash-picker-header">
             <span id="slash-picker-title" class="slash-picker-provider-name"></span>
             <span id="slash-picker-time" class="slash-picker-time"></span>
@@ -1311,7 +1582,7 @@
         </div>
         <div id="input-bar">
           <div id="input-wrap">
-            <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle tools position">⇄</button>
+            <button id="tools-flip-btn" class="quick-cmd-btn" data-i18n-tooltip="tools_flip_tooltip" aria-label="Toggle control side">⇄</button>
             <button id="mobile-composer-attach-btn" class="quick-cmd-btn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n-tooltip="mobile_composer_attach_tooltip" aria-label="Add attachment">＋</button>
             <div id="input-area">
               <div id="paste-chips"></div>
@@ -1381,7 +1652,7 @@
       </div>
     </div><!-- /#terminal-column -->
   </div>
-  <div id="about-panel" hidden>
+  <div id="about-panel" class="aac-wheel-overlay" hidden>
     <div class="about-dialog">
       <div class="about-title-bar">
         <span class="about-title" data-i18n="about_title">About this app</span>
@@ -1439,8 +1710,8 @@
               </a>
             </li>
             <li class="about-oss-item">
-              <a class="about-oss-link" href="https://github.com/cure53/DOMPurify/releases/tag/3.4.1" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">DOMPurify 3.4.1</p>
+              <a class="about-oss-link" href="https://github.com/cure53/DOMPurify/releases/tag/3.4.12" target="_blank" rel="noopener noreferrer">
+                <p class="about-oss-name">DOMPurify 3.4.12</p>
                 <p class="about-oss-desc" data-i18n="about_oss_dompurify_desc">Apache-2.0 OR MPL-2.0 License. Used to sanitize HTML rendered by the files preview.</p>
               </a>
             </li>
@@ -1560,10 +1831,10 @@
       </div>
     </div>
   </div>
-  <div id="model-picker-overlay" hidden></div>
+  <div id="model-picker-overlay" class="aac-wheel-overlay" hidden></div>
 
   <!-- リモート PIN ログインモーダル（plan_hub-remote-auth.md C3 / 非 loopback 未認証時のみ表示） -->
-  <div id="pin-login-overlay" hidden>
+  <div id="pin-login-overlay" class="aac-wheel-overlay" hidden>
     <div id="pin-login-dialog">
       <div id="pin-login-title" data-i18n="pin_login_title">PIN を入力</div>
       <div id="pin-login-msg" data-i18n="pin_login_msg">このHubはリモートPINで保護されています。PINを入力してください。</div>

@@ -1,20 +1,26 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
-import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectKeyForSession } from './sidebar-tree.js';
+import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
 import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { detectApproval, releaseActionBarIfOwnedByOther, setActionBarFocus } from './approval.js';
-import { onActiveSessionChanged } from './token-statusbar.js';
+import { detectApproval, isAIOrCustomProvider, releaseActionBarIfOwnedByOther, scheduleApprovalLedgerRestore, setActionBarFocus } from './approval.js';
+import { getSessionAgentInfo, getSessionCtxPct, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
+import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
 import { setActiveSessionForPayload } from './chat-payload.js';
 import { FilesTabManager } from './files-view.js';
 import { dirnameForPath } from './path-links.js';
 import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
+import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
+import { openRelayDialog } from './relay-dialog.js';
+import { openNextSpawnConfirmationFor, pendingSpawnConfirmationCount } from './spawn-confirm.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -22,6 +28,12 @@ import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-stor
 
 const SESSION_CARD_COLORS = ['blue', 'green', 'orange', 'red', 'purple'];
 let activeSessionColorFilter = '';
+
+// スマホ幅判定（他モジュールと同じ 720px 基準）。セッション切替時の入力欄
+// 自動フォーカスを PC だけに限定するために使う。
+const _mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)') : null;
+function isMobileViewport(): boolean { return !!_mobileMql?.matches; }
 
 export async function patchSessionMeta(id: number, patch: Record<string, unknown>): Promise<boolean> {
   try {
@@ -128,6 +140,15 @@ export function activateSessionForMultiPane(id) {
 window.activateSessionForMultiPane = activateSessionForMultiPane;
 
 export function activateSession(id) {
+  // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 「その親が
+  // アクティブになったとき」に確認ダイアログを開く唯一のフック。関数の冒頭で
+  // スケジュールしておくことで、この下の早期 return（マルチペイン委譲）を通っても
+  // 通常ビューの経路を最後まで通っても、どちらの後でも実行される。queueMicrotask
+  // にしているのは、この関数の残り（set_activeSessionId 等）が確実に終わってから
+  // openNextSpawnConfirmationFor 内の activeSessionId 判定を走らせるため。
+  // activateSessionForMultiPane には同じフックを足さない（別窓 Grid が直接呼ぶ経路
+  // なので、そちらは Hub タブへ戻って親を選び直すまで割り込ませない）。
+  queueMicrotask(() => openNextSpawnConfirmationFor(id));
   // C4: マルチタブが開いているとき、外部からの activateSession 呼び出し（承認自動移動等）は
   // 軽量版にリダイレクトし、シングルビュー固有の処理（attachTerminal 等）を実行しない。
   // _multiPaneFocusSyncing フラグが立っているときは再帰防止のためスキップ。
@@ -188,7 +209,10 @@ export function activateSession(id) {
   if (typeof rewireChatHistorySub === 'function') rewireChatHistorySub(id);
   // chat-payload (内蔵プロキシ経由 payload 表示) のアクティブセッションを切替
   setActiveSessionForPayload(id);
-  inputEl.focus();
+  // スマホはセッションへ移動した瞬間にフォーカスするとソフトキーボードが立ち上がり、
+  // 画面の下半分が隠れて本文が読めなくなる（2026-08-17 report）。PC はキーボードが
+  // 常時出ているので従来どおり即入力できる状態にする。
+  if (!isMobileViewport()) inputEl.focus();
   if (typeof window._wakewordSessionChanged === 'function') window._wakewordSessionChanged();
   const sessionInfo = sessions.get(id);
   if (sessionInfo) {
@@ -204,6 +228,9 @@ export function activateSession(id) {
   requestAnimationFrame(() => {
     if (activeSessionId !== id) return;
     detectApproval(id);
+    // claude / codex で、上の detectApproval が何も出せなかったときの最後の砦。
+    // Hub 配信を一度取りこぼした保留承認を台帳から出し直す（「↻ 承認」と同じ経路）。
+    scheduleApprovalLedgerRestore(id);
     refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   });
   refitAndStickTerminalToBottomAfterLayoutSettles(id, {
@@ -247,11 +274,68 @@ export function stateLabel(state) {
   return t('state_' + state) || state;
 }
 
+// 状態記号はテキストのグリフ（⚑ / ⌨ / ● / ◌ / ✕）ではなく SVG で描く。
+// グリフは 1 文字ごとにフォールバック先のフォントが変わり、送り幅も墨の位置も
+// 揃わない（実測: Segoe UI で ●=7.9px / ⚑=9.5px / ⌨=14.7px / ✕=10.7px）。
+// 「同じ大きさに見えない・同じ高さに乗らない」はここが原因で、CSS の translateY を
+// 足しても状態ごとにズレ量が違うため直らない。provider アイコンと同じ 16x16 viewBox
+// に統一すると、墨の中心が座標で決まるので状態が変わっても位置と大きさが動かない。
+const STATE_ICON_SVG = {
+  flag: '<path d="M5 2.7v10.6" stroke-width="1.6" stroke-linecap="round"/><path d="M6.4 3.5 12.1 6.1 6.4 8.7Z" stroke="none"/>',
+  keyboard: '<rect x="2.4" y="4.6" width="11.2" height="6.8" rx="1.6" fill="none" stroke-width="1.4"/><path d="M5 7.4h.01M7.6 7.4h.01M10.2 7.4h.01M5.6 9.6h4.8" stroke-width="1.4" stroke-linecap="round"/>',
+  dot: '<circle cx="8" cy="8" r="3.6" stroke="none"/>',
+  ring: '<circle cx="8" cy="8" r="3.5" fill="none" stroke-width="1.5" stroke-dasharray="2.3 1.9"/>',
+  cross: '<path d="m4.7 4.7 6.6 6.6M11.3 4.7 4.7 11.3" stroke-width="1.7" stroke-linecap="round"/>',
+  // 子起動の確認待ち（pending-spawn-confirm）専用の記号。既存の awaiting_approval（flag）
+  // と混同されないよう、あえて別の形にしている（角丸四角＋十字＝「新しい子を追加できる」の意匠）。
+  spawnPending: '<rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2" fill="none" stroke-width="1.4"/><path d="M8 5.6v4.8M5.6 8h4.8" stroke-width="1.4" stroke-linecap="round"/>',
+};
+
+export function stateIconSvgHtml(kind) {
+  const body = STATE_ICON_SVG[kind] || STATE_ICON_SVG.dot;
+  return `<svg class="card-state-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" stroke="currentColor" aria-hidden="true">${body}</svg>`;
+}
+
 function stateActivityDecoration(s) {
-  if (s.awaiting_approval) return { className: 'awaiting-approval', icon: '⚑', label: '承認待ち' };
-  if (s.awaiting_user) return { className: 'awaiting-input', icon: '⌨', label: '入力待ち' };
-  if (s.workflow_active) return { className: 'workflow-active', icon: '◌', label: '処理中' };
-  return { className: '', icon: '', label: '' };
+  const state = s?.state || 'standby';
+  const baseLabel = stateLabel(state);
+  if (s.awaiting_approval) {
+    const activityLabel = ti18n('card_activity_awaiting_approval', 'Awaiting approval');
+    return { className: 'awaiting-approval', iconKind: 'flag', label: activityLabel === baseLabel ? baseLabel : `${baseLabel}: ${activityLabel}` };
+  }
+  // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): AI 本体の
+  // 承認（awaiting_approval、上の分岐）が立っていないときに限って、子起動の確認待ちを
+  // 出す。子起動の確認は AI 本体の承認より優先度を上げない。
+  const pendingSpawnConfirmCount = pendingSpawnConfirmationCount(s.id);
+  if (pendingSpawnConfirmCount > 0) {
+    const activityLabel = pendingSpawnConfirmCount > 1
+      ? ti18n('card_pending_spawn_confirm_count', '{count} pending child spawn confirmations', { count: pendingSpawnConfirmCount })
+      : ti18n('card_activity_pending_spawn_confirm', 'Child spawn awaiting confirmation');
+    return { className: 'pending-spawn-confirm', iconKind: 'spawnPending', label: `${baseLabel}: ${activityLabel}` };
+  }
+  if (s.awaiting_user) {
+    const activityLabel = ti18n('card_activity_awaiting_input', 'Awaiting input');
+    return { className: 'awaiting-input', iconKind: 'keyboard', label: `${baseLabel}: ${activityLabel}` };
+  }
+  if (state === 'waiting') return { className: 'awaiting-approval', iconKind: 'flag', label: baseLabel };
+  // running を workflow_active より先に判定する。Hub 側は
+  // internal/hub/idle_state.go で WorkflowActive = !OutputIdle && !AwaitingUser、
+  // internal/hub/session_activity.go の DisplayState() が WorkflowActive のとき
+  // "running" を返すので、running のセッションは必ず workflow_active も立っている。
+  // 逆順にすると running の緑 ● に到達できず、実行中がずっと workflow-active の
+  // グレー ◌（--muted-2）で描かれ「動いている感じがしない」表示になる。
+  if (state === 'running') return { className: '', iconKind: 'dot', label: baseLabel };
+  if (s.workflow_active) {
+    const activityLabel = ti18n('card_activity_workflow_active', 'Processing');
+    return { className: 'workflow-active', iconKind: 'ring', label: `${baseLabel}: ${activityLabel}` };
+  }
+  if (state === 'error' || state === 'disconnected') return { className: '', iconKind: 'cross', label: baseLabel };
+  // standby も塗りつぶし ● にする。同じ状態を出す他の 2 箇所（サマリーチップの
+  // .chip-dot / ステータスバーの .tsb-pdot）はどちらも state によらず塗りつぶしの
+  // 丸で、色だけで区別している。ここだけ中空 ○ だと同じ状態が画面内で別の形になる。
+  // running との区別は色（--badge-running-text / --badge-standby-text）と
+  // state-pulse アニメーションの有無が担う。
+  return { className: '', iconKind: 'dot', label: baseLabel };
 }
 
 export function safeClassToken(value) {
@@ -274,10 +358,23 @@ export function providerDisplayName(provider) {
     'lm-studio': 'LM Studio',
     opencode: 'OpenCode',
     grok: 'Grok Build',
+    'command-code': 'Command Code',
   };
   return labels[key] || String(provider || '');
 }
 
+// provider アイコンの図形は 2 種類あり、使い分けは「単体で動くかどうか」で決まる。
+//
+//   丸（circle）  : それ単体で起動できるもの。`many-ai-cli wrap <provider>` の対象。
+//   角丸（rect）  : 単体では動かず、Claude や Codex のセッションからラップして使うもの
+//                   （モデル選択で選ぶ route。spawn-panel.ts の resolveRoute を参照）。
+//
+// **「ローカル実行かクラウドか」ではない。** Ollama はクラウドモデルも持つので、その軸で
+// 読み替えると新しいアイコンを足すときに形を取り違える（2026-08-30 に実際に誤読があった）。
+// 角丸なのは Ollama が単体で動かないからで、ローカルだからではない。
+//
+// この関数が 9 provider ぶんの図形の単一ソース。index.html の .usage-menu-icon は同じ図形を
+// 静的 SVG で複製しているので、形を変えるときは両方を揃える。
 export function providerIconHtml(provider, size = 16) {
   const key = String(provider || '').toLowerCase();
   const parsedSize = Number(size);
@@ -308,8 +405,78 @@ export function providerIconHtml(provider, size = 16) {
   if (key === 'grok') {
     return `<svg ${base}><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" ${txt}>G</text></svg>`;
   }
+  if (key === 'command-code') {
+    return `<svg ${base}><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" ${txt}>M</text></svg>`;
+  }
   const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
+}
+
+// モデル名は provider が返す opaque な値をそのまま表示する。命名規則を推測して
+// 略称・family・衝突回避を作ると、新しい provider/model のたびに保守が発生する。
+function cardProviderModelHtml(s) {
+  // モデル名・effort は getSessionAgentInfo が唯一の解決点（ステータスバー・
+  // タブチップと同じ値。s.model だけを見ると relay しか値を持たない場面で
+  // カードだけ空になる）。
+  const info = getSessionAgentInfo(Number(s?.id));
+  const modelName = info.model;
+  const localRoute = (s?.route === 'ollama' || s?.route === 'lm-studio') ? s.route : '';
+  const providerKey = localRoute || String(s?.provider || '').trim();
+  if (!providerKey && !modelName) return '';
+  const providerLabel = providerKey ? providerDisplayName(providerKey) : '';
+  const effort = info.effort;
+  const tooltip = [providerLabel, modelName, effort].filter(Boolean).join(' · ');
+  const providerIcon = providerKey ? providerIconHtml(providerKey, 14) : '';
+  const modelHtml = modelName
+    ? `<span class="card-model-name" aria-hidden="true">${escapeHtml(modelName)}</span>`
+    : '';
+  return `<span class="card-provider-model" role="img" data-tooltip="${escapeHtml(tooltip)}" title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}">${providerIcon}${modelHtml}</span>`;
+}
+
+// 旧ピン留め（sessions.pinned）を、1 度だけ兄弟順の先頭へ変換する。
+//
+// pinned は以前「プロジェクトから引き抜いて Pinned という別の箱へ移す」印だった。
+// 箱を廃止したので、同じ意図（上に置いておきたい）を兄弟順で表し直す。変換後は
+// pinned を読まない・書かない。列（internal/sessionstore/store.go）は残す。
+//
+// 2 回目以降の起動で利用者の並びを勝手に書き換えないよう、済みの印を user_prefs へ
+// 置く（端末をまたいで共有される）。
+export function migratePinnedSessionsOnce(): void {
+  try {
+    if (localStorage.getItem(STORAGE_SIDEBAR_PIN_MIGRATED_KEY) === '1') return;
+  } catch (_) { /* localStorage が使えない環境では毎回スキップしない（下で印を立てる） */ }
+
+  const pinned = (Array.from(sessions.values()) as any[]).filter(s => s && s.pinned);
+  // 既存の並びの相対順を保つため、後ろのものから順に先頭へ送る。
+  const ordered = pinned
+    .map(s => ({ id: s.id, rank: sessionOrder.indexOf(s.id) }))
+    .sort((a, b) => (b.rank === -1 ? Number.MAX_SAFE_INTEGER : b.rank) - (a.rank === -1 ? Number.MAX_SAFE_INTEGER : a.rank));
+  for (const entry of ordered) {
+    const next = moveToSiblingFront(sessionOrder, Array.from(sessions.values()) as any[], entry.id);
+    sessionOrder.length = 0;
+    sessionOrder.push(...next);
+  }
+  if (ordered.length > 0) saveSessionOrder();
+  setUserPref('sidebar_pin_migrated', true);
+}
+
+// セッションを自分の器（プロジェクト、または親セッション）の中で兄弟順の先頭へ動かす。
+// カードの ⇧・カードのコンテキストメニュー・モバイルの行アクションが同じ経路を通る。
+export function moveSessionToSiblingFront(id: number): void {
+  const next = moveToSiblingFront(sessionOrder, Array.from(sessions.values()) as any[], id);
+  // sessionOrder は他モジュールが同じ配列参照を見ているので、差し替えずに中身を入れ替える。
+  sessionOrder.length = 0;
+  sessionOrder.push(...next);
+  saveSessionOrder();
+  renderSessionList();
+  // マルチタブが開いているときはペインスロット順も更新する。
+  // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく。
+  const mv = document.getElementById('multi-view');
+  if (mv && !(mv as any).hidden && window.multiPaneManager) {
+    window._c5SidebarUpdating = true;
+    try { window.multiPaneManager.render(); }
+    finally { window._c5SidebarUpdating = false; }
+  }
 }
 
 // C9: 整列ロジックは state.js の orderSessions に集約。getOrderedSessions は後方互換の薄い委譲。
@@ -382,9 +549,7 @@ export function onSessionCardActivate(id) {
 // プロトコルに「ターン開始」専用の時刻が無い（started_at は起動時刻、last_output_at は
 // 最終出力時刻）ため。token-statusbar の turnStartAt と同方式。running を抜けたら破棄。
 const cardRunningSince = new Map<number, number>();
-// 「長時間処理中」警告バッジを出すしきい値（秒）。これを超えて running が続くと⚠を出す。
-// 重いターン（巨大 context × xhigh 思考）で 1 応答が 5 分以上かかる状態を可視化する。
-const CARD_LONGPROC_SEC = 300;
+// しきい値と重大度の判定は longproc.ts が正本（ライブ帯と同じ基準を使うため）。
 
 // running 中の応答経過秒を返す（running でなければ null、追跡もクリアする）。
 function cardTurnElapsedSec(id, state) {
@@ -404,26 +569,63 @@ function cardWorkflowProgressHtml(s) {
   return `<span class="card-workflow-progress" role="status" aria-label="${escapeHtml(aria)}" data-tooltip="${escapeHtml(aria)}">⚙ ${done}/${total}</span>`;
 }
 
-// カード 3 行目（ライブ情報）の中身 HTML を生成する。空文字なら行を隠す。
-// ctx%（コンテキスト残量）は下部ステータスバーに常時出ているため、カード側では
-// 重複表示しない。ここでは応答経過と長時間バッジ（running 中のみ）だけを出す。
-function cardLiveRowHtml(s) {
-  const parts = [];
+// カードは幅が狭いので完了サマリーはここまで詰める。全文は tooltip 側で読める。
+const CARD_DONE_MAX_LEN = 48;
+
+// カード 2 行目の状態情報を生成する。状態表示は 1 つに絞り、長時間・停滞、
+// 終了理由、完了サマリー、workflow 進捗の順で優先する。
+function cardStatusRowHtml(s) {
   const state = s.state || 'standby';
   const sec = cardTurnElapsedSec(s.id, state);
-  if (sec !== null) {
-    // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
-    if (sec >= CARD_LONGPROC_SEC) {
-      const label = ti18n('card_longproc_label', 'Long-running', {});
-      const lpTip = ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
-      parts.push(`<span class="card-longproc" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)}</span>`);
+  // 稼働経過秒（⏱ 48s 等）はユーザー要望により非表示。長時間処理の⚠バッジのみ残す。
+  // バッジには経過を併記する（5 分と 38 分が同じ見た目だと区別できないため）。
+  const lp = longprocStatus(sec, s.transcript_grew_at, Date.now());
+  if (lp.level !== 'none') {
+    const stalled = lp.level === 'stalled';
+    const label = stalled
+      ? ti18n('card_stalled_label', 'Not progressing', {})
+      : ti18n('card_longproc_label', 'Long-running', {});
+    const lpTip = stalled
+      ? ti18n('card_stalled_title', "The agent's own transcript has not grown for a while. The model is likely still emitting one long response. Send ESC in the terminal instead of resending.", {})
+      : ti18n('card_longproc_title', 'This response has been running a long time. It may be stuck behind a heavy turn (large context × high effort). Send ESC to interrupt instead of resending.', {});
+    const dur = formatLongprocDuration(stalled ? lp.stalledSec : lp.elapsedSec);
+    const cls = longprocBadgeClass('card-longproc', lp.level);
+    return `<span class="${cls}" data-tooltip="${escapeHtml(lpTip)}">⚠ ${escapeHtml(label)} ${escapeHtml(dur)}</span>`;
+  }
+  const providerName = providerDisplayName(s.provider);
+  const isDeadState = state === 'error' || state === 'disconnected';
+  if (isDeadState && s.end_reason) {
+    const key = 'end_reason_' + s.end_reason;
+    const translated = t(key, { provider: providerName || s.provider || '' });
+    if (translated !== key) {
+      return `<span class="card-end-reason" data-tooltip="${escapeHtml(translated)}">${escapeHtml(translated)}</span>`;
     }
   }
-  return parts.join('');
+  // 直前ターンの完了サマリー。端末は今見ているセッションの今の画面しか映さないので、
+  // **見ていないセッション**の完了に気づける経路はここだけになる。
+  // 稼働中は上の長時間バッジや状態表示のほうが今知りたい情報なので、待機側の状態でだけ出す。
+  if (state !== 'running' && state !== 'waiting') {
+    const done = getDoneSummary(s.id);
+    const line = doneSummaryDisplayText(done, CARD_DONE_MAX_LEN);
+    if (line) {
+      const full = doneSummaryLine(done?.text, 0); // tooltip には切らない全文を出す
+      return `<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}">${escapeHtml(line)}</span>`;
+    }
+  }
+  return cardWorkflowProgressHtml(s);
 }
 
-// 1 枚のカードのライブ行を in-place で更新する（フル再描画を避け、スクロール位置・
-// 入力フォーカス・D&D 状態を保つため）。行が無ければ card-actions の前に作る。
+function cardCtxHtml(s) {
+  const ctx = getSessionCtxPct(Number(s.id));
+  if (!ctx) return '';
+  const pct = Math.max(0, Math.min(100, Number(ctx.pct) || 0));
+  const severity = pct >= 90 ? 'crit' : (pct >= 75 ? 'warn' : '');
+  const title = ti18n('card_ctx_title', 'Context window usage', { pct });
+  return `<span class="card-ctx" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="card-ctx-gauge"><span class="card-ctx-fill ${severity}" style="width:${pct}%"></span></span><span class="card-ctx-pct ${severity}">${pct}%</span>${ctx.is1m ? '<span class="card-ctx-1m">1M</span>' : ''}</span>`;
+}
+
+// 1 枚のカードの 2 行目を in-place で更新する（フル再描画を避け、スクロール位置・
+// 入力フォーカス・D&D 状態を保つため）。行そのものは常に存在させる。
 export function updateCardLiveInfo(id) {
   const root = document.getElementById('sessions');
   if (!root) return;
@@ -431,21 +633,13 @@ export function updateCardLiveInfo(id) {
   if (!s) return;
   const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
   if (!card) return;
-  let row = card.querySelector('.card-live-row') as HTMLElement | null;
-  if (!row) {
-    row = document.createElement('div');
-    row.className = 'card-live-row';
-    const actions = card.querySelector('.card-actions');
-    if (actions) card.insertBefore(row, actions); else card.appendChild(row);
-  }
-  const inner = cardLiveRowHtml(s);
-  row.innerHTML = inner;
-  row.hidden = !inner;
-  const workflowSlot = card.querySelector('.card-workflow-progress-slot');
-  if (workflowSlot) workflowSlot.innerHTML = cardWorkflowProgressHtml(s);
+  const statusSlot = card.querySelector('.card-status-slot');
+  if (statusSlot) statusSlot.innerHTML = cardStatusRowHtml(s);
+  const ctxSlot = card.querySelector('.card-ctx-slot');
+  if (ctxSlot) ctxSlot.innerHTML = cardCtxHtml(s);
 }
 
-// 全カードのライブ行を更新する（1Hz タイマー等から呼ぶ）。
+// 全カードの 2 行目を更新する（1Hz タイマー等から呼ぶ）。
 export function updateAllCardsLiveInfo() {
   const root = document.getElementById('sessions');
   if (!root) return;
@@ -590,68 +784,41 @@ export function renderSessionList() {
 
   appendSessionColorFilters(root);
 
-  // 表示順の正本は sessionOrder（＝カードの D&D 並び替え結果）。未登録のセッションは
-  // 生成順に末尾へ積まれるので、何も並び替えていなければ #2 → #10 の生成順になる。
-  // ピン留めだけは orderSessions 側でプロジェクト境界を越えて先頭へ持ち上げる。
-  // 状態（承認待ち等）や provider でここを並べ替えてはいけない。並べ替えると
-  // sessionOrder が毎レンダー上書きされ、D&D の結果が画面へ反映されなくなる。
-  const displayedSessions = getOrderedSessions()
-    .filter((s: any) => !activeSessionColorFilter || s.color === activeSessionColorFilter);
-
-  // ピンはプロジェクト境界を越えて最上位に置く。そうしないと「別プロジェクトの
-  // ピンより、先に出たプロジェクトの非ピン」が上に残ってしまう。
-  const groups = new Map();
-  const pinnedSessions = displayedSessions.filter((s: any) => s.pinned);
-  if (pinnedSessions.length > 0) groups.set('__pinned__', pinnedSessions);
-  displayedSessions.filter((s: any) => !s.pinned).forEach(s => {
-    const cwdStr = s.cwd || '';
-    const name = cwdStr
-      ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
-      : '';
-    const key = name || '__no_project__';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(s);
+  // 配置の正本は sidebar-tree.ts の buildSidebarTree。器（プロジェクト）は Hub が配る
+  // project_id から決まり、親子は parent_session_id から決まる。ここで状態（承認待ち等）や
+  // provider による並べ替えを足してはいけない。足すと sessionOrder が毎レンダー上書きされ、
+  // D&D の結果が画面へ反映されなくなる。規則は sidebar-tree-fixtures.ts が固定している。
+  const tree = buildSidebarTree({
+    sessions: Array.from(sessions.values()) as any[],
+    order: sessionOrder,
+    groupOrder,
+    projectFavorites,
+    colorFilter: activeSessionColorFilter,
   });
 
-  // ピン留め優先、その中で groupOrder に従ってソート（未登録キーは末尾）
   // 未登録のプロジェクトキーを groupOrder に追記し、以降のレンダーで並び順を固定する。
   // ここで append しないと、両プロジェクトとも未登録の状態で比較関数が 0 を返し、
-  // Map 挿入順（= 各プロジェクトのセッションが sessionOrder 上で最初に登場する位置）
-  // に依存してしまい、あるプロジェクトの先頭セッションを ✕ で削除した瞬間に
-  // 他プロジェクトのグループが上下にジャンプする（削除で並び順が変わって見える）。
+  // あるプロジェクトの先頭セッションを ✕ で削除した瞬間に他プロジェクトのグループが
+  // 上下にジャンプする（削除で並び順が変わって見える）。
   let _groupOrderChanged = false;
-  for (const k of groups.keys()) {
-    if (k === '__pinned__') continue;
-    if (!groupOrder.includes(k)) {
-      groupOrder.push(k);
+  for (const project of tree) {
+    if (!groupOrder.includes(project.key)) {
+      groupOrder.push(project.key);
       _groupOrderChanged = true;
     }
   }
   if (_groupOrderChanged) saveGroupOrder();
-  const _projectFavIdx = new Map(projectFavorites.map((k, i) => [k, i]));
-  const _groupOrderIdx = new Map(groupOrder.map((k, i) => [k, i]));
-  const sortedGroupKeys = [...groups.keys()].sort((a, b) => {
-    if (a === '__pinned__') return -1;
-    if (b === '__pinned__') return 1;
-    const aPin = _projectFavIdx.has(a);
-    const bPin = _projectFavIdx.has(b);
-    if (aPin !== bPin) return aPin ? -1 : 1;
-    if (aPin && bPin) return _projectFavIdx.get(a) - _projectFavIdx.get(b);
-    const ai = _groupOrderIdx.has(a) ? _groupOrderIdx.get(a) : -1;
-    const bi = _groupOrderIdx.has(b) ? _groupOrderIdx.get(b) : -1;
-    if (ai === -1 && bi === -1) return 0;
-    if (ai === -1) return 1;
-    if (bi === -1) return -1;
-    return ai - bi;
-  });
 
-  sortedGroupKeys.forEach(key => {
-    const groupSessions = groups.get(key);
-    const isPinnedGroup = key === '__pinned__';
-    const projectDisplayName = isPinnedGroup ? ti18n('session_pinned_group', 'Pinned') : (key === '__no_project__' ? t('no_project') : key);
+  tree.forEach(project => {
+    const key = project.key;
+    // 状態チップ・⊞・✕ は畳んでいる子も含めた全件を対象にする。
+    const groupSessions = flattenSidebarTree([project])
+      .map(id => sessions.get(id))
+      .filter(Boolean) as any[];
+    const projectDisplayName = key === NO_PROJECT_KEY ? t('no_project') : (project.label || key);
     const isCollapsed = collapsedGroups.has(key);
     const groupEl = document.createElement('div');
-    groupEl.className = 'project-group' + (projectFavorites.includes(key) ? ' project-group--pinned' : '');
+    groupEl.className = 'project-group' + (project.favorite ? ' project-group--pinned' : '');
 
     const header = document.createElement('div');
     header.className = 'project-group-header' + (isCollapsed ? ' project-group-header--collapsed' : '');
@@ -670,7 +837,7 @@ export function renderSessionList() {
     // ここ（プロジェクトグループ header）の「📁 Files」ボタンは廃止した。
     // C3: "Open running sessions in grid" ボタンは projActions（☆ の左隣）へ配置する。
     let gridBtn: HTMLButtonElement | null = null;
-    if (!isPinnedGroup && key !== '__no_project__') {
+    if (key !== NO_PROJECT_KEY) {
       const runningSessionsInGroup = groupSessions.filter(s => s.state === 'running' || s.state === 'waiting' || (s.state || 'standby') === 'standby');
       if (runningSessionsInGroup.length > 0) {
         gridBtn = document.createElement('button');
@@ -692,7 +859,7 @@ export function renderSessionList() {
     chipsEl.className = 'group-status-chips';
     chipsEl.innerHTML =
       `<span class="status-chip status-chip--running">${runningCount}</span>` +
-      `<span class="status-chip status-chip--waiting">${waitingCount}</span>` +
+      `<span class="status-chip status-chip--waiting${waitingCount > 0 ? ' status-chip--attention' : ''}">${waitingCount}</span>` +
       `<span class="status-chip status-chip--standby">${standbyCount}</span>`;
     header.appendChild(chipsEl);
 
@@ -704,7 +871,7 @@ export function renderSessionList() {
     if (gridBtn) projActions.appendChild(gridBtn);
 
     const projStarBtn = document.createElement('button');
-    if (!isPinnedGroup) {
+    {
       const isProjFav = projectFavorites.includes(key);
       projStarBtn.className = 'star-btn' + (isProjFav ? ' starred' : '');
       projStarBtn.textContent = isProjFav ? '★' : '☆';
@@ -721,7 +888,13 @@ export function renderSessionList() {
       const projXBtn = document.createElement('button');
       projXBtn.className = 'dismiss-btn';
       projXBtn.textContent = t('remove');
-      projXBtn.title = t('project_dismiss');
+      // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): グループ内に
+      // 子起動の確認待ちを抱えたセッションが 1 件でもあれば、グループ ✕ ごと無効化する。
+      // requestSessionDismiss 側の先回りガードもあるが、押せる見た目のまま弾かれるのは
+      // 分かりにくいので、ボタン自体を disabled にしておく。
+      const groupHasPendingSpawnConfirm = groupSessions.some(s => pendingSpawnConfirmationCount(s.id) > 0);
+      projXBtn.title = groupHasPendingSpawnConfirm ? t('dismiss_disabled_pending_spawn_tooltip') : t('project_dismiss');
+      projXBtn.disabled = groupHasPendingSpawnConfirm;
       projXBtn.onclick = (e) => {
         e.stopPropagation();
         groupSessions.forEach(s => dismissSession(s.id));
@@ -738,11 +911,12 @@ export function renderSessionList() {
       } else {
         collapsedGroups.add(key);
       }
+      saveCollapsedNodes();
       renderSessionList();
     });
 
     // グループD&D
-    header.draggable = !isPinnedGroup;
+    header.draggable = true;
     header.addEventListener('dragstart', (e) => {
       set_dragSrcGroupKey(key);
       set_dragSrcId(null);
@@ -774,8 +948,9 @@ export function renderSessionList() {
       if (!dragSrcGroupKey || dragSrcGroupKey === key) return;
       const srcKey = dragSrcGroupKey;
       set_dragSrcGroupKey(null);
-      if (!groupOrder.length) set_groupOrder([...sortedGroupKeys]);
-      sortedGroupKeys.forEach(k => { if (!groupOrder.includes(k)) groupOrder.push(k); });
+      const treeKeys = tree.map(node => node.key);
+      if (!groupOrder.length) set_groupOrder([...treeKeys]);
+      treeKeys.forEach(k => { if (!groupOrder.includes(k)) groupOrder.push(k); });
       const srcIdx = groupOrder.indexOf(srcKey);
       const dstIdx = groupOrder.indexOf(key);
       if (srcIdx !== -1) groupOrder.splice(srcIdx, 1);
@@ -789,26 +964,41 @@ export function renderSessionList() {
     const body = document.createElement('div');
     body.className = 'project-group-body' + (isCollapsed ? ' hidden' : '');
 
-    groupSessions.forEach(s => {
+    // 親の直下に子を並べる。畳んでいる親の子は entries に入れない（数だけ親に出す）。
+    const entries: Array<{ s: any; depth: number; childCount: number }> = [];
+    for (const top of project.children) {
+      const topSession: any = sessions.get(top.id);
+      if (!topSession) continue;
+      entries.push({ s: topSession, depth: 0, childCount: top.children.length });
+      if (collapsedGroups.has('session:' + top.id)) continue;
+      for (const child of top.children) {
+        const childSession: any = sessions.get(child.id);
+        if (childSession) entries.push({ s: childSession, depth: 1, childCount: 0 });
+      }
+    }
+
+    entries.forEach(entry => {
+      const s = entry.s;
+      const childCollapsed = collapsedGroups.has('session:' + s.id);
       const c = document.createElement('div');
       const state = s.state || 'standby';
+      const activity = stateActivityDecoration(s);
       const stateClass = (state === 'running' || state === 'waiting') ? ` ${state}` : '';
-      const orchClass = s.parent_session_id ? ' orchestration-child' : (s.orchestration_id ? ' orchestration-parent' : '');
+      const approvalClass = activity.className === 'awaiting-approval' ? ' awaiting-approval' : '';
+      const pendingSpawnConfirmClass = activity.className === 'pending-spawn-confirm' ? ' pending-spawn-confirm' : '';
+      const orchClass = entry.depth > 0 ? ' orchestration-child' : (entry.childCount > 0 || s.orchestration_id ? ' orchestration-parent' : '');
       const colorClass = s.color ? ` card-color-${safeClassToken(s.color)}` : '';
-      c.className = 'card' + stateClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
+      c.className = 'card' + stateClass + approvalClass + pendingSpawnConfirmClass + orchClass + colorClass + (s.id === activeSessionId ? ' active' : '');
       c.tabIndex = isCollapsed ? -1 : 0;
       c.setAttribute('role', 'button');
       const label = stateLabel(state);
       const filteredMsg = filterFirstMessage(s.last_message || s.first_message || '');
-      const cwdStr = s.cwd || '';
       const title = sessionDisplayTitle(s);
-      const sessionLabel = title ? `<span class="card-label" data-tooltip="${escapeHtml(title)}">${s.label ? '' : '⌁ '}${escapeHtml(title)}</span>` : '';
+      const displayTitle = title || filteredMsg;
+      const titleTooltipParts = [title, filteredMsg].filter((value, index, values) => value && values.indexOf(value) === index);
+      if (titleTooltipParts.length > 0) c.dataset.tooltip = titleTooltipParts.join('\n');
+      const taskTitleHtml = displayTitle ? `<span class="card-label">${escapeHtml(displayTitle)}</span>` : '<span class="card-label" aria-hidden="true"></span>';
       const noteHtml = s.note ? `<span class="card-note" data-tooltip="${escapeHtml(s.note)}">${escapeHtml(s.note)}</span>` : '';
-      const msgHtml = filteredMsg
-        ? `<span class="card-msg" data-tooltip="${escapeHtml(filteredMsg)}">${escapeHtml(filteredMsg)}</span>`
-        : `<span class="card-msg"></span>`;
-      const providerName = providerDisplayName(s.provider);
-      const providerChipHtml = providerName ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>` : '';
       const roleLabel = s.role ? String(s.role) : (s.orchestration_id ? 'conductor' : '');
       const roleHtml = roleLabel
         ? `<span class="card-role-chip ${s.parent_session_id ? 'child' : 'parent'}" data-tooltip="${escapeHtml(s.parent_session_id ? `Parent #${s.parent_session_id}` : 'Orchestration conductor')}">${escapeHtml(roleLabel)}</span>`
@@ -816,29 +1006,17 @@ export function renderSessionList() {
       const branchRoleHtml = s.worktree_branch
         ? `<span class="card-worktree-chip" data-tooltip="${escapeHtml(s.worktree_branch)}">${escapeHtml(s.worktree_branch)}</span>`
         : '';
-	const boardPendingHtml = s.board_notify_pending
-		? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
-		: '';
-      const isDeadState = state === 'error' || state === 'disconnected';
-      let reasonText = '';
-      if (isDeadState && s.end_reason) {
-        const key = 'end_reason_' + s.end_reason;
-        const translated = window.t(key, { provider: providerName || s.provider || '' });
-        // 未知の reason コードは window.t がキー文字列をそのまま返すため、その場合は非表示にする。
-        if (translated !== key) reasonText = translated;
-      }
-      const reasonHtml = reasonText
-        ? `<span class="card-end-reason" data-tooltip="${escapeHtml(reasonText)}">${escapeHtml(reasonText)}</span>`
+      // 子を持つ親にだけ出す折りたたみトグル。畳んでいる間も件数は見える。
+      const childToggleTip = childCollapsed
+        ? ti18n('card_children_expand', '子セッションを表示')
+        : ti18n('card_children_collapse', '子セッションを畳む');
+      const childToggleHtml = entry.childCount > 0
+        ? `<span class="card-children-toggle" role="button" tabindex="0" data-tooltip="${escapeHtml(childToggleTip)}" aria-label="${escapeHtml(childToggleTip)}">${childCollapsed ? '▶' : '▼'} ${entry.childCount}</span>`
+        : '';
+      const boardPendingHtml = s.board_notify_pending
+        ? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
         : '';
       c.dataset.sessionId = s.id;
-      const localRoute = (s.route === 'ollama' || s.route === 'lm-studio') ? s.route : null;
-      let modelBadge = '';
-      if (s.model) {
-        const badgeProviderKey = localRoute || (s.provider || '');
-        const badgeProviderLabel = localRoute ? providerDisplayName(localRoute) : providerName;
-        const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
-        modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
-      }
       const branchStr = s.branch || '';
       const branchTip = branchStr
         ? ti18n('card_branch_tooltip', `Open Git view (${branchStr})`, { branch: branchStr })
@@ -847,42 +1025,48 @@ export function renderSessionList() {
       // 空 branch でも常に span を表示（git 外であることが分かるよう "(no git)" を表示）
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
-      // branch chip は title-row が混むため meta-row（2行目）の投稿指示テキスト末尾へ付ける。
-      const metaRow = `<div class="card-meta-row">${s.pinned ? '<span class="card-pin" aria-label="Pinned">📌</span>' : ''}${reasonHtml}${sessionLabel}${noteHtml}${roleHtml}${msgHtml}${branchRoleHtml}${branchBadge}</div>`;
-      // 状態 pill（ステータスバー .tsb-pill と同じ ●ドット付き形状）。並び順も下のバーに合わせ #N の直後に置く。
-			const activity = stateActivityDecoration(s);
-      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}"${activity.label ? ` title="${activity.label}"` : ''}><span class="card-pdot"></span><span class="card-state-icon">${activity.icon}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
-      const workflowProgressHtml = `<span class="card-workflow-progress-slot">${cardWorkflowProgressHtml(s)}</span>`;
-      // ライブ情報（ctx% / 応答経過 / 長時間バッジ）。中身が空なら hidden で行ごと隠す。
-      const liveInner = cardLiveRowHtml(s);
-      const liveRow = `<div class="card-live-row"${liveInner ? '' : ' hidden'}>${liveInner}</div>`;
+      // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
+      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
+      // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N の直後に置く。
+      const stateDescription = activity.label || label;
+      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
-		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml}${workflowProgressHtml} ${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${boardPendingHtml}</div>` +
-        metaRow + liveRow;
+		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
+	        metaRow;
+
+      const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;
+      if (childToggleEl) {
+        const toggleChildren = (e: Event) => {
+          e.stopPropagation();
+          const nodeKey = 'session:' + s.id;
+          if (collapsedGroups.has(nodeKey)) collapsedGroups.delete(nodeKey);
+          else collapsedGroups.add(nodeKey);
+          saveCollapsedNodes();
+          renderSessionList();
+        };
+        childToggleEl.addEventListener('click', toggleChildren);
+        childToggleEl.addEventListener('keydown', (e: any) => {
+          if (e.key === 'Enter' || e.key === ' ') toggleChildren(e);
+        });
+      }
 
       const actions = document.createElement('div');
       actions.className = 'card-actions';
       c.appendChild(actions);
 
-      const pinBtn = document.createElement('button');
-      pinBtn.className = 'session-pin-btn' + (s.pinned ? ' pinned' : '');
-      pinBtn.textContent = s.pinned ? '📌' : '⌑';
-      pinBtn.title = s.pinned ? ti18n('session_unpin', 'Unpin session') : ti18n('session_pin', 'Pin session');
-      pinBtn.setAttribute('aria-label', pinBtn.title);
-      pinBtn.onclick = async (e) => {
+      // 「先頭へ」。器（プロジェクト、または親セッション）の中で兄弟順の先頭へ動かすだけ。
+      // 以前の 📌 は所属を書き換えて Pinned という別の箱へ移していたが、★ と同じ
+      // 「器の中で先頭へ」に揃えた。セッションの属性（pinned 列）はもう書かない。
+      const frontBtn = document.createElement('button');
+      frontBtn.className = 'session-front-btn';
+      frontBtn.textContent = '⇧';
+      frontBtn.title = ti18n('session_move_front', 'このセッションを先頭へ');
+      frontBtn.setAttribute('aria-label', frontBtn.title);
+      frontBtn.onclick = (e) => {
         e.stopPropagation();
-        await patchSessionMeta(s.id, { pinned: !s.pinned });
-        // ピンは orderSessions（swipe / multi-pane スロット順）にも影響するため、
-        // マルチタブが開いているときはペインスロット順も更新する。
-        // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
-        const _mv = document.getElementById('multi-view');
-        if (_mv && !_mv.hidden && window.multiPaneManager) {
-          window._c5SidebarUpdating = true;
-          try { window.multiPaneManager.render(); }
-          finally { window._c5SidebarUpdating = false; }
-        }
+        moveSessionToSiblingFront(s.id);
       };
-      actions.appendChild(pinBtn);
+      actions.appendChild(frontBtn);
 
       const metaBtn = document.createElement('button');
       metaBtn.className = 'session-meta-btn';
@@ -921,10 +1105,30 @@ export function renderSessionList() {
         actions.appendChild(boardBtn);
       }
 
+      // AI セッション（子ではない）から relay を開始する入口。conductor の進行中 relay
+      // の有無にかかわらず、追加の relay を開けるようにする。
+      if (!s.parent_session_id && isAIOrCustomProvider(String(s.provider || ''))) {
+        const relayBtn = document.createElement('button');
+        relayBtn.className = 'session-relay-open-btn';
+        relayBtn.textContent = '🔁';
+        relayBtn.title = t('relay_start');
+        relayBtn.setAttribute('aria-label', relayBtn.title);
+        relayBtn.onclick = (e) => {
+          e.stopPropagation();
+          openRelayDialog(s.id);
+        };
+        actions.appendChild(relayBtn);
+      }
+
       const xBtn = document.createElement('button');
       xBtn.className = 'dismiss-btn';
       xBtn.textContent = t('remove');
-      xBtn.title = t('dismiss_session');
+      // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
+      // 確認待ちを抱えている親は × を無効化する。requestSessionDismiss 側にも同じガードが
+      // あるが、押せる見た目のまま弾かれるのは分かりにくいのでボタン自体を disabled にする。
+      const hasPendingSpawnConfirm = pendingSpawnConfirmationCount(s.id) > 0;
+      xBtn.title = hasPendingSpawnConfirm ? t('dismiss_disabled_pending_spawn_tooltip') : t('dismiss_session');
+      xBtn.disabled = hasPendingSpawnConfirm;
       xBtn.onclick = (e) => { e.stopPropagation(); dismissSession(s.id); };
       actions.appendChild(xBtn);
 
@@ -982,12 +1186,8 @@ export function renderSessionList() {
         const insertAt = dropAfter ? dstIdx + 1 : dstIdx;
         sessionOrder.splice(insertAt, 0, srcId);
         saveSessionOrder();
-        // C5: グループ跨ぎ（Pinned ⇄ 通常）→ ドロップ先に合わせてピン状態を自動切替
-        const srcPinned = !!sessions.get(srcId)?.pinned;
-        const dstPinned = !!s.pinned;
-        if (srcPinned !== dstPinned) {
-          patchSessionMeta(srcId, { pinned: dstPinned });
-        }
+        // ドラッグは兄弟順を変えるだけ。ここでセッションの属性を書き換えない
+        // （以前は Pinned の箱へ落とすと pinned が黙って true になっていた）。
         // C5: マルチタブが開いているときはペインスロット順も更新
         // render() → renderSessionList() の再帰を防ぐため _c5SidebarUpdating フラグを立てておく
         const _mv = document.getElementById('multi-view');
@@ -1205,7 +1405,7 @@ export function renderSummaryAndNotifications() {
 	const totalWaiting = stateCounts.waiting;
 	const totalApprovals = Array.from(sessions.values()).filter(s => s.awaiting_approval === true).length;
 
-  const PROVIDER_ORDER = { claude: 0, ollama: 1, 'lm-studio': 2, codex: 3, copilot: 4, opencode: 5, 'cursor-agent': 6, grok: 7 };
+  const PROVIDER_ORDER = { claude: 0, ollama: 1, 'lm-studio': 2, codex: 3, copilot: 4, opencode: 5, 'cursor-agent': 6, grok: 7, 'command-code': 8 };
   const sortedGroups = Array.from(providerGroups.values()).sort((a, b) => {
     const ka = a.localRoute || a.provider;
     const kb = b.localRoute || b.provider;
@@ -1253,12 +1453,10 @@ export function renderSummaryAndNotifications() {
 	updateTabNotification(totalWaiting, totalApprovals);
 }
 
+// 器のキーの導出は sidebar-tree.ts が正本。ここで別の規則を持つと、状態チップの
+// 部分更新だけが別の見出しを探しに行って静かに外れる。
 export function sessionProjectKey(s) {
-  const cwdStr = s?.cwd || '';
-  const name = cwdStr
-    ? cwdStr.replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || ''
-    : '';
-  return name || '__no_project__';
+  return projectKeyForSession(s, sessions.values() as any);
 }
 
 export function updateProjectGroupStatusChipsForSession(s) {
@@ -1280,7 +1478,10 @@ export function updateProjectGroupStatusChipsForSession(s) {
   const waiting = chipsEl.querySelector('.status-chip--waiting');
   const standby = chipsEl.querySelector('.status-chip--standby');
   if (running) running.textContent = String(counts.running);
-  if (waiting) waiting.textContent = String(counts.waiting);
+  if (waiting) {
+    waiting.textContent = String(counts.waiting);
+    waiting.classList.toggle('status-chip--attention', counts.waiting > 0);
+  }
   if (standby) standby.textContent = String(counts.standby);
   return true;
 }
@@ -1292,16 +1493,21 @@ export function updateSessionCardStateInPlace(id) {
   const card = root.querySelector(`.card[data-session-id="${CSS.escape(String(id))}"]`);
   if (!card) return false;
   const state = s.state || 'standby';
+  const activity = stateActivityDecoration(s);
   card.classList.toggle('running', state === 'running');
   card.classList.toggle('waiting', state === 'waiting');
+  card.classList.toggle('awaiting-approval', activity.className === 'awaiting-approval');
+  card.classList.toggle('pending-spawn-confirm', activity.className === 'pending-spawn-confirm');
   card.classList.toggle('active', id === activeSessionId);
   const pill = card.querySelector('.card-state-pill');
   if (pill) {
-    const activity = stateActivityDecoration(s);
     pill.className = `card-state-pill ${safeClassToken(state)} ${activity.className}`;
-		if (activity.label) pill.setAttribute('title', activity.label); else pill.removeAttribute('title');
-		const icon = pill.querySelector('.card-state-icon');
-		if (icon) icon.textContent = activity.icon;
+    const stateDescription = activity.label || stateLabel(state);
+    pill.setAttribute('title', stateDescription);
+    pill.setAttribute('data-tooltip', stateDescription);
+    pill.setAttribute('aria-label', stateDescription);
+    const icon = pill.querySelector('.card-state-icon');
+    if (icon) icon.innerHTML = stateIconSvgHtml(activity.iconKind);
     const txt = pill.querySelector('.card-state-text');
     if (txt) txt.textContent = stateLabel(state);
   }

@@ -148,23 +148,35 @@ function btnEl(): HTMLButtonElement | null {
 function dotEl(): HTMLElement | null {
   return document.getElementById('expose-dot');
 }
+function stateEl(): HTMLElement | null {
+  return document.getElementById('expose-state');
+}
+function lampEl(): Element | null {
+  return document.querySelector('.web-menu-lamp');
+}
+function webMenuBtnEl(): HTMLElement | null {
+  return document.getElementById('web-menu-btn');
+}
 
-// ドット色＋ツールチップ（状態の常時可視化）。
+// メニュー行の文言＋ツールチップ＋ランプ（状態の常時可視化）。
 function reflectDot(): void {
   const btn = btnEl();
   const dot = dotEl();
+  const lamp = lampEl();
   if (!btn || !dot) return;
   const st = cached?.state;
   let cls = 'expose-dot';
   let label = t('expose_state_loading');
+  let stateKind = '';
   if (busy) {
     cls += ' expose-dot-busy';
+    stateKind = 'is-busy';
   } else if (st === 'ready') {
-    cls += ' expose-dot-ready'; label = t('expose_state_ready');
+    cls += ' expose-dot-ready'; label = t('expose_state_ready'); stateKind = 'is-ready';
   } else if (st === 'serve_inactive') {
     cls += ' expose-dot-inactive'; label = t('expose_state_inactive');
   } else if (st === 'serve_disabled_on_tailnet') {
-    cls += ' expose-dot-warn'; label = t('expose_state_disabled');
+    cls += ' expose-dot-warn'; label = t('expose_state_disabled'); stateKind = 'is-warn';
   } else if (st === 'not_logged_in') {
     cls += ' expose-dot-off'; label = t('expose_state_not_logged_in');
   } else if (st === 'not_installed') {
@@ -173,9 +185,25 @@ function reflectDot(): void {
     cls += ' expose-dot-off';
   }
   dot.className = cls;
+  const state = stateEl();
+  if (state) {
+    state.textContent = label;
+    state.className = stateKind ? `web-menu-item-state ${stateKind}` : 'web-menu-item-state';
+  }
+  lamp?.classList.toggle('expose-dot-ready', !busy && st === 'ready');
   btn.classList.toggle('expose-on', st === 'ready');
   btn.setAttribute('aria-pressed', st === 'ready' ? 'true' : 'false');
-  btn.setAttribute('title', `${t('expose_tooltip')} — ${label}`);
+  const tip = `${t('expose_tooltip')} — ${label}`;
+  btn.setAttribute('title', tip);
+  btn.dataset.tooltip = tip;
+  btn.setAttribute('aria-label', `${t('expose_btn')} — ${label}`);
+  const webBtn = webMenuBtnEl();
+  if (webBtn) {
+    const base = t('web_menu_tooltip');
+    const isReady = !busy && st === 'ready';
+    webBtn.dataset.tooltip = isReady ? `${label} — ${base}` : base;
+    webBtn.classList.toggle('expose-on', isReady);
+  }
 }
 
 function setBusy(v: boolean): void {

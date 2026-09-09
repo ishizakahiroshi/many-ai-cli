@@ -239,7 +239,7 @@ async function openModal(): Promise<void> {
   if (overlay) return;
   modalSessionId = activeSessionId;
   overlay = document.createElement('div');
-  overlay.className = 'bug-report-overlay';
+  overlay.className = 'bug-report-overlay aac-wheel-overlay';
   overlay.setAttribute('role', 'presentation');
 
   const dialog = document.createElement('section');
@@ -256,7 +256,7 @@ async function openModal(): Promise<void> {
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'bug-report-close';
-  close.textContent = '×';
+  close.textContent = '✕';
   close.setAttribute('aria-label', t('bug_report_cancel'));
   close.addEventListener('click', closeModal);
   header.append(title, close);

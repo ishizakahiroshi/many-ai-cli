@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"many-ai-cli/internal/sessionstore"
 )
 
 func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
@@ -14,15 +16,27 @@ func (s *Server) handleSessionChat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": true, "messages": []any{}})
 		return
 	}
-	id, _ := strconv.Atoi(r.URL.Query().Get("session_id"))
-	if id <= 0 {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
-		return
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	var messages any
+	var err error
+	if rawDBID := strings.TrimSpace(q.Get("session_db_id")); rawDBID != "" {
+		dbID, parseErr := strconv.ParseInt(rawDBID, 10, 64)
+		if parseErr != nil || dbID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_db_id")
+			return
+		}
+		messages, err = s.sessionStore.ChatMessagesBySessionID(dbID, limit)
+	} else {
+		id, parseErr := strconv.Atoi(q.Get("session_id"))
+		if parseErr != nil || id <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "session_id required")
+			return
+		}
+		messages, err = s.sessionStore.ChatMessagesByLiveSession(id, limit)
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	messages, err := s.sessionStore.ChatMessagesByLiveSession(id, limit)
 	if err != nil {
-		s.logger.Warn("session chat restore failed", "session_id", id, "err", err)
+		s.logger.Warn("session chat restore failed", "session_id", q.Get("session_id"), "session_db_id", q.Get("session_db_id"), "err", err)
 		writeJSONError(w, http.StatusInternalServerError, "session_chat_failed", "failed to restore chat")
 		return
 	}
@@ -114,6 +128,57 @@ func (s *Server) handleSessionStorePruneTranscriptNoise(w http.ResponseWriter, r
 	}
 	s.logger.Info("transcript noise pruned", "deleted_messages", deleted)
 	writeJSON(w, map[string]any{"ok": true, "deleted_messages": deleted})
+}
+
+// handleApprovalHistory は承認台帳を読み出す。
+//
+// 保留中の承認がブラウザのメモリにしか無いと、そのタブが 1 度取りこぼした時点で
+// 誰も復元できなくなる（plan_approval-history-ledger.md）。台帳はその復元元であり、
+// 同時に「過去に何を承認したか」を見る唯一の経路でもある。
+//
+// パラメータはすべて省略可。session_id / session_db_id が無ければ全セッション横断。
+// state=pending で未回答だけに絞る。
+func (s *Server) handleApprovalHistory(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	if s.sessionStore == nil {
+		writeJSON(w, map[string]any{"ok": true, "approvals": []any{}})
+		return
+	}
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	pendingOnly := strings.EqualFold(strings.TrimSpace(q.Get("state")), "pending")
+
+	var approvals []sessionstore.ApprovalRow
+	var err error
+	switch {
+	case strings.TrimSpace(q.Get("session_db_id")) != "":
+		dbID, parseErr := strconv.ParseInt(strings.TrimSpace(q.Get("session_db_id")), 10, 64)
+		if parseErr != nil || dbID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_db_id")
+			return
+		}
+		approvals, err = s.sessionStore.ApprovalsBySessionID(dbID, limit, pendingOnly)
+	case strings.TrimSpace(q.Get("session_id")) != "":
+		id, parseErr := strconv.Atoi(strings.TrimSpace(q.Get("session_id")))
+		if parseErr != nil || id <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session_id")
+			return
+		}
+		approvals, err = s.sessionStore.ApprovalsByLiveSession(id, limit, pendingOnly)
+	default:
+		approvals, err = s.sessionStore.RecentApprovals(limit, pendingOnly)
+	}
+	if err != nil {
+		s.logger.Warn("approval history read failed", "session_id", q.Get("session_id"), "session_db_id", q.Get("session_db_id"), "err", err)
+		writeJSONError(w, http.StatusInternalServerError, "approval_history_failed", "failed to read approval history")
+		return
+	}
+	if approvals == nil {
+		approvals = []sessionstore.ApprovalRow{}
+	}
+	writeJSON(w, map[string]any{"ok": true, "approvals": approvals})
 }
 
 func (s *Server) activeSessionIDs() []int {

@@ -37,6 +37,9 @@ jobs:
       - name: Checkout release source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          # Full dispatch は入力 tag の source を使う。npm-only だけは、公開済み
+          # artifact と現行 branch の再配布 script を組み合わせる既存契約を維持する。
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.npm_only == false && inputs.tag || github.ref }}
           fetch-depth: 1
 
       - name: Fetch and verify Microsoft VC++ runtime
@@ -80,7 +83,25 @@ jobs:
       # only the binaries come from the published Release, the version from the tag.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.npm_only == false && inputs.tag || github.ref }}
           fetch-depth: 0
+
+      - name: Validate release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::invalid release tag: ${RELEASE_TAG}"
+            exit 1
+          fi
+          tag_commit="$(git rev-parse "${RELEASE_TAG}^{commit}")"
+          if [ "${NPM_ONLY}" != "true" ]; then
+            source_commit="$(git rev-parse HEAD)"
+            if [ "${source_commit}" != "${tag_commit}" ]; then
+              echo "::error::checked out source ${source_commit} does not match ${RELEASE_TAG} (${tag_commit})"
+              exit 1
+            fi
+          fi
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
@@ -103,6 +124,13 @@ jobs:
 
       # SBOM 生成用 syft（.goreleaser.yaml の sboms セクションが参照）
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+
+      # Validate の instrumentation job と同じ source invariant を release 自身でも
+      # credential を渡す前に再確認する。tag push と Validate は別 trigger のため、
+      # release 側の gate が無いと publish 後の artifact 検査まで止められない。
+      - name: Check instrumentation before publish
+        if: ${{ env.NPM_ONLY != 'true' }}
+        run: node scripts/check-instrumentation.mjs
 
       # winget-pkgs fork を upstream (microsoft/winget-pkgs) と同期してから
       # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット
@@ -162,16 +190,84 @@ jobs:
           echo "----- release notes (${VERSION}) -----"
           cat "${RUNNER_TEMP}/release-notes.md"
 
-      - uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
+      # .goreleaser.yaml の before hooks をここで先に走らせる。
+      #
+      # 理由: goreleaser のステップは homebrew-tap / winget-pkgs fork へ push できる
+      # PAT を env に持つ。before hooks はその同じプロセスで動くので、`bun install` が
+      # 引く依存ツリーと `go install` が取るツールが、PAT の載った環境変数空間で
+      # 実行されることになる（2026-08-17 の監査 F-87）。版はすべて固定してあり bun は
+      # 既定で信頼外の lifecycle script を実行しないため悪用の見込みは低いが、
+      # 依存が 1 つ信頼リストへ入るだけで成立してしまう。credential を持つ工程と
+      # 第三者コードを走らせる工程を分けておけば、その前提に依存しなくて済む。
+      #
+      # .goreleaser.yaml 側の hooks は消さない。ローカルの `goreleaser --snapshot` が
+      # web/dist と .syso 無しで壊れる（CI だけが知っている手順を増やさない）。
+      # CI では下の --skip=before で二重実行を避ける。
+      - name: Run goreleaser before hooks (no publish credentials in this step)
         if: ${{ env.NPM_ONLY != 'true' }}
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          (cd web && bun install --frozen-lockfile && bun run build)
+          go install github.com/tc-hib/go-winres@v0.3.3
+          go-winres make --in winres/winres.json --out cmd/many-ai-cli/rsrc \
+            --product-version="${RELEASE_VERSION}" --file-version="${RELEASE_VERSION}"
+          go-winres make --in winres/winres-launcher.json --out cmd/many-ai-cli-launcher/rsrc \
+            --product-version="${RELEASE_VERSION}" --file-version="${RELEASE_VERSION}"
+
+      # goreleaser-action v7 は通常 checksum と Sigstore bundle を検証するが、
+      # bundle download 失敗時は warning で継続する。publish credential を渡す
+      # binary は fail-closed で検証するため、固定版をここで直接取得する。
+      - name: Install verified GoReleaser v2.18.0
+        if: ${{ env.NPM_ONLY != 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=v2.18.0
+          archive=goreleaser_Linux_x86_64.tar.gz
+          base="https://github.com/goreleaser/goreleaser/releases/download/${version}"
+          verify_dir="${RUNNER_TEMP}/goreleaser-verify"
+          install_dir="${RUNNER_TEMP}/goreleaser-bin"
+          rm -rf "${verify_dir}" "${install_dir}"
+          mkdir -p "${verify_dir}" "${install_dir}"
+          cd "${verify_dir}"
+          for file in checksums.txt checksums.txt.sigstore.json "${archive}"; do
+            curl --fail --location --retry 3 --output "${file}" "${base}/${file}"
+          done
+          cosign verify-blob \
+            --bundle checksums.txt.sigstore.json \
+            --certificate-identity "https://github.com/goreleaser/goreleaser/.github/workflows/release.yml@refs/tags/${version}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            checksums.txt
+          expected="$(awk -v name="${archive}" '$2 == name { print $1 }' checksums.txt)"
+          [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "::error::missing or ambiguous checksum for ${archive}"
+            exit 1
+          }
+          actual="$(sha256sum "${archive}" | cut -d' ' -f1)"
+          [ "${actual}" = "${expected}" ] || {
+            echo "::error::GoReleaser archive checksum mismatch"
+            exit 1
+          }
+          tar -xzf "${archive}" -C "${install_dir}" goreleaser
+          "${install_dir}/goreleaser" --version | grep -F '2.18.0'
+          echo "${install_dir}" >> "${GITHUB_PATH}"
+
+      - name: Publish release with verified GoReleaser
+        if: ${{ env.NPM_ONLY != 'true' }}
+        shell: bash
+        # --skip=before: 直前のステップで実行済み。ここで再実行すると PAT を
+        # 持つプロセスで第三者コードが動き、分離した意味が無くなる。
+        run: goreleaser release --clean --skip=before --release-notes="${RUNNER_TEMP}/release-notes.md"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # homebrew-tap / winget-pkgs fork への push 用 PAT（GITHUB_TOKEN は自リポジトリ限定のため）
           PUBLISH_GITHUB_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
+
+      - name: Verify no instrumentation in release artifacts
+        if: ${{ env.NPM_ONLY != 'true' }}
+        run: node scripts/check-artifact-clean.mjs dist
 
       # Belt-and-suspenders: re-apply the human-readable CHANGELOG section as the
       # Release body unconditionally. Past releases needed a MANUAL `gh release
@@ -215,7 +311,21 @@ jobs:
             --pattern '*-linux-x64.zip' \
             --pattern '*-macos-intel.zip' \
             --pattern '*-macos-apple-silicon.zip' \
-            --pattern 'SHA256SUMS.txt'
+            --pattern 'SHA256SUMS.txt' \
+            --pattern 'SHA256SUMS.txt.sig' \
+            --pattern 'SHA256SUMS.txt.pem'
+
+      - name: Verify published checksum signature (npm-only re-run)
+        if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}
+        working-directory: ${{ runner.temp }}/relzips
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --certificate SHA256SUMS.txt.pem \
+            --signature SHA256SUMS.txt.sig \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${RELEASE_TAG}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            SHA256SUMS.txt
 
       - name: Stage npm binaries (verified, from published release zips)
         if: ${{ env.NPM_AVAILABLE == 'true' && env.NPM_ONLY == 'true' }}

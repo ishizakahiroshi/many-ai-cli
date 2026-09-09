@@ -33,7 +33,7 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
 
 ### npm 配布の地雷
 
-- **publish パスの誤解釈**: `npm publish "npm/<pkg>"` は npm が **GitHub shorthand（`owner/repo`）と誤解釈**し `git ls-remote ssh://git@github.com/npm/<pkg>.git` を試みて `Permission denied` で失敗する。✅ 必ず **`npm publish "./npm/<pkg>"`**（先頭 `./`）。
+- **publish パスの誤解釈**: `npm publish "npm/<pkg>"` は npm が **GitHub shorthand（`owner/repo`）と誤解釈**し Git リモートの取得を試みて `Permission denied` で失敗する。✅ 必ず **`npm publish "./npm/<pkg>"`**（先頭 `./`）。
 - **token は publish 権限必須**: read-only token だと publish が **`E429 "Could not publish, as user undefined: rate limited exceeded"`** で失敗する（権限不足を**紛らわしいレート制限文言**で返す。`npm whoami` は通っても publish 権限が無いと publish 不可）。granular token は **Permissions = Read and write / Packages = All packages**、または Classic の **Automation** token。CI secret `NPM_TOKEN` も同要件。granular は最長 90 日で失効するので CI 長期運用は Classic Automation（無期限可）推奨。
 - **本物の E429（レート制限）**: 短時間に publish を連打すると npm がロックする。**連続試行は窓リセットで逆効果**。15〜20 分空けて 1 回ずつ。release.yml の npm publish step には **retry/backoff を入れる**（v0.3.0 時点では未実装＝⚠️宿題）。
 - **Windows から platform package を publish しない**: Windows の `npm pack` は **unix 実行ビットを付けられない**（tarball 内が `-rw-r--r--` = 0644）。root shim が `spawnSync(binary)` で直接 exec するため、これだと **linux/macOS パッケージが起動失敗（EACCES）**する。**正道は CI(Linux) で publish**。手動復旧する場合は **WSL(ext4) で `chmod 0755` してから `npm pack`/`publish`**（/mnt/c 上だと chmod が効かないことがあるのでネイティブ fs で）。展開だけ Windows・pack/publish は WSL、という分担。
@@ -297,8 +297,12 @@ git status --short
 
 - `CHANGELOG.md`（`[Unreleased]` を新バージョン節へ確定し、比較リンクを更新）
 - `README.md` / `README.ja.md`（追加機能、検証状況、artifact 名、セキュリティ説明）
-- `winres/winres.json` / `winres/winres-launcher.json`（manifest identity 等の template 版数）
+- `winres/winres.json` / `winres/winres-launcher.json`（アイコン・製品名・manifest identity。**版数は対象外**）
+  - **`file_version` / `product_version` / `FileVersion` / `ProductVersion` は手で直さない。** `.goreleaser.yaml` の before hook が `go-winres make --product-version={{ .Version }} --file-version={{ .Version }}` でタグから焼くので、**JSON 内の版数が古いままなのは正常**（2026-08-15 時点で `0.3.1.0` のまま v0.7.0 を出しており、exe のプロパティはタグどおりになる）
+  - 同じ理由で `npm/*/package.json` の `version` も手で直さない（`release.yml` が `scripts/sync-npm-version.mjs "${RELEASE_TAG}"` で上書きする）
 - `THIRD_PARTY_NOTICES.md` / `web/src/vendor/THIRD_PARTY_LICENSES.txt`（依存・vendored license 表記）
+
+- 調査用の観測コードを同梱しないこと: `node scripts/check-instrumentation.mjs` が green で、リリース成果物を `node scripts/check-artifact-clean.mjs dist` に渡した結果が `instrumentation: not-shipped` になることを確認する。Makefile の `GO_TAGS` と Web の `MAI_DEBUG` は、リリースではオプトインになっていなければならない。
 
 Linux / macOS が未検証のまま出す場合は、README の検証状況と `.goreleaser.yaml` のビルド対象が矛盾していないことを確認する。
 

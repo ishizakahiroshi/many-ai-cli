@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -92,6 +93,33 @@ func TestPrepareOpenCodeConfigRestoresExisting(t *testing.T) {
 	}
 	if string(got) != string(original) {
 		t.Fatalf("restored config = %s, want %s", got, original)
+	}
+}
+
+func TestPrepareOpenCodeConfigPreservesConcurrentEdit(t *testing.T) {
+	cwd := t.TempDir()
+	cfgPath := filepath.Join(cwd, "opencode.json")
+	original := []byte(`{"permission":{"edit":"deny"}}`)
+	if err := os.WriteFile(cfgPath, original, 0o600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	cleanup, err := prepareOpenCodeConfig(cwd, "allow", quietLogger())
+	if err != nil {
+		t.Fatalf("prepareOpenCodeConfig: %v", err)
+	}
+	edited := []byte(`{"permission":{"edit":"allow"},"model":"local"}`)
+	if err := os.WriteFile(cfgPath, edited, 0o600); err != nil {
+		t.Fatalf("edit config: %v", err)
+	}
+	cleanup()
+
+	got, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read edited config: %v", err)
+	}
+	if !bytes.Equal(got, edited) {
+		t.Fatalf("cleanup overwrote concurrent edit: got %s, want %s", got, edited)
 	}
 }
 

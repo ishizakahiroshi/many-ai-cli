@@ -2,7 +2,7 @@
 // Go side is the source of truth; update this file when JSON fields or message
 // type values change in internal/proto/messages.go.
 
-export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'common' | string;
+export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'command-code' | 'common' | string;
 
 export type SessionState =
   | 'standby'
@@ -51,9 +51,17 @@ export type MessageType =
   | 'done_summary'
   | 'git_turn'
   | 'user_turn_started'
-  | 'spawn_confirmation_requested';
+  | 'spawn_confirmation_requested'
+  | 'spawn_confirmation_closed'
+  // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): Hub → UI.
+  // 承認待ちを抱えた親セッションの dismiss を Hub が拒否したことを伝える。
+  // session_id は拒否された対象、reason は固定文言不要（UI 側は一律のトースト文言を出す）。
+  // 型だけ先に用意しておく（Hub 側の送信実装は internal/ 配下のため本 C の範囲外）。
+  | 'session_dismiss_refused';
 
-export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | string;
+// 'unknown' は Hub の フォールバック 専用（マーカーが無いままターンが終わった）。
+// 「終わったが何が終わったか分からない」であって異常ではないので needs_action と分ける。
+export type DoneSummaryKind = 'success' | 'failure' | 'aborted' | 'needs_action' | 'unknown' | string;
 export interface DoneSummary {
   session_id: number;
   provider?: ProviderID;
@@ -119,6 +127,26 @@ export interface WfAgent {
   label: string;
   state: string;
   metrics?: string;
+  detail?: WfAgentDetail;
+}
+
+// Mirror of internal/proto.WfAgentDetail. Populated only when the Hub could
+// resolve a task ID for the running Workflow (see
+// docs/local/plan_workflow-progress-agent-transcript-detail_c1_investigation-proto.md
+// "発見2"). Fields sourced from prompt_preview/result_preview/last_tool_summary
+// carry excerpted user/agent content and must never be logged, persisted, or
+// forwarded outside the per-session WS payload.
+export interface WfAgentDetail {
+  model?: string;
+  started_at?: number; // epoch ms
+  last_progress_at?: number; // epoch ms
+  duration_ms?: number;
+  tokens?: number;
+  tool_calls?: number;
+  last_tool_name?: string;
+  last_tool_summary?: string; // truncated, see C2 budget
+  prompt_preview?: string; // truncated
+  result_preview?: string; // truncated
 }
 
 export interface WfPhase {
@@ -142,6 +170,52 @@ export interface WorkflowProgress {
   phases?: WfPhase[];
   settled: boolean;
   settled_by?: string;
+  task_detail_source?: string;
+}
+
+/** relay ループ 1 本の状態（internal/proto/messages.go の RelayStatus のミラー）。 */
+export interface RelayStatus {
+  orchestration_id?: string;
+  plan_path?: string;
+  mode?: 'worktree' | 'same-tree' | string;
+  state?: 'implementing' | 'reviewing' | 'fixing' | 'completed' | 'stopped' | string;
+  reason?: string;
+  completed_cs?: number;
+  round?: number;
+  max_rounds?: number;
+  final_seen?: boolean;
+  implementation_session_id?: number;
+  /** 強い実装役（D-22）。未 spawn は 0 / 未送。 */
+  strong_session_id?: number;
+  active_implementer?: 'implementation' | 'implementation-strong' | string;
+  escalate_after?: number;
+  review_session_id?: number;
+  review_path?: string;
+  worktree_path?: string;
+  branch?: string;
+  base_commit?: string;
+  updated_at?: string;
+}
+
+/** relay の時系列 1 行（RelayEvent のミラー）。 */
+export interface RelayEvent {
+  at?: string;
+  kind?: string;
+  c?: number;
+  round?: number;
+  text?: string;
+  review_path?: string;
+  commit?: string;
+  files_changed?: number;
+}
+
+/** Hub が Claude PTY の受信ヘッダーから観測した board 外通信の要約。 */
+export interface CrossSessionMessage {
+  at?: string;
+  receiver_session_id?: number;
+  receiver_role?: string;
+  sender?: string;
+  text?: string;
 }
 
 export interface Message {
@@ -152,6 +226,8 @@ export interface Message {
   display_name?: string;
   cwd?: string;
   branch?: string;
+  /** cwd が属する本体リポジトリのルート（hub/project_id.go）。worktree でも本体と同じ値。 */
+  project_id?: string;
   pid?: number;
   input_seq?: number;
   shell?: string;
@@ -168,6 +244,11 @@ export interface Message {
   data?: string | Uint8Array;
   text?: string;
   agent_session_id?: string;
+  // subscription profile（複数サブスクリプション管理）。空/未送は「CLI 自身の
+  // ログイン環境」を意味する。ID は不透明な識別子で、認証情報は含まない。
+  subscription_id?: string;
+  subscription_name?: string;
+  subscription_login?: boolean;
   messages?: AgentChatMessage[];
   cols?: number;
   rows?: number;
@@ -205,10 +286,14 @@ export interface Message {
   commit_body?: string;
   detected_at?: string;
   last_output_at?: string;
+  /** provider 自身の transcript が最後に伸びた時刻（RFC 3339）。停滞判定用。 */
+  transcript_grew_at?: string;
   started_at?: string;
   label?: string;
 	 session_meta?: SessionMeta;
   model?: string;
+  /** reasoning effort（"high" 等）。起動バナー / モデル変更行から Hub が検出した値。 */
+  effort?: string;
   route?: string;
   parent_session_id?: number;
   auto?: boolean;
@@ -217,8 +302,20 @@ export interface Message {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
+	/** 親セッションが回している relay ループ（開始順）。 */
+	relays?: RelayStatus[];
+	/** board 外の Claude 間通信を Hub が受信側 PTY で観測した履歴。 */
+	cross_session_messages?: CrossSessionMessage[];
 	spawn_confirmation_id?: string;
 	initial_prompt?: string;
+	/** epoch ms。spawn_confirmation_requested とその再送の両方に載る。 */
+	spawn_requested_at_ms?: number;
+	/**
+	 * spawn_confirmation_closed の reason は5値のみ:
+	 * approved | refused | superseded | parent_gone | spawn_failed。
+	 * spawn_failed のときだけ text に失敗理由が入る。session_id は親。
+	 */
+	spawn_child_session_id?: number;
   first_message?: string;
   last_message?: string;
   inject?: string;
@@ -245,6 +342,26 @@ export interface Message {
   rl_5h_reset?: number;     // 同リセット時刻（unix epoch 秒）
   rl_7d_pct?: number;       // 週次レート制限の使用率%
   rl_7d_reset?: number;     // 同リセット時刻（unix epoch 秒）
+  claude_rate_limits_present?: boolean;
+  claude_5h_field_present?: boolean;
+  claude_5h_present?: boolean;
+  claude_7d_field_present?: boolean;
+  claude_7d_present?: boolean;
+  codex_rate_limits_present?: boolean;
+  codex_primary_present?: boolean;
+  codex_primary_used_pct?: number;
+  codex_primary_window_minutes?: number;
+  codex_primary_reset?: number;
+  codex_secondary_used_pct?: number;
+  codex_secondary_present?: boolean;
+  codex_secondary_window_minutes?: number;
+  codex_secondary_reset?: number;
+  codex_credits_present?: boolean;
+  codex_has_credits?: boolean;
+  codex_credits_unlimited?: boolean;
+  codex_credits_balance?: string;
+  codex_plan_type?: string;
+  usage_observed_at?: string;
   lines_added?: number;     // AI がこのセッションで追加した行数
   lines_removed?: number;   // AI がこのセッションで削除した行数
   effort_level?: string;    // reasoning effort（low/medium/high/xhigh/max）
@@ -276,7 +393,10 @@ export interface SessionSnapshot {
   provider?: ProviderID;
   display_name?: string;
   cwd?: string;
+  /** cwd の末尾セグメントから導いた表示用のキー（state.ts の deriveProjectKeyFromCwd）。 */
   project?: string;
+  /** cwd が属する本体リポジトリのルート。サイドバーの箱はこちらを優先して使う。 */
+  project_id?: string;
   branch?: string;
   label?: string;
 	 pinned?: boolean;
@@ -284,6 +404,8 @@ export interface SessionSnapshot {
 	 note?: string;
 	 auto_title?: string;
   model?: string;
+  /** reasoning effort（"high" 等）。UI 3 箇所の統一表示に使う（usage 側の値が優先）。 */
+  effort?: string;
   route?: string;
   shell?: string;
   parent_session_id?: number;
@@ -294,6 +416,13 @@ export interface SessionSnapshot {
   board_path?: string;
   worktree_branch?: string;
 	board_notify_pending?: boolean;
+  /** 親セッションが回している relay ループ（開始順）。 */
+  relays?: RelayStatus[];
+  /** board 外の Claude 間通信を Hub が受信側 PTY で観測した履歴。 */
+  cross_session_messages?: CrossSessionMessage[];
+  // 起動に使ったサブスクリプション profile。空/未送は CLI 自身のログイン環境。
+  subscription_profile_id?: string;
+  subscription_profile_name?: string;
   state?: SessionState;
 	activity?: SessionActivity;
 	output_idle?: boolean;
@@ -301,6 +430,8 @@ export interface SessionSnapshot {
 	awaiting_user?: boolean;
 	awaiting_approval?: boolean;
   last_output_at?: string;
+  /** provider 自身の transcript が最後に伸びた時刻（RFC 3339）。停滞判定用。 */
+  transcript_grew_at?: string;
   started_at?: string;
   first_message?: string;
   last_message?: string;

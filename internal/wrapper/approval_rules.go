@@ -19,7 +19,16 @@ const sharedBlockEnd = "<!-- /many-ai-cli:approval-rules -->"
 // 新規注入には使わない。検出されたら Remove + 再注入で新マーカーへ移行される。
 const legacySharedBlockStart = "<!-- any-ai-cli:approval-rules -->"
 const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
-const rulesVersion = "18"
+
+// このファイルが載せるのは「AI と Hub のあいだの書式の約束事」だけ（承認マーカー・
+// 完了サマリ・orchestration エラー行の解釈）。機能の案内は載せない。
+// version 19 で子セッション委譲の案内を足したが、責務が違ううえ全セッションの常駐文脈を
+// 恒久的に消費するため 20 で撤去した。委譲の案内は internal/wrapper/delegation.go が
+// セッション単位の一時ファイルとして渡す。version 21 で DONE 要約に「次:」「未検証:」の
+// 任意 1 行を足した（docs/local/plan_session-handoff-board_c3_intent-layer.md C1。看板の
+// intent 層 kind=intent の材料。internal/hub/done_summary.go の extractIntentFromDoneText
+// が拾う）。
+const rulesVersion = "21"
 
 // ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
 // 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
@@ -147,6 +156,8 @@ var rulesFileContent = strings.Join([]string{
 	"",
 	"- 条件: `MANY_AI_CLI=1` の場合のみ出力する（承認マーカーと同じ確認済みの値を使用）。",
 	"- 1 文目は必ず結論にする（完了内容・失敗・中断・ユーザー判断待ちのいずれか）。2 文目は変更ファイル、テスト結果、残作業を短く補足する。",
+	"- 任意: 完了サマリーの後ろに `次: <次にやること 1 行>` を足してよい。書かなくてもよい（省略しても機械層の記録は残る）。",
+	"- 任意: 未検証の前提があれば `未検証: <前提 1 行>` も足してよい。",
 	"- Good（成功）: [MANY-AI-CLI-DONE] files タブの検索バグを修正しました。変更: web/src/app/files-view.ts。テスト: bun run check は成功しました。 [/MANY-AI-CLI-DONE]",
 	"- Good（失敗）: [MANY-AI-CLI-DONE] テスト追加は未完了です。internal/hub/server_test.go の既存失敗 3 件を確認しました。 [/MANY-AI-CLI-DONE]",
 	"- Good（要判断）: [MANY-AI-CLI-DONE] 実装は停止しています。破壊的な migration の適用可否についてユーザー判断が必要です。 [/MANY-AI-CLI-DONE]",
@@ -203,9 +214,12 @@ func SyncRulesFile() error {
 	return os.WriteFile(path, []byte(rulesFileContent), 0o644) // #nosec G306 -- 各 AI CLI が読む共有ルールファイル（秘密情報なし、0644 が意図）
 }
 
+// providerUsesSharedBlock は共有ブロック方式で承認ルールを渡す provider か。
+// opencode は 2026-08-29 に AGENTS.md を読むことを実測して追加した
+// （経緯は delegation_inject.go の providerUsesDelegationBlock）。
 func providerUsesSharedBlock(provider string) bool {
 	switch provider {
-	case "codex", "copilot", "cursor-agent":
+	case "codex", "copilot", "cursor-agent", "opencode":
 		return true
 	default:
 		return false
@@ -379,9 +393,10 @@ func RemoveRules(provider, path string) error {
 		newContent = strings.Join(kept, "\n")
 	case providerUsesSharedBlock(provider):
 		// 旧名 any-ai-cli マーカーのブロックも除去対象（旧バイナリからの移行）。
-		blockRe := regexp.MustCompile(`(?s)\n?(?:` +
-			regexp.QuoteMeta(sharedBlockStart) + `.*?` + regexp.QuoteMeta(sharedBlockEnd) + `|` +
-			regexp.QuoteMeta(legacySharedBlockStart) + `.*?` + regexp.QuoteMeta(legacySharedBlockEnd) + `)\n?`)
+		blockRe := regexp.MustCompile(blockRemovalPattern(
+			[2]string{sharedBlockStart, sharedBlockEnd},
+			[2]string{legacySharedBlockStart, legacySharedBlockEnd},
+		))
 		newContent = blockRe.ReplaceAllString(string(content), "")
 	default:
 		return fmt.Errorf("unknown provider: %s", provider)
@@ -390,4 +405,38 @@ func RemoveRules(provider, path string) error {
 		return nil
 	}
 	return os.WriteFile(path, []byte(newContent), 0o644) // #nosec G703 G306 -- provider 既知の instruction file パスのみ（HTTP 入力なし）。共有ドキュメントのため 0644 が意図
+}
+
+// blockRemovalPattern はブロック除去用の正規表現本体を組み立てる。start/end の
+// 各ペアを alternation で束ね、ブロック前後の改行を 1 個ずつ含めて除くことで、
+// 除去後に空行が積み残らないようにする。RemoveRules（本ファイル）と
+// RemoveDelegation（delegation_inject.go の removeBlock）が個別に組み立てていた
+// のと同じ形の正規表現を、ここへ 1 箇所へまとめる（重複定義防止）。
+func blockRemovalPattern(pairs ...[2]string) string {
+	alts := make([]string, len(pairs))
+	for i, pair := range pairs {
+		alts[i] = regexp.QuoteMeta(pair[0]) + `.*?` + regexp.QuoteMeta(pair[1])
+	}
+	return `(?s)\n?(?:` + strings.Join(alts, "|") + `)\n?`
+}
+
+// StripInjectedBlocks は many-ai-cli 自身が rule ファイルへ注入する 3 種のブロック
+// （共有ブロック・旧名 any-ai-cli ブロック・delegation ブロック）を取り除く。
+//
+// doctor の subscriptionRuleFileCheck（internal/doctor/subscriptions.go の
+// sha256File）がハッシュ比較の前にこれを通す。共有ブロック方式の provider
+// （codex 等）はセッションが動いている間だけ profile 側の AGENTS.md にこれらの
+// ブロックが入り、既定側には入らないため、除かずに比べると常に「内容が違います」
+// が誤検知される（C5、2026-09-07 plan_subscription-claude-md-symlink-seed.md）。
+//
+// 除去する範囲は RemoveRules / RemoveDelegation と同じ正規表現（blockRemovalPattern
+// 経由）なので、それらが「除去済み」とみなす範囲と食い違わない。ブロックが
+// 無い入力は byte 単位でそのまま返る。
+func StripInjectedBlocks(data []byte) []byte {
+	blockRe := regexp.MustCompile(blockRemovalPattern(
+		[2]string{sharedBlockStart, sharedBlockEnd},
+		[2]string{legacySharedBlockStart, legacySharedBlockEnd},
+		[2]string{delegationBlockStart, delegationBlockEnd},
+	))
+	return blockRe.ReplaceAll(data, []byte{})
 }

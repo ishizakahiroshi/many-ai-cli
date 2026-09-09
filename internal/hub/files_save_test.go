@@ -179,6 +179,42 @@ func TestFilesSave_BaseMtimeMismatch(t *testing.T) {
 	}
 }
 
+func TestFilesSave_SubsecondMtimeMismatch(t *testing.T) {
+	tmp := t.TempDir()
+	target := filepath.Join(tmp, "subsecond.txt")
+	if err := os.WriteFile(target, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Now().Truncate(time.Second).Add(100 * time.Millisecond)
+	current := base.Add(800 * time.Millisecond)
+	if err := os.Chtimes(target, current, current); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().UTC().Equal(current.UTC()) {
+		t.Skipf("filesystem does not preserve sub-second mtime: got %v, want %v", info.ModTime(), current)
+	}
+
+	s := newTestSaveServer(t, tmp)
+	code, resp := callSave(t, s, target, "must not overwrite", base)
+	if code != http.StatusConflict || resp.OK {
+		t.Fatalf("expected sub-second mtime conflict, got code=%d resp=%+v", code, resp)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "original" {
+		t.Fatalf("file content = %q, want original after conflict", got)
+	}
+	if !resp.Mtime.UTC().Equal(info.ModTime().UTC()) {
+		t.Fatalf("conflict mtime = %v, want %v", resp.Mtime, info.ModTime())
+	}
+}
+
 // TestFilesSave_FileNotFound は存在しないファイルで 404 を返すことを確認する。
 func TestFilesSave_FileNotFound(t *testing.T) {
 	tmp := t.TempDir()

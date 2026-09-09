@@ -33,6 +33,11 @@ func (s *Server) markRunning(id int) {
 		s.sessionsMu.Unlock()
 		return
 	}
+	if ses.State != "running" {
+		// standby/waiting から running へ入る = 新しいターンの開始。
+		// 前ターン終了後の待ち時間を transcript 停滞として持ち越さない（transcript_stall.go）。
+		resetTranscriptTrackingLocked(ses, now)
+	}
 	before := ses.Activity
 	ses.Activity.OutputIdle = false
 	ses.Activity.WorkflowActive = !ses.approvalVisible
@@ -42,12 +47,21 @@ func (s *Server) markRunning(id int) {
 	ses.State = ses.Activity.DisplayState()
 	changed := before != ses.Activity || ses.State != "running"
 	provider, display, cwd, branch, label, model, route, state, activity, lastOutputAt := ses.Provider, ses.Display, ses.CWD, ses.Branch, ses.Label, ses.Model, ses.Route, ses.State, ses.Activity, ses.LastOutputAt
+	transcriptGrewAt := ses.TranscriptGrewAt
+	orchestrationID := ses.OrchestrationID
 	s.sessionsMu.Unlock()
 	if changed {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: state, OutputIdle: activity.OutputIdle, WorkflowActive: activity.WorkflowActive, AwaitingUser: activity.AwaitingUser, AwaitingApproval: activity.AwaitingApproval, Activity: activityMessage(activity), LastOutputAt: lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: id, Provider: provider, Display: display, CWD: cwd, Branch: branch, Label: label, Model: model, Route: route, State: state, OutputIdle: activity.OutputIdle, WorkflowActive: activity.WorkflowActive, AwaitingUser: activity.AwaitingUser, AwaitingApproval: activity.AwaitingApproval, Activity: activityMessage(activity), LastOutputAt: lastOutputAt, TranscriptGrewAt: transcriptGrewAt})
 	}
 	if s.sessionStore != nil {
 		s.sessionStore.UpdateSessionState(id, state, lastOutputAt)
+	}
+	if orchestrationID != "" {
+		// running へ戻った子の起動失敗猶予をリセットする
+		// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md D2)。
+		// resetChildStandbySince is a no-op for a non-child session (conductors
+		// have OrchestrationID too but are absent from board.Children).
+		s.resetChildStandbySince(orchestrationID, id)
 	}
 }
 
@@ -74,19 +88,21 @@ func (s *Server) evaluateIdle() {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	type change struct {
-		id           int
-		provider     string
-		display      string
-		cwd          string
-		branch       string
-		label        string
-		model        string
-		route        string
-		state        string
-		activity     SessionActivity
-		lastOutputAt string
-		approvalWait bool
-		fallbackDone bool
+		id               int
+		provider         string
+		display          string
+		cwd              string
+		branch           string
+		label            string
+		model            string
+		route            string
+		state            string
+		activity         SessionActivity
+		lastOutputAt     string
+		transcriptGrewAt string
+		approvalWait     bool
+		fallbackDone     bool
+		orchestrationID  string
 	}
 	var changes []change
 	var branchChecks []branchRefreshRequest
@@ -120,12 +136,14 @@ func (s *Server) evaluateIdle() {
 		newState := ses.Activity.DisplayState()
 		if before != ses.Activity || newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, activity: ses.Activity, lastOutputAt: ses.LastOutputAt, approvalWait: newState == "waiting" && ses.Activity.AwaitingApproval, fallbackDone: newState == "standby"})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, activity: ses.Activity, lastOutputAt: ses.LastOutputAt, transcriptGrewAt: ses.TranscriptGrewAt, approvalWait: newState == "waiting" && ses.Activity.AwaitingApproval, fallbackDone: newState == "standby", orchestrationID: ses.OrchestrationID})
 		}
 	}
+	// State を確定させた後に集める（running になったばかりのセッションも拾うため）。
+	transcriptChecks := s.collectTranscriptChecksLocked(now)
 	s.sessionsMu.Unlock()
 	for _, c := range changes {
-		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, OutputIdle: c.activity.OutputIdle, WorkflowActive: c.activity.WorkflowActive, AwaitingUser: c.activity.AwaitingUser, AwaitingApproval: c.activity.AwaitingApproval, Activity: activityMessage(c.activity), LastOutputAt: c.lastOutputAt})
+		s.broadcast(proto.Message{Type: "session_update", SessionID: c.id, Provider: c.provider, Display: c.display, CWD: c.cwd, Branch: c.branch, Label: c.label, Model: c.model, Route: c.route, State: c.state, OutputIdle: c.activity.OutputIdle, WorkflowActive: c.activity.WorkflowActive, AwaitingUser: c.activity.AwaitingUser, AwaitingApproval: c.activity.AwaitingApproval, Activity: activityMessage(c.activity), LastOutputAt: c.lastOutputAt, TranscriptGrewAt: c.transcriptGrewAt})
 		if s.sessionStore != nil {
 			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
 		}
@@ -136,9 +154,17 @@ func (s *Server) evaluateIdle() {
 		}
 		if c.fallbackDone {
 			s.maybeCreateFallbackDoneSummary(c.id)
+			if c.orchestrationID != "" {
+				// running → standby への遷移で起動失敗の猶予時計を開始する
+				// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md D2)。
+				// 実際の grace 経過判定は checkOrchestrationChildTimers が毎 poll で行う
+				// （この遷移は 1 回しか起きないので、ここでは開始するだけでよい）。
+				s.markChildStandbySince(c.orchestrationID, c.id, now)
+			}
 		}
 	}
 	s.queueBranchRefreshes(branchChecks)
+	s.queueTranscriptChecks(transcriptChecks)
 }
 
 // startIdleTimerLocked starts the idle-timeout timer. Caller must hold
@@ -162,7 +188,7 @@ func (s *Server) startIdleTimerLocked(idleMin int) {
 		s.idleTimer = nil
 		s.sessionsMu.Unlock()
 		s.logger.Info("idle timeout reached, killing all wrappers", "minutes", idleMin)
-		s.killAllWrappers()
+		s.killAllWrappers("idle_timeout")
 	})
 }
 

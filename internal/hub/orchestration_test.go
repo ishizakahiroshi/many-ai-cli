@@ -2,10 +2,14 @@ package hub
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +18,7 @@ import (
 
 	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 )
 
 func orchestrationRequest(method, path string, body any) *http.Request {
@@ -26,6 +31,15 @@ func orchestrationRequest(method, path string, body any) *http.Request {
 	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
 	return req
+}
+
+func registerTestSpawnConfirmation(t *testing.T, s *Server, parent *session, body spawnChildRequest) *pendingSpawnConfirmation {
+	t.Helper()
+	pending, err := s.registerSpawnConfirmation(parent, "", body)
+	if err != nil {
+		t.Fatalf("registerSpawnConfirmation: %v", err)
+	}
+	return pending
 }
 
 func Test_handleSpawnChild_validationAndLimits(t *testing.T) {
@@ -123,6 +137,64 @@ func Test_detectLastBoardWriter_skipsDone(t *testing.T) {
 	got := detectLastBoardWriter(text)
 	if got.Role != "implementer" || got.SessionID != 10 {
 		t.Fatalf("writer = %#v, want implementer session=10", got)
+	}
+}
+
+func Test_detectLastBoardWriter_skipsSuccess(t *testing.T) {
+	text := "## implementer session=10 2026-06-25T00:00:00Z\nbody\n## SUCCESS implementer session=10\n"
+	got := detectLastBoardWriter(text)
+	if got.Role != "implementer" || got.SessionID != 10 {
+		t.Fatalf("writer = %#v, want implementer session=10 after SUCCESS", got)
+	}
+}
+
+func TestReserveOrchestrationConductorMergesWorktreeMetadata(t *testing.T) {
+	s := newTestServer()
+	const label = "conductor-worktree"
+	worktree := normalWorktree{Path: `C:\repo\.many-ai-cli\worktrees\child`, ParentDir: `C:\repo`, Branch: "orch/child", Created: true}
+	s.orchestration.pending[label] = pendingChild{
+		NormalWorktree:  worktree,
+		WorktreeCleanup: worktreeCleanupDelete,
+		WorktreeBranch:  worktree.Branch,
+		SpawnedAt:       time.Unix(1, 0),
+	}
+
+	id := s.reserveOrchestrationConductor(label, nil)
+	s.orchestration.mu.Lock()
+	got := s.orchestration.pending[label]
+	s.orchestration.mu.Unlock()
+	if got.OrchestrationID != id {
+		t.Fatalf("orchestration id = %q, want %q", got.OrchestrationID, id)
+	}
+	if got.NormalWorktree != worktree || got.WorktreeCleanup != worktreeCleanupDelete || got.WorktreeBranch != worktree.Branch {
+		t.Fatalf("worktree metadata was replaced: %+v", got)
+	}
+}
+
+func TestOrchestrationChildProcess(t *testing.T) {
+	if os.Getenv("MANY_AI_CLI_TEST_CHILD") != "1" {
+		return
+	}
+	for {
+		time.Sleep(time.Second)
+	}
+}
+
+func TestTerminateUnregisteredWrapKillsProcess(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestOrchestrationChildProcess$")
+	cmd.Env = append(os.Environ(), "MANY_AI_CLI_TEST_CHILD=1")
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	terminateUnregisteredWrap(cmd)
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("unregistered wrap process did not exit after kill")
 	}
 }
 
@@ -259,7 +331,10 @@ func Test_notifyBoardSession_softNotifyDoesNotQueueEnter(t *testing.T) {
 func Test_prepareChildWorktree_nonGit(t *testing.T) {
 	s := newTestServer()
 	cwd := t.TempDir()
-	gotCWD, branch, note := s.prepareChildWorktree(cwd, "s1", "tester", config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"})
+	gotCWD, branch, note, err := s.prepareChildWorktree(cwd, "s1", "tester", config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"})
+	if err != nil {
+		t.Fatalf("prepareChildWorktree non-git: %v", err)
+	}
 	if gotCWD != cwd {
 		t.Fatalf("cwd = %q, want %q", gotCWD, cwd)
 	}
@@ -268,6 +343,243 @@ func Test_prepareChildWorktree_nonGit(t *testing.T) {
 	}
 	if !strings.Contains(note, "not a git repository") {
 		t.Fatalf("note = %q, want non-git skip", note)
+	}
+}
+
+// C3 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md): 症状B（-cwd 無視）の
+// 確認。git リポジトリなら worktree が実際に切られ、子 cwd は <cwd>/.many-ai-cli/worktrees/
+// <orchestration id>/<role> になる。2回目の呼び出しは既存の worktree を再利用する。
+func Test_prepareChildWorktree_gitRepo(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+
+	gotCWD, branch, note, err := s.prepareChildWorktree(repo, "o1", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree create: %v", err)
+	}
+	wantCWD := filepath.Join(repo, ".many-ai-cli", "worktrees", "o1", "review")
+	if gotCWD != wantCWD {
+		t.Fatalf("cwd = %q, want %q", gotCWD, wantCWD)
+	}
+	if branch != "orch/o1/review" {
+		t.Fatalf("branch = %q, want orch/o1/review", branch)
+	}
+	if !strings.Contains(note, "worktree created") {
+		t.Fatalf("note = %q, want worktree created", note)
+	}
+	if _, err := os.Stat(gotCWD); err != nil {
+		t.Fatalf("worktree directory was not created: %v", err)
+	}
+
+	gotCWD2, branch2, note2, err := s.prepareChildWorktree(repo, "o1", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree reuse: %v", err)
+	}
+	if gotCWD2 != wantCWD || branch2 != branch {
+		t.Fatalf("reuse mismatch: cwd=%q branch=%q, want %q / %q", gotCWD2, branch2, wantCWD, branch)
+	}
+	if !strings.Contains(note2, "worktree reuse") {
+		t.Fatalf("note2 = %q, want worktree reuse", note2)
+	}
+}
+
+func Test_prepareChildWorktree_rejectsChangedBranch(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path, branch, _, err := s.prepareChildWorktree(repo, "identity", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree create: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repo, "worktree", "remove", "--force", path) })
+	runWorktreeTestGit(t, path, "switch", "-c", "manual-child-branch")
+	before, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil {
+		t.Fatalf("read reused worktree before rejection: %v", err)
+	}
+	_, gotBranch, note, err := s.prepareChildWorktree(repo, "identity", "review", cfg)
+	if !errors.Is(err, errWorktreeIdentityMismatch) {
+		t.Fatalf("changed branch error = %v, want identity mismatch", err)
+	}
+	if gotBranch != "" || !strings.Contains(note, "worktree reuse rejected") {
+		t.Fatalf("changed branch result = branch=%q note=%q, want rejected reuse", gotBranch, note)
+	}
+	if got := strings.TrimSpace(gitOutput(t, path, "branch", "--show-current")); got != "manual-child-branch" {
+		t.Fatalf("branch after rejected reuse = %q, want manual-child-branch", got)
+	}
+	after, err := os.ReadFile(filepath.Join(path, "README.md"))
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("worktree content changed on rejected reuse: before=%q after=%q err=%v", before, after, err)
+	}
+	runWorktreeTestGit(t, path, "switch", branch)
+}
+
+func Test_prepareChildWorktree_rejectsUnregisteredDirectory(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path := filepath.Join(repo, ".many-ai-cli", "worktrees", "ordinary", "review")
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, note, err := s.prepareChildWorktree(repo, "ordinary", "review", cfg); !errors.Is(err, errWorktreeIdentityMismatch) || !strings.Contains(note, "worktree reuse rejected") {
+		t.Fatalf("ordinary directory result = note=%q err=%v, want identity mismatch", note, err)
+	}
+}
+
+func Test_prepareChildWorktree_rejectsForeignWorktree(t *testing.T) {
+	s := newTestServer()
+	repoA := newRelayTestRepo(t)
+	repoB := newRelayTestRepo(t)
+	cfgA := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path, _, _, err := s.prepareChildWorktree(repoA, "foreign", "review", cfgA)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree in repo A: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repoA, "worktree", "remove", "--force", path) })
+	cfgB := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: filepath.Join(repoA, ".many-ai-cli", "worktrees")}
+	_, _, note, err := s.prepareChildWorktree(repoB, "foreign", "review", cfgB)
+	if !errors.Is(err, errWorktreeIdentityMismatch) || !strings.Contains(note, "worktree reuse rejected") {
+		t.Fatalf("foreign worktree result = note=%q err=%v, want identity mismatch", note, err)
+	}
+}
+
+func Test_prepareChildWorktree_acceptsCanonicalAlias(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	alias := filepath.Join(t.TempDir(), "repo-alias")
+	if err := os.Symlink(repo, alias); err != nil {
+		t.Skipf("directory symlink unavailable: %v", err)
+	}
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	path, branch, _, err := s.prepareChildWorktree(alias, "alias", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree through alias: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repo, "worktree", "remove", "--force", path) })
+	path2, branch2, note, err := s.prepareChildWorktree(repo, "alias", "review", cfg)
+	if err != nil || path2 != filepath.Join(repo, ".many-ai-cli", "worktrees", "alias", "review") || branch2 != branch || !strings.Contains(note, "worktree reuse") {
+		t.Fatalf("canonical alias reuse = path=%q branch=%q note=%q err=%v", path2, branch2, note, err)
+	}
+}
+
+// -cwd が無視されているなら、親と別のリポジトリを渡しても worktree が同じ場所にできて
+// しまう。実際には each -cwd がそれぞれの根の下に worktree を作ることを固定する
+// （観測7では親と同じリポジトリだったため「無視された」と区別が付かなかった）。
+func Test_prepareChildWorktree_differentRepoRoots(t *testing.T) {
+	s := newTestServer()
+	repoA := newRelayTestRepo(t)
+	repoB := newRelayTestRepo(t)
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+
+	cwdA, _, _, err := s.prepareChildWorktree(repoA, "o2", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree repoA: %v", err)
+	}
+	cwdB, _, _, err := s.prepareChildWorktree(repoB, "o2", "review", cfg)
+	if err != nil {
+		t.Fatalf("prepareChildWorktree repoB: %v", err)
+	}
+	if !strings.HasPrefix(cwdA, repoA) {
+		t.Fatalf("cwdA = %q, want under repoA %q", cwdA, repoA)
+	}
+	if !strings.HasPrefix(cwdB, repoB) {
+		t.Fatalf("cwdB = %q, want under repoB %q", cwdB, repoB)
+	}
+	if cwdA == cwdB {
+		t.Fatalf("-cwd を変えても同じ worktree パスになった: %q", cwdA)
+	}
+}
+
+// C3: SameTree が nil（未指定）なら既定どおり worktree が勝つ。
+func Test_preparePromptAndWorktree_defaultUsesWorktree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = repo
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	body := spawnChildRequest{Role: "review", CWD: repo}
+
+	prep, err := s.preparePromptAndWorktree(parent.ID, parent, body, cfg)
+	if err != nil {
+		t.Fatalf("preparePromptAndWorktree: %v", err)
+	}
+	wantCWD := filepath.Join(repo, ".many-ai-cli", "worktrees", prep.orchestrationID, "review")
+	if prep.childCWD != wantCWD {
+		t.Fatalf("childCWD = %q, want %q", prep.childCWD, wantCWD)
+	}
+	if prep.absoluteCWD != repo {
+		t.Fatalf("absoluteCWD = %q, want %q (requested cwd, before worktree substitution)", prep.absoluteCWD, repo)
+	}
+	if prep.branch == "" {
+		t.Fatal("branch は空でないはず（worktree が作られている）")
+	}
+}
+
+func Test_preparePromptAndWorktree_rejectsChangedWorktree(t *testing.T) {
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = repo
+	parent.OrchestrationID = "identity"
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	body := spawnChildRequest{Role: "review", CWD: repo}
+
+	prep, err := s.preparePromptAndWorktree(parent.ID, parent, body, cfg)
+	if err != nil {
+		t.Fatalf("preparePromptAndWorktree create: %v", err)
+	}
+	t.Cleanup(func() { runWorktreeTestGit(t, repo, "worktree", "remove", "--force", prep.childCWD) })
+	runWorktreeTestGit(t, prep.childCWD, "switch", "-c", "manual-prompt-branch")
+
+	_, err = s.preparePromptAndWorktree(parent.ID, parent, body, cfg)
+	var prepErr *spawnPreparationError
+	if !errors.As(err, &prepErr) || prepErr.status != http.StatusConflict || prepErr.code != "worktree_identity_mismatch" {
+		t.Fatalf("changed worktree preparation error = %v, want HTTP 409 identity mismatch", err)
+	}
+	if got := strings.TrimSpace(gitOutput(t, prep.childCWD, "branch", "--show-current")); got != "manual-prompt-branch" {
+		t.Fatalf("branch after rejected prompt preparation = %q, want manual-prompt-branch", got)
+	}
+}
+
+// C3: SameTree=true を明示すると worktree を使わず、要求 cwd をそのまま子 cwd にする。
+func Test_preparePromptAndWorktree_sameTreeSkipsWorktree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	repo := newRelayTestRepo(t)
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = repo
+	cfg := config.OrchestrationConfig{WorktreeAuto: boolPtr(true), WorktreeDirRoot: ".many-ai-cli/worktrees"}
+	sameTree := true
+	body := spawnChildRequest{Role: "review", CWD: repo, SameTree: &sameTree}
+
+	prep, err := s.preparePromptAndWorktree(parent.ID, parent, body, cfg)
+	if err != nil {
+		t.Fatalf("preparePromptAndWorktree: %v", err)
+	}
+	if prep.childCWD != repo {
+		t.Fatalf("childCWD = %q, want %q (same-tree should skip the worktree)", prep.childCWD, repo)
+	}
+	if prep.branch != "" {
+		t.Fatalf("branch = %q, want empty when same-tree skips the worktree", prep.branch)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".many-ai-cli", "worktrees")); !os.IsNotExist(err) {
+		t.Fatalf("worktree directory should not have been created with -same-tree (stat err=%v)", err)
+	}
+	board, err := os.ReadFile(prep.boardPath)
+	if err != nil {
+		t.Fatalf("read board: %v", err)
+	}
+	if !strings.Contains(string(board), "worktree skip: requested by --same-tree") {
+		t.Fatalf("board missing the same-tree skip note:\n%s", board)
 	}
 }
 
@@ -596,6 +908,1110 @@ func Test_appendBoardSection_concurrent(t *testing.T) {
 	}
 }
 
+// relay board regression tests (plan_orchestration-relay-loop-c1.md C2): the
+// generic DONE / notice / timer handling must step aside for a board that a
+// relay owns, and the relay must receive the signal instead.
+
+func Test_scanOrchestrationChildFiles_relayBoardSkipsGenericDone(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	run := h.run(id)
+	if err := os.WriteFile(childProgressPath(run.boardPath, impl), []byte(doneLines(relayRoleImplementation, impl, 1, false)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	h.s.scanOrchestrationChildFiles(id, time.Now())
+
+	if got := h.s.sessions[impl].State; got != "running" {
+		t.Fatalf("child state = %q, want running (relay boards never mark done)", got)
+	}
+	if got := h.status(id); got.State != relayStateReviewing || got.ReviewSessionID == 0 {
+		t.Fatalf("relay did not receive the DONE: %+v", got)
+	}
+	h.s.orchestration.mu.Lock()
+	b := h.s.orchestration.boards[id]
+	pendingNotices := len(b.PendingNotices)
+	child := b.Children[impl]
+	fileSize, childDone := child.FileSize, child.Done
+	h.s.orchestration.mu.Unlock()
+	if pendingNotices != 0 || len(h.s.pendingInput[h.parent.ID]) != 0 {
+		t.Fatalf("generic progress notice reached the parent: queued=%d pendingInput=%d", pendingNotices, len(h.s.pendingInput[h.parent.ID]))
+	}
+	if fileSize == 0 || childDone {
+		t.Fatalf("file bookkeeping size=%d done=%v, want size>0 and done=false", fileSize, childDone)
+	}
+	// A second scan without a file change does nothing.
+	before := len(h.injects)
+	h.s.scanOrchestrationChildFiles(id, time.Now())
+	if len(h.injects) != before {
+		t.Fatal("unchanged file triggered another relay transition")
+	}
+}
+
+func Test_checkOrchestrationChildTimers_relayTimeoutStopsRelay(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	old := time.Now().Add(-10 * time.Minute)
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.SpawnedAt, child.LastBoardWrite = old, old
+	h.s.orchestration.mu.Unlock()
+
+	h.s.checkOrchestrationChildTimers(id, time.Now(), config.OrchestrationConfig{ChildTimeoutSeconds: 1})
+
+	if got := h.status(id); got.State != relayStateStopped || got.Reason != relayReasonTimeout {
+		t.Fatalf("relay = %+v, want stopped(timeout)", got)
+	}
+	if got := h.s.sessions[impl].State; got != "running" {
+		t.Fatalf("child state = %q, want running (relay boards never mark timeout)", got)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic ORCHESTRATION-ERROR reached the parent: %d pending inputs", n)
+	}
+}
+
+func Test_checkOrchestrationChildTimers_relayIdleNudgesChildNotParent(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	old := time.Now().Add(-10 * time.Minute)
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.SpawnedAt, child.LastBoardWrite = old, old
+	h.s.orchestration.mu.Unlock()
+	h.s.sessions[impl].lastOutputAt = old
+	cfg := config.OrchestrationConfig{IdleDoneThresholdSec: 60}
+
+	h.s.checkOrchestrationChildTimers(id, time.Now(), cfg)
+
+	if len(h.injects) != 1 || h.injects[0].id != impl || !strings.Contains(h.injects[0].text, "This reminder is sent only once") {
+		t.Fatalf("injects = %+v, want one nudge to the implementation child", h.injects)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic idle warning reached the parent: %d pending inputs", n)
+	}
+	data, err := os.ReadFile(h.run(id).boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), fmt.Sprintf("idle role=implementation id=%d", impl)) {
+		t.Fatalf("board missing idle record:\n%s", data)
+	}
+	if got := h.status(id); got.State != relayStateImplementing {
+		t.Fatalf("idle changed the relay state: %+v", got)
+	}
+	// The latch holds while the child stays silent: no second nudge from the timer.
+	h.s.checkOrchestrationChildTimers(id, time.Now(), cfg)
+	if len(h.injects) != 1 {
+		t.Fatalf("injects after second tick = %d, want 1", len(h.injects))
+	}
+}
+
+func Test_checkOrchestrationChildTimers_terminalRelayStopsWatchingChildren(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+	if !h.s.relayFinish(h.run(id), relayStateCompleted, "", "finished by test") {
+		t.Fatal("relayFinish returned false")
+	}
+	old := time.Now().Add(-10 * time.Minute)
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.SpawnedAt, child.LastBoardWrite = old, old
+	h.s.orchestration.mu.Unlock()
+	h.s.sessions[impl].lastOutputAt = old
+	boardPath := h.run(id).boardPath
+	before, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h.s.checkOrchestrationChildTimers(id, time.Now(), config.OrchestrationConfig{IdleDoneThresholdSec: 60})
+
+	after, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) || len(h.injects) != 0 {
+		t.Fatalf("terminal relay watcher changed state: injects=%d board_changed=%v", len(h.injects), string(after) != string(before))
+	}
+}
+
+func Test_completeOrchestrationChildOnSessionEnd_relayStopsRelay(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+
+	h.s.completeOrchestrationChildOnSessionEnd(impl, "completed")
+
+	if got := h.status(id); got.State != relayStateStopped || got.Reason != relayReasonChildExited {
+		t.Fatalf("relay = %+v, want stopped(child_exited)", got)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic session_end notice reached the parent: %d pending inputs", n)
+	}
+	if len(h.notifies) != 1 || !strings.Contains(h.notifies[0], "relay stopped") || !strings.Contains(h.notifies[0], "child_exited") {
+		t.Fatalf("relay finish notice = %q", h.notifies)
+	}
+	data, err := os.ReadFile(h.run(id).boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "completed without DONE marker") || !strings.Contains(string(data), "relay stopped reason=child_exited") {
+		t.Fatalf("board records incomplete:\n%s", data)
+	}
+}
+
 func boolPtr(v bool) *bool {
 	return &v
+}
+
+// --- C1 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md) ---
+// childStartupFailed / markChildPromptDelivered / markChildPromptFailed.
+
+// setupStartupFailureBoard registers a parent/child pair on a fresh board and
+// returns the child session together with the board ID, for the C1/C2
+// startup-failure tests below.
+func setupStartupFailureBoard(t *testing.T, s *Server) (parent, child *session, boardID, boardPath string) {
+	t.Helper()
+	parent = registerTestSession(s, 1, "codex")
+	child = registerTestSession(s, 10, "command-code")
+	child.ParentSessionID = parent.ID
+	child.Role = "tester"
+	boardPath = filepath.Join(t.TempDir(), "board.md")
+	boardID = "s1"
+	s.registerBoardSession(boardID, boardPath, parent.ID, "conductor")
+	s.registerBoardChild(boardID, boardPath, child.ID, parent.ID, child.Role, time.Now())
+	return parent, child, boardID, boardPath
+}
+
+func Test_childStartupFailed_trueWhenDeliveredNoProgressPastGrace(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
+	if !s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = false, want true")
+	}
+}
+
+func Test_childStartupFailed_falseWhenProgressFileWritten(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	c.FileMod = time.Now().Add(-4 * time.Minute) // 一度でも進捗を書いた
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = true, want false (child wrote progress; timeout's job, not startup failure)")
+	}
+}
+
+func Test_childStartupFailed_falseWhenPromptNotConfirmedDelivered(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.StandbySince = time.Now().Add(-2 * time.Minute) // PromptDeliveredAt は未設定のまま
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = true, want false (delivery never confirmed)")
+	}
+
+	// 配送失敗として記録済みの場合も同様に偽（reportInjectFailure が既に報告済み）。
+	s.orchestration.mu.Lock()
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.PromptFailed = true
+	s.orchestration.mu.Unlock()
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = true, want false (delivery already reported as failed)")
+	}
+}
+
+func Test_childStartupFailed_falseWithinGrace(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now() // ちょうど standby に入った直後
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = true, want false (still within grace)")
+	}
+}
+
+func Test_childStartupFailed_falseWhileApprovalVisible(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+	child.approvalVisible = true
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = true, want false (waiting on an approval prompt, not dead)")
+	}
+}
+
+func Test_childStartupFailed_disabledByConfig(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60, ChildStartupFail: boolPtr(false)}
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("childStartupFailed = true, want false (child_startup_fail_enabled: false)")
+	}
+}
+
+// Test_childStartupFailed_latchPreventsSecondTrue covers the D9 latch itself:
+// childStartupFailed reads board.StartupFailed and returns false once it is
+// set, even though nothing else about the child changed. Setting the latch is
+// handleChildStartupFailed's job (C2); this only tests the read side.
+func Test_childStartupFailed_latchPreventsSecondTrue(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
+	if !s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("first call: childStartupFailed = false, want true")
+	}
+
+	// handleChildStartupFailed が実際に立てるラッチを模して立てる。
+	s.orchestration.mu.Lock()
+	s.orchestration.boards[boardID].StartupFailed[child.ID] = true
+	s.orchestration.mu.Unlock()
+
+	if s.childStartupFailed(child.ID, time.Now(), cfg) {
+		t.Fatal("second call after latch: childStartupFailed = true, want false")
+	}
+}
+
+// TestInjectInitialPromptNotify_RecordsPromptDelivered exercises the
+// "echo observed" success exit of injectInitialPromptNotify and confirms it
+// records PromptDeliveredAt (and leaves PromptFailed false). Follows the same
+// fake-wrapper-echoes-back pattern as
+// TestInjectInitialPromptNotify_ReadySignalInjectsOnce (orchestration_composer_guard_test.go).
+func TestInjectInitialPromptNotify_RecordsPromptDelivered(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	child := registerTestSession(s, 2, "codex")
+	child.ParentSessionID = parent.ID
+	child.Role = "tester"
+	child.vt = newVTBuffer(80, 24)
+	child.vt.Write([]byte("Ask Codex to do anything\r\n? for shortcuts\r\n"))
+	boardPath := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("s1", boardPath, parent.ID, "conductor")
+	s.registerBoardChild("s1", boardPath, child.ID, parent.ID, child.Role, time.Now())
+
+	s.sessionsMu.Lock()
+	s.wrappers[2] = &wrapperConn{sendFunc: func(m any) error {
+		msg, ok := m.(proto.Message)
+		if !ok || msg.Type != "pty_input" {
+			return nil
+		}
+		data := string(msg.Data)
+		s.sessionsMu.Lock()
+		if cur := s.sessions[2]; cur != nil && cur.vt != nil {
+			cur.vt.Write(msg.Data)
+		}
+		s.sessionsMu.Unlock()
+		if data == "\r" {
+			go func() {
+				time.Sleep(5 * time.Millisecond)
+				s.sessionsMu.Lock()
+				if cur := s.sessions[2]; cur != nil {
+					cur.lastOutputAt = time.Now()
+				}
+				s.sessionsMu.Unlock()
+			}()
+		}
+		return nil
+	}}
+	s.sessionsMu.Unlock()
+
+	before := time.Now()
+	s.injectInitialPromptNotify(2, "hello", injectNotice{ParentID: 1, BoardPath: boardPath, Role: "tester"})
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards["s1"].Children[2]
+	delivered, failed := c.PromptDeliveredAt, c.PromptFailed
+	s.orchestration.mu.Unlock()
+	if delivered.IsZero() || delivered.Before(before) {
+		t.Fatalf("PromptDeliveredAt = %v, want a time at/after %v", delivered, before)
+	}
+	if failed {
+		t.Fatal("PromptFailed = true, want false on a successful delivery")
+	}
+}
+
+// TestInjectInitialPromptNotify_RecordsPromptFailedOnBlockedModal exercises
+// the composerBlocked exit and confirms it records PromptFailed (and leaves
+// PromptDeliveredAt zero). Same setup as
+// TestInjectInitialPromptNotify_BlockedModalNeverInjects (orchestration_composer_guard_test.go),
+// which already proves this returns quickly instead of blocking for
+// orchestrationComposerMaxWait.
+func TestInjectInitialPromptNotify_RecordsPromptFailedOnBlockedModal(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	child := registerTestSession(s, 2, "codex")
+	child.ParentSessionID = parent.ID
+	child.Role = "tester"
+	child.vt = newVTBuffer(80, 24)
+	child.vt.Write([]byte("Do you trust the contents of this directory?\r\nPress enter to continue\r\n"))
+	boardPath := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("s1", boardPath, parent.ID, "conductor")
+	s.registerBoardChild("s1", boardPath, child.ID, parent.ID, child.Role, time.Now())
+
+	notice := injectNotice{ParentID: 1, BoardPath: boardPath, Role: "tester"}
+	s.injectInitialPromptNotify(2, "some prompt", notice)
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards["s1"].Children[2]
+	delivered, failed := c.PromptDeliveredAt, c.PromptFailed
+	s.orchestration.mu.Unlock()
+	if !failed {
+		t.Fatal("PromptFailed = false, want true after composerBlocked")
+	}
+	if !delivered.IsZero() {
+		t.Fatalf("PromptDeliveredAt = %v, want zero (never delivered)", delivered)
+	}
+}
+
+// TestSanitizeInjectText_StripsControlBytes covers the D4 sanitization step
+// handleChildStartupFailed applies to the captured screen tail before it
+// reaches the board or the parent notification. The vt buffer itself already
+// drops bare control bytes below 0x20 when writing cells (vt_buffer.go
+// writeRune's `if r < 0x20 { return }`), so a synthetic vt screen can never
+// actually contain them — this tests the sanitizer function directly, which
+// is the actual mechanism relied upon if that ever changes.
+func TestSanitizeInjectText_StripsControlBytes(t *testing.T) {
+	raw := "line one\x1b[31mred\x07 bell\x7fdel"
+	got := sanitizeInjectText(raw)
+	if strings.ContainsAny(got, "\x1b\x07\x7f") {
+		t.Fatalf("sanitizeInjectText left control bytes: %q", got)
+	}
+	for _, want := range []string{"line one", "red", "bell", "del"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("sanitizeInjectText removed too much (%q): %q", want, got)
+		}
+	}
+}
+
+// --- C2 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md) ---
+// checkOrchestrationChildTimers' startup_failed branch / handleChildStartupFailed.
+
+func Test_checkOrchestrationChildTimers_startupFailedNotifiesRecordsAndStops(t *testing.T) {
+	s := newTestServer()
+	parent, child, boardID, boardPath := setupStartupFailureBoard(t, s)
+	child.vt = newVTBuffer(80, 24)
+	child.vt.Write([]byte("Error: 403 The free MiniMax M3 model has been retired.\r\n"))
+
+	var dismissed []proto.Message
+	s.sessionsMu.Lock()
+	s.wrappers[child.ID] = &wrapperConn{sendFunc: func(m any) error {
+		if msg, ok := m.(proto.Message); ok {
+			dismissed = append(dismissed, msg)
+		}
+		return nil
+	}}
+	s.sessionsMu.Unlock()
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 1}
+	s.checkOrchestrationChildTimers(boardID, time.Now(), cfg)
+
+	// board 記帳: child-<id>.md ではなく board 本体へ "hub" 名義で。
+	data, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	board := string(data)
+	for _, want := range []string{"## hub ", "startup failed", "role=tester id=10", "403"} {
+		if !strings.Contains(board, want) {
+			t.Errorf("board missing %q:\n%s", want, board)
+		}
+	}
+	if _, err := os.Stat(childProgressPath(boardPath, child.ID)); err == nil {
+		t.Error("startup failure record leaked into child-<id>.md; it must go to the board body")
+	}
+
+	// 親への通知。
+	s.sessionsMu.Lock()
+	pending := append([]string(nil), s.pendingInput[parent.ID]...)
+	s.sessionsMu.Unlock()
+	joined := strings.Join(pending, "")
+	for _, want := range []string{"[MANY-AI-CLI-ORCHESTRATION-ERROR]", "limit=startup_failed", "role=tester id=10", "403"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("parent notification missing %q: %q", want, joined)
+		}
+	}
+
+	// セッション終端化 (D8)。
+	if child.State != "error" {
+		t.Fatalf("child.State = %q, want error", child.State)
+	}
+
+	// 停止 (D6, C3): 既定 ON なので killWrapper が呼ばれる。
+	if len(dismissed) != 1 {
+		t.Fatalf("dismissed messages = %d, want 1", len(dismissed))
+	}
+	if dismissed[0].Type != proto.TypeSessionDismissed || dismissed[0].SessionID != child.ID || dismissed[0].Reason != "startup_failed" {
+		t.Fatalf("dismiss message = %+v, want session_dismissed/startup_failed for session %d", dismissed[0], child.ID)
+	}
+
+	// ラッチ (D9)。
+	s.orchestration.mu.Lock()
+	latched := s.orchestration.boards[boardID].StartupFailed[child.ID]
+	s.orchestration.mu.Unlock()
+	if !latched {
+		t.Fatal("StartupFailed latch not set")
+	}
+
+	// respawn 抑止 (D5): 子が増えていない。
+	s.orchestration.mu.Lock()
+	childCount := len(s.orchestration.boards[boardID].Children)
+	s.orchestration.mu.Unlock()
+	if childCount != 1 {
+		t.Fatalf("children after startup failure = %d, want 1 (respawnTimedOutChild must not run)", childCount)
+	}
+
+	// 二重通知抑止 (D9): timeout 閾値を越えても回した 2 回目で増えない。
+	s.orchestration.mu.Lock()
+	c.SpawnedAt = time.Now().Add(-2 * time.Second)
+	s.orchestration.mu.Unlock()
+	s.checkOrchestrationChildTimers(boardID, time.Now(), config.OrchestrationConfig{ChildTimeoutSeconds: 1})
+
+	s.sessionsMu.Lock()
+	pending2 := append([]string(nil), s.pendingInput[parent.ID]...)
+	s.sessionsMu.Unlock()
+	if len(pending2) != len(pending) {
+		t.Fatalf("second tick added parent notifications: before=%d after=%d", len(pending), len(pending2))
+	}
+	if len(dismissed) != 1 {
+		t.Fatalf("second tick re-killed the wrapper: %d dismiss messages, want 1", len(dismissed))
+	}
+	s.orchestration.mu.Lock()
+	timedOut := s.orchestration.boards[boardID].TimedOut[child.ID]
+	s.orchestration.mu.Unlock()
+	if timedOut {
+		t.Fatal("second tick marked TimedOut despite the StartupFailed latch")
+	}
+}
+
+// Test_handleChildStartupFailed_stopsAfterBoardAndNotify is a genuinely
+// order-sensitive check (not just a final-state check): the fake wrapper's
+// sendFunc fires exactly when killWrapper sends the dismiss message
+// (synchronously, same goroutine), so if the board record or the parent
+// notification had not been written by that point, this fails. A
+// reordering that moved the kill before the board record / notify would
+// make both booleans below false.
+func Test_handleChildStartupFailed_stopsAfterBoardAndNotify(t *testing.T) {
+	s := newTestServer()
+	parent, child, boardID, boardPath := setupStartupFailureBoard(t, s)
+
+	var killed, boardHadRecordAtKillTime, parentHadNoticeAtKillTime bool
+	s.sessionsMu.Lock()
+	s.wrappers[child.ID] = &wrapperConn{sendFunc: func(m any) error {
+		killed = true
+		if data, err := os.ReadFile(boardPath); err == nil {
+			boardHadRecordAtKillTime = strings.Contains(string(data), "startup failed")
+		}
+		s.sessionsMu.Lock()
+		joined := strings.Join(s.pendingInput[parent.ID], "")
+		s.sessionsMu.Unlock()
+		parentHadNoticeAtKillTime = strings.Contains(joined, "[MANY-AI-CLI-ORCHESTRATION-ERROR]")
+		return nil
+	}}
+	s.sessionsMu.Unlock()
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+
+	s.checkOrchestrationChildTimers(boardID, time.Now(), config.OrchestrationConfig{ChildStartupGraceSeconds: 1})
+
+	if !killed {
+		t.Fatal("wrapper never received a dismiss message")
+	}
+	if !boardHadRecordAtKillTime {
+		t.Fatal("board record was not present yet when the wrapper was stopped (kill ran before the board record)")
+	}
+	if !parentHadNoticeAtKillTime {
+		t.Fatal("parent notification was not present yet when the wrapper was stopped (kill ran before the notify)")
+	}
+}
+
+func Test_checkOrchestrationChildTimers_startupFailedSkipsKillWhenDisabled(t *testing.T) {
+	s := newTestServer()
+	_, child, boardID, _ := setupStartupFailureBoard(t, s)
+
+	var dismissed []proto.Message
+	s.sessionsMu.Lock()
+	s.wrappers[child.ID] = &wrapperConn{sendFunc: func(m any) error {
+		if msg, ok := m.(proto.Message); ok {
+			dismissed = append(dismissed, msg)
+		}
+		return nil
+	}}
+	s.sessionsMu.Unlock()
+
+	s.orchestration.mu.Lock()
+	c := s.orchestration.boards[boardID].Children[child.ID]
+	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	c.StandbySince = time.Now().Add(-2 * time.Minute)
+	s.orchestration.mu.Unlock()
+
+	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 1, ChildStartupKill: boolPtr(false)}
+	s.checkOrchestrationChildTimers(boardID, time.Now(), cfg)
+
+	if len(dismissed) != 0 {
+		t.Fatalf("dismissed messages = %d, want 0 (child_startup_kill: false)", len(dismissed))
+	}
+	// 通知とラッチは child_startup_kill と独立に起きる。
+	if child.State != "error" {
+		t.Fatalf("child.State = %q, want error (notify still happens when only the kill is disabled)", child.State)
+	}
+}
+
+func Test_checkOrchestrationChildTimers_relayBoardRoutesStartupFailedToRelay(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	id, impl := st.OrchestrationID, st.ImplementationSessionID
+
+	h.s.orchestration.mu.Lock()
+	child := h.s.orchestration.boards[id].Children[impl]
+	child.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
+	child.StandbySince = time.Now().Add(-2 * time.Minute)
+	h.s.orchestration.mu.Unlock()
+
+	// ChildStartupKill を無効化する: relayHarness の fake spawn は
+	// newWrapperConn(&websocket.Conn{}) という「実 API を持つが未接続」の wrapper を
+	// 登録しており、killWrapper の close() を実際に走らせるとゼロ値 Conn への
+	// メソッド呼び出しで panic する。この test の関心は relay 振り分けであって
+	// kill 機構そのものではない（kill は Test_checkOrchestrationChildTimers_startupFailedNotifiesRecordsAndStops
+	// が別途カバーする）。
+	h.s.checkOrchestrationChildTimers(id, time.Now(), config.OrchestrationConfig{ChildStartupGraceSeconds: 1, ChildStartupKill: boolPtr(false)})
+
+	if got := h.status(id); got.State != relayStateStopped || got.Reason != relayReasonStartupFailed {
+		t.Fatalf("relay = %+v, want stopped(startup_failed)", got)
+	}
+	if n := len(h.s.pendingInput[h.parent.ID]); n != 0 {
+		t.Fatalf("generic ORCHESTRATION-ERROR reached the parent: %d pending inputs", n)
+	}
+	if got := h.s.sessions[impl].State; got != "running" {
+		t.Fatalf("child session state = %q, want unchanged (relay boards never call markChildState, same as timeout)", got)
+	}
+}
+
+// --- C1 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md):
+// spawn confirmations are a Hub-side hold decoupled from the HTTP request
+// that registered them, with no deadline, and only a human's explicit
+// refusal may ever write user_refusal to the board. The four tests below
+// pin exactly that.
+
+// Test_handleSpawnChild_callerContextCanceled_pendingSurvives は、呼び出し元の
+// HTTP リクエストが（相手 AI のシェルツール timeout 等で）先に死んでも、保留が
+// map から消えず、応答も書かれないことを確認する。
+func Test_handleSpawnChild_callerContextCanceled_pendingSurvives(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // 呼び出し元がすでに諦めている状態を再現する
+
+	req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", spawnChildRequest{Provider: "codex", Role: "tester", InitialPrompt: "hi"})
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	s.handleSessionAPI(rr, req)
+
+	if rr.Body.Len() != 0 {
+		t.Fatalf("handler must not write a response when the caller's context is already done, got status=%d body=%q", rr.Code, rr.Body.String())
+	}
+
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	if len(s.orchestration.spawnConfirmations) != 1 {
+		t.Fatalf("spawnConfirmations = %d entries, want 1 (must survive the dead caller)", len(s.orchestration.spawnConfirmations))
+	}
+	for _, p := range s.orchestration.spawnConfirmations {
+		if p.Decided {
+			t.Fatal("a confirmation must not be marked decided just because its waiter left")
+		}
+		if !p.WaiterGone {
+			t.Fatal("waitSpawnConfirmation must record that the waiter is gone")
+		}
+	}
+}
+
+// Test_resolveSpawnConfirmationDecision_refusalWritesUserRefusalOnce は、人が
+// 明示的に拒否したときだけ board へ user_refusal が書かれることを確認する。
+func Test_resolveSpawnConfirmationDecision_refusalWritesUserRefusalOnce(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex", InitialPrompt: "hi"})
+	s.resolveSpawnConfirmationDecision(pending, false, "", "")
+
+	select {
+	case outcome := <-pending.Outcome:
+		if outcome.Approved {
+			t.Fatal("a refusal outcome must not be Approved")
+		}
+	default:
+		t.Fatal("a decided refusal must write an outcome")
+	}
+
+	if parent.OrchestrationID == "" {
+		t.Fatal("a human refusal must create a board for the parent")
+	}
+	dir, err := config.Dir()
+	if err != nil {
+		t.Fatalf("config.Dir: %v", err)
+	}
+	boardPath := filepath.Join(dir, "orchestration", safeToken(parent.OrchestrationID), "board.md")
+	board, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatalf("read board: %v", err)
+	}
+	if !strings.Contains(string(board), "refused: role=tester reason=user_refusal") {
+		t.Fatalf("board missing the user_refusal line:\n%s", board)
+	}
+}
+
+// Test_registerSpawnConfirmation_supersedesSameParentRole は、同じ親・同じ role の
+// 要求が 2 回来たら保留が 1 件になり、古い方が superseded で閉じる（user_refusal を
+// 書かない）ことを確認する。
+func Test_registerSpawnConfirmation_supersedesSameParentRole(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	first := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
+	second := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
+
+	select {
+	case outcome := <-first.Outcome:
+		if outcome.Approved {
+			t.Fatal("a superseded confirmation must not be Approved")
+		}
+	default:
+		t.Fatal("registering a second confirmation for the same parent+role must close the older one")
+	}
+	if !first.Decided {
+		t.Fatal("the superseded confirmation must be marked decided")
+	}
+
+	s.orchestration.mu.Lock()
+	_, firstStillPending := s.orchestration.spawnConfirmations[first.ID]
+	_, secondPending := s.orchestration.spawnConfirmations[second.ID]
+	count := len(s.orchestration.spawnConfirmations)
+	s.orchestration.mu.Unlock()
+	if firstStillPending {
+		t.Fatal("the superseded confirmation must be removed from the pending map")
+	}
+	if !secondPending {
+		t.Fatal("the newer confirmation must remain pending")
+	}
+	if count != 1 {
+		t.Fatalf("pending confirmations = %d, want 1 (one per parent+role)", count)
+	}
+
+	dir, err := config.Dir()
+	if err != nil {
+		t.Fatalf("config.Dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "orchestration")); !os.IsNotExist(err) {
+		t.Fatalf("supersede must never write a board (that would only happen on a human refusal), stat err=%v", err)
+	}
+}
+
+func Test_registerSpawnConfirmation_enforcesParentAndGlobalLimits(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.MaxChildrenPerParent = 2
+	// The shared admission ledger counts live parent sessions as well as
+	// pending child slots: two parents + three pending confirmations exactly
+	// fill a total budget of five.
+	s.cfg.Orchestration.MaxTotalSessions = 5
+	parent := registerTestSession(s, 1, "codex")
+	otherParent := registerTestSession(s, 2, "codex")
+
+	first := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "role-a", Provider: "codex"})
+	registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "role-b", Provider: "codex"})
+	if rejected, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-c", Provider: "codex"}); err == nil || rejected != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || err.detail != "pending spawn confirmations per parent" {
+		t.Fatalf("parent limit result = pending=%v err=%v, want 429 orchestration_limit per-parent", rejected, err)
+	}
+
+	registerTestSpawnConfirmation(t, s, otherParent, spawnChildRequest{Role: "role-a", Provider: "codex"})
+	if accepted, err := s.registerSpawnConfirmation(otherParent, "", spawnChildRequest{Role: "role-b", Provider: "codex"}); err == nil || accepted != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || err.detail != "pending spawn confirmations total" {
+		t.Fatalf("global limit result = pending=%v err=%v, want 429 total", accepted, err)
+	}
+
+	// Re-registering the same parent+role replaces one slot even at the
+	// per-parent limit, while the old confirmation is closed as superseded.
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	replacement, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-a", Provider: "codex"})
+	if err != nil || replacement == nil {
+		t.Fatalf("same-role replacement = pending=%v err=%v, want success", replacement, err)
+	}
+	select {
+	case outcome := <-first.Outcome:
+		if outcome.Approved {
+			t.Fatal("superseded confirmation must not be approved")
+		}
+	default:
+		t.Fatal("superseded confirmation did not receive an outcome")
+	}
+
+	s.expireSpawnConfirmationsForParent(parent.ID, "test")
+	if reusable, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-reused", Provider: "codex"}); err != nil || reusable == nil {
+		t.Fatalf("slot reuse after expire = pending=%v err=%v, want success", reusable, err)
+	}
+}
+
+func TestSpawnConfirmationAdmissionReleasedOnDecision(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	s.cfg.Orchestration.MaxChildrenPerParent = 2
+	parent := registerTestSession(s, 1, "codex")
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "refuse", Provider: "codex"})
+	if got := len(s.orchestration.childAdmissions); got != 1 {
+		t.Fatalf("admissions after confirmation = %d, want 1", got)
+	}
+	s.resolveSpawnConfirmationDecision(pending, false, "", "")
+	if got := len(s.orchestration.childAdmissions); got != 0 {
+		t.Fatalf("admissions after refusal = %d, want 0", got)
+	}
+
+	pending = registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "expire", Provider: "codex"})
+	s.expireSpawnConfirmationsForParent(parent.ID, "test")
+	if got := len(s.orchestration.childAdmissions); got != 0 {
+		t.Fatalf("admissions after expiry = %d, want 0", got)
+	}
+	select {
+	case outcome := <-pending.Outcome:
+		if outcome.Approved {
+			t.Fatal("expired confirmation must not be approved")
+		}
+	default:
+		t.Fatal("expired confirmation did not receive an outcome")
+	}
+}
+
+func TestPerformSpawnAdmissionReleasedAfterPreparationFailure(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.MaxDepth = 1
+	s.cfg.Orchestration.MaxChildrenPerParent = 1
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = filepath.Join(t.TempDir(), "missing")
+	body := spawnChildRequest{Role: "tester", Provider: "codex", Model: "gpt-5-mini"}
+	if _, err := s.performSpawn(parent.ID, "", "", body); err == nil {
+		t.Fatal("spawn with a missing cwd unexpectedly succeeded")
+	}
+	id, err := s.reserveOrchestrationChildren(parent.ID, 1, s.cfg.Orchestration, "test-after-failure")
+	if err != nil {
+		t.Fatalf("reservation after failed spawn = %v, want released slot", err)
+	}
+	s.releaseOrchestrationChildren(id)
+}
+
+func Test_registerSpawnConfirmation_concurrentLimit(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.MaxChildrenPerParent = 4
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	parent := registerTestSession(s, 1, "codex")
+
+	const attempts = 12
+	results := make(chan *spawnHTTPError, attempts)
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{
+				Role: fmt.Sprintf("role-%d", i), Provider: "codex",
+			})
+			results <- err
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+
+	accepted := 0
+	for err := range results {
+		if err == nil {
+			accepted++
+			continue
+		}
+		if err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" {
+			t.Fatalf("unexpected concurrent registration error: %v", err)
+		}
+	}
+	if accepted != s.cfg.Orchestration.MaxChildrenPerParent {
+		t.Fatalf("concurrent accepted registrations = %d, want %d", accepted, s.cfg.Orchestration.MaxChildrenPerParent)
+	}
+	if got := len(s.pendingSpawnConfirmationMessages()); got != accepted {
+		t.Fatalf("pending confirmation messages = %d, want %d", got, accepted)
+	}
+}
+
+func Test_handleSpawnChild_pendingLimitReturns429(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	s.cfg.Orchestration.MaxChildrenPerParent = 2
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	for _, role := range []string{"role-a", "role-b"} {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", spawnChildRequest{Provider: "codex", Role: role})
+		req = req.WithContext(ctx)
+		rr := httptest.NewRecorder()
+		s.handleSessionAPI(rr, req)
+		if rr.Body.Len() != 0 {
+			t.Fatalf("accepted canceled request for %s wrote a response: status=%d body=%q", role, rr.Code, rr.Body.String())
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", spawnChildRequest{Provider: "codex", Role: "role-c"})
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+	s.handleSessionAPI(rr, req)
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("rejected pending request status = %d, want %d: %s", rr.Code, http.StatusTooManyRequests, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"error":"orchestration_limit"`) || !strings.Contains(rr.Body.String(), "pending spawn confirmations per parent") {
+		t.Fatalf("rejected pending request body = %s, want orchestration_limit per-parent", rr.Body.String())
+	}
+	if got := len(s.pendingSpawnConfirmationMessages()); got != 2 {
+		t.Fatalf("pending confirmation messages after rejection = %d, want 2", got)
+	}
+}
+
+// Test_expireSpawnConfirmationsForParent_withoutUserRefusal は
+// expireSpawnConfirmationsForParent 自体（parentID が本当に消えたときの失効経路）が、
+// parent_gone で失効し user_refusal を書かないことを確認する。
+//
+// C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md) より前は
+// handleDismiss がこの関数を無条件に呼んでいたため、このテストは handleDismiss 経由で
+// 書かれていた。C5 で handleDismiss は保留があるセッションの dismiss 自体を拒否するよう
+// になった（Test_handleDismiss_refusesDismissWhilePendingSpawnConfirmation 参照）ので、
+// handleDismiss はもうこのケースでこの関数へ到達しない（到達するのは、チェック後・削除前
+// の狭い競合窓で登録された保留だけ）。そのため本テストは expireSpawnConfirmationsForParent
+// を直接呼び、失効そのものの挙動を引き続き固定する。
+func Test_expireSpawnConfirmationsForParent_withoutUserRefusal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
+
+	s.expireSpawnConfirmationsForParent(parent.ID, "dismiss")
+
+	select {
+	case outcome := <-pending.Outcome:
+		if outcome.Approved {
+			t.Fatal("a parent_gone outcome must not be Approved")
+		}
+	default:
+		t.Fatal("expiring the parent's confirmations must write an outcome")
+	}
+	if !pending.Decided {
+		t.Fatal("the expired confirmation must be marked decided")
+	}
+
+	s.orchestration.mu.Lock()
+	_, stillPending := s.orchestration.spawnConfirmations[pending.ID]
+	s.orchestration.mu.Unlock()
+	if stillPending {
+		t.Fatal("the expired confirmation must be removed from the pending map")
+	}
+
+	dir, err := config.Dir()
+	if err != nil {
+		t.Fatalf("config.Dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "orchestration")); !os.IsNotExist(err) {
+		t.Fatalf("the parent going away must never write a board (that would only happen on a human refusal), stat err=%v", err)
+	}
+}
+
+// Test_handleDismiss_refusesDismissWhilePendingSpawnConfirmation は C5 の完了条件
+// そのもの: 保留を持つ親セッションに対する handleDismiss がセッションを消さず、保留も
+// 決定せずに残し、session_dismiss_refused を broadcast することを確認する。
+func Test_handleDismiss_refusesDismissWhilePendingSpawnConfirmation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+	wc := &wrapperConn{}
+	s.sessionsMu.Lock()
+	s.wrappers[parent.ID] = wc
+	s.sessionsMu.Unlock()
+
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
+
+	ui := registerTestUI(s)
+	events := make(chan proto.Message, 8)
+	s.sessionsMu.Lock()
+	s.uis[ui].sendFunc = func(m any) error {
+		if msg, ok := m.(proto.Message); ok {
+			events <- msg
+		}
+		return nil
+	}
+	s.sessionsMu.Unlock()
+
+	skip := s.handleDismiss(proto.Message{Type: "session_dismiss", SessionID: parent.ID})
+	if !skip {
+		t.Fatal("a refused dismiss must report skip=true, like the existing idempotent-dismiss case")
+	}
+
+	s.sessionsMu.Lock()
+	_, sessionStillExists := s.sessions[parent.ID]
+	_, wrapperStillExists := s.wrappers[parent.ID]
+	s.sessionsMu.Unlock()
+	if !sessionStillExists {
+		t.Fatal("a session holding a pending spawn confirmation must not be removed by dismiss")
+	}
+	if !wrapperStillExists {
+		t.Fatal("the wrapper must not be torn down when the dismiss is refused")
+	}
+
+	select {
+	case outcome := <-pending.Outcome:
+		t.Fatalf("a refused dismiss must not decide the pending confirmation, got outcome=%+v", outcome)
+	default:
+	}
+	if pending.Decided {
+		t.Fatal("a refused dismiss must leave the pending confirmation undecided")
+	}
+	s.orchestration.mu.Lock()
+	_, stillPending := s.orchestration.spawnConfirmations[pending.ID]
+	s.orchestration.mu.Unlock()
+	if !stillPending {
+		t.Fatal("a refused dismiss must leave the confirmation in the pending map")
+	}
+
+	var sawRefusal bool
+	drain := true
+	for drain {
+		select {
+		case msg := <-events:
+			if msg.Type == "session_dismiss_refused" && msg.SessionID == parent.ID {
+				sawRefusal = true
+			}
+		default:
+			drain = false
+		}
+	}
+	if !sawRefusal {
+		t.Fatal("a refused dismiss must broadcast session_dismiss_refused for the parent session")
+	}
+
+	dir, err := config.Dir()
+	if err != nil {
+		t.Fatalf("config.Dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "orchestration")); !os.IsNotExist(err) {
+		t.Fatalf("refusing a dismiss must never write a board, stat err=%v", err)
+	}
+}
+
+// Test_hasPendingSpawnConfirmation exercises the guard predicate directly:
+// false with nothing registered, true while a confirmation is undecided,
+// false again once it has been decided.
+func Test_hasPendingSpawnConfirmation(t *testing.T) {
+	s := newTestServer()
+	parent := registerTestSession(s, 1, "codex")
+
+	if s.hasPendingSpawnConfirmation(parent.ID) {
+		t.Fatal("want false before any confirmation is registered")
+	}
+
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex"})
+	if !s.hasPendingSpawnConfirmation(parent.ID) {
+		t.Fatal("want true while the confirmation is undecided")
+	}
+	if s.hasPendingSpawnConfirmation(parent.ID + 1) {
+		t.Fatal("want false for an unrelated session id")
+	}
+
+	s.orchestration.mu.Lock()
+	pending.Decided = true
+	delete(s.orchestration.spawnConfirmations, pending.ID)
+	s.orchestration.mu.Unlock()
+
+	if s.hasPendingSpawnConfirmation(parent.ID) {
+		t.Fatal("want false once the confirmation has been decided and removed")
+	}
 }

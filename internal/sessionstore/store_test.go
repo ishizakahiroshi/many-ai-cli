@@ -72,18 +72,26 @@ func TestStoreChatRestoreSearchAndPrune(t *testing.T) {
 	if meta.Title != "SQLite work" || meta.Summary != "summary text" || len(meta.Tags) != 2 {
 		t.Fatalf("meta = %#v", meta)
 	}
+	// pty_output は events へ行を作らない（eventNeedsRow）。残るのは
+	// session_start と user_input の 2 件で、本文は messages 側に残る。
+	wantRows := 0
+	for _, ev := range events {
+		if ev["type"] != "pty_output" {
+			wantRows++
+		}
+	}
 	timeline, err := store.TimelineByLiveSession(1, 10)
 	if err != nil {
 		t.Fatalf("TimelineByLiveSession: %v", err)
 	}
-	if len(timeline) != len(events) || timeline[1].Type != "user_input" {
+	if len(timeline) != wantRows || timeline[1].Type != "user_input" {
 		t.Fatalf("timeline = %#v", timeline)
 	}
 	list, err := store.ListSessions(10, false)
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
-	if len(list) != 1 || list[0].MessageCount != 3 || list[0].EventCount != len(events) {
+	if len(list) != 1 || list[0].MessageCount != 3 || list[0].EventCount != wantRows {
 		t.Fatalf("session list = %#v", list)
 	}
 	usage, err := store.UsageSummary()
@@ -355,6 +363,100 @@ func TestCloseStaleSessionsAndReattachRevive(t *testing.T) {
 	}
 }
 
+func TestReadPathsKeepPersistentSessionIdentity(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	oldID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     time.Now().Add(-time.Hour).Format(time.RFC3339),
+		JSONLPath:     filepath.Join(logDir, "sessions", "old.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(old): %v", err)
+	}
+	if err := store.StoreEvent(1, map[string]any{
+		"ts": time.Now().Add(-time.Hour).Format(time.RFC3339), "type": "user_input", "session_id": 1,
+		"text": "old session marker",
+	}); err != nil {
+		t.Fatalf("StoreEvent(old): %v", err)
+	}
+	store.EndSession(1, "completed", "old_done", time.Now().Add(-time.Minute))
+
+	newID, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "running",
+		StartedAt:     time.Now().Format(time.RFC3339),
+		JSONLPath:     filepath.Join(logDir, "sessions", "new.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession(new): %v", err)
+	}
+	if newID == oldID {
+		t.Fatalf("new session reused old persistent id %d", oldID)
+	}
+	if err := store.StoreEvent(1, map[string]any{
+		"ts": time.Now().Format(time.RFC3339), "type": "user_input", "session_id": 1,
+		"text": "new session marker",
+	}); err != nil {
+		t.Fatalf("StoreEvent(new): %v", err)
+	}
+
+	liveMessages, err := store.ChatMessagesByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("ChatMessagesByLiveSession: %v", err)
+	}
+	if len(liveMessages) != 1 || liveMessages[0].SessionID != newID || !strings.Contains(liveMessages[0].RawText, "new session marker") {
+		t.Fatalf("live messages = %#v, want only new session", liveMessages)
+	}
+	oldMessages, err := store.ChatMessagesBySessionID(oldID, 10)
+	if err != nil {
+		t.Fatalf("ChatMessagesBySessionID(old): %v", err)
+	}
+	if len(oldMessages) != 1 || oldMessages[0].SessionID != oldID || !strings.Contains(oldMessages[0].RawText, "old session marker") {
+		t.Fatalf("old messages = %#v", oldMessages)
+	}
+
+	liveOverview, err := store.SessionOverviewByLiveSession(1)
+	if err != nil {
+		t.Fatalf("SessionOverviewByLiveSession: %v", err)
+	}
+	if liveOverview.ID != newID || liveOverview.Provider != "codex" {
+		t.Fatalf("live overview = %#v, want new session", liveOverview)
+	}
+	oldOverview, err := store.SessionOverviewBySessionID(oldID)
+	if err != nil {
+		t.Fatalf("SessionOverviewBySessionID(old): %v", err)
+	}
+	if oldOverview.ID != oldID || oldOverview.Provider != "claude" || oldOverview.EndedAt == "" {
+		t.Fatalf("old overview = %#v", oldOverview)
+	}
+
+	ok, err := store.MessagesMentionText(1, []string{"old session marker"})
+	if err != nil || ok {
+		t.Fatalf("MessagesMentionText(old on reused live id) = %v, %v; want false, nil", ok, err)
+	}
+	ok, err = store.MessagesMentionText(1, []string{"new session marker"})
+	if err != nil || !ok {
+		t.Fatalf("MessagesMentionText(new on reused live id) = %v, %v; want true, nil", ok, err)
+	}
+
+	timeline, err := store.TimelineByLiveSession(1, 10)
+	if err != nil {
+		t.Fatalf("TimelineByLiveSession: %v", err)
+	}
+	if len(timeline) != 1 || timeline[0].Session != newID {
+		t.Fatalf("timeline = %#v, want only new session", timeline)
+	}
+}
+
 // StoreEventAsync がキュー経由で書き込まれ、最終的に同期版と同じ結果になることを検証する。
 func TestStoreEventAsyncDrainsQueue(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")
@@ -384,18 +486,20 @@ func TestStoreEventAsyncDrainsQueue(t *testing.T) {
 		}
 	}
 
-	// 連続する AI 出力は 1 message に結合されるため、件数確認は events で行う
+	// pty_output は events へ行を作らないので、キューが捌けたかは messages 側で見る。
+	// 連続する AI 出力は 1 message に結合されるため、件数ではなく最後のチャンクの
+	// 到達で判定する。
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		events, err := store.TimelineByLiveSession(1, 100)
+		msgs, err := store.ChatMessagesByLiveSession(1, 100)
 		if err != nil {
-			t.Fatalf("TimelineByLiveSession: %v", err)
+			t.Fatalf("ChatMessagesByLiveSession: %v", err)
 		}
-		if len(events) == 10 {
+		if len(msgs) > 0 && strings.Contains(msgs[0].RawText, "async chunk 9") {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("queue not drained: events = %d, want 10", len(events))
+			t.Fatalf("queue not drained: messages = %d", len(msgs))
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -405,6 +509,69 @@ func TestStoreEventAsyncDrainsQueue(t *testing.T) {
 	}
 	if len(msgs) == 0 || !strings.Contains(msgs[0].RawText, "async chunk 9") {
 		t.Fatalf("messages after drain = %#v", msgs)
+	}
+}
+
+func TestResetHistoryDropsQueuedEventsFromPreviousGeneration(t *testing.T) {
+	logDir := filepath.Join(t.TempDir(), "logs")
+	store, err := OpenForLogDir(logDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+
+	startedAt := time.Now().Format(time.RFC3339)
+	if _, err := store.StartSession(SessionStart{
+		LiveSessionID: 1,
+		Provider:      "codex",
+		State:         "running",
+		StartedAt:     startedAt,
+		JSONLPath:     filepath.Join(logDir, "sessions", "s1.jsonl"),
+	}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+
+	// writer と reset を同じ barrier で待たせる。どちらが先に進んでも、reset
+	// 前に queue へ入った old event が最終状態へ残らないことが契約。
+	store.historyMu.Lock()
+	if dropped := store.StoreEventAsync(1, map[string]any{
+		"ts": startedAt, "type": "user_input", "session_id": 1, "text": "old event",
+	}); dropped != 0 {
+		store.historyMu.Unlock()
+		t.Fatalf("StoreEventAsync(old) dropped = %d, want 0", dropped)
+	}
+	resetDone := make(chan error, 1)
+	go func() {
+		_, resetErr := store.ResetHistory([]int{1})
+		resetDone <- resetErr
+	}()
+	store.historyMu.Unlock()
+	if err := <-resetDone; err != nil {
+		t.Fatalf("ResetHistory: %v", err)
+	}
+
+	if dropped := store.StoreEventAsync(1, map[string]any{
+		"ts": startedAt, "type": "user_input", "session_id": 1, "text": "new event",
+	}); dropped != 0 {
+		t.Fatalf("StoreEventAsync(new) dropped = %d, want 0", dropped)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		msgs, err := store.ChatMessagesByLiveSession(1, 100)
+		if err != nil {
+			t.Fatalf("ChatMessagesByLiveSession: %v", err)
+		}
+		if len(msgs) == 1 && strings.Contains(msgs[0].RawText, "new event") {
+			if strings.Contains(msgs[0].RawText, "old event") {
+				t.Fatalf("pre-reset event reappeared: %#v", msgs)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("post-reset event not stored or old event remained: %#v", msgs)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -433,10 +600,12 @@ func TestPruneOlderThanChunked(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("StartSession(%d): %v", liveID, err)
 		}
-		// pruneChildRowBatch(7) を跨ぐ行数を作る（events と messages の両方に入る）
+		// pruneChildRowBatch(7) を跨ぐ行数を作る（events と messages の両方に入る）。
+		// pty_output は events へ行を作らない（eventNeedsRow）ので、両方に入る
+		// user_input を使う。events 側の分割削除を通すのがこのテストの主眼。
 		for i := 0; i < 20; i++ {
 			if err := store.StoreEvent(liveID, map[string]any{
-				"ts": startedAt, "type": "pty_output", "session_id": liveID,
+				"ts": startedAt, "type": "user_input", "session_id": liveID,
 				"text": "chunk " + strconv.Itoa(i) + " of session " + strconv.Itoa(liveID) + "\n",
 			}); err != nil {
 				t.Fatalf("StoreEvent(%d): %v", liveID, err)
@@ -562,9 +731,12 @@ func TestPruneTranscriptNoiseOnlyTouchesLegacyNoise(t *testing.T) {
 	}
 }
 
-// pty_output の events.payload_json から data_b64 が除去され text が切り詰められること、
-// chat 履歴（messages）側は影響を受けないことを検証する。
-func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
+// pty_output が events へ 1 行も作らないこと、chat 履歴（messages）側は
+// 影響を受けず本文が全量残ることを検証する。
+//
+// events を pty_output で埋めると保持 7 日でも数千万行・数 GB になり、
+// 既定 3 秒のタイムアウトを読み書き両方で超える（eventNeedsRow のコメント参照）。
+func TestStoreEventDoesNotRowPtyOutput(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), "logs")
 	store, err := OpenForLogDir(logDir)
 	if err != nil {
@@ -596,20 +768,10 @@ func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TimelineByLiveSession: %v", err)
 	}
-	if len(events) != 1 {
-		t.Fatalf("events len = %d, want 1", len(events))
+	if len(events) != 0 {
+		t.Fatalf("events len = %d, want 0 (pty_output must not create a row): %#v", len(events), events)
 	}
-	if _, ok := events[0].Payload["data_b64"]; ok {
-		t.Fatalf("payload should not contain data_b64: %#v", events[0].Payload)
-	}
-	storedText, _ := events[0].Payload["text"].(string)
-	if n := len([]rune(storedText)); n > eventPayloadTextLimit {
-		t.Fatalf("payload text runes = %d, want <= %d", n, eventPayloadTextLimit)
-	}
-	if !strings.HasPrefix(storedText, "longtext ") {
-		t.Fatalf("payload text prefix lost: %.40q", storedText)
-	}
-	// messages 側は元の text から作られる（末尾まで保持）
+	// messages 側は元の text から作られる（切り詰めずに末尾まで保持）
 	msgs, err := store.ChatMessagesByLiveSession(1, 10)
 	if err != nil {
 		t.Fatalf("ChatMessagesByLiveSession: %v", err)
@@ -617,7 +779,7 @@ func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
 	if len(msgs) != 1 || !strings.Contains(msgs[0].RawText, "end-marker") {
 		t.Fatalf("message should keep full text: len=%d", len(msgs))
 	}
-	// pty_output 以外（user_input）は payload を間引かない
+	// pty_output 以外（user_input）は従来どおり events へ残り、payload も間引かない
 	if err := store.StoreEvent(1, map[string]any{
 		"ts": startedAt, "type": "user_input", "session_id": 1, "text": "短い入力",
 	}); err != nil {
@@ -627,8 +789,22 @@ func TestStoreEventSlimsPtyOutputPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TimelineByLiveSession(2nd): %v", err)
 	}
-	if len(events) != 2 {
-		t.Fatalf("events len = %d, want 2", len(events))
+	if len(events) != 1 || events[0].Type != "user_input" {
+		t.Fatalf("events = %#v, want 1 user_input row", events)
+	}
+	if got, _ := events[0].Payload["text"].(string); got != "短い入力" {
+		t.Fatalf("user_input payload text = %q, want unmodified", got)
+	}
+}
+
+// busy_timeout が接続 pragma の 1 本目にあることを検証する。既定は 0（待たない）なので、
+// 後ろに置くと それより前の pragma だけがロック競合で即 SQLITE_BUSY になる。
+func TestBusyTimeoutIsFirstConnectionPragma(t *testing.T) {
+	if len(sqliteConnectionPragmas) == 0 {
+		t.Fatal("sqliteConnectionPragmas is empty")
+	}
+	if !strings.Contains(sqliteConnectionPragmas[0], "busy_timeout") {
+		t.Fatalf("first connection pragma = %q, want busy_timeout", sqliteConnectionPragmas[0])
 	}
 }
 

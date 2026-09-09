@@ -1,6 +1,7 @@
 package usagerelay
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestScanLastTokenCountCodexEventMsgFormat(t *testing.T) {
@@ -31,6 +33,87 @@ func TestScanLastTokenCountCodexEventMsgFormat(t *testing.T) {
 	if in != 33079 || out != 473 || cache != 26880 || total != 33552 || ctxWindow != 258400 || reasoningOut != 128 {
 		t.Fatalf("scanLastTokenCount = in=%d out=%d cache=%d total=%d ctx=%d reasoning=%d, want 33079/473/26880/33552/258400/128",
 			in, out, cache, total, ctxWindow, reasoningOut)
+	}
+}
+
+func TestScanLastTokenCountWithRateLimits(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	body := []byte(`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}},"rate_limits":{"primary":{"used_percent":89,"window_minutes":10080,"resets_at":1787196957},"secondary":null,"credits":{"has_credits":false,"unlimited":false,"balance":"0"},"plan_type":"plus"}}}
+`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, _, _, _, limits, err := scanLastTokenCountWithRateLimits(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limits.Primary == nil || limits.Primary.UsedPercent != 89 || limits.Primary.WindowMinutes != 10080 || limits.Primary.ResetsAt != 1787196957 {
+		t.Fatalf("primary rate limit = %#v", limits.Primary)
+	}
+	if limits.Secondary != nil {
+		t.Fatalf("secondary null must stay absent: %#v", limits.Secondary)
+	}
+	if limits.Credits.Balance != "0" {
+		t.Fatalf("credits balance = %q, want raw value retained for caller filtering", limits.Credits.Balance)
+	}
+}
+
+func TestScanLastTokenCountRateLimitPresenceAndObservedTime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	body := []byte(`{"timestamp":"2026-08-26T12:00:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3}},"rate_limits":{"primary":{"used_percent":0,"window_minutes":300,"resets_at":1787196957},"secondary":{"used_percent":42,"window_minutes":10080,"resets_at":1787197000},"credits":{"has_credits":true,"unlimited":true,"balance":""},"plan_type":"pro"}}}`)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, _, _, _, limits, present, observedAt, err := scanLastTokenCountWithRateLimitsAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !present || limits.Primary == nil || limits.Primary.UsedPercent != 0 || limits.Primary.WindowMinutes != 300 {
+		t.Fatalf("primary presence/value = %v/%#v", present, limits.Primary)
+	}
+	if limits.Secondary == nil || limits.Secondary.WindowMinutes != 10080 || limits.Secondary.UsedPercent != 42 {
+		t.Fatalf("secondary = %#v", limits.Secondary)
+	}
+	if limits.Credits == nil || !limits.Credits.HasCredits || !limits.Credits.Unlimited || limits.PlanType != "pro" {
+		t.Fatalf("credits/plan = %#v/%q", limits.Credits, limits.PlanType)
+	}
+	if !observedAt.Equal(time.Date(2026, 8, 26, 12, 0, 0, 0, time.UTC)) {
+		t.Fatalf("observedAt=%v", observedAt)
+	}
+
+	clearBody := []byte(`{"timestamp":"2026-08-26T12:01:00Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":4,"output_tokens":5,"total_tokens":9}},"rate_limits":null}}`)
+	body = append(body, 10)
+	body = append(body, clearBody...)
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _, _, _, _, cleared, clearPresent, clearObserved, err := scanLastTokenCountWithRateLimitsAt(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clearPresent || cleared.Primary != nil || cleared.Secondary != nil || cleared.Credits != nil || !clearObserved.Equal(time.Date(2026, 8, 26, 12, 1, 0, 0, time.UTC)) {
+		t.Fatalf("explicit null did not clear latest state: present=%v limits=%#v at=%v", clearPresent, cleared, clearObserved)
+	}
+}
+
+func TestScanLastTokenCountSkipsOversizedRecord(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rollout.jsonl")
+	oversized := append(bytes.Repeat([]byte("x"), 256*1024+1), '\n')
+	tokenCount := []byte(`{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":7,"output_tokens":8,"cached_input_tokens":9,"total_tokens":15}}}}` + "\n")
+	if err := os.WriteFile(path, append(oversized, tokenCount...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	in, out, cache, total, _, _, err := scanLastTokenCount(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in != 7 || out != 8 || cache != 9 || total != 15 {
+		t.Fatalf("scanLastTokenCount after oversized record = %d/%d/%d/%d, want 7/8/9/15", in, out, cache, total)
 	}
 }
 
@@ -153,6 +236,12 @@ func TestRunClaudePropagatesStatusbarMeta(t *testing.T) {
 	if got.RateLimit7dPct != 41.2 || got.RateLimit7dReset != 1738857600 {
 		t.Fatalf("7d rate limit = %v / %d, want 41.2 / 1738857600", got.RateLimit7dPct, got.RateLimit7dReset)
 	}
+	if !got.ClaudeRateLimitsPresent || !got.ClaudeFiveHourFieldPresent || !got.ClaudeFiveHourPresent || !got.ClaudeSevenDayFieldPresent || !got.ClaudeSevenDayPresent {
+		t.Fatalf("Claude rate-limit presence lost: %#v", got)
+	}
+	if got.UsageObservedAt == "" {
+		t.Fatal("usage_observed_at is empty")
+	}
 	if got.LinesAdded != 156 || got.LinesRemoved != 23 {
 		t.Fatalf("lines = +%d -%d, want +156 -23", got.LinesAdded, got.LinesRemoved)
 	}
@@ -250,6 +339,43 @@ func TestTokenCountEventResolveLegacyFormats(t *testing.T) {
 			if in != tc.in || out != tc.out || cache != tc.c || total != tc.tot || ctx != tc.ctx {
 				t.Fatalf("resolve = in=%d out=%d cache=%d total=%d ctx=%d, want %d/%d/%d/%d/%d",
 					in, out, cache, total, ctx, tc.in, tc.out, tc.c, tc.tot, tc.ctx)
+			}
+		})
+	}
+}
+
+func TestRunClaudeDistinguishesMissingNullAndZeroRateLimits(t *testing.T) {
+	cases := []struct {
+		name            string
+		statusLine      string
+		bodyPresent     bool
+		fiveHourField   bool
+		fiveHourPresent bool
+		sevenDayField   bool
+		sevenDayPresent bool
+	}{
+		{name: "missing", statusLine: `{"model":{"display_name":"Opus"}}`},
+		{name: "null", statusLine: `{"model":{"display_name":"Opus"},"rate_limits":null}`, bodyPresent: true},
+		{name: "zero and null window", statusLine: `{"model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":0,"resets_at":0},"seven_day":null}}`, bodyPresent: true, fiveHourField: true, fiveHourPresent: true, sevenDayField: true},
+		{name: "malformed auxiliary value", statusLine: `{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.1},"rate_limits":"not-an-object"}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got hubUsagePayload
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+					t.Errorf("decode payload: %v", err)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer srv.Close()
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			if err := runClaude(srv.URL, "tok", 1, strings.NewReader(tc.statusLine), io.Discard, logger); err != nil {
+				t.Fatalf("runClaude: %v", err)
+			}
+			if got.ClaudeRateLimitsPresent != tc.bodyPresent || got.ClaudeFiveHourFieldPresent != tc.fiveHourField || got.ClaudeFiveHourPresent != tc.fiveHourPresent || got.ClaudeSevenDayFieldPresent != tc.sevenDayField || got.ClaudeSevenDayPresent != tc.sevenDayPresent {
+				t.Fatalf("presence=%v/%v/%v/%v/%v, want %v/%v/%v/%v/%v", got.ClaudeRateLimitsPresent, got.ClaudeFiveHourFieldPresent, got.ClaudeFiveHourPresent, got.ClaudeSevenDayFieldPresent, got.ClaudeSevenDayPresent, tc.bodyPresent, tc.fiveHourField, tc.fiveHourPresent, tc.sevenDayField, tc.sevenDayPresent)
 			}
 		})
 	}

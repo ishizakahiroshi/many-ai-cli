@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/wrapper"
 )
 
@@ -25,8 +26,10 @@ type approvalRuleTarget struct {
 }
 
 type approvalRuleSessionSnap struct {
-	provider string
-	cwd      string
+	provider  string
+	cwd       string
+	codexHome string
+	claudeDir string
 }
 
 func (t approvalRuleTarget) wrapperProvider() string {
@@ -70,15 +73,42 @@ func mergeApprovalRuleTargets(targets []approvalRuleTarget) []approvalRuleTarget
 	return out
 }
 
-// isAIProvider は provider が AI セッション（承認・chat history・done summary 等が
-// 適用される）かどうかを返す。Shell セッションは対象外。
+// isAIProvider は provider が built-in の7種 AI CLI かどうかを返す
+// （承認・chat history・done summary 等が適用される対象。Shell は対象外）。
+// これは built-in 限定の述語で、承認ルールのフック注入スイープ（このファイル
+// 下方）と done summary / AI コミットのフォールバック（done_summary.go /
+// git_commit_ai.go）のゲートを兼ねる。いずれも custom_providers には広げない
+// （plan_custom-provider-spawn-execution.md 決定事項5・9）。
+//
+// **承認「検出」（PTY 出力を承認プロンプトとしてスキャンするか）の可否はこの
+// 関数だけでは決まらない。** 必ず sessionApprovalDetectionEligible(ses) を
+// 経由する（isAIProvider(ses.Provider) || ses.customProviderSession）。
 func isAIProvider(provider string) bool {
 	switch provider {
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
+	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code":
 		return true
 	default:
 		return false
 	}
+}
+
+// customProviderSessionFor computes session.customProviderSession at
+// registration time: whether provider names a config.yaml custom_providers
+// entry. wrapperLoop and its reattach counterpart call this exactly once, at
+// session registration, and store the result rather than re-deriving it on
+// every PTY chunk (cfgMu never reaches the detection hot path).
+func customProviderSessionFor(cfg *config.Config, provider string) bool {
+	return cfg.IsCustomProviderID(provider)
+}
+
+// sessionApprovalDetectionEligible reports whether ses's PTY output should be
+// scanned for an approval prompt at all: a built-in AI CLI or a registered
+// custom provider both qualify; "shell" and an unrecognized provider do not.
+// Every approval-detection call site reads this instead of isAIProvider
+// directly — see isAIProvider's doc comment for why the two must stay
+// separate.
+func sessionApprovalDetectionEligible(ses *session) bool {
+	return ses != nil && (isAIProvider(ses.Provider) || ses.customProviderSession)
 }
 
 func uniqueProviders(providers []string) []string {
@@ -126,13 +156,32 @@ func instructionRootForCWD(cwd string) string {
 	return filepath.Clean(cwd)
 }
 
-func codexAgentsPath() string {
+func codexAgentsPath(codexHome string) string {
 	home, _ := os.UserHomeDir()
-	codexHome := os.Getenv("CODEX_HOME")
-	if codexHome == "" {
+	if strings.TrimSpace(codexHome) == "" {
+		codexHome = os.Getenv("CODEX_HOME")
+	}
+	if strings.TrimSpace(codexHome) == "" {
 		codexHome = filepath.Join(home, ".codex")
 	}
 	return filepath.Join(codexHome, "AGENTS.md")
+}
+
+// claudeRulesPath は Claude の import 行を書き込む CLAUDE.md を決める。
+// codexAgentsPath と同じ契約で、セッションが register 時に報告した claudeDir
+// （profile の CLAUDE_CONFIG_DIR）→ Hub 自身の $CLAUDE_CONFIG_DIR → ~/.claude
+// の順に解決する。固定で ~/.claude/CLAUDE.md へ書いていた頃は、profile 側の
+// CLAUDE.md がコピーだと import 行が届かず、承認マーカーのルールは cwd の祖先に
+// 既定側の実体があるときだけ偶然読まれていた。
+func claudeRulesPath(claudeDir string) string {
+	home, _ := os.UserHomeDir()
+	if strings.TrimSpace(claudeDir) == "" {
+		claudeDir = os.Getenv("CLAUDE_CONFIG_DIR")
+	}
+	if strings.TrimSpace(claudeDir) == "" {
+		claudeDir = filepath.Join(home, ".claude")
+	}
+	return filepath.Join(claudeDir, "CLAUDE.md")
 }
 
 func projectAgentsApprovalRuleTarget(provider, cwd string) []approvalRuleTarget {
@@ -148,24 +197,33 @@ func projectAgentsApprovalRuleTarget(provider, cwd string) []approvalRuleTarget 
 }
 
 func providerApprovalRuleTargets(provider, cwd string) []approvalRuleTarget {
-	home, _ := os.UserHomeDir()
+	return providerApprovalRuleTargetsWithHomes(provider, cwd, "", "")
+}
+
+// providerApprovalRuleTargetsWithHomes は provider ごとの注入先を返す。claude と
+// codex はセッションが報告した profile ディレクトリ（claudeDir / codexHome）を
+// 優先するので、profile セッションのルールが既定側にだけ入る取りこぼしが起きない。
+func providerApprovalRuleTargetsWithHomes(provider, cwd, codexHome, claudeDir string) []approvalRuleTarget {
 	switch provider {
 	case "claude":
 		return []approvalRuleTarget{{
-			Path:      filepath.Join(home, ".claude", "CLAUDE.md"),
+			Path:      claudeRulesPath(claudeDir),
 			Providers: []string{"claude"},
 			Mode:      approvalRuleModeClaudeImport,
 		}}
 	case "codex":
 		return []approvalRuleTarget{{
-			Path:      codexAgentsPath(),
+			Path:      codexAgentsPath(codexHome),
 			Providers: []string{"codex"},
 			Mode:      approvalRuleModeSharedBlock,
 		}}
-	case "copilot", "cursor-agent", "grok":
+	case "copilot", "cursor-agent", "grok", "opencode":
 		// grok (Grok Build) は CLAUDE.md / AGENTS.md を両方ネイティブに読む
 		// （Claude Code 互換 harness）。copilot / cursor-agent と同じく
 		// プロジェクト直下 AGENTS.md へ共有ブロックを注入する。
+		// opencode も同じ扱い。プロジェクト側の指示ファイルは AGENTS.md /
+		// CLAUDE.md / CONTEXT.md の順で読まれ、git ルートに置けばサブディレクトリで
+		// 起動したセッションにも届く（2026-08-29 実測）。
 		return projectAgentsApprovalRuleTarget(provider, cwd)
 	default:
 		return nil
@@ -190,7 +248,7 @@ func (s *Server) activeApprovalRuleTargets() []approvalRuleTarget {
 
 	targets := make([]approvalRuleTarget, 0, len(snaps))
 	for _, snap := range snaps {
-		targets = append(targets, providerApprovalRuleTargets(snap.provider, snap.cwd)...)
+		targets = append(targets, providerApprovalRuleTargetsWithHomes(snap.provider, snap.cwd, snap.codexHome, snap.claudeDir)...)
 	}
 	return mergeApprovalRuleTargets(targets)
 }
@@ -219,7 +277,7 @@ func (s *Server) activeApprovalRuleSessionSnaps() []approvalRuleSessionSnap {
 		if !isAIProvider(ses.Provider) {
 			continue
 		}
-		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD})
+		snaps = append(snaps, approvalRuleSessionSnap{provider: ses.Provider, cwd: ses.CWD, codexHome: ses.CodexHome, claudeDir: ses.ClaudeDir})
 	}
 	s.sessionsMu.Unlock()
 	return snaps
@@ -277,12 +335,26 @@ func (s *Server) injectApprovalTargets(targets []approvalRuleTarget) {
 	}
 	// SyncRulesFile は InjectRules が内部で毎回実行するため、ここでの事前実行は
 	// 重複（bugfix_new-session-startup-latency-3x_2026-07-10.md で除去）。
+	// 委譲案内のブロックは承認ルールと同じ寿命に乗せる（同じ対象・同じ回収経路）。
+	// 設定が切られていれば「入れない」ではなく「外す」。利用者のファイルへ書く機能は
+	// 次回起動時の回収まで設計する、という原則に従う（CLAUDE.md の設計原則の索引）。
+	s.cfgMu.Lock()
+	delegationOn := s.cfg.UserPrefs.Spawn.DelegationAuto
+	s.cfgMu.Unlock()
+
 	var injected []approvalRuleTarget
 	for _, target := range targets {
 		provider := target.wrapperProvider()
 		if err := wrapper.InjectRules(provider, target.Path); err != nil {
 			s.logger.Warn("inject rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
+		}
+		if delegationOn {
+			if err := wrapper.InjectDelegation(provider, target.Path); err != nil {
+				s.logger.Warn("inject delegation failed", "provider", provider, "path", target.Path, "err", err)
+			}
+		} else if err := wrapper.RemoveDelegation(target.Path); err != nil {
+			s.logger.Warn("remove delegation failed", "path", target.Path, "err", err)
 		}
 		injected = append(injected, target)
 	}
@@ -300,6 +372,11 @@ func (s *Server) removeApprovalTargets(targets []approvalRuleTarget) {
 		if err := wrapper.RemoveRules(provider, target.Path); err != nil {
 			s.logger.Warn("remove rules failed", "providers", strings.Join(target.Providers, ","), "path", target.Path, "err", err)
 			continue
+		}
+		// 委譲ブロックは provider を問わず外す。注入時と対象が同じでも、設定変更や
+		// provider 変更をまたいだ置き去りを残さないため、条件を付けずに消しに行く。
+		if err := wrapper.RemoveDelegation(target.Path); err != nil {
+			s.logger.Warn("remove delegation failed", "path", target.Path, "err", err)
 		}
 		removed = append(removed, target)
 	}

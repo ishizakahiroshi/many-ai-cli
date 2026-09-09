@@ -213,13 +213,21 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
       // 再照会できるようにする。
       return false;
     }
-    const t = chatHistoryAutoCommitTimers.get(sid);
-    if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
-    chatHistoryOutputBuffers.delete(sid);
-    revokeChatHistoryAttachmentURLs(sid);
-    chatHistory.delete(sid);
-    chatHistoryIdSeq.delete(sid);
     const transcript = isTranscriptBackedSession(sid) && data.available !== false;
+    if (!transcript) {
+      // transcript 対象外（copilot / cursor-agent 等）は SQLite 由来で pushMessage
+      // に dedup が無いため、積み直す前に必ず全消しする。transcript 対象は
+      // pushAgentChatMessage が transcript_key / message_id で dedup・in-place
+      // 更新するため、ここで消すと「タブ末尾の窓の外に落ちた古い送信」が
+      // ライブ追従で既に積んであっても毎回失われる
+      // （bugfix_sent-history-tail-window-drops-old-sends_2026-08-20.md）。
+      const t = chatHistoryAutoCommitTimers.get(sid);
+      if (t) { clearTimeout(t); chatHistoryAutoCommitTimers.delete(sid); }
+      chatHistoryOutputBuffers.delete(sid);
+      revokeChatHistoryAttachmentURLs(sid);
+      chatHistory.delete(sid);
+      chatHistoryIdSeq.delete(sid);
+    }
     for (const m of messages) {
       if (transcript) {
         pushAgentChatMessage(sid, m);
@@ -573,6 +581,7 @@ export function getAiDisplayName(provider) {
     case 'lm-studio':  return ti18n('chat_ai_name_lm_studio', 'LM Studio');
     case 'opencode': return ti18n('chat_ai_name_opencode', 'OpenCode');
     case 'grok':     return ti18n('chat_ai_name_grok', 'Grok Build');
+    case 'command-code': return ti18n('chat_ai_name_command_code', 'Command Code');
     default: return provider ? String(provider) : 'AI';
   }
 }
@@ -586,6 +595,7 @@ export function getAiAvatarLetter(provider) {
     case 'lm-studio':  return 'L';
     case 'opencode': return 'P';
     case 'grok':     return 'G';
+    case 'command-code': return 'M';
     default: return 'A';
   }
 }
@@ -1299,7 +1309,7 @@ if (typeof window !== 'undefined') {
   function openRawModal(msg) {
     closeRawModal();
     const overlay = document.createElement('div');
-    overlay.className = 'chat-raw-modal-overlay';
+    overlay.className = 'chat-raw-modal-overlay aac-wheel-overlay';
     const dlg = document.createElement('div');
     dlg.className = 'chat-raw-modal';
     const head = document.createElement('div');

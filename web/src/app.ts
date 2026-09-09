@@ -1,20 +1,22 @@
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
-import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_TOOLS_LEFT_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
+import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, batchFreeText, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
+import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
 import { scheduleDeferredEnter, scheduleAfterOutputSettle, deferredEnterMinWaitFor, cancelDeferredEnter } from './app/deferred-enter.js';
 import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js';
+import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, cancelApprovalLedgerRestore, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -24,8 +26,12 @@ import './app/mobile-home.js';
 import { mobileApprovalActiveBadgeCount } from './app/mobile-approval-sheet.js';
 import { clearMobileTerminalLiteSession } from './app/mobile-terminal-lite.js';
 import './app/orchestration-dashboard.js';
+import './app/relay-dialog.js';
 import './app/prompt-templates.js';
+// 観測 sink の登録（既定ビルドでは空ファイルへ差し替えられる）。
+import './debug/index.js';
 import { setActiveTab } from './app/settings.js';
+import { pendingSpawnConfirmationCount } from './app/spawn-confirm.js';
 
 export let _userAvatarUrl = '';
 export let _userDisplayName = '';
@@ -283,12 +289,12 @@ export function isOllamaModelCommandBlocked(sessionId, text) {
   return /^\/model(\b|\s|$)/i.test(trimmed);
 }
 
-// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent/grok）の
+// shell（素のシェル）セッション内で AI CLI（claude/codex/copilot/cursor-agent/grok/command-code）の
 // 起動コマンドを直接打つと、provider=shell 用にチューニングされた入力・承認処理
 // （\x15 前置なし・マーカー未注入・shell 用承認検出）と二重ラップになり、スラッシュ
 // コマンドの文字化けや承認ボタンの不動作を招く。先頭トークンが起動コマンドのときは
 // 検知して provider 名を返す（パス前置・.cmd/.exe 等の拡張子も許容）。該当なしは null。
-const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent|grok)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
+const AI_CLI_LAUNCH_RE = /^(?:[^\s]*[\\/])?(claude|codex|copilot|cursor-agent|grok|command-code)(?:\.(?:cmd|exe|bat|ps1))?(?=\s|$)/i;
 // 「このまま続行」を選んだ shell セッションでは以後ナグを出さない（セッション単位で抑止）。
 const aiCliLaunchNudgeSuppressed = new Set();
 
@@ -748,13 +754,31 @@ export let slashIndex = -1;
 export function updateSlashMenu() {
   const val = inputEl.value;
   if (!val.startsWith('/') && !val.startsWith('$')) { hideSlashMenu(); return; }
-  ensureSlashCommands(activeProvider(), activeSessionId); // 非同期: 取得完了時に自動で再描画
+  const provider = activeProvider();
+  ensureSlashCommands(provider, activeSessionId); // 非同期: 取得完了時に自動で再描画
   const filtered = getSlashCommands().filter(c => c.cmd.startsWith(val));
-  if (filtered.length === 0) { hideSlashMenu(); return; }
+  if (filtered.length === 0) {
+    // custom provider（built-in 7種以外）はスラッシュコマンド一覧そのものが無いので、
+    // fetch 完了待ちの「空」と区別できるよう1行出す（plan_custom-provider-extension-triage.md C3）。
+    if (!isAIProvider(provider)) { renderSlashUnsupportedNotice(); return; }
+    hideSlashMenu();
+    return;
+  }
   slashItems = filtered;
   if (slashIndex >= slashItems.length) slashIndex = 0;
   if (slashIndex < 0) slashIndex = 0;
   renderSlashMenu();
+}
+
+function renderSlashUnsupportedNotice() {
+  slashItems = [];
+  slashIndex = -1;
+  slashMenuEl.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'slash-item slash-unsupported-notice';
+  div.textContent = t('slash_commands_unsupported_provider');
+  slashMenuEl.appendChild(div);
+  slashMenuEl.hidden = false;
 }
 
 export function renderSlashMenu() {
@@ -1065,12 +1089,10 @@ inputEl.addEventListener('keydown', (e) => {
     }
   };
 
-  applyToolsPosition(localStorage.getItem(STORAGE_TOOLS_LEFT_KEY) === '1');
-  btn.addEventListener('click', () => {
-    const isLeft = !wrap.classList.contains('tools-left');
-    applyToolsPosition(isLeft);
-    localStorage.setItem(STORAGE_TOOLS_LEFT_KEY, isLeft ? '1' : '0');
-  });
+  // 側の保持は ui-side.ts に一本化した。⇄ はカード列・パネルの ✕ も同時に振る。
+  applyToolsPosition(toolsOnLeft());
+  onUiSideChange((_side, isLeft) => applyToolsPosition(isLeft));
+  btn.addEventListener('click', () => { toggleUiSide(); });
 
   // 入力欄の空白（ボタン以外＝paddingや flex 余白）をクリックしたら textarea に
   // フォーカスを移す。ネイティブでは textarea の矩形上しか focus されず、行間や
@@ -1521,6 +1543,18 @@ export function sendText(sessionId, text) {
 }
 
 export function requestSessionDismiss(id) {
+  // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
+  // 確認待ちを抱えた親セッションは閉じさせない。UI 側の先回りガードで、カードの ×
+  // 無効化と合わせた二重の防御。Hub 側（handleDismiss の hasPendingSpawnConfirmation
+  // ガード・session_dismiss_refused の送信）はまだ実装されていない ―
+  // internal/hub/server.go・internal/hub/orchestration.go には本 C とは別の未コミット
+  // 変更が同居しており、衝突を避けるため本 C ではそちらへ手を入れていない。したがって
+  // 現時点では自動 dismiss 経路（auto-dismiss 等）や、この関数を経由しない直接の WS
+  // 送信は防げていない。UI の × とこの関数を経由する経路だけが対象。
+  if (pendingSpawnConfirmationCount(id) > 0) {
+    showToast(t('toast_session_dismiss_blocked_pending_spawn'));
+    return;
+  }
   // 「セッションが勝手に消える」事案の犯人特定用
   // (docs/local/bugfix_session-silent-auto-dismiss_2026-07-21.md)。
   // dismiss を投げる直前に呼び出し元スタックを console と PTY 生ログ両方へ残す。
@@ -1640,6 +1674,7 @@ export function clearSessionTimerEntry(timerMap, id) {
 export function cleanupRemovedSessionState(id) {
   try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
   try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
+  try { cancelApprovalLedgerRestore(id); } catch (_) {}
   try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}
@@ -1683,6 +1718,7 @@ export function removeLocalSession(id) {
   removeFromSessionOrder(id);
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
+  try { disposeAltScrollRail(id); } catch (_) {}
   approvalVisibleCache.delete(id);
   if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
     setMultiQuestionBannerVisible(false);
@@ -1698,6 +1734,7 @@ export function removeLocalSession(id) {
   answeredApprovalShapeKeys.delete(id);
   replayAnsweredApprovalTokens.delete(id);
   batchSelections.delete(id);
+  batchFreeText.delete(id);
   clearSequentialChoiceState(id);
   cancelApprovalHintConfirm(id);
   approvalSuppressUntil.delete(id);
@@ -1759,6 +1796,9 @@ document.addEventListener('mousedown', () => { suppressFocusReclaim = true; });
 document.addEventListener('mouseup',   () => { setTimeout(() => { suppressFocusReclaim = false; }, 300); });
 
 inputEl.addEventListener('blur', (e) => {
+  // スマホはフォーカスを回収するとソフトキーボードが再び立ち上がり、本文を読むために
+  // 入力欄から離れる操作ができなくなる。回収は物理キーボード前提の PC だけに限定する。
+  if (isMobileViewport()) return;
   if (isInteractiveFocusTarget(e.relatedTarget)) return;
   if (suppressFocusReclaim || voiceActive) return;
   if (activeSessionId !== null && document.getElementById('settings-panel').hidden) {
@@ -1839,6 +1879,8 @@ inputEl.addEventListener('blur', (e) => {
 
 (function () {
   const idleTimeoutEl     = document.getElementById('idle-timeout-min');
+  const terminalColorEl   = document.getElementById('terminal-color') as HTMLSelectElement | null;
+  const handoffIntentModeEl = document.getElementById('handoff-intent-mode') as HTMLSelectElement | null;
   const reconnectGraceEl  = document.getElementById('reconnect-grace-min');
 	const boardNotifyModeEl = document.getElementById('board-notify-mode') as HTMLSelectElement | null;
 	const spawnConfirmModeEl = document.getElementById('spawn-confirm-mode') as HTMLSelectElement | null;
@@ -1854,6 +1896,51 @@ inputEl.addEventListener('blur', (e) => {
   const logSessionMaxSizeEl        = document.getElementById('log-session-max-size');
   const attachRetentionDaysEl      = document.getElementById('attach-retention-days');
   const attachMaxTotalMbEl         = document.getElementById('attach-max-total-mb');
+
+  // ターミナルの色方針（force / inherit / off）。次に起こすセッションから効く。
+  async function loadTerminalColor() {
+    if (!terminalColorEl) return;
+    try {
+      const res = await fetch(`/api/terminal-color?token=${token}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      if (cfg && typeof cfg.terminal_color === 'string') terminalColorEl.value = cfg.terminal_color;
+    } catch (_) {}
+  }
+
+  async function saveTerminalColor() {
+    if (!terminalColorEl) return;
+    try {
+      await fetch(`/api/terminal-color?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terminal_color: terminalColorEl.value }),
+      });
+    } catch (_) {}
+  }
+
+  // 看板の意図層モード（done-only / turn-summary、既定 done-only）。
+  // docs/local/plan_session-handoff-board_c3_intent-layer.md 内部 C3。
+  async function loadHandoffIntentMode() {
+    if (!handoffIntentModeEl) return;
+    try {
+      const res = await fetch(`/api/handoff-intent-mode?token=${token}`);
+      if (!res.ok) return;
+      const cfg = await res.json();
+      if (cfg && typeof cfg.intent_mode === 'string') handoffIntentModeEl.value = cfg.intent_mode;
+    } catch (_) {}
+  }
+
+  async function saveHandoffIntentMode() {
+    if (!handoffIntentModeEl) return;
+    try {
+      await fetch(`/api/handoff-intent-mode?token=${token}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intent_mode: handoffIntentModeEl.value }),
+      });
+    } catch (_) {}
+  }
 
   async function loadIdleTimeout() {
     if (!idleTimeoutEl) return;
@@ -2099,8 +2186,8 @@ inputEl.addEventListener('blur', (e) => {
 			const res = await fetch(`/api/orchestration-config?token=${token}`);
 			if (!res.ok) return;
 			const cfg = await res.json();
-			const mode = String(cfg.board_notify_mode || 'queue-until-idle');
-			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'queue-until-idle';
+			const mode = String(cfg.board_notify_mode || 'soft-notify');
+			boardNotifyModeEl.value = ['soft-notify', 'queue-until-idle', 'interrupt'].includes(mode) ? mode : 'soft-notify';
 			if (spawnConfirmModeEl) {
 				const spawnMode = String(cfg.spawn_confirm_mode || 'on');
 				spawnConfirmModeEl.value = ['on', 'off', 'providers'].includes(spawnMode) ? spawnMode : 'on';
@@ -2173,6 +2260,7 @@ inputEl.addEventListener('blur', (e) => {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
       await fetch(`/api/slash-cmd-sources?token=${token}`, {
@@ -2222,6 +2310,7 @@ inputEl.addEventListener('blur', (e) => {
     setUserPref('usage_links.ollama', '');
     setUserPref('usage_links.opencode', '');
     setUserPref('usage_links.grok', '');
+    setUserPref('usage_links.command-code', '');
     setUserPref('voice.grace_seconds', DEFAULT_VOICE_GRACE_SEC);
 
     const triggerEnabled = document.getElementById('trigger-enabled');
@@ -2303,10 +2392,12 @@ inputEl.addEventListener('blur', (e) => {
     const slashCodexEl = document.getElementById('slash-src-codex');
     const slashCopilotEl = document.getElementById('slash-src-copilot');
     const slashCursorAgentEl = document.getElementById('slash-src-cursor-agent');
+    const slashCommandCodeEl = document.getElementById('slash-src-command-code');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
     if (slashCopilotEl) slashCopilotEl.value = '';
     if (slashCursorAgentEl) slashCursorAgentEl.value = '';
+    if (slashCommandCodeEl) slashCommandCodeEl.value = '';
     loadUsageLinkSettings();
 
     const termAppEl = document.getElementById('settings-terminal-app');
@@ -2369,6 +2460,8 @@ inputEl.addEventListener('blur', (e) => {
   // 設定パネルが開かれたときにログ設定を読み込む
   document.getElementById('settings-btn').addEventListener('click', () => {
     if (!document.getElementById('settings-panel').hidden) {
+      loadTerminalColor();
+      loadHandoffIntentMode();
       loadIdleTimeout();
       loadReconnectGrace();
 		loadBoardNotifyMode();
@@ -2383,6 +2476,8 @@ inputEl.addEventListener('blur', (e) => {
   });
 
   if (idleTimeoutEl) idleTimeoutEl.addEventListener('change', saveIdleTimeout);
+  if (terminalColorEl) terminalColorEl.addEventListener('change', saveTerminalColor);
+  if (handoffIntentModeEl) handoffIntentModeEl.addEventListener('change', saveHandoffIntentMode);
   if (reconnectGraceEl) reconnectGraceEl.addEventListener('change', saveReconnectGrace);
 	if (boardNotifyModeEl) boardNotifyModeEl.addEventListener('change', saveBoardNotifyMode);
 	if (spawnConfirmModeEl) spawnConfirmModeEl.addEventListener('change', () => { if (spawnConfirmProvidersRow) spawnConfirmProvidersRow.hidden = spawnConfirmModeEl.value !== 'providers'; void saveBoardNotifyMode(); });
@@ -2504,7 +2599,9 @@ inputEl.addEventListener('blur', (e) => {
 
   function onMove(e) {
     const dx = (e.clientX || (e.touches && e.touches[0].clientX) || 0) - startX;
-    const w = Math.min(MAX, Math.max(MIN, startW + dx));
+    // カード列が右側にあるときは、右へドラッグすると幅が縮む（外側の端を掴んでいる）。
+    const dir = document.body.classList.contains('sidebar-right') ? -1 : 1;
+    const w = Math.min(MAX, Math.max(MIN, startW + dir * dx));
     sidebar.style.width = w + 'px';
     try { localStorage.setItem(STORAGE_KEY, String(w)); } catch (_) {}
     renderSessionList();
@@ -2596,6 +2693,7 @@ inputEl.addEventListener('blur', (e) => {
     titleEl.textContent = provider === 'claude' ? 'Claude Code'
                         : provider === 'copilot' ? 'GitHub Copilot'
                         : provider === 'cursor-agent' ? 'Cursor Agent'
+                        : provider === 'command-code' ? 'Command Code'
                         : 'Codex CLI';
     timeEl.textContent  = '';
     listEl.innerHTML = `<div class="slash-picker-status">${t('slash_picker_loading')}</div>`;

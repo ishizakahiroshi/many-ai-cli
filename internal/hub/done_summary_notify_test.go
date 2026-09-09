@@ -1,12 +1,45 @@
 package hub
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/proto"
 )
 
 func ptrBool(v bool) *bool { return &v }
+
+func captureDoneSummaryEvents(s *Server) <-chan any {
+	events := make(chan any, 16)
+	ui := registerTestUI(s)
+	s.sessionsMu.Lock()
+	s.uis[ui].sendFunc = func(message any) error {
+		events <- message
+		return nil
+	}
+	s.sessionsMu.Unlock()
+	return events
+}
+
+func drainDoneSummaryEvents(events <-chan any) []proto.DoneSummary {
+	var summaries []proto.DoneSummary
+	for {
+		select {
+		case event := <-events:
+			message, ok := event.(proto.Message)
+			if !ok || message.Type != "done_summary" || message.DoneSummary == nil {
+				continue
+			}
+			summaries = append(summaries, *message.DoneSummary)
+		default:
+			return summaries
+		}
+	}
+}
 
 func newDoneSummaryServer(enabled *bool, backends int) *Server {
 	cfg := &config.Config{}
@@ -58,5 +91,154 @@ func TestUserPrefsCloneDoesNotSharePointer(t *testing.T) {
 	*clone.DoneSummaryNotify.Enabled = false
 	if !*prefs.DoneSummaryNotify.Enabled {
 		t.Fatal("Clone がポインタを共有しており、複製の書き換えが元へ波及した")
+	}
+}
+
+// フォールバックは通知が有効でも外部へ出さない。
+//
+// マーカーの規約は「タスク完了時のみ出力」なので、会話ターンにマーカーが無いのは
+// 正常動作。ここを外すと、質問へ答えただけのターンごとに push が飛び、本物の完了
+// 通知が埋もれる（2026-08-26 実測: Codex は 3 セッション連続でマーカー 0 件）。
+func TestFallbackDoneSummaryIsNeverNotifiedExternally(t *testing.T) {
+	s := newDoneSummaryServer(ptrBool(true), 3)
+	if !s.doneSummaryNotifyEnabled() {
+		t.Fatal("前提が崩れている: 明示 true なのに通知が無効")
+	}
+	if s.shouldNotifyDoneExternally(proto.DoneSummary{Text: "終わりました", Fallback: true}) {
+		t.Fatal("フォールバックが外部通知へ流れた")
+	}
+	if !s.shouldNotifyDoneExternally(proto.DoneSummary{Text: "終わりました"}) {
+		t.Fatal("AI が出した本物の完了サマリーまで止まった")
+	}
+}
+
+// フォールバックが needs_action を名乗らないことを固定する。
+// success 側（既定）へ寄せないことも同時に見る。どちらへ寄っても「AI が状態を
+// 報告した」と誤読させるため。
+func TestFallbackDoneSummaryKindIsUnknown(t *testing.T) {
+	if fallbackDoneSummaryKind != "unknown" {
+		t.Fatalf("fallbackDoneSummaryKind = %q, want unknown", fallbackDoneSummaryKind)
+	}
+	if got := classifyDoneSummary(fallbackDoneSummaryText("")); got == fallbackDoneSummaryKind {
+		t.Fatal("前提が崩れている: 定型文が classifyDoneSummary でも unknown になるなら固定値を持つ意味がない")
+	}
+}
+
+// 文面に警告語彙（検出できませんでした・確認してください）を戻さない。
+// 語彙が戻ると、色を弱めても読んだ側には異常として届く。
+func TestFallbackDoneSummaryTextIsNotAlarming(t *testing.T) {
+	for _, text := range []string{fallbackDoneSummaryText(""), fallbackDoneSummaryText("テストは 3 件とも成功しました。")} {
+		for _, ng := range []string{"検出できませんでした", "確認してください"} {
+			if strings.Contains(text, ng) {
+				t.Fatalf("フォールバック文面に警告語彙 %q が入っている: %q", ng, text)
+			}
+		}
+	}
+	if got, want := fallbackDoneSummaryText("直しました。"), "ターン終了（完了サマリーなし）。最後の出力: 直しました。"; got != want {
+		t.Fatalf("fallbackDoneSummaryText() = %q, want %q", got, want)
+	}
+}
+
+func TestFallbackDoneSummaryRequiresAChangedGitTurn(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	events := captureDoneSummaryEvents(s)
+	ses := registerTestSession(s, 1, "claude")
+	s.sessionsMu.Lock()
+	ses.CWD = dir
+	s.sessionsMu.Unlock()
+
+	// A confirmed turn with no worktree change is a conversation turn for this
+	// predicate and must still be captured without creating a fallback card.
+	s.captureGitTurnStart(1)
+	s.maybeCreateFallbackDoneSummary(1)
+	waitForGitTurnCapture(t, s, 1)
+	s.sessionsMu.Lock()
+	if !ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 1 || ses.gitTurns[0].Files != 0 {
+		t.Fatalf("conversation fallback state = last_done=%v turns=%+v", ses.lastDoneNotifyAt, ses.gitTurns)
+	}
+	s.sessionsMu.Unlock()
+	if summaries := drainDoneSummaryEvents(events); len(summaries) != 0 {
+		t.Fatalf("conversation turn emitted done summaries: %+v", summaries)
+	}
+
+	s.captureGitTurnStart(1)
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.maybeCreateFallbackDoneSummary(1)
+	waitForGitTurnCapture(t, s, 1)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s.sessionsMu.Lock()
+		notified := !ses.lastDoneNotifyAt.IsZero()
+		s.sessionsMu.Unlock()
+		if notified || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 2 || ses.gitTurns[1].Files != 1 {
+		t.Fatalf("work fallback state = last_done=%v turns=%+v", ses.lastDoneNotifyAt, ses.gitTurns)
+	}
+	summaries := drainDoneSummaryEvents(events)
+	if len(summaries) != 1 || !summaries[0].Fallback || summaries[0].Kind != fallbackDoneSummaryKind || summaries[0].Provider != "claude" {
+		t.Fatalf("work turn done summaries = %+v, want one unknown fallback for claude", summaries)
+	}
+}
+
+func TestFallbackDoneSummarySkipsMarkerSeenTurnEvenWhenMarkerWasDeduped(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "claude")
+	s.sessionsMu.Lock()
+	ses.CWD = dir
+	s.sessionsMu.Unlock()
+
+	s.captureGitTurnStart(1)
+	// Simulate a previous visible notification inside the dedupe interval. The
+	// current turn's marker is then detected but intentionally not published.
+	previousDoneAt := time.Now()
+	s.sessionsMu.Lock()
+	ses.lastDoneNotifyAt = previousDoneAt
+	s.sessionsMu.Unlock()
+	s.handleDoneSummaryMarker(1, []byte("[MANY-AI-CLI-DONE] already reported [/MANY-AI-CLI-DONE]"))
+	s.sessionsMu.Lock()
+	markerSeen := ses.doneSummaryMarkerSeen
+	s.sessionsMu.Unlock()
+	if !markerSeen {
+		t.Fatal("deduped marker did not mark the current turn")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by marked work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.maybeCreateFallbackDoneSummary(1)
+	waitForGitTurnCapture(t, s, 1)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if len(ses.gitTurns) != 1 || ses.gitTurns[0].Files != 1 || !ses.doneSummaryMarkerSeen || !ses.lastDoneNotifyAt.Equal(previousDoneAt) {
+		t.Fatalf("marker-seen fallback state = turns=%+v marker_seen=%v last_done=%v", ses.gitTurns, ses.doneSummaryMarkerSeen, ses.lastDoneNotifyAt)
+	}
+}
+
+func TestFallbackDoneSummarySkipsCodex(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	ses := registerTestSession(s, 1, "codex")
+	s.sessionsMu.Lock()
+	ses.CWD = dir
+	s.sessionsMu.Unlock()
+	s.captureGitTurnStart(1)
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed by codex\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.maybeCreateFallbackDoneSummary(1)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if !ses.lastDoneNotifyAt.IsZero() || len(ses.gitTurns) != 0 || ses.gitTurnStartTree == "" {
+		t.Fatalf("Codex fallback state = last_done=%v turns=%+v start_tree=%q", ses.lastDoneNotifyAt, ses.gitTurns, ses.gitTurnStartTree)
 	}
 }

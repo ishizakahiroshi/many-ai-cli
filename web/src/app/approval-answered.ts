@@ -25,6 +25,8 @@ export interface ApprovalSourceState {
   candidateKey?: string;
   sourceEpoch?: number;
   shape?: string;
+  /** Hub 側の供給元ラベル（approval_marker の approval_source。'transcript' / 'go_vt'）。 */
+  hubSource?: string;
 }
 
 export interface ApprovalCandidateIdentity {
@@ -35,6 +37,7 @@ export interface ApprovalCandidateIdentity {
 
 export const approvalSourceCache = new Map<number, ApprovalSourceState>(); // sessionId → current approval provenance/identity
 export const approvalSourceEpochCache = new Map<number, number>(); // sessionId → logical live prompt generation
+export const hubMarkerDeliveredEpoch = new Map<number, number>(); // sessionId → epoch in which Hub last delivered a marker
 export const approvalReplayState = new Map<number, { replayEpoch: number; pending: boolean }>(); // sessionId → replay gate
 export const answeredApprovalCandidates = new Map<number, Set<string>>(); // sessionId → `${epoch}\0${candidateKey}`
 export const answeredApprovalShapeKeys = new Map<number, Map<string, string>>(); // sessionId → `${epoch}\0${shape}` -> candidateKey
@@ -267,6 +270,78 @@ export function isAnsweredApprovalCandidate(id: number, options: any, kind?: str
   return !!(set && set.has(answeredCandidateToken(identity)));
 }
 
+/**
+ * この shape（provider・種別・質問・選択肢番号・送信文字列）の承認に、このセッションで
+ * 一度でも回答したか。世代（sourceEpoch）は見ない。
+ *
+ * 通常の判定 isAnsweredApprovalCandidate は世代込みで見る。世代が進めば同じ質問でも
+ * 新しい候補として出すのが仕様だからで、それはこのファイル冒頭のルールどおり。この関数は
+ * その世代の縛りを外して「同じ中身に答えたことがあるか」だけを見る。
+ *
+ * 用途は 1 つだけ。CLI がページ送りで過去の画面を描き直している間に届いた候補を採らない
+ * 条件に使う（approval-ui.ts の showOptions）。回答済み state を新しく増やさず、既存の
+ * 台帳を別の角度から引くだけにしてある（承認の同一性は 1 本という規約のため）。
+ */
+export function isAnsweredApprovalShapeAcrossEpochs(id: number, shape: string): boolean {
+  if (!shape) return false;
+  const shapes = answeredApprovalShapeKeys.get(id);
+  if (!shapes) return false;
+  const suffix = `\0${shape}`;
+  for (const token of shapes.keys()) {
+    if (token.endsWith(suffix)) return true;
+  }
+  return false;
+}
+
+/**
+ * Hub がこの世代のマーカー承認を配信したことを記録する。
+ *
+ * 回答済みかどうかとは別の話なので、承認の同一性 state（candidateKey + sourceEpoch）は
+ * 増やしていない。ここが持つのは「今の世代でどちらの検出層が正本か」という provenance で、
+ * 既存の approvalSourceCache と同じ種類のもの。approvalSourceCache と分けてあるのは、
+ * あちらが hideActionBar で消えるのに対し、こちらは世代が変わるまで残す必要があるため。
+ */
+export function noteHubMarkerDelivered(id: number, sourceEpoch: number): void {
+  if (!id || !(sourceEpoch > 0)) return;
+  const current = hubMarkerDeliveredEpoch.get(id) || 0;
+  if (sourceEpoch > current) hubMarkerDeliveredEpoch.set(id, sourceEpoch);
+}
+
+/**
+ * 今の世代について Hub のマーカー検出が正本か。
+ *
+ * true の間、ブラウザ側のローカル走査（pendingTextTail 由来）は承認候補を新しく立てない。
+ * ローカル走査は PTY の生テキストを継ぎ足した文字列を見ており、Ink の差分再描画では
+ * 書き換わらなかった文字が届かないため、同じ質問から Hub と違う本文を作ることがある。
+ * 実測（2026-08-26 / mer session #5）: 回答の 6 秒後に「SSH して」が「SSH て」になった
+ * 再パースが回答済み台帳を外し、回答済みの承認が再点灯して 保留中 が下がらなくなった。
+ * Hub は本物の VT グリッドを持つので同じ入力で候補キーが揺れていない。
+ *
+ * 世代で切ってあるのが要点。Hub がこの世代で何も配信していない場面
+ * （開始マーカーが画面外にあってブロックを抽出できない等）では false のままなので、
+ * ローカル走査は従来どおり最後の砦として働く。
+ */
+export function isHubMarkerAuthoritative(id: number): boolean {
+  const delivered = hubMarkerDeliveredEpoch.get(id) || 0;
+  return delivered > 0 && delivered >= getApprovalSourceEpoch(id);
+}
+
+/**
+ * CLI がページ送りで過去の画面を描き直している最中に届いた、回答済みの中身か。
+ *
+ * 2026-08-23 に showOptions() へ入れた条件をここへ移した（bugfix_approval-bar-stale-
+ * options-scroll-mismatch_2026-08-19.md）。当時は描画判定にしか無かったため、パネルは
+ * 出ないのに 保留中 バッジ・通知音・auto-switch だけが立ち、パネルが無いので閉じることも
+ * できなかった。受け口（handleGoApprovalDetected / handleHubApprovalMarker）が状態を
+ * 触る前にも同じ判定を通すため、判定式を 1 箇所に集約する。
+ *
+ * 遡り位置の取得だけは terminal.ts 側にあるので、呼び出し側から渡してもらう
+ * （このモジュールは DOM にも xterm にも触らない方針のため）。
+ */
+export function isStaleHistoryRepaint(id: number, shape: string, showingHistory: boolean): boolean {
+  return !!showingHistory && isAnsweredApprovalShapeAcrossEpochs(id, shape);
+}
+
 /** テスト専用。1 セッションぶんの承認同一性 state を初期状態へ戻す。 */
 export function _resetApprovalAnsweredStateForTest(id: number): void {
   answeredApprovalCandidates.delete(id);
@@ -275,4 +350,5 @@ export function _resetApprovalAnsweredStateForTest(id: number): void {
   approvalSourceEpochCache.delete(id);
   approvalSourceCache.delete(id);
   approvalReplayState.delete(id);
+  hubMarkerDeliveredEpoch.delete(id);
 }

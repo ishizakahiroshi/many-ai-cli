@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:8791e049d7be0dd15714c0479a20730e55d247e981b18073d9f48b3f0cd57c64",
+  "claims": [
+    {
+      "id": "claim_81236c6e7cf04308938caecb76bd8d95",
+      "statement": "log.NewFileLogger falls back to stderr-only output when cfg.Log.Enabled is false, produces a file+stderr MultiWriter when alsoStderr is true, and sets slog.LevelDebug when debug is true (otherwise slog.LevelInfo); this is the Hub's own operational log, separate from per-session PTY logging.",
+      "evidence": [
+        {
+          "resource": "repo://internal/log/log.go#L18-L23",
+          "version": "repo-lines-v1:sha256:3706af2ca69990a5c61063a4333fe6dc8c0acd8c9db590eaaeaca50fada7ed7a:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDYzZjIwNmYyNWQ3YjMyYTczYjdjZWYzZGRlOTBlNzQ1OTE4NzA1YmM0ZmQ4MzkxZDA2Njg1OGY5YTYyODIwNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGZlNzdjYjIxNGYyZjA2YmVhNWFmODg2NTVhZjRkYThmM2JkOGQ4ODEyYzcxNDg1Y2FhNzU4ODlhZmQ3OTkxMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWM2MTJlZTIwZTQ3ZWI0MmE0NDgyMjNjMDFiN2M3MmZhY2E3MzhkZDQ1NjlhMWM2ZTVlYTNkYjgyMjVmNWM0MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzQ1YWI3MGZlZGI3OTM1ZGI2YmQ5MTRhMTkyNjUzYjZmZTY2MTI1ZmI3MWNkNTU5ZmIyNzg1NjZhNzgyOWUwYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7b74e990a5834641853c94b390598c80",
+      "statement": "sessionlog's secretPatterns is documented as a deliberately heuristic denylist that accepts over-masking and accepts under-masking of secret shapes not on the list as a residual risk, with most patterns preserving the matched key-name prefix and replacing only the value with ***.",
+      "evidence": [
+        {
+          "resource": "repo://internal/sessionlog/sessionlog.go#L18-L25",
+          "version": "repo-lines-v1:sha256:f9918e93d4e83a3cd825db89d79f7a28e7bcabdf2658aa08bf1ba2a6e84411b0:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmIxODE2N2RkZjA3ZTFmYWMyODkwYzRjNDkzNjkwNWRiNTM0YjBiZjJlYTExNzEyNzgyMDI0YWNjOTExNGNkMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWIwZDJiYjA2MmYwZDA1YjdjODQ0NzAxZDg3OGJjN2M1MGIwMGY1ZDk3YjBhZWUzYjQxZjVmZDE5ZTI4ZGMxOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjZmNGEzY2Y1NmZkYjAxMGQ3NmEzMmNiNjI2MzBmY2JkOWUzYTNhMjI2MWI0NjY2ZDQ1NzU0MGM5NWZkOWMwZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzU0YjY3ZWFmNjE3ZDcwM2ZmMDFkODQxZWE5NDM0NzQ3OTU2NjAwMGY0ZDI4NWM2NGY2ZGNiNmE5YmNlMmExNiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_f4786241b4974d7cb5692ba1dbc7b3e4",
+      "statement": "sessionlog.IsThinkingNoiseLine detects an AI CLI's animated thinking-status redraw frame using strong signals including the literal phrase \"esc to interrupt\", and its detection logic is restricted to a narrow glyph range so ordinary conversational punctuation is not mistaken for spinner noise.",
+      "evidence": [
+        {
+          "resource": "repo://internal/sessionlog/transcript.go#L15-L39",
+          "version": "repo-lines-v1:sha256:1e8c16814679d967f2f7252001a51b403cdc86dd0c4bdec74e1df2146c84110e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWU3ODdiMTY5NDM2NzY2YWYyNjg0NjYwNzM3ZTZjNGZjNDFiMTAzYTBkZWM0NTNjNzUwODk4MjI1MTdjMGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4YzJlYzQ0ZDc0NThmMDkzNDk1NDY1NjQ1ZjYyODA2MjIwN2UxYWZjNTJjODliYWIyMzM1OGQxYTdhYWVhYjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRmYTJmZWJmOTkyZGYwM2RlYjQ3MzM5MzJlYzI4ZTZjMWQ2MDk1NmI0M2JjYzc5NDU5ZDAwMDA5OTVjNmEzNDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRkZjM0ODYwY2E1ZDY4NzI3NjQ0OGExMTQ2OWU1ZTg0NGFjMWRhMDRhOTliZDE3OWJkYjgxNTJiYjQ5MDVhOWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fb2d747881fa4d7eb13a43a02a83ed4b",
+      "statement": "Transcript generation strips ANSI/control sequences via a controlRE regex and collapses runs of 3+ blank lines via a blankRun regex before producing the readable .txt transcript.",
+      "evidence": [
+        {
+          "resource": "repo://internal/sessionlog/transcript.go#L16-L17",
+          "version": "repo-lines-v1:sha256:dea7d233158f056295d95a2c363e163627bc2d4722e6b685141ab319f3c8b811:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTA4M2EyYTZhZDc1ZDU4MWI1OWZkMDQ0OTJkZmZmZjg0NmVmMDFjZTYzOWQwMjJiMWU5MmNlYmU4ZDMzYmVlOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzkzODY3OTNiNjhjYWI1YmI2ZTgyODcwMDc1NjJlYTc3MGJmYzFkOTU4YzU4MGRkN2M4NmE0MzRhMTY1MTVlMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjY5NTJmNzdmMTM4YzkzZGY2OTE4ZTQyZWVkNWI5YjM5NGRkMjg1MmY0MDJlMTNhZTUzMmFiYjc0MjM3MjllYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGI1ZjE3NzJmZDZlZjBkMjAyMjUwZjQ3YWFkM2Y1MmNmNzU3YmZlMmQzYjI3NWRkMmJjN2UzNmZhNWRmMzFhZCJ9"
+        },
+        {
+          "resource": "repo://internal/sessionlog/transcript.go#L224-L224",
+          "version": "repo-lines-v1:sha256:b1beece0861bfb7e464925d465b564f61b2fbe972aad4183f36255b0293e49f4:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjFiZWVjZTA4NjFiZmI3ZTQ2NDkyNWQ0NjViNTY0ZjYxYjJmYmU5NzJhYWQ0MTgzZjM2MjU1YjAyOTNlNDlmNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjFiZWVjZTA4NjFiZmI3ZTQ2NDkyNWQ0NjViNTY0ZjYxYjJmYmU5NzJhYWQ0MTgzZjM2MjU1YjAyOTNlNDlmNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGQ1MWI3MmY0ZWJlMGU1MmE5MDRkMzFlMDY1MzQ3N2UzNDVhZWQzMDFmZmMwNTJlN2Y5ODViMmQ4MTg1Y2NhOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTczNmJmNjVjZDhkOTYzYTNhOWU5YjkyYjk0MzhhMzUyNTVhOTkzOWFjZmMwNjQyYWY5NmMyYjRlZWY2OTBkMCJ9"
+        },
+        {
+          "resource": "repo://internal/sessionlog/transcript.go#L86-L86",
+          "version": "repo-lines-v1:sha256:e7453b3070e70c0d13d99a144e0375f75b07a1372c838361388f9ab1d24f1234:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTc0NTNiMzA3MGU3MGMwZDEzZDk5YTE0NGUwMzc1Zjc1YjA3YTEzNzJjODM4MzYxMzg4ZjlhYjFkMjRmMTIzNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTc0NTNiMzA3MGU3MGMwZDEzZDk5YTE0NGUwMzc1Zjc1YjA3YTEzNzJjODM4MzYxMzg4ZjlhYjFkMjRmMTIzNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmIzNTViNDA0NjMyMjJmNTgwOTcwOTMwYzE0YjNlNmY5YTNmNjUwMmExMWZhZGQzZGJhYWE1NmRkYzFiZGU3ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjg3NzBiNzliN2MyMDM2YTI1ZDEyMWM4NzI0NzZjNWU3MzAxMGFjN2I2YzhkNjA1N2IzNjRlMGE2OWI3ODhhZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_6453a789942b4b339d7c6dad44794f2b",
+      "statement": "internal/sessionstore uses modernc.org/sqlite, a pure-Go SQLite driver, and applies PRAGMA busy_timeout as the first pragma on every new connection specifically because it defaults to 0 (immediate SQLITE_BUSY failure rather than waiting), so any pragma issued before it (such as the WAL-mode pragma issued during init, which creates a -wal file and can contend with another process already holding the database open) would itself fail immediately under lock contention instead of benefiting from the timeout.",
+      "evidence": [
+        {
+          "resource": "repo://internal/sessionstore/store.go#L17-L21",
+          "version": "repo-lines-v1:sha256:7eaf26363267b3640614db18531fb337acb5ea65360554b8c5b61d365f6057d2:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODc5OWQ2NzRmMmIxZTQ3NDVjNmFlMjM0YWZhZmY0MWRhNzM5NjM2ZjNjYjQ3NTY0OWVlY2NjY2ZmZjIyZTMwNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2UwZWYzOTAxNGJiYzkzZTBlY2NlYTI0Y2IxZjhiNGIwMzE4OTI0ZTNkNmUwZWUzOWVmNDVlYjBjMzZjNTA3ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWEwZTI5YTAwNmFkZjc3NTUyMWQ3NThjYjMyNzIwZmI2MDU5NDQ4MzJiNjgwOTc0NDRkMDRmNWEzN2QxZTYxZCJ9"
+        },
+        {
+          "resource": "repo://internal/sessionstore/store.go#L26-L32",
+          "version": "repo-lines-v1:sha256:7ee6be4f6e4d6c9e73cc9fdc903e46db2b2382fdd62085c6055d6c1271b5a38b:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGRiMDRiMTM4NDAwMTNkZjQ4NWRhYzg5Njg4MDAzYzFlYTA4NTNiYWEwNWY2ODIxNzI4ODAzYzQ4ZGQzMzc1ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTI2MTZjYmY3ZDEzNmI2ZGM1YTJiMGVmOTBhNTdkMjE5ODM2ZWE5MzQ3MWE1ZmE2MjAzOTgxZWNiNTQyMTU1OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2FmMWJiNjMyODBiNWFiODlmNWNjOTY1NjJlODFlYTZhNGRhMTQ0Yjc3M2UzMzNjODFiMDgzZTc0OTE3NDU0ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzE3NGE1ZGVhNjEzY2JjY2JkZGQyOWMyNGNjNDM4MDFlMjgwOTlkZDA5MTVmNzUyOTlkYWUyM2UwNTY1OTgzMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e77687805fa14f62999c82106d9e2303",
+      "statement": "attach.Save determines a saved attachment's file extension from the supplied filename first, falling back to sniffing the file's magic bytes (recognizing PNG/JPEG/GIF/WebP/PDF, defaulting to .bin otherwise) only when the filename does not yield an extension.",
+      "evidence": [
+        {
+          "resource": "repo://internal/attach/store.go#L131-L135",
+          "version": "repo-lines-v1:sha256:ec13002eb6b35d4a3e9245369e17a30488c0c6f192b004e35c6a298c01813694:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDMxNmZlMmQ3ZjNhZGYwM2MwMGU4NmUwMDNkNTZiMTNhNTMxOGNlZmRjZWQ4ODU4Y2RiZGFhYzdiYjA4NWMxOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzM3Mzg0ZmU4ZTgxMDc1MzI1ZWU3MTEyZjJmNTM2NjI2OWQ5MTI3NzhjYjAwMTcxMGU0MDk3YTdlNTg5NWJlMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzQ1Yjg5NDI1MmYzODgyYmM3MGNkNTAyNzJmZjY0MGYwMjM3OTQzMGMxZjhmZTExODAxNGYxMjg3Y2E3N2E0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjk4Mzc4Y2YwMWJkOTRjZTczYzY4YjNjMTdkNDM1Yzc1NmE5NTFmOGFmMWQwNmEwNjkzOTEzY2ZiZGU3Mjc0NyJ9"
+        },
+        {
+          "resource": "repo://internal/attach/store.go#L18-L34",
+          "version": "repo-lines-v1:sha256:8e07bb64e824cc8cfdd0e9d6206dcb35fe0677a3fe64d27bc2e6c13140f40945:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwODZlMDlmNzVkYTc1Mjk2MWJlNGUwOWJiNTVkZWEzNmZiOTUwZWZmNDYxODdhY2IwMjliOTE5NjRhMDA1YWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY4ZjNkZjgxNGM3MDY5MDQwMzIxMWNlNGRjZTk1NTE2NzRjNjFlMGMzNjI5NjE3ZTVlYTVlYjgwMzkyNmIzN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwM2QyZjdlYzc4ZGNhNTA4NmVlNWIyYWViYzc2MjA4MWRmZWU0YzY0OWQ1OTA0YzExNWIzZjk3MWU2YTYxMzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9e3adfe65b99440eb40005606f9c6abe",
+      "statement": "attach.Save writes each attachment to a per-session subdirectory using a timestamp-plus-nanosecond base filename and os.OpenFile with O_CREATE|O_EXCL, retrying with an incrementing numeric suffix on any name collision so two attachments saved in the same process tick never overwrite each other; it also returns a provider-specific inject string meant to be typed into the session so the wrapped CLI is told about the new file.",
+      "evidence": [
+        {
+          "resource": "repo://internal/attach/store.go#L125-L172",
+          "version": "repo-lines-v1:sha256:02722ddaec06b66e585363f8af51c33c1c737d52ad5ba246c7d2665a57bea521:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5YTZlMTMyOWI4NmI0MzU4MzMyMTY1YjQ5MzZmMzU1YTc3MTYwYTY0NGE5YTJmZTgwMzIxYTUzZGNhYjMzMmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFmYjZjYjgwMTRlODhlMDNhMjcyNzE3YjRhYzhmYmU3MTU5YzRmMzhkMjQ0ODdmZWZiMDk1ZTc4OWNhNmQ5YjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2MmUwMjQzMzk4OWFjMWM0MjY4Zjk3MGYxNTBmNmJiNmNkYjNjMDIxN2U3ZGMwMTBhMzVhYWQ4YWU4ZmFmNmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5303eff8352948658fc77e3afb6d95e0",
+      "statement": "attach.CleanOld treats a retentionDays value of 0 or less as disabling day-based deletion entirely (a no-op) rather than deleting everything, and the same <=0-means-disabled convention is used symmetrically by EnforceTotalSize's maxBytes parameter, which otherwise deletes attachments oldest-mtime-first once the total stored size under baseDir exceeds maxBytes.",
+      "evidence": [
+        {
+          "resource": "repo://internal/attach/store.go#L174-L179",
+          "version": "repo-lines-v1:sha256:70d2b4c3795016020dd4aa3c6b50908f25589e5c259018b622b8d7f057ddfa42:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjkzM2QxODJlYTcwMDkxNzhiZmM2ZWRiMzg4ZjlkNjhiNDJkMTJhYzgxYjE5YzIzMWZkZjgxZDg5MWUwMzk0OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWVlMDRiNGY3MjAyMmMyODllYmNiYTllOWUyNTA4MTdhMThmOTEzNDE1NWNlM2FkZGMyMmIwM2UyYThiZDIyNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTdmM2RkOWFlYjE2ZjE2Y2FiNDlhOWI2ZTU3ODMyODQ4MGFiMTY5ZWIzNzQ5NDgyNTkwMDRkYWM4Mzc0Y2E5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmIxYWI2YmI4ZDRjMjI0NTEyMzE1OWFjOTkyZDIwZjExY2JhODNkZmIxMGQzM2M2OWYyMDhlZmQzYzNlZGM1YSJ9"
+        },
+        {
+          "resource": "repo://internal/attach/store.go#L239-L244",
+          "version": "repo-lines-v1:sha256:6248da02570fbd4d377ed7806e60549cca9ddb33fec05e9733aebffe7cba99f4:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTc5ZDEyNjRkZTk3ZjEwOTNjMGVkMTI2NjM5MGY1Y2JlYmFmYWFkZjg3YzZmMjQzZTVkZDIxMTY0YWJjZWJkYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmI5MmRmMmJjYjFmYTNkNmI0MzA1MDBiNjBmNjNmMWM0MjUyMWNkNWYyOWU2ODFhZmNhMGE3ODE2OWZkODVjMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2JiNTZhZGY0MTg0ZGYyZGZjNGFiNzk1Y2Y2YjQ1MzE5MTgxNzI2ZDAwNTlhYTY5NTQ1MDUzY2MzZTBkN2QyNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDhhZGRlYWRhMDQ2MGJiMDQ3OGNkMmU2YzczZTcxZTZkNTQwMmNlNGIzNTllZmY3MDdlZmQxNDdkM2I2NWJmYyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

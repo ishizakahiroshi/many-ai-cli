@@ -33,6 +33,7 @@ type Pending = {
   idleTimer: ReturnType<typeof setTimeout> | null;
   retries: number;
   fragments: string[];
+  sawOutput: boolean;
 };
 
 const pending = new Map<number, Pending>();
@@ -56,6 +57,13 @@ function fire(id: number) {
   if (!sessions.has(id)) { pending.delete(id); return; }
   // 確定 \r やペースト本体の送出が未了なら判定しない（送信途中の内容を消さないため）
   if (hasPendingDeferredEnter(id)) { retryLater(id); return; }
+  // 送信後に PTY 出力を 1 度も見ていないなら「張り付いた」と判定してはいけない。
+  // 経過時間だけで撃つと、内側 CLI が本文をまだ取り込んでもいない段階（Hub 側の
+  // 遅延・CLI 側の停滞）で \x15 が本文と確定 CR に密着して届き、掃除役が送信そのものを
+  // 消す（2026-08-30 実測。本文・CR・\x15 が 2ms 以内に着弾し送信が消えた）。
+  // 張り付きの根拠は画面に残った平文であり、その平文は出力として来ている。
+  // 出力を見ていない = 判定材料が無い、なので待つ側へ倒す。
+  if (!p.sawOutput) { retryLater(id); return; }
   // 非アクティブセッションの xterm バッファはライブ書き込みが止まっていて古い。
   // アクティブになる（= flushPending で最新化される）まで判定を先送りする。
   if (id !== activeSessionId) { retryLater(id); return; }
@@ -90,13 +98,17 @@ export function scheduleResidueSweep(id: number, rawText: string, isMultiLine: b
   if (shouldSkipClearPrefix(sessions.get(id)?.provider || '')) return;
   const fragments = buildFragments(rawText, isMultiLine);
   if (fragments.length === 0) return;
-  pending.set(id, { startedAt: Date.now(), idleTimer: null, retries: 0, fragments });
+  pending.set(id, { startedAt: Date.now(), idleTimer: null, retries: 0, fragments, sawOutput: false });
   armIdle(id);
 }
 
 // pty_data 受信ごとに呼ぶ。出力が続く間（= 内側 CLI が取り込み・応答中）は判定を遅らせる。
+// あわせて「この送信の後に出力を見た」を記録する。fire はこれが立つまで判定しない。
 export function notifyResidueSweepOutput(id: number) {
-  if (pending.has(id)) armIdle(id);
+  const p = pending.get(id);
+  if (!p) return;
+  p.sawOutput = true;
+  armIdle(id);
 }
 
 export function cancelResidueSweep(id: number) {

@@ -31,6 +31,9 @@ func callInfo(t *testing.T, s *Server) map[string]any {
 	if w.Code != http.StatusOK {
 		t.Fatalf("/api/info code = %d, want 200", w.Code)
 	}
+	if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Fatalf("/api/info Cache-Control = %q, want no-store", cc)
+	}
 	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode /api/info: %v", err)

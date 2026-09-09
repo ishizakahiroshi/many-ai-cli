@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -40,7 +41,7 @@ func TestOneTapApprovalEndpointRejectsHighRiskApprove(t *testing.T) {
 		t.Fatalf("pending approval = %#v, want high risk", pending)
 	}
 	ses.nativeApprovalSig = pending.Sig
-	token, err := s.oneTapApprovals.issue(9, pending.Sig, pending.Sig, oneTapApprove)
+	token, err := s.oneTapApprovals.issue(9, pending.Sig, pending.Sig, 1, oneTapApprove)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestOneTapApprovalEndpointRejectsExpiredToken(t *testing.T) {
 	s := newTestServer()
 	now := time.Unix(1_700_000_000, 0)
 	s.oneTapApprovals = newTestOneTapApprovalManager(t, now)
-	token, err := s.oneTapApprovals.issue(1, "approval-1", "approval-1", oneTapReject)
+	token, err := s.oneTapApprovals.issue(1, "approval-1", "approval-1", 1, oneTapReject)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestOneTapApprovalEndpointRejectsExpiredToken(t *testing.T) {
 
 func TestOneTapApprovalTokenIsBoundAndOneShot(t *testing.T) {
 	m := newTestOneTapApprovalManager(t, time.Unix(1_700_000_000, 0))
-	token, err := m.issue(7, "approval-7", "approval-7", oneTapApprove)
+	token, err := m.issue(7, "approval-7", "approval-7", 1, oneTapApprove)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestOneTapApprovalTokenIsBoundAndOneShot(t *testing.T) {
 func TestOneTapApprovalTokenRejectsTamperAndExpiry(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	m := newTestOneTapApprovalManager(t, now)
-	token, err := m.issue(2, "approval-2", "approval-2", oneTapReject)
+	token, err := m.issue(2, "approval-2", "approval-2", 1, oneTapReject)
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
@@ -129,7 +130,7 @@ func TestApplyOneTapApprovalRevertsOnSendFailure(t *testing.T) {
 		t.Fatal("pending approval = nil")
 	}
 	ses.nativeApprovalSig = pending.Sig
-	token, err := s.oneTapApprovals.issue(12, pending.Sig, pending.Sig, oneTapReject)
+	token, err := s.oneTapApprovals.issue(12, pending.Sig, pending.Sig, 1, oneTapReject)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,5 +148,78 @@ func TestApplyOneTapApprovalRevertsOnSendFailure(t *testing.T) {
 	}
 	if err := s.oneTapApprovals.consume(claim); err != nil {
 		t.Fatalf("consume after send failure = %v, want token to remain retryable", err)
+	}
+}
+
+func TestApprovalActionDoesNotClearReplacementPrompt(t *testing.T) {
+	s := newTestServer()
+	ses := installBatchApproval(t, s, 13, "codex", t.TempDir(), "git status")
+	s.sessionsMu.Lock()
+	current := s.sessions[13]
+	key := approvalCandidateKeyWithContext(current.Provider, ses.Kind, ses.Question, ses.Context, ses.Options)
+	epoch := ensureApprovalSourceEpochLocked(current)
+	current.nativeApprovalCandidateKey = key
+	current.nativeApprovalSourceEpoch = epoch
+	wc := s.wrappers[13]
+	wc.sendFunc = func(any) error {
+		// A fresh prompt can arrive while the wire send is completing. The
+		// commit must not clear that replacement prompt.
+		current.nativeApprovalSig = "replacement-sig"
+		current.nativeApprovalCandidateKey = "replacement-key"
+		current.nativeApprovalSourceEpoch = epoch + 1
+		return nil
+	}
+	s.sessionsMu.Unlock()
+
+	result, err := s.sendNativeApprovalAction(nativeApprovalActionRequest{
+		sessionID: 13, approvalSig: ses.Sig, expectedCandidateKey: key,
+		expectedSourceEpoch: epoch, expectedWrapper: wc, action: oneTapReject,
+	})
+	if err != nil {
+		t.Fatalf("sendNativeApprovalAction = %v", err)
+	}
+	if s.commitNativeApprovalAction(result) {
+		t.Fatal("replacement prompt was committed as the old approval")
+	}
+	if current.nativeApprovalSig != "replacement-sig" || current.nativeApprovalCandidateKey != "replacement-key" {
+		t.Fatalf("replacement prompt changed after failed commit: sig=%q key=%q", current.nativeApprovalSig, current.nativeApprovalCandidateKey)
+	}
+}
+
+func TestApprovalActionReservationBlocksSecondSendBeforeCommit(t *testing.T) {
+	s := newTestServer()
+	ses := installBatchApproval(t, s, 14, "codex", t.TempDir(), "git status")
+	s.sessionsMu.Lock()
+	current := s.sessions[14]
+	key := current.nativeApprovalCandidateKey
+	epoch := current.nativeApprovalSourceEpoch
+	wc := s.wrappers[14]
+	var sends atomic.Int32
+	wc.sendFunc = func(any) error {
+		sends.Add(1)
+		return nil
+	}
+	s.sessionsMu.Unlock()
+
+	req := nativeApprovalActionRequest{
+		sessionID: 14, approvalSig: ses.Sig, expectedCandidateKey: key,
+		expectedSourceEpoch: epoch, expectedWrapper: wc, action: oneTapReject,
+	}
+	first, err := s.sendNativeApprovalAction(req)
+	if err != nil {
+		t.Fatalf("first sendNativeApprovalAction = %v", err)
+	}
+	if got := sends.Load(); got == 0 {
+		t.Fatal("first approval action did not reach wrapper")
+	}
+
+	if _, err := s.sendNativeApprovalAction(req); !errors.Is(err, errApprovalActionBusy) {
+		t.Fatalf("second sendNativeApprovalAction = %v, want busy", err)
+	}
+	if got := sends.Load(); got != 1 {
+		t.Fatalf("wrapper send count = %d, want exactly one before commit", got)
+	}
+	if !s.commitNativeApprovalAction(first) {
+		t.Fatal("first approval action did not commit")
 	}
 }

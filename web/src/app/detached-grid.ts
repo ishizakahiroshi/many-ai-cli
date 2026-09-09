@@ -7,11 +7,13 @@
 'use strict';
 
 import {
+  canPageAltBuffer,
   disableWebglRenderer,
   enableWebglRenderer,
   releaseHiddenWebglRenderers,
   scrollAltBufferPage,
 } from './terminal.js';
+import { ensureAltScrollRail, stepNotches } from './alt-scroll-rail-view.js';
 import { sessions } from './state.js';
 import type { SessionSnapshot } from '../types/proto.js';
 
@@ -241,6 +243,7 @@ export class DetachedGridManager {
     : session.provider === 'cursor-agent'  ? 'r'
     : session.provider === 'grok'          ? 'G'
     : session.provider === 'ollama'        ? 'O'
+    : session.provider === 'command-code'  ? 'M'
     : (session.provider || '?')[0].toUpperCase();
     header.appendChild(provBadge);
 
@@ -342,14 +345,20 @@ export class DetachedGridManager {
             : (window.terminals ? window.terminals.get(sessionId) : null);
     if (!t || !t.term) return;
     if (edge === 'top') {
-      if (scrollAltBufferPage(sessionId, t, -1)) {
+      if (canPageAltBuffer(sessionId, t)) {
+        if (!stepNotches(sessionId, 12)) {
+          scrollAltBufferPage(sessionId, t, -1);
+        }
         t.autoScroll = false;
         return;
       }
       t.autoScroll = false;
       t.term.scrollToTop();
     } else {
-      if (scrollAltBufferPage(sessionId, t, 1)) {
+      if (canPageAltBuffer(sessionId, t)) {
+        if (!stepNotches(sessionId, -12)) {
+          scrollAltBufferPage(sessionId, t, 1);
+        }
         t.autoScroll = true;
         return;
       }
@@ -395,6 +404,7 @@ export class DetachedGridManager {
         if (!termArea.isConnected || !termArea.contains(container)) return;
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
+          ensureAltScrollRail(session.id, t);
           enableWebglRenderer(t);
           t.everAttached = true;
           if (typeof window.flushPendingTerminalChunks === 'function') {

@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:f82315b382cfd9747564d7ae3b467980c72e3c53980b0c7e3416654e4bb2a98d",
+  "claims": [
+    {
+      "id": "claim_967154b86bec41ff8002c2df9bda973a",
+      "statement": "The Docker deployment model runs one container per user rather than a shared multi-tenant Hub: deploy/docker/compose.yaml includes one users/<user>.yaml file per user, each defining that user's assigned port and bind-mounted work volume, copied from users/example.yaml.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/compose.yaml#L1-L10",
+          "version": "repo-lines-v1:sha256:68eef1d5af49c52988ceb9cf37162f2e1d4d496f741a9b3333af1308b1aae4ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlOGMzYTgyMzUwYjM1ZTAxYjYyYWIzMTk1OGE2Njg4ODAzOWE0MTYwNjBmMGM0ZTI5ZGU3NDBjOWUyYTM3YjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0OTViN2FlNDM0MDhlMTY4NDgxMWI2YzY0YmQyZTgwNzcwYjBiNDJkMzNmNTMzOWRkNGExOTlmYTM4ZmY5YzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d2927e1a891e407da714ad71cc9f57ee",
+      "statement": "The Dockerfile's web-build stage uses bun only to install dependencies (bun install --frozen-lockfile) while running the actual build script through node/bun run build, deliberately keeping bun out of the script-execution path to minimize attack surface.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/Dockerfile#L24-L32",
+          "version": "repo-lines-v1:sha256:5397e050dc1f7180bd5706d4ed0d7de30c39b004129b340fc2e04fb087151ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZjODliMjUwNWZlYmMzODgxMDU0MTRlZDQ5YmY3NjM3M2FmMGY5YmRjZDk0YTNiN2M5MDg1NzI4ODBhM2VhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ5YjMzYmNiNjI3NTE3ZWEyZWQ5NDViNjE4OTZlYmNiNTI0OGIzYjQwZDY2NzVhNTZkY2QwN2Q5Nzg5MzA2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTI3ODdjNjBmOTQ5MDI1MTI1MDg4ODg0OWFiZTlkMDg2N2E0YjU0MjRjOWEwYTFjNWI2YWJjNDY1MjMwZTIyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjYzMDcyODE5MjYzZDcwZTI0ZDc2OGI0MWU4NWQ2ZTU0N2JiNjUwNjlmOTI4MDJmY2MxOWUyNTNiZmYzMTFhNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d4ac0a135264449598ee0758c5617acb",
+      "statement": "The provider-cli-build stage installs the Claude Code, Codex, and Copilot CLIs at pinned exact versions via `npm ci --omit=dev` against a tracked package-lock.json, rather than tracking latest.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/Dockerfile#L34-L41",
+          "version": "repo-lines-v1:sha256:caa26c22f2bc74bf7731bda29de4f8b6486a804cdc97de4d330a3e1137bb77d7:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFkYmEwYTA3NDgxYzg4NThiZjI4OGMzYmU1MzIwYzc1OGJjZWJhNTI4N2EzY2NkODQ4MWYwYWNmYjE5MjkyYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzkzY2MyYTQyMDVmY2FjYzYzNjkyMWIxOTdkOTg1YWUyYzRjMjczZjkzZDZhODk4MjY5YzdlNDNjNDU0MTA0NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjRmNzVkMjY1MGYyY2M2MzgwNTNiMWUxMTU2NzM1ZjE2OTYyN2ZmYWMwMTY2NWFjNjYxMWRkMGZiNWNiY2M0ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGVkY2RjMDViMGRlNjM4ZDg5OGY5M2ZiZDVkMDI3YjYzZWI4ZmJlZmIzMjZmYzg4Njc2ZjQ3N2EyMTA3MDUzYSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_7bcf9abb2d1149ae91202085fd35405a",
+      "statement": "The whisper-build stage compiles whisper-server from a whisper.cpp commit that is checked out and then verified against a hardcoded expected commit SHA, with GGML_OPENMP=OFF (relying on whisper.cpp's own thread pool instead of libgomp), BUILD_SHARED_LIBS=OFF, and GGML_NATIVE=OFF, because upstream whisper.cpp does not publish a Linux server binary release.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/Dockerfile#L52-L77",
+          "version": "repo-lines-v1:sha256:9d01ba5003738ab2992dad77a01ee1e4e13a6f1e397cc058ec49eb610a3a80f6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0N2NiZTU3Nzg5MTI4NTBjMThkNGQ3MjBiNTYxZTRiNTBjZGVlNTRlZDUwZGQ2ZjI4NTIyOWNmZTA2YjA2NDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3NTYyZTFmYjhkZjk5YTY3NjMyODYwZmYwMTg1ZDFkZWIwN2I4YjIzNzQzZTQ1OTBiZDQ3M2E4YmQyODAyYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjNTYzMWQ5NjYxOGJhN2UzNmViYTJkOTBlMDM1ZmFiNTE2MTA2MTIzNjU4ZmUzNjllODQxZDUyNzU3YTkzMWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNhNmI1MTMwMzU3MjFjNDE5MTY0ODQ5ZThmMTYxMTExZTAyNTI2ZTY0ZDM1OTkwOTA1YTg2MWMyNDYzNDZmMTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_967b180010304298bd449807e1c34339",
+      "statement": "The final runtime stage fetches cursor-agent by downloading the installer's pinned versioned package URL directly and verifying its SHA256 against a hardcoded expected hash before extracting it, rather than running the official installer, because the official installer always resolves to the latest version with no version pin.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/Dockerfile#L100-L124",
+          "version": "repo-lines-v1:sha256:b839cd64a1c52dd4bbe9a111f8f33b186225531fb0112f0f30e69ef353690117:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3ZGIzM2Y3MGUzN2JlMmE3MjBkMDVjNTc4NGJkZDRjZDkxOTg1YTAzZmFhNmExY2Y5NGRmNjU2NWY1MWM1NDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MzVmNWYxMWIzNWM0NjdlYWE2MDE1M2U5NGM2NDhkOTBjZmU4MmExMWRkYWY5YThmYzE0ZGMwNjVmMWExNDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU2MjA3YjE5OGQwNGM4MzQ1MTI1MWIzYzE5ZTIyNzJjNzliZjFhNmUxZTBjZGNjNDk3MTIxOGRhNjVlZmQwYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhMjZiMjQ2Yzk3ZDUxYTVlMzljZWM2Y2ViYTdlYWFlZTQxMDQyZTQzZGViN2ZjNWE1OTk5MzQyNzQ1YzRlMzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dede553e08174e5993f6ad6d908af255",
+      "statement": "The runtime container explicitly strips the ubuntu user's sudo and adm group membership as defense in depth even though the sudo binary itself is not installed in the image.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/Dockerfile#L140-L145",
+          "version": "repo-lines-v1:sha256:447d41ce1390b3ecba9defa2bf76a097856bc0e7deeb47ef9af7ec232ded3073:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGZhNzA0ZTU0MzUxYTQ3Mjg1NjE1OWRiNmQ5OTdlZTYzZDEzNjQwNTkyMDZiMDU3MThkMmI0YmQzMDMyMzUwZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmJkYmM2ZjlhMGZiYzkyMzQ0NTZmNWY4NjRjNmEzYjJiMzE3MmM5YjA0NTFmYmIyMDc2Y2ZmYzY4MGU4NmZhZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjQ5NjIzOGYwMTU2MTRiOTU4MjMyZDY4NzVmYTNjMGE3NWVmYTQ0MWU3Nzc3ZTNhZTI1MmMxMWViMmJmMDY1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTRmNTFiY2NmNTk1YTNlYmRkMmYxNzI1ZDc0Y2Q0NmZiOGRkODA4ZWQ5NzE0NzhhNTM1YTZlMzA1YmMwMGYxNyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9c78911c97f844598298afbef50d349c",
+      "statement": "Inside the container the Hub still binds only to 127.0.0.1; external reachability is provided by a socat relay bound to 0.0.0.0:48000 forwarding to the loopback Hub port, which is safe because the host only ever publishes the mapped port on its own 127.0.0.1, never exposing the Hub externally.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/entrypoint.sh#L127-L138",
+          "version": "repo-lines-v1:sha256:6e91385ca15003fa899e537363b6c4a371e3f44163c14ec95b8d6c2ba1ec854e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyM2U0NGZlMjNjNGFlNmJiODZjZDNlODhiY2VkYmRlYzUwOTM4ZGZiNTliYmQxYzZkZDgzYzg0Y2U3ZjAyYjEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRlNWMyN2E5YzIwMTFlNGE2ZWQyNTQ1ZmE5Y2YyNzk5ZDhhM2I0MWU0MjU5MjZiODVlZTkwZDZmNjZhOTM1MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3NWIxNjQzZWUzOWRlMDE2YzRiZmFmM2U3YTgyNTlmZTRjNGZlZGQ1OWQxOGEwZmYzMjU3ODEzZDA5OTI1ODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjNzIxOTUxNDdkMWE2M2MzNWFhZDc1MzVhY2U4OTI3YjA3MmU4NGIwNzk2MmRjOTI2NGEzMmJmNDlhOWE2YTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e75ec65c977f49f1bfd1c6d889260ffa",
+      "statement": "On first boot, aac-entrypoint.sh pre-seeds config.yaml with open_browser: false, auto_shutdown: false, and idle_timeout_min: 0 before the Hub's own LoadOrCreate runs, specifically because LoadOrCreate unmarshals YAML over code defaults so any key left unwritten here would fall back to the normal desktop default, which would be wrong for a headless remote container.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/entrypoint.sh#L91-L113",
+          "version": "repo-lines-v1:sha256:13b541b600ae6370aa331ea9ffc41185467624ed6ebea2645f9c40f0cbfeb237:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1ZTI3OWM3YmJjNmI0OTEyNmI5NWE4YzI5ODljNDhkMjE2ZjYxODYyZTQzOWI4MmY1NjFmNzE4OTE4N2QzNzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3NjlkMjM3Y2Q0MjBiOWQzOGI5ODFhMGE0ZjY3NzAxOTBhNGE4M2RjYTFmZTU2YzRmNWJhMWUyY2JjMGVmNzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiNTU1YjQwYWYyZDg1Y2IxNTAyMTg3Y2FlY2NjNjAxNTU0YWJlZjI2YzZjNmRlODBjMWJkZDcyYmNlOTRkNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI1YzM0NjNmZDdiZjBmMzAyMzYwNTMxYjdjODI5N2Q5NjJiZGU2YzQ5MTVjMDMzODg5NWFlYzMxNWNiMzQwMGEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f3ffba6c2044cd9ac78c653655de9d2",
+      "statement": "On SIGTERM/SIGINT the entrypoint terminates wrapper processes first, then stops the socat relay loop by killing the foreground socat process before waiting on the loop's own PID (waiting first would deadlock, since the loop cannot process its TERM trap while blocked in the foreground socat call), and only then sends TERM to the Hub and waits for it.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/entrypoint.sh#L27-L89",
+          "version": "repo-lines-v1:sha256:955b614f31f88ff4d81656a6c9e1f627c5bd6803495b5cb9665b95cdf5c710f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmM2EwOTI3ZWQ0MzAyNzM1NDU2YjZmNDlmYWJiODk5MjJlMjUxNTg5YjZjMDM3OTIzNTg0NTg3Y2U3ZmJlNWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM0OTBjNGFiN2E2NTFkODhmYTI2Y2VhZWJjYmJmNGY5ZDE3ZTQ1YmE0NzE4YWJiMDIzNGQ3ZmRiNzE4N2U2NWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4YzY0M2VjZjk5MzhhZjI4Nzg5MTI3YTBlOWM2Mzg4NWU3NWRmZjQzNjIwOTFmMzUyZjBmZjNmMGI5MTJjMDgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d28beda8b4104e73b8cd8fe9e946b7fe",
+      "statement": "If the Hub process exits with status 0 (an intentional 'stop Web UI only' action), the entrypoint restarts the Hub instead of exiting the container, because the entrypoint runs as PID 1 and exiting it would terminate every wrapper process, defeating the intent of stopping the Hub while keeping sessions alive; a non-zero Hub exit instead tears down the wrappers and container, deferring to the restart: unless-stopped policy.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/entrypoint.sh#L142-L183",
+          "version": "repo-lines-v1:sha256:350c2ad58d493a8a803c9a9953635ef0d33da9820e589e43396b597f9d4168c9:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4ZjQ5OTAxYmE2OGRkODUyZDg5ZTQ2YWYwYzQzNWE3NDdkMzYxNzIzYzExYTg1MTEwNzdmZWJiYjFlNTU2YjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRkNWYyY2UzODY4ZTFlZjkzZGZkZWQzOTZlYzI4ODU2YjJhMmE3NzA2NTc2ZGIzYWZjYzkwNWY3MGI3NDY0MjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVjNzIxOTUxNDdkMWE2M2MzNWFhZDc1MzVhY2U4OTI3YjA3MmU4NGIwNzk2MmRjOTI2NGEzMmJmNDlhOWE2YTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d29a525187df4b6cbaa493fbf81b5464",
+      "statement": "aac-update.sh is a separately cron-scheduled script, not invoked automatically by the container or compose file itself; it runs `docker compose pull` then `docker compose up -d --wait --wait-timeout 180` (recreating only containers whose image changed) and only prunes dangling untagged images, and it skips the update entirely if a HOLD file exists in its directory.",
+      "evidence": [
+        {
+          "resource": "repo://deploy/docker/aac-update.sh#L1-L39",
+          "version": "repo-lines-v1:sha256:07d11ea086d9e78acfa2eee7fbe4ac86d9b00e18393053584d0ea166a09c0150:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4MDc2ZDNkMjhkMjFlMDIwMTJiMjBlYWY3ZGJmNzU0MDlhNjI3NzEzNDQzOTAyNWYyODJlMzY4ZTMzMDVhYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4Mjg3YmI5MTlhZDFhNjRmZTE3ZDk0Mjc5ZmY0Y2Q5MWMwZGU0NDE4YThiZDRlZGMxN2VjMTIzOTAwOTExMTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEzNmJkYzI4MGNiODQ1ZTMwZTA4Y2VmYTUwZTVlOWQ2N2VjZDI4NDQ3ZmZjMjNlMjhhN2FmY2Y2MWMzNjVmOTgifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

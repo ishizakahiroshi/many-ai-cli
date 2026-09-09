@@ -42,7 +42,10 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   requestUsesHTTPS(r),
-		SameSite: http.SameSiteStrictMode,
+		// 発行側（handleIndex）と同じ Lax にそろえる。削除の一致判定は name/domain/path
+		// だけなので機能上はどちらでも消えるが、属性が食い違っていると読む側が
+		// 「token cookie は Strict」と誤読する。
+		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1, // -1 → Max-Age=0 を送出しブラウザは即削除
 	})
 	http.SetCookie(w, &http.Cookie{
@@ -109,6 +112,11 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 	s.pinSessionsMu.Lock()
 	s.pinSessions = map[string]pinCookieSession{}
 	s.pinSessionsMu.Unlock()
+	// The persisted rotation is the revocation boundary. Invalidate browser
+	// WebSockets only after persistence succeeds; a failed save must leave the
+	// old token and its active UI connections usable. Provider wrappers have a
+	// separate lifecycle and are intentionally preserved.
+	s.invalidateAllUI()
 	port := s.currentHubPort()
 	// 新 token を含むためキャッシュ禁止。
 	w.Header().Set("Cache-Control", "no-store")

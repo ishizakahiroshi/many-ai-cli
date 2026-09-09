@@ -18,6 +18,58 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+// TestNormalizeHandoffIntentModeDefaultsUnknownValues is the C3 completion
+// criterion for the config half of 案 3 (docs/local/plan_session-handoff-board_c3_intent-layer.md
+// 内部 C3): an empty or unrecognized value falls back to done-only, and the
+// one recognized alternative round-trips unchanged.
+func TestNormalizeHandoffIntentModeDefaultsUnknownValues(t *testing.T) {
+	cases := map[string]string{
+		"":             HandoffIntentModeDoneOnly,
+		"done-only":    HandoffIntentModeDoneOnly,
+		"turn-summary": HandoffIntentModeTurnSummary,
+		"bogus":        HandoffIntentModeDoneOnly,
+		"TURN-SUMMARY": HandoffIntentModeDoneOnly, // 大文字小文字は丸めない（TerminalColor と同じ厳密一致）
+	}
+	for in, want := range cases {
+		if got := NormalizeHandoffIntentMode(in); got != want {
+			t.Errorf("NormalizeHandoffIntentMode(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHandoffConfigTurnSummaryEnabled(t *testing.T) {
+	if (HandoffConfig{}).TurnSummaryEnabled() {
+		t.Fatal("zero-value HandoffConfig must default to done-only (turn-summary disabled)")
+	}
+	if !(HandoffConfig{IntentMode: HandoffIntentModeTurnSummary}).TurnSummaryEnabled() {
+		t.Fatal("intent_mode=turn-summary must enable TurnSummaryEnabled")
+	}
+	if (HandoffConfig{IntentMode: "bogus"}).TurnSummaryEnabled() {
+		t.Fatal("an unknown intent_mode must not enable turn-summary")
+	}
+}
+
+func TestUsageProbeModelDefaultsAndRejectsUnsafeValues(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.UserPrefs.UsageProbeModel != DefaultUsageProbeModel {
+		t.Fatalf("default usage probe model = %q, want %q", cfg.UserPrefs.UsageProbeModel, DefaultUsageProbeModel)
+	}
+
+	for _, raw := range []string{"", "   ", "claude haiku", "claude;rm", "claude\tmodel"} {
+		cfg.UserPrefs.UsageProbeModel = raw
+		cfg.applyDefaults()
+		if cfg.UserPrefs.UsageProbeModel != DefaultUsageProbeModel {
+			t.Fatalf("invalid usage probe model %q became %q", raw, cfg.UserPrefs.UsageProbeModel)
+		}
+	}
+
+	cfg.UserPrefs.UsageProbeModel = "claude-sonnet-4-5"
+	cfg.applyDefaults()
+	if cfg.UserPrefs.UsageProbeModel != "claude-sonnet-4-5" {
+		t.Fatalf("valid usage probe model was not preserved: %q", cfg.UserPrefs.UsageProbeModel)
+	}
+}
+
 func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if !cfg.Workflow.JournalEnabled {
@@ -36,11 +88,15 @@ func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
 
 func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
-	if cfg.Orchestration.BoardNotifyMode != BoardNotifyQueueUntilIdle {
-		t.Fatalf("default board notify mode = %q, want %q", cfg.Orchestration.BoardNotifyMode, BoardNotifyQueueUntilIdle)
+	if cfg.Orchestration.BoardNotifyMode != BoardNotifySoft {
+		t.Fatalf("default board notify mode = %q, want %q", cfg.Orchestration.BoardNotifyMode, BoardNotifySoft)
 	}
 	for _, mode := range []BoardNotifyMode{BoardNotifySoft, BoardNotifyQueueUntilIdle, BoardNotifyInterrupt} {
 		cfg.Orchestration.BoardNotifyMode = mode
+		cfg.applyDefaults()
+		if cfg.Orchestration.BoardNotifyMode != mode {
+			t.Fatalf("applyDefaults replaced explicit mode %q with %q", mode, cfg.Orchestration.BoardNotifyMode)
+		}
 		if err := cfg.Validate(); err != nil {
 			t.Fatalf("Validate() mode %q: %v", mode, err)
 		}
@@ -48,6 +104,61 @@ func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
 	cfg.Orchestration.BoardNotifyMode = "immediately"
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("Validate() accepted invalid board notify mode")
+	}
+}
+
+// TestChildStartupFastFailConfigDefaultsAndOverrides covers C1
+// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md): the two
+// child_startup_* settings default to enabled with a 60s grace, and an
+// explicit false/override in YAML survives applyDefaults.
+func TestChildStartupFastFailConfigDefaultsAndOverrides(t *testing.T) {
+	cfg := &Config{}
+	cfg.applyDefaults()
+	if cfg.Orchestration.ChildStartupGraceSeconds != 60 {
+		t.Fatalf("default child_startup_grace_seconds = %d, want 60", cfg.Orchestration.ChildStartupGraceSeconds)
+	}
+	if !cfg.Orchestration.ChildStartupFailEnabled() {
+		t.Fatal("default ChildStartupFailEnabled() = false, want true")
+	}
+	if !cfg.Orchestration.ChildStartupKillEnabled() {
+		t.Fatal("default ChildStartupKillEnabled() = false, want true")
+	}
+
+	yamlCfg := &Config{}
+	if err := yaml.Unmarshal([]byte("orchestration:\n  child_startup_fail_enabled: false\n  child_startup_kill: false\n  child_startup_grace_seconds: 30\n"), yamlCfg); err != nil {
+		t.Fatal(err)
+	}
+	yamlCfg.applyDefaults()
+	if yamlCfg.Orchestration.ChildStartupFailEnabled() {
+		t.Fatal("explicit child_startup_fail_enabled=false was ignored by applyDefaults")
+	}
+	if yamlCfg.Orchestration.ChildStartupKillEnabled() {
+		t.Fatal("explicit child_startup_kill=false was ignored by applyDefaults")
+	}
+	if yamlCfg.Orchestration.ChildStartupGraceSeconds != 30 {
+		t.Fatalf("explicit child_startup_grace_seconds = %d, want 30 (applyDefaults must not clobber a positive value)", yamlCfg.Orchestration.ChildStartupGraceSeconds)
+	}
+}
+
+// TestConfigCloneDeepCopiesChildStartupPointers covers C1's Clone requirement:
+// ChildStartupFail / ChildStartupKill must not alias the source config's
+// *bool after Clone (same pattern as WorktreeAuto).
+func TestConfigCloneDeepCopiesChildStartupPointers(t *testing.T) {
+	cfg := &Config{}
+	failFalse := false
+	killFalse := false
+	cfg.Orchestration.ChildStartupFail = &failFalse
+	cfg.Orchestration.ChildStartupKill = &killFalse
+
+	clone := cfg.Clone()
+	*cfg.Orchestration.ChildStartupFail = true
+	*cfg.Orchestration.ChildStartupKill = true
+
+	if clone.Orchestration.ChildStartupFail == nil || *clone.Orchestration.ChildStartupFail {
+		t.Fatal("ChildStartupFail pointer was aliased by Clone")
+	}
+	if clone.Orchestration.ChildStartupKill == nil || *clone.Orchestration.ChildStartupKill {
+		t.Fatal("ChildStartupKill pointer was aliased by Clone")
 	}
 }
 
@@ -132,6 +243,34 @@ func TestProviderDefaultsIncludeGrok(t *testing.T) {
 	}
 	if got := profiles.WithProvider("grok", ApprovalProfileCustom).For("grok"); got != ApprovalProfileCustom {
 		t.Fatalf("WithProvider(grok, custom).For(grok) = %q", got)
+	}
+}
+
+func TestProviderDefaultsIncludeCommandCode(t *testing.T) {
+	slash := DefaultSlashCmdSources()
+	if slash.CommandCode == "" || !strings.Contains(slash.CommandCode, "/command-code.md") {
+		t.Fatalf("DefaultSlashCmdSources().CommandCode = %q", slash.CommandCode)
+	}
+	effSlash := EffectiveSlashCmdSources(SlashCmdSources{})
+	if effSlash.CommandCode != slash.CommandCode {
+		t.Fatalf("EffectiveSlashCmdSources().CommandCode = %q, want %q", effSlash.CommandCode, slash.CommandCode)
+	}
+
+	patterns := DefaultApprovalPatternSources()
+	if patterns.CommandCode == "" || !strings.Contains(patterns.CommandCode, "/command-code.md") {
+		t.Fatalf("DefaultApprovalPatternSources().CommandCode = %q", patterns.CommandCode)
+	}
+	effPatterns := EffectiveApprovalPatternSources(ApprovalPatternSources{})
+	if effPatterns.CommandCode != patterns.CommandCode {
+		t.Fatalf("EffectiveApprovalPatternSources().CommandCode = %q, want %q", effPatterns.CommandCode, patterns.CommandCode)
+	}
+
+	profiles := EffectiveApprovalProfiles(ApprovalProfiles{})
+	if profiles.For("command-code") != ApprovalProfileOfficial {
+		t.Fatalf("profiles.For(command-code) = %q", profiles.For("command-code"))
+	}
+	if got := profiles.WithProvider("command-code", ApprovalProfileCustom).For("command-code"); got != ApprovalProfileCustom {
+		t.Fatalf("WithProvider(command-code, custom).For(command-code) = %q", got)
 	}
 }
 
@@ -527,11 +666,26 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 }
 
 func TestConfigValidationRejectsUnsafeTrustedNetworks(t *testing.T) {
-	for _, cidr := range []string{"0.0.0.0/0", "::/0", "not-a-cidr"} {
+	// IPv4 は /24、IPv6 は /64 より広い CIDR も too broad として拒否する（MAC-09）。
+	// 検証はマスク幅だけを見るので、アドレスは全て RFC5737 TEST-NET / ULA の
+	// 例示リテラルで表す（RFC1918 はローカル secrets-scan が、CGNAT 等の
+	// 公開レンジは CI の public-ipv4-literal ルールが弾くため、両方が許す
+	// 例示 IP に寄せる）。
+	for _, cidr := range []string{"0.0.0.0/0", "::/0", "not-a-cidr", "203.0.113.0/8", "0.0.0.0/1", "203.0.113.0/10", "198.51.100.0/16", "::/1", "fd00::/48"} {
 		cfg := defaultConfig(t.TempDir())
 		cfg.Hub.TrustedNetworks = []string{cidr}
 		if err := cfg.Validate(); err == nil {
 			t.Fatalf("Validate() with trusted network %q succeeded, want error", cidr)
+		}
+	}
+}
+
+func TestConfigValidationAcceptsNarrowTrustedNetworks(t *testing.T) {
+	for _, cidr := range []string{"198.51.100.0/24", "203.0.113.7/32", "fd00::/64", "fe80::1/128"} {
+		cfg := defaultConfig(t.TempDir())
+		cfg.Hub.TrustedNetworks = []string{cidr}
+		if err := cfg.Validate(); err != nil {
+			t.Fatalf("Validate() with trusted network %q failed: %v", cidr, err)
 		}
 	}
 }
@@ -678,5 +832,22 @@ func TestSessionOrderSurvivesSaveRoundTrip(t *testing.T) {
 	cfg.UserPrefs.SessionOrder[0] = 99
 	if clone.UserPrefs.SessionOrder[0] != 4 {
 		t.Fatalf("session order slice was aliased")
+	}
+}
+
+func TestChildFullBypassEnabledDefaultTrue(t *testing.T) {
+	var o OrchestrationConfig
+	if !o.ChildFullBypassEnabled() {
+		t.Fatal("nil ChildFullBypass should default to true")
+	}
+	f := false
+	o.ChildFullBypass = &f
+	if o.ChildFullBypassEnabled() {
+		t.Fatal("explicit false should disable full bypass")
+	}
+	tr := true
+	o.ChildFullBypass = &tr
+	if !o.ChildFullBypassEnabled() {
+		t.Fatal("explicit true should enable full bypass")
 	}
 }

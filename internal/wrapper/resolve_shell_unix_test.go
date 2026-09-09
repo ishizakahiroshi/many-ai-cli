@@ -50,7 +50,7 @@ func TestResolveDefaultShell_NoShellEnv(t *testing.T) {
 // resolveDefaultShell の結果と同じコマンドを返すことを確認する。
 func TestResolveCmdShellProvider(t *testing.T) {
 	want := resolveDefaultShell()
-	got, gotArgs := resolveCmd("shell", []string{})
+	got, gotArgs := resolveCmd("shell", nil, []string{})
 	if got != want {
 		t.Errorf("resolveCmd(shell) = %q, want %q", got, want)
 	}
@@ -63,7 +63,7 @@ func TestResolveCmdShellProvider(t *testing.T) {
 // resolveCmd が追加の args をそのまま返すことを確認する。
 func TestResolveCmdShellProviderPassthroughArgs(t *testing.T) {
 	args := []string{"-c", "echo hello"}
-	_, gotArgs := resolveCmd("shell", args)
+	_, gotArgs := resolveCmd("shell", nil, args)
 	if len(gotArgs) != len(args) {
 		t.Errorf("resolveCmd(shell) args len = %d, want %d", len(gotArgs), len(args))
 	}

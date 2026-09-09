@@ -27,6 +27,32 @@ func TestParseGitStatusPorcelainZ(t *testing.T) {
 	}
 }
 
+func TestParseDecorateKeepsSlashLocalBranchLocal(t *testing.T) {
+	refs := parseDecorate("HEAD -> refs/heads/feature/foo, refs/remotes/upstream/feature/foo, tag: refs/tags/v1.2.3")
+	got := map[string]string{}
+	for _, ref := range refs {
+		got[ref.Name] = ref.Kind
+	}
+	if got["feature/foo"] != "local" {
+		t.Fatalf("local slash branch = %q, want local: %#v", got["feature/foo"], refs)
+	}
+	if got["upstream/feature/foo"] != "remote" {
+		t.Fatalf("remote slash branch = %q, want remote: %#v", got["upstream/feature/foo"], refs)
+	}
+	if got["v1.2.3"] != "tag" {
+		t.Fatalf("tag = %q, want tag: %#v", got["v1.2.3"], refs)
+	}
+
+	short := parseDecorate("HEAD -> feature/foo, origin/main")
+	shortKinds := map[string]string{}
+	for _, ref := range short {
+		shortKinds[ref.Name] = ref.Kind
+	}
+	if shortKinds["feature/foo"] != "local" || shortKinds["origin/main"] != "remote" {
+		t.Fatalf("short decoration kinds = %#v, want local slash + origin remote", shortKinds)
+	}
+}
+
 func TestApplyWorkingTreeNumstat(t *testing.T) {
 	files := []gitStatusFile{
 		{Status: "M", Path: "web/src/app.js"},
@@ -120,8 +146,8 @@ func TestSuggestCommitMessageClassification(t *testing.T) {
 			wantSubject: "go.mod",
 		},
 		{
-			name:        "style only",
-			files:       []gitStatusFile{{Status: "M", Path: "web/src/styles/spawn.css"}},
+			name:  "style only",
+			files: []gitStatusFile{{Status: "M", Path: "web/src/styles/spawn.css"}},
 			// scope=styles は prefix=style と接頭辞被りだが厳密不一致のため付く。
 			wantPrefix:  "style",
 			wantSubject: "spawn.css",

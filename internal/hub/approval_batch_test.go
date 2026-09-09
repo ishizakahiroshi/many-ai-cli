@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"many-ai-cli/internal/autoapproval"
 	"many-ai-cli/internal/proto"
 )
 
@@ -36,7 +37,7 @@ func installBatchApproval(t *testing.T, s *Server, id int, provider, cwd, comman
 	}
 	ses.nativeApprovalSig = vtApproval.Sig
 	s.sessionsMu.Lock()
-	s.wrappers[id] = &wrapperConn{}
+	s.wrappers[id] = &wrapperConn{sendFunc: func(any) error { return nil }}
 	s.sessionsMu.Unlock()
 	return vtApproval
 }
@@ -47,12 +48,86 @@ func callApprovalBatch(t *testing.T, s *Server, req approvalBatchRequest) *httpt
 	if err != nil {
 		t.Fatal(err)
 	}
+	return callApprovalBatchBody(t, s, body)
+}
+
+func callApprovalBatchBody(t *testing.T, s *Server, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
 	r := httptest.NewRequest(http.MethodPost, "/api/approval/batch?token=test-token", bytes.NewReader(body))
 	r.Host = "127.0.0.1:47777"
 	r.Header.Set("Origin", "http://127.0.0.1:47777")
 	w := httptest.NewRecorder()
 	s.handleApprovalBatch(w, r)
 	return w
+}
+
+func TestApprovalBatchRejectsOversizedBodyBeforeSideEffects(t *testing.T) {
+	withApprovalTestHome(t)
+	s := newTestServer()
+	s.cfg.Token = "test-token"
+	cwd := t.TempDir()
+	approval := installBatchApproval(t, s, 30, "codex", cwd, "git status")
+	body := []byte(`{"signature":"` + approvalBatchSignature("codex", cwd, approval.Summary) + `","action":"auto_rule","padding":"` + strings.Repeat("x", jsonBodyMaxBytes) + `"}`)
+
+	w := callApprovalBatchBody(t, s, body)
+	if w.Code == http.StatusOK || w.Code < 400 {
+		t.Fatalf("oversized body status = %d, want non-2xx: %s", w.Code, w.Body.String())
+	}
+	if s.sessions[30].nativeApprovalSig == "" {
+		t.Fatal("oversized body cleared the pending approval")
+	}
+	policy, err := autoapproval.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.Rules) != 0 {
+		t.Fatalf("oversized body added auto-approval rules: %#v", policy.Rules)
+	}
+}
+
+type batchResponseWriter struct {
+	header           http.Header
+	status           int
+	writeHeaderCalls int
+	body             bytes.Buffer
+}
+
+func (w *batchResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (w *batchResponseWriter) WriteHeader(status int) {
+	w.writeHeaderCalls++
+	if w.status == 0 {
+		w.status = status
+	}
+}
+
+func (w *batchResponseWriter) Write(data []byte) (int, error) {
+	if w.status == 0 {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.body.Write(data)
+}
+
+func TestApprovalBatchMalformedJSONWritesSingleResponse(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Token = "test-token"
+	r := httptest.NewRequest(http.MethodPost, "/api/approval/batch?token=test-token", strings.NewReader("{"))
+	r.Host = "127.0.0.1:47777"
+	r.Header.Set("Origin", "http://127.0.0.1:47777")
+	w := &batchResponseWriter{}
+
+	s.handleApprovalBatch(w, r)
+	if w.status != http.StatusBadRequest {
+		t.Fatalf("malformed JSON status = %d, want %d: %s", w.status, http.StatusBadRequest, w.body.String())
+	}
+	if w.writeHeaderCalls != 1 {
+		t.Fatalf("malformed JSON wrote %d response headers, want 1: %s", w.writeHeaderCalls, w.body.String())
+	}
 }
 
 func TestApprovalBatchAutoRuleRequiresLow(t *testing.T) {
@@ -116,5 +191,40 @@ func TestApprovalBatchApproveSkipsMidHigh(t *testing.T) {
 	}
 	if low.Summary.Risk != proto.ApprovalRiskLow {
 		t.Fatalf("low fixture risk = %q", low.Summary.Risk)
+	}
+}
+
+func TestApprovalBatchApproveSkipsWriteRedirectAndBranchMutation(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Token = "test-token"
+	cwd := t.TempDir()
+	write := installBatchApproval(t, s, 23, "codex", cwd, "cat /dev/null > ./important.txt")
+	if write.Summary.Risk != proto.ApprovalRiskMid {
+		t.Fatalf("write redirect risk = %q, want mid", write.Summary.Risk)
+	}
+	w := callApprovalBatch(t, s, approvalBatchRequest{
+		Signature: approvalBatchSignature("codex", cwd, write.Summary),
+		Action:    "approve",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("write redirect approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if s.sessions[23].nativeApprovalSig == "" {
+		t.Fatal("write redirect approval was cleared by batch approve")
+	}
+
+	branch := installBatchApproval(t, s, 24, "codex", cwd, "git branch -D feature")
+	if branch.Summary.Risk != proto.ApprovalRiskMid {
+		t.Fatalf("branch mutation risk = %q, want mid", branch.Summary.Risk)
+	}
+	w = callApprovalBatch(t, s, approvalBatchRequest{
+		Signature: approvalBatchSignature("codex", cwd, branch.Summary),
+		Action:    "approve",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("branch mutation approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if s.sessions[24].nativeApprovalSig == "" {
+		t.Fatal("branch mutation approval was cleared by batch approve")
 	}
 }

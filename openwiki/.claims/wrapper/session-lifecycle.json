@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e8bd3b77b0b3fd4e7e3c2a757f2120ea0180a0f694547000c334f105820458a1",
+  "claims": [
+    {
+      "id": "claim_63875e14be604960b86d1c0b7cbbf9bc",
+      "statement": "internal/wrapper uses github.com/creack/pty on non-Windows (pty_unix.go's ptyProcess) and github.com/aymanbagabas/go-pty's ConPTY-backed conPtyProcess on Windows (pty_windows.go), selected via build tags, because Windows has no native POSIX PTY and ConPTY is the OS's own equivalent pseudoconsole primitive.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/pty_unix.go#L1-L15",
+          "version": "repo-lines-v1:sha256:5fe790d9b3ca2189fa8722face8914a1a2ec87c55583b401c5a4f82273959d3d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2M2M3N2M5YzAxMWZjMTI1MjY3YzNiNWFlNTU1MjQ1M2JmYmVlMmQzYzQwMzU1ZDkyZWRkODA4MzMxMjQyMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkNDBmNzEwOWIzZjM1MzQxYjE1NTZiNDkwOGM1N2MxMjRiODM4YTNhMzhmY2MzZjNiMDEzNjEyOWFkNTk3MzAifQ"
+        },
+        {
+          "resource": "repo://internal/wrapper/pty_windows.go#L1-L15",
+          "version": "repo-lines-v1:sha256:5f2f5607804aa2c12ad442472274e0ea4028b0402bc77153345c7cdf471444a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkYmNjYmY1YWRmYzk4NGZlYmIyYWYwOTY0OGQzM2JkYmEyZjYyYWRhNGNkMzU0M2ZlZjljYmY1MzgzNWQ4OGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlZmEzM2RkYmYxMzNiYmQ4Yzk0NDcyZjI5OTYzM2RiYmY3OGE1NjI2NmIyZGI1NWZlMmE5Y2JkYTg3NzBhYjIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9201eda6bde64bac84b0fbf8b8147038",
+      "statement": "ptyProcess.Close on Unix is idempotent and layered: the first call asks the child to exit and closes the PTY master, escalating to SIGKILL only if Wait does not complete within a grace period, and subsequent calls are no-ops.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/pty_unix.go#L28-L31",
+          "version": "repo-lines-v1:sha256:e80b00e089d58c8cf29a40c06b95d5a907e6ae46fe464b33db85786e433b4334:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGMzZGViZmFlNWY3MjU1YTA0ZjM5MmMxMzU2ZTcyYWQwZWRhZjdiODdlNWU1NDkyMGExZDAwZjM4OWFmZGRmYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhmZmI2MmFiMjFiMTA5YzQ1NTBmNDVhODUzY2UyODkwN2I5MmVjNTYyMTc3NjJkYTU3ZGU2NWYwNDQ4Y2Y0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDZhODNlNzcyY2ZhYjhiY2Q2N2EzYmYzMTNjYzBiOTdmMmE0NjA0NzYzZGYzNmFhNTM4NmFkZTVlOTg4NGRkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmE4NDU3MTk0N2RhOTQ3NmQ1Mjk4NDNkMjhlZDJmNjQ3YjVhMTc5ZTdmMjc1OWJlYzZiZjVkZDc1MGUzY2ZmNSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_65a9dd14dc124abba3468fb25568f3f9",
+      "statement": "wrapperSession.maxProcessedInputSeq tracks the highest pty_input sequence number the wrapper has actually finished writing to the PTY, because the Hub resends an unacknowledged input frame using its original sequence number and a WebSocket disconnect between a PTY write completing and its ack reaching the Hub can lose that ack (abortCurrentConn closes without waiting on the send mutex); without this guard a resend would write the same bytes, including a trailing carriage return, to the PTY a second time, silently submitting an extra Enter against whatever prompt is showing next.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L84-L98",
+          "version": "repo-lines-v1:sha256:c2b4d18b2a683b387ac6311887daeb6906bb96d3eefede4a0e268ec980fcd280:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM5ODk2YTFlZDI3ZWNhZjUyOWI5MThlOTQ3OTRlMTllZWE2YTJkMjBkZWQ5NTVjODg5MTNkMjQ5NTNiMTI3MGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA0ZDcwMDkxMWIyYzdhM2ZlYzgwZjE3OGIxNGQwNmIzNjdhMjVmMjcwZDljYjlkZTcwMGNlYjMzZTFlODE4NjQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI2YTVjZWE2NTRhODU3NDVlNWM1MDJiNTU1MjRmY2JiMzhkODcxNmNlYWZhN2Q5YmQ5Zjc3ZmRkNDNhOWQzMGQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU4MWU0ZDVhZTA5ZTg1MTE2NGQ1M2JhNThmYTdiNzllOGFjNWYyOGUyYWI3YzUyMDZjMzgzYTRlNmY3MzdhMjIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_02e2af222e8a4693b23246da68bf8d42",
+      "statement": "inputSeqAlreadyProcessed treats any sequence number at or below the recorded maximum as an already-applied resend and acknowledges it without re-writing to the PTY; markInputSeqProcessed is only called after a PTY write actually succeeds so a failed write's sequence number is never marked done, with the accepted residual gap being that a later successful write past a failed one causes the failed write's resend to also be treated as already-processed, judged acceptable because a PTY write only fails when the PTY itself is broken, which already ends the session.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L94-L106",
+          "version": "repo-lines-v1:sha256:2ad9d9769a54af327b49e6b8efd6d9db308aaaeb11a5b3a13f80e7561e4d5e9f:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyYjM4Y2ZlMDI2MzEyYmNkOWVlZTYxZTQwMjNlZjc1NTE1ZjJhYTJlMjc1ZjYxZGRjZDE5NTc4YWZiNzUwN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjljNjkxYTAwYjA5NDA2YzExMjhiZTE3ZmUxMDM0MTk4NGQ1ZWRmYTQ4NGRkMTUxOThiYjQ2YTlhZTA3YzllZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmZTFiMjJiZDRhOWRjMmQ4NTViODJkN2RmYTJhY2Y4NDM0MDRkOGNmNzNkYzI4YzA2NjVmNmRjNzM5YjA1MGQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ab3adf1db0304698bd60f3348db190b3",
+      "statement": "The reconnectSupervisor treats a WebSocket disconnect as a genuinely intentional disconnect, closing the PTY immediately, only when all four hold at once: the disconnect was not flagged intentional-only-by-name (i.e., it passes the intentional check), no local transport fault occurred, the wrapper did not just reattach within postReattachGuard, and a fresh probe confirms the Hub is still alive.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L296-L315",
+          "version": "repo-lines-v1:sha256:5a85ee64e73626df7dacb31e9f9de5c8eccfc4653fb160facfa0af3a7e72b335:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI0YzVhYmI4YzljNWM0OTBjZWVkYTVmNDI3YTMwMGY1NjFlNDUzZWYyNjZlNDNiODE4NGU4Mjk5NjU0ZjMxYzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0ZWZjNDk0MThkMjZkY2YxMjliMjJhNmFhMjExMDhjZWVjMzc2NzdhMzJkMDhlOWQ1ZmVlMzVkZGE2NmJiOWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5MzViZGU0OWMxZWVlYTUxMmUyMzJiZTYwMjg2YjBiMGRkMjNhMjA5NDZkNWIyZjAzMWZlNTYzNTAzYjRmODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlODZkYjZlMzI2ZWNlMGI0ZTMyY2RiY2VkMWVhZTY2OTcxYTgxYTgxMThjZTNkM2Q3MTI0NmY4NDE5ZGI3N2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_94dcc2d4d3404d4b94b26e62c156d650",
+      "statement": "A local PTY-output transport fault (the wrapper's own send queue filling up or a write deadline being hit) is explicitly not treated as proof the Hub went down, because without that distinction a transient full output queue or slow write would kill the wrapped CLI and all of its own child agents while the Hub was still healthy, even with auto_shutdown enabled.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L316-L333",
+          "version": "repo-lines-v1:sha256:054942dff338199571556beb9e13c1c87998fbbc8ddcc4ef9dd956edb3d13960:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3MTc5YTcyMDhlNWM2YWI5N2I0NWE5MDNjMGI1NzYxMGY4ZTRkOTA3ZGIyMTI5YmIyMWRiY2ViZTg4ODk0YWYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0ZWZjNDk0MThkMjZkY2YxMjliMjJhNmFhMjExMDhjZWVjMzc2NzdhMzJkMDhlOWQ1ZmVlMzVkZGE2NmJiOWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3MzcxMzNlMzMyZDkwOTQyNjRkMDNmMWMyZWNhM2JhNWRiYjdhOTJlOWVmOGMxOTI1N2E0ZjZiZGZlMTlkOWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3N2NlY2I1NmZhYmYxYWY2MDgwMjZmZDM1YzMwMWJlNDI5YmZiZTFlNmM5OWUwODExMmRjZTYyY2E2MTg3NTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1ba43de8b4ca4c528f2feb20372f42a0",
+      "statement": "A disconnect within postReattachGuard (10 seconds) of a successful reattach is given the same reconnect-grace benefit of the doubt as a transport fault, even though a bare post-reattach WebSocket EOF never actually goes through the transport-fault code path, added specifically after a bug where a Codex reattach's plain EOF was misclassified as an intentional kill even after the queue-full transport-fault case was already fixed.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L321-L327",
+          "version": "repo-lines-v1:sha256:71abc4cac705f9329d1a7e162847df16ab3983f78c78c8d5d9dfcfa39f84521b:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWU2ZDNlZWFmNzgwM2Q3ZWQzMGYwODU1ZTc1NGE4Y2QyYTYwMzY3MWY4NDk3NzI4YjI5NmE5MzEzZmYwZGQ1NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTI1YjU3MGYyZTAyN2FlMjkwOWIxNmNlOTY4OTk5MjFmYWMwMGRlMzliNDUxMzA5Y2ExNjM5MGVlN2RkODk5NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzJlN2QzZGU4MmYyNGNlMWJiMGQ5MmJjNDU2YTU1NzAzNjYzYmU2Y2RhNjQ4N2JiYjc3YjU3ODgwNDI4YjFiMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDFhN2IxYzNlY2FjNGZkYTdhMTQxYTVhMTY0MWJhN2I5NjM2YjVkNDhmY2UyNDQ2M2ZjOWZhN2IyYTUwZTIyZiJ9"
+        },
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L49-L55",
+          "version": "repo-lines-v1:sha256:ffa627144ed50aedddb9cbe4405ffd0b2d9525db4816caab41d4ab4d1b9a7eda:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGJiMjRhOGZkNmNiNTdkOGIxYWM0ZmQ0MmJkMGE4ZDgxZjczODFiZGRlMzljMDBmNzg1MGNiMmQ1ZWU1M2JiMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODdjNGZkZmYwZTU5NmE2NzU4MjlhNzRmMmI1YWZhYjIzYzk2M2M1MDdlZWEzMzU5ZDRhY2Y0N2Y5ZDM5MmI2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjg5YTI1NDk1MDQzYzEyM2QwNzY1ZDdjYTcwYTVmNGNkOWIxYzBjNTZjZDkyNjg3OTViNWJmMjU5NTg0MDA4NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjYxY2YzMjI2MWRlYWNlODk5ZmY4MWQ0M2FmOGU0YTEzYThjMWMwZTM2MmRiZTk5MjIzNmVkYjczNDI1YTQ5YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_5f45e64c8e534b969c573716ab156765",
+      "statement": "reconnectGrace reads hub.wrapper_reconnect_grace_sec from config and returns zero duration (disabling reconnect entirely, restoring immediate-kill behavior) when the configured value is negative or zero.",
+      "evidence": [
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L58-L66",
+          "version": "repo-lines-v1:sha256:5adb92fc3f0778d31b4eb4f65cb0d4c15746ae69153c030a3d2170681f243e9a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDg0ZDFlOTJkYTA5YzdmYjlmMTYxYmEzODhiMDA3ZGExMTQzYjM1MGEwZWE2OGFlZjg5NWQ5ZWZiNzQwYWNiYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjJjZjc0ZTJhYWIzZGM2NTQzN2E4ZjA2MTI4YTk4OTcyMWNhZTM4MDhiNDVkZDg5NTJiYTI3YzY0YTljMDYwMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTQ3MjlhYTllZTYwNjQxMzU3ZDI3ZGMwNjc3M2QxN2M0NmYyYzY2MzMyYzhjYjQzYWQ0MzlmYWZkOWU0ODgxMyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

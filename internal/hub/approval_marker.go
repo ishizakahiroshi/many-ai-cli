@@ -8,6 +8,7 @@ import (
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/sessionstore"
 )
 
 // approvalMarkerSuppressNotifyInterval は破損ブロック抑止の告知を UI へ送る最小間隔。
@@ -50,6 +51,96 @@ func extractApprovalMarkerBlock(lines []string) *approvalMarkerBlock {
 	}
 }
 
+// openless 再構成の適用条件。
+//
+//	openlessCloseBottomWindow: 終了マーカーが画面下端からこの行数以内にあること。
+//	  CLI のチローム（区切り線・入力欄・ステータス行）の高さぶんの余裕。ここを超える
+//	  位置に終了マーカーがあるなら、その下に別の出力が続いている＝「今出た質問の末尾」
+//	  ではないので再構成しない。
+//	openlessMinBlockLines: 再構成した本文の最小行数。画面が低い端末で、数行の断片から
+//	  承認バーを組み立ててしまうのを防ぐ。
+const (
+	openlessCloseBottomWindow = 16
+	openlessMinBlockLines     = 8
+)
+
+// extractApprovalMarkerBlockFromVT は VT ミラーから承認マーカーブロックを取り出す。
+// 本番の検出経路はすべてこちらを通す（extractApprovalMarkerBlock は素の行列に対する
+// 純粋な抽出で、テストと下記フォールバックの土台）。
+func extractApprovalMarkerBlockFromVT(vt *vtBuffer) *approvalMarkerBlock {
+	if vt == nil {
+		return nil
+	}
+	lines := vt.TailLinesWithScrollback(vtTailLinesForMarker)
+	if marker := extractApprovalMarkerBlock(lines); marker != nil {
+		return marker
+	}
+	return reconstructOpenlessMarkerBlock(lines, vt.Rows())
+}
+
+// reconstructOpenlessMarkerBlock は「終了マーカーはあるが開始マーカーがどこにも無い」
+// ブロックを、画面に残っている範囲から組み立て直す。
+//
+// なぜ必要か（2026-08-26 セッション #5 で実測）: Claude Code は代替画面バッファを Ink が
+// 絶対座標で塗り直す。画面高に収まらない長さの回答では、あふれた行はスクロールアウト
+// ではなく上書きで消えるため、vtBuffer の scrollback（newLine() で押し出された行だけを
+// 積む）には 1 行も入らない。実測は 128x35 の端末で本文 26 行の承認ブロックが出た場面で、
+// scrollback 0 行・開始マーカーは画面外・終了マーカーだけが画面に残る状態だった。
+// extractApprovalMarkerBlock は開始マーカーが見つからず nil を返し、承認は無音で
+// 検出されないまま standby の完了マーカー未検出フォールバック（done_summary.go）へ落ちる。
+//
+// 安全に再構成できる理由: ブロックが画面高を超えているなら、画面の先頭から終了マーカーまでは
+// 定義上すべてブロックの本文である（本文の末尾が終了マーカーで、それが画面の下端付近にある）。
+// そこで下の 3 条件をすべて満たすときだけ、画面先頭〜終了マーカーを本文とみなす。
+//
+//  1. 終了マーカーが「今の画面」にあり、下端から openlessCloseBottomWindow 行以内
+//  2. 終了マーカーより後ろに開始マーカーが無い（＝次のブロックを描き始めていない）
+//  3. 本文が openlessMinBlockLines 行以上
+//
+// 欠落した前置きは戻らないが、選択肢が欠けていれば classifyApprovalMarkerBlock が
+// option_start で弾く（承認バーを黙って出さないのではなく、抑止の告知が UI へ出る）。
+func reconstructOpenlessMarkerBlock(lines []string, screenRows int) *approvalMarkerBlock {
+	if screenRows <= 0 || screenRows > len(lines) {
+		return nil
+	}
+	screenStart := len(lines) - screenRows
+
+	closeIdx := -1
+	for i := len(lines) - 1; i >= screenStart; i-- {
+		if strings.Contains(lines[i], approvalMarkerClose) {
+			closeIdx = i
+			break
+		}
+	}
+	if closeIdx < 0 || len(lines)-1-closeIdx > openlessCloseBottomWindow {
+		return nil
+	}
+	for i := closeIdx + 1; i < len(lines); i++ {
+		if strings.Contains(lines[i], approvalMarkerOpen) {
+			return nil
+		}
+	}
+
+	body := append([]string(nil), lines[screenStart:closeIdx+1]...)
+	// 終了マーカーと同じ行に後続の描画が混ざっている場合は行内で切る。
+	last := body[len(body)-1]
+	if i := strings.Index(last, approvalMarkerClose); i >= 0 {
+		body[len(body)-1] = last[:i+len(approvalMarkerClose)]
+	}
+	for len(body) > 0 && strings.TrimSpace(body[0]) == "" {
+		body = body[1:]
+	}
+	if len(body) < openlessMinBlockLines {
+		return nil
+	}
+
+	block := approvalMarkerOpen + "\n" + strings.Join(body, "\n")
+	return &approvalMarkerBlock{
+		Block: block,
+		Sig:   approvalMarkerSignature(block),
+	}
+}
+
 // approvalMarkerSignature は dedupe 用シグネチャを返す。
 // Grok 等の差分再描画 TUI は同一質問でも色・余白の ANSI だけが揺れるため、
 // raw バイトの sha256 だと再 broadcast → Web 側 dismiss 抑止が外れる。
@@ -63,6 +154,13 @@ func approvalMarkerSignature(block string) string {
 }
 
 func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBlock, detectedAt time.Time) bool {
+	return s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceGoVT)
+}
+
+// maybeBroadcastApprovalMarkerFrom は供給元（VT ミラー / トランスクリプト）を
+// 名乗って同じ配信経路へ入る。承認の同一性（candidateKey + sourceEpoch）は
+// 供給元によらず 1 本のままで、source は記録・調査用のラベルにすぎない。
+func (s *Server) maybeBroadcastApprovalMarkerFrom(id int, marker *approvalMarkerBlock, detectedAt time.Time, source string) bool {
 	if marker == nil || marker.Block == "" || marker.Sig == "" {
 		return false
 	}
@@ -87,6 +185,10 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		ses.approvalMarkerSuppressedSig = marker.Sig
 		if notify {
 			ses.approvalMarkerSuppressedAt = detectedAt
+			// 原因調査用の生データは告知と同じスロットルで 1 事象 1 件だけ取る。
+			// ptyBuf はリングバッファなのでロック内で複製する
+			// （approval_corrupt_dump.go・maidebug ビルドのみ）。
+			s.probe("approval-corrupt-snapshot", id, ses, detectedAt)
 		}
 		provider := ses.Provider
 		s.sessionsMu.Unlock()
@@ -103,12 +205,14 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		// Block 本文は壊れているので送らない（誤った選択肢を描かせないため）。
 		// broadcast は必ず sessionsMu を解放した後に呼ぶ。
 		if notify {
+			// ファイル IO なので sessionsMu 解放後に行う（maidebug ビルドのみ）。
+			s.probe("approval-corrupt-dump", id, provider, reason, marker, detectedAt)
 			s.broadcast(proto.Message{
 				Type:           "approval_marker_suppressed",
 				SessionID:      id,
 				Provider:       provider,
 				ApprovalSig:    marker.Sig,
-				ApprovalSource: approvalSourceGoVT,
+				ApprovalSource: source,
 				Reason:         reason,
 				DetectedAt:     detectedAt.Format(time.RFC3339),
 			})
@@ -137,6 +241,23 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 	ses.approvalMarkerSourceEpoch = sourceEpoch
 	s.sessionsMu.Unlock()
 
+	// 台帳へ記録するのは配信するものだけ。構造が壊れて抑止したブロックは上で return
+	// しているので、ここへは来ない（壊れた選択肢を後から復元させないため）。
+	// 選択肢は解かずブロック原文を持つ（解釈器はブラウザ側の 1 本に保つ）。
+	if s.sessionStore != nil {
+		s.sessionStore.StoreApprovalDetected(sessionstore.ApprovalDetected{
+			LiveSessionID: id,
+			Sig:           marker.Sig,
+			Source:        source,
+			Kind:          "marker",
+			Provider:      provider,
+			Block:         marker.Block,
+			CandidateKey:  candidateKey,
+			SourceEpoch:   sourceEpoch,
+			DetectedAt:    detectedAt,
+		})
+	}
+
 	s.broadcast(proto.Message{
 		Type:                   "approval_marker",
 		SessionID:              id,
@@ -145,7 +266,7 @@ func (s *Server) maybeBroadcastApprovalMarker(id int, marker *approvalMarkerBloc
 		ApprovalCandidateKey:   candidateKey,
 		ApprovalCandidateShape: candidateIdentity.shape,
 		ApprovalSourceEpoch:    sourceEpoch,
-		ApprovalSource:         approvalSourceGoVT,
+		ApprovalSource:         source,
 		Block:                  marker.Block,
 		DetectedAt:             detectedAt.Format(time.RFC3339),
 	})

@@ -1,9 +1,10 @@
 // --- ESM imports (generated) ---
-import { STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_GROUP_ORDER_KEY, STORAGE_ORDER_KEY, STORAGE_PROJECT_FAVORITES_KEY, setUserPref } from './user-prefs.js';
+import { STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_COLLAPSED_NODES_KEY, STORAGE_GROUP_ORDER_KEY, STORAGE_ORDER_KEY, STORAGE_PROJECT_FAVORITES_KEY, setUserPref } from './user-prefs.js';
 import { activateSession } from './session-list.js';
 import { isBatchOptions } from './approval-parser.js';
 import { setApprovalProviderResolver, _approvalCtxHash } from './approval-answered.js';
 import type { SessionSnapshot } from '../types/proto.js';
+import { buildSidebarTree, deriveProjectKeyFromCwd, flattenSidebarTree } from './sidebar-tree.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -16,6 +17,7 @@ export interface TerminalEntry {
   pendingFlushActive?: boolean;
   pendingFlushSeq?: number;
   pendingFlushWatchdog?: ReturnType<typeof setTimeout> | null;
+  layoutGeneration?: number;
   webglAddon?: { dispose?: () => void } | null;
   pendingTextTail?: string;
   textDecoder?: TextDecoder;
@@ -85,8 +87,12 @@ export {
   finishApprovalReplay,
   getApprovalSourceEpoch,
   isAnsweredApprovalCandidate,
+  isAnsweredApprovalShapeAcrossEpochs,
   isApprovalReplayPending,
+  isHubMarkerAuthoritative,
+  isStaleHistoryRepaint,
   noteApprovalSourceEpoch,
+  noteHubMarkerDelivered,
   recordAnsweredApprovalCandidate,
   recordAnsweredApprovalIdentity,
   replayAnsweredApprovalTokens,
@@ -216,7 +222,10 @@ export let sessionOrder: number[] = readStorageArray(STORAGE_ORDER_KEY)
   .map((v) => (typeof v === 'number' ? v : parseInt(String(v), 10)))
   .filter((v) => Number.isInteger(v));
 export let groupOrder: string[] = readStorageArray(STORAGE_GROUP_ORDER_KEY);
-export const collapsedGroups = new Set<string>();
+// サイドバーで畳んでいるノード。プロジェクトはキーそのもの、親セッションは "session:<id>"。
+// 永続化しないとリロードのたびに全部開くので、プロジェクトが増えるほど「上に固定したい」
+// という動機だけが育つ（ピン留めが所属を書き換える機能へ育った原因のひとつ）。
+export const collapsedGroups = new Set<string>(readStorageArray(STORAGE_COLLAPSED_NODES_KEY));
 
 export function saveProjectFavorites() {
   setUserPref('project_favorites', projectFavorites);
@@ -226,18 +235,27 @@ export function saveGroupOrder() {
   setUserPref('group_order', groupOrder);
 }
 
+export function saveCollapsedNodes(): void {
+  // 消えたセッションの "session:<id>" を溜め込まない。
+  const alive = [...collapsedGroups].filter(key => {
+    if (!key.startsWith('session:')) return true;
+    return sessions.has(Number(key.slice('session:'.length)));
+  });
+  if (alive.length !== collapsedGroups.size) {
+    collapsedGroups.clear();
+    for (const key of alive) collapsedGroups.add(key);
+  }
+  setUserPref('collapsed_nodes', alive);
+}
+
 export function saveSessionOrder() {
   setUserPref('session_order', sessionOrder);
 }
 
-// cwd からプロジェクトキーを派生する。
-// renderSessionList のグループ化（末尾セグメント）と同じ規則で揃え、
-// FilesTabManager の可視性判定（curSess.project 参照）が一貫して機能するようにする。
-export function deriveProjectKeyFromCwd(cwd: unknown): string {
-  if (!cwd) return '';
-  const name = String(cwd).replace(/\\/g, '/').split('/').filter(p => p.length > 0).pop() || '';
-  return name;
-}
+// cwd からプロジェクトキーを派生する。定義の正本は sidebar-tree.ts（配置規則を
+// 1 箇所に集めるため）。ここは既存の import 経路を壊さないための再 export。
+// FilesTabManager の可視性判定（curSess.project 参照）もこの規則を使う。
+export { deriveProjectKeyFromCwd };
 
 export function addToSessionOrder(id: number, forceToFront = false): void {
   const idx = sessionOrder.indexOf(id);
@@ -261,7 +279,13 @@ export function removeFromSessionOrder(id: number): void {
 
 // orderSessions は全モジュール共通のセッション整列ロジック（C9: 旧 getSortedSessions /
 // getOrderedSessions / multi-pane フォールバックの三重定義を 1 つに集約）。
-// 📌 ピン留めセッションを先頭に、残りを sessionOrder 順（未登録セッションは末尾）で並べる。
+// 全セッションの並び。サイドバー・multi-pane のスロット順・スワイプ順は、すべてこの
+// 1 経路から作る。導出は sidebar-tree.ts の木を深さ優先でたどった順そのもので、
+// 「子は親の直後」「器を越えない」がここでも自動的に成り立つ。
+//
+// 色フィルタも折りたたみもここでは効かせない。表示の絞り込みは呼び出し側の責務で、
+// 順序としては全件が存在する。
+//
 // sessions / sessionOrder 未定義時は空配列または id 昇順へフォールバックする
 // （旧 multi-pane.js の防御的フォールバックを継承）。
 export function orderSessions(): SessionSnapshot[] {
@@ -269,12 +293,9 @@ export function orderSessions(): SessionSnapshot[] {
   if (typeof sessionOrder === 'undefined') {
     return Array.from(sessions.values()).sort((a, b) => a.id - b.id);
   }
-  const orderedIds = sessionOrder.filter(id => sessions.has(id));
-  sessions.forEach((s) => {
-    if (!orderedIds.includes(s.id)) orderedIds.push(s.id);
-  });
-  const ordered = orderedIds.map(id => sessions.get(id)).filter(Boolean) as SessionSnapshot[];
-  return [...ordered.filter(s => s.pinned), ...ordered.filter(s => !s.pinned)];
+  const all = Array.from(sessions.values());
+  const tree = buildSidebarTree({ sessions: all, order: sessionOrder, groupOrder, projectFavorites });
+  return flattenSidebarTree(tree).map(id => sessions.get(id)).filter(Boolean) as SessionSnapshot[];
 }
 window.orderSessions = orderSessions;
 // 後方互換エイリアス: multi-pane.js など window.getSortedSessions 参照箇所のために残す。
@@ -348,7 +369,6 @@ export function enqueueApprovalAutoSwitch(sessionId: number): void {
 export function set__elapsedTimerInterval(v: ReturnType<typeof setInterval> | null) { _elapsedTimerInterval = v; }
 export function set_actionBarFocusIdx(v: number) { actionBarFocusIdx = v; }
 export function set_activeSessionId(v: number | null) {
-  try { console.log('[approval-route] set_activeSessionId', { from: activeSessionId, to: v, stack: new Error().stack?.split('\n').slice(1, 5).join(' | ') }); } catch (_) {}
   activeSessionId = v;
 }
 export function set_batchFocusIdx(v: number) { batchFocusIdx = v; }

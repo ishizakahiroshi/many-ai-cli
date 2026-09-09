@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,11 +23,14 @@ import (
 
 const orchestrationPollInterval = 2 * time.Second
 
-const orchestrationSpawnConfirmTimeout = 2 * time.Minute
-
 // orchestrationInjectQuiet / orchestrationInjectMaxWait は spawn 直後の初期案内文注入前に
 // 起動アニメーションの静止を待つ上限。quiet 続けば十分とみなし、静止しなくても maxWait で
 // 諦めて注入する（プロバイダ起動が異常に遅い場合でも無期限に待たない）。
+//
+// この静止は「入力受付の準備完了」の判定には使えない。実測（2026-08-31 session #14 /
+// claude v2.1.251 / Windows）では splash 描画から入力欄の描画まで 12 秒あり、その途中に
+// 8 秒間まったく出力が無い区間があった。quiet をいくら伸ばしても、その無音を準備完了と
+// 誤読する。到達の担保は下の注入後エコー観測が持つ。
 const (
 	orchestrationInjectQuiet   = 300 * time.Millisecond
 	orchestrationInjectMaxWait = 5 * time.Second
@@ -36,26 +40,76 @@ const (
 // 起動シーケンス途中の静止窓で誤発火し、readline 未起動の TUI に注入バイトが
 // 捨てられる（bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md 根本原因 A）。
 // 注入後に PTY 画面へ注入テキストのエコーが現れることを実観測し、現れなければ再注入する。
+//
+// EchoWait は実測に合わせる。session #14 では注入から入力欄への反映まで 13.4 秒かかって
+// おり、3 秒では必ず空振りして再注入していた（同じ本文が 4 通届いた）。再注入は本当に
+// 落とされたときの最後の保険なので、回数は 2 に抑える。
 const (
-	orchestrationInjectEchoWait    = 3 * time.Second
-	orchestrationInjectMaxAttempts = 4
+	orchestrationInjectEchoWait    = 20 * time.Second
+	orchestrationInjectMaxAttempts = 2
 	orchestrationInjectEchoPoll    = 100 * time.Millisecond
 )
+
+// orchestrationSubmitConfirmWait は、エコー観測後に入力欄から本文が消える（＝確定 CR が
+// 効いてターンが始まった）のを待つ上限。実測（2026-09-07 #34）では手で Enter を押してから
+// 同じ秒のうちに入力欄が空になり transcript へ流れたので、5 秒は十分な余裕。超えても
+// 入力欄に残っていれば Enter を 1 回だけ送り直す（confirmInitialPromptSubmitted）。
+// テストは Server.injectSubmitConfirm で短縮する（ゼロ値 = この既定）。
+const orchestrationSubmitConfirmWait = 5 * time.Second
+
+// orchestrationComposerClearStableFor は「入力欄が空になった」を確定させるまでの継続時間。
+// Ink の差分再描画の途中で入力欄の行が一瞬空に見えることがあるため、瞬間値では取らない。
+const orchestrationComposerClearStableFor = 300 * time.Millisecond
 
 var safeOrchestrationToken = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 type orchestrationManager struct {
 	mu       sync.Mutex
 	appendMu sync.Mutex
-	pending  map[string]pendingChild
-	boards   map[string]*orchestrationBoard
+	// eventFlushMu serializes event delivery polls without holding mu over PTY I/O.
+	eventFlushMu sync.Mutex
+	pending      map[string]pendingChild
+	boards       map[string]*orchestrationBoard
 	// roles は C1 (plan_orchestration-spawn-ui-exposure.md) で起動時に受け取った
 	// 役割マッピングを orchestration_id ごとに保持する。conductor への instruction file
 	// 注入（C2）はここから読み出す想定。
-	roles              map[string]map[string]orchestrationRoleAssignment
-	spawnConfirmations map[string]chan spawnConfirmationDecision
-	stopOnce           sync.Once
-	stopCh             chan struct{}
+	roles map[string]map[string]orchestrationRoleAssignment
+	// spawnConfirmations holds every spawn confirmation the Hub has not yet
+	// seen a browser decide, keyed by its ID. Unlike the pre-C1 design, this
+	// is a Hub-side hold with no deadline: a pending confirmation lives here
+	// until a browser decides it or its parent goes away, independent of the
+	// HTTP request that registered it
+	// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
+	spawnConfirmations map[string]*pendingSpawnConfirmation
+	// childAdmissions is the shared reservation ledger for every future child
+	// session: ordinary spawn, confirmation wait, relay start/resume, and
+	// strong escalation. The map is protected by mu; callers also hold
+	// Server.orchestrationAdmissionMu while comparing it with sessions.
+	childAdmissions   map[string]orchestrationChildAdmission
+	childAdmissionSeq uint64
+	// relays holds every relay loop (relay.go) keyed by its own orchestration
+	// ID. The map is guarded by mu; each relayRun has its own mutex for its
+	// transitions so mu is never held across spawn / inject / git calls.
+	relays map[string]*relayRun
+	// relayMeta mirrors, under mu, the few run fields that listing and the
+	// child budget need (parent, attached, active, spawned). Readers never
+	// take a run's mutex for them, which keeps run.mu → mu the only order.
+	relayMeta map[string]relayMeta
+	relaySeq  uint64
+	// spawnConfirmSeq disambiguates spawn confirmation IDs generated in the
+	// same instant. time.Now().UnixNano() alone collides on platforms with
+	// coarse clock resolution (observed on Windows: two calls a few
+	// microseconds apart return the identical value), which would let two
+	// different confirmations share one ID and answer each other's POST.
+	spawnConfirmSeq uint64
+	stopOnce        sync.Once
+	stopCh          chan struct{}
+}
+
+type orchestrationChildAdmission struct {
+	ParentID int
+	Slots    int
+	Kind     string
 }
 
 // orchestrationRoleAssignment は起動フォームの「子役割の詳細設定」アコーディオンで
@@ -63,6 +117,10 @@ type orchestrationManager struct {
 type orchestrationRoleAssignment struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
+	// Subscription は、この role に割り当てる子セッションのサブスクリプション
+	// profile ID（"auto" も可）。空文字は「role 別の指定なし」を意味し、
+	// resolveChildSubscription が親継承・グローバル既定へフォールバックする。
+	Subscription string `json:"subscription,omitempty"`
 }
 
 type pendingChild struct {
@@ -76,6 +134,23 @@ type pendingChild struct {
 	NormalWorktree  normalWorktree
 	WorktreeCleanup string
 	SpawnedAt       time.Time
+	// InitialPrompt (plan_session-handoff-board_c4_prompted-spawn.md C1): an
+	// ordinary /api/spawn (OrchestrationID == "") carries this straight
+	// through to wrapperLoop's registration handshake, which injects it once
+	// the session registers — the same injectInitialPrompt used for
+	// orchestration sessions, just without the board/role framing text
+	// buildConductorInitialPrompt / buildChildInitialPrompt add. Already
+	// sanitized and length-capped by sanitizeSpawnInitialPrompt before it
+	// lands here.
+	InitialPrompt string
+	// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3): the
+	// predecessor session's ID when this /api/spawn request is starting a
+	// handoff successor, or 0 for an ordinary spawn. wrapperLoop's
+	// registration handshake reads this and passes it straight to
+	// recordHandoffSessionStart — nothing else consumes it, and it never
+	// creates a UI parent/child relationship (the successor is a new peer
+	// session, not this one's child).
+	HandoffFrom int
 }
 
 type orchestrationBoard struct {
@@ -86,12 +161,26 @@ type orchestrationBoard struct {
 	Done       map[int]bool
 	IdleWarned map[int]bool
 	TimedOut   map[int]bool
-	LastSize   int64
-	LastMod    time.Time
-	LastWrite  time.Time
+	// StartupFailed ラッチは D9 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md)。
+	// 起動ハンドシェイク未達として一度通知・停止した子には、同じ子で
+	// checkOrchestrationChildTimers が timeout 判定を重ねて 2 通目を出すことを防ぐ。
+	StartupFailed map[int]bool
+	LastSize      int64
+	LastMod       time.Time
+	LastWrite     time.Time
 	// PendingNotices は queue-until-idle の conductor ごとの最新通知。連続した
 	// board 更新はここで上書きし、idle 復帰時に Enter を 1 回だけ送る。
 	PendingNotices map[int]string
+	// PendingEvents is an overwrite-free FIFO for notices that require the
+	// conductor to act. Overflow details remain in board.md and are surfaced by
+	// EventOverflow references as queue capacity returns.
+	PendingEvents []boardEvent
+	EventOverflow map[int]uint64
+	NextEventID   uint64
+	// QuestionCursor prevents append-only QUESTION markers from being replayed
+	// whenever an unrelated later section changes board.md.
+	QuestionCursor int64
+	LastWriter     boardWriter
 }
 
 type orchestrationChild struct {
@@ -108,16 +197,37 @@ type orchestrationChild struct {
 	FilePath string
 	FileSize int64
 	FileMod  time.Time
+	// QuestionCursor is a byte offset into the append-only progress file. DONE
+	// is latched separately; questions need their own cursor so old markers are
+	// not re-delivered after every later progress update.
+	QuestionCursor int64
 	// Restart data is retained only in memory for opt-in timeout recovery.
 	RestartSpec    spawnWrappedSpec
 	InitialPrompt  string
 	WorktreeBranch string
 	TimeoutRetries int
+	// 起動ハンドシェイク未達の早期検知用フィールド
+	// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md, D2)。
+	//
+	// PromptDeliveredAt: 初期プロンプトの配送が確認できた時刻（エコー観測 or 遅延エコー
+	// 観測）。ゼロ値は「未確認」。
+	PromptDeliveredAt time.Time
+	// PromptFailed: 配送失敗が既に reportInjectFailure 経由で親へ報告済み。
+	PromptFailed bool
+	// StandbySince: standby が続き始めた時刻。running へ戻ったらゼロへ戻す
+	// (markRunning)。ゼロ値は「現在 standby ではない、または一度も standby になっていない」。
+	StandbySince time.Time
 }
 
 type boardDoneEvent struct {
 	Role      string
 	SessionID int
+}
+
+type boardQuestionEvent struct {
+	Role      string
+	SessionID int
+	Writer    boardWriter
 }
 
 type boardWriter struct {
@@ -141,12 +251,66 @@ type spawnChildRequest struct {
 	// Force は同 role の生存子がいても新規 spawn を許可する（重複 spawn ガードの明示迂回。
 	// plan_orchestration-conductor-improvements.md C2）。
 	Force bool `json:"force"`
+	// SubscriptionProfileID は子セッションを起動するサブスクリプション profile。
+	// 省略時は CLI 自身のログイン環境（従来どおり）。存在しない ID を指定した場合、
+	// 子は起動せずエラーになる（別アカウントへ黙って倒れない）。
+	SubscriptionProfileID string `json:"subscription_profile_id"`
+	// SameTree は tri-state（`/api/spawn` の IsolateWorktree と同じ形）。
+	// nil は「orchestration.worktree_auto の設定に従う」（既定）。明示 true は
+	// 「worktree を使わず、CWD で直接動かす」（`orchestrate spawn -same-tree` /
+	// `orchestrate relay -same-tree` と同じ語）。
+	// C3 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md)。
+	SameTree *bool `json:"same_tree"`
 }
 
-type spawnConfirmationDecision struct {
+// pendingSpawnConfirmation is a spawn confirmation the Hub is holding while
+// no browser has decided it yet. It is deliberately decoupled from the HTTP
+// request that created it: the calling AI's own tool call can be killed by
+// its shell timeout long before a human looks at the browser, and the
+// confirmation must still be answerable after that happens
+// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
+type pendingSpawnConfirmation struct {
+	ID       string
+	ParentID int
+	Role     string
+	// RequestedProvider is the raw provider value the caller originally
+	// passed (before role-mapping / memory / parent-provider resolution).
+	// performSpawn only updates the remembered role→provider mapping when
+	// this is empty, matching the pre-C1 behaviour.
+	RequestedProvider string
+	// Body is the request as resolved at registration time, before any
+	// override the browser's decision may apply.
+	Body        spawnChildRequest
+	RequestedAt time.Time
+	Decided     bool
+	// WaiterGone is set by waitSpawnConfirmation when the HTTP request that
+	// registered this confirmation gives up (its context is done) while the
+	// confirmation is still undecided. The decision side reads it to know
+	// whether its HTTP response will ever reach anyone, and therefore
+	// whether it must also reach the parent through the board instead.
+	WaiterGone bool
+	// Outcome carries the decision exactly once, written by the goroutine
+	// that processes it (resolveSpawnConfirmationDecision /
+	// expireSpawnConfirmationsForParent / registerSpawnConfirmation on
+	// supersede). It is buffered so that write never blocks on a waiter that
+	// stopped listening.
+	Outcome chan spawnConfirmationOutcome
+	// AdmissionID reserves this confirmation's future child slot until the
+	// browser refuses it, it is superseded/expired, or performSpawn consumes
+	// it after approval.
+	AdmissionID string
+}
+
+// spawnConfirmationOutcome is written to pendingSpawnConfirmation.Outcome
+// exactly once. Approved is false only for a genuine user refusal (or a
+// confirmation that never got a human decision at all — superseded / the
+// parent went away). Err is non-nil only when the user approved but
+// performSpawn itself failed: the confirmation was decided, the child was
+// not created.
+type spawnConfirmationOutcome struct {
 	Approved bool
-	Provider string
-	Model    string
+	Result   childSpawnResult
+	Err      *spawnHTTPError
 }
 
 type spawnConfirmationResponse struct {
@@ -175,9 +339,130 @@ func newOrchestrationManager() *orchestrationManager {
 		pending:            map[string]pendingChild{},
 		boards:             map[string]*orchestrationBoard{},
 		roles:              map[string]map[string]orchestrationRoleAssignment{},
-		spawnConfirmations: map[string]chan spawnConfirmationDecision{},
+		spawnConfirmations: map[string]*pendingSpawnConfirmation{},
+		relays:             map[string]*relayRun{},
+		relayMeta:          map[string]relayMeta{},
 		stopCh:             make(chan struct{}),
 	}
+}
+
+var errOrchestrationAdmissionParentNotFound = errors.New("orchestration parent session not found")
+
+// reserveOrchestrationChildren atomically checks the live session snapshot
+// together with every outstanding child admission. The admission mutex is
+// held only for this check and the tiny ledger update; worktree preparation,
+// board I/O, and wrapper startup happen after it is released.
+func (s *Server) reserveOrchestrationChildren(parentID, slots int, cfg config.OrchestrationConfig, kind string) (string, error) {
+	if slots <= 0 {
+		return "", nil
+	}
+	s.orchestrationAdmissionMu.Lock()
+	defer s.orchestrationAdmissionMu.Unlock()
+	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	if parent == nil {
+		return "", errOrchestrationAdmissionParentNotFound
+	}
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	return s.reserveOrchestrationChildrenLocked(parentID, childCount, totalSessions, cfg, slots, kind, "")
+}
+
+// reserveOrchestrationChildrenLocked is the lock-holding half of
+// reserveOrchestrationChildren. The caller holds both
+// orchestrationAdmissionMu and orchestration.mu. excludeID is used when a
+// same-role confirmation is replaced in one admission transaction.
+func (s *Server) reserveOrchestrationChildrenLocked(parentID, childCount, totalSessions int, cfg config.OrchestrationConfig, slots int, kind, excludeID string) (string, error) {
+	parentReserved, totalReserved := 0, 0
+	for id, admission := range s.orchestration.childAdmissions {
+		if id == excludeID || admission.Slots <= 0 {
+			continue
+		}
+		totalReserved += admission.Slots
+		if admission.ParentID == parentID {
+			parentReserved += admission.Slots
+		}
+	}
+	running := 0
+	for _, meta := range s.orchestration.relayMeta {
+		if meta.parentID == parentID && meta.attached && meta.active {
+			running++
+		}
+	}
+	if childCount+parentReserved+slots > cfg.MaxChildrenPerParent {
+		return "", errOrchestrationLimit{Limit: "children_per_parent", Running: running, Max: cfg.MaxChildrenPerParent}
+	}
+	if totalSessions+totalReserved+slots > cfg.MaxTotalSessions {
+		return "", errOrchestrationLimit{Limit: "total_sessions", Running: running, Max: cfg.MaxTotalSessions}
+	}
+	if s.orchestration.childAdmissions == nil {
+		s.orchestration.childAdmissions = map[string]orchestrationChildAdmission{}
+	}
+	s.orchestration.childAdmissionSeq++
+	id := fmt.Sprintf("oa-%d", s.orchestration.childAdmissionSeq)
+	s.orchestration.childAdmissions[id] = orchestrationChildAdmission{ParentID: parentID, Slots: slots, Kind: kind}
+	return id, nil
+}
+
+func (s *Server) releaseOrchestrationChildren(admissionID string) {
+	if strings.TrimSpace(admissionID) == "" {
+		return
+	}
+	s.orchestrationAdmissionMu.Lock()
+	s.orchestration.mu.Lock()
+	delete(s.orchestration.childAdmissions, admissionID)
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
+}
+
+// consumeOrchestrationChildren commits slots that have become live sessions.
+// A missing admission is tolerated for restored/direct unit-test runs that
+// predate the ledger; new admission paths always pass a live ID here.
+func (s *Server) consumeOrchestrationChildren(admissionID string, slots int) bool {
+	if strings.TrimSpace(admissionID) == "" || slots <= 0 {
+		return false
+	}
+	s.orchestrationAdmissionMu.Lock()
+	defer s.orchestrationAdmissionMu.Unlock()
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	admission, ok := s.orchestration.childAdmissions[admissionID]
+	if !ok || admission.Slots <= 0 {
+		return false
+	}
+	if slots >= admission.Slots {
+		delete(s.orchestration.childAdmissions, admissionID)
+	} else {
+		admission.Slots -= slots
+		s.orchestration.childAdmissions[admissionID] = admission
+	}
+	return true
+}
+
+func (s *Server) orchestrationAdmissionMatches(admissionID string, parentID, slots int) bool {
+	if strings.TrimSpace(admissionID) == "" || slots <= 0 {
+		return false
+	}
+	s.orchestrationAdmissionMu.Lock()
+	defer s.orchestrationAdmissionMu.Unlock()
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	admission, ok := s.orchestration.childAdmissions[admissionID]
+	return ok && admission.ParentID == parentID && admission.Slots >= slots
+}
+
+func (s *Server) releaseSpawnConfirmationAdmission(pending *pendingSpawnConfirmation) {
+	if pending == nil {
+		return
+	}
+	s.orchestrationAdmissionMu.Lock()
+	s.orchestration.mu.Lock()
+	if current := s.orchestration.spawnConfirmations[pending.ID]; current == pending {
+		pending.Decided = true
+		delete(s.orchestration.spawnConfirmations, pending.ID)
+	}
+	delete(s.orchestration.childAdmissions, pending.AdmissionID)
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
 }
 
 // reserveOrchestrationConductor は「オーケストレーション」ボタン経由の起動リクエストを
@@ -188,10 +473,13 @@ func newOrchestrationManager() *orchestrationManager {
 func (s *Server) reserveOrchestrationConductor(label string, roles map[string]orchestrationRoleAssignment) string {
 	orchestrationID := fmt.Sprintf("o%d", time.Now().UnixNano())
 	s.orchestration.mu.Lock()
-	s.orchestration.pending[label] = pendingChild{
-		OrchestrationID: orchestrationID,
-		SpawnedAt:       time.Now(),
-	}
+	// An ordinary /api/spawn with both isolate_worktree and orchestration=true
+	// has already reserved this label with worktree cleanup metadata. Merge the
+	// conductor fields into that entry instead of replacing the cleanup handle.
+	meta := s.orchestration.pending[label]
+	meta.OrchestrationID = orchestrationID
+	meta.SpawnedAt = time.Now()
+	s.orchestration.pending[label] = meta
 	if len(roles) > 0 {
 		if s.orchestration.roles == nil {
 			s.orchestration.roles = map[string]map[string]orchestrationRoleAssignment{}
@@ -227,37 +515,187 @@ func (s *Server) spawnConfirmationRequired(provider string) bool {
 	}
 }
 
-// awaitSpawnConfirmation publishes a request to every connected browser and
-// holds only this HTTP request. The first decision wins; a missing UI or an
-// expired request is intentionally treated as refusal.
-func (s *Server) awaitSpawnConfirmation(ctx context.Context, parent *session, body spawnChildRequest) (spawnConfirmationDecision, bool) {
-	id := fmt.Sprintf("sc-%d", time.Now().UnixNano())
-	result := make(chan spawnConfirmationDecision, 1)
+// registerSpawnConfirmation publishes a spawn confirmation request to every
+// connected browser and holds it in the Hub with no deadline
+// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1). If
+// the same parent already has an undecided confirmation for the same role,
+// that older one is superseded (closed without ever being a user_refusal)
+// rather than left to pile up — a conductor re-issuing the same spawn while
+// the first request is still awaiting a human should not accumulate stale
+// confirmations.
+func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider string, body spawnChildRequest) (*pendingSpawnConfirmation, *spawnHTTPError) {
+	if parent == nil {
+		return nil, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+	}
+	pending := &pendingSpawnConfirmation{
+		ParentID:          parent.ID,
+		Role:              body.Role,
+		RequestedProvider: requestedProvider,
+		Body:              body,
+		RequestedAt:       time.Now(),
+		Outcome:           make(chan spawnConfirmationOutcome, 1),
+	}
+	cfg := s.snapshotCfg().Orchestration
+	var superseded *pendingSpawnConfirmation
+	s.orchestrationAdmissionMu.Lock()
+	liveParent, childCount, totalSessions := s.orchestrationParentState(parent.ID)
+	if liveParent == nil {
+		s.orchestrationAdmissionMu.Unlock()
+		return nil, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+	}
 	s.orchestration.mu.Lock()
-	s.orchestration.spawnConfirmations[id] = result
-	s.orchestration.mu.Unlock()
-	defer func() {
-		s.orchestration.mu.Lock()
-		delete(s.orchestration.spawnConfirmations, id)
+	// The sequence number is required, not cosmetic: time.Now().UnixNano()
+	// alone has produced identical values for two calls a few microseconds
+	// apart (observed on Windows), which would let two unrelated
+	// confirmations collide on the same ID.
+	s.orchestration.spawnConfirmSeq++
+	pending.ID = fmt.Sprintf("sc-%d-%d", pending.RequestedAt.UnixNano(), s.orchestration.spawnConfirmSeq)
+	excludeAdmissionID := ""
+	for _, existing := range s.orchestration.spawnConfirmations {
+		if existing.ParentID == parent.ID && existing.Role == body.Role && !existing.Decided {
+			superseded = existing
+			excludeAdmissionID = existing.AdmissionID
+			break
+		}
+	}
+	admissionID, admissionErr := s.reserveOrchestrationChildrenLocked(parent.ID, childCount, totalSessions, cfg, 1, "spawn-confirmation", excludeAdmissionID)
+	if admissionErr != nil {
 		s.orchestration.mu.Unlock()
-	}()
-	s.broadcast(proto.Message{
-		Type: "spawn_confirmation_requested", SpawnConfirmationID: id,
-		SessionID: parent.ID, Role: body.Role, Provider: body.Provider, Model: body.Model,
-		CWD: body.CWD, InitialPrompt: body.InitialPrompt,
-	})
-	timer := time.NewTimer(orchestrationSpawnConfirmTimeout)
-	defer timer.Stop()
+		s.orchestrationAdmissionMu.Unlock()
+		var limit errOrchestrationLimit
+		if errors.As(admissionErr, &limit) {
+			detail := "pending spawn confirmations total"
+			if limit.Limit == "children_per_parent" {
+				detail = "pending spawn confirmations per parent"
+			}
+			return nil, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: detail}
+		}
+		return nil, &spawnHTTPError{status: http.StatusInternalServerError, code: "orchestration_limit", detail: admissionErr.Error()}
+	}
+	if superseded != nil {
+		superseded.Decided = true
+		delete(s.orchestration.spawnConfirmations, superseded.ID)
+		delete(s.orchestration.childAdmissions, superseded.AdmissionID)
+	}
+	pending.AdmissionID = admissionID
+	s.orchestration.spawnConfirmations[pending.ID] = pending
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
+
+	if superseded != nil {
+		select {
+		case superseded.Outcome <- spawnConfirmationOutcome{Approved: false}:
+		default:
+		}
+		s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: superseded.ID, SessionID: superseded.ParentID, Reason: "superseded"})
+	}
+
+	s.broadcast(s.spawnConfirmationRequestedMessage(pending))
+	return pending, nil
+}
+
+// waitSpawnConfirmation blocks until either a decision has been written to
+// p.Outcome, or ctx is done because the caller's own HTTP request died (its
+// tool call timed out, or the process holding it was killed). In the latter
+// case the pending confirmation itself is left untouched other than noting
+// that its waiter is gone; it stays answerable by handleSpawnConfirmation.
+func (s *Server) waitSpawnConfirmation(ctx context.Context, p *pendingSpawnConfirmation) (spawnConfirmationOutcome, bool) {
 	select {
-	case decision := <-result:
-		return decision, decision.Approved
+	case outcome := <-p.Outcome:
+		return outcome, true
 	case <-ctx.Done():
-		return spawnConfirmationDecision{}, false
-	case <-timer.C:
-		return spawnConfirmationDecision{}, false
+		s.orchestration.mu.Lock()
+		if !p.Decided {
+			p.WaiterGone = true
+		}
+		s.orchestration.mu.Unlock()
+		return spawnConfirmationOutcome{}, false
 	}
 }
 
+// pendingSpawnConfirmationMessages returns spawn_confirmation_requested
+// messages for every confirmation the Hub is still holding, oldest request
+// first, so a newly (re)connected browser can rebuild the dialogs it would
+// otherwise never see again (C2, plan_..._c4_spawn-confirm-ui.md).
+func (s *Server) pendingSpawnConfirmationMessages() []proto.Message {
+	s.orchestration.mu.Lock()
+	pending := make([]*pendingSpawnConfirmation, 0, len(s.orchestration.spawnConfirmations))
+	for _, p := range s.orchestration.spawnConfirmations {
+		if p.Decided {
+			continue
+		}
+		pending = append(pending, p)
+	}
+	s.orchestration.mu.Unlock()
+	sort.Slice(pending, func(i, j int) bool { return pending[i].RequestedAt.Before(pending[j].RequestedAt) })
+	msgs := make([]proto.Message, 0, len(pending))
+	for _, p := range pending {
+		msgs = append(msgs, s.spawnConfirmationRequestedMessage(p))
+	}
+	return msgs
+}
+
+// hasPendingSpawnConfirmation reports whether parentID is still holding at
+// least one undecided spawn confirmation. handleDismiss calls this before
+// tearing a session down: dismissing a conductor that is holding a
+// confirmation open would silently drop a decision the browser has not made
+// yet, so that session must not be removed while this returns true
+// (C5, plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md).
+func (s *Server) hasPendingSpawnConfirmation(parentID int) bool {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	for _, p := range s.orchestration.spawnConfirmations {
+		if p.ParentID == parentID && !p.Decided {
+			return true
+		}
+	}
+	return false
+}
+
+// expireSpawnConfirmationsForParent fails every undecided spawn confirmation
+// belonging to parentID without ever recording a user_refusal — the parent
+// disappearing is not a person clicking refuse
+// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
+// trigger names the caller for logging only (e.g. "dismiss").
+//
+// By the time handleDismiss reaches its call to this, hasPendingSpawnConfirmation
+// has already refused the dismiss for any parent that had a confirmation
+// pending at the start of the request, so in the common case this call finds
+// nothing to expire. It stays in place as the safety net for the narrow race
+// where a confirmation is registered after that check but before the session
+// is actually removed (C5): a session must never be deleted while leaving a
+// confirmation permanently unanswerable.
+func (s *Server) expireSpawnConfirmationsForParent(parentID int, trigger string) {
+	s.orchestrationAdmissionMu.Lock()
+	s.orchestration.mu.Lock()
+	var expired []*pendingSpawnConfirmation
+	for id, p := range s.orchestration.spawnConfirmations {
+		if p.ParentID != parentID || p.Decided {
+			continue
+		}
+		p.Decided = true
+		expired = append(expired, p)
+		delete(s.orchestration.spawnConfirmations, id)
+		delete(s.orchestration.childAdmissions, p.AdmissionID)
+	}
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
+	for _, p := range expired {
+		select {
+		case p.Outcome <- spawnConfirmationOutcome{Approved: false}:
+		default:
+		}
+		s.logger.Info("spawn confirmation expired: parent gone", "confirmation_id", p.ID, "parent_session_id", parentID, "role", p.Role, "trigger", trigger)
+		s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: p.ID, SessionID: parentID, Reason: "parent_gone"})
+	}
+}
+
+// handleSpawnConfirmation answers the POST from a browser deciding a pending
+// spawn confirmation. It responds immediately (the browser does not wait for
+// the child to finish launching) and hands the decision to a background
+// goroutine, because launching the child can take longer than a human should
+// have to wait for this request to return
+// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
 func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request, parentID int) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
@@ -270,19 +708,118 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "confirmation_id is required")
 		return
 	}
+	s.orchestrationAdmissionMu.Lock()
 	s.orchestration.mu.Lock()
-	ch := s.orchestration.spawnConfirmations[body.ConfirmationID]
-	s.orchestration.mu.Unlock()
-	if ch == nil {
+	pending := s.orchestration.spawnConfirmations[body.ConfirmationID]
+	if pending == nil {
+		s.orchestration.mu.Unlock()
+		s.orchestrationAdmissionMu.Unlock()
 		writeJSONError(w, http.StatusNotFound, "not_found", "spawn confirmation is no longer pending")
 		return
 	}
-	select {
-	case ch <- spawnConfirmationDecision{Approved: body.Approved, Provider: body.Provider, Model: body.Model}:
-		writeJSON(w, map[string]bool{"ok": true})
-	default:
+	if pending.Decided {
+		s.orchestration.mu.Unlock()
+		s.orchestrationAdmissionMu.Unlock()
 		writeJSONError(w, http.StatusConflict, "already_decided", "spawn confirmation has already been decided")
+		return
 	}
+	pending.Decided = true
+	delete(s.orchestration.spawnConfirmations, body.ConfirmationID)
+	if !body.Approved {
+		delete(s.orchestration.childAdmissions, pending.AdmissionID)
+	}
+	s.orchestration.mu.Unlock()
+	s.orchestrationAdmissionMu.Unlock()
+
+	writeJSON(w, map[string]bool{"ok": true})
+	decidedProvider := strings.TrimSpace(body.Provider)
+	decidedModel := strings.TrimSpace(body.Model)
+	approved := body.Approved
+	s.safeGo("spawn_confirmation_decided", func() {
+		s.resolveSpawnConfirmationDecision(pending, approved, decidedProvider, decidedModel)
+	})
+}
+
+// resolveSpawnConfirmationDecision runs the effect of one decided spawn
+// confirmation: for a refusal it records the single, unambiguous
+// user_refusal board entry (C1's only writer of that reason); for an
+// approval it is the one place that actually launches the child
+// (performSpawn), because launching from both the waiting HTTP handler and
+// here would risk a double spawn. It always writes exactly one outcome to
+// pending.Outcome — the original HTTP handler may or may not still be
+// listening — and always broadcasts spawn_confirmation_closed so every
+// connected browser closes its dialog.
+func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmation, approved bool, decidedProvider, decidedModel string) {
+	if !approved {
+		s.releaseSpawnConfirmationAdmission(pending)
+		if parent, _, _ := s.orchestrationParentState(pending.ParentID); parent != nil {
+			if boardPath, err := s.ensureOrchestrationBoardForRefusal(parent, pending.Body); err == nil {
+				_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("refused: role=%s reason=user_refusal\n", pending.Role))
+			}
+		}
+		select {
+		case pending.Outcome <- spawnConfirmationOutcome{Approved: false}:
+		default:
+		}
+		s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: pending.ID, SessionID: pending.ParentID, Reason: "refused"})
+		return
+	}
+	defer s.releaseOrchestrationChildren(pending.AdmissionID)
+
+	body := pending.Body
+	if decidedProvider != "" {
+		body.Provider = decidedProvider
+	}
+	if decidedModel != "" {
+		body.Model = decidedModel
+	}
+	var providerChangeNote string
+	if note := providerConfirmationChangeNote(pending.Body.Provider, body.Provider); note != "" {
+		s.logger.Warn("orchestration spawn-child confirmation changed provider",
+			"parent_session_id", pending.ParentID, "role", pending.Role,
+			"requested_provider", pending.Body.Provider, "decided_provider", body.Provider)
+		providerChangeNote = note
+	}
+	result, spawnErr := s.performSpawnWithAdmission(pending.ParentID, pending.RequestedProvider, providerChangeNote, body, pending.AdmissionID)
+
+	s.orchestration.mu.Lock()
+	waiterGone := pending.WaiterGone
+	s.orchestration.mu.Unlock()
+
+	if spawnErr != nil {
+		select {
+		case pending.Outcome <- spawnConfirmationOutcome{Approved: true, Err: spawnErr}:
+		default:
+		}
+		s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: pending.ID, SessionID: pending.ParentID, Reason: "spawn_failed", Text: spawnErr.detail})
+		if waiterGone {
+			s.notifyBoardGoneWaiter(pending, fmt.Sprintf("[MANY-AI-CLI] child spawn failed after your earlier request lost its connection: role=%s detail=%s", pending.Role, spawnErr.detail))
+		}
+		return
+	}
+
+	select {
+	case pending.Outcome <- spawnConfirmationOutcome{Approved: true, Result: result}:
+	default:
+	}
+	s.broadcast(proto.Message{Type: "spawn_confirmation_closed", SpawnConfirmationID: pending.ID, SessionID: pending.ParentID, Reason: "approved", SpawnChildSessionID: result.ID})
+	if waiterGone {
+		_ = s.appendBoardSection(result.BoardPath, "hub", fmt.Sprintf("spawned (confirmed after the requesting session disconnected): role=%s session=%d\n", pending.Role, result.ID))
+		s.notifyBoardGoneWaiter(pending, fmt.Sprintf("[MANY-AI-CLI] child spawned after your earlier request lost its connection: role=%s session=#%d", pending.Role, result.ID))
+	}
+}
+
+// notifyBoardGoneWaiter tells the parent conductor about a spawn
+// confirmation outcome that no live HTTP response can deliver anymore. Only
+// resolveSpawnConfirmationDecision's approved path calls this — a refusal is
+// already recorded on the board unconditionally and does not need to
+// interrupt the conductor.
+func (s *Server) notifyBoardGoneWaiter(pending *pendingSpawnConfirmation, text string) {
+	parent, _, _ := s.orchestrationParentState(pending.ParentID)
+	if parent == nil || parent.OrchestrationID == "" {
+		return
+	}
+	s.notifyBoardEvent(parent.OrchestrationID, pending.ParentID, text)
 }
 
 func (s *Server) ensureOrchestrationBoardForRefusal(parent *session, body spawnChildRequest) (string, error) {
@@ -334,6 +871,18 @@ func (s *Server) handleSessionAPI(w http.ResponseWriter, r *http.Request) {
 		s.handleSessionInject(w, r, id)
 	case "children":
 		s.handleSessionChildren(w, r, id)
+	case "relay":
+		if r.Method == http.MethodGet {
+			s.handleRelayGet(w, r, id)
+		} else {
+			s.handleRelayStart(w, r, id)
+		}
+	case "relay-stop":
+		s.handleRelayStop(w, r, id)
+	case "relay-resume":
+		s.handleRelayResume(w, r, id)
+	case "relay-cleanup":
+		s.handleRelayCleanup(w, r, id)
 	default:
 		writeJSONError(w, http.StatusNotFound, "not_found", "not found")
 	}
@@ -344,6 +893,13 @@ type childSpawnPreparation struct {
 	boardPath       string
 	childCWD        string
 	branch          string
+	// absoluteCWD is the requested CWD after absolutization but before any
+	// worktree substitution. dispatchSpawn logs it next to childCWD so a
+	// -cwd request that got redirected into a worktree is traceable from the
+	// log alone (C1, plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md).
+	// relaySpawn does not set it (relay resolves its own worktree elsewhere),
+	// so it is blank for relay-originated spawns.
+	absoluteCWD string
 }
 
 type childSpawnResult struct {
@@ -378,6 +934,17 @@ func (s *Server) preparePromptAndWorktree(parentID int, parent *session, body sp
 	cwd := strings.TrimSpace(body.CWD)
 	if cwd == "" {
 		cwd = parent.CWD
+	} else if !filepath.IsAbs(cwd) {
+		// A relative --cwd must resolve against the conductor (parent) session's
+		// directory, not the Hub process cwd. Otherwise os.Stat and
+		// spawnCwdTooBroad evaluate the wrong path: a relative value slips past
+		// the "too broad" guard and, if the Hub was started in $HOME, a
+		// bypassPermissions child can be planted at $HOME.
+		base := parent.CWD
+		if base == "" {
+			base = s.hubCWD
+		}
+		cwd = filepath.Join(base, cwd)
 	}
 	if cwd == "" {
 		cwd = s.hubCWD
@@ -399,14 +966,40 @@ func (s *Server) preparePromptAndWorktree(parentID int, parent *session, body sp
 		return childSpawnPreparation{}, &spawnPreparationError{status: http.StatusInternalServerError, code: "board_error", detail: errorDetail("board error", err)}
 	}
 	s.markConductor(parentID, orchestrationID, boardPath)
-	childCWD, branch, worktreeNote := s.prepareChildWorktree(cwd, orchestrationID, body.Role, cfg)
+
+	// C3 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md): SameTree は
+	// tri-state。nil のときだけ config の worktree_auto を見る（既定どおり worktree が
+	// 勝つ）。明示 true は worktree を使わず、要求 cwd をそのまま子 cwd にする。
+	var childCWD, branch, worktreeNote string
+	var worktreeErr error
+	if body.SameTree != nil && *body.SameTree {
+		childCWD = cwd
+		worktreeNote = "worktree skip: requested by --same-tree"
+	} else {
+		childCWD, branch, worktreeNote, worktreeErr = s.prepareChildWorktree(cwd, orchestrationID, body.Role, cfg)
+	}
 	if worktreeNote != "" {
 		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("%s\n", worktreeNote))
 	}
-	return childSpawnPreparation{orchestrationID: orchestrationID, boardPath: boardPath, childCWD: childCWD, branch: branch}, nil
+	if worktreeErr != nil {
+		return childSpawnPreparation{}, &spawnPreparationError{status: http.StatusConflict, code: "worktree_identity_mismatch", detail: worktreeNote}
+	}
+	return childSpawnPreparation{orchestrationID: orchestrationID, boardPath: boardPath, childCWD: childCWD, branch: branch, absoluteCWD: cwd}, nil
 }
 
 func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildRequest, prep childSpawnPreparation) (childSpawnResult, error) {
+	// C1 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md): 子へ実際に渡す
+	// 最終値を1行に残す。cwd は「要求値・絶対化後・worktree 適用後」の3つを並べ、-cwd が
+	// どこで worktree の cwd へ置き換わったかを1行で追えるようにする（症状Bの判断材料）。
+	// board への worktree created/reuse/skip 記録は preparePromptAndWorktree 側で今まで
+	// どおり残る。ここは関数の先頭でのみ追記し、末尾（inject 系）には触れない。
+	s.logger.Info("orchestration spawn-child dispatch",
+		"parent_session_id", parentID, "role", body.Role,
+		"provider", body.Provider, "model", body.Model,
+		"requested_cwd", body.CWD, "absolute_cwd", prep.absoluteCWD, "resolved_cwd", prep.childCWD,
+		"worktree_branch", prep.branch,
+		"has_subscription_profile_id", strings.TrimSpace(body.SubscriptionProfileID) != "",
+	)
 	label := fmt.Sprintf("orch-%s-%s-%d", safeToken(prep.orchestrationID), body.Role, time.Now().UnixNano())
 	spawnedAt := time.Now()
 	meta := pendingChild{
@@ -422,17 +1015,30 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	s.orchestration.mu.Lock()
 	s.orchestration.pending[label] = meta
 	s.orchestration.mu.Unlock()
+	// AI 経由の spawn（`orchestrate spawn`）はサブスクリプションを指定する手段が無く、
+	// 以前は常に空＝CLI 既定のログインで子が起きていた。複数契約を使い分けている利用者には
+	// 事故になるので、ここで解決する（resolveChildSubscription が正本）。
+	//
+	// **body へ代入せずローカル変数で持つ。** TestLiveSessionAuthIsNeverSwapped が
+	// 「SubscriptionProfileID への代入は session 生成時（wrapper_loop.go）だけ」を
+	// 機械で守っている。ここは生成に渡す値を決めているのであって、実行中セッションの
+	// 認証を差し替えているのではない。検査を緩めずに意図を通すため、代入を作らない。
+	subscriptionID := strings.TrimSpace(body.SubscriptionProfileID)
+	if subscriptionID == "" {
+		subscriptionID = s.resolveChildSubscription(parent, body.Provider, body.Role)
+	}
 	childID, err := s.spawnWrappedSession(spawnWrappedSpec{
-		Provider:       body.Provider,
-		CWD:            prep.childCWD,
-		Model:          body.Model,
-		ModelSelection: body.ModelSelection,
-		RiskConfirmed:  body.RiskConfirmed,
-		Label:          label,
-		PermissionMode: body.PermissionMode,
-		Sandbox:        body.Sandbox,
-		AskForApproval: body.AskForApproval,
-		Route:          body.Route,
+		Provider:              body.Provider,
+		CWD:                   prep.childCWD,
+		Model:                 body.Model,
+		ModelSelection:        body.ModelSelection,
+		RiskConfirmed:         body.RiskConfirmed,
+		Label:                 label,
+		PermissionMode:        body.PermissionMode,
+		Sandbox:               body.Sandbox,
+		AskForApproval:        body.AskForApproval,
+		Route:                 body.Route,
+		SubscriptionProfileID: subscriptionID,
 	}, 20*time.Second)
 	if err != nil {
 		s.orchestration.mu.Lock()
@@ -444,12 +1050,118 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	s.registerBoardChild(prep.orchestrationID, prep.boardPath, childID, parentID, body.Role, spawnedAt)
 	s.setChildRestartData(prep.orchestrationID, childID, spawnWrappedSpec{
 		Provider: body.Provider, CWD: prep.childCWD, Model: body.Model, ModelSelection: body.ModelSelection,
-		RiskConfirmed: true, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
+		RiskConfirmed: body.RiskConfirmed, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
 		AskForApproval: body.AskForApproval, Route: body.Route,
+		SubscriptionProfileID: subscriptionID,
 	}, body.InitialPrompt, prep.branch, 0)
 	prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
-	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPrompt(childID, prompt) })
+	notice := injectNotice{ParentID: parentID, BoardPath: prep.boardPath, Role: body.Role}
+	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPromptNotify(childID, prompt, notice) })
 	return childSpawnResult{ID: childID, BoardPath: prep.boardPath, CWD: prep.childCWD, WorktreeBranch: prep.branch}, nil
+}
+
+// spawnHTTPError is the structured failure shape performSpawn returns. The
+// HTTP handler (no confirmation required) turns it straight into
+// writeJSONError; the confirmation-decision goroutine (which has no
+// http.ResponseWriter) turns it into a board note instead
+// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
+type spawnHTTPError struct {
+	status int
+	code   string
+	detail string
+}
+
+func (e *spawnHTTPError) Error() string { return e.detail }
+
+// performSpawn runs every step of child creation that used to sit inline in
+// handleSpawnChild after a spawn confirmation (if one was required) has
+// already been decided: re-reading the parent and orchestration limits from
+// a fresh snapshot, the duplicate-role guard, worktree/prompt preparation,
+// and dispatch. It never touches an http.ResponseWriter, so it is callable
+// from either handleSpawnChild directly (no confirmation required) or
+// resolveSpawnConfirmationDecision (confirmation required) — exactly one of
+// those two call sites runs for a given spawn request, so the child is never
+// launched twice for it.
+//
+// requestedProvider is the caller's original, pre-resolution provider value;
+// it is only used to decide whether to update the remembered role→provider
+// mapping (an explicit --provider should not change future defaults).
+// providerChangeNote, when non-empty, is appended to the child's board once
+// the board exists (used when a confirmation decision changed the provider
+// from what was requested).
+func (s *Server) performSpawn(parentID int, requestedProvider, providerChangeNote string, body spawnChildRequest) (childSpawnResult, *spawnHTTPError) {
+	return s.performSpawnWithAdmission(parentID, requestedProvider, providerChangeNote, body, "")
+}
+
+func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, providerChangeNote string, body spawnChildRequest, existingAdmissionID string) (childSpawnResult, *spawnHTTPError) {
+	if !validOrchestrationProvider(body.Provider) {
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusBadRequest, code: "bad_request", detail: invalidProviderDetail(body.Provider)}
+	}
+	if !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusBadRequest, code: "bad_request", detail: "invalid model selected for child"}
+	}
+	parent, _, _ := s.orchestrationParentState(parentID)
+	if parent == nil {
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+	}
+	cfg := s.snapshotCfg().Orchestration
+	applyChildApprovalDefaults(&body, cfg.ChildFullBypassEnabled())
+	if parent.Depth >= cfg.MaxDepth {
+		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max orchestration depth reached"}
+	}
+	admissionID := strings.TrimSpace(existingAdmissionID)
+	if !s.orchestrationAdmissionMatches(admissionID, parentID, 1) {
+		var err error
+		admissionID, err = s.reserveOrchestrationChildren(parentID, 1, cfg, "spawn")
+		if err != nil {
+			if errors.Is(err, errOrchestrationAdmissionParentNotFound) {
+				return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
+			}
+			var limit errOrchestrationLimit
+			if errors.As(err, &limit) {
+				detail := "max children per parent reached"
+				if limit.Limit == "total_sessions" {
+					detail = "max total sessions reached"
+				}
+				s.notifyOrchestrationError(parentID, limit.Limit, detail)
+				return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: detail}
+			}
+			return childSpawnResult{}, &spawnHTTPError{status: http.StatusInternalServerError, code: "orchestration_limit", detail: err.Error()}
+		}
+	}
+	defer s.releaseOrchestrationChildren(admissionID)
+	// 同 role の生存子がいる場合の重複 spawn ガード。conductor が修正指示・再確認指示を
+	// 毎回 spawn で出すと生存子数が max_children_per_parent に到達して詰まる実測があった
+	// （plan_orchestration-conductor-improvements.md C2）。既存子への指示は send を使わせる。
+	if !body.Force {
+		if live := s.liveChildForRole(parentID, body.Role); live != nil {
+			return childSpawnResult{}, &spawnHTTPError{status: http.StatusConflict, code: "duplicate_role_child", detail: fmt.Sprintf("live child #%d already exists for role %q; use `many-ai-cli orchestrate send --role %s \"<text>\"` to instruct it, or pass --force to spawn another", live.ID, body.Role, body.Role)}
+		}
+	}
+
+	prep, err := s.preparePromptAndWorktree(parentID, parent, body, cfg)
+	if err != nil {
+		var prepErr *spawnPreparationError
+		if errors.As(err, &prepErr) {
+			return childSpawnResult{}, &spawnHTTPError{status: prepErr.status, code: prepErr.code, detail: prepErr.detail}
+		}
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusInternalServerError, code: "board_error", detail: errorDetail("child preparation failed", err)}
+	}
+	if providerChangeNote != "" {
+		_ = s.appendBoardSection(prep.boardPath, "hub", providerChangeNote+"\n")
+	}
+	result, err := s.dispatchSpawn(parentID, parent, body, prep)
+	if err != nil {
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusInternalServerError, code: "spawn_error", detail: errorDetail("spawn error", err)}
+	}
+	// 起動できた組み合わせだけを覚える。失敗した provider を記憶すると、次回も同じ失敗を繰り返す。
+	// 明示 --provider を渡した spawn は記憶を更新しない。「今回はこれ」という指定であって、
+	// 次回以降の既定を変える意思とは限らないため（C2, plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md）。
+	if strings.TrimSpace(requestedProvider) == "" {
+		s.rememberRoleProvider(body.Role, body.Provider)
+	}
+	return result, nil
 }
 
 func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parentID int) {
@@ -465,34 +1177,41 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		return
 	}
 
-	cfg := s.snapshotCfg().Orchestration
-	parent, childCount, totalSessions := s.orchestrationParentState(parentID)
+	// C1 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md): AI/CLI が渡した
+	// 要求値をここで1行残す。以後 body.Provider 等は解決処理で書き換わるため、この時点の
+	// 値を先に確保しておく。initial_prompt の本文は出さない（利用者の作業内容そのもの）。
+	requestedProvider := body.Provider
+	requestedModel := body.Model
+	requestedCWD := body.CWD
+	s.logger.Info("orchestration spawn-child requested",
+		"parent_session_id", parentID, "role", body.Role,
+		"requested_provider", requestedProvider, "requested_model", requestedModel,
+		"requested_cwd", requestedCWD, "force", body.Force)
+
+	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
 		writeJSONError(w, http.StatusNotFound, "not_found", "parent session not found")
 		return
 	}
 
-	// C2 (plan_orchestration-spawn-ui-exposure.md): `many-ai-cli orchestrate spawn`
-	// は provider/model を省略できる。省略時は起動フォームの詳細設定で決めた
-	// role→provider/model マッピングから自動解決する（AI に provider/model を
-	// 判断させたくない「詳細設定あり」ケース向け）。明示指定があれば常に優先する。
-	if body.Provider == "" || body.Model == "" {
-		if roles := s.orchestrationRolesFor(parent.OrchestrationID); roles != nil {
-			if ra, ok := roles[body.Role]; ok {
-				if body.Provider == "" {
-					body.Provider = ra.Provider
-				}
-				if body.Model == "" {
-					body.Model = ra.Model
-				}
-			}
+	// C2 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md): provider/model の
+	// 解決は resolveSpawnChildProvider（resolveChildProvider が正本の純関数）へ集約した。
+	// 明示 --provider は役割対応表・記憶・親 provider のいずれにも負けない。
+	providerSource := s.resolveSpawnChildProvider(parent, &body)
+	if providerSource == providerSourceDefault {
+		parentProvider := ""
+		if parent != nil {
+			parentProvider = parent.Provider
 		}
+		s.logger.Info("orchestration child provider fallback used hardcoded default",
+			"role", body.Role, "parent_provider", parentProvider, "fallback_provider", "codex")
 	}
-	if body.Provider == "" {
-		body.Provider = "codex"
-	}
+	s.logger.Info("orchestration spawn-child provider resolved",
+		"parent_session_id", parentID, "role", body.Role,
+		"provider", body.Provider, "provider_source", providerSource)
+
 	if !validOrchestrationProvider(body.Provider) {
-		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
+		writeJSONError(w, http.StatusBadRequest, "bad_request", invalidProviderDetail(body.Provider))
 		return
 	}
 	if !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
@@ -500,79 +1219,59 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		return
 	}
 	if s.spawnConfirmationRequired(body.Provider) {
-		decision, ok := s.awaitSpawnConfirmation(r.Context(), parent, body)
+		pending, registerErr := s.registerSpawnConfirmation(parent, requestedProvider, body)
+		if registerErr != nil {
+			writeJSONError(w, registerErr.status, registerErr.code, registerErr.detail)
+			return
+		}
+		outcome, ok := s.waitSpawnConfirmation(r.Context(), pending)
 		if !ok {
-			boardPath, boardErr := s.ensureOrchestrationBoardForRefusal(parent, body)
-			if boardErr == nil {
-				_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("refused: role=%s reason=user_refusal\n", body.Role))
-			}
+			// The caller's own HTTP request died (its tool call timed out, or
+			// the process holding it was killed). The confirmation is
+			// deliberately left exactly as it was: no board write, no
+			// response, because nothing has actually been decided yet. It
+			// stays pending in the Hub and a browser can still decide it
+			// later — handleSpawnConfirmation's goroutine performs the spawn
+			// itself in that case
+			// (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C1).
+			return
+		}
+		if !outcome.Approved {
 			writeJSONStatus(w, http.StatusForbidden, httpErrorResp{OK: false, Error: "spawn_refused", Detail: "child spawn was refused by the user"})
 			return
 		}
-		if strings.TrimSpace(decision.Provider) != "" {
-			body.Provider = strings.TrimSpace(decision.Provider)
-		}
-		if strings.TrimSpace(decision.Model) != "" {
-			body.Model = strings.TrimSpace(decision.Model)
-		}
-		if !validOrchestrationProvider(body.Provider) || !spawnValidModelLabel(body.Model) || strings.HasPrefix(body.Model, "-") {
-			writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider or model selected for child")
+		if outcome.Err != nil {
+			writeJSONError(w, outcome.Err.status, outcome.Err.code, outcome.Err.detail)
 			return
 		}
-	}
-	applyChildApprovalDefaults(&body)
-	if parent.Depth >= cfg.MaxDepth {
-		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
-		writeJSONStatus(w, http.StatusTooManyRequests, httpErrorResp{OK: false, Error: "orchestration_limit", Detail: "max orchestration depth reached"})
+		result := outcome.Result
+		writeJSON(w, map[string]any{"ok": true, "session_id": result.ID, "board_path": result.BoardPath, "cwd": result.CWD, "worktree_branch": result.WorktreeBranch})
 		return
-	}
-	if childCount >= cfg.MaxChildrenPerParent {
-		s.notifyOrchestrationError(parentID, "children_per_parent", "max children per parent reached")
-		writeJSONStatus(w, http.StatusTooManyRequests, httpErrorResp{OK: false, Error: "orchestration_limit", Detail: "max children per parent reached"})
-		return
-	}
-	if totalSessions >= cfg.MaxTotalSessions {
-		s.notifyOrchestrationError(parentID, "total_sessions", "max total sessions reached")
-		writeJSONStatus(w, http.StatusTooManyRequests, httpErrorResp{OK: false, Error: "orchestration_limit", Detail: "max total sessions reached"})
-		return
-	}
-	// 同 role の生存子がいる場合の重複 spawn ガード。conductor が修正指示・再確認指示を
-	// 毎回 spawn で出すと生存子数が max_children_per_parent に到達して詰まる実測があった
-	// （plan_orchestration-conductor-improvements.md C2）。既存子への指示は send を使わせる。
-	if !body.Force {
-		if live := s.liveChildForRole(parentID, body.Role); live != nil {
-			writeJSONStatus(w, http.StatusConflict, httpErrorResp{OK: false, Error: "duplicate_role_child", Detail: fmt.Sprintf("live child #%d already exists for role %q; use `many-ai-cli orchestrate send --role %s \"<text>\"` to instruct it, or pass --force to spawn another", live.ID, body.Role, body.Role)})
-			return
-		}
 	}
 
-	prep, err := s.preparePromptAndWorktree(parentID, parent, body, cfg)
-	if err != nil {
-		var prepErr *spawnPreparationError
-		if errors.As(err, &prepErr) {
-			writeJSONError(w, prepErr.status, prepErr.code, prepErr.detail)
-			return
-		}
-		writeJSONError(w, http.StatusInternalServerError, "board_error", errorDetail("child preparation failed", err))
-		return
-	}
-	result, err := s.dispatchSpawn(parentID, parent, body, prep)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("spawn error", err))
+	// No confirmation required for this provider: this handler is the only
+	// place deciding whether the child gets created, so it calls performSpawn
+	// directly instead of going through the confirmation/decision split.
+	result, spawnErr := s.performSpawn(parentID, requestedProvider, "", body)
+	if spawnErr != nil {
+		writeJSONError(w, spawnErr.status, spawnErr.code, spawnErr.detail)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "session_id": result.ID, "board_path": result.BoardPath, "cwd": result.CWD, "worktree_branch": result.WorktreeBranch})
 }
 
 // applyChildApprovalDefaults は orchestration 子セッションの承認モード既定値を埋める。
-// 子は自走が前提のため、呼び出し側（conductor）が指定しない場合はプロバイダごとの
-// 全許可（承認バイパス相当）を既定にする。子の承認プロンプトを人間が張り付いて
-// 処理する運用は自走目的と矛盾するため。危険操作の抑制は承認ではなく worktree 隔離と
-// board の禁止事項で行う。承認バイパスは spawn リスクゲート（evaluateClaudeRisk /
-// evaluateCodexRisk）で HighRisk 扱いになるが、人間の同意はオーケストレーション開始時に
-// 済んでいるため子 spawn では確認済みとして扱う
+// fullBypass が true（既定）のとき、呼び出し側が指定しない場合はプロバイダごとの
+// 全許可（承認バイパス相当）と RiskConfirmed=true を埋める。子は自走が前提で、
+// 承認プロンプトを人間が張り付いて処理する運用は自走目的と矛盾するため。危険操作の
+// 抑制は承認ではなく worktree 隔離と board の禁止事項で行う
 // （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
-func applyChildApprovalDefaults(body *spawnChildRequest) {
+// fullBypass が false（orchestration.child_full_bypass: false）のときは既定を埋めず、
+// 呼び出し側の明示値のみを使う（高リスク権限の自動確認を避ける安全側パス）。
+func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
+	if !fullBypass {
+		return
+	}
 	switch body.Provider {
 	case "shell":
 		return
@@ -592,6 +1291,54 @@ func applyChildApprovalDefaults(body *spawnChildRequest) {
 		}
 	}
 	body.RiskConfirmed = true
+}
+
+// childApprovalPreview reports, per provider, the approval settings the child in
+// body would actually start with. The spawn confirmation carries it so the human
+// approving a child can see what they are granting: without it the dialog names
+// only role / provider / model / cwd / prompt, and a codex child silently starts
+// with --sandbox danger-full-access
+// (docs/local/bugfix_spawn-confirm-permission-disclosure_2026-09-08.md).
+//
+// It runs applyChildApprovalDefaults itself rather than restating the mapping, so
+// the dialog cannot drift from what the spawn actually does. Every provider is
+// computed from the same body because the dialog lets the approver switch
+// provider before deciding, and resolveSpawnConfirmationDecision then replaces
+// Provider/Model and nothing else — so a field the caller set explicitly stays
+// set across that switch, exactly as these entries show.
+func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]proto.ChildApproval {
+	providers := orchestrationProviders
+	if p := strings.TrimSpace(body.Provider); p != "" && !validOrchestrationProvider(p) {
+		// The dialog keeps an unknown requested provider as a selectable option,
+		// so describe it too instead of leaving that selection blank.
+		providers = append(append([]string(nil), providers...), p)
+	}
+	out := make(map[string]proto.ChildApproval, len(providers))
+	for _, provider := range providers {
+		b := body
+		b.Provider = provider
+		applyChildApprovalDefaults(&b, fullBypass)
+		out[provider] = proto.ChildApproval{
+			PermissionMode: b.PermissionMode,
+			Sandbox:        b.Sandbox,
+			AskForApproval: b.AskForApproval,
+			RiskConfirmed:  b.RiskConfirmed,
+		}
+	}
+	return out
+}
+
+// spawnConfirmationRequestedMessage builds the one message shape both the
+// initial broadcast and the resend to a (re)connecting UI use. Keeping it in one
+// place is what stops the resend from quietly lacking a field the fresh request
+// has — the approval preview was added here for exactly that reason.
+func (s *Server) spawnConfirmationRequestedMessage(p *pendingSpawnConfirmation) proto.Message {
+	return proto.Message{
+		Type: "spawn_confirmation_requested", SpawnConfirmationID: p.ID,
+		SessionID: p.ParentID, Role: p.Body.Role, Provider: p.Body.Provider, Model: p.Body.Model,
+		CWD: p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
+		SpawnChildApproval: childApprovalPreview(p.Body, s.snapshotCfg().Orchestration.ChildFullBypassEnabled()),
+	}
 }
 
 // isTerminalSessionState は再起動・追加指示の対象にしない終端状態。
@@ -817,6 +1564,74 @@ func (s *Server) setChildRestartData(boardID string, sessionID int, spec spawnWr
 	}
 }
 
+// markChildPromptDelivered records that a child's initial prompt was confirmed
+// delivered (echo observed, or a late echo from a previous attempt).
+// injectInitialPromptNotify does not carry a board ID (see its doc comment),
+// so — like completeOrchestrationChildOnSessionEnd — this walks every board
+// and finds the child by session ID
+// (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md C1).
+func (s *Server) markChildPromptDelivered(sessionID int, at time.Time) {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	for _, board := range s.orchestration.boards {
+		if child := board.Children[sessionID]; child != nil {
+			child.PromptDeliveredAt = at
+			return
+		}
+	}
+}
+
+// markChildPromptFailed records that a child's initial prompt delivery
+// failed. reportInjectFailure has already told the parent/board by the time
+// this is called (composerBlocked or attempts exhausted); this only marks
+// the child so childStartupFailed does not treat an undelivered prompt as a
+// startup failure on top of the delivery failure already reported.
+func (s *Server) markChildPromptFailed(sessionID int) {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	for _, board := range s.orchestration.boards {
+		if child := board.Children[sessionID]; child != nil {
+			child.PromptFailed = true
+			return
+		}
+	}
+}
+
+// markChildStandbySince starts the standby clock for a child the first time
+// it enters standby (evaluateIdle's fallbackDone transition). It is a no-op
+// once the clock is already running, and a no-op for a non-child session
+// (boardID resolves to no board, or the session id is not in Children) since
+// ses.OrchestrationID is set on conductors too.
+func (s *Server) markChildStandbySince(boardID string, sessionID int, since time.Time) {
+	if boardID == "" {
+		return
+	}
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	if board := s.orchestration.boards[boardID]; board != nil {
+		if child := board.Children[sessionID]; child != nil && child.StandbySince.IsZero() {
+			child.StandbySince = since
+		}
+	}
+}
+
+// resetChildStandbySince clears the standby clock when a child goes back to
+// running (markRunning). Called on every PTY output chunk, so it takes the
+// boardID directly (from the already-locked session) instead of walking
+// every board like markChildPromptDelivered/Failed do.
+func (s *Server) resetChildStandbySince(boardID string, sessionID int) {
+	if boardID == "" {
+		return
+	}
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	if board := s.orchestration.boards[boardID]; board != nil {
+		if child := board.Children[sessionID]; child != nil {
+			child.StandbySince = time.Time{}
+		}
+	}
+}
+
 // childProgressPath は子専用進捗ファイルのパス（board と同じディレクトリ）。
 func childProgressPath(boardPath string, sessionID int) string {
 	return filepath.Join(filepath.Dir(boardPath), fmt.Sprintf("child-%d.md", sessionID))
@@ -832,7 +1647,9 @@ func newOrchestrationBoard(id, path string) *orchestrationBoard {
 		Done:           map[int]bool{},
 		IdleWarned:     map[int]bool{},
 		TimedOut:       map[int]bool{},
+		StartupFailed:  map[int]bool{},
 		PendingNotices: map[int]string{},
+		EventOverflow:  map[int]uint64{},
 		LastWrite:      now,
 	}
 }
@@ -881,6 +1698,8 @@ func (s *Server) scanOrchestrationBoards() {
 		s.checkOrchestrationChildTimers(b.ID, now, cfg)
 	}
 	s.flushQueuedBoardNotices(now)
+	s.flushBoardEvents(now)
+	s.checkRelayReconnect(now)
 }
 
 // scanOrchestrationChildFiles は子専用進捗ファイル（child-<ID>.md）を監視する。
@@ -888,10 +1707,11 @@ func (s *Server) scanOrchestrationBoards() {
 // 内容を読んで DONE 検出と関係セッションへの更新通知を行う（C4: 子ごとファイル分離）。
 func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 	type childFile struct {
-		id   int
-		path string
-		size int64
-		mod  time.Time
+		id             int
+		path           string
+		size           int64
+		mod            time.Time
+		questionCursor int64
 	}
 	s.orchestration.mu.Lock()
 	b := s.orchestration.boards[boardID]
@@ -904,15 +1724,22 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		if child.FilePath == "" {
 			continue
 		}
-		files = append(files, childFile{id: id, path: child.FilePath, size: child.FileSize, mod: child.FileMod})
+		files = append(files, childFile{
+			id:             id,
+			path:           child.FilePath,
+			size:           child.FileSize,
+			mod:            child.FileMod,
+			questionCursor: child.QuestionCursor,
+		})
 	}
 	s.orchestration.mu.Unlock()
 
 	type update struct {
-		id    int
-		info  os.FileInfo
-		text  string
-		dones []boardDoneEvent
+		id        int
+		info      os.FileInfo
+		text      string
+		dones     []boardDoneEvent
+		questions []boardQuestionEvent
 	}
 	var updates []update
 	for _, f := range files {
@@ -927,18 +1754,33 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		if err != nil {
 			continue
 		}
-		updates = append(updates, update{id: f.id, info: info, text: string(data), dones: detectBoardDoneEvents(string(data))})
+		text := string(data)
+		appended := appendedBoardText(text, f.questionCursor)
+		questions, _ := detectBoardQuestionEvents(appended, boardWriter{SessionID: f.id})
+		updates = append(updates, update{
+			id:        f.id,
+			info:      info,
+			text:      text,
+			dones:     detectBoardDoneEvents(text),
+			questions: questions,
+		})
 	}
 	if len(updates) == 0 {
 		return
 	}
+	// A relay board (relay.go) keeps the file bookkeeping below but gets none
+	// of the generic DONE handling and progress notices (D-6): the relay counts
+	// the DONE lines itself and decides what to inject next.
+	owns := s.relayOwns(boardID)
 
 	type notice struct {
 		sessionID int
 		text      string
+		event     bool
 	}
 	var notices []notice
 	var doneIDs []int
+	var rejectedQuestions []boardQuestionEvent
 	s.orchestration.mu.Lock()
 	b = s.orchestration.boards[boardID]
 	if b == nil {
@@ -952,26 +1794,63 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 		}
 		child.FileSize = u.info.Size()
 		child.FileMod = u.info.ModTime()
+		child.QuestionCursor = int64(len(u.text))
 		child.LastBoardWrite = now
+		if owns {
+			continue
+		}
+		becameDone := false
 		for _, ev := range u.dones {
 			// 自ファイルなので session id 表記が欠けていても本人の DONE とみなす
 			if ev.SessionID == 0 || ev.SessionID == u.id {
+				becameDone = !child.Done
 				b.Done[u.id] = true
 				child.Done = true
-				doneIDs = append(doneIDs, u.id)
+				if becameDone {
+					doneIDs = append(doneIDs, u.id)
+				}
 				break
 			}
 		}
-		for sessionID := range b.Sessions {
-			if sessionID == u.id {
+		hasAuthorizedQuestion := false
+		for _, question := range u.questions {
+			if question.SessionID != u.id || question.Role != child.Role {
+				question.Writer = boardWriter{Role: child.Role, SessionID: u.id}
+				rejectedQuestions = append(rejectedQuestions, question)
 				continue
 			}
-			notices = append(notices, notice{sessionID: sessionID, text: fmt.Sprintf("\n[orchestration] progress updated by %s (session=%d): %s\n", child.Role, u.id, child.FilePath)})
+			hasAuthorizedQuestion = true
+			notices = append(notices, notice{
+				sessionID: child.ParentID,
+				text: fmt.Sprintf("\n[orchestration] question from role=%s session=%d progress=%s\n",
+					child.Role, u.id, child.FilePath),
+				event: true,
+			})
+		}
+		if child.ParentID > 0 && (becameDone || !hasAuthorizedQuestion) {
+			text := fmt.Sprintf("\n[orchestration] progress updated by %s (session=%d): %s\n", child.Role, u.id, child.FilePath)
+			if becameDone {
+				text = fmt.Sprintf("\n[orchestration] child complete role=%s session=%d progress=%s\n", child.Role, u.id, child.FilePath)
+			}
+			notices = append(notices, notice{sessionID: child.ParentID, text: text, event: becameDone})
 		}
 	}
 	s.orchestration.mu.Unlock()
+	if owns {
+		for _, u := range updates {
+			s.relayOnChildFileChange(boardID, u.id, u.text)
+		}
+		return
+	}
 	for _, n := range notices {
-		s.notifyBoardSession(boardID, n.sessionID, n.text)
+		if n.event {
+			s.notifyBoardEvent(boardID, n.sessionID, n.text)
+		} else {
+			s.notifyBoardSession(boardID, n.sessionID, n.text)
+		}
+	}
+	for _, question := range rejectedQuestions {
+		s.recordRejectedBoardQuestion(boardID, b.Path, question)
 	}
 	for _, id := range doneIDs {
 		s.markChildState(id, "done")
@@ -979,6 +1858,11 @@ func (s *Server) scanOrchestrationChildFiles(boardID string, now time.Time) {
 }
 
 func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, text string, now time.Time) {
+	// A relay board only records the write; the relay's own instructions and
+	// records go there, and neither DONE authorization nor "board updated"
+	// notices apply (D-6). relayOwns takes orchestration.mu, so ask before
+	// taking the lock here.
+	owns := s.relayOwns(boardID)
 	s.orchestration.mu.Lock()
 	stored := s.orchestration.boards[boardID]
 	if stored == nil {
@@ -986,20 +1870,39 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 		return
 	}
 	dones := detectBoardDoneEvents(text)
+	appended := appendedBoardText(text, stored.QuestionCursor)
+	questions, lastWriter := detectBoardQuestionEvents(appended, stored.LastWriter)
+	if stored.QuestionCursor > int64(len(text)) {
+		// A rewritten/truncated legacy board establishes a new cursor without
+		// replaying old questions. Progress files are append-only by contract.
+		questions = nil
+		lastWriter = detectLastBoardWriter(text)
+	}
 	writer := detectLastBoardWriter(text)
 	writerID := s.resolveBoardWriterLocked(stored, writer)
 	stored.LastSize = info.Size()
 	stored.LastMod = info.ModTime()
 	stored.LastWrite = now
+	stored.QuestionCursor = int64(len(text))
+	stored.LastWriter = lastWriter
 	for _, child := range stored.Children {
 		if writerID == child.ID || (writerID == 0 && writer.Role == child.Role) {
 			child.LastBoardWrite = now
 		}
 	}
+	if owns {
+		s.orchestration.mu.Unlock()
+		return
+	}
 	var authorizedDoneIDs []int
 	var rejectedDones []boardDoneEvent
+	var authorizedQuestions []boardQuestionEvent
+	var rejectedQuestions []boardQuestionEvent
 	for _, ev := range dones {
 		if sessionID, ok := authorizeBoardDoneLocked(stored, ev, writerID); ok {
+			if stored.Done[sessionID] {
+				continue
+			}
 			stored.Done[sessionID] = true
 			child := stored.Children[sessionID]
 			child.Done = true
@@ -1009,21 +1912,27 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 			rejectedDones = append(rejectedDones, ev)
 		}
 	}
-	sessions := map[int]string{}
-	for id, role := range stored.Sessions {
-		sessions[id] = role
+	for _, question := range questions {
+		questionWriterID := s.resolveBoardWriterLocked(stored, question.Writer)
+		if authorizeBoardQuestionLocked(stored, question, questionWriterID) {
+			authorizedQuestions = append(authorizedQuestions, question)
+		} else {
+			rejectedQuestions = append(rejectedQuestions, question)
+		}
 	}
+	parentID := boardConductorSessionIDLocked(stored)
 	s.orchestration.mu.Unlock()
 
 	updatedBy := writer.Role
 	if updatedBy == "" {
 		updatedBy = "unknown"
 	}
-	for sessionID := range sessions {
-		if writerID != 0 && sessionID == writerID {
-			continue
-		}
-		s.notifyBoardSession(boardID, sessionID, fmt.Sprintf("\n[orchestration] board updated by %s: %s\n", updatedBy, boardPath))
+	// An actionable marker already carries the board/progress reference. Do not
+	// also send the same write through an explicit interrupt progress mode,
+	// which could bypass the event delivery blockers.
+	if parentID > 0 && parentID != writerID && writer.Role != "hub" &&
+		len(authorizedQuestions) == 0 && len(authorizedDoneIDs) == 0 {
+		s.notifyBoardSession(boardID, parentID, fmt.Sprintf("\n[orchestration] board updated by %s: %s\n", updatedBy, boardPath))
 	}
 	for _, ev := range rejectedDones {
 		s.logger.Warn("orchestration DONE rejected",
@@ -1032,9 +1941,51 @@ func (s *Server) handleBoardChange(boardID, boardPath string, info os.FileInfo, 
 			"claimed_session_id", ev.SessionID,
 			"role", ev.Role)
 	}
+	for _, question := range rejectedQuestions {
+		s.recordRejectedBoardQuestion(boardID, boardPath, question)
+	}
+	for _, question := range authorizedQuestions {
+		if parentID > 0 {
+			s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] question from role=%s session=%d progress=%s\n",
+				question.Role, question.SessionID, boardPath))
+		}
+	}
 	for _, sessionID := range authorizedDoneIDs {
+		s.orchestration.mu.Lock()
+		child := stored.Children[sessionID]
+		role, progressPath := "", boardPath
+		if child != nil {
+			role = child.Role
+			if child.FilePath != "" {
+				progressPath = child.FilePath
+			}
+		}
+		s.orchestration.mu.Unlock()
+		if parentID > 0 {
+			s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete role=%s session=%d progress=%s\n", role, sessionID, progressPath))
+		}
 		s.markChildState(sessionID, "done")
 	}
+}
+
+// boardConductorSessionIDLocked returns the single conductor registered for a
+// board. Ambiguous or missing ownership fails closed instead of notifying an
+// arbitrary sibling. The caller holds orchestration.mu.
+func boardConductorSessionIDLocked(board *orchestrationBoard) int {
+	if board == nil {
+		return 0
+	}
+	found := 0
+	for sessionID, role := range board.Sessions {
+		if role != "conductor" {
+			continue
+		}
+		if found != 0 {
+			return 0
+		}
+		found = sessionID
+	}
+	return found
 }
 
 // authorizeBoardDoneLocked binds a shared-board DONE marker to the child that
@@ -1063,8 +2014,15 @@ func (s *Server) notifyBoardSession(boardID string, sessionID int, text string) 
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
 	isConductor := ses != nil && ses.OrchestrationID != "" && ses.ParentSessionID == 0
+	injectGated := ses != nil && sessionInjectGated(ses, time.Now())
 	s.sessionsMu.Unlock()
 	if !isConductor {
+		if injectGated {
+			// 初期プロンプトが入る前の子へ board 通知を送らない。子は初期プロンプトで
+			// 「board を読んでから動け」と指示されるので通知は要らず、ここで送るとゲートが
+			// 保留キューへ積み、注入より先に着いて 1 通目が通知になる。
+			return
+		}
 		s.injectText(sessionID, text, true, false)
 		return
 	}
@@ -1180,6 +2138,71 @@ func uniqueChildSessionForRole(b *orchestrationBoard, role string) int {
 	return found
 }
 
+// childStartupFailedLocked implements D2's startup-handshake-failure
+// judgment (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md)
+// from already-read values, taking no locks itself. Callers that already hold
+// orchestration.mu (checkOrchestrationChildTimers) can call this directly
+// with a pre-fetched approvalVisible; childStartupFailed below is the
+// standalone, locking entry point for everyone else (tests included).
+//
+// True only when BOTH hold: the initial prompt's delivery was confirmed and
+// the child has never written its progress file (child.FileMod.IsZero()),
+// AND the session has been standby (no PTY output) for at least
+// cfg.ChildStartupGraceSeconds while not waiting on an approval prompt.
+func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, now time.Time, cfg config.OrchestrationConfig) bool {
+	if !cfg.ChildStartupFailEnabled() {
+		return false
+	}
+	if child.PromptDeliveredAt.IsZero() || child.PromptFailed {
+		// 配送が確認できていない（未注入・保留キュー行き・配送失敗のいずれか）。
+		// 誤検知で殺すより従来の timeout に任せるほうが安全。
+		return false
+	}
+	if !child.FileMod.IsZero() {
+		// 一度でも進捗ファイルを書いた子は働いている。timeout の担当。
+		return false
+	}
+	if approvalVisible {
+		// 承認待ちの間は grace のカウントを進めない。
+		return false
+	}
+	if child.StandbySince.IsZero() {
+		// standby ではない（まだ running、または一度も standby になっていない）。
+		return false
+	}
+	grace := cfg.ChildStartupGraceSeconds
+	if grace <= 0 {
+		grace = 60
+	}
+	return now.Sub(child.StandbySince) >= time.Duration(grace)*time.Second
+}
+
+// childStartupFailed is the locking, session-ID-addressed entry point for
+// childStartupFailedLocked. It also enforces the D9 latch: once a board has
+// recorded StartupFailed[sessionID] (set by handleChildStartupFailed after it
+// has acted on a true verdict), this returns false so the same child cannot
+// fire the judgment twice.
+func (s *Server) childStartupFailed(sessionID int, now time.Time, cfg config.OrchestrationConfig) bool {
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	approvalVisible := ses != nil && ses.approvalVisible
+	s.sessionsMu.Unlock()
+
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	for _, board := range s.orchestration.boards {
+		child := board.Children[sessionID]
+		if child == nil {
+			continue
+		}
+		if board.StartupFailed[sessionID] {
+			return false
+		}
+		return childStartupFailedLocked(child, approvalVisible, now, cfg)
+	}
+	return false
+}
+
 func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cfg config.OrchestrationConfig) {
 	type notice struct {
 		parentID  int
@@ -1190,27 +2213,59 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 		threshold int
 	}
 	var notices []notice
+	// A relay board routes timeout / idle to the relay (relay.go) instead of
+	// marking the child or warning the conductor (D-6 / D-15). The latches
+	// (TimedOut / IdleWarned) below are shared; the relay releases them when it
+	// hands the child its next instruction.
+	owns := s.relayOwns(boardID)
+	if owns && s.relayTerminal(boardID) {
+		return
+	}
+	boardPath := ""
 	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
 	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
 	// だけの判定は実測で偽陽性を連発した（plan_orchestration-conductor-improvements.md C1）。
+	// approvalVisible も同じ理由で事前取得する（承認待ちを起動失敗の grace に含めないため。
+	// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md D2）。
 	// sessionsMu → orchestration.mu の順に短く取り、入れ子にしない。
 	lastOutputs := map[int]time.Time{}
+	approvalVisible := map[int]bool{}
 	s.sessionsMu.Lock()
 	for id, ses := range s.sessions {
 		lastOutputs[id] = ses.lastOutputAt
+		approvalVisible[id] = ses.approvalVisible
 	}
 	s.sessionsMu.Unlock()
 	s.orchestration.mu.Lock()
 	b := s.orchestration.boards[boardID]
 	if b != nil {
+		boardPath = b.Path
 		for id, child := range b.Children {
-			if child.Done || b.Done[id] || b.TimedOut[id] {
+			if child.Done || b.Done[id] || b.TimedOut[id] || b.StartupFailed[id] {
 				continue
 			}
-			if cfg.ChildTimeoutSeconds > 0 && now.Sub(child.SpawnedAt) > time.Duration(cfg.ChildTimeoutSeconds)*time.Second {
-				b.TimedOut[id] = true
-				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "timeout", state: "timeout", threshold: cfg.ChildTimeoutSeconds})
+			if childStartupFailedLocked(child, approvalVisible[id], now, cfg) {
+				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "startup_failed"})
 				continue
+			}
+			if cfg.ChildTimeoutSeconds > 0 {
+				// Measure the timeout from the child's last activity, not its
+				// spawn time. A child still actively writing to the board or
+				// emitting PTY output past ChildTimeoutSeconds is healthy and must
+				// not be force-marked "timeout" — that state makes it unsendable
+				// and, with TimeoutRespawn, starts a 2nd body in the same worktree.
+				lastActivity := child.SpawnedAt
+				if child.LastBoardWrite.After(lastActivity) {
+					lastActivity = child.LastBoardWrite
+				}
+				if last, ok := lastOutputs[id]; ok && last.After(lastActivity) {
+					lastActivity = last
+				}
+				if now.Sub(lastActivity) > time.Duration(cfg.ChildTimeoutSeconds)*time.Second {
+					b.TimedOut[id] = true
+					notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "timeout", state: "timeout", threshold: cfg.ChildTimeoutSeconds})
+					continue
+				}
 			}
 			if cfg.IdleDoneThresholdSec > 0 {
 				threshold := time.Duration(cfg.IdleDoneThresholdSec) * time.Second
@@ -1233,6 +2288,23 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	}
 	s.orchestration.mu.Unlock()
 	for _, n := range notices {
+		if n.kind == "startup_failed" {
+			// Evidence capture / board record / notify-or-relay / stop all happen
+			// regardless of relay ownership (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md
+			// C2/C3); handleChildStartupFailed branches on owns internally.
+			s.handleChildStartupFailed(boardID, boardPath, n.childID, n.role, n.parentID, owns, cfg)
+			continue
+		}
+		if owns {
+			switch n.kind {
+			case "timeout":
+				s.relayOnChildTimeout(boardID, n.childID)
+			case "idle":
+				_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("idle role=%s id=%d threshold=%ds\n", n.role, n.childID, n.threshold))
+				s.relayOnChildIdle(boardID, n.childID)
+			}
+			continue
+		}
 		switch n.kind {
 		case "timeout":
 			s.notifyOrchestrationError(n.parentID, "timeout", fmt.Sprintf("role=%s id=%d threshold=%ds", n.role, n.childID, n.threshold))
@@ -1241,8 +2313,101 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 				s.respawnTimedOutChild(boardID, n.childID, cfg.MaxTimeoutRespawns)
 			}
 		case "idle":
-			s.injectText(n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold), true, false)
+			s.notifyBoardEvent(boardID, n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold))
 		}
+	}
+}
+
+// childStartupFailureScreenTail collects the last few non-empty screen lines
+// as evidence for a startup-failure notification (D4,
+// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md). The
+// input is the child's raw provider screen, not an AI-authored DONE line, so
+// unlike lastUsefulDoneLine (done_summary.go) this keeps up to maxLines lines
+// instead of just one; it reuses that function's box-removal
+// (inputBoxTopIndex) and per-line cleanup (cleanTUILine) but writes its own
+// multi-line collection since the two inputs are shaped differently.
+func (s *Server) childStartupFailureScreenTail(sessionID int, maxLines int) []string {
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	var screen []string
+	if ses != nil && ses.vt != nil {
+		screen = ses.vt.Lines()
+	}
+	s.sessionsMu.Unlock()
+	if len(screen) == 0 {
+		return nil
+	}
+	end := len(screen)
+	if top := inputBoxTopIndex(screen); top >= 0 {
+		end = top
+	}
+	var lines []string
+	for i := end - 1; i >= 0 && len(lines) < maxLines; i-- {
+		raw := strings.TrimSpace(screen[i])
+		if strings.HasPrefix(raw, "│") || strings.HasPrefix(raw, "┃") {
+			// 枠線で囲まれたパネルの中身。上辺を見つけられなかったときの受け皿
+			// （lastUsefulDoneLine と同じ理由）。
+			continue
+		}
+		line := strings.TrimSpace(cleanTUILine(screen[i]))
+		if line == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	// 収集は画面末尾から遡ったので、表示順（上から下）へ戻す。
+	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+		lines[i], lines[j] = lines[j], lines[i]
+	}
+	return lines
+}
+
+// childStartupFailureScreenTailMaxLines bounds how many screen lines
+// handleChildStartupFailed captures as evidence (D4).
+const childStartupFailureScreenTailMaxLines = 5
+
+// handleChildStartupFailed is the C2/C3 action taken once childStartupFailed
+// (via checkOrchestrationChildTimers) has judged a child as a startup
+// failure. It captures the screen tail as evidence, records it on the board,
+// latches StartupFailed so this fires once (D9), then either tells the
+// parent directly or hands the child to its relay (D10), and finally stops
+// the child's wrapper if child_startup_kill is enabled (D6). It never calls
+// respawnTimedOutChild (D5): a startup failure is not a timeout, and
+// re-spawning with the same spec would repeat the same failure.
+//
+// owns and cfg are passed in from the caller's already-computed values
+// (relayOwns / snapshotCfg) so this does not pay for a second lookup.
+func (s *Server) handleChildStartupFailed(boardID, boardPath string, childID int, role string, parentID int, owns bool, cfg config.OrchestrationConfig) {
+	tail := sanitizeInjectText(strings.Join(s.childStartupFailureScreenTail(childID, childStartupFailureScreenTailMaxLines), "\n"))
+	grace := cfg.ChildStartupGraceSeconds
+	if grace <= 0 {
+		grace = 60
+	}
+	// 文面は観測した事実（無音の秒数・進捗ファイル未作成・画面末尾）だけを書く。以前は
+	// 「子 CLI の model/auth/provider を確認せよ」と原因を断定していたが、2026-09-07 の #32 は
+	// 初期プロンプトが入力欄に残っていただけで、その断定が指揮者の判断を誤らせた
+	// （docs/local/bugfix_claude-child-initial-prompt-enter-lost_2026-09-07.md）。
+	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("startup failed: role=%s id=%d went idle for %ds after its initial prompt was delivered and never wrote its progress file. screen tail:\n%s\n", role, childID, grace, tail))
+
+	s.orchestration.mu.Lock()
+	if board := s.orchestration.boards[boardID]; board != nil {
+		if board.StartupFailed == nil {
+			board.StartupFailed = map[int]bool{}
+		}
+		board.StartupFailed[childID] = true
+	}
+	s.orchestration.mu.Unlock()
+
+	if owns {
+		s.relayOnChildStartupFailed(boardID, childID)
+	} else {
+		detail := fmt.Sprintf("role=%s id=%d: the child went idle for %ds after its initial prompt was delivered and never wrote its progress file. Hub has no other evidence of why it stopped; read the screen tail below before retrying the same role/provider. screen tail: %s", role, childID, grace, tail)
+		s.notifyOrchestrationError(parentID, "startup_failed", detail)
+		s.markChildState(childID, "error")
+	}
+
+	if cfg.ChildStartupKillEnabled() {
+		s.killWrapper(childID, "startup_failed")
 	}
 }
 
@@ -1269,7 +2434,13 @@ func (s *Server) completeOrchestrationChildOnSessionEnd(sessionID int, state str
 		return
 	}
 	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child completed without DONE marker: role=%s session=%d state=%s (session_end)\n", role, sessionID, state))
-	s.notifyBoardSession(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))
+	if s.relayOwns(boardID) {
+		// The relay stops itself (stopped(child_exited)) and notifies the parent
+		// through its own finish path (D-6).
+		s.relayOnChildExit(boardID, sessionID, state)
+		return
+	}
+	s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))
 }
 
 // respawnTimedOutChild retries an opted-in child once (or the configured small
@@ -1299,6 +2470,12 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 		label := fmt.Sprintf("orch-%s-%s-retry-%d", safeToken(boardID), child.Role, time.Now().UnixNano())
 		spec := child.RestartSpec
 		spec.Label = label
+		admissionID, admissionErr := s.reserveOrchestrationChildren(child.ParentID, 1, s.snapshotCfg().Orchestration, "timeout-respawn")
+		if admissionErr != nil {
+			s.notifyOrchestrationError(child.ParentID, "timeout_respawn", fmt.Sprintf("role=%s id=%d: %v", child.Role, sessionID, admissionErr))
+			return
+		}
+		defer s.releaseOrchestrationChildren(admissionID)
 		meta := pendingChild{ParentSessionID: child.ParentID, Role: child.Role, Auto: true, Depth: 1, OrchestrationID: boardID, BoardPath: board.Path, WorktreeBranch: child.WorktreeBranch, SpawnedAt: time.Now()}
 		s.orchestration.mu.Lock()
 		s.orchestration.pending[label] = meta
@@ -1311,10 +2488,13 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 			s.notifyOrchestrationError(child.ParentID, "timeout_respawn", fmt.Sprintf("role=%s id=%d: %v", child.Role, sessionID, err))
 			return
 		}
+		s.consumeOrchestrationChildren(admissionID, 1)
 		s.registerBoardChild(boardID, board.Path, newID, child.ParentID, child.Role, time.Now())
 		s.setChildRestartData(boardID, newID, child.RestartSpec, child.InitialPrompt, child.WorktreeBranch, child.TimeoutRetries+1)
 		_ = s.appendBoardSection(board.Path, "hub", fmt.Sprintf("timeout retry spawned: role=%s old_session=%d session=%d\n", child.Role, sessionID, newID))
-		s.injectInitialPrompt(newID, buildChildInitialPrompt(child.InitialPrompt, board.Path, child.Role, child.WorktreeBranch, newID))
+		s.injectInitialPromptNotify(newID,
+			buildChildInitialPrompt(child.InitialPrompt, board.Path, child.Role, child.WorktreeBranch, newID),
+			injectNotice{ParentID: child.ParentID, BoardPath: board.Path, Role: child.Role})
 	})
 }
 
@@ -1347,11 +2527,58 @@ func detectBoardDoneEvents(text string) []boardDoneEvent {
 	return events
 }
 
+// appendedBoardText returns only bytes written after cursor. If an append-only
+// file was truncated or rewritten, it returns no content so historical
+// QUESTION markers are not replayed as new alerts.
+func appendedBoardText(text string, cursor int64) string {
+	if cursor < 0 || cursor > int64(len(text)) {
+		return ""
+	}
+	return text[cursor:]
+}
+
+// detectBoardQuestionEvents associates each QUESTION marker with the ordinary
+// section header immediately preceding it. That writer identity is required
+// to authorize legacy children that still append to the shared board.
+func detectBoardQuestionEvents(text string, writer boardWriter) ([]boardQuestionEvent, boardWriter) {
+	var events []boardQuestionEvent
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "## ") {
+			continue
+		}
+		if strings.HasPrefix(line, "## QUESTION ") {
+			fields := strings.Fields(strings.TrimPrefix(line, "## QUESTION "))
+			if len(fields) == 0 {
+				continue
+			}
+			role := sanitizeRole(fields[0])
+			sessionID := parseBoardSessionID(fields[1:])
+			if role == "" || sessionID == 0 {
+				continue
+			}
+			events = append(events, boardQuestionEvent{Role: role, SessionID: sessionID, Writer: writer})
+			continue
+		}
+		if strings.HasPrefix(line, "## DONE ") || strings.HasPrefix(line, "## SUCCESS ") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(line, "## "))
+		if len(fields) > 0 {
+			writer = boardWriter{Role: sanitizeRole(fields[0]), SessionID: parseBoardSessionID(fields[1:])}
+		}
+	}
+	return events, writer
+}
+
 func detectLastBoardWriter(text string) boardWriter {
 	var writer boardWriter
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "## ") || strings.HasPrefix(line, "## DONE ") {
+		if !strings.HasPrefix(line, "## ") ||
+			strings.HasPrefix(line, "## DONE ") ||
+			strings.HasPrefix(line, "## SUCCESS ") ||
+			strings.HasPrefix(line, "## QUESTION ") {
 			continue
 		}
 		fields := strings.Fields(strings.TrimPrefix(line, "## "))
@@ -1360,6 +2587,34 @@ func detectLastBoardWriter(text string) boardWriter {
 		}
 	}
 	return writer
+}
+
+// authorizeBoardQuestionLocked rejects IDOR attempts by requiring the claimed
+// child identity and role to match the section's immediately preceding writer.
+// The caller holds orchestration.mu.
+func authorizeBoardQuestionLocked(board *orchestrationBoard, question boardQuestionEvent, writerID int) bool {
+	if board == nil || question.SessionID <= 0 || writerID != question.SessionID {
+		return false
+	}
+	child := board.Children[question.SessionID]
+	return child != nil && child.Role == question.Role
+}
+
+func (s *Server) recordRejectedBoardQuestion(boardID, boardPath string, question boardQuestionEvent) {
+	s.logger.Warn("orchestration QUESTION rejected",
+		"board_id", boardID,
+		"source_session_id", question.Writer.SessionID,
+		"claimed_session_id", question.SessionID,
+		"role", question.Role)
+	if boardPath == "" {
+		return
+	}
+	if err := s.appendBoardSection(boardPath, "hub", fmt.Sprintf(
+		"QUESTION rejected: source_session=%d claimed_role=%s claimed_session=%d\n",
+		question.Writer.SessionID, question.Role, question.SessionID)); err != nil {
+		s.logger.Error("orchestration QUESTION rejection record failed",
+			"board_id", boardID, "board_path", boardPath, "err", err)
+	}
 }
 
 func parseBoardSessionID(fields []string) int {
@@ -1411,37 +2666,88 @@ func (s *Server) markChildState(sessionID int, state string) {
 
 func sessionUpdateMessage(ses *session) proto.Message {
 	return proto.Message{
-		Type:                "session_update",
-		SessionID:           ses.ID,
-		Provider:            ses.Provider,
-		Display:             ses.Display,
-		CWD:                 ses.CWD,
-		Branch:              ses.Branch,
-		Label:               ses.Label,
-		Model:               ses.Model,
-		Route:               ses.Route,
-		State:               ses.State,
-		OutputIdle:          ses.Activity.OutputIdle,
-		WorkflowActive:      ses.Activity.WorkflowActive,
-		AwaitingUser:        ses.Activity.AwaitingUser,
-		AwaitingApproval:    ses.Activity.AwaitingApproval,
-		Activity:            activityMessage(ses.Activity),
-		ApprovalSourceEpoch: ensureApprovalSourceEpochLocked(ses),
-		LastOutputAt:        ses.LastOutputAt,
-		StartedAt:           ses.StartedAt,
-		ParentSessionID:     ses.ParentSessionID,
-		Role:                ses.Role,
-		Auto:                ses.Auto,
-		Depth:               ses.Depth,
-		OrchestrationID:     ses.OrchestrationID,
-		BoardPath:           ses.BoardPath,
-		WorktreeBranch:      ses.WorktreeBranch,
-		BoardNotifyPending:  ses.BoardNotifyPending,
+		Type:                 "session_update",
+		SessionID:            ses.ID,
+		Provider:             ses.Provider,
+		Display:              ses.Display,
+		CWD:                  ses.CWD,
+		Branch:               ses.Branch,
+		ProjectID:            ses.ProjectID,
+		Label:                ses.Label,
+		Model:                ses.Model,
+		Route:                ses.Route,
+		State:                ses.State,
+		OutputIdle:           ses.Activity.OutputIdle,
+		WorkflowActive:       ses.Activity.WorkflowActive,
+		AwaitingUser:         ses.Activity.AwaitingUser,
+		AwaitingApproval:     ses.Activity.AwaitingApproval,
+		Activity:             activityMessage(ses.Activity),
+		ApprovalSourceEpoch:  ensureApprovalSourceEpochLocked(ses),
+		LastOutputAt:         ses.LastOutputAt,
+		StartedAt:            ses.StartedAt,
+		ParentSessionID:      ses.ParentSessionID,
+		Role:                 ses.Role,
+		Auto:                 ses.Auto,
+		Depth:                ses.Depth,
+		OrchestrationID:      ses.OrchestrationID,
+		BoardPath:            ses.BoardPath,
+		WorktreeBranch:       ses.WorktreeBranch,
+		BoardNotifyPending:   ses.BoardNotifyPending,
+		Relays:               copyRelayStatuses(ses.Relays),
+		CrossSessionMessages: copyCrossSessionMessages(ses.CrossSessionMessages),
+		SubscriptionID:       ses.SubscriptionProfileID,
+		SubscriptionName:     ses.SubscriptionProfileName,
 	}
 }
 
+// copyRelayStatuses flattens the parent's relay snapshots for the wire. The
+// caller holds sessionsMu; the pointers are never mutated after publication.
+func copyRelayStatuses(relays []*proto.RelayStatus) []proto.RelayStatus {
+	if len(relays) == 0 {
+		return nil
+	}
+	out := make([]proto.RelayStatus, 0, len(relays))
+	for _, r := range relays {
+		if r != nil {
+			out = append(out, *r)
+		}
+	}
+	return out
+}
+
 func (s *Server) notifyOrchestrationError(parentID int, limit, detail string) {
-	s.injectText(parentID, fmt.Sprintf("\n[MANY-AI-CLI-ORCHESTRATION-ERROR] limit=%s detail=%s\n", safeToken(limit), strings.ReplaceAll(detail, "\n", " ")), true, false)
+	text := fmt.Sprintf("\n[MANY-AI-CLI-ORCHESTRATION-ERROR] limit=%s detail=%s\n", safeToken(limit), strings.ReplaceAll(detail, "\n", " "))
+	if boardID := s.orchestrationBoardForParent(parentID); boardID != "" {
+		if s.relayOwns(boardID) {
+			return
+		}
+		s.notifyBoardEvent(boardID, parentID, text)
+		return
+	}
+	s.injectText(parentID, text, true, false)
+}
+
+// orchestrationBoardForParent resolves only a conductor's own registered board.
+// The two-lock lookup fails closed on stale or inconsistent session metadata.
+func (s *Server) orchestrationBoardForParent(parentID int) string {
+	s.sessionsMu.Lock()
+	parent := s.sessions[parentID]
+	boardID := ""
+	if parent != nil && parent.ParentSessionID == 0 {
+		boardID = parent.OrchestrationID
+	}
+	s.sessionsMu.Unlock()
+	if boardID == "" {
+		return ""
+	}
+	s.orchestration.mu.Lock()
+	board := s.orchestration.boards[boardID]
+	valid := board != nil && board.Sessions[parentID] == "conductor"
+	s.orchestration.mu.Unlock()
+	if !valid {
+		return ""
+	}
+	return boardID
 }
 
 // waitForInputReady は spawn 直後の起動アニメーション（スプラッシュ・Tips バナー等）が
@@ -1469,6 +2775,233 @@ func (s *Server) waitForInputReady(sessionID int, quiet, maxWait time.Duration) 
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+}
+
+// providerComposerSignals は「入力欄が描画され、キー入力を受け付けられる」ことの陽性シグナル。
+// 空白除去済み（collapseWhitespace 後）の画面テキストに対して部分一致で見る。
+//
+// 静止時間による判定（waitForInputReady）は、起動途中に静止窓を持つ provider では
+// 原理的に誤発火する。2026-07-04 の bugfix（根本原因 A）で指摘済みだが、当時の対策は
+// 「注入後にエコーが出なければ再注入」というリトライで、**早すぎる 1 回目の書き込み自体は
+// 残っていた**。2026-09-01、その 1 回目が codex をモーダルへ固着させ、リトライでも
+// Web の承認パネルでも抜けられないことが実測された
+// （bugfix_codex-update-screen-swallows-initial-prompt_2026-09-01.md 観測 9）。
+//
+// **実測で確認した provider だけを載せる。** 載っていない provider は従来どおり静止判定へ
+// フォールバックする（未確認の合図で待ち続けて注入が永久に止まる方が害が大きい）。
+var providerComposerSignals = map[string][]string{
+	// 実測: logs/sessions/codex_2026-09-01_*_s{11,12,14}.log（通常セッション・到達時）
+	"codex": {"AskCodextodoanything"},
+	// claude: 入力欄の直下に出る footer `⏵⏵ bypass permissions on (shift+tab to cycle)` /
+	// `⏵⏵ auto mode on (shift+tab to cycle)`。2026-09-07 に手元の claude 生ログ 87 本
+	// （v2.1.251〜v2.1.263）を数え、87 本すべてに `(shift+tab to cycle)` があり、入力欄
+	// （`❯`）と同じフレームで描かれていた（logs/sessions/claude_2026-09-07_125754_docs_s32.jsonl
+	// の 12:57:55 の 3015 バイト）。`? for shortcuts` は 1/87 で本文中の言及だったので使わない。
+	//
+	// これが無い間は claude を「合図なし」扱いで 300ms 静止待ちへ落としていた。Claude Code
+	// v2.1.263 は登録から 0.7 秒の無音の後にやっと alt screen と bracketed paste を有効化する
+	// ため、静止待ちがその無音に当たり、入力欄が無い PTY へ本文と確定 CR を書き込んでいた。
+	// 本文は起動後にまとめて読まれて入力欄に載るが確定 CR だけが効かず、子は入力欄に
+	// 指示を載せたまま止まる（2026-09-07 の #29 / #32 / #34 で 3 回中 3 回。
+	// docs/local/bugfix_claude-child-initial-prompt-enter-lost_2026-09-07.md）。
+	"claude": {"shift+tabtocycle"},
+}
+
+// providerBlockingSignals は「モーダルが出ていて入力を受け付けない」ことのシグナル。
+// これが画面にある間は注入しない。**注入すると抜けられなくなる**ため、待つか諦めるかしかない。
+var providerBlockingSignals = map[string][]string{
+	"codex": {
+		"Doyoutrustthecontentsofthisdirectory", // ディレクトリ信頼の確認
+		"Updateavailable!",                     // 自己更新メニュー
+		"Pressentertocontinue",                 // 上記 2 つの共通フッター
+	},
+	// claude: 未登録。保持している claude 生ログ 87 本にモーダルで止まった画面が 1 つも
+	// 無く、文言を実測で確かめられない（2026-09-07）。モーダル中は footer が描かれないので
+	// ready 側の合図が出ず、composerUnknown として従来の静止待ちへ落ちる。実際に止まった
+	// 画面を観測したら、その文言をここへ足す。
+}
+
+// providerComposerRegion は「入力欄に今なにが載っているか」を画面から切り出す provider 別の
+// 関数。エコー観測（waitForInjectEcho）は本文が画面のどこかに現れたことしか言えず、
+// 「入力欄に貼り付いたまま」と「確定されて transcript に流れた」を区別できない。
+// 2026-09-07 の #32 はこの区別が無かったため、入力欄に載ったままの本文を配送成功と記録し、
+// 起動失敗の見張りが 82 秒後に子を殺した。未登録の provider は従来どおりエコー＝配送成功。
+var providerComposerRegion = map[string]func(screen []string) (text string, ok bool){
+	"claude": claudeComposerText,
+}
+
+// claudeComposerText は Claude Code の入力欄の中身を空白除去済みで返す。
+//
+// レイアウト（v2.1.263 実測 2026-09-07 s32 の VT 画面）:
+//
+//	[transcript ...]
+//	──────────────  区切り線
+//	❯ 入力欄（長文は次行以降へ折り返す）
+//	──────────────  区切り線
+//	$0.0000  Fable 5.1  ↑0 ↓0        statusline
+//	⏵⏵ bypass permissions on (shift+tab to cycle)   footer
+//
+// transcript 側のユーザー発言も `❯ ` で始まるが常に入力欄より上にあるので、画面で最後の
+// `❯` 行を入力欄の先頭とみなし、そこから次の区切り線か footer までを入力欄とする。
+// `❯` が画面に無ければ ok=false（判定不能。呼び出し側は従来どおりの扱いへ倒す）。
+func claudeComposerText(screen []string) (string, bool) {
+	start := -1
+	for i := len(screen) - 1; i >= 0; i-- {
+		if strings.HasPrefix(strings.TrimSpace(screen[i]), "❯") {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", false
+	}
+	var b strings.Builder
+	for i := start; i < len(screen); i++ {
+		line := strings.TrimSpace(screen[i])
+		if i > start && (isTUIRuleLine(line) || isClaudeFooterLine(line)) {
+			break
+		}
+		if i == start {
+			line = strings.TrimPrefix(line, "❯")
+		}
+		b.WriteString(line)
+	}
+	return collapseWhitespace(b.String()), true
+}
+
+// isTUIRuleLine は罫線だけの行（Claude Code の入力欄の上下に引かれる `─` の連続）か。
+// 8 文字未満は箇条書きの `─` 等と区別できないので罫線とみなさない。
+func isTUIRuleLine(line string) bool {
+	n := 0
+	for _, r := range line {
+		switch r {
+		case '─', '━', '═', ' ':
+		default:
+			return false
+		}
+		if r != ' ' {
+			n++
+		}
+	}
+	return n >= 8
+}
+
+// isClaudeFooterLine は入力欄の下の footer 行か（モード表示 `⏵⏵ ... (shift+tab to cycle)`）。
+// statusline は利用者設定で無いこともあるので、footer だけを終端の目印にする。
+func isClaudeFooterLine(line string) bool {
+	return strings.HasPrefix(line, "⏵") || strings.Contains(collapseWhitespace(line), "shift+tabtocycle")
+}
+
+// composerWaitResult は waitForComposerReady の判定結果。
+type composerWaitResult int
+
+const (
+	composerReady    composerWaitResult = iota // 入力欄が出ており、モーダルも無い
+	composerBlocked                            // モーダルが出たまま抜けない
+	composerUnknown                            // 陽性シグナルを一度も観測できなかった
+	composerNoSignal                           // この provider の合図が未定義（従来判定へ）
+)
+
+const (
+	// 入力欄の描画を待つ上限。claude は splash から入力欄まで 12 秒かかった実測がある
+	// （orchestration.go 冒頭のコメント参照）ので、その 3 倍強を取る。
+	orchestrationComposerMaxWait = 45 * time.Second
+	// 「入力欄あり・モーダル無し」がこの時間続いて初めて ready と判定する。
+	// codex は入力欄を描いた直後にモーダルを重ねてくるため、瞬間値では取り違える
+	// （実測: s13 では composer 描画とモーダル出現が同じ秒に入っていた）。
+	// blocked 判定（モーダルが安定して出続けている）にも同じ定数を使う。ready/blocked
+	// どちらも「確定にはこれだけの継続時間を要求する」という同じ意味論であり、
+	// 別定数を増やす理由が無い。
+	orchestrationComposerStableFor = 1500 * time.Millisecond
+)
+
+// waitForComposerReady は入力欄の陽性シグナルを待ち、モーダルが出ていないことも確認する。
+// 第 2 戻り値は composerBlocked のときに検出したモーダルのシグナル文字列。
+func (s *Server) waitForComposerReady(sessionID int, maxWait time.Duration) (composerWaitResult, string) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	provider := ""
+	if ses != nil {
+		provider = ses.Provider
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return composerUnknown, ""
+	}
+	readySignals := providerComposerSignals[provider]
+	if len(readySignals) == 0 {
+		return composerNoSignal, ""
+	}
+	blockers := providerBlockingSignals[provider]
+
+	deadline := time.Now().Add(maxWait)
+	var readySince time.Time
+	var blockedSince time.Time
+	lastBlocker := ""
+	for {
+		s.sessionsMu.Lock()
+		cur := s.sessions[sessionID]
+		screen := ""
+		if cur != nil && cur.vt != nil {
+			screen = collapseWhitespace(strings.Join(cur.vt.Lines(), ""))
+		}
+		s.sessionsMu.Unlock()
+		if cur == nil {
+			return composerUnknown, ""
+		}
+
+		blocked := ""
+		for _, b := range blockers {
+			if strings.Contains(screen, b) {
+				blocked = b
+				break
+			}
+		}
+		switch {
+		case blocked != "":
+			lastBlocker = blocked
+			readySince = time.Time{}
+			// ready 側と対称: モーダルが安定してこの時間出続けたら、deadline を待たず
+			// その場で確定させる。ここで即座に返さないと、モーダルが起動直後から
+			// 一度も揺らがず出ていても maxWait（45秒）満了まで無意味なポーリングを
+			// 続けてから composerBlocked を返すことになり、reportInjectFailure による
+			// 通知が最大 45 秒遅れる（2026-09-02 発見）。
+			if blockedSince.IsZero() {
+				blockedSince = time.Now()
+			}
+			if time.Since(blockedSince) >= orchestrationComposerStableFor {
+				return composerBlocked, lastBlocker
+			}
+		case containsAnySignal(screen, readySignals):
+			blockedSince = time.Time{}
+			if readySince.IsZero() {
+				readySince = time.Now()
+			}
+			if time.Since(readySince) >= orchestrationComposerStableFor {
+				return composerReady, ""
+			}
+		default:
+			readySince = time.Time{}
+			blockedSince = time.Time{}
+		}
+
+		if time.Now().After(deadline) {
+			if lastBlocker != "" {
+				return composerBlocked, lastBlocker
+			}
+			return composerUnknown, ""
+		}
+		time.Sleep(orchestrationInjectEchoPoll)
+	}
+}
+
+func containsAnySignal(screen string, signals []string) bool {
+	for _, sig := range signals {
+		if strings.Contains(screen, sig) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) injectText(sessionID int, text string, pressEnter bool, interrupt bool) {
@@ -1502,20 +3035,15 @@ func (s *Server) injectText(sessionID int, text string, pressEnter bool, interru
 }
 
 func (s *Server) injectRaw(sessionID int, text string) {
-	s.sessionsMu.Lock()
-	wc := s.wrappers[sessionID]
-	s.sessionsMu.Unlock()
-	s.submitInput(wc, sessionID, text)
+	s.submitInput(sessionID, text)
 }
 
 // injectRawBypassGate は初期プロンプト注入（injectInitialPrompt）専用の送信経路。
-// initialInjectPending ゲート中でも wrapper へ直接届ける（通常経路だと注入自体が
-// pendingInput へ回ってデッドロックするため）。
-func (s *Server) injectRawBypassGate(sessionID int, text string) {
-	s.sessionsMu.Lock()
-	wc := s.wrappers[sessionID]
-	s.sessionsMu.Unlock()
-	s.submitInputWithGate(wc, sessionID, text, true)
+// initialInjectPending ゲート中でも、ゲートが積んだ保留キューも追い越して wrapper へ
+// 直接届ける（通常経路だと注入自体が pendingInput へ回ってデッドロックするため）。
+// 戻り値は wrapper へ書けたかどうか。false なら保留キューに入っているので送り直さない。
+func (s *Server) injectRawBypassGate(sessionID int, text string) bool {
+	return s.submitInputWithGate(sessionID, text, true)
 }
 
 // injectInitialPrompt は orchestration セッション（conductor / 子）への初期プロンプトを、
@@ -1526,7 +3054,35 @@ func (s *Server) injectRawBypassGate(sessionID int, text string) {
 //
 // 完了・断念にかかわらず initialInjectPending ゲートを解除し、保留中のユーザー入力を
 // 順番どおり flush する。goroutine で呼ぶこと（エコー検証で数十秒ブロックしうる）。
+// injectNotice は初期プロンプトを届けられなかったときの報告先。
+// 子セッションでは board と親（conductor）へ出す。conductor 自身への注入では空でよい。
+type injectNotice struct {
+	ParentID  int
+	BoardPath string
+	Role      string
+}
+
+// reportInjectFailure は「初期プロンプトが届いていない」ことを board と親へ出す。
+//
+// これが無いと、Hub は失敗を検知していながら誰にも伝えず、カードは実行中のまま残る。
+// 指揮者は届いたつもりで待ち続け、利用者が画面を見るまで気づけない
+// （2026-09-01 実測: 指揮者が 3 通の指示を書き終えるまで気づかなかった）。
+func (s *Server) reportInjectFailure(sessionID int, notice injectNotice, detail string) {
+	if notice.BoardPath != "" {
+		_ = s.appendBoardSection(notice.BoardPath, "hub",
+			fmt.Sprintf("initial prompt NOT delivered: role=%s session=%d %s\n", notice.Role, sessionID, detail))
+	}
+	if notice.ParentID > 0 {
+		s.notifyOrchestrationError(notice.ParentID, "child_input_blocked",
+			fmt.Sprintf("role=%s id=%d: %s", notice.Role, sessionID, detail))
+	}
+}
+
 func (s *Server) injectInitialPrompt(sessionID int, prompt string) {
+	s.injectInitialPromptNotify(sessionID, prompt, injectNotice{})
+}
+
+func (s *Server) injectInitialPromptNotify(sessionID int, prompt string, notice injectNotice) {
 	defer s.clearInitialInjectGate(sessionID)
 	marker := injectEchoMarker(prompt)
 	// チャット送信・injectText と同じくブラケットペーストで包み、確定 \r は
@@ -1536,22 +3092,181 @@ func (s *Server) injectInitialPrompt(sessionID int, prompt string) {
 	// 可視テキストで行うためマーカー包みの影響を受けない。
 	text := bracketedPasteStart + strings.TrimRight(prompt, "\r\n") + bracketedPasteEnd + "\r"
 	for attempt := 1; attempt <= orchestrationInjectMaxAttempts; attempt++ {
-		s.waitForInputReady(sessionID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
+		// 入力欄が出たことを陽性シグナルで確かめてから書き込む。
+		// モーダルが出ている間に書き込むと、そのモーダルから抜けられなくなる。
+		switch res, blocker := s.waitForComposerReady(sessionID, orchestrationComposerMaxWait); res {
+		case composerReady:
+			// 入力欄が安定して出ている。このまま注入する。
+		case composerBlocked:
+			s.logger.Warn("initial prompt not injected; child TUI is on a modal",
+				"session_id", sessionID, "attempt", attempt, "blocker", blocker)
+			s.reportInjectFailure(sessionID, notice,
+				fmt.Sprintf("child TUI is waiting on a modal (%s) and never reached its composer; the initial prompt was NOT delivered", blocker))
+			// C1 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md): 配送失敗を
+			// 記録する。reportInjectFailure が既に親へ child_input_blocked を出したので、
+			// 起動失敗判定（childStartupFailed）が同じ子へ重ねて startup_failed を出さない。
+			s.markChildPromptFailed(sessionID)
+			return
+		case composerNoSignal:
+			// この provider の合図は未確認。従来の静止判定へフォールバックする。
+			s.waitForInputReady(sessionID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
+		default: // composerUnknown
+			s.logger.Warn("composer signal not observed; falling back to quiet wait",
+				"session_id", sessionID, "attempt", attempt)
+			s.waitForInputReady(sessionID, orchestrationInjectQuiet, orchestrationInjectMaxWait)
+		}
 		if attempt > 1 && s.waitForInjectEcho(sessionID, marker, 0) {
 			// 前回注入分のエコーが遅れて描画された場合は再注入しない（二重送信防止）
 			s.logger.Info("initial prompt echo observed late", "session_id", sessionID, "attempt", attempt)
+			s.finishInitialPromptDelivery(sessionID, marker, notice)
 			return
 		}
-		s.injectRawBypassGate(sessionID, text)
+		if !s.injectRawBypassGate(sessionID, text) {
+			// wrapper へ書けず保留キューへ入った。ゲート解除時の flush がこの 1 通を
+			// 届けるので、ここで送り直すと同じ本文が二重に届く。
+			s.logger.Warn("initial prompt deferred to pending queue; not retrying",
+				"session_id", sessionID, "attempt", attempt)
+			return
+		}
 		if s.waitForInjectEcho(sessionID, marker, orchestrationInjectEchoWait) {
 			if attempt > 1 {
 				s.logger.Info("initial prompt injected after retry", "session_id", sessionID, "attempt", attempt)
 			}
+			s.finishInitialPromptDelivery(sessionID, marker, notice)
 			return
 		}
 		s.logger.Warn("initial prompt echo not observed; retrying", "session_id", sessionID, "attempt", attempt)
 	}
 	s.logger.Warn("initial prompt injection gave up", "session_id", sessionID, "attempts", orchestrationInjectMaxAttempts)
+	s.reportInjectFailure(sessionID, notice,
+		fmt.Sprintf("the child never echoed the initial prompt after %d attempts; it was NOT delivered", orchestrationInjectMaxAttempts))
+	// C1 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md): 上と同じ理由で
+	// 配送失敗を記録する。
+	s.markChildPromptFailed(sessionID)
+}
+
+// finishInitialPromptDelivery はエコー観測後の締め。確定 CR が効いたところまで確かめられれば
+// 配送成功、入力欄に本文が残ったままなら（Enter を 1 回送り直しても消えなければ）配送失敗
+// として記録する。どちらか一方だけを 1 回記録する。
+func (s *Server) finishInitialPromptDelivery(sessionID int, marker string, notice injectNotice) {
+	if s.confirmInitialPromptSubmitted(sessionID, marker, notice) {
+		s.markChildPromptDelivered(sessionID, time.Now())
+		return
+	}
+	s.markChildPromptFailed(sessionID)
+}
+
+// injectSubmitConfirmWait は confirmInitialPromptSubmitted の待ち上限（ゼロ値 = 本番既定）。
+func (s *Server) injectSubmitConfirmWait() time.Duration {
+	if s.injectSubmitConfirm > 0 {
+		return s.injectSubmitConfirm
+	}
+	return orchestrationSubmitConfirmWait
+}
+
+// confirmInitialPromptSubmitted はエコー観測後に「確定 CR が効いたか」を入力欄の中身で確かめる。
+//
+// エコーは本文が画面に現れたことしか言えない。2026-09-07 の #29 / #32 / #34 では、起動前に
+// 書き込んだ本文が Claude Code の起動後に入力欄へ載り、確定 CR だけが捨てられていた。
+// エコー検証はこれを配送成功と記録し、確定 CR の再送判定（confirmOrResendSubmitEnter）は
+// 起動時のスプラッシュ描画を「動き出した」と誤認して再送しなかった。入力欄が空になった
+// ことまで見れば、この 2 つの誤認は起きない。
+//
+// 入力欄に残っていれば Enter を 1 回だけ送り直す。1 回に限るのは、確定 CR を 2 回入れると
+// 後続の承認プロンプトへ誤承認が当たりうるため（deferred-enter.ts と同じ規約）。承認待ちが
+// 見えている間は送らない。それでも残っていれば配送失敗として board と親へ出す。
+// 戻り値 true は「配送成功として記録してよい」。入力欄を判定できない provider（未登録）や
+// 画面に入力欄が見つからないときは、従来どおりエコー＝配送成功に倒す。
+func (s *Server) confirmInitialPromptSubmitted(sessionID int, marker string, notice injectNotice) bool {
+	wait := s.injectSubmitConfirmWait()
+	cleared, known := s.waitForComposerClear(sessionID, marker, wait)
+	if !known || cleared {
+		return true
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	approvalVisible := ses != nil && ses.approvalVisible
+	s.sessionsMu.Unlock()
+	if ses == nil {
+		return true
+	}
+	if approvalVisible {
+		s.logger.Warn("initial prompt still in composer but an approval prompt is visible; not resending Enter",
+			"session_id", sessionID)
+		return true
+	}
+	s.logger.Warn("initial prompt still in composer after Enter; resending Enter once", "session_id", sessionID)
+	if !s.injectRawBypassGate(sessionID, "\r") {
+		// 保留キューへ回った。ゲート解除時の flush が届けるので、ここで重ねて送らない。
+		s.logger.Warn("Enter resend deferred to pending queue", "session_id", sessionID)
+		return true
+	}
+	cleared, known = s.waitForComposerClear(sessionID, marker, wait)
+	if !known || cleared {
+		s.logger.Info("initial prompt submitted after Enter resend", "session_id", sessionID)
+		return true
+	}
+	s.logger.Warn("initial prompt still in composer after Enter resend; giving up", "session_id", sessionID)
+	s.reportInjectFailure(sessionID, notice,
+		"the initial prompt is still sitting in the child's composer and two Enters did not submit it; it was NOT delivered. Open the child session and press Enter once, then instruct it with orchestrate send")
+	return false
+}
+
+// waitForComposerClear は入力欄から本文（marker）が消えるまで待つ。
+// cleared は「消えたことを orchestrationComposerClearStableFor 続けて観測した」、
+// known は「この provider・この画面で入力欄の判定ができた」。known=false のときは
+// 呼び出し側が従来どおりの扱い（エコー＝配送成功）へ倒す。
+func (s *Server) waitForComposerClear(sessionID int, marker string, maxWait time.Duration) (cleared, known bool) {
+	deadline := time.Now().Add(maxWait)
+	var clearSince time.Time
+	for {
+		stuck, ok := s.promptStuckInComposer(sessionID, marker)
+		if !ok {
+			return false, false
+		}
+		if stuck {
+			clearSince = time.Time{}
+			if time.Now().After(deadline) {
+				return false, true
+			}
+		} else {
+			if clearSince.IsZero() {
+				clearSince = time.Now()
+			}
+			if time.Since(clearSince) >= orchestrationComposerClearStableFor {
+				return true, true
+			}
+		}
+		time.Sleep(orchestrationInjectEchoPoll)
+	}
+}
+
+// promptStuckInComposer は注入した本文の末尾（marker）がまだ入力欄に載っているかを返す。
+// ok=false は判定不能（provider に入力欄の切り出しが無い・セッション消滅・画面に入力欄なし）。
+func (s *Server) promptStuckInComposer(sessionID int, marker string) (stuck, ok bool) {
+	if marker == "" {
+		return false, false
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	provider := ""
+	var screen []string
+	if ses != nil {
+		provider = ses.Provider
+		if ses.vt != nil {
+			screen = ses.vt.Lines()
+		}
+	}
+	s.sessionsMu.Unlock()
+	extract := providerComposerRegion[provider]
+	if ses == nil || extract == nil {
+		return false, false
+	}
+	text, found := extract(screen)
+	if !found {
+		return false, false
+	}
+	return strings.Contains(text, marker), true
 }
 
 // clearInitialInjectGate は初期注入ゲートを解除し、ゲート中に溜まったユーザー入力を flush する。
@@ -1568,7 +3283,14 @@ func (s *Server) clearInitialInjectGate(sessionID int) {
 	s.flushPendingInput(sessionID)
 }
 
-// waitForInjectEcho は注入テキストのエコー（marker）が PTY 画面に現れるまで待つ。
+// pastePlaceholderRe は「長い貼り付けをプレースホルダへ畳んだ」痕跡（空白除去後）。
+// Claude Code は複数行の貼り付けを `[Pasted text #1 +33 lines]` に畳むため、本文の文字列は
+// 1 文字も画面に出ない。実測: logs/sessions/claude_2026-08-31_122034_implementation_s14.jsonl
+// の 2026-08-31 12:20:47 の行。
+var pastePlaceholderRe = regexp.MustCompile(`\[Pastedtext#\d+`)
+
+// waitForInjectEcho は注入テキストが CLI に取り込まれた痕跡が PTY 画面に現れるまで待つ。
+// 痕跡は 2 通りある: marker（本文末尾）がそのまま出るか、貼り付けプレースホルダへ畳まれるか。
 // TUI の折り返しに影響されないよう、画面テキストと marker の双方から空白を除いて比較する。
 func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Duration) bool {
 	if marker == "" {
@@ -1586,7 +3308,7 @@ func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Du
 		if ses == nil {
 			return false
 		}
-		if strings.Contains(screen, marker) {
+		if strings.Contains(screen, marker) || pastePlaceholderRe.MatchString(screen) {
 			return true
 		}
 		if time.Now().After(deadline) {
@@ -1596,17 +3318,18 @@ func (s *Server) waitForInjectEcho(sessionID int, marker string, maxWait time.Du
 	}
 }
 
-// injectEchoMarker は注入テキストの先頭行から、エコー検出用の空白除去済み部分文字列を作る。
+// injectEchoMarker は注入テキストの末尾から、エコー検出用の空白除去済み部分文字列を作る。
+//
+// 先頭ではなく末尾を見るのは、TUI の入力欄が長文の「末尾」しか映さないため。実測
+// （2026-08-31 session #14）では、先頭行 `You are an orchestration child session.` は画面へ
+// 1 度も出ず、末尾の `…報告してください。` だけが出ていた。先頭を marker にすると claude
+// 相手では原理的に一致せず、再注入が必ず撃ち切る。
 func injectEchoMarker(prompt string) string {
-	line := prompt
-	if i := strings.IndexByte(line, '\n'); i >= 0 {
-		line = line[:i]
-	}
-	line = collapseWhitespace(line)
-	const maxMarkerRunes = 32
+	line := collapseWhitespace(prompt)
+	const maxMarkerRunes = 16
 	runes := []rune(line)
 	if len(runes) > maxMarkerRunes {
-		runes = runes[:maxMarkerRunes]
+		runes = runes[len(runes)-maxMarkerRunes:]
 	}
 	return string(runes)
 }
@@ -1636,7 +3359,7 @@ func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int
 	}
 	// 進捗・DONE は子専用ファイルへ。board.md は conductor の指示・全体状況の読み取り専用に
 	// することで、共有 board への同時書き込み競合と記帳名義ゆれを避ける（C4）。
-	b.WriteString("Read the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## " + role + " session=" + id + " <RFC3339 time>` sections, each including a `status: running|blocked|done|failed` line. When complete, append `## DONE " + role + " session=" + id + "` (or the explicit success form `## SUCCESS " + role + " session=" + id + "`) and a concise summary to your progress file. Do not write to the shared board.\n\n")
+	b.WriteString("Read the board before acting; the conductor posts instructions there. Write your progress ONLY to your progress file (create it on first write), as `## " + role + " session=" + id + " <RFC3339 time>` sections, each including a `status: running|blocked|done|failed` line. If you need an answer before continuing, include `status: blocked` and append `## QUESTION " + role + " session=" + id + "`; the conductor will answer with orchestrate send. When complete, append `## DONE " + role + " session=" + id + "` (or the explicit success form `## SUCCESS " + role + " session=" + id + "`) and a concise summary to your progress file. Do not write to the shared board.\n\n")
 	// base はユーザー・conductor 由来のフリーテキスト。BEL/ESC 等の C0 制御文字が
 	// 混入していると PTY 経由で子セッションの端末エコー・Hub UI レンダリングに
 	// エスケープシーケンス（タイトル詐称・画面クリア等）を注入できてしまうため
@@ -1675,31 +3398,35 @@ func buildConductorInitialPrompt(orchestrationID string, roles map[string]orches
 			b.WriteString(fmt.Sprintf("- %s: provider=%s model=%s\n", role, ra.Provider, ra.Model))
 		}
 		b.WriteString("To spawn a child for a role above, run:\n")
-		b.WriteString("  many-ai-cli orchestrate spawn --role <role> \"<prompt>\"\n")
+		b.WriteString("  <MANY_AI_CLI_BIN> orchestrate spawn --role <role> \"<prompt>\"\n")
 		b.WriteString("(provider/model are resolved automatically from the mapping above; pass --provider/--model to override a specific spawn.)\n")
 	} else {
 		b.WriteString("No child role mapping was configured. Decide provider/model yourself whenever a child is needed and run:\n")
-		b.WriteString("  many-ai-cli orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
+		b.WriteString("  <MANY_AI_CLI_BIN> orchestrate spawn --role <role> --provider <provider> --model <model> \"<prompt>\"\n")
 	}
 	b.WriteString("Do not call the Hub HTTP API or handle any auth token directly; this subcommand does it for you.\n")
+	b.WriteString("The Hub exposes its exact executable path in MANY_AI_CLI_BIN. Invoke that path, not a many-ai-cli resolved from PATH, for every orchestrate command.\n")
+	b.WriteString("To run a plan file through the implementation→review→fix relay without conducting it yourself, run: <MANY_AI_CLI_BIN> orchestrate relay --plan <path-to-plan.md> (roles come from the mapping above; pass --impl/--review provider[/model] if no mapping is configured; add --strong provider[/model] to hand a C to a stronger implementer when it keeps failing review; the relay works in its own git worktree unless you pass --same-tree). Relay children are driven by the Hub: do not spawn or send to them yourself, and you may close this session while a relay is running — it continues without you and you will be notified when it finishes.\n")
+	b.WriteString("Use `<MANY_AI_CLI_BIN> orchestrate relay status [--id <orchestration-id>]` to inspect relay state and `<MANY_AI_CLI_BIN> orchestrate relay stop [--id <orchestration-id>]` to stop it.\n")
 	// 2026-07-04 の実運用（plan_orchestration-conductor-improvements.md C3）で確立した
 	// conductor 運用ルール。spawn 反復による枠涸渇・停止指示の解釈違い・レビューと修正の
 	// レースを構造的に防ぐ。
 	b.WriteString("Operating rules:\n")
-	b.WriteString("- To give follow-up instructions to an existing live child, run `many-ai-cli orchestrate send --role <role> \"<text>\"` instead of spawning again. spawn is rejected (409) while a live child exists for the role; send injects the text into the child and records it on the board automatically.\n")
+	b.WriteString("- To give follow-up instructions to an existing live child, run `<MANY_AI_CLI_BIN> orchestrate send --role <role> \"<text>\"` instead of spawning again. spawn is rejected (409) while a live child exists for the role; send injects the text into the child and records it on the board automatically.\n")
+	b.WriteString("- When a child reports `## QUESTION <role> session=<id>`, read its progress file and answer with `<MANY_AI_CLI_BIN> orchestrate send --role <role> \"<answer>\"`.\n")
 	b.WriteString("- When the user asks you to stop, confirm in one line whether they mean immediately or after the current work unit completes (default: after completion).\n")
 	b.WriteString("- Do not dispatch a reviewer while the implementation child is still working on fixes; wait for its `## DONE` entry on the board first.\n")
 	return b.String()
 }
 
-func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg config.OrchestrationConfig) (string, string, string) {
+func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg config.OrchestrationConfig) (string, string, string, error) {
 	if !cfg.WorktreeEnabled() {
-		return cwd, "", "worktree skip: disabled by config"
+		return cwd, "", "worktree skip: disabled by config", nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := exec.CommandContext(ctx, "git", "-C", cwd, "rev-parse", "--show-toplevel").Run(); err != nil {
-		return cwd, "", "worktree skip: parent cwd is not a git repository"
+		return cwd, "", "worktree skip: parent cwd is not a git repository", nil
 	}
 	branch := "orch/" + safeToken(orchestrationID) + "/" + safeToken(role)
 	root := cfg.WorktreeDirRoot
@@ -1708,10 +3435,14 @@ func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg con
 	}
 	childDir := filepath.Join(root, safeToken(orchestrationID), safeToken(role))
 	if err := os.MkdirAll(filepath.Dir(childDir), sessionlog.PrivateDirMode); err != nil {
-		return cwd, "", "worktree skip: " + err.Error()
+		return cwd, "", "worktree skip: " + err.Error(), nil
 	}
 	if _, err := os.Stat(childDir); err == nil {
-		return childDir, branch, "worktree reuse: " + childDir + " branch=" + branch
+		if err := validateWorktreeIdentity(cwd, childDir, branch); err != nil {
+			note := "worktree reuse rejected: " + err.Error()
+			return cwd, "", note, err
+		}
+		return childDir, branch, "worktree reuse: " + childDir + " branch=" + branch, nil
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel2()
@@ -1720,9 +3451,9 @@ func (s *Server) prepareChildWorktree(cwd, orchestrationID, role string, cfg con
 	// session cwd（ユーザー本人が指定した自マシンのパス）。
 	cmd := exec.CommandContext(ctx2, "git", "-C", cwd, "worktree", "add", "-b", branch, childDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return cwd, "", "worktree skip: " + strings.TrimSpace(string(out)) + " " + err.Error()
+		return cwd, "", "worktree skip: " + strings.TrimSpace(string(out)) + " " + err.Error(), nil
 	}
-	return childDir, branch, "worktree created: " + childDir + " branch=" + branch
+	return childDir, branch, "worktree created: " + childDir + " branch=" + branch, nil
 }
 
 func (s *Server) appendBoardSection(path, role, text string) error {
@@ -1755,11 +3486,179 @@ func safeToken(value string) string {
 	return value
 }
 
-func validOrchestrationProvider(provider string) bool {
-	switch provider {
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok":
-		return true
-	default:
-		return false
+// provider 解決の確定理由（C1/C2, plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md）。
+// ログと board 記帳で共通して使う語彙。
+const (
+	providerSourceExplicit   = "explicit"
+	providerSourceRoleMap    = "role_map"
+	providerSourceRemembered = "remembered"
+	providerSourceParent     = "parent"
+	providerSourceDefault    = "default"
+)
+
+// resolveChildProvider は spawn child の provider をどこから決めるかを、Server に依存せず
+// 値だけで決める純関数。source は判定理由（providerSource* 定数のいずれか）。
+//
+// 解決順:
+//
+//  1. explicit  — AI が明示した --provider（ユーザーがそう言った。空でなければ常に勝つ）
+//  2. role_map  — オーケストレーション開始時に決めた役割 → provider の対応表
+//  3. remembered — その役割で前回実際に起動した provider（user_prefs.spawn.role_provider）
+//  4. parent    — 親と同じ provider（親が shell 等で子に使えないときは通らない）
+//  5. default   — ハードコード `codex`（3・4 とも使えないときの最後の受け皿）
+//
+// 3・4 を足した理由（2026-08-29）: 昇格したセッション（普通に始めたセッションが最初の
+// spawn で指揮者になる経路）には対応表が無いので、以前はここが `codex` 決め打ちだった。
+// Claude で作業している人が「レビューさせて」と言っただけで、黙って別契約の codex が
+// 動き出す。親と同じなら少なくとも意外性が無い。役割ごとの記憶があれば、1 度だけ
+// 承認ダイアログで直せば以後その役割はその provider になる（毎回聞かなくてよい）。
+//
+// custom provider の親（`plan_custom-provider-extension-triage.md` C1）は
+// `validOrchestrationProvider` が常に偽になるため、上記の「親と同じ」を素通りして
+// ステップ5（ハードコード `codex`）へ落ちる。既定の `spawn_confirm_mode` では起動前に
+// 確認ダイアログを挟むため完全に無言ではないが、ダイアログ自体は選定理由までは示さず、
+// `spawn_confirm_mode: off` の環境では本当に無言になる。せめてログには残す
+// （呼び出し側が source == providerSourceDefault のときに Info を出す）。
+func resolveChildProvider(requested, roleAssigned, remembered, parentProvider string) (provider, source string) {
+	if strings.TrimSpace(requested) != "" {
+		return requested, providerSourceExplicit
 	}
+	if strings.TrimSpace(roleAssigned) != "" {
+		return roleAssigned, providerSourceRoleMap
+	}
+	if validOrchestrationProvider(remembered) {
+		return remembered, providerSourceRemembered
+	}
+	if validOrchestrationProvider(parentProvider) {
+		return parentProvider, providerSourceParent
+	}
+	return "codex", providerSourceDefault
+}
+
+// resolveSpawnChildProvider は handleSpawnChild の provider/model 解決ステップを1呼び出しへ
+// まとめる（C2）。役割対応表の参照は provider と model で共有し、二重ルックアップを避ける。
+// body を直接書き換え、確定理由（providerSource* 定数）を返す。ログ出力は呼び出し側で行う
+// （この関数は Server の cfgMu 越しの読み取り以外に副作用を持たない）。
+func (s *Server) resolveSpawnChildProvider(parent *session, body *spawnChildRequest) string {
+	var roleAssignedProvider string
+	if parent != nil {
+		if roles := s.orchestrationRolesFor(parent.OrchestrationID); roles != nil {
+			if ra, ok := roles[body.Role]; ok {
+				roleAssignedProvider = ra.Provider
+				if body.Model == "" {
+					body.Model = ra.Model
+				}
+			}
+		}
+	}
+	s.cfgMu.Lock()
+	remembered := s.cfg.UserPrefs.Spawn.RoleProvider[body.Role]
+	s.cfgMu.Unlock()
+	parentProvider := ""
+	if parent != nil {
+		parentProvider = parent.Provider
+	}
+	provider, source := resolveChildProvider(body.Provider, roleAssignedProvider, remembered, parentProvider)
+	body.Provider = provider
+	return source
+}
+
+// resolveChildProviderFallback は resolveChildProvider の後方互換 wrapper。--provider の
+// 明示指定も役割対応表も無い（handleSpawnChild 側で既に弾かれている）前提で、
+// 記憶 → 親 → ハードコード `codex` の3段だけを返す。
+func (s *Server) resolveChildProviderFallback(parent *session, role string) string {
+	s.cfgMu.Lock()
+	remembered := s.cfg.UserPrefs.Spawn.RoleProvider[role]
+	s.cfgMu.Unlock()
+	parentProvider := ""
+	if parent != nil {
+		parentProvider = parent.Provider
+	}
+	provider, source := resolveChildProvider("", "", remembered, parentProvider)
+	if source == providerSourceDefault {
+		s.logger.Info("orchestration child provider fallback used hardcoded default",
+			"role", role, "parent_provider", parentProvider, "fallback_provider", "codex")
+	}
+	return provider
+}
+
+// providerConfirmationChangeNote は、承認ダイアログの決定が確認前の provider と違うときだけ
+// board へ残す1行を組み立てる（C2 item 2）。一致するときは空文字（＝書かない）。
+func providerConfirmationChangeNote(preConfirmProvider, decidedProvider string) string {
+	if preConfirmProvider == decidedProvider {
+		return ""
+	}
+	return fmt.Sprintf("provider changed at confirmation: requested=%s decided=%s", preConfirmProvider, decidedProvider)
+}
+
+// rememberRoleProvider は実際に起動した provider を役割ごとに覚える。
+// 承認ダイアログで書き換えられた後の値がここへ来るので、「1 度直せば次から効く」が成立する。
+// 保存に失敗しても spawn は成功扱いのままにする（記憶は利便性であって正しさではない）。
+func (s *Server) rememberRoleProvider(role, provider string) {
+	role = strings.TrimSpace(role)
+	if role == "" || !validOrchestrationProvider(provider) {
+		return
+	}
+	s.cfgMu.Lock()
+	if s.cfg.UserPrefs.Spawn.RoleProvider == nil {
+		s.cfg.UserPrefs.Spawn.RoleProvider = map[string]string{}
+	}
+	if s.cfg.UserPrefs.Spawn.RoleProvider[role] == provider {
+		s.cfgMu.Unlock()
+		return
+	}
+	s.cfg.UserPrefs.Spawn.RoleProvider[role] = provider
+	s.cfgMu.Unlock()
+	if err := s.persistConfig(); err != nil {
+		s.logger.Warn("remember role provider failed", "role", role, "provider", provider, "err", err)
+	}
+}
+
+// resolveChildSubscription は子セッションのサブスクリプション profile を決める。
+//
+// 以前は AI 経由の spawn で常に空になり、複数契約を使い分けている利用者でも子は必ず
+// 「CLI 既定のログイン」で動いていた（`orchestrate spawn` に指定手段が無いため）。
+// role 別の profile 指定があればそれを優先し、無ければ親と同じ provider の profile を
+// そのまま引き継ぐ。親の profile も無ければ、新規セッションパネルがその provider 用に
+// 覚えている値（`subscription_<provider>`）を使う。どれも無ければ従来どおり空＝CLI
+// 既定のログイン。
+//
+// 存在しない ID を渡すと子は起動せずエラーになる（spawnChildRequest の doc 参照）ので、
+// 黙って別アカウントへ倒れることはない。
+func (s *Server) resolveChildSubscription(parent *session, provider, role string) string {
+	if parent != nil {
+		if roles := s.orchestrationRolesFor(parent.OrchestrationID); roles != nil {
+			if ra, ok := roles[role]; ok && strings.TrimSpace(ra.Subscription) != "" {
+				return ra.Subscription
+			}
+		}
+	}
+	if parent != nil && parent.Provider == provider && strings.TrimSpace(parent.SubscriptionProfileID) != "" {
+		return parent.SubscriptionProfileID
+	}
+	s.cfgMu.Lock()
+	saved := s.cfg.UserPrefs.Spawn.Defaults["subscription_"+provider]
+	s.cfgMu.Unlock()
+	return strings.TrimSpace(saved)
+}
+
+// orchestrationProviders は子セッションに使える provider の全部。**綴りは厳密**で、
+// `Codex` も `ChatGPT` も通らない。一覧を定数として持つのは、弾いたときのエラーへ
+// そのまま載せるため。AI は綴りを揺らす（Codex / codex / ChatGPT / GPT-5）ので、
+// 「invalid provider」とだけ返すと正解に辿り着けず当てずっぽうを繰り返す。
+var orchestrationProviders = []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code"}
+
+func validOrchestrationProvider(provider string) bool {
+	for _, p := range orchestrationProviders {
+		if provider == p {
+			return true
+		}
+	}
+	return false
+}
+
+// invalidProviderDetail は弾いた値と有効な一覧を 1 文にする。
+func invalidProviderDetail(provider string) string {
+	return fmt.Sprintf("invalid provider %q; valid providers are: %s",
+		provider, strings.Join(orchestrationProviders, ", "))
 }

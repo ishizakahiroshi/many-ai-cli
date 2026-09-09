@@ -22,6 +22,7 @@ type Message struct {
 	Display   string `json:"display_name,omitempty"`
 	CWD       string `json:"cwd,omitempty"`
 	Branch    string `json:"branch,omitempty"`
+	ProjectID string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（hub/project_id.go）
 	PID       int    `json:"pid,omitempty"`
 	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
 	// acknowledge the frame after the bytes have been written to the PTY.
@@ -48,9 +49,28 @@ type Message struct {
 	HomeDir   string `json:"home_dir,omitempty"`
 	CodexHome string `json:"codex_home,omitempty"`
 	ClaudeDir string `json:"claude_dir,omitempty"`
+	// GrokHome is $GROK_HOME for this session. When set it replaces ~/.grok
+	// entirely, the same contract as CodexHome. Empty means the default home.
+	GrokHome string `json:"grok_home,omitempty"`
 	// AgentSessionID is the provider-owned transcript ID. It is sent by the
 	// wrapper during register/reattach and is never rendered in the session card.
-	AgentSessionID    string             `json:"agent_session_id,omitempty"`
+	AgentSessionID string `json:"agent_session_id,omitempty"`
+	// SubscriptionID names the subscription profile this session was launched
+	// with. The wrapper reports it back from its environment so the Hub records
+	// what actually ran, not what it intended to run. Empty means "the CLI's own
+	// login environment", which is the default and the only pre-v0.8 behaviour.
+	// It is an opaque id, never a credential.
+	SubscriptionID string `json:"subscription_id,omitempty"`
+	// SubscriptionName is the display label the Hub resolves from config for
+	// SubscriptionID. Hub → UI only.
+	SubscriptionName string `json:"subscription_name,omitempty"`
+	// UsageProbe marks the short-lived Claude session used only to retrieve
+	// subscription usage. The Hub keeps it out of the normal UI/session feed.
+	UsageProbe bool `json:"usage_probe,omitempty"`
+	// SubscriptionLogin marks a short-lived vendor-CLI login session
+	// (`claude auth login`, `grok login`, …). The Hub dismisses it when the
+	// login command ends so it does not remain as a leftover project group.
+	SubscriptionLogin bool               `json:"subscription_login,omitempty"`
 	Data              []byte             `json:"data,omitempty"`     // wrapper内部用: PTY生バイト列（base64エンコード）
 	Text              string             `json:"text,omitempty"`     // pty_output: ANSIを除去したプレーンテキスト / pty_input: ユーザー入力文字列
 	AgentChatMessages []AgentChatMessage `json:"messages,omitempty"` // agent_chat: structured transcript messages
@@ -127,6 +147,17 @@ type Message struct {
 	// session_update で standby/waiting 遷移時に付与し、UI カードに「最終応答時刻」として表示する。
 	LastOutputAt string `json:"last_output_at,omitempty"`
 
+	// TranscriptGrewAt: provider 自身の transcript（Codex の rollout JSONL 等）が
+	// 最後に伸びた時刻（ISO 8601 / RFC 3339）。空は「まだ特定できていない」。
+	// UI はこの時刻からの経過を 1Hz で自分で計算する（毎秒 broadcast しないため）。
+	//
+	// LastOutputAt では代用できない。Codex TUI は "Working (36m 09s)" のカウンタを
+	// 毎秒再描画するので PTY 出力は途切れず、モデルが 1 個の出力を吐き続けている間も
+	// LastOutputAt は更新され続ける。transcript はターンが進んだときだけ伸びるので、
+	// 伸びていない時間がそのまま「同じ応答を生成し続けている時間」になる。
+	// 由来: docs/local/bugfix_codex-long-silence-not-surfaced_2026-08-19.md
+	TranscriptGrewAt string `json:"transcript_grew_at,omitempty"`
+
 	// StartedAt: セッション登録時刻（ISO 8601 / RFC 3339）。UI カードに起動時刻として表示する。
 	StartedAt string `json:"started_at,omitempty"`
 
@@ -140,6 +171,11 @@ type Message struct {
 	// Model: 使用モデル名（例: "claude-sonnet-4-5", "gpt-5.5"）。UI カードに表示する。
 	Model string `json:"model,omitempty"`
 
+	// Effort: 起動バナー / モデル変更行から取れた reasoning effort（"high" 等）。
+	// Claude statusLine relay の EffortLevel と同じ値を、relay 無しの環境でも
+	// UI へ届けるための session 側の経路。空文字では既存値を消さない。
+	Effort string `json:"effort,omitempty"`
+
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`
@@ -152,11 +188,58 @@ type Message struct {
 	BoardPath          string `json:"board_path,omitempty"`
 	WorktreeBranch     string `json:"worktree_branch,omitempty"`
 	BoardNotifyPending bool   `json:"board_notify_pending,omitempty"`
+	// Relays lists every relay loop conducted by this (parent) session, in start
+	// order. Events are deliberately not carried here; the relay API returns them.
+	Relays []RelayStatus `json:"relays,omitempty"`
+	// CrossSessionMessages is an in-memory, bounded observation of Claude
+	// cross-session message headers seen in this orchestration. The Hub does not
+	// relay or authorize these messages; it only exposes the receiver-side PTY
+	// observation to the UI so board-external activity is not invisible.
+	CrossSessionMessages []CrossSessionMessage `json:"cross_session_messages,omitempty"`
 	// spawn_confirmation_requested is sent to browser UIs before an
 	// orchestration child is created. The response travels by HTTP, never via
 	// the conductor PTY, so the user remains the authority for the decision.
+	// The Hub holds the confirmation with no deadline (C1,
+	// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md), so it
+	// is re-sent to a browser that connects (or reconnects) while it is still
+	// undecided; SpawnRequestedAtMs lets the UI show how long it has waited.
 	SpawnConfirmationID string `json:"spawn_confirmation_id,omitempty"`
 	InitialPrompt       string `json:"initial_prompt,omitempty"`
+	// SpawnRequestedAtMs is the epoch-millisecond time a spawn confirmation
+	// was first requested. Carried on both spawn_confirmation_requested (for
+	// the elapsed-time display) and its resend on UI connect.
+	SpawnRequestedAtMs int64 `json:"spawn_requested_at_ms,omitempty"`
+	// SpawnChildApproval carries, per provider, the approval settings the child
+	// would actually start with — what the human is granting by approving. It
+	// is keyed by provider because the dialog lets the approver change the
+	// provider before deciding, so the UI picks the entry for whatever is
+	// selected at that moment. Display only: the Hub does not read it back.
+	// Sent on spawn_confirmation_requested and on its resend to a (re)connecting
+	// UI (pending_spawn-confirm-permission-disclosure.md).
+	SpawnChildApproval map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
+	// spawn_confirmation_closed: Hub → UI. Tells every browser that a spawn
+	// confirmation is no longer open, so any dialog showing it can close.
+	// Reason is one of exactly five values (C2,
+	// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md):
+	//   approved     - a human approved it; SpawnChildSessionID is the new child.
+	//   refused      - a human explicitly refused it (the only case that also
+	//                  writes a user_refusal line to the board).
+	//   superseded   - the same parent+role requested a new confirmation
+	//                  before this one was decided.
+	//   parent_gone  - the parent session was dismissed or otherwise removed
+	//                  before anyone decided.
+	//   spawn_failed - a human approved it, but performSpawn itself failed;
+	//                  Text carries the failure detail.
+	// SessionID carries the parent, as on spawn_confirmation_requested.
+	SpawnChildSessionID int `json:"spawn_child_session_id,omitempty"`
+
+	// session_dismiss_refused: Hub → UI. Broadcast when handleDismiss refuses
+	// a session_dismiss because SessionID is holding at least one undecided
+	// spawn confirmation (hasPendingSpawnConfirmation) (C5,
+	// plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md). Carries
+	// no new fields: SessionID is the session the dismiss targeted and was not
+	// removed; Reason is left empty (the UI shows one fixed toast regardless
+	// of which pending confirmation caused the refusal).
 
 	// FirstMessage: セッション内で最初に確定されたユーザー入力（UI カード表示用）。
 	FirstMessage string `json:"first_message,omitempty"`
@@ -178,7 +261,9 @@ type Message struct {
 	Filename  string `json:"filename,omitempty"` // 元ファイル名（拡張子の決定に使用）
 
 	// approval_patterns_updated: Hub → UI。リモート fetch で公式パターンに差分があった
-	// 場合に通知する。Providers には差分があった provider 名のみが入る。
+	// 場合、または custom_providers: の approval_pattern_source が新規に同期できた
+	// 場合に通知する（後者は internal/hub/approval_patterns_custom.go）。Providers には
+	// 差分があった provider 名／custom provider id のみが入る。
 	Providers []string `json:"providers,omitempty"`
 
 	// UIActiveSessionID: UI register 時に UI 側が現在表示中のセッション ID を伝える。
@@ -216,31 +301,62 @@ type Message struct {
 
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・C2 relay 中継）。
 	// rate_limits は Pro/Max のみ／early-session は 0。lines は AI 編集量（作業ツリー git diff とは別軸）。
-	RateLimit5hPct   float64 `json:"rl_5h_pct,omitempty"`
-	RateLimit5hReset int64   `json:"rl_5h_reset,omitempty"`
-	RateLimit7dPct   float64 `json:"rl_7d_pct,omitempty"`
-	RateLimit7dReset int64   `json:"rl_7d_reset,omitempty"`
-	LinesAdded       int     `json:"lines_added,omitempty"`
-	LinesRemoved     int     `json:"lines_removed,omitempty"`
-	EffortLevel      string  `json:"effort_level,omitempty"`
-	Thinking         bool    `json:"thinking,omitempty"`
-	Exceeds200k      bool    `json:"exceeds_200k,omitempty"`
-	DurationMs       int64   `json:"duration_ms,omitempty"`
-	APIDurationMs    int64   `json:"api_duration_ms,omitempty"`
-	OutputStyle      string  `json:"output_style,omitempty"`
-	VimMode          string  `json:"vim_mode,omitempty"`
-	AgentName        string  `json:"agent_name,omitempty"`
-	RepoHost         string  `json:"repo_host,omitempty"`
-	RepoOwner        string  `json:"repo_owner,omitempty"`
-	RepoName         string  `json:"repo_name,omitempty"`
-	RemainingPct     float64 `json:"remaining_pct,omitempty"`
-	ReasoningOut     int     `json:"reasoning_output_tokens,omitempty"`
+	RateLimit5hPct              float64 `json:"rl_5h_pct,omitempty"`
+	RateLimit5hReset            int64   `json:"rl_5h_reset,omitempty"`
+	RateLimit7dPct              float64 `json:"rl_7d_pct,omitempty"`
+	RateLimit7dReset            int64   `json:"rl_7d_reset,omitempty"`
+	ClaudeRateLimitsPresent     bool    `json:"claude_rate_limits_present,omitempty"`
+	ClaudeFiveHourFieldPresent  bool    `json:"claude_5h_field_present,omitempty"`
+	ClaudeFiveHourPresent       bool    `json:"claude_5h_present,omitempty"`
+	ClaudeSevenDayFieldPresent  bool    `json:"claude_7d_field_present,omitempty"`
+	ClaudeSevenDayPresent       bool    `json:"claude_7d_present,omitempty"`
+	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present,omitempty"`
+	CodexPrimaryPresent         bool    `json:"codex_primary_present,omitempty"`
+	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct,omitempty"`
+	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes,omitempty"`
+	CodexPrimaryReset           int64   `json:"codex_primary_reset,omitempty"`
+	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct,omitempty"`
+	CodexSecondaryPresent       bool    `json:"codex_secondary_present,omitempty"`
+	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes,omitempty"`
+	CodexSecondaryReset         int64   `json:"codex_secondary_reset,omitempty"`
+	CodexCreditsPresent         bool    `json:"codex_credits_present,omitempty"`
+	CodexHasCredits             bool    `json:"codex_has_credits,omitempty"`
+	CodexCreditsUnlimited       bool    `json:"codex_credits_unlimited,omitempty"`
+	CodexCreditsBalance         string  `json:"codex_credits_balance,omitempty"`
+	CodexPlanType               string  `json:"codex_plan_type,omitempty"`
+	UsageObservedAt             string  `json:"usage_observed_at,omitempty"`
+	LinesAdded                  int     `json:"lines_added,omitempty"`
+	LinesRemoved                int     `json:"lines_removed,omitempty"`
+	EffortLevel                 string  `json:"effort_level,omitempty"`
+	Thinking                    bool    `json:"thinking,omitempty"`
+	Exceeds200k                 bool    `json:"exceeds_200k,omitempty"`
+	DurationMs                  int64   `json:"duration_ms,omitempty"`
+	APIDurationMs               int64   `json:"api_duration_ms,omitempty"`
+	OutputStyle                 string  `json:"output_style,omitempty"`
+	VimMode                     string  `json:"vim_mode,omitempty"`
+	AgentName                   string  `json:"agent_name,omitempty"`
+	RepoHost                    string  `json:"repo_host,omitempty"`
+	RepoOwner                   string  `json:"repo_owner,omitempty"`
+	RepoName                    string  `json:"repo_name,omitempty"`
+	RemainingPct                float64 `json:"remaining_pct,omitempty"`
+	ReasoningOut                int     `json:"reasoning_output_tokens,omitempty"`
 
 	// binary_stale: Hub → UI。稼働中 Hub の実行ファイルがディスク上で差し替わった
 	// （= 再ビルドが反映されていない）状態かどうか。状態が変化した瞬間だけ配信する。
 	// ポインタなのは false を確実に届けるため: omitempty で false が消えると
 	// 「stale から復帰した」を伝えられず、バナーが出たまま固着する。
 	BinaryStale *bool `json:"binary_stale,omitempty"`
+}
+
+// CrossSessionMessage is the disclosure-safe summary of one direct
+// cross-session message observed in a Claude PTY. Text is the masked display
+// header only; message bodies are deliberately not retained by the Hub.
+type CrossSessionMessage struct {
+	At                string `json:"at,omitempty"`
+	ReceiverSessionID int    `json:"receiver_session_id,omitempty"`
+	ReceiverRole      string `json:"receiver_role,omitempty"`
+	Sender            string `json:"sender,omitempty"`
+	Text              string `json:"text,omitempty"`
 }
 
 // AgentChatMessage is the provider-neutral structured transcript payload used
@@ -274,21 +390,22 @@ type SessionActivity struct {
 // browser UIs. Source and SettledBy identify which observation established the
 // current values; tree details are present only when the VT tree is visible.
 type WorkflowProgress struct {
-	Detected       bool      `json:"detected"`
-	Source         string    `json:"source,omitempty"`
-	Name           string    `json:"name,omitempty"`
-	Done           int       `json:"done"`
-	Total          int       `json:"total"`
-	Running        int       `json:"running"`
-	Failed         int       `json:"failed"`
-	Pending        int       `json:"pending"`
-	WaitingDynamic int       `json:"waiting_dynamic"`
-	Percent        int       `json:"percent"`
-	ElapsedSec     int       `json:"elapsed_sec,omitempty"`
-	TokensRaw      string    `json:"tokens_raw,omitempty"`
-	Phases         []WfPhase `json:"phases,omitempty"`
-	Settled        bool      `json:"settled"`
-	SettledBy      string    `json:"settled_by,omitempty"`
+	Detected         bool      `json:"detected"`
+	Source           string    `json:"source,omitempty"`
+	Name             string    `json:"name,omitempty"`
+	Done             int       `json:"done"`
+	Total            int       `json:"total"`
+	Running          int       `json:"running"`
+	Failed           int       `json:"failed"`
+	Pending          int       `json:"pending"`
+	WaitingDynamic   int       `json:"waiting_dynamic"`
+	Percent          int       `json:"percent"`
+	ElapsedSec       int       `json:"elapsed_sec,omitempty"`
+	TokensRaw        string    `json:"tokens_raw,omitempty"`
+	Phases           []WfPhase `json:"phases,omitempty"`
+	Settled          bool      `json:"settled"`
+	SettledBy        string    `json:"settled_by,omitempty"`
+	TaskDetailSource string    `json:"task_detail_source,omitempty"`
 }
 
 type WfPhase struct {
@@ -297,9 +414,30 @@ type WfPhase struct {
 }
 
 type WfAgent struct {
-	Label   string `json:"label"`
-	State   string `json:"state"`
-	Metrics string `json:"metrics,omitempty"`
+	Label   string         `json:"label"`
+	State   string         `json:"state"`
+	Metrics string         `json:"metrics,omitempty"`
+	Detail  *WfAgentDetail `json:"detail,omitempty"`
+}
+
+// WfAgentDetail is populated only when the Hub could resolve a task ID for
+// the running Workflow (see docs/local/plan_workflow-progress-agent-transcript-detail_c1_investigation-proto.md
+// "発見2"). It augments the existing VT/journal-derived WfAgent with data
+// read from the Claude Code task output file. Fields sourced from
+// promptPreview/resultPreview/lastToolSummary carry excerpted user/agent
+// content and must never be logged, persisted, or forwarded outside the
+// per-session WS payload.
+type WfAgentDetail struct {
+	Model           string `json:"model,omitempty"`
+	StartedAt       int64  `json:"started_at,omitempty"`       // epoch ms
+	LastProgressAt  int64  `json:"last_progress_at,omitempty"` // epoch ms
+	DurationMs      int64  `json:"duration_ms,omitempty"`
+	Tokens          int    `json:"tokens,omitempty"`
+	ToolCalls       int    `json:"tool_calls,omitempty"`
+	LastToolName    string `json:"last_tool_name,omitempty"`
+	LastToolSummary string `json:"last_tool_summary,omitempty"` // truncated, see C2 budget
+	PromptPreview   string `json:"prompt_preview,omitempty"`    // truncated
+	ResultPreview   string `json:"result_preview,omitempty"`    // truncated
 }
 
 // SessionMeta is user-editable, server-persisted identification metadata for a
@@ -333,8 +471,13 @@ type ApprovalSummary struct {
 }
 
 // DoneSummary is a normalized, secret-masked terminal summary. Kind is one of
-// success, failure, aborted, or needs_action; Fallback marks an idle-derived
-// summary created when the provider omitted the DONE marker.
+// success, failure, aborted, needs_action, unknown, or relay; Fallback marks
+// an idle-derived summary created when the provider omitted the DONE marker.
+//
+// Fallback summaries always carry Kind "unknown": the turn ended, but nothing
+// reported what it ended as. They are never raised to needs_action, because a
+// turn that produced no marker is indistinguishable from a plain conversational
+// reply (the marker rules tell the AI not to emit one for those).
 type DoneSummary struct {
 	SessionID int    `json:"session_id"`
 	Provider  string `json:"provider,omitempty"`
@@ -345,10 +488,77 @@ type DoneSummary struct {
 	Fallback  bool   `json:"fallback,omitempty"`
 }
 
+// RelayBranchPrefix is the prefix of every relay branch
+// (`many-ai-cli/relay/<orchestration id>`). RelayStatus.Branch carries it, and
+// `doctor` recognises leftover relay worktrees by it without importing hub.
+const RelayBranchPrefix = "many-ai-cli/relay/"
+
+// RelayStatus is the snapshot of one relay loop (plan → implementation →
+// adversarial review → fix → next C) that the Hub drives as a state machine
+// (docs/local/plan_orchestration-relay-loop.md). One parent session may run
+// several relays; OrchestrationID identifies each one.
+//
+// State is implementing | reviewing | fixing | completed | stopped. Reason is
+// set only for stopped (max_rounds / blocked / verdict_missing /
+// review_file_missing / timeout / child_exited / user_stop / spawn_error /
+// hub_restart); for blocked it also carries the reviewer's reason text.
+type RelayStatus struct {
+	OrchestrationID         string `json:"orchestration_id,omitempty"`
+	PlanPath                string `json:"plan_path,omitempty"`
+	Mode                    string `json:"mode,omitempty"` // worktree | same-tree
+	State                   string `json:"state,omitempty"`
+	Reason                  string `json:"reason,omitempty"`
+	CompletedCs             int    `json:"completed_cs,omitempty"`
+	Round                   int    `json:"round,omitempty"`
+	MaxRounds               int    `json:"max_rounds,omitempty"`
+	FinalSeen               bool   `json:"final_seen,omitempty"`
+	ImplementationSessionID int    `json:"implementation_session_id,omitempty"`
+	// StrongSessionID is the optional stronger implementer (D-22); 0 until it
+	// is spawned. ActiveImplementer names the role working on the current C
+	// (implementation | implementation-strong) and EscalateAfter is the number
+	// of failed review rounds after which the C is handed to the strong one.
+	StrongSessionID   int    `json:"strong_session_id,omitempty"`
+	ActiveImplementer string `json:"active_implementer,omitempty"`
+	EscalateAfter     int    `json:"escalate_after,omitempty"`
+	ReviewSessionID   int    `json:"review_session_id,omitempty"`
+	ReviewPath        string `json:"review_path,omitempty"`
+	WorktreePath      string `json:"worktree_path,omitempty"`
+	Branch            string `json:"branch,omitempty"`
+	BaseCommit        string `json:"base_commit,omitempty"`
+	UpdatedAt         string `json:"updated_at,omitempty"`
+}
+
+// RelayEvent is one row of a relay's timeline. Kind is started | c_done |
+// review_started | verdict | fix_sent | proceed_sent | nudge | escalated |
+// completed | stopped | restored | resumed.
+type RelayEvent struct {
+	At           string `json:"at,omitempty"`
+	Kind         string `json:"kind,omitempty"`
+	C            int    `json:"c,omitempty"`
+	Round        int    `json:"round,omitempty"`
+	Text         string `json:"text,omitempty"`
+	ReviewPath   string `json:"review_path,omitempty"`
+	Commit       string `json:"commit,omitempty"`
+	FilesChanged int    `json:"files_changed,omitempty"`
+}
+
 type ApprovalOption struct {
 	Num           int    `json:"num"`
 	Label         string `json:"label,omitempty"`
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	SendText      string `json:"send_text,omitempty"`
 	PreserveOrder bool   `json:"preserve_order,omitempty"`
+}
+
+// ChildApproval is one provider's effective approval configuration for an
+// orchestration child, as carried by Message.SpawnChildApproval. Empty fields
+// mean the Hub fills nothing in for that provider and the child starts with its
+// CLI's own defaults (this is what orchestration.child_full_bypass: false does).
+type ChildApproval struct {
+	PermissionMode string `json:"permission_mode,omitempty"`
+	Sandbox        string `json:"sandbox,omitempty"`
+	AskForApproval string `json:"ask_for_approval,omitempty"`
+	// RiskConfirmed reports that the child skips the high-risk confirmation the
+	// same settings would trigger on a normal /api/spawn request.
+	RiskConfirmed bool `json:"risk_confirmed,omitempty"`
 }

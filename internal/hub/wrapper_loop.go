@@ -90,6 +90,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 
 	s.cfgMu.Lock()
 	logDir := s.cfg.Hub.LogDir
+	// custom_providers エントリかどうかは登録時に一度だけ判定して固定する
+	// （session.customProviderSession のコメント参照。cfgMu を承認検出の
+	// ホットパスへ持ち込まないため）。
+	customProviderSession := customProviderSessionFor(s.cfg, reg.Provider)
 	s.cfgMu.Unlock()
 	rawLogPath, jsonlPath, history := s.startSessionLog(logDir, sessionlog.Metadata{
 		SessionID: id,
@@ -111,29 +115,36 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		}
 		s.orchestration.mu.Unlock()
 	}
+	// wrapper が env から読み戻した値を正本にする。Hub が「起動時に指定したつもり」
+	// ではなく、実際にその env で立ち上がったプロセスの申告を記録する。
+	subscriptionID, subscriptionName := s.resolveSubscriptionLabel(reg.Provider, reg.SubscriptionID)
 	cardMeta := sessionstore.SessionCardMeta{Label: reg.Label}
-	storeID, cardMeta := s.attachStore(sessionstore.SessionStart{
-		LiveSessionID:   id,
-		Provider:        reg.Provider,
-		Display:         reg.Display,
-		CWD:             reg.CWD,
-		Branch:          branch,
-		Label:           reg.Label,
-		Model:           reg.Model,
-		Route:           regRoute,
-		Shell:           reg.Shell,
-		State:           "standby",
-		StartedAt:       startedAt.Format(time.RFC3339),
-		LogPath:         rawLogPath,
-		JSONLPath:       jsonlPath,
-		ParentSessionID: childMeta.ParentSessionID,
-		Role:            childMeta.Role,
-		Auto:            childMeta.Auto,
-		Depth:           childMeta.Depth,
-		OrchestrationID: childMeta.OrchestrationID,
-		BoardPath:       childMeta.BoardPath,
-		WorktreeBranch:  childMeta.WorktreeBranch,
-	}, cardMeta)
+	storeID := int64(0)
+	if !reg.UsageProbe {
+		storeID, cardMeta = s.attachStore(sessionstore.SessionStart{
+			LiveSessionID:   id,
+			Provider:        reg.Provider,
+			Display:         reg.Display,
+			CWD:             reg.CWD,
+			Branch:          branch,
+			Label:           reg.Label,
+			Model:           reg.Model,
+			Route:           regRoute,
+			Shell:           reg.Shell,
+			State:           "standby",
+			StartedAt:       startedAt.Format(time.RFC3339),
+			LogPath:         rawLogPath,
+			JSONLPath:       jsonlPath,
+			ParentSessionID: childMeta.ParentSessionID,
+			Role:            childMeta.Role,
+			Auto:            childMeta.Auto,
+			Depth:           childMeta.Depth,
+			OrchestrationID: childMeta.OrchestrationID,
+			BoardPath:       childMeta.BoardPath,
+			WorktreeBranch:  childMeta.WorktreeBranch,
+			SubscriptionID:  subscriptionID,
+		}, cardMeta)
+	}
 	s.sessionsMu.Lock()
 	ses := &session{
 		ID:              id,
@@ -162,20 +173,36 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		HomeDir:         reg.HomeDir,
 		CodexHome:       reg.CodexHome,
 		ClaudeDir:       reg.ClaudeDir,
+		GrokHome:        reg.GrokHome,
 		AgentSessionID:  reg.AgentSessionID,
-		Activity:        SessionActivity{OutputIdle: true},
-		State:           "standby",
-		StartedAt:       startedAt.Format(time.RFC3339),
-		branchCheckedAt: startedAt,
-		LogPath:         rawLogPath,
-		JSONLPath:       jsonlPath,
-		History:         history,
-		inflightInput:   map[int64]inflightInput{},
+
+		SubscriptionProfileID:   subscriptionID,
+		SubscriptionProfileName: subscriptionName,
+		UsageProbe:              reg.UsageProbe,
+		SubscriptionLogin:       reg.SubscriptionLogin,
+
+		Activity:  SessionActivity{OutputIdle: true},
+		State:     "standby",
+		StartedAt: startedAt.Format(time.RFC3339),
+		// branchCheckedAt はゼロ値のまま（= 未取得）にしておき、最初の state tick
+		// （200ms）で branch と project_id を取りに行かせる。startedAt を入れると
+		// 最初の取得が branchRefreshAfter（2 秒）後になり、そのあいだ新規セッションは
+		// project_id 未解決＝cwd 末尾を鍵にした箱に出る。同じリポジトリの箱が既に
+		// あると「同じ名前の箱が 2 つ」に見える
+		// （docs/local/bugfix_sidebar-box-splits-on-empty-project-id_2026-09-01.md）。
+		LogPath:       rawLogPath,
+		JSONLPath:     jsonlPath,
+		History:       history,
+		inflightInput: map[int64]inflightInput{},
+
+		customProviderSession: customProviderSession,
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
-	if childMeta.OrchestrationID != "" {
+	if childMeta.OrchestrationID != "" || childMeta.InitialPrompt != "" {
 		// orchestration セッションは登録直後に初期プロンプト注入（conductor は本関数末尾、
-		// 子は handleSpawnChild の injectInitialPrompt）が走る。注入完了までユーザー入力を
+		// 子は handleSpawnChild の injectInitialPrompt）が走る。通常の /api/spawn が
+		// initial_prompt を渡した場合（plan_session-handoff-board_c4_prompted-spawn.md C1）
+		// も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を
 		// 保留し、起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
 		ses.initialInjectPending = true
 		ses.initialInjectGateAt = time.Now()
@@ -216,7 +243,10 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// statusline_gate_wrapper と突き合わせ「send=true → reg=false」の JSON 劣化を
 	// 確定する。2026-07-19 時点 hub.log は send=true のみ（false 0）だが wrapper 側
 	// 未突合のため残置（原因確定後に外す）。
-	tokenStatusbarForAck := s.tokenStatusbarEnabled()
+	// A usage probe needs Claude's statusLine relay even when the user has
+	// disabled the ordinary token status bar. The probe remains hidden from the
+	// UI, so this does not turn the status bar back on for normal sessions.
+	tokenStatusbarForAck := s.tokenStatusbarEnabled() || reg.UsageProbe
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, Auto: childMeta.Auto, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
@@ -233,6 +263,14 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
 		prompt := buildConductorInitialPrompt(childMeta.OrchestrationID, roles)
 		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
+	} else if childMeta.OrchestrationID == "" && childMeta.InitialPrompt != "" {
+		// C1 (plan_session-handoff-board_c4_prompted-spawn.md): 通常の /api/spawn
+		// が画面から渡した文面。orchestration 経路のような board/role の枠組み文は
+		// 付けず、sanitizeSpawnInitialPrompt 済みの文面をそのまま注入する。
+		// 同じ safeGo + injectInitialPrompt を使うので、Enter が消える不具合の
+		// 再発防止（confirmInitialPromptSubmitted 等）もそのまま効く。
+		prompt := childMeta.InitialPrompt
+		s.safeGo("inject_initial_prompt_spawn", func() { s.injectInitialPrompt(id, prompt) })
 	}
 	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
 	// sessionUpdateMessage は approvalSourceEpoch を読むため、ここだけは
@@ -252,24 +290,34 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
 	s.broadcast(announce)
-	s.writeHistory(id, map[string]any{
-		"ts":                startedAt.Format(time.RFC3339),
-		"type":              "session_start",
-		"session_id":        id,
-		"provider":          reg.Provider,
-		"cwd":               reg.CWD,
-		"branch":            branch,
-		"label":             reg.Label,
-		"model":             reg.Model,
-		"shell":             reg.Shell,
-		"pid":               reg.PID,
-		"parent_session_id": childMeta.ParentSessionID,
-		"role":              childMeta.Role,
-		"auto":              childMeta.Auto,
-		"orchestration_id":  childMeta.OrchestrationID,
-		"board_path":        childMeta.BoardPath,
-	})
-	s.startAgentChatTail(id)
+	// subscription は ID だけ残す。表示名は rename されうるので、履歴の追跡に
+	// 使える正本にならない。
+	if !reg.UsageProbe {
+		s.writeHistory(id, map[string]any{
+			"ts":                      startedAt.Format(time.RFC3339),
+			"type":                    "session_start",
+			"session_id":              id,
+			"provider":                reg.Provider,
+			"cwd":                     reg.CWD,
+			"branch":                  branch,
+			"label":                   reg.Label,
+			"model":                   reg.Model,
+			"shell":                   reg.Shell,
+			"pid":                     reg.PID,
+			"parent_session_id":       childMeta.ParentSessionID,
+			"role":                    childMeta.Role,
+			"auto":                    childMeta.Auto,
+			"orchestration_id":        childMeta.OrchestrationID,
+			"board_path":              childMeta.BoardPath,
+			"subscription_profile_id": subscriptionID,
+		})
+		s.startAgentChatTail(id)
+		// handoff は log.session_enabled とは無関係の独立ゲート
+		// （handoff.go の handoffEnabled 参照）。writeHistory の分岐に相乗り
+		// しているのは「usage probe を除く」判定を再利用するためだけで、
+		// SessionEnabled には依存しない。
+		s.recordHandoffSessionStart(id, reg.Provider, reg.CWD, branch, reg.Model, subscriptionID, childMeta.HandoffFrom)
+	}
 	s.wrapperMessageLoop(wc, id)
 }
 
@@ -298,9 +346,35 @@ func reattachIdentityMatches(prev *wrapperConn, ses *session, req proto.Message)
 	return ses.Provider == req.Provider && ses.CWD == req.CWD
 }
 
+func (s *Server) markSessionDismissedLocked(id int) {
+	if id <= 0 {
+		return
+	}
+	if s.dismissedSessionIDs == nil {
+		s.dismissedSessionIDs = make(map[int]struct{})
+	}
+	s.dismissedSessionIDs[id] = struct{}{}
+}
+
+func (s *Server) sessionDismissedLocked(id int) bool {
+	_, ok := s.dismissedSessionIDs[id]
+	return ok
+}
+
 func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if req.SessionID <= 0 {
 		_ = websocket.JSON.Send(conn, proto.Message{Type: "reattach_reject", Reason: "invalid session_id"})
+		return
+	}
+	s.sessionsMu.Lock()
+	dismissed := s.sessionDismissedLocked(req.SessionID)
+	s.sessionsMu.Unlock()
+	if dismissed {
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "reattach_reject",
+			SessionID: req.SessionID,
+			Reason:    "session dismissed",
+		})
 		return
 	}
 	startedAt := time.Now()
@@ -332,6 +406,11 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// プリミティブにしない）。
 	s.cfgMu.Lock()
 	logDir := s.cfg.Hub.LogDir
+	// wrapperLoop と同じ理由で登録時に一度だけ判定する（session.
+	// customProviderSession 参照）。reattach は既存セッションの継続なので
+	// 実質値は変わらないはずだが、Hub 再起動をまたぐ cold reattach では前回値を
+	// 引き継げないため、ここでも同じ判定式で計算し直す。
+	customProviderSession := customProviderSessionFor(s.cfg, req.Provider)
 	s.cfgMu.Unlock()
 	rawLogPath, jsonlPath, history := s.startSessionLog(logDir, sessionlog.Metadata{
 		SessionID: req.SessionID,
@@ -344,6 +423,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if reqRoute == "" {
 		reqRoute = s.resolveRoute(req.Provider, req.Model)
 	}
+	// Hub 再起動後の cold reattach で、relay（relay_store.go）の子か conductor かを
+	// label / 起動時刻で同定する。sessionsMu と run.mu を入れ子にしないため、
+	// ロックを取る前に照合しておき、結果のコピーを下で session へ写す。
+	relayMatch := s.relayReattachMatch(req)
 	// renumber 判定（既存 wrapper と衝突する場合は新 ID を割り当てる）を SQLite
 	// アクセスより前に行い、StartSession を 1 回だけ呼ぶ（重複 INSERT による orphan
 	// 行の発生を防ぐ）。
@@ -376,23 +459,60 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 			StartedAt: startedAt,
 		}, true)
 	}
-	cardMeta := sessionstore.SessionCardMeta{Label: req.Label}
-	storeID, cardMeta := s.attachStore(sessionstore.SessionStart{
-		LiveSessionID: acceptedID,
-		Provider:      req.Provider,
-		Display:       req.Display,
-		CWD:           req.CWD,
-		Branch:        branch,
-		Label:         req.Label,
-		Model:         req.Model,
-		Route:         reqRoute,
-		Shell:         req.Shell,
-		State:         "running",
-		StartedAt:     startedAtText,
-		LogPath:       rawLogPath,
-		JSONLPath:     jsonlPath,
-	}, cardMeta)
 	s.sessionsMu.Lock()
+	dismissed = s.sessionDismissedLocked(req.SessionID)
+	s.sessionsMu.Unlock()
+	if dismissed {
+		if history != nil {
+			_ = history.Close()
+		}
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "reattach_reject",
+			SessionID: req.SessionID,
+			Reason:    "session dismissed",
+		})
+		return
+	}
+	reattachSubscriptionID, reattachSubscriptionName := s.resolveSubscriptionLabel(req.Provider, req.SubscriptionID)
+	cardMeta := sessionstore.SessionCardMeta{Label: req.Label}
+	storeID := int64(0)
+	if !req.UsageProbe {
+		storeID, cardMeta = s.attachStore(sessionstore.SessionStart{
+			LiveSessionID:  acceptedID,
+			Provider:       req.Provider,
+			Display:        req.Display,
+			CWD:            req.CWD,
+			Branch:         branch,
+			Label:          req.Label,
+			Model:          req.Model,
+			Route:          reqRoute,
+			Shell:          req.Shell,
+			State:          "running",
+			StartedAt:      startedAtText,
+			LogPath:        rawLogPath,
+			JSONLPath:      jsonlPath,
+			SubscriptionID: reattachSubscriptionID,
+		}, cardMeta)
+	}
+	s.sessionsMu.Lock()
+	if s.sessionDismissedLocked(req.SessionID) {
+		s.sessionsMu.Unlock()
+		if history != nil {
+			_ = history.Close()
+		}
+		if storeID != 0 && s.sessionStore != nil {
+			s.sessionStore.EndSession(acceptedID, "dismissed", "", time.Now())
+		}
+		if !req.UsageProbe {
+			s.recordHandoffSessionEnd(acceptedID, "dismissed", "")
+		}
+		_ = websocket.JSON.Send(conn, proto.Message{
+			Type:      "reattach_reject",
+			SessionID: req.SessionID,
+			Reason:    "session dismissed",
+		})
+		return
+	}
 	var oldHistory *sessionlog.Writer
 	// 切断前のターミナル文脈（ptyBuf / VT ミラー / 受信累計）を引き継ぐ。
 	// 以前は replay(64KB) で丸ごと置き換えていたため、再接続のたびに Hub 側の
@@ -427,11 +547,13 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevApprovalMarkerSourceEpoch uint64
 	var prevApprovalMarkerSuppressedSig string
 	var prevApprovalMarkerSuppressedAt time.Time
+	var prevReattachState reattachPreservedState
 	var requeuedInputCount int
 	var requeuedInputMinSeq int64
 	var requeuedInputMaxSeq int64
 	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
+		prevReattachState = snapshotReattachStateLocked(cur)
 		prevAgentChatPath = cur.agentChatPath
 		prevAgentChatOffset = cur.agentChatOffset
 		prevReplayEpoch = cur.replayEpoch
@@ -454,6 +576,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevApprovalMarkerSourceEpoch = cur.approvalMarkerSourceEpoch
 		prevApprovalMarkerSuppressedSig = cur.approvalMarkerSuppressedSig
 		prevApprovalMarkerSuppressedAt = cur.approvalMarkerSuppressedAt
+		stopReattachAsyncStateLocked(cur)
 		s.stopAgentChatTailLocked(cur)
 		oldHistory = cur.History
 		prevPTYBuf = cur.ptyBuf
@@ -538,7 +661,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		HomeDir:                        req.HomeDir,
 		CodexHome:                      req.CodexHome,
 		ClaudeDir:                      req.ClaudeDir,
+		GrokHome:                       req.GrokHome,
 		AgentSessionID:                 req.AgentSessionID,
+		SubscriptionProfileID:          reattachSubscriptionID,
+		SubscriptionProfileName:        reattachSubscriptionName,
+		UsageProbe:                     req.UsageProbe,
+		SubscriptionLogin:              req.SubscriptionLogin,
 		Activity:                       SessionActivity{OutputIdle: len(replay) == 0, WorkflowActive: len(replay) > 0},
 		State:                          "running",
 		LastOutputAt:                   lastOutputAt,
@@ -583,8 +711,18 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		inflightInput:       prevInflightInput,
 		resendInput:         prevResendInput,
 		inputAckCapable:     prevInputAckCapable,
+
+		customProviderSession: customProviderSession,
+	}
+	if prevExists {
+		applyReattachPreservedStateLocked(s.sessions[acceptedID], prevReattachState)
+	} else if relayMatch != nil {
+		// 再起動前の orchestration メタは preserved state に無い。relay.json から
+		// 引いた値で子（role / parent / board）または conductor を復元する。
+		relayMatch.applyLocked(s.sessions[acceptedID])
 	}
 	s.sessions[acceptedID].inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
+	s.restartReattachAsyncStateLocked(acceptedID, s.sessions[acceptedID], now)
 	wc := newWrapperConn(conn)
 	wc.pid = req.PID
 	s.wrappers[acceptedID] = wc
@@ -605,28 +743,53 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		// 旧 wrapperMessageLoop の後始末が「まだ自分が現役」と見えてしまう。
 		staleConn.close()
 	}
-	// wrapper が一時切断中に届かなかった保留入力を、再接続したこの wrapper へ順番に再送する。
-	// 他のバックグラウンド goroutine と同様 safeGo で起動し、panic で Hub 全体を巻き込まないようにする。
-	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
+	if !prevExists && relayMatch != nil {
+		// relay 側の ID（振り直しがあれば新 ID）と board の登録を更新する。
+		s.relayNoteReattached(relayMatch, acceptedID)
+	}
 	if oldHistory != nil {
 		_ = oldHistory.Close()
 	}
+	// ack 前に dismiss されていたら reattach を受理しない。
+	if !s.wrapperStillRegistered(acceptedID, wc) {
+		s.logger.Info("session dismissed before reattach ack; skip announce",
+			"session_id", acceptedID, "provider", req.Provider)
+		_ = wc.send(proto.Message{Type: "reattach_reject", SessionID: acceptedID, Reason: "session dismissed"})
+		return
+	}
+	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
 	if s.approvalRulesEnabled() {
 		s.injectApprovalRules()
 	}
 	if s.tokenStatusbarEnabled() {
 		s.injectUsageHooks()
 	}
-	// inject 中に dismiss されたら reattach 完了を UI に告知しない（wrapperLoop と同趣旨）。
+	// inject 中に dismiss されたら、ack 後なので明示的に終了を通知する。
 	if !s.wrapperStillRegistered(acceptedID, wc) {
 		s.logger.Info("session dismissed during reattach inject; skip announce",
 			"session_id", acceptedID, "provider", req.Provider)
+		_ = wc.send(proto.Message{
+			Type:      proto.TypeSessionDismissed,
+			SessionID: acceptedID,
+			Reason:    "ui_dismiss",
+		})
 		return
 	}
-	_ = wc.send(proto.Message{Type: "reattach_ack", SessionID: acceptedID})
-	s.sessionsMu.Lock()
-	announce := sessionUpdateMessage(s.sessions[acceptedID])
-	s.sessionsMu.Unlock()
+	// wrapper が一時切断中に届かなかった保留入力を、reattach_ack の後に
+	// 再接続したこの wrapper へ順番に再送する。ack が handshake 中の最初の
+	// wrapper 向けフレームになるよう、ここより前に flush を開始しない。
+	s.safeGo("flush_pending_input", func() { s.flushPendingInput(acceptedID) })
+	announce, ok := s.reattachAnnounceMessage(acceptedID, wc)
+	if !ok {
+		s.logger.Info("session dismissed during reattach announce; skip",
+			"session_id", acceptedID, "provider", req.Provider)
+		_ = wc.send(proto.Message{
+			Type:      proto.TypeSessionDismissed,
+			SessionID: acceptedID,
+			Reason:    "ui_dismiss",
+		})
+		return
+	}
 	announce.Shell = req.Shell
 	announce.LogPath = rawLogPath
 	announce.JSONLPath = jsonlPath
@@ -666,21 +829,23 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		"gap_bytes", len(gap),
 		"wrapper_pty_bytes", req.PTYBytes,
 		"hub_pty_bytes", prevSeen)
-	s.writeHistory(acceptedID, map[string]any{
-		"ts":             now.Format(time.RFC3339),
-		"type":           "session_reattach",
-		"session_id":     acceptedID,
-		"old_session_id": req.SessionID,
-		"provider":       req.Provider,
-		"cwd":            req.CWD,
-		"branch":         branch,
-		"label":          req.Label,
-		"model":          req.Model,
-		"shell":          req.Shell,
-		"pid":            req.PID,
-		"renumbered":     acceptedID != req.SessionID,
-	})
-	s.startAgentChatTail(acceptedID)
+	if !req.UsageProbe {
+		s.writeHistory(acceptedID, map[string]any{
+			"ts":             now.Format(time.RFC3339),
+			"type":           "session_reattach",
+			"session_id":     acceptedID,
+			"old_session_id": req.SessionID,
+			"provider":       req.Provider,
+			"cwd":            req.CWD,
+			"branch":         branch,
+			"label":          req.Label,
+			"model":          req.Model,
+			"shell":          req.Shell,
+			"pid":            req.PID,
+			"renumbered":     acceptedID != req.SessionID,
+		})
+		s.startAgentChatTail(acceptedID)
+	}
 	s.wrapperMessageLoop(wc, acceptedID)
 }
 
@@ -690,6 +855,26 @@ func (s *Server) wrapperStillRegistered(id int, wc *wrapperConn) bool {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 	return s.sessions[id] != nil && s.wrappers[id] == wc
+}
+
+// reattachAnnounceMessage takes the final session/wrapper snapshot under one
+// lock. Dismiss can run between the earlier registration check and this
+// announcement; never pass a nil session to sessionUpdateMessage in that gap.
+func (s *Server) reattachAnnounceMessage(id int, wc *wrapperConn) (proto.Message, bool) {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[id]
+	if ses == nil || s.wrappers[id] != wc {
+		return proto.Message{}, false
+	}
+	return sessionUpdateMessage(ses), true
+}
+
+// wrapperCleanupAlreadyDismissedLocked distinguishes an intentional UI
+// dismiss (both maps removed) from an ordinary wrapper disconnect where the
+// session still needs to be marked disconnected and finalized.
+func wrapperCleanupAlreadyDismissedLocked(s *Server, id int) bool {
+	return s.wrappers[id] == nil && s.sessions[id] == nil
 }
 
 func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
@@ -703,22 +888,27 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		switch m.Type {
 		case "pty_data":
 			now := time.Now()
-			maskedRaw := sessionlog.MaskSecrets(string(m.Data))
-			cleanText := sessionlog.StripANSI(maskedRaw)
-			s.writeHistory(id, map[string]any{
-				"ts":         now.Format(time.RFC3339),
-				"type":       "pty_output",
-				"session_id": id,
-				"data_b64":   sessionlog.EncodeBase64([]byte(maskedRaw)),
-				"text":       cleanText,
-			})
+			cleanText := sessionlog.StripANSI(string(m.Data))
+			if s.sessionLogEnabled() {
+				maskedRaw := sessionlog.MaskSecrets(string(m.Data))
+				cleanText = sessionlog.StripANSI(maskedRaw)
+				s.writeHistory(id, map[string]any{
+					"ts":         now.Format(time.RFC3339),
+					"type":       "pty_output",
+					"session_id": id,
+					"data_b64":   sessionlog.EncodeBase64([]byte(maskedRaw)),
+					"text":       cleanText,
+				})
+			}
 			var provider string
 			var vtLines []string
 			var marker *approvalMarkerBlock
+			var crossSessionMessage *crossSessionMessageCandidate
 			var initialModelLines []string
 			var initialModelCWD string
 			scanNativeApproval := false
 			hadNativeApprovalSig := false
+			resumeAgentChatTail := false
 			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
@@ -729,6 +919,17 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 				ses.vt.Write(m.Data)
 				provider = ses.Provider
+				if provider == "claude" && ses.OrchestrationID != "" {
+					candidate := detectCrossSessionMessage(ses.vt.Lines())
+					signature := ""
+					if candidate != nil {
+						signature = candidate.Signature
+					}
+					if signature != ses.crossSessionMessageScreenSig {
+						ses.crossSessionMessageScreenSig = signature
+						crossSessionMessage = candidate
+					}
+				}
 				// Workflow VT は Claude の表示形式だけを較正済み。全 provider へ
 				// 広げると shell/codex の通常出力を workflow と誤認するため厳密に限定する。
 				if provider == "claude" {
@@ -737,7 +938,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				if chunkHasApprovalTrigger && now.Before(ses.vtResizeDebounceUntil) {
 					ses.nativeApprovalScanQueued = true
 				}
-				shouldCheckApproval := isAIProvider(provider) &&
+				shouldCheckApproval := sessionApprovalDetectionEligible(ses) &&
 					now.After(ses.vtResizeDebounceUntil) &&
 					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
 				if shouldCheckApproval {
@@ -758,10 +959,28 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// 約 40ms 後にマーカー再配信、選択肢ラベル末尾が罫線に置き換わっていた。
 				// ネイティブ承認スキャン（上の shouldCheckApproval）と同じく、resize debounce の間は
 				// ミラーを読まない。SIGWINCH 後の再描画で必ず次チャンクが来るので取りこぼしにならない。
-				if isAIProvider(provider) && now.After(ses.vtResizeDebounceUntil) {
-					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）。
+				// トランスクリプトを供給元にしているセッション（claude / codex）は
+				// ここで VT を読まない。両方から同じ質問を立てると、折り返しで
+				// 質問文が切れている側と切れていない側で candidateKey が割れる
+				// （approval_marker_transcript.go の冒頭が理由の正本）。
+				if sessionApprovalDetectionEligible(ses) && now.After(ses.vtResizeDebounceUntil) &&
+					!approvalMarkerSourceIsTranscriptLocked(ses) {
+					// マーカー抽出は scrollback 込み（画面高超えブロック / Grok 対応）＋
+					// 開始マーカーが画面外へ流れた場合の再構成（approval_marker.go）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
-					marker = extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+					marker = extractApprovalMarkerBlockFromVT(ses.vt)
+				}
+				// 出力が動いている間はトランスクリプトの tail を止めない。
+				// pollAgentChat は最後の出力から 1 分で自分を止めるが、再開する口が
+				// register / reattach にしか無かったため、いったん止まると次の
+				// 出力が来ても誰も読み直さなかった。承認マーカーの供給元にする以上、
+				// 「出力があるのに読んでいない」時間帯を残せない。
+				if isAgentChatProvider(provider) && !ses.agentChatRunning && !ses.UsageProbe {
+					resumeAgentChatTail = true
+				}
+				// 終了マーカーが端末に出た＝回答を書き終えた合図。次の poll を前倒しする。
+				if approvalMarkerSourceIsTranscriptLocked(ses) && ptyChunkClosesApprovalMarker(m.Data) {
+					s.kickAgentChatPollLocked(id, ses)
 				}
 				// 起動バナーからの初期モデル検出（--model 指定なしのセッション向け）。
 				// Model が埋まる・上限バイト超過のどちらかで打ち切る。
@@ -776,8 +995,14 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 			}
 			s.sessionsMu.Unlock()
+			if resumeAgentChatTail {
+				s.startAgentChatTail(id)
+			}
 			s.maybeBroadcastApprovalMarker(id, marker, now)
 			s.broadcast(m)
+			if crossSessionMessage != nil {
+				s.recordCrossSessionMessage(id, crossSessionMessage, now)
+			}
 			if scanNativeApproval {
 				approval := detectNativeApproval(provider, vtLines)
 				if approval == nil && hadNativeApprovalSig && shouldSuppressNativeApprovalClearMiss(provider, vtLines) {
@@ -817,6 +1042,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				s.handleDoneSummaryMarker(id, doneSnap)
 			}
 			s.handleCommitMsgChunk(id, cleanText)
+			s.handleHandoffTurnSummaryChunk(id, cleanText)
 		case "pty_input_ack":
 			s.handlePTYInputAck(wc, id, m.InputSeq)
 		case "session_end":
@@ -854,6 +1080,11 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 
 	// wrapper 切断
 	s.sessionsMu.Lock()
+	if wrapperCleanupAlreadyDismissedLocked(s, id) {
+		s.sessionsMu.Unlock()
+		s.logger.Debug("wrapper loop ended after session dismiss", "session_id", id)
+		return
+	}
 	if cur := s.wrappers[id]; cur != nil && cur != wc {
 		// この ID は既に別の接続へ差し替わっている（reattachIdentityMatches が同一
 		// wrapper と判定して番号を引き継いだ場合）。後始末を続けると現役セッションを
@@ -878,7 +1109,8 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	requeuedCount, requeuedMinSeq, requeuedMaxSeq := s.deferInflightForResendLocked(id, wc)
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
-	var endedProvider, endedCWD string
+	var endedProvider, endedCWD, endedCodexHome, endedClaudeDir string
+	var endedUsageProbe bool
 	// done/timeout も終端として保持する（オーケストレーション完了状態を disconnected で潰さない）。
 	if cur := s.sessions[id]; cur != nil && !isTerminalSessionState(cur.State) {
 		s.stopAgentChatTailLocked(cur)
@@ -894,6 +1126,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		endReason = cur.EndReason
 		endedProvider = cur.Provider
 		endedCWD = cur.CWD
+		endedCodexHome = cur.CodexHome
+		endedClaudeDir = cur.ClaudeDir
+		endedUsageProbe = cur.UsageProbe
 	}
 	// 旧 wrapper（ack 未対応）では従来どおり未送信の保留入力を捨てる。
 	// ack 対応 wrapper の場合は in-flight と既存 pending を次の reattach へ残す。
@@ -943,7 +1178,16 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	if s.sessionStore != nil {
 		s.sessionStore.EndSession(id, endState, endReason, time.Now())
 	}
-	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	if !endedUsageProbe {
+		// wrapper 切断の全経路（正常終了・session_end 未送信の kill・Hub 側 WS 断）を
+		// ここ 1 箇所に集約している上の EndSession 呼び出しに相乗りする。handoff は
+		// log.session_enabled と独立（handoff.go 参照）。
+		s.recordHandoffSessionEnd(id, endState, endReason)
+	}
+	// dismiss 経路（server.go handleDismiss）と同じく profile の claudeDir も渡す。
+	// 渡さなくても knownApprovalTargets 経由で profile 側の宛先は外れるが、候補に
+	// 既定の ~/.claude/CLAUDE.md を混ぜる理由が無い（C6 レビュー、2026-09-07）。
+	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithHomes(endedProvider, endedCWD, endedCodexHome, endedClaudeDir))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	s.finalizeTranscript(id, jsonlPathForTranscript)
 	// usage 集計マップから当該セッションのエントリを掃除する。dismiss 経路だけでなく
@@ -951,4 +1195,5 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 	// (VPS / docker) で線形にメモリが累積する。
 	DeleteSessionUsageStat(id)
 	s.broadcast(proto.Message{Type: "session_end", SessionID: id, State: endState, Reason: endReason})
+	s.dismissSubscriptionLoginSession(id)
 }

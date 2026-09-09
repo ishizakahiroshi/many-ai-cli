@@ -284,3 +284,40 @@ func TestFilesMove_Multi_RejectAncestorAndDescendantBeforeMoving(t *testing.T) {
 		t.Fatalf("child should remain at source: %v", err)
 	}
 }
+
+func TestRollbackMovesDoesNotOverwriteRecreatedSource(t *testing.T) {
+	tmp := t.TempDir()
+	src := filepath.Join(tmp, "src", "data.md")
+	dst := filepath.Join(tmp, "dst", "data.md")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("original moved data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("new source data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	failures := rollbackMoves([]fileMovePlan{{SrcClean: src, NewPath: dst}})
+	if len(failures) != 1 {
+		t.Fatalf("rollback failures = %d, want 1", len(failures))
+	}
+	srcData, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dstData, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(srcData) != "new source data" || string(dstData) != "original moved data" {
+		t.Fatalf("rollback changed data: src=%q dst=%q", srcData, dstData)
+	}
+}

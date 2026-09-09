@@ -59,15 +59,19 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 		tailscale(cfg),
 		logs(cfg),
 		sessionLog(cfg),
+		handoffCheck(cfg),
 	}
-	// 置き去り検査だけは「見つかったときにしか出さない」。置き去りの無い
-	// リポジトリや git 管理外の場所で出力が増えないようにする。
+	// 置き去り検査とサブスクリプション検査は「該当があるときにしか出さない」。
+	// 使っていない機能で診断出力が伸びると、本当に見るべき行が埋もれる。
 	checks = append(checks, residue(ctx, cfg)...)
+	checks = append(checks, commandCode(ctx)...)
+	checks = append(checks, subscriptions(ctx, cfg)...)
+	checks = append(checks, customProviders(cfg)...)
 	return Report{Checks: checks}
 }
 
 func providers(ctx context.Context) Check {
-	names := []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok"}
+	names := config.BuiltinProviderIDs
 	var found []string
 	for _, name := range names {
 		path, err := providerLookPath(name)

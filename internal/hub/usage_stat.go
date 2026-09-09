@@ -37,6 +37,17 @@ func stripControlForLog(s string, maxRunes int) string {
 	return string(out)
 }
 
+func parseUsageObservedAt(raw string) time.Time {
+	if strings.TrimSpace(raw) == "" {
+		return time.Time{}
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed
+}
+
 // usageStat はセッション単位のトークン / コスト累積値。
 // メモリのみ保持し、ディスクへは書き込まない。
 type usageStat struct {
@@ -54,30 +65,53 @@ type usageStat struct {
 	// CtxUsedPct: Claude Code statusLine 算出済みの context 使用率%（0=未取得。Claude のみ）。
 	CtxUsedPct float64
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・0/未送=未取得）。
-	RateLimit5hPct   float64
-	RateLimit5hReset int64
-	RateLimit7dPct   float64
-	RateLimit7dReset int64
-	LinesAdded       int
-	LinesRemoved     int
-	EffortLevel      string
-	Thinking         bool
-	Exceeds200k      bool
-	DurationMs       int64
-	APIDurationMs    int64
-	Version          string
-	OutputStyle      string
-	VimMode          string
-	AgentName        string
-	RepoHost         string
-	RepoOwner        string
-	RepoName         string
-	RemainingPct     float64
-	ReasoningOut     int
+	RateLimit5hPct             float64
+	RateLimit5hReset           int64
+	RateLimit7dPct             float64
+	RateLimit7dReset           int64
+	ClaudeRateLimitsPresent    bool
+	ClaudeFiveHourFieldPresent bool
+	ClaudeFiveHourPresent      bool
+	ClaudeSevenDayFieldPresent bool
+	ClaudeSevenDayPresent      bool
+	// Codex rate_limits are separate from Claude's 5h/7d fields because their
+	// window semantics and source are different. Presence keeps 0% distinct
+	// from an omitted record.
+	CodexRateLimitsPresent      bool
+	CodexPrimaryPresent         bool
+	CodexPrimaryUsedPct         float64
+	CodexPrimaryWindowMinutes   int
+	CodexPrimaryReset           int64
+	CodexSecondaryUsedPct       float64
+	CodexSecondaryPresent       bool
+	CodexSecondaryWindowMinutes int
+	CodexSecondaryReset         int64
+	CodexCreditsPresent         bool
+	CodexHasCredits             bool
+	CodexCreditsUnlimited       bool
+	CodexCreditsBalance         string
+	CodexPlanType               string
+	LinesAdded                  int
+	LinesRemoved                int
+	EffortLevel                 string
+	Thinking                    bool
+	Exceeds200k                 bool
+	DurationMs                  int64
+	APIDurationMs               int64
+	Version                     string
+	OutputStyle                 string
+	VimMode                     string
+	AgentName                   string
+	RepoHost                    string
+	RepoOwner                   string
+	RepoName                    string
+	RemainingPct                float64
+	ReasoningOut                int
 	// UsageModel: relay が報告したモデル ID / display_name。
-	UsageModel string
-	StartedAt  string
-	ReceivedAt time.Time
+	UsageModel      string
+	StartedAt       string
+	UsageObservedAt string
+	ReceivedAt      time.Time
 }
 
 // usageStatsMu は usageStats map を保護する。sessionsMu とは独立したロック。
@@ -106,7 +140,8 @@ type modelPricing struct {
 // modelPriceTable: モデル ID（完全一致または前方一致で検索）→ 単価。
 // Codex 用: トークン → コスト算出に使う。
 // Claude 用: relay が cost をそのまま送るため原則使わないが、
-//            将来的にトークン内訳を表示する場合に備えて収録。
+//
+//	将来的にトークン内訳を表示する場合に備えて収録。
 var modelPriceTable = map[string]modelPricing{
 	// --- OpenAI / Codex ---
 	// gpt-4.1 系 (2025-04 発表)
@@ -170,8 +205,25 @@ func calcCostUSD(modelID string, tokIn, tokOut, tokCacheRead int) (cost float64,
 	if !ok {
 		return 0, false
 	}
+	// Codex reports cached input as a subset of input_tokens. Charge the
+	// uncached remainder at the normal input rate and the cached subset at the
+	// cache-read rate. Clamp malformed counts so cache > input cannot produce a
+	// negative billable input amount.
+	if tokIn < 0 {
+		tokIn = 0
+	}
+	if tokOut < 0 {
+		tokOut = 0
+	}
+	if tokCacheRead < 0 {
+		tokCacheRead = 0
+	}
+	if tokCacheRead > tokIn {
+		tokCacheRead = tokIn
+	}
+	uncachedInput := tokIn - tokCacheRead
 	const mTok = 1_000_000.0
-	cost = float64(tokIn)*p.InputPerMTok/mTok +
+	cost = float64(uncachedInput)*p.InputPerMTok/mTok +
 		float64(tokOut)*p.OutputPerMTok/mTok +
 		float64(tokCacheRead)*p.CacheReadPerMTok/mTok
 	return cost, true
@@ -208,26 +260,46 @@ type sessionUsageRequest struct {
 	CtxUsedPct    float64 `json:"ctx_used_pct"`
 	StartedAt     string  `json:"started_at"`
 	// statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ）。
-	RateLimit5hPct   float64 `json:"rl_5h_pct"`
-	RateLimit5hReset int64   `json:"rl_5h_reset"`
-	RateLimit7dPct   float64 `json:"rl_7d_pct"`
-	RateLimit7dReset int64   `json:"rl_7d_reset"`
-	LinesAdded       int     `json:"lines_added"`
-	LinesRemoved     int     `json:"lines_removed"`
-	EffortLevel      string  `json:"effort_level"`
-	Thinking         bool    `json:"thinking"`
-	Exceeds200k      bool    `json:"exceeds_200k"`
-	DurationMs       int64   `json:"duration_ms"`
-	APIDurationMs    int64   `json:"api_duration_ms"`
-	Version          string  `json:"version"`
-	OutputStyle      string  `json:"output_style"`
-	VimMode          string  `json:"vim_mode"`
-	AgentName        string  `json:"agent_name"`
-	RepoHost         string  `json:"repo_host"`
-	RepoOwner        string  `json:"repo_owner"`
-	RepoName         string  `json:"repo_name"`
-	RemainingPct     float64 `json:"remaining_pct"`
-	ReasoningOut     int     `json:"reasoning_output_tokens"`
+	RateLimit5hPct              float64 `json:"rl_5h_pct"`
+	RateLimit5hReset            int64   `json:"rl_5h_reset"`
+	RateLimit7dPct              float64 `json:"rl_7d_pct"`
+	RateLimit7dReset            int64   `json:"rl_7d_reset"`
+	ClaudeRateLimitsPresent     bool    `json:"claude_rate_limits_present"`
+	ClaudeFiveHourFieldPresent  bool    `json:"claude_5h_field_present"`
+	ClaudeFiveHourPresent       bool    `json:"claude_5h_present"`
+	ClaudeSevenDayFieldPresent  bool    `json:"claude_7d_field_present"`
+	ClaudeSevenDayPresent       bool    `json:"claude_7d_present"`
+	CodexRateLimitsPresent      bool    `json:"codex_rate_limits_present"`
+	CodexPrimaryPresent         bool    `json:"codex_primary_present"`
+	CodexPrimaryUsedPct         float64 `json:"codex_primary_used_pct"`
+	CodexPrimaryWindowMinutes   int     `json:"codex_primary_window_minutes"`
+	CodexPrimaryReset           int64   `json:"codex_primary_reset"`
+	CodexSecondaryUsedPct       float64 `json:"codex_secondary_used_pct"`
+	CodexSecondaryPresent       bool    `json:"codex_secondary_present"`
+	CodexSecondaryWindowMinutes int     `json:"codex_secondary_window_minutes"`
+	CodexSecondaryReset         int64   `json:"codex_secondary_reset"`
+	CodexCreditsPresent         bool    `json:"codex_credits_present"`
+	CodexHasCredits             bool    `json:"codex_has_credits"`
+	CodexCreditsUnlimited       bool    `json:"codex_credits_unlimited"`
+	CodexCreditsBalance         string  `json:"codex_credits_balance"`
+	CodexPlanType               string  `json:"codex_plan_type"`
+	UsageObservedAt             string  `json:"usage_observed_at"`
+	LinesAdded                  int     `json:"lines_added"`
+	LinesRemoved                int     `json:"lines_removed"`
+	EffortLevel                 string  `json:"effort_level"`
+	Thinking                    bool    `json:"thinking"`
+	Exceeds200k                 bool    `json:"exceeds_200k"`
+	DurationMs                  int64   `json:"duration_ms"`
+	APIDurationMs               int64   `json:"api_duration_ms"`
+	Version                     string  `json:"version"`
+	OutputStyle                 string  `json:"output_style"`
+	VimMode                     string  `json:"vim_mode"`
+	AgentName                   string  `json:"agent_name"`
+	RepoHost                    string  `json:"repo_host"`
+	RepoOwner                   string  `json:"repo_owner"`
+	RepoName                    string  `json:"repo_name"`
+	RemainingPct                float64 `json:"remaining_pct"`
+	ReasoningOut                int     `json:"reasoning_output_tokens"`
 	// TranscriptPath is supplied only by the Codex Stop hook. It is retained in
 	// memory for the active session so the UI can lead the user to the provider's
 	// source-of-truth rollout JSONL without storing its contents in the Hub.
@@ -322,6 +394,12 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		return v
 	}
+	clampWindowMinutes := func(v int) int {
+		if v < 0 || v > 10*365*24*60 {
+			return 0
+		}
+		return v
+	}
 	rl5hReset := clampEpoch(req.RateLimit5hReset)
 	rl7dReset := clampEpoch(req.RateLimit7dReset)
 	clampLines := func(v int) int {
@@ -376,43 +454,72 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		costUSD, costKnown = calcCostUSD(usageModel, req.TokensIn, req.TokensOut, req.TokensCache)
 	}
 
+	receivedAt := time.Now()
+	providerObservedAt := parseUsageObservedAt(req.UsageObservedAt)
+	recordAt := receivedAt
+	observedAt := ""
+	if !providerObservedAt.IsZero() {
+		recordAt = providerObservedAt
+		observedAt = providerObservedAt.UTC().Format(time.RFC3339Nano)
+	}
 	stat := &usageStat{
-		CostUSD:          costUSD,
-		CostKnown:        costKnown,
-		TokensIn:         req.TokensIn,
-		TokensOut:        req.TokensOut,
-		TokensCache:      req.TokensCache,
-		TokensTotal:      req.TokensTotal,
-		CtxWindow:        req.CtxWindow,
-		CtxUsedPct:       ctxUsedPct,
-		RateLimit5hPct:   rl5hPct,
-		RateLimit5hReset: rl5hReset,
-		RateLimit7dPct:   rl7dPct,
-		RateLimit7dReset: rl7dReset,
-		LinesAdded:       linesAdded,
-		LinesRemoved:     linesRemoved,
-		EffortLevel:      effortLevel,
-		Thinking:         req.Thinking,
-		Exceeds200k:      req.Exceeds200k,
-		DurationMs:       durationMs,
-		APIDurationMs:    apiDurationMs,
-		Version:          version,
-		OutputStyle:      outputStyle,
-		VimMode:          vimMode,
-		AgentName:        agentName,
-		RepoHost:         repoHost,
-		RepoOwner:        repoOwner,
-		RepoName:         repoName,
-		RemainingPct:     remainingPct,
-		ReasoningOut:     reasoningOut,
-		UsageModel:       usageModel,
-		StartedAt:        req.StartedAt,
-		ReceivedAt:       time.Now(),
+		CostUSD:                     costUSD,
+		CostKnown:                   costKnown,
+		TokensIn:                    req.TokensIn,
+		TokensOut:                   req.TokensOut,
+		TokensCache:                 req.TokensCache,
+		TokensTotal:                 req.TokensTotal,
+		CtxWindow:                   req.CtxWindow,
+		CtxUsedPct:                  ctxUsedPct,
+		RateLimit5hPct:              rl5hPct,
+		RateLimit5hReset:            rl5hReset,
+		RateLimit7dPct:              rl7dPct,
+		RateLimit7dReset:            rl7dReset,
+		ClaudeRateLimitsPresent:     req.ClaudeRateLimitsPresent,
+		ClaudeFiveHourFieldPresent:  req.ClaudeFiveHourFieldPresent,
+		ClaudeFiveHourPresent:       req.ClaudeFiveHourPresent,
+		ClaudeSevenDayFieldPresent:  req.ClaudeSevenDayFieldPresent,
+		ClaudeSevenDayPresent:       req.ClaudeSevenDayPresent,
+		CodexRateLimitsPresent:      req.CodexRateLimitsPresent,
+		CodexPrimaryPresent:         req.CodexPrimaryPresent,
+		CodexPrimaryUsedPct:         clampPct(req.CodexPrimaryUsedPct),
+		CodexPrimaryWindowMinutes:   clampWindowMinutes(req.CodexPrimaryWindowMinutes),
+		CodexPrimaryReset:           clampEpoch(req.CodexPrimaryReset),
+		CodexSecondaryUsedPct:       clampPct(req.CodexSecondaryUsedPct),
+		CodexSecondaryPresent:       req.CodexSecondaryPresent,
+		CodexSecondaryWindowMinutes: clampWindowMinutes(req.CodexSecondaryWindowMinutes),
+		CodexSecondaryReset:         clampEpoch(req.CodexSecondaryReset),
+		CodexCreditsPresent:         req.CodexCreditsPresent,
+		CodexHasCredits:             req.CodexHasCredits,
+		CodexCreditsUnlimited:       req.CodexCreditsUnlimited,
+		CodexCreditsBalance:         stripControlForLog(req.CodexCreditsBalance, 64),
+		CodexPlanType:               stripControlForLog(req.CodexPlanType, 32),
+		LinesAdded:                  linesAdded,
+		LinesRemoved:                linesRemoved,
+		EffortLevel:                 effortLevel,
+		Thinking:                    req.Thinking,
+		Exceeds200k:                 req.Exceeds200k,
+		DurationMs:                  durationMs,
+		APIDurationMs:               apiDurationMs,
+		Version:                     version,
+		OutputStyle:                 outputStyle,
+		VimMode:                     vimMode,
+		AgentName:                   agentName,
+		RepoHost:                    repoHost,
+		RepoOwner:                   repoOwner,
+		RepoName:                    repoName,
+		RemainingPct:                remainingPct,
+		ReasoningOut:                reasoningOut,
+		UsageModel:                  usageModel,
+		StartedAt:                   req.StartedAt,
+		UsageObservedAt:             observedAt,
+		ReceivedAt:                  receivedAt,
 	}
 
 	usageStatsMu.Lock()
 	usageStats[req.SessionID] = stat
 	usageStatsMu.Unlock()
+	s.recordSessionSubscriptionUsage(req.SessionID, stat, recordAt)
 
 	s.logger.Info("usage_stat received",
 		slog.Int("session_id", req.SessionID),
@@ -428,39 +535,59 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 
 	// C3: usage 更新を全 UI クライアントに broadcast する。
 	s.broadcast(proto.Message{
-		Type:             "usage_stat",
-		SessionID:        req.SessionID,
-		Provider:         req.Provider,
-		CostUSD:          costUSD,
-		CostKnown:        costKnown,
-		TokensIn:         req.TokensIn,
-		TokensOut:        req.TokensOut,
-		TokensCache:      req.TokensCache,
-		TokensTotal:      req.TokensTotal,
-		CtxWindow:        req.CtxWindow,
-		CtxUsedPct:       ctxUsedPct,
-		RateLimit5hPct:   rl5hPct,
-		RateLimit5hReset: rl5hReset,
-		RateLimit7dPct:   rl7dPct,
-		RateLimit7dReset: rl7dReset,
-		LinesAdded:       linesAdded,
-		LinesRemoved:     linesRemoved,
-		EffortLevel:      effortLevel,
-		Thinking:         req.Thinking,
-		Exceeds200k:      req.Exceeds200k,
-		DurationMs:       durationMs,
-		APIDurationMs:    apiDurationMs,
-		Version:          version,
-		OutputStyle:      outputStyle,
-		VimMode:          vimMode,
-		AgentName:        agentName,
-		RepoHost:         repoHost,
-		RepoOwner:        repoOwner,
-		RepoName:         repoName,
-		RemainingPct:     remainingPct,
-		ReasoningOut:     reasoningOut,
-		UsageModel:       usageModel,
-		UsageStartedAt:   req.StartedAt,
+		Type:                        "usage_stat",
+		SessionID:                   req.SessionID,
+		Provider:                    req.Provider,
+		CostUSD:                     costUSD,
+		CostKnown:                   costKnown,
+		TokensIn:                    req.TokensIn,
+		TokensOut:                   req.TokensOut,
+		TokensCache:                 req.TokensCache,
+		TokensTotal:                 req.TokensTotal,
+		CtxWindow:                   req.CtxWindow,
+		CtxUsedPct:                  ctxUsedPct,
+		RateLimit5hPct:              rl5hPct,
+		RateLimit5hReset:            rl5hReset,
+		RateLimit7dPct:              rl7dPct,
+		RateLimit7dReset:            rl7dReset,
+		ClaudeRateLimitsPresent:     stat.ClaudeRateLimitsPresent,
+		ClaudeFiveHourFieldPresent:  stat.ClaudeFiveHourFieldPresent,
+		ClaudeFiveHourPresent:       stat.ClaudeFiveHourPresent,
+		ClaudeSevenDayFieldPresent:  stat.ClaudeSevenDayFieldPresent,
+		ClaudeSevenDayPresent:       stat.ClaudeSevenDayPresent,
+		CodexRateLimitsPresent:      stat.CodexRateLimitsPresent,
+		CodexPrimaryPresent:         stat.CodexPrimaryPresent,
+		CodexPrimaryUsedPct:         stat.CodexPrimaryUsedPct,
+		CodexPrimaryWindowMinutes:   stat.CodexPrimaryWindowMinutes,
+		CodexPrimaryReset:           stat.CodexPrimaryReset,
+		CodexSecondaryUsedPct:       stat.CodexSecondaryUsedPct,
+		CodexSecondaryPresent:       stat.CodexSecondaryPresent,
+		CodexSecondaryWindowMinutes: stat.CodexSecondaryWindowMinutes,
+		CodexSecondaryReset:         stat.CodexSecondaryReset,
+		CodexCreditsPresent:         stat.CodexCreditsPresent,
+		CodexHasCredits:             stat.CodexHasCredits,
+		CodexCreditsUnlimited:       stat.CodexCreditsUnlimited,
+		CodexCreditsBalance:         stat.CodexCreditsBalance,
+		CodexPlanType:               stat.CodexPlanType,
+		UsageObservedAt:             stat.UsageObservedAt,
+		LinesAdded:                  linesAdded,
+		LinesRemoved:                linesRemoved,
+		EffortLevel:                 effortLevel,
+		Thinking:                    req.Thinking,
+		Exceeds200k:                 req.Exceeds200k,
+		DurationMs:                  durationMs,
+		APIDurationMs:               apiDurationMs,
+		Version:                     version,
+		OutputStyle:                 outputStyle,
+		VimMode:                     vimMode,
+		AgentName:                   agentName,
+		RepoHost:                    repoHost,
+		RepoOwner:                   repoOwner,
+		RepoName:                    repoName,
+		RemainingPct:                remainingPct,
+		ReasoningOut:                reasoningOut,
+		UsageModel:                  usageModel,
+		UsageStartedAt:              req.StartedAt,
 	})
 
 	writeJSON(w, map[string]any{"ok": true})

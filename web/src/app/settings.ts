@@ -1,17 +1,19 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
-import { activateSession, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
+import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
-import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility } from './token-statusbar.js';
+import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
+import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
+import { setHandoffNotifyThresholdPercent } from './handoff.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -35,6 +37,7 @@ export function showApprovalToast() {
   if (document.getElementById('approval-toast')) return;
   const el = document.createElement('div');
   el.id = 'approval-toast';
+  el.classList.add('aac-wheel-overlay');
 
   const dialog = document.createElement('div');
   dialog.className = 'approval-toast-dialog';
@@ -266,7 +269,7 @@ export function playNotificationSound() {
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
     const tk = token;
-    const customUrl = `/api/user-prefs/notify-sound-custom?token=${encodeURIComponent(tk || '')}`;
+    const customUrl = '/api/user-prefs/notify-sound-custom';
     if (customUrl) {
       try { new Audio(customUrl).play().catch(() => {}); return; } catch (_) {}
     }
@@ -386,6 +389,7 @@ export function getUsageLinkUrl(provider) {
     'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
     grok:     STORAGE_USAGE_LINK_GROK_KEY,
+    'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
   };
   const key = keyMap[provider];
   if (!key) return DEFAULT_USAGE_LINKS[provider] || '#';
@@ -393,7 +397,7 @@ export function getUsageLinkUrl(provider) {
 }
 
 export function applyUsageLinks() {
-  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok']) {
+  for (const p of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
     const el = document.getElementById(`usage-link-${p}`);
     if (el) el.href = getUsageLinkUrl(p);
   }
@@ -409,11 +413,14 @@ export function loadUsageLinkSettings() {
     'lm-studio':   STORAGE_USAGE_LINK_LM_STUDIO_KEY,
     opencode: STORAGE_USAGE_LINK_OPENCODE_KEY,
     grok:     STORAGE_USAGE_LINK_GROK_KEY,
+    'command-code': STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
   };
   for (const [p, k] of Object.entries(keyMap)) {
     const el = document.getElementById(`usage-link-${p}-url`);
     if (el) el.value = localStorage.getItem(k) || '';
   }
+  const probeModel = document.getElementById('usage-probe-model') as HTMLInputElement | null;
+  if (probeModel) probeModel.value = localStorage.getItem(STORAGE_USAGE_PROBE_MODEL_KEY) || '';
   applyUsageLinks();
 }
 
@@ -427,6 +434,7 @@ export function saveUsageLinkSettings() {
     ['lm-studio',   'usage_links.lm-studio',  STORAGE_USAGE_LINK_LM_STUDIO_KEY],
     ['opencode', 'usage_links.opencode', STORAGE_USAGE_LINK_OPENCODE_KEY],
     ['grok',     'usage_links.grok',     STORAGE_USAGE_LINK_GROK_KEY],
+    ['command-code', 'usage_links.command-code', STORAGE_USAGE_LINK_COMMAND_CODE_KEY],
   ];
   for (const [p, prefPath, key] of pairs) {
     const input = document.getElementById(`usage-link-${p}-url`);
@@ -442,6 +450,8 @@ export function saveUsageLinkSettings() {
       input.value = '';
     }
   }
+  const probeModel = document.getElementById('usage-probe-model') as HTMLInputElement | null;
+  if (probeModel) setUserPref('usage_probe_model', probeModel.value.trim());
   applyUsageLinks();
 }
 
@@ -455,18 +465,31 @@ export function initUsageDropdown() {
   if (dropdown.parentElement !== document.body) {
     document.body.appendChild(dropdown);
   }
+  initUsagePanel(dropdown);
 
   const positionDropdown = () => {
     const rect = btn.getBoundingClientRect();
     const margin = 6;
     dropdown.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - margin)}px`;
-    dropdown.style.right = `${Math.max(margin, window.innerWidth - rect.right)}px`;
+    dropdown.style.left = '50%';
+    dropdown.style.right = 'auto';
+    dropdown.style.transform = 'translateX(-50%)';
   };
 
   const closeDropdown = () => {
     dropdown.hidden = true;
     btn.setAttribute('aria-expanded', 'false');
   };
+
+  // ヘッダ右上の ✕。パネル外クリック・Escape と同じ closeDropdown を通す。
+  // stopPropagation は、閉じた後のクリックが背後の要素へ届かないようにするため。
+  const panelCloseBtn = dropdown.querySelector('#usage-dropdown-close');
+  if (panelCloseBtn) {
+    panelCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeDropdown();
+    });
+  }
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -478,6 +501,7 @@ export function initUsageDropdown() {
     positionDropdown();
     dropdown.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
+    void refreshUsagePanel();
   });
 
   // xterm 等で stopPropagation されると bubble phase の document リスナーまで届かないため、
@@ -901,6 +925,19 @@ export function applyLang(lang) {
   if (sel) sel.value = l;
 }
 
+export function setSettingsPanelOpen(open: boolean): void {
+  const panel = document.getElementById('settings-panel');
+  if (!panel) return;
+  panel.hidden = !open;
+  document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(open));
+}
+
+function syncSettingsPanelButton(): void {
+  const panel = document.getElementById('settings-panel');
+  if (!panel) return;
+  document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(!panel.hidden));
+}
+
 (function () {
   applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
   applyFontSize(localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium');
@@ -918,13 +955,16 @@ export function applyLang(lang) {
   const closeBtn   = document.getElementById('settings-close-btn');
   const licensesBtn = document.getElementById('settings-licenses-btn');
   const usageLinksResetBtn = document.getElementById('usage-links-reset-btn');
+  const providerOrderResetBtn = document.getElementById('provider-order-reset-btn');
 
+  syncSettingsPanelButton();
   fontsizeEl.value = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) {
+    const open = panel.hidden === true;
+    setSettingsPanelOpen(open);
+    if (open) {
       // 開いた瞬間に全セクションの畳み状態サマリを最新値で描画。
       // 個別 input の change を 1 つ 1 つ拾わなくても、ここと <details> の toggle で十分。
       attachSummaryToggleListeners();
@@ -935,14 +975,24 @@ export function applyLang(lang) {
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      panel.hidden = true;
+      setSettingsPanelOpen(false);
       maybeAutoSwitchToNextApproval();
+    });
+  }
+
+  if (providerOrderResetBtn) {
+    providerOrderResetBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        const { resetSpawnProviderOrder } = await import('./spawn-panel.js');
+        resetSpawnProviderOrder();
+      } catch (_) {}
     });
   }
 
   document.addEventListener('click', (e) => {
     if (!panel.hidden && !panel.contains(e.target)) {
-      panel.hidden = true;
+      setSettingsPanelOpen(false);
       maybeAutoSwitchToNextApproval();
     }
     if (pathPopupEl && !pathPopupEl.hidden && !pathPopupEl.contains(e.target)) {
@@ -1000,7 +1050,7 @@ export function applyLang(lang) {
     );
   });
   licensesBtn.addEventListener('click', () => {
-    panel.hidden = true;
+    setSettingsPanelOpen(false);
     aboutPanel.hidden = false;
   });
   if (usageLinksResetBtn) {
@@ -1013,6 +1063,7 @@ export function applyLang(lang) {
       setUserPref('usage_links.ollama', '');
       setUserPref('usage_links.opencode', '');
       setUserPref('usage_links.grok', '');
+      setUserPref('usage_links.command-code', '');
       loadUsageLinkSettings();
       showToast(t('settings_usage_links_reset_done'), usageLinksResetBtn);
     });
@@ -1076,7 +1127,7 @@ function initSettingsInformationArchitecture(): void {
   const openDeepLink = () => {
     const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
     if (!match) return;
-    panel.hidden = false;
+    setSettingsPanelOpen(true);
     const sectionId = match[1];
     if (!sectionId) { apply(); return; }
     const section = sections.find((item) => item.dataset.section === sectionId);
@@ -1822,9 +1873,9 @@ initSettingsInformationArchitecture();
       });
       if (!res.ok) throw new Error(`PUT avatar ${res.status}`);
       // キャッシュバスター付きで更新
-      set__userAvatarUrl(`/api/avatar?token=${tk}`);
+      set__userAvatarUrl('/api/avatar');
       urlInputEl.value = '';
-      updatePreview(`/api/avatar?token=${tk}&t=${Date.now()}`, _userDisplayName);
+      updatePreview(`/api/avatar?t=${Date.now()}`, _userDisplayName);
       showToast(typeof window.t === 'function' ? t('settings_avatar_file_set') : 'アイコン画像を設定しました');
     } catch (e) {
       console.warn('[user-prefs] avatar upload failed:', e);
@@ -1850,7 +1901,7 @@ initSettingsInformationArchitecture();
     const res = await fetch(`/api/usage-link-defaults?token=${encodeURIComponent(token || '')}`);
     if (!res.ok) return;
     const d = await res.json();
-    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok']) {
+    for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
       // 空文字は無視（GitHub 側が古くキーを欠く場合に空で返るため、
       // ローカルの正しいデフォルト値を潰さない）
       if (typeof d[k] === 'string' && d[k] !== '') DEFAULT_USAGE_LINKS[k] = d[k];
@@ -1881,7 +1932,7 @@ function renderStaleBinaryBanner(stale: boolean): void {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'multi-question-banner-close';
-  closeBtn.textContent = '×';
+  closeBtn.textContent = '✕';
   closeBtn.title = tr('stale_binary_banner_close_tooltip', 'Dismiss');
   closeBtn.addEventListener('click', () => { banner.hidden = true; });
   banner.appendChild(msg);
@@ -1907,6 +1958,7 @@ window.addEventListener('many-binary-stale', (ev: Event) => {
     const info = await res.json();
     set__userAvatarUrl(info.userAvatar || '');
     set__userDisplayName(info.userDisplayName || '');
+    setHandoffNotifyThresholdPercent(Number(info.handoff_notify_remaining_percent));
     document.dispatchEvent(new CustomEvent('user-info-ready'));
     // 稼働中 Hub が古いバイナリ（起動後にディスクの exe が差し替わった）なら
     // 常設バナーで再起動を促す。multi-question-banner と同じ構造・クラスを流用。
@@ -2052,10 +2104,11 @@ window.approvalPatternsUI = (function () {
     copilot: { official: [], custom: [] },
     'cursor-agent': { official: [], custom: [] },
     grok: { official: [], custom: [] },
+    'command-code': { official: [], custom: [] },
     common: { official: [], custom: [] },
   };
   // アクティブプロファイル設定（サーバ側 ApprovalProfiles と同期）
-  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', grok: 'official', common: 'official' };
+  let activeProfiles = { claude: 'official', codex: 'official', copilot: 'official', 'cursor-agent': 'official', grok: 'official', 'command-code': 'official', common: 'official' };
 
   function currentProvider() { return providerEl.value; }
   function currentProfile() { return profileEl.value; }
@@ -2072,6 +2125,7 @@ window.approvalPatternsUI = (function () {
           copilot: p.copilot || 'official',
           'cursor-agent': p['cursor-agent'] || 'official',
           grok: p.grok || 'official',
+          'command-code': p['command-code'] || 'official',
           common: p.common || 'official',
         };
       }
@@ -2088,6 +2142,7 @@ window.approvalPatternsUI = (function () {
         providerApprovalTriggers.copilot = norm(data.copilot);
         providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
         providerApprovalTriggers.grok = norm(data.grok);
+        providerApprovalTriggers['command-code'] = norm(data['command-code']);
         providerApprovalTriggers.common = norm(data.common);
       }
     } catch (e) {
@@ -2277,6 +2332,7 @@ export async function loadSlashCmdSources() {
   const codexEl  = document.getElementById('slash-src-codex');
   const copilotEl = document.getElementById('slash-src-copilot');
   const cursorAgentEl = document.getElementById('slash-src-cursor-agent');
+  const commandCodeEl = document.getElementById('slash-src-command-code');
   if (!claudeEl || !codexEl || !copilotEl) return;
   try {
     const resp = await fetch(`/api/slash-cmd-sources?token=${token}`);
@@ -2286,6 +2342,7 @@ export async function loadSlashCmdSources() {
     codexEl.value  = data.codex  || '';
     copilotEl.value = data.copilot || '';
     if (cursorAgentEl) cursorAgentEl.value = data['cursor-agent'] || '';
+    if (commandCodeEl) commandCodeEl.value = data['command-code'] || '';
   } catch (_) {}
 }
 
@@ -2298,6 +2355,7 @@ export async function loadSlashCmdSources() {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
       const resp = await fetch(`/api/slash-cmd-sources?token=${token}`, {
@@ -2430,13 +2488,19 @@ export function renderSessionInfoChip() {
     ? `<span class="card-provider-chip ${safeClassToken(s.provider)}">${escapeHtml(providerName)}</span>`
     : '';
   const isOllamaBackedSess = (s.route === 'ollama');
+  // モデル名・effort はカード tooltip / ステータスバーと同じ getSessionAgentInfo から取る。
+  const agentInfo = getSessionAgentInfo(Number(s.id));
   let modelBadge = '';
-  if (s.model) {
+  if (agentInfo.model) {
     const badgeProviderKey = isOllamaBackedSess ? 'ollama' : (s.provider || '');
     const badgeProviderLabel = isOllamaBackedSess ? 'Ollama' : providerName;
-    const tip = badgeProviderLabel ? `${badgeProviderLabel} · ${s.model}` : s.model;
-    modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(s.model)}</span></span>`;
+    const tip = [badgeProviderLabel, agentInfo.model, agentInfo.effort].filter(Boolean).join(' · ');
+    modelBadge = ` <span class="card-model card-model--with-icon" data-tooltip="${escapeHtml(tip)}">${providerIconHtml(badgeProviderKey)}<span class="card-model-text">${escapeHtml(agentInfo.model)}</span></span>`;
   }
+  // effort バッジはステータスバーと同じ .effort-badge（見た目も 1 箇所で定義）。
+  const effortBadge = agentInfo.effort
+    ? ` <span class="effort-badge" data-tooltip="${escapeHtml(t('tsb_effort_title', { level: agentInfo.effort }))}">${escapeHtml(agentInfo.effort)}</span>`
+    : '';
   const state = s.state || 'standby';
   const stateLbl = (typeof stateLabel === 'function') ? stateLabel(state) : state;
   // 状態 pill はステータスバー（token-statusbar）と表示順・フォント・色を揃える:
@@ -2447,10 +2511,18 @@ export function renderSessionInfoChip() {
     : (state === 'error' || state === 'disconnected') ? 'error'
     : 'standby';
   const statePill = `<span class="tsb-pill ${pillCls}"><span class="tsb-pdot"></span>${escapeHtml(stateLbl)}</span>`;
+  // subscription profile を使って起動したセッションだけバッジを足す。
+  // カード側には出さない（profile を使う人は少数で、常時表示は情報過密になる）。
+  const subID = String(s.subscription_profile_id || '');
+  let subBadge = '';
+  if (subID) {
+    const subName = String(s.subscription_profile_name || '') || subID;
+    subBadge = ` <span class="card-subscription" data-tooltip="${escapeHtml(`${t('subs_session_badge_tooltip')}: ${subName} (${subID})`)}">${escapeHtml(subName)}</span>`;
+  }
   chip.innerHTML =
     `<span class="sid">#${s.id}</span>` +
     ` ${statePill} ` +
-    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}`;
+    `${providerIconHtml(s.provider)} ${providerChipHtml}${modelBadge}${effortBadge}${subBadge}`;
 }
 
 // D12: チャット件数バッジ更新
@@ -2758,8 +2830,7 @@ export function openCardCtxMenu(x, y, sid) {
   const labelOpenInGrid     = ti18n('ctx_open_in_grid',          'Open in detached grid');
   const labelOpenProjectGrid = ti18n('ctx_open_project_in_grid', 'Open project in detached grid');
   const labelRename         = ti18n('session_rename',             'Rename session');
-  const labelPin            = ti18n('session_pin',                'Pin session');
-  const labelUnpin          = ti18n('session_unpin',              'Unpin session');
+  const labelMoveFront      = ti18n('session_move_front',         'Move this session to the front');
   const labelColor          = ti18n('session_set_color',          'Set color');
   const labelNote           = ti18n('session_edit_note',          'Edit note');
   menu.innerHTML =
@@ -2770,7 +2841,7 @@ export function openCardCtxMenu(x, y, sid) {
     `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
     `<button type="button" data-action="rename"><span class="ico">✎</span><span>${escapeHtml(labelRename)}</span></button>` +
-    `<button type="button" data-action="pin"><span class="ico">📌</span><span>${escapeHtml(sessForMetaLabel(sid)?.pinned ? labelUnpin : labelPin)}</span></button>` +
+    `<button type="button" data-action="move-front"><span class="ico">⇧</span><span>${escapeHtml(labelMoveFront)}</span></button>` +
     `<button type="button" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
     `<button type="button" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
@@ -2818,8 +2889,9 @@ export function openCardCtxMenu(x, y, sid) {
       } else if (action === 'rename') {
         const value = window.prompt(labelRename, String(sess.label || ''));
         if (value !== null) void patchSessionMeta(id, { label: value });
-      } else if (action === 'pin') {
-        void patchSessionMeta(id, { pinned: !sess.pinned });
+      } else if (action === 'move-front') {
+        // 器の中で兄弟順の先頭へ動かすだけ。セッションの属性は書き換えない。
+        moveSessionToSiblingFront(id);
       } else if (action === 'color') {
         const current = String(sess.color || '');
         const value = window.prompt(`${labelColor} (blue / green / orange / red / purple; blank to clear)`, current);
@@ -3334,7 +3406,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
       STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY,
       STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY,
       STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY,
-      STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY,
+      STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY,
     ];
     let custom = 0;
     for (const k of keys) {
@@ -3346,7 +3418,7 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
   },
 
   'slash-src': () => {
-    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent'];
+    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent', 'slash-src-command-code'];
     let custom = 0;
     for (const id of ids) {
       if (_summaryVal(id).trim()) custom++;

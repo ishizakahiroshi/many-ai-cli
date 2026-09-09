@@ -199,8 +199,8 @@ from the same highlight.js distribution and is covered by the same license.
 ---
 
 ## DOMPurify
-https://github.com/cure53/DOMPurify
-Version: 3.4.1
+https://github.com/cure53/DOMPurify/tree/3.4.12/
+Version: 3.4.12
 License: Apache-2.0 OR MPL-2.0
 
 DOMPurify
@@ -840,7 +840,7 @@ https://github.com/golang/net (net)
 https://github.com/golang/term (term)
 https://github.com/golang/crypto (crypto)
 https://github.com/golang/sys (sys)
-Versions: net v0.55.0, term v0.43.0, crypto v0.52.0, sys v0.45.0
+Versions: net v0.57.0, term v0.45.0, crypto v0.54.0, sys v0.47.0
 License: BSD-3-Clause
 
 Copyright 2009 The Go Authors.
@@ -961,7 +961,7 @@ limitations under the License.
 
 ## modernc.org/sqlite
 https://pkg.go.dev/modernc.org/sqlite
-Version: 1.51.0
+Version: 1.54.0
 License: BSD-3-Clause
 
 Copyright (c) 2017 The Sqlite Authors. All rights reserved.
@@ -1031,8 +1031,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ---
 
 ## DOMPurify
-https://github.com/cure53/DOMPurify/tree/3.4.1/
-Version: 3.4.1
+https://github.com/cure53/DOMPurify/tree/3.4.12/
+Version: 3.4.12
 License: Apache-2.0 OR MPL-2.0
 
 Copyright 2015 Mario Heiderich
@@ -1115,8 +1115,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ---
 
 ## qrcode-generator
-https://github.com/kazuhikoarase/qrcode-generator/
-Version: unknown (vendored copy has no version banner; based on QR Code Generator for JavaScript by Kazuhiko Arase)
+https://github.com/kazuhikoarase/qrcode-generator/tree/v1.4.4/
+Version: 1.4.4 (matched against the vendored qrcode.js implementation)
 License: MIT
 
 Copyright (c) 2009 Kazuhiko Arase

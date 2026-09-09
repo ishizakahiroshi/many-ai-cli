@@ -46,9 +46,19 @@ func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
 		writeDeleteDirErr(w, http.StatusForbidden, "forbidden", "src is outside allowed roots")
 		return
 	}
-	if pathsEqual(srcClean, cwd) || pathsEqual(srcClean, gitRoot) {
-		writeDeleteDirErr(w, http.StatusConflict, "conflict", "refusing to delete an allowed root directory")
-		return
+	for _, root := range []string{cwd, gitRoot} {
+		if root == "" {
+			continue
+		}
+		same, known := protectedPathIdentityEqual(srcClean, root)
+		if !known {
+			writeDeleteDirErr(w, http.StatusConflict, "conflict", "cannot establish allowed root identity")
+			return
+		}
+		if same {
+			writeDeleteDirErr(w, http.StatusConflict, "conflict", "refusing to delete an allowed root directory")
+			return
+		}
 	}
 
 	info, err := os.Lstat(srcClean)
@@ -69,7 +79,27 @@ func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, filesDeleteDirResp{OK: true})
 }
 
+// protectedPathIdentityEqual is intentionally local to delete-root
+// protection. General path comparisons keep their lexical semantics for
+// rename and list operations, while this check must also recognize a CWD
+// reached through a symlink or junction.
+func protectedPathIdentityEqual(target, root string) (same, known bool) {
+	resolvedTarget, targetOK := evalSymlinksViaSelf(filepath.Clean(target))
+	resolvedRoot, rootOK := evalSymlinksViaSelf(filepath.Clean(root))
+	if targetOK && rootOK {
+		if pathsEqual(resolvedTarget, resolvedRoot) {
+			return true, true
+		}
+		return false, true
+	}
+	targetInfo, targetErr := os.Stat(target)
+	rootInfo, rootErr := os.Stat(root)
+	if targetErr == nil && rootErr == nil {
+		return os.SameFile(targetInfo, rootInfo), true
+	}
+	return false, false
+}
+
 func writeDeleteDirErr(w http.ResponseWriter, status int, code, detail string) {
 	writeJSONStatus(w, status, filesDeleteDirResp{OK: false, Error: code, Detail: detail})
 }
-

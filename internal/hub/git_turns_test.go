@@ -92,6 +92,112 @@ func TestGitTreeDiffCapturesTrackedAndUntrackedChanges(t *testing.T) {
 	}
 }
 
+func TestReusableGitTurnIndexMatchesColdSnapshots(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	indexDir := t.TempDir()
+	indexPath := filepath.Join(indexDir, "index")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ready := false
+	previousHead := ""
+	assertMatchesCold := func(stage string) {
+		t.Helper()
+		cached, head, err := writeGitWorktreeTreeAtIndex(ctx, dir, indexPath, ready, previousHead)
+		if err != nil {
+			t.Fatalf("%s cached snapshot: %v", stage, err)
+		}
+		cold, err := writeGitWorktreeTree(ctx, dir)
+		if err != nil {
+			t.Fatalf("%s cold snapshot: %v", stage, err)
+		}
+		if cached != cold {
+			t.Fatalf("%s cached tree = %s, cold tree = %s", stage, cached, cold)
+		}
+		ready = true
+		previousHead = head
+	}
+
+	assertMatchesCold("initial")
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "added.txt"), []byte("added\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	assertMatchesCold("modified-and-added")
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(filepath.Join(dir, "added.txt"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		assertMatchesCold("mode-changed")
+	}
+	if err := os.Remove(filepath.Join(dir, "tracked.txt")); err != nil {
+		t.Fatal(err)
+	}
+	assertMatchesCold("deleted")
+
+	cmd := exec.Command("git", "-C", dir, "add", "-A")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add before HEAD change: %v\n%s", err, out)
+	}
+	cmd = exec.Command("git", "-C", dir, "-c", "user.name=Test User", "-c", "user.email=test@example.com", "commit", "-m", "second")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit before HEAD change: %v\n%s", err, out)
+	}
+	assertMatchesCold("head-changed")
+}
+
+func TestGitTurnIndexResetDecision(t *testing.T) {
+	tests := []struct {
+		name                  string
+		ready                 bool
+		previousHead, current string
+		want                  bool
+	}{
+		{name: "cold", ready: false, previousHead: "same", current: "same", want: true},
+		{name: "same HEAD", ready: true, previousHead: "same", current: "same", want: false},
+		{name: "changed HEAD", ready: true, previousHead: "old", current: "new", want: true},
+		{name: "unborn remains unborn", ready: true, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := gitTurnIndexNeedsReset(tt.ready, tt.previousHead, tt.current); got != tt.want {
+				t.Fatalf("gitTurnIndexNeedsReset() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGitTurnIndexRemovedOnDismiss(t *testing.T) {
+	indexDir, err := os.MkdirTemp("", gitTurnIndexTempPrefix)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { removeGitTurnIndexDir(indexDir) })
+	if err := os.WriteFile(filepath.Join(indexDir, "index"), []byte("cache"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestServer()
+	s.sessions[77] = &session{ID: 77, gitTurnIndexDir: indexDir}
+	s.handleDismiss(proto.Message{SessionID: 77})
+	if _, err := os.Stat(indexDir); !os.IsNotExist(err) {
+		t.Fatalf("git turn index directory still exists after dismiss: %v", err)
+	}
+}
+
+func TestRemoveGitTurnIndexDirRejectsNestedLookalike(t *testing.T) {
+	lookalike := filepath.Join(t.TempDir(), gitTurnIndexTempPrefix+"nested")
+	if err := os.Mkdir(lookalike, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	removeGitTurnIndexDir(lookalike)
+	if _, err := os.Stat(lookalike); err != nil {
+		t.Fatalf("nested lookalike should not be removed: %v", err)
+	}
+}
+
 func TestCaptureGitTurnLifecycle(t *testing.T) {
 	dir := initGitTurnTestRepo(t)
 	s := newTestServer()
@@ -151,6 +257,66 @@ func TestCaptureGitTurnLifecycle(t *testing.T) {
 	}
 	if diffResp.Summary.FilesChanged != 1 || len(diffResp.Files) != 1 {
 		t.Fatalf("git turn diff response = %+v", diffResp)
+	}
+}
+
+func TestNextInputWaitsForGitTurnEndCallbackBeforeBaseline(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	s.sessions[9] = &session{
+		ID:       9,
+		Provider: "claude",
+		CWD:      dir,
+		State:    "running",
+		inputMu:  new(sync.Mutex),
+	}
+
+	s.captureGitTurnStart(9)
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	callbackStarted := make(chan struct{})
+	releaseCallback := make(chan struct{})
+	callbackDone := make(chan struct{})
+	s.captureGitTurnEndWithCallback(9, time.Now().Format(time.RFC3339), func(gitTurnSnapshot) {
+		close(callbackStarted)
+		<-releaseCallback
+		close(callbackDone)
+	})
+	select {
+	case <-callbackStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for Git turn callback")
+	}
+
+	nextBaselineDone := make(chan struct{})
+	go func() {
+		s.captureGitTurnStart(9)
+		close(nextBaselineDone)
+	}()
+	select {
+	case <-nextBaselineDone:
+		t.Fatal("next baseline overtook the previous Git turn callback")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	close(releaseCallback)
+	select {
+	case <-callbackDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for Git turn callback release")
+	}
+	select {
+	case <-nextBaselineDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for next Git baseline")
+	}
+	waitForGitTurnCapture(t, s, 9)
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[9]
+	if len(ses.gitTurns) != 1 || ses.gitTurns[0].Files != 1 || ses.gitTurnStartTree == "" {
+		t.Fatalf("Git turn state after callback = turns=%+v start_tree=%q", ses.gitTurns, ses.gitTurnStartTree)
 	}
 }
 
@@ -225,5 +391,74 @@ func TestNextInputWaitsForPreviousTurnEndBeforeBaselineAndDelivery(t *testing.T)
 	}
 	if len(pending) != 1 || pending[0] != "next turn\r" {
 		t.Fatalf("pending provider delivery = %#v, want next input after baseline", pending)
+	}
+}
+
+func TestGitTurnEndCaptureSurvivesReattach(t *testing.T) {
+	dir := initGitTurnTestRepo(t)
+	s := newTestServer()
+	old := &session{
+		ID:       12,
+		Provider: "codex",
+		CWD:      dir,
+		State:    "running",
+		inputMu:  new(sync.Mutex),
+	}
+	s.sessions[12] = old
+
+	s.captureGitTurnStart(12)
+	s.sessionsMu.Lock()
+	if old.gitTurnStartTree == "" || old.gitTurnIndexDir == "" {
+		s.sessionsMu.Unlock()
+		t.Fatal("start capture did not record a baseline tree and index")
+	}
+	s.sessionsMu.Unlock()
+	if err := os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("changed-across-reattach\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate an in-flight end worker that still holds the pre-reattach
+	// pointer: mark capture pending on A, replace A with B (preserving the
+	// start tree / index / completion channel), then run the worker on A.
+	s.sessionsMu.Lock()
+	startTree := old.gitTurnStartTree
+	startedAt := old.gitTurnStartedAt
+	captureDone := make(chan struct{})
+	old.gitTurnCaptureInFlight = true
+	old.gitTurnCaptureDone = captureDone
+	state := snapshotReattachStateLocked(old)
+	s.sessionsMu.Unlock()
+
+	replacement := &session{
+		ID:       12,
+		Provider: "codex",
+		CWD:      dir,
+		State:    "running",
+		inputMu:  new(sync.Mutex),
+	}
+	applyReattachPreservedStateLocked(replacement, state)
+	s.sessionsMu.Lock()
+	s.sessions[12] = replacement
+	s.sessionsMu.Unlock()
+
+	s.captureGitTurnEndWorker(12, time.Now().Format(time.RFC3339), old, captureDone, startTree, startedAt, nil)
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[12]
+	if ses == old {
+		t.Fatal("expected the replacement session to be live")
+	}
+	if len(ses.gitTurns) != 1 {
+		t.Fatalf("turn count = %d, want 1 (end snapshot dropped across reattach)", len(ses.gitTurns))
+	}
+	if ses.gitTurns[0].StartTree != startTree || ses.gitTurns[0].EndTree == "" {
+		t.Fatalf("completed turn = %+v, want start=%s and a non-empty end tree", ses.gitTurns[0], startTree)
+	}
+	if ses.gitTurnStartTree != "" {
+		t.Fatalf("pending start tree = %q, want cleared", ses.gitTurnStartTree)
+	}
+	if ses.gitTurnCaptureInFlight || ses.gitTurnCaptureDone != nil {
+		t.Fatal("replacement still has an in-flight git turn capture")
 	}
 }

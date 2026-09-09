@@ -1,6 +1,7 @@
 {
   "claude":   "https://claude.ai/settings/usage",
   "codex":    "https://chatgpt.com/codex/cloud/settings/analytics#usage",
+  "command-code": "https://commandcode.ai/usage",
   "copilot":  "https://github.com/settings/billing",
   "cursor-agent": "https://cursor.com/dashboard",
   "grok":     "https://grok.com/?_s=usage",

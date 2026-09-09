@@ -1,11 +1,9 @@
 package hub
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"net/http"
-	neturl "net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +12,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/config"
 )
 
 const (
@@ -30,6 +29,7 @@ func (s *Server) activeSessionCount() int {
 }
 
 func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
@@ -38,7 +38,9 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	userAvatar := cfg.UserPrefs.Avatar
 	if userAvatar != "" && !strings.HasPrefix(userAvatar, "http://") && !strings.HasPrefix(userAvatar, "https://") {
-		userAvatar = fmt.Sprintf("/api/avatar?token=%s", neturl.QueryEscape(cfg.Token))
+		// token を URL に再埋め込みしない。UI は query token を strip 済みで、
+		// 同一オリジンの img は HttpOnly token cookie で /api/avatar を取れる。
+		userAvatar = "/api/avatar"
 	}
 	userDisplayName := cfg.UserPrefs.DisplayName
 	if userDisplayName == "" {
@@ -69,28 +71,47 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 	binaryStale := s.binGuard.IsStale()
 	s.noteStaleBinary(binaryStale)
 	writeJSON(w, map[string]any{
-		"cwd":             s.hubCWD,
-		"version":         s.version,
-		"binary_sha256":   s.binGuard.StartSHA(),
-		"binary_stale":    binaryStale,
-		"web_src_hash":    s.webSrcHash,
-		"web_dist_fresh":  s.webDistFresh,
-		"active_sessions": s.activeSessionCount(),
-		"git_commit":      s.gitCommit,
-		"build_time":      s.buildTime,
-		"runtime_mode":    mode,
-		"runtime_label":   runtimeLabel(mode),
-		"ssh":             sshSession,
-		"host_ip":         hostIP,
-		"env_kind":        env.Kind,
-		"env_label":       env.Label,
-		"env_short":       env.Short,
-		"env_color":       env.Color,
-		"env_title":       env.Title,
-		"env_host_label":  env.HostLabel,
-		"userAvatar":      userAvatar,
-		"userDisplayName": userDisplayName,
+		"cwd":              s.hubCWD,
+		"custom_providers": customProviderOptions(cfg.CustomProviders),
+		"version":          s.version,
+		"binary_sha256":    s.binGuard.StartSHA(),
+		"binary_stale":     binaryStale,
+		"web_src_hash":     s.webSrcHash,
+		"web_dist_fresh":   s.webDistFresh,
+		"active_sessions":  s.activeSessionCount(),
+		"git_commit":       s.gitCommit,
+		"build_time":       s.buildTime,
+		"runtime_mode":     mode,
+		"runtime_label":    runtimeLabel(mode),
+		"ssh":              sshSession,
+		"host_ip":          hostIP,
+		"env_kind":         env.Kind,
+		"env_label":        env.Label,
+		"env_short":        env.Short,
+		"env_color":        env.Color,
+		"env_title":        env.Title,
+		"env_host_label":   env.HostLabel,
+		"userAvatar":       userAvatar,
+		"userDisplayName":  userDisplayName,
+		// plan_session-handoff-board_c5_handoff-md.md 内部 C2: 経路 1（残量が
+		// 近いときの通知）の閾値。UI 側はこの値未満（usage_stat が既に broadcast
+		// している RateLimit5hPct/7dPct 等から計算した残量）を見て、セッション
+		// ごとに 1 回だけ通知を出す。
+		"handoff_notify_remaining_percent": cfg.Handoff.NotifyRemainingPercentOrDefault(),
 	})
+}
+
+// customProviderOptions は config.yaml の custom_providers: を spawn ドロップダウンが
+// 使える最小の形（id + 表示ラベル）へ落とす。built-in と衝突する・壊れたエントリは
+// EffectiveCustomProviders が既に弾いている。空でも null ではなく [] を返す
+// （web/src/app/spawn-panel.ts 側で毎回配列として扱えるようにするため）。
+func customProviderOptions(raw config.CustomProviders) []map[string]string {
+	effective := config.EffectiveCustomProviders(raw)
+	out := make([]map[string]string, 0, len(effective))
+	for _, p := range effective {
+		out = append(out, map[string]string{"id": p.ID, "label": p.EffectiveLabel()})
+	}
+	return out
 }
 
 // handleNetHint は launcher（SSH tunnel モード）から接続元情報を受け取り保持する。
@@ -179,7 +200,11 @@ func (s *Server) handleAvatar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ct := http.DetectContentType(data)
+	if !avatarImageAllowed(ct) {
+		ct = "application/octet-stream"
+	}
 	w.Header().Set("Content-Type", ct)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "max-age=3600")
 	_, _ = w.Write(data)
 }

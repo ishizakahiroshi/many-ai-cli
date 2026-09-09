@@ -83,12 +83,15 @@ func (p *ptyProcess) Resize(cols, rows uint16) error {
 	return pty.Setsize(p.f, &pty.Winsize{Rows: rows, Cols: cols})
 }
 
-func startProcess(provider string, args []string, cwd string, cols, rows int, extraEnv []string) (processSession, error) {
-	cmdName, cmdArgs := resolveCmd(provider, args)
+func startProcess(provider string, customArgv []string, args []string, cwd string, cols, rows int, extraEnv []string, terminalColor string) (processSession, error) {
+	cmdName, cmdArgs := resolveCmd(provider, customArgv, args)
 	cmd := exec.Command(cmdName, cmdArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "MANY_AI_CLI=1")
-	cmd.Env = append(cmd.Env, extraEnv...)
+	// 子へ渡す環境の組み立て（TERM/COLORTERM の上書き・色の強制・NO_COLOR の扱い）は
+	// childEnv に集約した。方針（force / inherit / off）と実測値、設定画面から変えられる
+	// ことは
+	// env_color.go のコメント参照。
+	cmd.Env = append(childEnv(os.Environ(), terminalColor), extraEnv...)
 	var (
 		f   *os.File
 		err error
@@ -104,7 +107,21 @@ func startProcess(provider string, args []string, cwd string, cols, rows int, ex
 	return &ptyProcess{f: f, cmd: cmd, waitDone: make(chan struct{})}, nil
 }
 
-func resolveCmd(provider string, args []string) (string, []string) {
+// resolveCmd picks the executable and final argv for this session.
+// customArgv (non-nil only for a config.yaml custom_providers entry — see
+// wrapper.customProviderFor) takes priority: its first element is the
+// executable to resolve, the rest is prepended to args. Custom providers
+// never reach the shell/copilot special cases below, and never fall into the
+// bare exec.LookPath(provider) fallback either — provider there is a
+// config.yaml id, not necessarily a real binary name.
+func resolveCmd(provider string, customArgv []string, args []string) (string, []string) {
+	if len(customArgv) > 0 {
+		combined := append(append([]string{}, customArgv[1:]...), args...)
+		if path, err := exec.LookPath(customArgv[0]); err == nil {
+			return path, combined
+		}
+		return customArgv[0], combined
+	}
 	if provider == "shell" {
 		return resolveDefaultShell(), args
 	}

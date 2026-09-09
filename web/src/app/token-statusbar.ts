@@ -12,7 +12,7 @@ import type { Message } from '../types/proto.js';
 import { activeSessionId, sessions, chatHistory } from './state.js';
 import { token, escapeHtml } from './util.js';
 import { t } from '../i18n.js';
-import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession } from './session-list.js';
+import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession, renderSessionList } from './session-list.js';
 import { wsConnectionState } from './ws-client.js';
 import { FilesTabManager } from './files-view.js';
 import { showPathPopup } from './path-links.js';
@@ -33,8 +33,10 @@ interface UsageCacheEntry {
   // statusbar 追加メタ（Claude statusLine ネイティブ算出値。Claude のみ・0/false=未取得）。
   rl5hPct: number;
   rl5hReset: number;
+  rl5hPresent: boolean;
   rl7dPct: number;
   rl7dReset: number;
+  rl7dPresent: boolean;
   linesAdded: number;
   linesRemoved: number;
   effortLevel: string;
@@ -377,7 +379,8 @@ export function renderStatusbar(): void {
 
   const isTokenProvider = provider === 'claude' || provider === 'codex';
   const sessionModelName = sesData?.model || '';
-  const modelName = entry?.usageModel || sessionModelName || '';
+  const agentInfo = getSessionAgentInfo(sid);
+  const modelName = agentInfo.model;
 
   // ---- #N セッション番号 ----
   const idEl = setSeg(bar, 'tsb-seg-id', true);
@@ -406,15 +409,17 @@ export function renderStatusbar(): void {
     agentEl.title = titleLines.join('\n');
   }
 
-  // ---- effort / thinking バッジ（Claude statusLine 算出値）----
-  const showEffort = !!(provider === 'claude' && entry && (entry.effortLevel || entry.thinking));
+  // ---- effort / thinking バッジ ----
+  // effort は statusLine 由来（ライブ）とバナー由来（セッション）を解決した値を使う。
+  // カード tooltip / タブチップと同じ getSessionAgentInfo を通すので表示がズレない。
+  const showEffort = !!(agentInfo.effort || agentInfo.thinking);
   const effortEl = setSeg(bar, 'tsb-seg-effort', showEffort);
-  if (effortEl && entry) {
+  if (effortEl) {
     let html = '';
-    if (entry.effortLevel) html += `<span class="tsb-effort-lvl">${escapeHtml(entry.effortLevel)}</span>`;
-    if (entry.thinking) html += `<span class="tsb-thinking">🧠</span>`;
+    if (agentInfo.effort) html += `<span class="effort-badge">${escapeHtml(agentInfo.effort)}</span>`;
+    if (agentInfo.thinking) html += `<span class="tsb-thinking">🧠</span>`;
     effortEl.innerHTML = html;
-    effortEl.title = entry.effortLevel ? t('tsb_effort_title', { level: entry.effortLevel }) : t('tsb_thinking_title');
+    effortEl.title = agentInfo.effort ? t('tsb_effort_title', { level: agentInfo.effort }) : t('tsb_thinking_title');
   }
 
   // ---- 作業ラベル（E）----
@@ -606,22 +611,22 @@ export function renderStatusbar(): void {
   }
 
   // ---- レート制限残量（Claude.ai Pro/Max のみ・statusLine 算出値の直結）----
-  const showRl = !!(provider === 'claude' && entry && (entry.rl5hPct > 0 || entry.rl7dPct > 0));
+  const showRl = !!(provider === 'claude' && entry && (entry.rl5hPresent || entry.rl7dPresent));
   const rlEl = setSeg(bar, 'tsb-seg-ratelimit', showRl);
   if (rlEl && entry) {
     // モバイルは crit（残量 90% 超）のときだけ表示する（CSS @media が :not(.tsb-crit) を隠す）。
     rlEl.classList.toggle('tsb-crit', entry.rl5hPct >= 90 || entry.rl7dPct >= 90);
     const cls5 = entry.rl5hPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
     const cls7 = entry.rl7dPct >= 90 ? 'tsb-pct crit' : 'tsb-pct';
-    const seg5 = entry.rl5hPct > 0 ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
-    const seg7 = entry.rl7dPct > 0 ? `<span class="${cls7}">7d ${Math.round(entry.rl7dPct)}%</span>` : '';
+    const seg5 = entry.rl5hPresent ? `<span class="${cls5}">5h ${Math.round(entry.rl5hPct)}%</span>` : '';
+    const seg7 = entry.rl7dPresent ? `<span class="${cls7}">7d ${Math.round(entry.rl7dPct)}%</span>` : '';
     rlEl.innerHTML = `⏳ ${seg5}${seg5 && seg7 ? ' · ' : ''}${seg7}`;
     const lines: string[] = [t('tsb_ratelimit_title')];
-    if (entry.rl5hPct > 0) {
+    if (entry.rl5hPresent) {
       const r = formatResetIn(entry.rl5hReset);
       lines.push(t('tsb_ratelimit_5h', { p: Math.round(entry.rl5hPct) }) + (r ? ` · ${t('tsb_ratelimit_reset', { t: r })}` : ''));
     }
-    if (entry.rl7dPct > 0) {
+    if (entry.rl7dPresent) {
       const r = formatResetIn(entry.rl7dReset);
       lines.push(t('tsb_ratelimit_7d', { p: Math.round(entry.rl7dPct) }) + (r ? ` · ${t('tsb_ratelimit_reset', { t: r })}` : ''));
     }
@@ -748,6 +753,7 @@ function openDetailModal(): void {
 
   const overlay = document.createElement('div');
   overlay.id = 'tsb-detail-modal';
+  overlay.classList.add('aac-wheel-overlay');
   const box = document.createElement('div');
   box.className = 'tsb-detail-box';
 
@@ -841,6 +847,8 @@ function toggleCostPopover(anchor: HTMLElement): void {
   if (document.getElementById('tsb-cost-pop')) { closeCostPopover(); return; }
   const pop = document.createElement('div');
   pop.id = 'tsb-cost-pop';
+  // overflow-y:auto の自前スクロール領域。全画面は覆わないので data-wheel-native 側で除外する。
+  pop.setAttribute('data-wheel-native', '');
   const rows: string[] = [];
   let total = 0;
   usageCache.forEach((e, id) => {
@@ -940,8 +948,26 @@ function renderSentHistoryContent(sid: number, loading: boolean): void {
     meta.appendChild(idx);
     meta.appendChild(time);
     row.appendChild(meta);
-    // 本文（テキスト送信のみ）。クリックでその送信内容をコピー。
+    // 本文（テキスト送信のみ）。行のどこをクリックしてもコピーできるが、
+    // それだけでは押せる場所が分からないので右上に明示のコピーボタンも出す。
+    // 表示は チャット吹き出しの hover アクション（chat-history.ts）と同じ 📋 → ✓。
     if (it.text) {
+      const copyBtn = document.createElement('button');
+      copyBtn.type = 'button';
+      copyBtn.className = 'tsb-sent-copy';
+      copyBtn.textContent = '📋';
+      copyBtn.title = t('copy_to_clipboard');
+      copyBtn.setAttribute('aria-label', t('copy_to_clipboard'));
+      copyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // 行の click ハンドラで二重にコピーしない
+        copyText(it.text, row);
+        copyBtn.textContent = '✓';
+        copyBtn.classList.add('copied');
+        // copyText 側の行フラッシュ（tsb-copied）と同じ 600ms で戻す。
+        setTimeout(() => { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 600);
+      });
+      meta.appendChild(copyBtn);
       const text = document.createElement('div');
       text.className = 'tsb-sent-text';
       text.textContent = it.text;
@@ -1022,6 +1048,7 @@ function openSentHistoryModal(): void {
 
   const overlay = document.createElement('div');
   overlay.id = 'tsb-sent-modal';
+  overlay.classList.add('aac-wheel-overlay');
 
   const box = document.createElement('div');
   box.className = 'tsb-sent-box';
@@ -1102,10 +1129,38 @@ export function getSessionCtxPct(sessionId: number): { pct: number; is1m: boolea
   return { pct: Math.max(0, Math.min(100, Math.round(pct))), is1m: entry.ctxWindow >= 1_000_000 };
 }
 
+/**
+ * provider / モデル名 / effort の解決を 1 本にまとめる。
+ *
+ * 同じ 3 つの値をセッションカード（tooltip）・タブバーのセッションチップ・
+ * ステータスバーの 3 箇所が表示するので、取得元がバラけると「バーには出るのに
+ * カードには出ない」という食い違いになる（実際にそうなっていた）。ここが唯一の解決点。
+ *
+ * 優先順位はどちらの値も「ライブ（usage_stat = provider が毎ターン押し出す値）」＞
+ * 「セッション（起動バナー / モデル変更行から Hub が検出した値）」。
+ * statusLine relay を入れていない環境ではセッション側だけが残る。
+ */
+export interface SessionAgentInfo {
+  provider: string;
+  model: string;
+  effort: string;
+  thinking: boolean;
+}
+
+export function getSessionAgentInfo(sessionId: number): SessionAgentInfo {
+  const entry = usageCache.get(sessionId);
+  const sess = sessions.get(sessionId) as any;
+  const provider = String(entry?.provider || sess?.provider || '').trim();
+  const model = String(entry?.usageModel || sess?.model || '').trim();
+  const effort = String(entry?.effortLevel || sess?.effort || '').trim();
+  return { provider, model, effort, thinking: !!entry?.thinking };
+}
+
 /** WS usage_stat メッセージを受信したときに呼ぶ。 */
 export function handleUsageStatMessage(m: Message): void {
   const sid = m.session_id;
   if (!sid) return;
+  const prev = usageCache.get(sid);
   usageCache.set(sid, {
     provider:       m.provider       || '',
     costUSD:        m.cost_usd       ?? 0,
@@ -1118,8 +1173,10 @@ export function handleUsageStatMessage(m: Message): void {
     usedPct:        m.ctx_used_pct   ?? 0,
     rl5hPct:        m.rl_5h_pct      ?? 0,
     rl5hReset:      m.rl_5h_reset    ?? 0,
+    rl5hPresent:    m.claude_5h_present ?? ((m.rl_5h_pct ?? 0) > 0),
     rl7dPct:        m.rl_7d_pct      ?? 0,
     rl7dReset:      m.rl_7d_reset    ?? 0,
+    rl7dPresent:    m.claude_7d_present ?? ((m.rl_7d_pct ?? 0) > 0),
     linesAdded:     m.lines_added    ?? 0,
     linesRemoved:   m.lines_removed  ?? 0,
     effortLevel:    m.effort_level   || '',
@@ -1139,6 +1196,13 @@ export function handleUsageStatMessage(m: Message): void {
     usageModel:     m.usage_model    || '',
     usageStartedAt: m.usage_started_at || '',
   });
+  // provider / モデル名 / effort が変わったらセッションカードも描き直す。
+  // カードは getSessionAgentInfo 経由でこのキャッシュを読むので、再描画しないと
+  // バーだけ新しい値になりカードが古いまま残る。
+  const next = usageCache.get(sid)!;
+  if (!prev || prev.provider !== next.provider || prev.usageModel !== next.usageModel || prev.effortLevel !== next.effortLevel) {
+    renderSessionList();
+  }
   if (sid === activeSessionId) {
     renderStatusbar();
   }
@@ -1151,6 +1215,13 @@ export function removeUsageCacheEntry(sessionId: number): void {
   if (sessionId === activeSessionId) {
     renderStatusbar();
   }
+}
+
+/** Hub再起動時にlive session IDが再利用されるため、旧usageを全消去する。 */
+export function resetUsageCache(): void {
+  usageCache.clear();
+  turnStartAt.clear();
+  if (activeSessionId !== null) renderStatusbar();
 }
 
 /** アクティブセッションが変わった時に呼ぶ（セッション切替時の snapshot 更新）。 */

@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
 import { showToast, token } from './util.js';
+import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -11,7 +12,13 @@ export const STORAGE_LANG_KEY       = 'ai_cli_hub_lang';
 export const STORAGE_ORDER_KEY             = 'ai_cli_hub_session_order';
 export const STORAGE_GROUP_ORDER_KEY       = 'ai_cli_hub_group_order';
 export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
+// サイドバーで畳んでいるノード。プロジェクトはキーそのもの、親セッションは "session:<id>"。
+export const STORAGE_COLLAPSED_NODES_KEY     = 'ai_cli_hub_collapsed_nodes';
+// 旧ピン留めを兄弟順へ変換し終えた印。1 度だけ走らせるために端末をまたいで共有する。
+export const STORAGE_SIDEBAR_PIN_MIGRATED_KEY = 'ai_cli_hub_sidebar_pin_migrated';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
+// 新規セッションの provider 並び順（端末・ブラウザ単位。サーバ同期しない）。
+export const STORAGE_SPAWN_PROVIDER_ORDER_KEY = 'ai_cli_hub_spawn_provider_order';
 export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
 export const STORAGE_CWD_FAVORITES_KEY     = 'ai_cli_hub_cwd_favorites';
 export const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';
@@ -52,6 +59,8 @@ export const STORAGE_USAGE_LINK_OLLAMA_KEY    = 'ai_cli_hub_usage_link_ollama';
 export const STORAGE_USAGE_LINK_LM_STUDIO_KEY = 'ai_cli_hub_usage_link_lm_studio';
 export const STORAGE_USAGE_LINK_OPENCODE_KEY  = 'ai_cli_hub_usage_link_opencode';
 export const STORAGE_USAGE_LINK_GROK_KEY      = 'ai_cli_hub_usage_link_grok';
+export const STORAGE_USAGE_LINK_COMMAND_CODE_KEY = 'ai_cli_hub_usage_link_command_code';
+export const STORAGE_USAGE_PROBE_MODEL_KEY    = 'ai_cli_hub_usage_probe_model';
 export const STORAGE_VOICE_GRACE_KEY          = 'ai_cli_hub_voice_grace_seconds';
 export const STORAGE_VOICE_INPUT_DISABLED_KEY = 'ai_cli_hub_voice_input_disabled';
 export const STORAGE_VOICE_ENGINE_KEY         = 'anyai.voiceEngine';
@@ -166,6 +175,7 @@ export const DEFAULT_USAGE_LINKS = {
   'lm-studio': 'http://localhost:1234',
   opencode: 'https://opencode.ai/go',
   grok:     'https://grok.com/?_s=usage',
+  'command-code': 'https://commandcode.ai/usage',
 };
 
 export const FONTSIZE_MAP = { large: 15, medium: 13, small: 11 };
@@ -206,6 +216,8 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show3':          [STORAGE_QUICK_CMD_3_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show4':          [STORAGE_QUICK_CMD_4_SHOW_KEY,      (v) => v ? '1' : '0'],
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
+  'collapsed_nodes':           [STORAGE_COLLAPSED_NODES_KEY,       JSON.stringify],
+  'sidebar_pin_migrated':      [STORAGE_SIDEBAR_PIN_MIGRATED_KEY,  (v) => v ? '1' : '0'],
   'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
   'template_send.immediate':   [STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
@@ -216,6 +228,8 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'usage_links.lm-studio':     [STORAGE_USAGE_LINK_LM_STUDIO_KEY,  String],
   'usage_links.opencode':      [STORAGE_USAGE_LINK_OPENCODE_KEY,   String],
   'usage_links.grok':          [STORAGE_USAGE_LINK_GROK_KEY,       String],
+  'usage_links.command-code':  [STORAGE_USAGE_LINK_COMMAND_CODE_KEY, String],
+  'usage_probe_model':         [STORAGE_USAGE_PROBE_MODEL_KEY,     String],
   'session_order':             [STORAGE_ORDER_KEY,                 JSON.stringify],
   'group_order':               [STORAGE_GROUP_ORDER_KEY,           JSON.stringify],
   'project_favorites':         [STORAGE_PROJECT_FAVORITES_KEY,     JSON.stringify],
@@ -251,6 +265,8 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.ollama',
   'usage_links.opencode',
   'usage_links.grok',
+  'usage_links.command-code',
+  'usage_probe_model',
   'display.locked_mode',
   'display.theme',
   'display.font_size',
@@ -263,6 +279,7 @@ export const _USER_PREFS_STRING_ARRAY_PATHS = new Set([
   'project_favorites',
   'cwd_history',
   'cwd_favorites',
+  'collapsed_nodes',
 ]);
 // session_order の中身はセッション ID の数値配列。文字列配列として扱うと
 // サニタイズで全要素が捨てられ、サーバへ常に空配列が PUT される（＝手動
@@ -287,7 +304,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
   try { parsed = JSON.parse(raw); } catch (_) { parsed = raw; }
 
   if (path.endsWith('.enabled') || path === 'voice.wake_word_enabled' || path === 'voice.input_disabled' || path === 'approval.auto_switch' || path === 'approval.auto_approval_enabled'
-      || path === 'template_send.immediate'
+      || path === 'template_send.immediate' || path === 'sidebar_pin_migrated'
       || /^quick_cmds\.show[1-5]$/.test(path)) {
     return { ok: true, value: raw === '1' || raw === 'true' || parsed === true };
   }
@@ -384,16 +401,36 @@ export async function _putUserPrefsNow() {
   if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
 }
 
+const _userPrefsPutQueue = createUserPrefsPutQueue(async () => {
+  try {
+    await _putUserPrefsNow();
+  } catch (e) {
+    console.warn('[user-prefs] PUT failed:', e);
+    showToast(_userPrefsSaveErrorMessage(e));
+  }
+});
+
+function _putUserPrefsWithFeedback(): Promise<void> {
+  return _userPrefsPutQueue.request();
+}
+
 export function _scheduleUserPrefsPut() {
   if (_userPrefsDebounceTimer) clearTimeout(_userPrefsDebounceTimer);
-  _userPrefsDebounceTimer = setTimeout(async () => {
-    try {
-      await _putUserPrefsNow();
-    } catch (e) {
-      console.warn('[user-prefs] PUT failed:', e);
-      showToast(_userPrefsSaveErrorMessage(e));
-    }
+  _userPrefsDebounceTimer = setTimeout(() => {
+    _userPrefsDebounceTimer = null;
+    void _putUserPrefsWithFeedback();
   }, 200);
+}
+
+// デバウンス中の最新 user_prefs を待たずに Hub へ届ける。spawn のように
+// 成功レスポンス後すぐ画面や Hub が閉じられる経路で、localStorage だけが先に
+// 更新される競合を避けるために使う。
+export async function flushUserPrefsPut(): Promise<void> {
+  if (_userPrefsDebounceTimer) {
+    clearTimeout(_userPrefsDebounceTimer);
+    _userPrefsDebounceTimer = null;
+  }
+  await _putUserPrefsWithFeedback();
 }
 
 export function setUserPref(path: string, value: any): void {

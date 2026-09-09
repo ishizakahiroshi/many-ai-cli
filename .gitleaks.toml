@@ -47,7 +47,13 @@ paths = [
   # バイナリ（ランダムバイトが IP 正規表現に偶然マッチするため除外）
   '''\.syso$''',
   '''\.(?:png|jpe?g|webp|gif|ico|woff2?|ttf|otf|eot|wasm)$''',
-  # Go テストファイル全般。偽秘密を含むテストフィクスチャが generic-api-key 等を
-  # 誤検出させるため一括除外（_test.go は本番ビルドに含まれず流出経路なし）。
-  '''_test\.go$''',
+]
+regexTarget = "match"
+regexes = [
+  # Redaction tests intentionally contain recognizable, non-production fixture
+  # values. Keep the allowlist value-scoped; production-looking test files are
+  # still scanned by path and all unrelated matches remain visible.
+  '''(?i)synthetic(?:[A-Za-z0-9_-]+)?''',
+  '''\b(?:deadbeef|test-token|hub-token|oldtok|tok)\b''',
+  '''(?i)(?:hunter2longvalue|topsecretvalue|p4ssw0rd|abcdef0123456789|abcdef123456|supersecret)''',
 ]

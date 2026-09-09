@@ -19,7 +19,7 @@ func TestInjectRulesSharedBlockIsIdempotentAcrossProviders(t *testing.T) {
 	withTempHome(t)
 	path := filepath.Join(t.TempDir(), "AGENTS.md")
 
-	for _, provider := range []string{"codex", "copilot", "cursor-agent"} {
+	for _, provider := range []string{"codex", "copilot", "cursor-agent", "opencode"} {
 		if err := InjectRules(provider, path); err != nil {
 			t.Fatalf("InjectRules(%s) failed: %v", provider, err)
 		}
@@ -152,6 +152,74 @@ func TestInjectRulesMigratesLegacyNamedBlock(t *testing.T) {
 	}
 	if !strings.Contains(content, "before") {
 		t.Fatalf("original content was not preserved:\n%s", content)
+	}
+}
+
+// StripInjectedBlocks は doctor のハッシュ比較（sha256File）の前段で使われる。
+// 3 種のブロックが揃って入っていても、地の文だけが残ることを確認する（C5）。
+func TestStripInjectedBlocksRemovesAllThreeKinds(t *testing.T) {
+	body := strings.Join([]string{
+		"before",
+		"",
+		sharedBlockStart,
+		"shared block content",
+		sharedBlockEnd,
+		"",
+		legacySharedBlockStart,
+		"legacy block content",
+		legacySharedBlockEnd,
+		"",
+		delegationBlockStart,
+		"delegation block content",
+		delegationBlockEnd,
+		"",
+		"after",
+	}, "\n")
+
+	got := string(StripInjectedBlocks([]byte(body)))
+
+	for _, marker := range []string{
+		sharedBlockStart, sharedBlockEnd,
+		legacySharedBlockStart, legacySharedBlockEnd,
+		delegationBlockStart, delegationBlockEnd,
+		"shared block content", "legacy block content", "delegation block content",
+	} {
+		if strings.Contains(got, marker) {
+			t.Fatalf("StripInjectedBlocks left %q behind:\n%s", marker, got)
+		}
+	}
+	if !strings.Contains(got, "before") || !strings.Contains(got, "after") {
+		t.Fatalf("StripInjectedBlocks removed surrounding content:\n%s", got)
+	}
+}
+
+// ブロックが無い入力は byte 単位でそのまま返る（除去し過ぎない）。
+func TestStripInjectedBlocksReturnsInputUnchangedWhenNoBlocksPresent(t *testing.T) {
+	body := []byte("plain content with no injected blocks\n")
+	got := StripInjectedBlocks(body)
+	if string(got) != string(body) {
+		t.Fatalf("StripInjectedBlocks changed a block-free input:\nwant: %q\ngot:  %q", body, got)
+	}
+}
+
+// TestRulesFileContentHasIntentOptionalLines is the C1 completion criterion
+// (docs/local/plan_session-handoff-board_c3_intent-layer.md 内部 C1): the DONE
+// format section gains the two optional "次:" / "未検証:" lines without
+// dropping any existing wording, and the version stamp matches rulesVersion.
+func TestRulesFileContentHasIntentOptionalLines(t *testing.T) {
+	if !strings.Contains(rulesFileContent, "<!-- version: "+rulesVersion+" -->") {
+		t.Fatalf("rulesFileContent version stamp does not match rulesVersion %q:\n%s", rulesVersion, rulesFileContent)
+	}
+	for _, want := range []string{
+		"次: <次にやること 1 行>",
+		"未検証: <前提 1 行>",
+		// 既存の必須書式が消えていないことも合わせて確認する。
+		"1 文目は必ず結論にする",
+		"[MANY-AI-CLI-DONE] <1〜2 文の完了サマリー> [/MANY-AI-CLI-DONE]",
+	} {
+		if !strings.Contains(rulesFileContent, want) {
+			t.Errorf("rulesFileContent missing %q", want)
+		}
 	}
 }
 

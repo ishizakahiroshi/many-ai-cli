@@ -15,6 +15,9 @@ const (
 	agentChatMaxLimit     = 200
 	agentChatPollInterval = time.Second
 	agentChatIdleStop     = time.Minute
+	// agentChatKickDelay は前倒し poll までの待ち。0 にしないのは、端末への描画と
+	// トランスクリプトへの書き込みが同時ではないため（実測は同じ秒だが順序の保証は無い）。
+	agentChatKickDelay = 80 * time.Millisecond
 )
 
 func isAgentChatProvider(provider string) bool {
@@ -47,6 +50,7 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 		HomeDir:        ses.HomeDir,
 		CodexHome:      ses.CodexHome,
 		ClaudeDir:      ses.ClaudeDir,
+		GrokHome:       ses.GrokHome,
 		AgentSessionID: ses.AgentSessionID,
 		NativeLogPath:  ses.NativeLogPath,
 	}
@@ -172,13 +176,15 @@ func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
 		if snap.CWD == "" || root == "" {
 			return "", false
 		}
+		// NativeLogPath は Stop hook が当該 session へ直接設定した exact path。
+		// 秒精度の開始時刻を使う fallback より必ず優先する。
+		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
+			return snap.NativeLogPath, true
+		}
 		if startedAt, err := time.Parse(time.RFC3339, snap.StartedAt); err == nil {
 			if path, ok := findCodexRolloutLog(root, snap.CWD, startedAt); ok {
 				return path, true
 			}
-		}
-		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
-			return snap.NativeLogPath, true
 		}
 	}
 	return "", false
@@ -202,20 +208,37 @@ func (s *Server) stopAgentChatTailLocked(ses *session) {
 	if ses == nil {
 		return
 	}
-	s.agentChatBroadcastMu.Lock()
 	if ses.agentChatTimer != nil {
 		ses.agentChatTimer.Stop()
 		ses.agentChatTimer = nil
 	}
 	ses.agentChatRunning = false
 	ses.agentChatGeneration++
-	s.agentChatBroadcastMu.Unlock()
 }
 
 func (s *Server) stopAgentChatTail(id int) {
 	s.sessionsMu.Lock()
 	s.stopAgentChatTailLocked(s.sessions[id])
 	s.sessionsMu.Unlock()
+}
+
+// kickAgentChatPollLocked は次の poll を前倒しする。承認マーカーの供給元を
+// トランスクリプトへ移した以上、承認パネルの出る速さが 1 秒周期のポーリングに
+// 縛られる。終了マーカーが端末へ届いた瞬間（＝AI が回答を書き終えた瞬間）に
+// 1 回だけ前倒しして、VT 経路だった頃の体感を保つ。
+//
+// Stop() が true のときしか組み直さない。すでに発火済みのタイマーを Reset すると
+// 同じ generation の poll が二重に走り、両者が同じ agentChatParseState（可変 map）を
+// 触ってしまう。取り逃しても次の通常 poll が必ず拾うので、前倒しは best-effort でよい。
+func (s *Server) kickAgentChatPollLocked(id int, ses *session) {
+	if ses == nil || !ses.agentChatRunning || ses.agentChatTimer == nil {
+		return
+	}
+	if !ses.agentChatTimer.Stop() {
+		return
+	}
+	generation := ses.agentChatGeneration
+	ses.agentChatTimer = time.AfterFunc(agentChatKickDelay, func() { s.pollAgentChat(id, generation) })
 }
 
 func (s *Server) scheduleAgentChatPollLocked(id int, generation uint64) {
@@ -227,35 +250,46 @@ func (s *Server) scheduleAgentChatPollLocked(id int, generation uint64) {
 }
 
 func (s *Server) broadcastAgentChatIfCurrent(id int, generation uint64, message proto.Message) bool {
-	// Lock order is sessionsMu -> agentChatBroadcastMu, matching
-	// stopAgentChatTailLocked. The session replacement therefore cannot commit
-	// between the generation check and the send snapshot.
+	// The generation check and UI snapshot are the only critical section. Do not
+	// hold sessionsMu or a broadcast mutex while a UI write waits on a socket;
+	// a stalled browser must not block session replacement or unrelated Hub work.
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil || !ses.agentChatRunning || ses.agentChatGeneration != generation {
 		s.sessionsMu.Unlock()
 		return false
 	}
-	s.agentChatBroadcastMu.Lock()
 	ucs := make([]*uiConn, 0, len(s.uis))
 	for _, uc := range s.uis {
+		if uc.priming || uc.draining {
+			uc.queued = append(uc.queued, message)
+			continue
+		}
 		ucs = append(ucs, uc)
 	}
 	s.sessionsMu.Unlock()
 
-	deadline := time.Now().Add(broadcastWriteTimeout)
 	var dead []*uiConn
 	for _, uc := range ucs {
-		if err := uc.sendWithDeadline(message, deadline); err != nil {
+		if !s.agentChatGenerationCurrent(id, generation) {
+			return false
+		}
+		if err := uc.sendWithDeadline(message, time.Now().Add(broadcastWriteTimeout)); err != nil {
 			s.logger.Warn("agent chat broadcast: UI send failed", "err", err)
 			dead = append(dead, uc)
 		}
 	}
-	s.agentChatBroadcastMu.Unlock()
 	for _, uc := range dead {
 		s.removeUI(uc.ws)
 	}
 	return true
+}
+
+func (s *Server) agentChatGenerationCurrent(id int, generation uint64) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[id]
+	return ses != nil && ses.agentChatRunning && ses.agentChatGeneration == generation
 }
 
 func (s *Server) pollAgentChat(id int, generation uint64) {
@@ -283,6 +317,7 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		parseState = newAgentChatParseStateWithPage(agentChatLiveMessageMax, agentChatBatchBytesMax, -1)
 	}
 	var messages []agentChatMessage
+	var codexCompletions []codexTaskCompletion
 	newOffset := previousOffset
 	var err error
 	if pathOK {
@@ -319,9 +354,27 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 			}
 		}
 	}
+	if provider == "codex" && pathOK && parseState != nil {
+		// A tail prime reconstructs the browser view from already-written rollout
+		// records. It is a baseline, not a new completion event. Forward polls
+		// alone may publish task_complete records.
+		codexCompletions = parseState.takeCodexCompletions()
+		if stateWasReset {
+			codexCompletions = nil
+		}
+	}
 	if err != nil {
 		s.logger.Debug("agent chat tail failed", "session_id", id, "provider", provider, "err", err)
 	}
+	// 承認マーカーはチャット表示より前に出す。下の配信ループは UI 側の都合で
+	// 途中 return しうるので、そこへ承認を巻き込ませない。
+	// path は session ではなくこの poll が持っている値を渡す（session 側の
+	// agentChatPath はこの関数の末尾で書くので、ここで読むと 1 周ぶん古い）。
+	transcriptPath := ""
+	if pathOK {
+		transcriptPath = path
+	}
+	s.scanTranscriptApprovalMarkers(id, provider, transcriptPath, messages, stateWasReset, time.Now())
 
 	for _, message := range messages {
 		if !s.broadcastAgentChatIfCurrent(id, generation, proto.Message{
@@ -346,6 +399,20 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		cur.agentChatOffset = newOffset
 		cur.agentChatParseState = parseState
 	}
+	// トランスクリプトが読めなくなったら承認マーカーの供給元を VT へ戻す
+	// （approval_marker_transcript.go の「読めなくなったとき」節が理由の正本）。
+	transcriptFellBack := false
+	transcriptRecovered := false
+	knownTranscriptPath := cur.agentChatPath
+	if pathOK && err == nil {
+		transcriptRecovered = cur.agentChatPath != "" &&
+			cur.agentChatMissStreak >= approvalMarkerTranscriptMissLimit
+		cur.agentChatMissStreak = 0
+	} else if cur.agentChatMissStreak < approvalMarkerTranscriptMissLimit {
+		cur.agentChatMissStreak++
+		transcriptFellBack = cur.agentChatPath != "" &&
+			cur.agentChatMissStreak == approvalMarkerTranscriptMissLimit
+	}
 	if len(messages) > 0 {
 		cur.agentChatLastAt = now
 	}
@@ -356,11 +423,24 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	shouldStop := isTerminalSessionState(cur.State) || (!idleBase.IsZero() && now.Sub(idleBase) >= agentChatIdleStop)
 	if shouldStop {
 		s.stopAgentChatTailLocked(cur)
-		s.sessionsMu.Unlock()
-		return
+	} else {
+		s.scheduleAgentChatPollLocked(id, generation)
 	}
-	s.scheduleAgentChatPollLocked(id, generation)
 	s.sessionsMu.Unlock()
+	// 供給元が入れ替わったことは必ず記録する。無音で沈黙するのが本 bugfix で
+	// 消そうとした失敗そのものなので、退避したことまで無音にしない。
+	if transcriptFellBack {
+		s.logger.Warn("approval marker source fell back to VT mirror",
+			"session_id", id, "provider", provider,
+			"misses", approvalMarkerTranscriptMissLimit, "path", knownTranscriptPath, "err", err)
+	}
+	if transcriptRecovered {
+		s.logger.Info("approval marker source back on transcript",
+			"session_id", id, "provider", provider)
+	}
+	for _, completion := range codexCompletions {
+		s.handleCodexTaskCompletion(id, completion)
+	}
 }
 
 func (s *Server) agentChatTailPageBudget() agentChatReadBudget {
@@ -391,6 +471,7 @@ func (s *Server) agentChatSnapshot(id int) agentLogSession {
 			HomeDir:        ses.HomeDir,
 			CodexHome:      ses.CodexHome,
 			ClaudeDir:      ses.ClaudeDir,
+			GrokHome:       ses.GrokHome,
 			AgentSessionID: ses.AgentSessionID,
 			NativeLogPath:  ses.NativeLogPath,
 		}

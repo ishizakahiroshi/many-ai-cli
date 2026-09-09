@@ -52,9 +52,11 @@ jobs:
       - name: Try clean merge
         if: steps.precheck.outputs.skip != 'true'
         id: merge
+        env:
+          RELEASE_TAG_NAME: ${{ github.ref_name }}
         run: |
           if git merge --no-ff main \
-              -m "Merge branch 'main' into develop (automated backport for ${{ github.ref_name }})"; then
+              -m "Merge branch 'main' into develop (automated backport for ${RELEASE_TAG_NAME})"; then
             echo "result=clean" >> "$GITHUB_OUTPUT"
           else
             git merge --abort || true
@@ -67,11 +69,13 @@ jobs:
 
       - name: Verify tag is ancestor of develop
         if: steps.merge.outputs.result == 'clean'
+        env:
+          RELEASE_TAG_NAME: ${{ github.ref_name }}
         run: |
-          if git merge-base --is-ancestor "${{ github.ref_name }}" develop; then
-            echo "OK: ${{ github.ref_name }} は develop の祖先。"
+          if git merge-base --is-ancestor "$RELEASE_TAG_NAME" develop; then
+            echo "OK: $RELEASE_TAG_NAME は develop の祖先。"
           else
-            echo "::error::backport は成功したが ${{ github.ref_name }} が develop の祖先に入っていない。手動確認が必要。"
+            echo "::error::backport は成功したが $RELEASE_TAG_NAME が develop の祖先に入っていない。手動確認が必要。"
             exit 1
           fi
 
@@ -79,9 +83,10 @@ jobs:
         if: steps.merge.outputs.result == 'conflict'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG_NAME: ${{ github.ref_name }}
         run: |
           gh issue create \
-            --title "[backport needed] ${{ github.ref_name }}: main → develop merge conflict" \
+            --title "[backport needed] ${RELEASE_TAG_NAME}: main → develop merge conflict" \
             --label "release" \
             --body "$(cat <<'EOF'
           自動 backport workflow が main → develop のマージで競合を検知しました。

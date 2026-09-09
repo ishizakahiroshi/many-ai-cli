@@ -7,8 +7,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"many-ai-cli/internal/sessionstore"
 )
 
 func newSessionLogTestServer(t *testing.T) (*Server, string) {
@@ -62,6 +66,42 @@ func TestHandleSessionLogUnknownSession(t *testing.T) {
 	w := sessionLogGet(t, s, "/api/session-log?token=tok&session_id=99")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleSessionLogByPersistentSessionID(t *testing.T) {
+	s, sessionsDir := newSessionLogTestServer(t)
+	logPath := filepath.Join(sessionsDir, "persisted.log")
+	if err := os.WriteFile(logPath, []byte("persisted session log"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := sessionstore.OpenForLogDir(s.cfg.Hub.LogDir)
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	id, err := store.StartSession(sessionstore.SessionStart{
+		LiveSessionID: 1,
+		Provider:      "claude",
+		State:         "running",
+		StartedAt:     "2026-08-19T00:00:00Z",
+		LogPath:       logPath,
+		JSONLPath:     filepath.Join(sessionsDir, "persisted.jsonl"),
+	})
+	if err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	store.EndSession(1, "completed", "done", time.Now())
+	s.sessionStore = store
+
+	w := sessionLogGet(t, s, "/api/session-log?token=tok&session_db_id="+strconv.FormatInt(id, 10))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := decodeSessionLogResp(t, w)
+	data, err := base64.StdEncoding.DecodeString(resp.DataB64)
+	if err != nil || string(data) != "persisted session log" {
+		t.Fatalf("unexpected persistent log data: %q err=%v", data, err)
 	}
 }
 

@@ -3,39 +3,20 @@ import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
-import { activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
+import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
 import { checkApprovalOnStartup } from './settings.js';
 import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, trackApprovalHintFromChunk } from './approval.js';
+import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, scheduleApprovalLedgerRestore, trackApprovalHintFromChunk } from './approval.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
-import { handleUsageStatMessage, removeUsageCacheEntry } from './token-statusbar.js';
+import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
+import { checkHandoffNotifyFromUsageStat } from './handoff.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
-
-function showSpawnConfirmation(m) {
-  const id = String(m.spawn_confirmation_id || '');
-  if (!id || document.querySelector(`[data-spawn-confirmation-id="${CSS.escape(id)}"]`)) return;
-  const dialog = document.createElement('dialog');
-  dialog.className = 'spawn-confirm-dialog';
-  dialog.dataset.spawnConfirmationId = id;
-  const escapeHtml = (value) => { const el = document.createElement('span'); el.textContent = value; return el.innerHTML; };
-  const prompt = String(m.initial_prompt || '').trim();
-  dialog.innerHTML = `<form method="dialog"><h2>Approve child session?</h2><p><b>Role:</b> ${escapeHtml(String(m.role || 'child'))}</p><label>Provider <input name="provider" value="${escapeHtml(String(m.provider || 'codex'))}"></label><label>Model <input name="model" value="${escapeHtml(String(m.model || ''))}"></label><p><b>Worktree:</b> ${escapeHtml(String(m.cwd || 'parent working directory'))}</p><pre>${escapeHtml(prompt.slice(0, 1200))}</pre><menu><button value="refuse">Refuse</button><button value="approve" class="primary">Approve</button></menu></form>`;
-  dialog.addEventListener('close', async () => {
-    const provider = (dialog.querySelector('[name=provider]') as HTMLInputElement)?.value || '';
-    const model = (dialog.querySelector('[name=model]') as HTMLInputElement)?.value || '';
-    const approved = dialog.returnValue === 'approve';
-    dialog.remove();
-    try {
-      await fetch(`/api/sessions/${m.session_id}/spawn-confirm?token=${token}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmation_id: id, approved, provider, model }) });
-    } catch (_) { showToast('Could not submit the spawn decision'); }
-  }, { once: true });
-  document.body.appendChild(dialog);
-  dialog.showModal();
-}
+import { dropDoneSummary, setDoneSummary } from './done-summary.js';
+import { clearAllSpawnConfirmationsForHubRestart, closeSpawnConfirmation, noteSpawnConfirmationRequested, openNextSpawnConfirmationFor } from './spawn-confirm.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -116,8 +97,14 @@ function purgeLocalStateForHubRestart() {
     try {
       removeLocalSession(id);
       removeWorkflowSnapshot(id);
+      dropDoneSummary(id);
     } catch (_) {}
   });
+  resetUsageCache();
+  // C2/C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md):
+  // Hub 再起動で保留していた spawn 確認も消えている。ローカルの保留ストアと、
+  // 開いたままのダイアログがあれば理由付きで閉じる。
+  clearAllSpawnConfirmationsForHubRestart();
 }
 
 export function syncElapsedTimer() {
@@ -213,6 +200,7 @@ export function sessionLayoutSnapshot(s) {
     s.log_path || '',
     s.jsonl_path || '',
     s.model || '',
+    s.effort || '',
     s.route || '',
     s.end_reason || '',
   ].join('\x1f');
@@ -232,6 +220,7 @@ export function _connectWs() {
     if (_elapsedTimerInterval) { clearInterval(_elapsedTimerInterval); set__elapsedTimerInterval(null); }
     if (activeSessionId !== null) _lastActiveSessionIdBeforeDisconnect = activeSessionId;
     sessions.clear();
+    resetUsageCache();
     autoDismissTimers.forEach(t => clearTimeout(t));
     autoDismissTimers.clear();
     set_activeSessionId(null);
@@ -382,12 +371,16 @@ export function _connectWs() {
     if (!id) return;
     if (finishApprovalReplay(id, m.replay_epoch, m.approval_source_epoch, m.approval_consumed ? String(m.approval_candidate_key || '') : '', String(m.approval_candidate_shape || '')) && id === activeSessionId) {
       scheduleApprovalCheck(id);
+      // 再接続の replay は保留中の承認を運ばない（pty_data と reattach_replay_done だけ）。
+      // claude / codex はローカル走査で立て直せないので、台帳から出し直す。
+      scheduleApprovalLedgerRestore(id);
     }
     return;
   }
 
   if (m.type === 'usage_stat') {
     handleUsageStatMessage(m);
+    checkHandoffNotifyFromUsageStat(m);
     return;
   }
 
@@ -462,7 +455,29 @@ export function _connectWs() {
   }
 
   if (m.type === 'spawn_confirmation_requested') {
-    showSpawnConfirmation(m);
+    // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 要求の
+    // 瞬間には出さない。ストアへ積んでサイドバーの印を更新し、その親が今まさに
+    // アクティブなときだけダイアログを開く。UI 再接続直後の resend
+    // （sendSnapshot からの再送）でも同じ型・同じ分岐を通る。
+    noteSpawnConfirmationRequested(m);
+    renderSessionList();
+    if (activeSessionId === Number(m.session_id || 0)) {
+      openNextSpawnConfirmationFor(Number(m.session_id || 0));
+    }
+    return;
+  }
+
+  if (m.type === 'spawn_confirmation_closed') {
+    closeSpawnConfirmation(m);
+    renderSessionList();
+    return;
+  }
+
+  if (m.type === 'session_dismiss_refused') {
+    // C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): Hub 側の
+    // hasPendingSpawnConfirmation ガードから返る想定の通知。フロント側の受け口だけ
+    // 先に用意しておく（Hub 側の送信自体は本 C では未実装 — 備考参照）。
+    showToast(t('toast_session_dismiss_blocked_pending_spawn'));
     return;
   }
 
@@ -488,6 +503,18 @@ export function _connectWs() {
     if (Number.isFinite(m.session_id) && m.workflow_progress) {
       receiveWorkflowProgress(m.session_id, m.workflow_progress);
       updateCardLiveInfo(m.session_id);
+    }
+    return;
+  }
+
+  // 端末は今見ているセッションの今の画面しか映さないため、**見ていないセッション**の
+  // 完了を知る経路はここだけになる。Hub は通知設定と無関係に broadcast してくるので、
+  // 外部通知を切っている利用者でもライブ帯とカードには出る。
+  if (m.type === 'done_summary') {
+    if (Number.isFinite(m.session_id) && m.done_summary) {
+      setDoneSummary(m.session_id, m.done_summary);
+      updateCardLiveInfo(m.session_id);
+      if (m.session_id === activeSessionId) syncLiveStatusDomForActive();
     }
     return;
   }
@@ -524,6 +551,8 @@ export function _connectWs() {
       addToSessionOrder(s.id);
     });
     document.getElementById('summary').textContent = t('connected') || '接続済み';
+    // 旧ピン留めの 1 回きりの変換。snapshot が入った直後（＝全セッションが揃った時点）に走らせる。
+    migratePinnedSessionsOnce();
     renderSessionList();
     if (_pendingOpenSessionId && sessions.has(_pendingOpenSessionId)) {
       const id = _pendingOpenSessionId;
@@ -546,6 +575,8 @@ export function _connectWs() {
     if (m.display_name)    cur.display_name    = m.display_name;
     if (m.cwd)            { cur.cwd = m.cwd; cur.project = deriveProjectKeyFromCwd(m.cwd); }
     if (m.branch !== undefined) cur.branch      = m.branch;
+    // project_id は omitempty で送られるので、未指定なら既存値を保つ（branch と同じ規約）。
+    if (m.project_id !== undefined) cur.project_id = m.project_id;
     if (m.label !== undefined) cur.label       = m.label;
 	if (m.session_meta) {
 	  cur.label = m.session_meta.label;
@@ -567,21 +598,30 @@ export function _connectWs() {
 		if (m.awaiting_user !== undefined) cur.awaiting_user = m.awaiting_user;
 		if (m.awaiting_approval !== undefined) cur.awaiting_approval = m.awaiting_approval;
     if (m.last_output_at)  cur.last_output_at  = m.last_output_at;
+    if (m.transcript_grew_at) cur.transcript_grew_at = m.transcript_grew_at;
     if (m.started_at)      cur.started_at      = m.started_at;
     if (m.first_message)   cur.first_message   = m.first_message;
     if (m.last_message)    cur.last_message    = m.last_message;
     if (m.log_path)        cur.log_path        = m.log_path;
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
+    if (m.effort !== undefined) cur.effort      = m.effort;
     if (m.route !== undefined) cur.route       = m.route;
     if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
     if (m.role !== undefined) cur.role = m.role;
     if (m.auto !== undefined) cur.auto = m.auto;
     if (m.depth !== undefined) cur.depth = m.depth;
     if (m.orchestration_id !== undefined) cur.orchestration_id = m.orchestration_id;
-    if (m.board_path !== undefined) cur.board_path = m.board_path;
-    if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
+	if (m.board_path !== undefined) cur.board_path = m.board_path;
+	if (m.worktree_branch !== undefined) cur.worktree_branch = m.worktree_branch;
 	if (m.board_notify_pending !== undefined) cur.board_notify_pending = m.board_notify_pending;
+	if (m.relays !== undefined) cur.relays = m.relays;
+	if (m.cross_session_messages !== undefined) cur.cross_session_messages = m.cross_session_messages;
+    // subscription profile は Go 側 proto の短い名前（subscription_id / _name）で届き、
+    // snapshot は session 構造体の名前（subscription_profile_id / _name）で届く。
+    // カード側は snapshot 名で読むので、ここで揃えておく。
+    if (m.subscription_id !== undefined) cur.subscription_profile_id = m.subscription_id;
+    if (m.subscription_name !== undefined) cur.subscription_profile_name = m.subscription_name;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
     // （通常の session_update では 0 を omitempty で送らないため、ここで上書きしない）。
     if (m.git_checked) {
@@ -591,7 +631,8 @@ export function _connectWs() {
     }
     sessions.set(m.session_id, cur);
     // 実行中⇄アイドルの遷移をアクティブセッションの入力欄／送信ボタンへ反映する
-    if (m.state && m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
+	if (m.state && m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
+	if (m.relays !== undefined || m.cross_session_messages !== undefined || m.board_path !== undefined) window.renderOrchestrationDashboard?.();
     if (!isNew && beforeLayout === sessionLayoutSnapshot(cur) && (m.state || m.last_output_at)) {
       fastRenderSessionId = m.session_id;
     }
@@ -662,6 +703,7 @@ export function _connectWs() {
     removeLocalSession(m.session_id);
     removeUsageCacheEntry(m.session_id);
     removeWorkflowSnapshot(m.session_id);
+    dropDoneSummary(m.session_id);
   }
 
   if (fastRenderSessionId !== null && renderSessionStateUpdate(fastRenderSessionId)) return;

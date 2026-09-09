@@ -13,9 +13,11 @@ import (
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/wrapper"
 )
 
 type spawnWrappedSpec struct {
+	Context        context.Context
 	Provider       string
 	CWD            string
 	Model          string
@@ -27,6 +29,28 @@ type spawnWrappedSpec struct {
 	AskForApproval string
 	Route          string
 	Utf8Session    bool
+	// SubscriptionProfileID は起動に使うサブスクリプション profile。
+	// 空なら CLI 自身のログイン環境をそのまま使う（従来動作）。
+	SubscriptionProfileID string
+	// SubscriptionLogin が true のとき、通常のセッションではなく公式 CLI の
+	// ログインフロー（`claude auth login` 等）を PTY で走らせる。
+	SubscriptionLogin bool
+	// UsageProbe marks a short-lived internal session that must not be exposed
+	// in the normal UI session feed.
+	UsageProbe bool
+}
+
+const manyAICLIBinEnv = "MANY_AI_CLI_BIN"
+
+// hubSpawnEnv gives every Hub-spawned session the exact executable that
+// launched it. This avoids resolving an older distribution from PATH when an
+// orchestration conductor invokes a newer subcommand such as relay.
+func hubSpawnEnv(base []string, hubPort int, exe string) []string {
+	return mergeEnvOverrides(sanitizeEnv(base), []string{
+		"MANY_AI_CLI=1",
+		fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort),
+		manyAICLIBinEnv + "=" + exe,
+	})
 }
 
 func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []string {
@@ -40,17 +64,26 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	if !validOrchestrationProvider(spec.Provider) {
 		return 0, fmt.Errorf("invalid provider")
 	}
+	// profile は env を組み立てる前に解決する。存在しない / 無効化された profile を
+	// 指定された場合はここで失敗させ、**別アカウントで黙って起動しない**。
+	subEnv, _, subErr := s.subscriptionLaunch(spec.Provider, spec.SubscriptionProfileID)
+	if subErr != nil {
+		return 0, subErr
+	}
 	if strings.HasPrefix(spec.Model, "-") || strings.HasPrefix(spec.Label, "-") || !spawnValidModelLabel(spec.Model) || !spawnValidModelLabel(spec.Label) {
 		return 0, fmt.Errorf("invalid model or label value")
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return 0, fmt.Errorf("executable error: %w", err)
 	}
 	wrapArgs := []string{"wrap", spec.Provider}
 	resolvedModel := strings.TrimSpace(spec.Model)
 	if spec.Label != "" {
 		wrapArgs = append(wrapArgs, "--label="+spec.Label)
+	}
+	if spec.SubscriptionLogin {
+		// ログイン用の使い捨てセッション。公式 CLI の login サブコマンドは
+		// --model / --permission-mode 等を受け付けないので、通常の provider 別
+		// フラグ組み立てを丸ごと飛ばす。
+		wrapArgs = append(wrapArgs, "--subscription-login")
+		return s.startWrapProcess(spec, wrapArgs, subEnv, "", wait)
 	}
 	switch spec.Provider {
 	case "claude":
@@ -63,7 +96,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if risk.HighRisk && mode != "required" {
 			mode = "required"
 		}
-		if mode == "required" && !spec.RiskConfirmed {
+		if spawnNeedsRiskConfirmation(spec, mode == "required") {
 			return 0, fmt.Errorf("risk confirmation required")
 		}
 		if resolvedModel != "" {
@@ -82,7 +115,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		if risk.HighRisk && mode != "required" {
 			mode = "required"
 		}
-		if mode == "required" && !spec.RiskConfirmed {
+		if spawnNeedsRiskConfirmation(spec, mode == "required") {
 			return 0, fmt.Errorf("risk confirmation required")
 		}
 		if resolvedModel != "" {
@@ -96,7 +129,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		}
 	case "opencode":
 		risk := evaluateOpenCodeRisk(spec.PermissionMode)
-		if risk.HighRisk && !spec.RiskConfirmed {
+		if spawnNeedsRiskConfirmation(spec, risk.HighRisk) {
 			return 0, fmt.Errorf("risk confirmation required")
 		}
 		if resolvedModel != "" {
@@ -104,6 +137,13 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		}
 		wrapArgs = appendOpenCodePermissionArgs(wrapArgs, spec.PermissionMode)
 	default:
+		if spec.Provider != "shell" {
+			// grok / copilot / cursor-agent の全許可は Claude / OpenCode と同じく確認必須。
+			risk := evaluateBypassPermissionRisk(spec.PermissionMode)
+			if spawnNeedsRiskConfirmation(spec, risk.HighRisk) {
+				return 0, fmt.Errorf("risk confirmation required")
+			}
+		}
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
@@ -127,10 +167,39 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		wrapArgs = append(wrapArgs, "--utf8")
 	}
 
+	id, err := s.startWrapProcess(spec, wrapArgs, subEnv, effectiveRoute, wait)
+	if err != nil {
+		return 0, err
+	}
+	if spawnRecordsLastModel(spec, resolvedModel, effectiveRoute) {
+		_ = s.setLastModel(spec.Provider, resolvedModel)
+	}
+	return id, nil
+}
+
+// startWrapProcess launches `many-ai-cli wrap <provider> …` and waits for the
+// resulting session to register. It is shared by the ordinary orchestration
+// spawn and by the subscription login spawn, which needs the same environment,
+// log, and process-attribute handling but none of the model/permission flags.
+func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []string, effectiveRoute string, wait time.Duration) (int, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return 0, fmt.Errorf("executable error: %w", err)
+	}
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = spec.CWD
 	hubPort := s.currentHubPort()
-	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1", fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
+	probeValue := "0"
+	if spec.UsageProbe {
+		probeValue = "1"
+	}
+	cmd.Env = mergeEnvOverrides(cmd.Env, []string{"MANY_AI_CLI_USAGE_PROBE=" + probeValue})
+	loginValue := "0"
+	if spec.SubscriptionLogin {
+		loginValue = "1"
+	}
+	cmd.Env = mergeEnvOverrides(cmd.Env, []string{"MANY_AI_CLI_SUBSCRIPTION_LOGIN=" + loginValue})
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
@@ -140,6 +209,9 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	s.cfgMu.Unlock()
 	if envPreset := EnvPresetForWithOllamaBase(spec.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	}
+	if len(subEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
 	}
 
 	var stdinNull, spawnLog *os.File
@@ -174,15 +246,39 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 			_ = spawnLog.Close()
 		}
 	})
-	if resolvedModel != "" && !isLocalRoute(effectiveRoute) {
-		_ = s.setLastModel(spec.Provider, resolvedModel)
+	if spec.UsageProbe {
+		s.updateUsageProbePID(spec.Label, cmd.Process.Pid)
 	}
-	return s.waitForSessionByLabel(spec.Label, wait)
+	id, err := s.waitForSessionByLabelContext(spec.Context, spec.Label, wait)
+	if err != nil {
+		// A wrapper that never registers has no Hub session to dismiss. Kill the
+		// process after the bounded wait so spawn-child cannot leave an orphan
+		// provider terminal behind.
+		terminateUnregisteredWrap(cmd)
+		return 0, err
+	}
+	return id, nil
 }
 
-func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int, error) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+func terminateUnregisteredWrap(cmd *exec.Cmd) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = cmd.Process.Kill()
+}
+
+func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string, timeout time.Duration) (int, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	for {
 		s.sessionsMu.Lock()
 		for id, ses := range s.sessions {
 			if ses.Label == label {
@@ -191,9 +287,65 @@ func (s *Server) waitForSessionByLabel(label string, timeout time.Duration) (int
 			}
 		}
 		s.sessionsMu.Unlock()
-		time.Sleep(100 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-deadline.C:
+			return 0, context.DeadlineExceeded
+		case <-ticker.C:
+		}
 	}
-	return 0, context.DeadlineExceeded
+}
+
+// validSpawnProvider reports whether provider is spawnable: a built-in AI
+// CLI, "shell", or a config.yaml custom_providers entry. Custom providers go
+// through config.EffectiveCustomProviders, so a broken or built-in-colliding
+// entry (see internal/config/custom_provider.go) is rejected here exactly as
+// it is dropped from the spawn dropdown in /api/info (misc_handlers.go).
+//
+// Kept in sync with web/src/app/spawn-panel.ts's injectCustomProviderOptions
+// and with the native <option> values the spawn form already ships with —
+// this is the check plan_provider-user-config.md's C2 needed to actually let
+// a custom provider spawn, not just appear in the dropdown (敵対レビュー
+// 2026-08-31 Finding 1: this switch used to be a fixed built-in list only).
+func (s *Server) validSpawnProvider(provider string) bool {
+	switch provider {
+	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code", "shell":
+		return true
+	}
+	s.cfgMu.Lock()
+	custom := s.cfg.CustomProviders
+	s.cfgMu.Unlock()
+	for _, p := range config.EffectiveCustomProviders(custom) {
+		if p.ID == provider {
+			return true
+		}
+	}
+	return false
+}
+
+// validGridAIProvider reports whether provider is valid as the AI half of
+// handleSpawnGrid's "ai+shell" preset: any provider validSpawnProvider
+// accepts, except "shell" itself (that half of the pair is fixed to shell
+// sessions already, so allowing "shell" here would be a self-referential no-op).
+// Built-in providers, and now custom_providers entries too
+// (plan_custom-provider-spawn-execution.md C2), both qualify.
+func (s *Server) validGridAIProvider(provider string) bool {
+	return provider != "shell" && s.validSpawnProvider(provider)
+}
+
+// resolveSpawnModel decides the --model value handleSpawn passes downstream.
+// A custom provider gets none: built-in per-provider args/env injection
+// (RouteForModel, Ollama/LM Studio routing, ANTHROPIC_*/OPENAI_* presets)
+// only makes sense for the providers many-ai-cli knows the shape of, and
+// none of it is meant to reach an arbitrary user CLI (decision 2,
+// plan_custom-provider-spawn-execution.md). Extracted as its own function so
+// this suppression is unit-testable without spawning a real wrap process.
+func resolveSpawnModel(model string, isCustomProvider bool) string {
+	if isCustomProvider {
+		return ""
+	}
+	return strings.TrimSpace(model)
 }
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
@@ -214,19 +366,41 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		Utf8Session     bool   `json:"utf8_session"`
 		IsolateWorktree *bool  `json:"isolate_worktree"`
 		WorktreeCleanup string `json:"worktree_cleanup"`
+		// Delegation は「子セッションへ委譲できることを AI に伝える」の指定。
+		// nil は「画面が指定しなかった」で、config の user_prefs.spawn.delegation_auto を使う
+		// （isolate_worktree と同じ扱い）。委譲できるかどうかではなく、AI が知るかどうかを
+		// 決めるだけ。正本は internal/wrapper/delegation.go の冒頭。
+		Delegation *bool `json:"delegation"`
+		// SubscriptionProfileID は使用するサブスクリプション profile。
+		// 省略・空文字は「Default CLI login」で、従来のリクエストと同一の挙動になる。
+		SubscriptionProfileID string `json:"subscription_profile_id"`
 		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
 		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
 		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
 		Orchestration      bool                                    `json:"orchestration"`
 		OrchestrationRoles map[string]*orchestrationRoleAssignment `json:"orchestration_roles"`
+		// InitialPrompt (plan_session-handoff-board_c4_prompted-spawn.md C1):
+		// 画面から渡す最初の指示。空文字（省略）は「従来どおり何も注入しない」で、
+		// この分岐に一切入らない。配送は spawn-child が使っている
+		// injectInitialPrompt を共有する（新しい配送方式を作らない）。
+		InitialPrompt string `json:"initial_prompt"`
+		// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3):
+		// 引き継ぎ元セッションの ID。看板 UI からの起動でのみ渡され、それ以外の
+		// /api/spawn 呼び出しは省略（0）のままで従来と 1 バイトも変わらない。
+		HandoffFrom int `json:"handoff_from"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if body.Provider != "claude" && body.Provider != "codex" && body.Provider != "copilot" && body.Provider != "cursor-agent" && body.Provider != "opencode" && body.Provider != "grok" && body.Provider != "shell" {
+	if !s.validSpawnProvider(body.Provider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
+	// custom provider かどうかは以降で何度か使う（subscription 早期拒否・
+	// model/route 抑止）。同じ判定を s.cfgMu 越しに何度も取らないよう1回だけ引く。
+	s.cfgMu.Lock()
+	isCustomProvider := s.cfg.IsCustomProviderID(body.Provider)
+	s.cfgMu.Unlock()
 	validPermModes := map[string]bool{
 		"": true, "default": true, "plan": true,
 		"acceptEdits": true, "auto": true, "bypassPermissions": true,
@@ -250,6 +424,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !validWorktreeCleanup(body.WorktreeCleanup) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid worktree cleanup policy")
+		return
+	}
+	if body.HandoffFrom < 0 {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid handoff_from")
 		return
 	}
 	cwd := body.CWD
@@ -284,6 +462,23 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// subscription profile は起動処理へ入る前に解決する。存在しない / 無効化された
+	// profile を指定された場合は 400 で止め、**既定ログインへ黙って倒れない**。
+	// 誤ったアカウントで走ることの方が、起動できないことより重い。
+	if strings.TrimSpace(body.SubscriptionProfileID) != "" && body.Provider == "shell" {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "shell sessions do not use subscription profiles")
+		return
+	}
+	if strings.TrimSpace(body.SubscriptionProfileID) != "" && isCustomProvider {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "custom providers do not use subscription profiles")
+		return
+	}
+	subEnv, _, subErr := s.subscriptionLaunch(body.Provider, body.SubscriptionProfileID)
+	if subErr != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_subscription", errorDetail("subscription profile error", subErr))
+		return
+	}
+
 	// P-33 C2: ordinary sessions can opt into a dedicated worktree. Keep the
 	// metadata in the existing pending-registration path so the session is
 	// associated with the isolated directory only after its wrapper connects.
@@ -297,6 +492,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	if cleanupPolicy == "" {
 		cleanupPolicy = s.cfg.UserPrefs.Spawn.WorktreeCleanup
+	}
+	delegation := s.cfg.UserPrefs.Spawn.DelegationAuto
+	if body.Delegation != nil {
+		delegation = *body.Delegation
 	}
 	s.cfgMu.Unlock()
 	cleanupPolicy = effectiveWorktreeCleanup(cleanupPolicy)
@@ -361,6 +560,28 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		orchestrationID = s.reserveOrchestrationConductor(body.Label, roles)
 	}
 
+	// C1 (plan_session-handoff-board_c4_prompted-spawn.md): initial_prompt が
+	// 空文字なら spawnPendingLabelForInitialPrompt が "" を返し、この if に
+	// 入らない。label の生成も pending への書き込みも一切起きないので、
+	// 従来の /api/spawn（initial_prompt を知らない呼び出し元）と 1 バイトも
+	// 挙動が変わらない。
+	initialPrompt := sanitizeSpawnInitialPrompt(body.InitialPrompt)
+	if lbl := spawnPendingLabelForInitialPrompt(body.Label, initialPrompt, time.Now()); lbl != "" {
+		body.Label = lbl
+		s.orchestration.mu.Lock()
+		// isolate_worktree や orchestration=true が同じ label で既に pending
+		// entry を作っていることがあるので、reserveOrchestrationConductor と
+		// 同じく上書きせずマージする。
+		meta := s.orchestration.pending[body.Label]
+		meta.InitialPrompt = initialPrompt
+		meta.HandoffFrom = body.HandoffFrom
+		if meta.SpawnedAt.IsZero() {
+			meta.SpawnedAt = time.Now()
+		}
+		s.orchestration.pending[body.Label] = meta
+		s.orchestration.mu.Unlock()
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		cleanupIsolated()
@@ -368,7 +589,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wrapArgs := []string{"wrap", body.Provider}
-	resolvedModel := strings.TrimSpace(body.Model)
+	resolvedModel := resolveSpawnModel(body.Model, isCustomProvider)
 
 	if body.Label != "" {
 		// --label=value 形式で渡す（空白区切りだと value が次フラグに化ける可能性がある）。
@@ -385,8 +606,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		hubPort := s.currentHubPort()
 		cmd := exec.Command(exe, wrapArgs...)
 		cmd.Dir = cwd
-		cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
-			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+		cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 		}
@@ -518,6 +738,20 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		if resolvedModel != "" {
 			wrapArgs = append(wrapArgs, "--model", resolvedModel)
 		}
+	case "command-code":
+		// 全許可（wrapper 側で --yolo に変換される）は Claude / OpenCode と同じく確認必須。
+		// spawnWrappedSession の default 分岐と同じ判定を HTTP 経路にも置く。
+		risk := evaluateBypassPermissionRisk(body.PermissionMode)
+		if risk.HighRisk && !body.RiskConfirmed {
+			writeJSONError(w, http.StatusBadRequest, "risk_confirmation_required", "risk confirmation required")
+			return
+		}
+		if resolvedModel != "" {
+			wrapArgs = append(wrapArgs, "--model", resolvedModel)
+		}
+		if body.PermissionMode != "" && body.PermissionMode != "default" {
+			wrapArgs = append(wrapArgs, "--permission-mode", body.PermissionMode)
+		}
 	}
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
@@ -542,8 +776,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	hubPort := s.currentHubPort()
 	cmd := exec.Command(exe, wrapArgs...)
 	cmd.Dir = cwd
-	cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
-		fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+	cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
+	// 画面の指定と config 既定を Hub 側で解決し、wrapper へは結論だけを渡す
+	// （判定を 2 箇所に置かない）。0 も明示して、env が残った環境で意図せず ON にならないようにする。
+	if delegation {
+		cmd.Env = append(cmd.Env, wrapper.DelegationEnvName+"=1")
+	} else {
+		cmd.Env = append(cmd.Env, wrapper.DelegationEnvName+"=0")
+	}
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
@@ -555,6 +795,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
 		s.logger.Debug("spawn: env preset applied",
 			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
+	}
+	if len(subEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
+		// キー名のみ出す（値はディレクトリパスと profile ID だが、env ダンプの
+		// 習慣を作らないため envKeyList を通す）。
+		s.logger.Debug("spawn: subscription profile applied",
+			"provider", body.Provider, "keys", envKeyList(subEnv))
 	}
 	// Windows ConPTY (go-pty) は wrap プロセスの std handles が未設定だと
 	// claude.exe / codex の起動に失敗してすぐ disconnect する。stdin は
@@ -714,15 +961,12 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// AI provider バリデーション（ai+shell プリセット時のみ使用）
+	// AI provider バリデーション（ai+shell プリセット時のみ使用）。
 	aiProvider := body.Provider
 	if aiProvider == "" {
 		aiProvider = "claude"
 	}
-	validAIProviders := map[string]bool{
-		"claude": true, "codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true,
-	}
-	if body.Preset == "ai+shell" && !validAIProviders[aiProvider] {
+	if body.Preset == "ai+shell" && !s.validGridAIProvider(aiProvider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")
 		return
 	}
@@ -777,8 +1021,7 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 		wrapArgs := []string{"wrap", spec.provider, "--label=" + spec.label}
 		cmd := exec.Command(exe, wrapArgs...)
 		cmd.Dir = cwd
-		cmd.Env = append(sanitizeEnv(os.Environ()), "MANY_AI_CLI=1",
-			fmt.Sprintf("MANY_AI_CLI_HUB_PORT=%d", hubPort))
+		cmd.Env = hubSpawnEnv(os.Environ(), hubPort, exe)
 		if s.parentShell != "" {
 			cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 		}
@@ -869,6 +1112,70 @@ func (s *Server) setLastModel(provider, model string) error {
 	s.cfg.UserPrefs.Spawn.LastModel[provider] = model
 	s.cfgMu.Unlock()
 	return s.persistConfig()
+}
+
+// spawnNeedsRiskConfirmation は「ユーザーの確認が取れるまで起動してはいけない
+// spawn か」を返す。usage probe は Hub が内部で起こす使い捨てセッションで、
+// 確認を出す相手（押した人）が居ないため対象外にする。ここを通すと
+// RiskConfirmed が立たないまま必ず risk confirmation required で落ちる。
+// サブスクリプションログインの spawn が provider 別分岐へ入らないのと同じ扱い。
+func spawnNeedsRiskConfirmation(spec spawnWrappedSpec, confirmationRequired bool) bool {
+	if spec.UsageProbe {
+		return false
+	}
+	return confirmationRequired && !spec.RiskConfirmed
+}
+
+// spawnRecordsLastModel は spawn したモデルを「次回の既定モデル」として
+// 保存してよいかを返す。usage probe のモデル（低コストの固定値）はユーザーの
+// 選択ではないので保存しない。保存すると次にユーザーが自分のモデルで起動する
+// ときに「モデル変更＝高リスク」の確認が出る。
+func spawnRecordsLastModel(spec spawnWrappedSpec, resolvedModel, effectiveRoute string) bool {
+	if spec.UsageProbe || strings.TrimSpace(resolvedModel) == "" {
+		return false
+	}
+	return !isLocalRoute(effectiveRoute)
+}
+
+// spawnInitialPromptMaxLen bounds the initial_prompt a plain /api/spawn can
+// carry. jsonBodyMaxBytes already caps the whole request; this caps the
+// prompt itself, the same way gitCommitBodyMaxLen caps a commit body
+// (git_commit.go) — a separate, smaller ceiling on the one free-text field
+// that gets typed into a running CLI.
+const spawnInitialPromptMaxLen = 8192
+
+// sanitizeSpawnInitialPrompt trims, strips control bytes, and caps the length
+// of a spawn request's initial_prompt. It reuses sanitizeInjectText — the
+// same filter the spawn-child injection path (orchestration.go) runs before
+// writing to a PTY — so both callers agree on what "safe to inject" means
+// instead of each carrying its own filter. An empty or all-whitespace input
+// returns "", which callers treat as "no prompt was requested" (plan_
+// session-handoff-board_c4_prompted-spawn.md C1: empty must not change
+// spawn behavior at all).
+func sanitizeSpawnInitialPrompt(raw string) string {
+	s := strings.TrimSpace(sanitizeInjectText(raw))
+	if s == "" {
+		return ""
+	}
+	return truncateUTF8Bytes(s, spawnInitialPromptMaxLen)
+}
+
+// spawnPendingLabelForInitialPrompt decides the label to key
+// s.orchestration.pending by when a spawn request carries a non-empty
+// initial prompt, generating one if the caller (and no earlier step, such as
+// isolate_worktree or orchestration=true) already assigned a label. It
+// returns "" when there is nothing to deliver, in which case the caller must
+// leave label handling and the pending map untouched entirely — this is the
+// single choke point that keeps an empty initial_prompt byte-for-byte
+// identical to a request that never mentions the field.
+func spawnPendingLabelForInitialPrompt(label, initialPrompt string, now time.Time) string {
+	if initialPrompt == "" {
+		return ""
+	}
+	if label != "" {
+		return label
+	}
+	return fmt.Sprintf("spawn-%d", now.UnixNano())
 }
 
 // spawnValidModelLabel は model / label / label_prefix 値が安全かを検証する。

@@ -10,6 +10,682 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-09
+
+### Added
+- **Added the on-disk record store for the upcoming session handoff board**
+  (`internal/handoff`). Nothing writes to it yet from a running session — this
+  is only the foundation: a fixed, allowlisted record type and a jsonl append
+  path at `~/.many-ai-cli/handoff/s<id>.jsonl`. What can go into a record is
+  decided by the Go type, not by scanning free text afterward — there is no
+  field a PTY transcript, a file's contents, a diff, or an environment
+  variable could be put into; the one free-text field is passed through the
+  existing secret-masking before it is written.
+- Handoff records are retained for 14 days by default (`handoff.retention_days`)
+  and cleaned up by the Hub's existing periodic maintenance sweep regardless of
+  whether the feature is enabled; `handoff.enabled: false` stops any new
+  writes. `many-ai-cli doctor` now reports the handoff directory's file count
+  and oldest file age.
+- **The handoff board now records intent, not just what finished.** The DONE
+  summary format gains two optional lines — `次: <next step>` and
+  `未検証: <unverified assumption>` — that a session can add to its own
+  completion marker; when present, the Hub writes them as a separate
+  `kind=intent` line so a successor reads what to do next, not only what was
+  done. Neither line is required and nothing changes if you never write them.
+- **Turn-by-turn summaries are now a settings toggle** (`handoff.intent_mode`,
+  Settings → Session → "Handoff recording"). The default (`done-only`) records
+  only completion summaries and intent lines, at no extra cost. Choosing "Also
+  record a summary of every turn" (`turn-summary`) asks the session itself for
+  a one-line summary after every turn, using the same injected-prompt +
+  marker mechanism as the Git tab's AI commit message, and writes it as
+  `kind=turn_summary`; it spends the session's own tokens on every turn, so it
+  stays off by default.
+
+- **A new session can now be launched with an initial instruction from the
+  screen.** The new-session panel has an "Initial instruction (optional)"
+  textarea; whatever is typed there is delivered to the freshly started CLI
+  the same way `orchestrate spawn`'s `--initial-prompt` already is, once the
+  session's input is actually ready (the same fix that stopped the confirming
+  Enter from being dropped on Claude children applies here too). Leaving it
+  empty launches exactly as before. This is a general-purpose way to start a
+  session with a task already in hand — pass a plan file's path, say — not
+  specific to any one workflow.
+
+- **The handoff board can now hand a stuck session off to a new one.** A
+  one-screen markdown is built from a session's own board (identity, recent
+  completions, recent changes, its intent lines) and, once you review it, used
+  as the initial instruction for a brand-new peer session on a different
+  provider — never the same provider's other subscription profile, and never
+  started automatically. Two entry points: a corner notice when a session's
+  remaining quota drops below a threshold (`handoff.notify_remaining_percent`,
+  default 10%), and a "handoff list" button (↪) in the session sidebar that
+  reads the on-disk board directly, so it still works after the Hub restarts
+  or the original session has already ended. The successor's own board records
+  which session it continues; nothing about the two sessions is linked in the
+  UI beyond that.
+
+- **Orchestration children now wake their conductor only for actionable
+  events.** Routine progress defaults to a dashboard badge and no longer fans
+  out to sibling children. Completion, startup failure, timeout/idle warnings,
+  delayed spawn results, and the new `## QUESTION <role> session=<id>` marker
+  use an overwrite-free bounded FIFO, wait through approvals, active work,
+  modals, and Codex side threads, then deliver to the conductor's main
+  composer. Queue overflow keeps the full event on the board and delivers a
+  board reference instead of silently dropping it.
+
+- **The AI usage panel now has a close button.** The panel opened from the header
+  Usage button could only be dismissed by clicking outside it or pressing Escape.
+  It now carries a ✕ in its header, and the header sticks to the top so the
+  button stays reachable while scrolling a long panel. The button follows the
+  Settings → General "close buttons" side preference like every other panel
+  (`web/src/index.html`, `web/src/styles.css`, `web/src/app/settings.ts`).
+
+- **Spawn approval settings, subscription, worktree isolation, and delegation
+  are now remembered per AI, not shared across them.** The new-session form
+  used to keep one shared approval-setting memory, so picking
+  `bypassPermissions` for Claude could leak into Grok, and starting a Codex
+  session could silently erase Claude's remembered permission mode and
+  subscription. Each provider's approval settings, subscription pick, worktree
+  isolation, and delegation choice are now stored and restored independently,
+  and switching providers with the panel still open updates them live instead
+  of leaving the previous provider's values on screen. Turning "Remember" off
+  now clears all four for every provider, not just approval settings, and
+  nothing new is recorded while it stays off. The model field is unaffected —
+  it is still never pre-filled by design. High-risk launch confirmation still
+  appears every time.
+
+- **Orchestration relay loop.** `internal/hub/relay.go`, `relay_worktree.go`,
+  `relay_store.go`, and `relay_api.go` run each plan C through implementation,
+  review, and fix with explicit round limits, optional strong escalation, and
+  `many-ai-cli orchestrate relay` in `internal/orchestrate/orchestrate.go`.
+  The dashboard dialog and timeline live in `web/src/app/relay-dialog.ts` and
+  `web/src/app/orchestration-dashboard.ts`; dedicated worktrees, `relay.json`
+  restore/resume, relay notifications, and no-auto-merge constraints are part
+  of the initial implementation.
+- **Tabs can be reordered by dragging.** Tabs in the top tab bar move with a
+  drag, so frequently used sessions can sit at the left end while rarely used
+  ones stay out of the way on the right. The order is stored per browser and
+  survives a reload. Reordering is also available from Settings → General,
+  which can restore the default order.
+
+- **Every part of the control layout can be placed on either side
+  independently, and the approval popup can dock to the left or right edge of
+  the terminal.** Previously one switch moved everything together. Settings →
+  General now offers separate selectors for the session card column, the input
+  bar tools, and every panel close button (✕), each keeping its pre-update
+  position unless you change it. The approval / question popup gains a new
+  option to stand as a vertical column on the right or left side of the
+  terminal instead of hugging the bottom edge; the inner edge of the column is
+  draggable to widen it, and double-clicking that edge restores the default
+  width. On phone widths the card column stays as the left drawer and the
+  popup always docks at the bottom, exactly as before. The ⇄ button in the
+  input bar still works as a shortcut and flips all of these parts to the
+  opposite side at once.
+
+- **Extra subscriptions, where the official CLI lets you stack them.** The
+  dashboard already ran Claude Code, Codex CLI, GitHub Copilot CLI, Cursor
+  Agent CLI, Grok Build CLI, and opencode side by
+  side. What it could not do was point two sessions of the *same* CLI at two
+  different monthly plans you already pay for: each official CLI remembers one
+  default login. Settings → **Subscriptions** registers several accounts per
+  provider, and the spawn form gains a **Subscription** selector once a
+  provider has two or more, so two sessions can run on two accounts at the
+  same time. This is not an API key router: it spreads sessions across plans
+  you already pay for.
+- **Role-based orchestration and relay spawns can pick a subscription, not
+  just a provider.** The orchestration launch panel's role table and the
+  relay dialog's role table each gain a Subscription selector next to CLI and
+  Model, shown only when the chosen provider has two or more registered
+  profiles. Hub-side, `orchestrationRoleAssignment` now carries an optional
+  `subscription` and `resolveChildSubscription` resolves it ahead of the
+  parent-provider and global-default fallbacks that already existed.
+
+  Stacking extra plans works for Claude Code (`CLAUDE_CONFIG_DIR`), Codex
+  (`CODEX_HOME`), Grok (`GROK_HOME`), and opencode (`XDG_DATA_HOME`). GitHub
+  Copilot CLI and Cursor Agent CLI stay on a single login and are recorded as
+  **unsupported**: Copilot keeps its token in the OS credential store and
+  Cursor in `~/.cursor/cli-config.json`, and neither is relocatable by an
+  environment variable, so two sessions would silently share one account.
+  Registering a profile for them is refused rather than half-working.
+
+  Each profile is a directory under `~/.many-ai-cli/subscriptions/<provider>/<id>`
+  that the official CLI is pointed at through its own environment variable.
+  Login runs the vendor's own command (`claude auth login`, `codex login`, …)
+  inside a short-lived session; **many-ai-cli never reads, writes, parses, or
+  stores the credential**, and `config.yaml` holds only the id, display name,
+  plan label, and enabled flag. `auto` picks an enabled profile in turn and
+  records the profile that was actually chosen.
+
+  The **Usage** menu is the breakdown of that stack, not a separate product.
+  Opening it shows remaining quota per profile for Claude (5h / 7d; a
+  one-turn probe on demand when nothing is running), Codex (from the local
+  rollout JSONL), and Grok (from the local billing log). Copilot, Cursor, and
+  OpenCode stay as links to the vendor page — there is no remaining figure to
+  read. Numbers are fetched when you open the menu, not on a timer.
+
+  Nothing changes for anyone who does not open the new Settings section:
+  a spawn without a profile builds a byte-for-byte identical environment
+  (`internal/subscription/`, `internal/hub/subscription*.go`,
+  `internal/hub/subscription_usage.go`, `internal/config/subscription.go`,
+  `web/src/app/subscriptions.ts`, `web/src/app/usage-panel.ts`).
+
+- **Spawn can start Grok, Copilot, and Cursor Agent in auto or YOLO mode.**
+  The new-session form already had Claude's permission dropdown, Codex's
+  sandbox/approval pair, and OpenCode's full-allow checkbox. Grok, Copilot,
+  and Cursor Agent launched in each CLI's default ask mode even though the
+  wrapper already knew how to pass a bypass flag. The same approval-mode
+  select now appears for those three: **auto** maps to Grok
+  `--permission-mode auto`, Copilot `--autopilot`, and Cursor
+  `--auto-review`; **full access** maps to Grok `bypassPermissions`
+  (always-approve / `--yolo`), Copilot `--allow-all`, and Cursor `--force`.
+  Plan and acceptEdits stay Claude/Grok-only, because Copilot and Cursor do
+  not have those permission modes. Full access still asks for confirmation
+  before launch (`web/src/app/spawn-panel.ts`, `internal/wrapper/wrapper.go`,
+  `internal/hub/spawn_handler.go`).
+
+- **A long-running session now tells you how long, and whether it is actually
+  stuck.** Until now a session showed one fixed "Long-running" badge after five
+  minutes and never changed again, so a genuinely heavy turn and a wedged one
+  looked identical for as long as you cared to wait. The badge now carries the
+  elapsed time (`⚠ Long-running 38m`) and escalates at fifteen minutes.
+
+  Separately, the Hub watches the provider's own transcript — Codex's rollout
+  JSONL, Claude Code's transcript, and so on — and switches the badge to
+  **Not progressing** once that file has stopped growing for ten minutes.
+  PTY output cannot tell you this on its own: Codex redraws its
+  `Working (36m 09s)` counter every second, so a session that has produced
+  nothing for half an hour still looks busy from the terminal stream alone.
+  A transcript only grows when the turn actually advances.
+
+  Only the file's size is read, never its content — transcripts can contain
+  prompts, source fragments, and credentials (`internal/hub/transcript_stall.go`,
+  `web/src/app/longproc.ts`).
+
+- **Subscription profiles mirror a linked rule file instead of copying it.**
+  When your default `CLAUDE.md` (or `AGENTS.md` for Codex/Grok) is itself a
+  symlink, the profile now gets a symlink to the same resolved target so
+  editing the original reaches every profile with no re-seed; it falls back
+  to a copy, recorded as degraded, when the link cannot be created
+  (`internal/subscription/seed.go`'s `SeedMirrorFile`).
+- **Which providers can report remaining quota is now a single table**
+  (`internal/subscription/usage_source.go`) instead of provider names
+  hand-written into several switch statements. Adding a provider means adding
+  one row there plus its own file parser, not hunting every place a provider
+  id was compared. No behavior changes: the Usage panel's JSON is unaffected.
+  We also checked whether Cursor Agent CLI exposes remaining quota anywhere
+  locally — it does not (checked on the Free tier: no usage/quota field in its
+  `about`/`status` output, and no such file under its config directory), so it
+  stays undetectable, same as before.
+
+
+- **Command Code can be launched from the Hub — terminal and spawn only for
+  now.** Command Code (`command-code`) is the seventh CLI the wrapper knows
+  about: it appears in the spawn form and the provider dropdown, the
+  approval-mode select maps onto its own flags (plan → `--permission-mode plan`,
+  auto / acceptEdits → `--auto-accept`, full access → `--yolo`),
+  `many-ai-cli doctor` reports whether it is installed and signed in, and it
+  ships its own slash-command and approval-pattern resource files. **Approval
+  integration is not validated yet**: the detector still needs PTY captures of
+  the real approval prompt, so treat approvals in a Command Code session as
+  experimental and answer them in the terminal if the action bar does not pick
+  them up. Its OS aliases `cmd` / `cmdc` are deliberately not used as the
+  provider id or in `shell-init`, because `cmd` collides with the Windows
+  shell.
+
+- **Any other AI CLI can be registered by hand.** `custom_providers:` in
+  `config.yaml` adds an arbitrary command to the spawn dropdown; it starts and
+  attaches through the PTY exactly like a built-in provider and is included in
+  approval detection, with an optional `approval_pattern_source` for that CLI's
+  own trigger phrases. There is no "Add provider" button anywhere in the UI —
+  editing `config.yaml` is the only way in and the only way back out — and
+  nothing built-in is attached to a custom provider: no `--model`, no
+  permission-mode or sandbox flags, no vendor environment presets, no Ollama
+  routing, no subscription profile. Leave the key out, the default, and nothing
+  changes. The terms-of-service review behind the built-in list does not extend
+  to whatever you point it at; that check is yours
+  (`internal/config/custom_provider.go`, `README.md`).
+
+- **Delegating to a child session now works from an ordinary session, on five of
+  the six built-in CLIs.** It used to be reachable only from an orchestration
+  conductor. The guidance that tells a session it *can* delegate also moved out
+  of `approval-rules.md` — that file is the format contract between the Hub and
+  the CLI, and a feature blurb there costs every session's resident context
+  permanently — into a per-provider delivery path chosen by what each CLI
+  actually accepts, checked by running `--help` against all six
+  (`internal/wrapper/approval_rules.go`).
+
+- **Terminal color is a setting now, not a config-file edit.** Settings →
+  Session offers force / inherit / off (`hub.terminal_color`, default force).
+  "Stop overriding" and "no color" are different outcomes — dropping the
+  override still leaves color on when the launching environment has no
+  `NO_COLOR` — so the choice is three-way rather than a checkbox. `TERM` /
+  `COLORTERM` are still corrected in all three modes, because that is a
+  statement about the terminal's capability rather than a preference. The
+  setting takes effect for sessions started after the change, since the
+  environment is fixed at launch (`internal/wrapper/env_color.go`).
+
+- **Approvals are recorded in a ledger, so a dropped broadcast is recoverable
+  and history is visible.** A pending approval used to exist only in the memory
+  of the browser tab that received the live message; if that tab missed it,
+  neither the Hub nor disk held anything to restore from, and no screen showed
+  what had been approved earlier. The `approvals` table in the session store is
+  now written by the marker path as well as the VT path, and read back for
+  restore and for history, carrying provider, candidate key, source epoch, and
+  the raw block. Suppressed malformed blocks are not written.
+
+- **Adding a second subscription for the same provider asks you to read the
+  caveats first.** The warnings about stacking plans lived only in the README
+  while the screen said nothing, even though the mobile-connect flow already
+  gates a comparable risk. The gate appears once, only when a provider is about
+  to get its second profile — the same boundary at which the spawn form's
+  subscription selector appears. Its wording is built from what the README
+  already says, and it does not claim the practice is permitted: holding several
+  plans is not itself forbidden, switching after hitting a limit is a separate
+  matter judged by the vendor with no refund, official paid capacity comes
+  first, and many-ai-cli never switches automatically on remaining quota. The
+  acknowledgement is kept in `localStorage`.
+
+- **The workflow progress modal shows what is running and what came back.** When
+  the task id resolves, phases and agents are listed with model name, elapsed
+  time, token count, the most recent tool operation, and a result preview; the
+  `result` and `logs` fields are deliberately not read, at the type level.
+  Sessions whose task id cannot be resolved fall back to the previous VT /
+  journal display.
+
+- **Every entry in the send-history modal has a copy button.** Clicking anywhere
+  on a row already copied it, but nothing on screen said so — the only hint was
+  a tooltip. Each row now carries a copy button in its meta line that turns into
+  a check mark for the same 600 ms as the row flash, matching the chat bubble's
+  hover action. Clicking the row still copies, and rows that carry an attachment
+  but no text do not get a button.
+### Changed
+- **The spawn cwd subfolder dropdown now sorts folders by name, with favorites
+  pinned to the top.** Previously, a trailing path separator listed subdirectories
+  in `os.ReadDir` byte order (uppercase before lowercase), so `PlainSheet` appeared
+  above `ai-audit-prompts`. Favorites stay first and both groups use the same
+  basename `localeCompare` as the favorites section. The web folder browser uses
+  the same name order (`web/src/app/spawn-panel.ts`).
+- **The README now spells out what `orchestration.child_full_bypass` actually grants.**
+  The default (`true`) starts codex children with `--sandbox danger-full-access
+  --ask-for-approval never` and the other providers in their own bypass-permissions
+  equivalent; a conductor's spawn is still gated by `orchestration.spawn_confirm_mode`
+  (default `on`) while relay children skip that confirmation by design. Behavior is
+  unchanged — only the documentation was vague (`README.md`, `README.ja.md`).
+
+- **Close buttons all draw the same glyph.** Some close, dismiss, and clear
+  buttons used `×` (U+00D7, the multiplication sign) while others used `✕`
+  (U+2715), so they did not line up when they appeared next to each other. They
+  all use `✕` now. Dimension labels such as `2×2` are unaffected. The files
+  preview also stopped identifying its own close button by that glyph, which
+  would have broken silently on this change (`web/src/index.html`,
+  `web/src/app/files-view.ts`, `path-links.ts`, `settings.ts`,
+  `bug-report-modal.ts`, `mobile-approval-sheet.ts`, `spawn-panel.ts`).
+
+- **The Usage menu now makes room for multiple subscription profiles on wide
+  screens.** From 900px upward, the menu expands to 840px, splits provider
+  links into two columns, and places each provider's usage windows side by
+  side; narrow screens retain the compact single-column layout
+  (`web/src/index.html`, `web/src/styles.css`, `web/src/app/usage-panel.ts`).
+
+- **The remote-access SSH sample now uses `~/.ssh/id_ed25519`.** The Windows
+  walkthrough spelled the key out as a full Windows user-profile path, so every
+  reader had to edit the line before the block would work. OpenSSH expands `~`
+  in `IdentityFile` on Windows as well (checked against
+  OpenSSH_for_Windows_9.5p2), so the sample is copy-paste ready as written and
+  now reads the same on every platform (`README.md`, `README.ja.md`).
+
+- **The Windows shortcut created by `setup` is now named "MANY-AI-CLI".**
+  0.7.0 wrote `Many AI Hub.lnk` on the desktop. The same tray launcher is
+  now `MANY-AI-CLI.lnk` on the desktop and in the Startup folder. Re-running
+  `setup` removes the old name so the two do not sit side by side.
+  `uninstall` still deletes the old name if it is left behind
+  (`internal/setupcmd/setup_windows.go`, `internal/uninstall/uninstall_windows.go`).
+
+- **The Windows tray now actually stays resident, and wears the app's own icon.**
+  As shipped in 0.7.0 the tray only appeared if you re-ran `setup` and then
+  double-clicked the desktop shortcut again after every sign-in, which is not
+  what "resident" means. `setup` now also writes the same **"MANY-AI-CLI"**
+  shortcut into your Startup folder — the Startup folder rather than a registry
+  `Run` key, so you can find and switch it off from Explorer or Task Manager.
+  The icon in the notification area is the many-ai-cli icon loaded from the
+  executable's own resource at the system small-icon size, instead of the
+  generic Windows application icon. Because starting at sign-in and clicking the
+  desktop icon now overlap, a named mutex keeps a single tray process alive;
+  a second launch opens the Hub and exits rather than adding a duplicate icon.
+  `uninstall` removes the sign-in entry (`internal/tray/`,
+  `internal/setupcmd/setup_windows.go`, `internal/uninstall/`).
+
+- **Approval-waiting session cards now take visual priority over secondary metadata.**
+  The card and its flag badge share one approval-waiting condition, with a tinted
+  card background, filled flag badge, and the existing reduced-motion-aware pulse.
+  Normal long-running, 1M, and branch metadata no longer use filled warning chips,
+  while severe and stalled long-running states keep their danger treatment
+  (`web/src/app/session-list.ts`, `web/src/styles.css`).
+
+- **`many-ai-cli doctor` now flags a stale or unlinked rule-file copy.** A
+  profile whose `CLAUDE.md` / `AGENTS.md` stayed a plain copy while the
+  default became a symlink, or whose copy has drifted from the current
+  default, gets a WARN naming the profile and file — never the contents
+  (`internal/doctor/subscriptions.go`'s `subscriptionRuleFileCheck`). The
+  blocks many-ai-cli writes into that file itself — the approval-rules import
+  line and the delegation block — are stripped before the comparison, so a
+  profile the Hub has already written to is not reported as drifted
+  (`internal/wrapper/approval_rules.go`'s `StripInjectedBlocks`).
+
+
+- **The sidebar is one tree, and a child session sits under its parent's
+  project.** Orchestration children could land in a different group from their
+  parent, and children from unrelated repositories shared one box, because a
+  project had no id and was guessed from the last folder name of the cwd — a
+  relay worktree ends in `.../<id>/relay`, so every one of them landed in a box
+  named "relay". The Hub now hands out a `project_id` resolved from the
+  repository's common Git directory, so a worktree resolves to the same project
+  as its main checkout. Placement is computed by one pure function; user actions
+  change sibling order and collapse state only, never which box a session
+  belongs to (`web/src/app/sidebar-tree.ts`).
+
+- **Scrolling a full-screen TUI moves by lines, not by pages.** Alternate-screen
+  scrolling sent PageUp / PageDown, which jumped 13 rows at a time on a 35-row
+  terminal, so a code block spanning the top or bottom edge could not be brought
+  fully into view to select it. The Hub now reads the CLI's mouse tracking out
+  of the PTY stream itself — xterm cancels tracking locally to protect
+  selection, so its own mode flags cannot be used for this — and sends SGR wheel
+  events, falling back to X10 and then to PageUp / PageDown. The pseudo scroll
+  rail moved from pages to notches to match, and alternate-screen providers now
+  get the same rail Codex already had.
+
+- **Session cards are two lines, and the model name is shown raw.** The card no
+  longer interprets each provider's model naming; it shows the provider's own
+  string, elided with the full value in a tooltip, next to the automatic title
+  and the state icon in a fixed two-line layout.
+
+- **The Hub menu button is green while the dashboard is exposed externally.**
+  Whether `tailscale serve` was running could only be seen by opening the
+  dropdown. The button's own background, border, and text color now follow that
+  state.
+### Fixed
+- **A `[MANY-AI-CLI]` question in a Claude or Codex session no longer disappears
+  from the dashboard until you press ↻.** The Hub delivers these questions from
+  the CLI's own transcript, which can run more than a minute ahead of what the
+  terminal has painted. The browser then judged "is this still on screen?" by
+  matching option labels against the terminal text, and Ink's partial repaints
+  made that check fail, so it closed an unanswered question and nothing
+  re-delivered it. For transcript-sourced questions the browser now leaves
+  closing to the Hub: the Hub closes the question when the transcript shows
+  your next message (including answers typed straight into the terminal) and
+  tells every open dashboard. Switching to a session or reconnecting also
+  restores a still-pending question from the approval ledger, the same path the
+  ↻ button already used. Marker approvals answered from the dashboard are now
+  recorded as resolved in the approval ledger; previously the lookup used a
+  browser-side signature that never matched, so every such row stayed
+  `pending` (`internal/hub/approval_marker_transcript.go`,
+  `internal/hub/approval_native.go`, `web/src/app/approval.ts`).
+- **Claude child sessions no longer stall with their first instruction sitting
+  unsent in the composer.** The Hub injected the initial prompt after a 300 ms
+  output lull, which on Claude Code v2.1.263 happens *before* the CLI has even
+  drawn its composer or enabled bracketed paste; the text was picked up once the
+  CLI started reading stdin, but the confirming Enter was lost, and the startup
+  watchdog then killed the child 60 s later with a message blaming the CLI's
+  model or auth settings. The Hub now waits for Claude Code's composer footer
+  (`(shift+tab to cycle)`) before injecting, treats the prompt as delivered only
+  once it has left the composer, resends Enter exactly once if it has not, and
+  reports "still sitting in the composer" to the conductor instead of guessing
+  at auth. The startup-failure notice now states only what was observed (idle
+  seconds, no progress file, screen tail).
+- **The session database no longer grows without bound.** Every chunk of
+  terminal output was written as its own row in the `events` table, which on the
+  author's machine reached 4.7 GB and over 21 million rows even with the 7-day
+  retention sweep running. Past that size SQLite exceeded its 3-second timeout in
+  both directions: session events were dropped on write, and the session-history
+  API answered 500. Terminal output no longer creates `events` rows. Nothing is
+  lost — the readable text still goes to the `messages` table and the raw bytes
+  to `logs/sessions/*.log` and `*.jsonl`, and no product code read those rows.
+  Existing databases stay large until retention clears them; `/api/session-store/reset`
+  erases history immediately if you want the space back now
+  (`internal/sessionstore/store.go`).
+
+- **The Gemini ban precedent in the README named Google's own product as an
+  offender.** The terms-of-service warning cited "OpenClaw / OpenCode /
+  Antigravity" as third-party wrappers whose users were hit with `403 ToS`.
+  Antigravity is Google's agentic development platform, and it was the access
+  that got disabled, not the tool that caused it — the thread titles on
+  Google's forum read "Antigravity / Gemini Code Assist Disabled" and were
+  read as tool names. Checked against Google's own statement in
+  `google-gemini/gemini-cli` Discussion #20632 (2026-02-27): the violation is
+  harvesting or piggybacking on Gemini CLI's OAuth authentication, not
+  wrapping as such. Both READMEs now carry the narrower rule, the tools
+  actually named, and the reinstatement path (`README.md`, `README.ja.md`).
+
+- **Grok's native tool-permission card now becomes Hub approval buttons.**
+  Grok Build draws `1 (•) Yes, and don't ask again… / 2 (○) Yes, proceed /
+  3 (○) No, reject` instead of Claude's `1. Yes` numbered list, so the detector
+  never built options and the dashboard only showed the terminal radio (arrow
+  keys). The Go VT path and the web parser now treat that radio form as the
+  same 3-choice native approval as Claude (`internal/hub/approval_detector.go`,
+  `web/src/app/approval-parser.ts`, `resources/approval-patterns/grok.md`).
+
+- **Signing into a subscription no longer leaves a leftover `dist` session
+  group.** The login button started the vendor CLI (`grok login`,
+  `claude auth login`, …) in Hub's process working directory. When Hub itself
+  was launched from the build-output folder that holds `many-ai-cli.exe`, that
+  directory is named `dist`, so the session list grew a project group of that
+  name. After "Signed in", `grok login` stayed in standby and the card stayed
+  forever — dead-session auto-dismiss is 24 hours, and login was never marked
+  as the short-lived session the changelog already described. Login now runs
+  in `~/.many-ai-cli/subscription-login` and the Hub closes the session once
+  the vendor CLI finishes or prints a sign-in success line
+  (`internal/hub/subscription_login.go`, `internal/subscription/login_complete.go`).
+
+- **Waiting for child spawn approval in the browser no longer leads AI conductors into duplicate spawn loops.**
+  When a child session's spawn confirmation was left waiting in the browser past
+  the local CLI timeout, `many-ai-cli orchestrate spawn` exited with an error
+  suggesting "then retry", leading parent agents to re-submit the request and
+  encounter HTTP 409 Conflict after the child was launched. The default
+  client-side wait is extended from 3 to 5 minutes (overridable via
+  `MANY_AI_CLI_SPAWN_TIMEOUT`), and timeout errors now explicitly instruct the
+  caller not to retry, explaining that the child will start upon approval and
+  deliver its session ID via orchestration notification
+  (`internal/orchestrate/orchestrate.go`, `internal/orchestrate/orchestrate_test.go`).
+
+- **The Claude approval-rules import line now lands in the profile's own `CLAUDE.md`.**
+  For a session running under a subscription profile, the line was always
+  written to `~/.claude/CLAUDE.md`, which that session never reads because
+  `CLAUDE_CONFIG_DIR` points at the profile. The target is now resolved from
+  the session's registered config dir, then `CLAUDE_CONFIG_DIR`, then
+  `~/.claude`, and the same target is used when the line is removed at session
+  end or dismiss. A profile whose `CLAUDE.md` is a symlink to the default gets
+  the line once, not once per path
+  (`internal/hub/approval_handler.go`'s `claudeRulesPath`).
+
+- **Approval prompts are no longer suppressed after the TUI erases its previous
+  frame with ECH.** The Hub's VT mirror ignored `CSI n X` (erase characters), so
+  when Claude Code or Grok redrew a shorter approval block and cleared the
+  leftover rows with ECH, a fragment of the old closing marker stayed in the
+  mirror only. The extractor then took that stale marker as the end of the
+  block, the structure check rejected it as `marker_leak`, and the user saw a
+  suppression banner instead of the approval bar. Replaying the four dumps
+  recorded between 2026-09-01 and 2026-09-07 reproduced all three `marker_leak`
+  cases deterministically, and all three pass with ECH implemented
+  (`internal/hub/vt_buffer.go`'s `eraseChars`).
+
+- **The working-directory box now filters its folder list as you type.** Typing
+  a path separator listed that directory's subfolders, but the list vanished
+  the moment you typed the first letter of the folder you were heading for.
+  Characters after the last separator are now a filter over that same list:
+  `…\public\o` keeps the subfolder section and leaves the folders whose name
+  contains `o`, ordered prefix matches first, then favorites, then name, with
+  the matched part highlighted. Nothing is fetched again while you type — the
+  list already loaded for that parent is filtered in the browser. A bare drive
+  root (`D:\`) now lists its folders too; it previously sent `D:` to the Hub,
+  which is not an absolute path on Windows and was rejected. Paths shown in the
+  subfolder section are no longer repeated under Favorites or History.
+
+
+- **The Settings button shows the same open/close chevron as Usage and Hub.** It
+  was the only button in that header group without one, so nothing on screen
+  said it toggles a panel.
+
+- **A PWA launched from the iOS home screen no longer opens to an
+  `unauthorized` JSON body.** A cold launch sent `GET /` with neither token nor
+  cookie and then sat on the 401 response, and it reproduced immediately after a
+  full quit, so elapsed time was not the cause. Three things overlapped: the
+  manifest had no `start_url`, so the launch URL was whatever the address bar
+  held after the token had been stripped from it; the auth cookie was
+  `SameSite=Strict`, which does not ride a top-level navigation that starts
+  outside the browser; and the 401 body was JSON, so no front-end code ran to
+  recover with the token saved in `localStorage`. The cookie is now
+  `SameSite=Lax` — CSRF on non-GET requests is enforced by the existing Origin /
+  `Sec-Fetch-Site` check, not by the cookie attribute.
+
+- **Opening a session on a phone no longer raises the keyboard over the
+  transcript.** Focus was returned to the composer both when a session was
+  activated and whenever the field lost focus, so on a phone the soft keyboard
+  covered the lower half of the screen and there was no way to leave the field
+  to read. At 720px and below both focus paths are disabled; on a desktop the
+  composer is still focused the moment a session opens, as before.
+
+- **Reopening the send-history modal no longer loses older sends.** For
+  transcript-backed providers the restore path cleared the whole chat history
+  and rebuilt it from a windowed API, so anything already picked up by live
+  tailing that had since fallen outside the window was gone. The clear now
+  happens only for providers without transcript dedup; transcript-backed
+  sessions merge into the existing dedup path instead.
+### Security
+- **"Revoke all access" now disconnects dashboards that were already connected.**
+  Revoking rotated the token and PIN sessions but left open WebSocket
+  connections attached, so a browser that had the old dashboard open could keep
+  sending input and receiving output until it reconnected. UI registration,
+  the receive loop, broadcasts, and the queued-input path are now tied to an
+  authentication generation; a successful revoke advances it and closes every
+  existing UI connection. Wrapper connections are untouched, so running CLIs
+  are not interrupted (`internal/hub/auth_handlers.go`, `server.go`,
+  `ui_broadcast.go`).
+- **Files save compares the base mtime at full precision.** The conflict check
+  truncated both sides to whole seconds, so an external edit made in the same
+  second as the dashboard's last read was silently overwritten. The 409
+  response also carries the current mtime at full precision
+  (`internal/hub/files_save.go`).
+- **A failed multi-file move no longer overwrites files while rolling back.**
+  Rollback used a plain rename, so a file another process had just created at
+  the original location was replaced. Rollback now uses the same no-replace
+  rename as the forward move; on a collision both files are kept and the
+  result names where the moved data remains (`internal/hub/files_move.go`).
+- **Folder-limited auto-approval rules added from the dashboard now match the
+  folder literally.** The working directory was stored as a raw regular
+  expression, so `C:\work\project` never matched on Windows while `/work/app`
+  also matched `/work/application`. The dashboard now stores an anchored,
+  escaped pattern; hand-written `working_dir` regexes in the YAML are unchanged
+  (`internal/autoapproval/policy.go`, `internal/hub/approval_batch.go`).
+- **One approval, one keystroke.** Concurrent one-tap, batch, and auto
+  approvals of the same prompt could each send their own answer to the CLI,
+  because the send and the consume/commit step were not held under one
+  reservation. The reservation now spans send through commit for the same
+  signature, candidate, generation, and wrapper; a second answer for the same
+  prompt is not sent, while a clean send failure can still be retried
+  (`internal/hub/approval_action.go`).
+- **Write redirects and branch mutations are no longer classified as low
+  risk.** `cat x > file` and `git branch -D name` started with a read-only
+  prefix and slipped into low-only batch and auto approval. Unquoted output
+  redirects and branch create/delete/move now classify as mid; quoted or
+  escaped `>`, `2>/dev/null`, and `2>&1` stay read-only
+  (`internal/approval/summary.go`, `internal/autoapproval/policy.go`).
+- **The delete API rejects the workspace root reached through a symlink or
+  junction alias.** The root guard compared a resolved path against the lexical
+  root, so passing the real path while the session's cwd was an alias removed
+  the root itself. Root protection now compares canonical paths and file
+  identity, and refuses the operation when the identity cannot be resolved
+  (`internal/hub/files_delete.go`).
+- **The child spawn confirmation now shows what the child is being granted.**
+  The dialog named only role, provider, model, working directory, and prompt, so
+  approving a codex child silently granted `--sandbox danger-full-access
+  --ask-for-approval never` (and a bypass-permissions equivalent on the other CLIs)
+  whenever `orchestration.child_full_bypass` was left at its default. The Hub now
+  sends the effective settings per provider — computed by running the same code the
+  spawn uses, so the dialog cannot drift from it — and the dialog updates them when
+  the approver switches provider. No permission changed; only what you are told
+  before you approve. Relay children skip this confirmation by design and are
+  unaffected.
+- Cap pending spawn confirmations per parent and across the Hub using the existing
+  orchestration limits. Requests over either cap return HTTP 429 without creating
+  a confirmation or broadcasting it, while same-role replacement and late human
+  decisions remain available.
+- Apply the common 1 MiB JSON body limit to `/api/approval/batch` so oversized
+  approval and auto-rule requests are rejected before any side effect.
+- Docker builds now exclude credentials, local AI state, worktrees, logs, and
+  transcripts from the build context. Base images, the Whisper source commit,
+  provider CLI versions, and Cursor archives are pinned and checked before use;
+  the provider CLIs are installed from a tracked npm lockfile.
+- Reject `hub.trusted_networks` CIDRs wider than `/24` (IPv4) / `/64` (IPv6) as
+  a config error. Existing configs with a wider entry now fail at startup with
+  an error naming the entry; use `hub.allowed_hosts` with the token for wider
+  private ranges such as a whole tailnet.
+- Extend the outside-roots secret-file read denylist with more
+  credential-bearing names (`kubeconfig`, `.pgpass`, `.my.cnf`, `.s3cfg`,
+  `.boto`, `.dockercfg`, `secrets.yaml` / `.yml` / `.json`) and
+  directory-scoped pairs (`.kube/config`, `.docker/config.json`,
+  `.aws/config`, everything under `.gnupg/`).
+- `findGitRoot` no longer adopts a home directory that happens to be a git
+  repository as the git root, so Files API scopes and relay worktree bases stay
+  at the working directory instead of expanding to the whole home.
+- Auto-approval hard-blocks now cover `find` side-effect options
+  (`-exec` / `-execdir` / `-ok` / `-okdir` / `-delete`) and command
+  substitution (`$(...)`, backticks), which could previously pass the low-risk
+  gate behind a broad user rule.
+- The startup banner and the remote access settings panel now point out when
+  `allowed_hosts` / `trusted_networks` are configured without a remote PIN.
+  The PIN itself remains optional.
+- The custom notify-sound upload now rejects the file whenever the sniffed
+  content type is not `audio/*`, even if the client's `Content-Type` header
+  claims otherwise. The previous fallback that trusted the header when
+  sniffing failed reopened the polyglot-container path the sniff check was
+  meant to close.
+- Avatar uploads are now sniffed and restricted to PNG/JPEG/GIF/WebP; any
+  other binary, including SVG (script-embedding risk), is rejected with
+  HTTP 415. Previously the upload endpoint stored whatever bytes were sent
+  with no content-type check.
+- The local avatar is now served from `/api/avatar` without the Hub token in
+  the URL query string; the endpoint already required the existing
+  token/cookie guard, so the change only stops the token from leaking into
+  browser history, referrers, and logs via `/api/info` and the settings UI.
+- Add `orchestration.child_full_bypass` (default `true`, matching prior
+  behavior) so orchestration children can opt out of the automatic
+  bypass-permissions / `RiskConfirmed` defaults applied on spawn.
+- **Relay child admission now reserves the shared session budget atomically.**
+  Concurrent relay starts can no longer pass separate snapshots and exceed
+  the per-parent or global child limit. The reservation covers ordinary
+  orchestration spawns, pending confirmations, relay resume, timeout retry,
+  and strong escalation, and is released when preparation or launch fails.
+- **Worktree-backed child and relay reuse now verifies its identity.** Before
+  reusing a directory, the Hub checks the parent Git common directory, the
+  registered worktree path, and the recorded branch. A manually changed
+  branch, unregistered directory, or worktree from another repository stops
+  spawn or resume while preserving the user's checkout and files.
+- **Reading a file outside the allowed roots no longer hands over modern SSH
+  private keys or credential files.** The deny rule for key files matched only
+  the `id_rsa` prefix, so `id_ed25519` — the default `ssh-keygen` output for
+  years now — along with `id_ecdsa` and `id_dsa` went straight through. Files
+  that mix settings and credentials in one place were not covered either. The
+  check now recognises every default OpenSSH key name and additionally denies
+  `.netrc`, `_netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `.htpasswd`,
+  SSH authorization and host-key records. Files inside the allowed roots are
+  unaffected (`internal/hub/files_scope.go`).
+
+- **Bug reports could carry three of this tool's own secrets through
+  redaction.** The key-value matcher listed finished key names (`api_key`,
+  `auth_token`, `client_secret`, …), so `auth_cookie_secret`, `remote_pin_hash`,
+  and `vapid_private_key` did not match and their values survived. Collection
+  itself is allowlisted and never reads these, so the exposure was limited to
+  attached session and hub logs. Redaction now matches on the trailing word, and
+  `key` / `hash` only count when preceded by a secret-ish qualifier, so
+  `cache_key` and `commit_hash` stay readable (`internal/report/redact.go`).
+
+- **The release workflow no longer runs third-party code in the same process as
+  the publishing credential.** GoReleaser's step carries a token that can push to
+  the Homebrew tap and the winget fork, and its `before` hooks ran the web
+  dependency install and a tool install in that same environment. Those hooks now
+  run in an earlier step with no credentials, and GoReleaser is invoked with
+  `--skip=before` (`.github/workflows/release.yml`, `.goreleaser.yaml`).
+
 ## [0.7.0] - 2026-08-15
 
 ### Added
@@ -1811,7 +2487,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.0...v0.5.1

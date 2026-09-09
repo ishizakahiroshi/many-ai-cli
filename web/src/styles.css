@@ -2,6 +2,7 @@
 @import url("/styles/terminal.css");
 @import url("/styles/approval.css");
 @import url("/styles/spawn.css");
+@import url("/styles/spawn-confirm.css");
 @import url("/styles/zero-session.css");
 @import url("/styles/tabs.css");
 @import url("/styles/files.css");
@@ -22,6 +23,7 @@
 @import url("/styles/prompt-templates.css");
 @import url("/styles/mobile-approval-only.css");
 @import url("/styles/bug-report.css");
+@import url("/styles/subscriptions.css");
 
 #deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); }
 #deferred-send-status[hidden] { display:none; }
@@ -93,6 +95,7 @@
   --prov-opencode:       #22c55e;
   --prov-cursor-agent:   #94a3b8;
   --prov-grok:           #52525b;
+  --prov-command-code:   #f43f5e;
 
   /* Git graph lane colors (dark) */
   --lane-1:              #38bdf8;  /* 青系: HEAD/develop/main 系の主軸 */
@@ -327,9 +330,9 @@ header {
   background: rgba(34,197,94,0.08);
 }
 .session-chip.waiting {
-  color: var(--warn);
-  border-color: rgba(245,158,11,0.3);
-  background: rgba(245,158,11,0.08);
+  color: #111;
+  border-color: var(--warn);
+  background: var(--warn);
 }
 .session-chip.standby {
   color: var(--badge-standby-text);
@@ -397,22 +400,50 @@ header {
 .usage-dropdown {
   position: fixed;
   z-index: 1300;
-  min-width: 160px;
+  min-width: 340px;
+  max-width: min(430px, calc(100vw - 12px));
+  max-height: calc(100vh - 70px);
   background: var(--bg-elev, #1e2330);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-  overflow: hidden;
+  overflow: auto;
 }
 .usage-dropdown[hidden] { display: none !important; }
 .usage-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: 7px 12px 5px;
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted-2, #666);
   border-bottom: 1px solid var(--line);
+  /* .usage-dropdown は overflow:auto。スクロールしても ✕ に手が届くようヘッダは貼り付ける。
+     z-index は .usage-info-bubble（2）より下にして、行の説明バブルを隠さない。 */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-elev, #1e2330);
 }
+/* 閉じるボタンは他パネル（.server-modal-close / .wf-modal-close）と同じ見た目に揃える。
+   ヘッダ側の uppercase / letter-spacing はグリフに掛けない。 */
+.usage-dropdown-close {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.usage-dropdown-close:hover { background: var(--danger-bg); color: var(--danger); }
 .usage-dropdown-item {
   display: flex;
   align-items: center;
@@ -431,6 +462,493 @@ header {
 .usage-item-icon { flex-shrink: 0; }
 .usage-item-name { flex: 1; }
 .usage-item-ext  { flex-shrink: 0; opacity: 0.35; }
+.usage-dropdown-section-title {
+  padding: 8px 12px 4px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--muted-2, #777);
+  border-top: 1px solid var(--line);
+}
+.usage-dropdown-unavailable-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.usage-dropdown-unavailable-row .usage-dropdown-item { flex: 1; min-width: 0; }
+.usage-unavailable {
+  flex-shrink: 0;
+  margin-right: 4px;
+  font-size: 0.63rem;
+  color: var(--muted-2, #777);
+  white-space: nowrap;
+}
+.usage-info {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-right: 9px;
+  padding: 0;
+  border: 1px solid var(--muted-2, #777);
+  border-radius: 50%;
+  color: var(--muted-2, #777);
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  cursor: help;
+}
+.usage-info:hover,
+.usage-info:focus-visible,
+.usage-info[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--text);
+  outline: none;
+}
+.usage-info-bubble {
+  position: absolute;
+  z-index: 2;
+  /* Pin to the row. .usage-dropdown is overflow:auto and min-width:340px;
+     a 300px bubble with right:8px was clipped on the left (「CLI の」が消える). */
+  left: 8px;
+  right: 8px;
+  bottom: calc(100% - 2px);
+  width: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--bg-elev, #1e2330);
+  box-shadow: 0 5px 14px rgba(0,0,0,0.35);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.usage-info-bubble[hidden] { display: none; }
+.usage-profile-list {
+  margin: -2px 8px 5px 28px;
+  border-left: 2px solid color-mix(in srgb, var(--line) 75%, transparent);
+}
+.usage-profile-row {
+  padding: 5px 7px 6px;
+  color: var(--text-soft, var(--muted));
+  font-size: 0.67rem;
+}
+.usage-profile-row + .usage-profile-row { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.usage-profile-head,
+.usage-profile-actions,
+.usage-meter-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.usage-profile-head { min-width: 0; margin-bottom: 3px; }
+.usage-profile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.usage-profile-plan { margin-left: auto; color: var(--muted-2, #777); white-space: nowrap; }
+.usage-meter-line { min-width: 0; margin: 2px 0; }
+.usage-meter-label { min-width: 27px; flex-shrink: 0; color: var(--muted-2, #777); }
+.usage-meter {
+  flex: 1;
+  min-width: 55px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--line) 65%, transparent);
+}
+.usage-meter-fill { display: block; height: 100%; border-radius: inherit; background: var(--green, #22c55e); }
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-label,
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-value { color: var(--warn, #f59e0b); }
+.usage-meter-line[data-usage-severity="warning"] .usage-meter-fill { background: var(--warn, #f59e0b); }
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-label,
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-value { color: var(--danger, #e06c75); font-weight: 700; }
+.usage-meter-line[data-usage-severity="danger"] .usage-meter-fill { background: var(--danger, #e06c75); }
+.usage-meter-value { width: 84px; flex-shrink: 0; text-align: right; color: var(--text); }
+.usage-meter-group--stale .usage-meter-fill { opacity: 0.55; }
+.usage-meter-meta { line-height: 1.35; }
+.usage-meter-meta--stale { color: var(--warn, #f59e0b); }
+.usage-profile-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-top: 4px;
+  color: var(--text-soft, var(--muted));
+}
+.usage-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 7px;
+  margin: 2px 0 5px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: var(--radius-sm);
+  line-height: 1.35;
+}
+.usage-auth strong { color: var(--warn, #f59e0b); }
+.usage-auth span { color: var(--muted); }
+.usage-auth--unknown { border-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.usage-auth--unknown strong { color: var(--muted); }
+.usage-auth--checking {
+  align-items: center;
+  border-color: color-mix(in srgb, var(--line) 80%, transparent);
+  color: var(--muted-2, #777);
+}
+.usage-auth--checking span { color: var(--muted-2, #777); }
+.usage-auth-spinner {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 45%, transparent);
+  border-top-color: var(--muted);
+  border-radius: 50%;
+  animation: usage-spin 0.8s linear infinite;
+}
+/* 読み込み中のプレースホルダ。renderProfiles() が .usage-profile-list を
+   まとめて捨てるので、実データが来た時点で自動的に消える。 */
+.usage-profile-list--loading { pointer-events: none; }
+.usage-skeleton-line {
+  height: 6px;
+  margin: 5px 0;
+  border-radius: 99px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--line) 55%, transparent) 0%,
+    color-mix(in srgb, var(--line) 95%, transparent) 50%,
+    color-mix(in srgb, var(--line) 55%, transparent) 100%);
+  background-size: 220% 100%;
+  animation: usage-skeleton-shimmer 1.3s ease-in-out infinite;
+}
+.usage-skeleton-line--short { width: 55%; }
+@keyframes usage-spin { to { transform: rotate(360deg); } }
+@keyframes usage-skeleton-shimmer {
+  from { background-position: 140% 0; }
+  to   { background-position: -40% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .usage-auth-spinner,
+  .usage-skeleton-line { animation: none; }
+}
+.usage-auth-action,
+.usage-auth-retry {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft, var(--muted));
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.usage-auth-action:hover,
+.usage-auth-retry:hover { color: var(--text); background: var(--bg-hover, rgba(255,255,255,0.06)); }
+.usage-auth-retry:disabled { opacity: 0.55; cursor: wait; }
+.usage-profile-meta { margin-top: 3px; color: var(--muted-2, #777); font-size: 0.61rem; }
+.usage-not-acquired {
+  display: block;
+  color: var(--muted-2, #777);
+  line-height: 1.4;
+  white-space: normal;
+}
+.usage-probe-button,
+.usage-probe-cancel {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-soft, var(--muted));
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.usage-probe-button:hover,
+.usage-probe-cancel:hover { color: var(--text); background: var(--bg-hover, rgba(255,255,255,0.06)); }
+.usage-probe-button:disabled,
+.usage-probe-cancel:disabled { opacity: 0.55; cursor: wait; }
+.usage-probe-state { color: var(--muted-2, #777); }
+.usage-probe-error { margin-top: 3px; color: var(--danger, #e06c75); }
+.usage-probe-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0,0,0,0.55);
+}
+.usage-probe-dialog-backdrop[hidden] { display: none; }
+.usage-probe-dialog {
+  width: min(390px, 100%);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--bg-elev, #1e2330);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+}
+.usage-probe-dialog h2 { margin: 0 0 10px; font-size: 1rem; }
+.usage-probe-dialog p { margin: 7px 0; font-size: 0.78rem; line-height: 1.5; }
+.usage-probe-dialog label { display: flex; gap: 7px; align-items: center; margin: 13px 0; font-size: 0.72rem; }
+.usage-probe-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; }
+.usage-probe-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
+.usage-probe-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
+
+/* C5: plan_session-handoff-board_c5_handoff-md.md — 引き継ぎプレビュー/一覧
+   ダイアログと、経路1の通知バナー。usage-probe-dialog と同じ構造を流用する。 */
+.handoff-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0,0,0,0.55);
+}
+.handoff-dialog {
+  width: min(560px, 100%);
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--bg-elev, #1e2330);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+}
+.handoff-dialog.handoff-list-dialog { width: min(680px, 100%); }
+.handoff-dialog h2 { margin: 0 0 10px; font-size: 1rem; flex-shrink: 0; }
+.handoff-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.handoff-dialog-source { margin: 0 0 8px; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.handoff-dialog-markdown {
+  margin: 0 0 12px;
+  padding: 10px;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  background: var(--bg, #14171f);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.handoff-dialog-provider-row { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; }
+.handoff-provider-select { flex: 1; padding: 5px 7px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font: inherit; }
+.handoff-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; flex-shrink: 0; }
+.handoff-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
+.handoff-dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.handoff-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
+
+.handoff-list-rows { display: flex; flex-direction: column; gap: 6px; }
+.handoff-list-row { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.handoff-list-row-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; font-size: 0.76rem; }
+.handoff-list-row-id { color: var(--muted-2, #9aa4b2); flex-shrink: 0; }
+.handoff-list-row-provider { flex-shrink: 0; }
+.handoff-list-row-status { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--bg, #14171f); border: 1px solid var(--line); }
+.handoff-list-row-status[data-live="1"] { color: var(--accent-text, #93c5fd); border-color: var(--accent, #3b82f6); }
+.handoff-list-row-cwd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2, #9aa4b2); }
+.handoff-list-row-preview { flex-shrink: 0; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
+.handoff-list-row-preview:hover { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }
+
+.handoff-notify-banner {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2100;
+  width: min(340px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid var(--accent, #3b82f6);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev, #1e2330);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.4);
+}
+.handoff-notify-body { font-size: 0.78rem; line-height: 1.5; margin-bottom: 10px; }
+.handoff-notify-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.handoff-notify-action { padding: 5px 10px; border: 1px solid var(--accent, #3b82f6); border-radius: var(--radius-sm); background: var(--accent, #3b82f6); color: #fff; font: inherit; cursor: pointer; }
+.handoff-notify-dismiss { padding: 2px 7px; border: none; background: transparent; color: var(--muted-2, #9aa4b2); font-size: 1rem; cursor: pointer; line-height: 1; }
+.handoff-notify-dismiss:hover { color: var(--text); }
+
+/* Usage ドロップダウンの広幅レイアウト。900px 未満は既定の縦 1 カラムを保つ
+   （docs/local/plan_usage-panel-wide-layout.md C1〜C3）。 */
+@media (min-width: 900px) {
+  /* 2 列のメーターが最長ロケール（en の Remaining 100% / vi の Hàng tuần）でも
+     入る幅。足りない幅では .usage-meters が自動で 1 列へ戻る。 */
+  .usage-dropdown { max-width: min(840px, calc(100vw - 24px)); }
+  .usage-dropdown-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+    align-items: start;
+  }
+  .usage-dropdown-col { min-width: 0; }
+  /* ヘッダ下の区切り線と重なるので左カラム先頭の見出しは上罫線を消す */
+  .usage-dropdown-col > .usage-dropdown-section-title:first-child { border-top: 0; }
+  /* 1 プロファイルのメーター群（5h/7d 等）を横並びにする。メーター行と直下の
+     usage-meter-meta の対応が分からなくならないよう、セル単位は group ごと。
+     minmax(0, 1fr) だとセルが 1 行分の最小幅を下回り、行がセルからはみ出して
+     隣のセルのラベル（7d / 週次）が前のセルのバー・数値の下に潜って読めなくなる。
+     auto-fit + 実測の最小幅にして、2 列が入らない幅では自動で 1 列へ戻す。 */
+  .usage-meters {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    column-gap: 14px;
+    row-gap: 2px;
+    align-items: start;
+  }
+  /* 横並び時は数値の固定幅（縦積み時の桁揃え用）を外して行の最小幅を下げる */
+  .usage-meters .usage-meter-value { width: auto; }
+  .usage-meters .usage-meter { min-width: 40px; }
+}
+
+/* ヘッダーの Web メニュー（Hub 自体への操作） */
+.web-menu {
+  position: relative;
+  display: inline-block;
+}
+.web-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--control-h-sm);
+  padding: 3px 9px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--header-font-size);
+  font-family: inherit;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.web-menu-btn:hover,
+.web-menu-btn[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--line);
+  background: var(--bg-elev);
+}
+/* 外部公開中はボタン全体を色付けし、ドロップダウンを開かなくても常時気づけるようにする。 */
+.web-menu-btn.expose-on {
+  color: var(--green-text);
+  border-color: color-mix(in srgb, var(--green-text) 35%, transparent);
+  background: color-mix(in srgb, var(--green-bg) 45%, transparent);
+}
+.web-menu-btn.expose-on:hover,
+.web-menu-btn.expose-on[aria-expanded="true"] {
+  color: var(--green-text);
+  border-color: var(--green-text);
+  background: color-mix(in srgb, var(--green-bg) 65%, transparent);
+}
+.web-menu-icon,
+.web-menu-chevron {
+  flex-shrink: 0;
+}
+.web-menu-chevron {
+  opacity: 0.55;
+  transition: transform 0.15s;
+}
+.web-menu-btn[aria-expanded="true"] .web-menu-chevron {
+  transform: rotate(180deg);
+}
+.web-menu-lamp {
+  stroke: currentColor;
+  filter: none;
+  transition: stroke 0.15s, filter 0.15s;
+}
+.web-menu-lamp.expose-dot-ready {
+  stroke: var(--green);
+  filter: drop-shadow(0 0 2px var(--green));
+}
+#web-menu-dropdown {
+  position: fixed;
+  z-index: 1300;
+  min-width: 220px;
+  max-width: min(320px, calc(100vw - 12px));
+  max-height: calc(100vh - 70px);
+  padding: 4px 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-elev, #1e2330);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+}
+#web-menu-dropdown[hidden] { display: none !important; }
+#web-menu-dropdown .web-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--control-h-sm);
+  gap: var(--space-2);
+  padding: 7px 12px;
+  color: var(--text-soft, var(--muted));
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  font-size: var(--header-font-size);
+  line-height: 1.3;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#web-menu-dropdown .web-menu-item:hover,
+#web-menu-dropdown .web-menu-item:focus-visible {
+  color: var(--text);
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+}
+#web-menu-dropdown .web-menu-item:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.web-menu-item-icon {
+  flex: 0 0 1.25rem;
+  width: 1.25rem;
+  line-height: 1;
+  text-align: center;
+}
+.web-menu-item-label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.web-menu-item-state {
+  flex: 0 1 auto;
+  margin-left: auto;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+  color: var(--muted-2, var(--muted));
+}
+.web-menu-item-state.is-ready { color: var(--green, #3fb950); }
+.web-menu-item-state.is-warn { color: var(--warn, #d29922); }
+.web-menu-divider {
+  height: 1px;
+  margin: 4px 12px;
+  background: var(--line);
+}
+/* 旧ドットは状態反映の互換フック。表示はメニュー行の文言と、閉じた Web ボタンのランプ。 */
+#web-menu-dropdown #expose-dot { display: none !important; }
+/* ヘッダーボタン時代の「ON 枠」はメニューではホバーと区別できないので外す。 */
+#web-menu-dropdown #expose-btn.expose-on,
+#web-menu-dropdown #expose-btn[aria-pressed="true"] {
+  border-color: transparent;
+  background: transparent;
+}
+#web-menu-dropdown #expose-btn:hover,
+#web-menu-dropdown #expose-btn:focus-visible {
+  color: var(--text);
+  background: var(--bg-hover, rgba(255,255,255,0.06));
+}
+/* 既存の狭幅用ヘッダールールより、メニュー内のラベル表示を優先する。 */
+#web-menu-dropdown #expose-btn span[data-i18n="expose_btn"],
+#web-menu-dropdown #bug-report-btn span:last-child { display: inline; }
 
 /* シャットダウン・設定ボタン共通 */
 #shutdown-btn,
@@ -458,7 +976,16 @@ header {
   font-size: var(--header-font-size);
   white-space: nowrap;
 }
-#settings-btn:hover { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
+#settings-btn:hover,
+#settings-btn[aria-expanded="true"] { color: var(--text); border-color: var(--line); background: var(--bg-elev); }
+.settings-chevron {
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: transform 0.15s;
+}
+#settings-btn[aria-expanded="true"] .settings-chevron {
+  transform: rotate(180deg);
+}
 
 @media (max-width: 720px) {
   .usage-menu-btn span { display: none; }
@@ -506,6 +1033,51 @@ header {
   position: absolute;
   inset: 0 -4px;
 }
+
+/* 操作系の左右（設定 → General → 操作系の左右 / 入力欄の ⇄ ボタン。状態は ui-side.ts）。
+
+   セッションカード列を右へ寄せる。
+   DOM は動かさず order だけ入れ替える（DOM を並べ替えると detached-grid の
+   要素隠しやモバイルドロワーの前提が崩れる）。モバイル幅ではカード列が
+   position:fixed のドロワーになり order が効かないので、デスクトップ幅にだけ効かせる。 */
+@media (min-width: 721px) {
+  body.sidebar-right #terminal-column { order: 0; }
+  body.sidebar-right #sidebar-resizer { order: 1; }
+  body.sidebar-right #session-list { order: 2; }
+}
+
+/* パネルの開閉・閉じるボタン（⊟/⊞/✕）を左へ寄せる。閉じるボタンはどれも flex の子なので、
+   order だけで自分の入っているヘッダの左端へ寄る（flex でないヘッダでは単に無効）。 */
+body.close-left :is(
+  .review-close-btn,
+  .git-turn-close-btn,
+  .detail-close,
+  .git-commit-close,
+  .server-modal-close,
+  .wf-modal-close,
+  .mc-modal-close,
+  .bug-report-close,
+  .dgl-close,
+  .tsb-sent-close,
+  .session-search-close,
+  .spawn-web-dir-close,
+  .first-run-tour-close,
+  .multi-question-banner-close,
+  .expand-popup-btns
+) {
+  order: -1;
+  margin-left: 0;
+}
+
+/* margin-left:auto で右端へ押し出しているものは、押し出す向きを逆にする。 */
+body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions, .usage-dropdown-close) {
+  order: -1;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* ボタンが群になっているヘッダでは、群の中でも ✕ を先頭へ。 */
+body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1; }
 .no-sessions { color: var(--muted-2); font-size: 0.85rem; padding: 12px; text-align: center; }
 
 /* Responsive breakpoints:
@@ -536,6 +1108,7 @@ header {
   .star-btn,
   .session-history-reset-btn,
   .session-board-open-btn,
+  .session-relay-open-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -787,6 +1360,11 @@ header {
 .card { position: relative; background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 9px 42px 9px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s, background 0.15s; overflow: hidden; }
 .card:hover { border-color: var(--line-soft); background: var(--bg-deep); }
 .card.waiting { border-color: rgba(245,158,11,0.35); }
+.card.awaiting-approval { background: color-mix(in srgb, var(--warn-bg) 12%, var(--bg-elev)); }
+/* 子起動の確認待ち（pending-spawn-confirm）。既存の awaiting-approval（AI 本体の承認）
+   と並んだときに見分けられるよう、--warn ではなく --perm（元々未使用だった紫系トークン）
+   を流用する（plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md C3）。 */
+.card.pending-spawn-confirm { background: color-mix(in srgb, var(--perm-bg) 12%, var(--bg-elev)); }
 .card.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, var(--bg-elev));
@@ -819,30 +1397,58 @@ header {
 }
 .card.running::before { background: var(--green); opacity: 1; }
 .card.waiting::before { background: var(--warn); opacity: 1; }
+.card.awaiting-approval::before { background: var(--warn); opacity: 1; width: 5px; }
+.card.pending-spawn-confirm::before { background: var(--perm); opacity: 1; width: 5px; }
 .card.active::before  { background: var(--accent); opacity: 1; width: 5px; top: 4px; bottom: 4px; }
-.card-title-row { display: flex; align-items: center; gap: 2px; overflow: hidden; }
+/* 1 行に並ぶ文字は baseline で揃える。align-items:center だと各項目の baseline が
+   その項目の中心から (ascent-descent)/2 ＝ 約 0.41em ずれるため、font-size が違う
+   #N(16px) / モデル名(0.68rem) / タイトル(0.75rem) が 1〜2px ずつ段違いに見える。
+   このズレは line-height をいくら揃えても消えない（中心からの baseline 距離は
+   line-height に依存せず font-size にだけ比例するため）。 */
+.card-title-row { display: flex; align-items: baseline; gap: 2px; overflow: hidden; --card-icon-shift: 1.5px; }
 .card-title-row > b { flex-shrink: 0; }
+/* 状態アイコンと provider アイコンは、どちらも 14x14 の SVG で墨が中心にある。
+   align-self:baseline を使うと SVG は baseline を持たないため下辺が行の baseline に
+   乗り、2 つのアイコンは所属する flex コンテナ（行 / .card-provider-model）が違っても
+   必ず同じ高さに来る。align-self:center だと各コンテナの高さが基準になるため、
+   同じ数値を書いても揃わない（実測で中心が 12.5px と 15px に分かれていた）。
+   共有変数 --card-icon-shift だけが光学調整のつまみで、片方だけ動かせないようにしてある。
+   +1.5px は #N（bold 16px）のキャップ中心へ載せる量。 */
+.card-title-row > .card-state-pill,
+.card-provider-model > .card-provider-icon { align-self: baseline; transform: translateY(var(--card-icon-shift, 0px)); }
 .card.orchestration-child { border-left: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); margin-left: 8px; }
+/* 子を持つ親カードに出す折りたたみトグル。畳んでいる間も件数が読めるようにする。 */
+.card-children-toggle { cursor: pointer; user-select: none; font-size: .72rem; line-height: 1.4;
+  padding: 0 6px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  color: color-mix(in srgb, var(--accent) 85%, var(--fg)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.card-children-toggle:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .card.orchestration-parent { border-left: 2px solid color-mix(in srgb, var(--warn) 70%, transparent); }
-/* 状態 pill（下のステータスバー .tsb-pill と同形状: ●ドット付き・丸み・同じ状態色）。 */
-.card-state-pill { display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 0.62rem; font-weight: 700; padding: 1px 7px; border-radius: var(--radius-md); border: 1px solid transparent; line-height: 1.2; }
-.card-state-pill .card-pdot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.card-state-icon { font-size: 0.68rem; line-height: 1; }
-.card-state-pill.awaiting-approval { animation: state-attention 1.4s ease-in-out infinite; }
-.card-state-pill.awaiting-input { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-.card-state-pill.workflow-active .card-pdot { animation: state-pulse 1s ease-in-out infinite; }
-@keyframes state-attention { 50% { filter: brightness(1.22); } }
+/* 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。 */
+/* 箱は全状態で同じ正方形。awaiting-approval だけ幅を可変にすると、中の記号の送り幅で
+   箱の大きさが変わり「状態ごとに大きさがバラバラ」に見える。塗り（背景色）だけを
+   状態で切り替える。 */
+.card-state-pill { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 1.1rem; height: 1.1rem; padding: 0; border: 0; border-radius: var(--radius-md); background: transparent; line-height: 0; }
+.card-state-pill .card-pdot,
+.card-state-text { display: none; }
+.card-state-icon { display: inline-flex; line-height: 0; }
+.card-state-svg { display: block; width: 14px; height: 14px; overflow: visible; }
+.card-state-pill.awaiting-input { color: var(--accent); }
+.card-state-pill.workflow-active .card-state-icon { animation: state-pulse 1s ease-in-out infinite; }
 @keyframes state-pulse { 50% { transform: scale(1.45); opacity: .55; } }
-@media (prefers-reduced-motion: reduce) { .card-state-pill.awaiting-approval, .card-state-pill.workflow-active .card-pdot { animation: none; } }
-.card-state-pill.running  { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
-.card-state-pill.waiting  { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);          border-color: color-mix(in srgb, var(--warn-text) 35%, transparent); }
-.card-state-pill.standby  { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border-color: color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
+@media (prefers-reduced-motion: reduce) { .card-state-pill.running .card-state-icon, .card-state-pill.workflow-active .card-state-icon { animation: none; } }
+.card-state-pill.running  { color: var(--badge-running-text); }
+.card-state-pill.running .card-state-icon { animation: state-pulse 1.4s ease-in-out infinite; }
+.card-state-pill.awaiting-approval .card-state-icon { animation: none; }
+.card-state-pill.waiting  { color: var(--warn-text); }
+.card-state-pill.standby  { color: var(--badge-standby-text); }
 .card-state-pill.error,
-.card-state-pill.disconnected { color: var(--danger);          background: color-mix(in srgb, var(--danger-bg) 25%, transparent);        border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.card-state-pill.disconnected { color: var(--danger); }
+/* 付帯状態は通常 state の色より優先する（standby 中の入力待ち等）。 */
+.card-state-pill.awaiting-approval { color: #111; background: var(--warn); border-radius: var(--radius-sm); }
+.card-state-pill.pending-spawn-confirm { color: #111; background: var(--perm); border-radius: var(--radius-sm); }
+.card-state-pill.awaiting-input { color: var(--accent); }
+.card-state-pill.workflow-active { color: var(--muted-2); }
 .card-started-at { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 3px; }
-/* カード 3 行目: ライブ情報（ctx 使用率% / 応答経過時間 / 長時間処理中バッジ）。 */
-.card-live-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 4px; font-size: 0.66rem; color: var(--muted-2); line-height: 1.4; }
-.card-live-row[hidden] { display: none; }
 .card-ctx { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .card-ctx-gauge { display: inline-block; width: 38px; height: 6px; background: var(--bg-deep); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; vertical-align: middle; }
 .card-ctx-fill { display: block; height: 100%; border-radius: 3px; background: var(--green); transition: width 0.3s; }
@@ -850,9 +1456,32 @@ header {
 .card-ctx-fill.crit { background: var(--danger); }
 .card-ctx-pct { font-variant-numeric: tabular-nums; }
 .card-ctx-pct.crit { color: var(--danger); font-weight: 700; }
-.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); }
-.card-longproc { white-space: nowrap; color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn-text) 40%, transparent); border-radius: var(--radius-sm); padding: 0 5px; font-weight: 700; }
+.card-ctx-1m { font-size: 0.58rem; font-weight: 700; padding: 0 3px; border-radius: 3px; color: var(--accent); }
+.card-longproc { white-space: nowrap; color: var(--muted-2); border-radius: var(--radius-sm); padding: 0 5px; }
+/* 段階表示（longproc.ts の LongprocLevel）。severe = 15 分超、stalled = provider の
+   transcript が伸びていない。stalled は「重いだけ」ではないので危険色にする。 */
+.card-longproc.is-severe  { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent); }
+.card-longproc.is-stalled { color: var(--danger); background: color-mix(in srgb, var(--danger-bg) 55%, transparent); border: 1px solid var(--danger); }
+/* 直前ターンの完了サマリー（done-summary.ts）。端末へ本文を書かなくなったので、
+   見ていないセッションの完了に気づく経路はこのバッジになる。幅は狭いので 1 行省略、
+   全文は data-tooltip 側で読める。 */
+.card-done { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-muted); border: 1px solid color-mix(in srgb, var(--line) 90%, transparent); border-radius: var(--radius-sm); padding: 0 5px; }
+.card-done-success      { color: var(--green-text); border-color: color-mix(in srgb, var(--green) 35%, transparent); }
+.card-done-failure      { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.card-done-aborted      { color: var(--fg-muted); border-color: color-mix(in srgb, var(--line) 90%, transparent); }
+.card-done-needs-action { color: var(--warn-text); border-color: color-mix(in srgb, var(--warn-text) 40%, transparent); }
+/* unknown = マーカー無しでターンが終わった（Hub のフォールバック）。異常ではないので
+   警告色を使わず、成否を名乗る success 系の色にも寄せない。 */
+.card-done-unknown      { color: var(--fg-muted); border-color: color-mix(in srgb, var(--line) 70%, transparent); opacity: 0.85; }
 .card-provider-icon { flex-shrink: 0; vertical-align: middle; margin-right: 2px; }
+/* baseline 揃えは入れ子にも通す。ここが align-items:center のままだと、この箱自身が
+   flex コンテナとして親へ返す baseline がアイコン側から合成され、モデル名の文字だけ
+   親行の baseline から外れる。 */
+.card-provider-model { display: inline-flex; align-items: baseline; gap: 3px; flex-shrink: 0; min-width: 0; color: var(--text-dim); cursor: default; }
+/* 大きさは状態アイコンと同じ 14x14。縦位置は上の --card-icon-shift 側が持つ。 */
+.card-provider-model .card-provider-icon { width: 14px; height: 14px; margin-right: 0; }
+/* モデル名は意味を解釈せず raw 表示。幅だけ制限し、全文は tooltip で読める。 */
+.card-model-name { min-width: 0; max-width: 16ch; flex: 0 1 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.68rem; line-height: 1; color: var(--green-text); }
 /* モデル名の色は下のステータスバー .tsb-model（#9ece6a）に合わせて緑系で統一。 */
 .card-model { flex-shrink: 1; font-size: 0.72rem; color: #9ece6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; margin-left: 2px; }
 /* モデルバッジ（Claude/Codex/Ollama 共通）。アイコン + モデル名。幅が狭いと ellipsis 省略しつつアイコンは常時表示。ホバーで provider · model のツールチップ。 */
@@ -860,12 +1489,13 @@ header {
 .card-model.card-model--with-icon svg.card-provider-icon { width: 10px; height: 10px; flex-shrink: 0; margin-right: 0; }
 /* モデル名は先頭10文字相当で打ち切り（…）。全文はバッジの data-tooltip でホバー表示。 */
 .card-model.card-model--with-icon .card-model-text { min-width: 0; max-width: 10ch; flex-shrink: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 35%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 30%, transparent); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
+.card-branch { flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--green-text); border-radius: var(--radius-sm); padding: 1px 5px; font-size: 0.68rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: auto; cursor: pointer; user-select: none; transition: background 0.15s, transform 0.05s, color 0.15s; font-family: Consolas, monospace; }
 .card-branch:hover { background: color-mix(in srgb, var(--green-text) 22%, transparent); color: var(--text); }
 .card-branch:active { transform: scale(0.96); }
 .card-branch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border-color: var(--line); cursor: not-allowed; opacity: 0.6; }
+.card-branch[data-disabled="true"] { color: var(--muted); background: var(--bg-deep); border: 1px solid var(--line); cursor: not-allowed; opacity: 0.6; }
 .card-branch[data-disabled="true"]:hover { background: var(--bg-deep); color: var(--muted); }
+.card.awaiting-approval .card-ctx { opacity: .55; }
 .card-role-chip,
 .card-worktree-chip {
   flex-shrink: 0;
@@ -985,14 +1615,16 @@ header {
 .card-project { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; margin-left: 4px; }
 /* meta-row（2行目）はアクション(☆↻×)が上段のみのため、右パディング(42px)分まで
    はみ出させてブランチバッジを右端近くまで寄せる（上段アクションとは縦に重ならない）。 */
-.card-meta-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 3px; margin-right: -30px; }
+.card-meta-row { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-2); min-height: 1.4em; margin-top: 3px; margin-right: -30px; overflow: hidden; font-size: 0.66rem; color: var(--muted-2); line-height: 1.4; }
+.card-status-slot,
+.card-ctx-slot { display: inline-flex; align-items: center; flex-shrink: 0; }
+.card-status-slot:empty,
+.card-ctx-slot:empty { display: none; }
 .card-last-output { flex-shrink: 0; font-size: 0.72rem; color: var(--muted-2); margin-left: 2px; }
 /* 長い自動タイトルはブランチバッジを押し出さず … で省略（全文は data-tooltip で表示） */
-.card-label { flex-shrink: 1; min-width: 0; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-label { flex: 1 1 auto; min-width: 0; font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-note { flex: 1; min-width: 0; color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: italic; }
-.card-pin { flex-shrink: 0; font-size: 0.74rem; }
 .card-end-reason { flex-shrink: 0; font-size: 0.72rem; color: var(--danger, #ef4444); font-weight: 500; white-space: nowrap; max-width: 18rem; overflow: hidden; text-overflow: ellipsis; }
-.card-msg { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: inherit; }
 .card-actions {
   position: absolute;
   top: 6px;
@@ -1015,8 +1647,8 @@ header {
   opacity: 1;
 }
 .card-dir-icon:hover { opacity: 1; }
-.session-pin-btn, .session-meta-btn { border: 0; background: transparent; color: var(--muted); padding: 2px; min-width: 20px; min-height: 20px; cursor: pointer; font: inherit; }
-.session-pin-btn:hover, .session-meta-btn:hover, .session-pin-btn.pinned { color: var(--warn); }
+.session-front-btn, .session-meta-btn { border: 0; background: transparent; color: var(--muted); padding: 2px; min-width: 20px; min-height: 20px; cursor: pointer; font: inherit; }
+.session-front-btn:hover, .session-meta-btn:hover { color: var(--warn); }
 .session-color-filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 0 8px; }
 .session-color-filter { border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev); color: var(--muted); cursor: pointer; padding: 2px 8px; font: inherit; font-size: 0.7rem; }
 .session-color-filter.active { border-color: var(--accent); color: var(--text); }
@@ -1035,6 +1667,7 @@ header {
 .card-provider-chip.opencode, .summary-provider-name.opencode, .pane-slot .sc-provider.opencode, .prov-shape.opencode, .prov-letter.opencode { --prov: var(--prov-opencode); }
 .card-provider-chip.cursor-agent, .summary-provider-name.cursor-agent, .pane-slot .sc-provider.cursor-agent, .prov-shape.cursor-agent, .prov-letter.cursor-agent { --prov: var(--prov-cursor-agent); }
 .card-provider-chip.grok, .summary-provider-name.grok, .pane-slot .sc-provider.grok, .prov-shape.grok, .prov-letter.grok { --prov: var(--prov-grok); }
+.card-provider-chip.command-code, .summary-provider-name.command-code, .pane-slot .sc-provider.command-code, .prov-shape.command-code, .prov-letter.command-code { --prov: var(--prov-command-code); }
 
 /* チップ（プロバイダーチップ / サマリ名）: メイン色文字 + 12%背景 */
 .card-provider-chip, .summary-provider-name {
@@ -1190,11 +1823,16 @@ header {
   display: block;
 }
 .dismiss-btn:hover { color: var(--danger); }
+/* C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 子起動の
+   確認待ちを抱えたセッション（グループ）は × を押せない見た目にする。 */
+.dismiss-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.dismiss-btn:disabled:hover { color: var(--muted); }
 
 /* お気に入りボタン */
 .star-btn,
 .session-history-reset-btn,
-.session-board-open-btn {
+.session-board-open-btn,
+.session-relay-open-btn {
   position: static;
   background: none;
   appearance: none;
@@ -1215,6 +1853,7 @@ header {
 .star-btn:hover { color: var(--warn); }
 .session-history-reset-btn:hover { color: var(--accent-text); }
 .session-board-open-btn:hover { color: var(--accent-text); }
+.session-relay-open-btn:hover { color: var(--accent-text); }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
@@ -1651,11 +2290,21 @@ header {
 .status-chip { display: inline-flex; align-items: center; justify-content: center; gap: 3px; min-width: 26px; font-variant-numeric: tabular-nums; font-size: 0.8rem; font-weight: bold; padding: 2px 8px; border-radius: var(--radius-sm); line-height: 1.4; }
 .status-chip--running { color: var(--badge-running-text); background: color-mix(in srgb, var(--badge-running-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-running-text) 35%, transparent); }
 .status-chip--waiting { color: var(--warn-text);          background: color-mix(in srgb, var(--warn-bg) 25%, transparent);         border: 1px solid color-mix(in srgb, var(--warn-text) 35%, transparent); }
+.status-chip--attention { color: #111; background: var(--warn); border-color: var(--warn); }
 .status-chip--standby { color: var(--badge-standby-text); background: color-mix(in srgb, var(--badge-standby-bg) 25%, transparent); border: 1px solid color-mix(in srgb, var(--badge-standby-text) 35%, transparent); }
 .status-chip--blink { animation: status-chip-blink 2.5s ease-in-out infinite; }
 @keyframes status-chip-blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .status-chip--attention,
+  .session-chip.waiting,
+  .card-state-pill.awaiting-approval { animation: waiting-attention 1.2s ease-in-out infinite; }
+  @keyframes waiting-attention {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.45; }
+  }
 }
 .summary-sep { color: var(--line-soft); align-self: center; font-size: 0.9rem; padding: 0 2px; }
 .summary-provider-chip { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--header-font-size); color: var(--text); white-space: nowrap; flex-shrink: 0; }
@@ -1733,3 +2382,430 @@ header {
 }
 .card[draggable=true]:hover::before { opacity: 0.5; }
 
+/* Orchestration relay dashboard */
+#orchestration-dashboard-pane {
+  margin-top: 14px;
+  padding: 0 2px 18px;
+}
+.orchestration-dashboard-heading,
+.orchestration-conductor-detail,
+.orchestration-relay-card-head,
+.orchestration-relay-actions,
+.orchestration-relay-roles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.orchestration-dashboard-heading {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.orchestration-dashboard-heading h2,
+.orchestration-dashboard-heading p,
+.orchestration-relay-cards h3 {
+  margin: 0;
+}
+.orchestration-dashboard-heading p {
+  color: var(--muted-2);
+  font-size: 0.78rem;
+}
+.orchestration-conductor-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 8px;
+}
+.orchestration-conductor-tab,
+.orchestration-relay-action,
+.orchestration-relay-review-link,
+.orchestration-relay-branch,
+.relay-event-review,
+.relay-event-commit,
+.orchestration-relay-timeline-more {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.orchestration-conductor-tab {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.orchestration-conductor-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.orchestration-conductor-detail {
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.orchestration-detail-role {
+  color: var(--text);
+  font-weight: 700;
+}
+.orchestration-relay-cards {
+  margin-top: 12px;
+}
+.orchestration-relay-cards h3 {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+.orchestration-relay-card-list {
+  display: grid;
+  gap: 8px;
+}
+.orchestration-relay-card {
+  --relay-color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--relay-color) 45%, var(--line));
+  border-left: 3px solid var(--relay-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  padding: 10px 12px;
+}
+.orchestration-relay-state-implementing { --relay-color: var(--green); }
+.orchestration-relay-state-reviewing { --relay-color: var(--accent); }
+.orchestration-relay-state-fixing { --relay-color: var(--warn); }
+.orchestration-relay-state-completed { --relay-color: var(--green); opacity: 0.82; }
+.orchestration-relay-state-stopped { --relay-color: var(--danger); opacity: 0.9; }
+.orchestration-relay-card-head {
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.orchestration-relay-card-head strong {
+  color: var(--text);
+  font-size: 0.86rem;
+}
+.orchestration-relay-state-badge,
+.orchestration-relay-role-badge,
+.orchestration-relay-active-label {
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--relay-color) 16%, transparent);
+  color: var(--relay-color);
+  font-size: 0.68rem;
+  padding: 2px 6px;
+}
+.orchestration-relay-meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 12px;
+  margin: 0 0 8px;
+}
+.orchestration-relay-meta > div {
+  min-width: 0;
+}
+.orchestration-relay-meta dt {
+  color: var(--muted-2);
+  font-size: 0.65rem;
+}
+.orchestration-relay-meta dd {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-relay-roles {
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin: 5px 0 8px;
+}
+.orchestration-relay-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted-2);
+  font-size: 0.7rem;
+}
+.orchestration-relay-session,
+.orchestration-relay-branch {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 28ch;
+  padding: 2px 5px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+button.orchestration-relay-session {
+  color: var(--accent);
+  cursor: pointer;
+}
+button.orchestration-relay-session.active {
+  border-color: var(--relay-color);
+  background: color-mix(in srgb, var(--relay-color) 14%, var(--bg-elev));
+  color: var(--relay-color);
+  font-weight: 700;
+}
+.relay-role-not-started {
+  border: 1px dashed var(--line);
+}
+.orchestration-relay-active-label {
+  margin-left: auto;
+}
+.orchestration-relay-review-link {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 3px 7px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-relay-actions {
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.orchestration-relay-action,
+.orchestration-relay-timeline-more {
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 0.72rem;
+}
+.orchestration-relay-action:hover,
+.orchestration-relay-review-link:hover,
+.orchestration-relay-branch:hover,
+.relay-event-review:hover,
+.relay-event-commit:hover,
+.orchestration-relay-timeline-more:hover {
+  border-color: var(--accent);
+}
+.orchestration-relay-timeline {
+  margin-top: 9px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.orchestration-relay-timeline summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.orchestration-relay-timeline-rows {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+}
+.orchestration-relay-timeline-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px;
+  border-left: 2px solid color-mix(in srgb, var(--relay-color) 45%, transparent);
+  padding: 3px 0 3px 7px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+.relay-event-time,
+.relay-event-c,
+.relay-event-round,
+.relay-event-files {
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.relay-event-kind {
+  color: var(--text);
+  font-weight: 700;
+}
+.relay-event-text {
+  min-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relay-event-review,
+.relay-event-commit {
+  max-width: 24ch;
+  overflow: hidden;
+  padding: 1px 4px;
+  color: var(--accent);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-relay-timeline-more {
+  margin-top: 5px;
+}
+.orchestration-relay-timeline-error {
+  color: var(--danger);
+  font-size: 0.72rem;
+}
+.orchestration-child-card-head .orchestration-relay-role-badge {
+  margin-left: 4px;
+}
+
+@media (max-width: 720px) {
+  #orchestration-dashboard-pane { padding-inline: 0; }
+  .orchestration-relay-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .orchestration-relay-active-label { width: 100%; margin-left: 0; }
+  .orchestration-relay-timeline-row { align-items: flex-start; }
+  .relay-event-text { flex-basis: 100%; }
+}
+
+/* C5: relay 開始ダイアログ。全画面 overlay は .aac-wheel-overlay を持つ。 */
+#relay-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 9600;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.58);
+}
+#relay-dialog[hidden] { display: none !important; }
+.relay-dialog-box {
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: auto 0;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+.relay-dialog-header,
+.relay-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.relay-dialog-header { margin-bottom: 12px; }
+.relay-dialog-header h2 { margin: 0; font-size: 1rem; }
+.relay-dialog-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 6px;
+}
+.relay-dialog-close:hover { color: var(--text); }
+.relay-dialog-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.relay-dialog-target strong { color: var(--text); font-family: Consolas, monospace; }
+.relay-dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+.relay-dialog-field input,
+.relay-dialog-field select,
+.relay-dialog-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 8px;
+  font-size: 0.8rem;
+}
+.relay-dialog-field textarea { resize: vertical; min-height: 52px; }
+.relay-dialog-field input:focus,
+.relay-dialog-field select:focus,
+.relay-dialog-field textarea:focus { border-color: var(--accent); }
+.relay-dialog-candidates { margin-top: 8px; }
+.relay-dialog-section-title {
+  margin-top: 14px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.relay-role-table { margin-top: 5px; }
+.relay-role-table td:first-child { width: 32%; white-space: normal; }
+.relay-role-table .relay-role-cli,
+.relay-role-table .relay-role-model {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  padding: 5px 6px;
+  font-size: 0.78rem;
+}
+.relay-role-table .relay-role-model:disabled { opacity: 0.45; cursor: not-allowed; }
+.relay-role-required { color: var(--warn); }
+.relay-strong-note { padding-inline: 0; margin-top: 3px; }
+.relay-dialog-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-top: 10px;
+}
+.relay-remaining-slots { padding-inline: 0; margin-top: 6px; font-style: normal; }
+.relay-mode-field {
+  margin: 12px 0 0;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.relay-mode-field legend { padding: 0 4px; color: var(--muted); }
+.relay-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+.relay-radio-label input { width: auto; }
+.relay-same-tree-warning { padding-inline: 0; margin-top: 6px; }
+.relay-dialog-error { padding-inline: 0; margin-top: 8px; font-style: normal; }
+.relay-dialog-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.relay-start-button {
+  margin-left: auto;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+}
+.relay-start-button:hover { background: var(--accent); color: var(--bg); }
+.relay-start-button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .relay-dialog-box { max-height: calc(100dvh - 16px); padding: 12px; }
+  .relay-dialog-options { grid-template-columns: 1fr; gap: var(--space-2); }
+  .relay-role-table { font-size: 0.74rem; }
+  .relay-role-table th,
+  .relay-role-table td { padding: 4px 3px; }
+  .relay-role-table td:first-child { width: 28%; }
+}
+
+/* モバイル行の「先頭へ」。スマホには D&D が無いので優先度の唯一の入口になる。 */
+.mh-front-btn { cursor: pointer; user-select: none; font-size: .85rem; line-height: 1;
+  padding: 4px 7px; border-radius: 8px; border: 1px solid var(--line);
+  color: var(--fg); background: transparent; }
+.mh-front-btn:active { background: color-mix(in srgb, var(--accent) 18%, transparent); }

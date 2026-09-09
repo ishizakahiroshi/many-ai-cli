@@ -20,6 +20,8 @@ import (
 func newTestServer() *Server {
 	cfg := &config.Config{}
 	cfg.Hub.Port = 47777
+	cfg.Orchestration.MaxChildrenPerParent = 4
+	cfg.Orchestration.MaxTotalSessions = 16
 	// Most unit tests exercise a spawn's downstream behavior without a browser.
 	// Production defaults are applied by config.Load; keep this bare test
 	// fixture non-interactive unless a test opts into the confirmation gate.
@@ -655,14 +657,15 @@ func TestEvaluateIdle_NoChangeWhenRunningRecent(t *testing.T) {
 }
 
 // TestExtractBannerModel は起動バナーのレンダリング済み行からの
-// モデル名抽出（Claude / Codex / 非対象 provider）を確認する。
+// モデル名 / effort 抽出（Claude / Codex / 非対象 provider）を確認する。
 func TestExtractBannerModel(t *testing.T) {
 	tests := []struct {
-		name     string
-		provider string
-		cwd      string
-		lines    []string
-		want     string
+		name       string
+		provider   string
+		cwd        string
+		lines      []string
+		want       string
+		wantEffort string
 	}{
 		{
 			name:     "claude: effort・プラン付きバナー",
@@ -672,16 +675,33 @@ func TestExtractBannerModel(t *testing.T) {
 				"▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max",
 				"  ▘▘ ▝▝  C:\\dev\\many-ai-cli",
 			},
-			want: "Opus 4.8 (1M context)",
+			want:       "Opus 4.8 (1M context)",
+			wantEffort: "medium",
+		},
+		{
+			// v2.1.246 でロゴのアスキーアートが変わった（▝▜█████▛▘ → ▝▜██████▀）。
+			// ロゴ文字列を足場にしていた実装は、この形で検出できなくなった。
+			name:     "claude: 新ロゴ（v2.1.246）",
+			provider: "claude",
+			lines: []string{
+				" ▐▛███▛█   Claude Code v2.1.246",
+				"▝▜██████▀  Opus 5 with high effort · Claude Pro",
+			},
+			want:       "Opus 5",
+			wantEffort: "high",
 		},
 		{
 			name:     "claude: effort なしバナー",
 			provider: "claude",
-			lines:    []string{"▝▜█████▛▘  Sonnet 4.6 · Claude Pro"},
-			want:     "Sonnet 4.6",
+			lines: []string{
+				"▐▛███▜▌ Claude Code v2.1.162",
+				"▝▜█████▛▘  Sonnet 4.6 · Claude Pro",
+			},
+			want:       "Sonnet 4.6",
+			wantEffort: "",
 		},
 		{
-			name:     "claude: ロゴ行なし",
+			name:     "claude: バージョン行なし",
 			provider: "claude",
 			lines:    []string{"❯ Try \"edit <filepath> to...\""},
 			want:     "",
@@ -711,10 +731,11 @@ func TestExtractBannerModel(t *testing.T) {
 			want: "Claude Haiku 4.5",
 		},
 		{
-			name:     "copilot: effort サフィックス付き",
-			provider: "copilot",
-			lines:    []string{"● Loading: 3 instructions, 1 skill                              GPT-5 mini · low"},
-			want:     "GPT-5 mini",
+			name:       "copilot: effort サフィックス付き",
+			provider:   "copilot",
+			lines:      []string{"● Loading: 3 instructions, 1 skill                              GPT-5 mini · low"},
+			want:       "GPT-5 mini",
+			wantEffort: "low",
 		},
 		{
 			name:     "copilot: Auto は許可",
@@ -768,8 +789,12 @@ func TestExtractBannerModel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := extractBannerModel(tt.provider, tt.cwd, tt.lines); got != tt.want {
-				t.Fatalf("extractBannerModel(%q) = %q, want %q", tt.provider, got, tt.want)
+			got, gotEffort := extractBannerModel(tt.provider, tt.cwd, tt.lines)
+			if got != tt.want {
+				t.Fatalf("extractBannerModel(%q) model = %q, want %q", tt.provider, got, tt.want)
+			}
+			if gotEffort != tt.wantEffort {
+				t.Fatalf("extractBannerModel(%q) effort = %q, want %q", tt.provider, gotEffort, tt.wantEffort)
 			}
 		})
 	}
@@ -782,24 +807,40 @@ func TestApplyDetectedModel_OnlyIfEmpty(t *testing.T) {
 	ses := registerTestSession(s, 14, "claude")
 
 	// 空 → 設定される
-	s.applyDetectedModel(14, "claude", "Opus 4.8 (1M context)", true)
+	s.applyDetectedModel(14, "claude", "Opus 4.8 (1M context)", "medium", true)
 	if ses.Model != "Opus 4.8 (1M context)" {
 		t.Fatalf("Model = %q, want %q", ses.Model, "Opus 4.8 (1M context)")
+	}
+	if ses.Effort != "medium" {
+		t.Fatalf("Effort = %q, want %q", ses.Effort, "medium")
 	}
 	if !ses.initialModelScanDone {
 		t.Fatalf("initialModelScanDone = false, want true")
 	}
 
 	// 既存値あり + onlyIfEmpty=true → 上書きしない
-	s.applyDetectedModel(14, "claude", "Haiku 4.5", true)
+	s.applyDetectedModel(14, "claude", "Haiku 4.5", "low", true)
 	if ses.Model != "Opus 4.8 (1M context)" {
 		t.Fatalf("Model = %q, onlyIfEmpty で上書きされてはならない", ses.Model)
 	}
+	if ses.Effort != "medium" {
+		t.Fatalf("Effort = %q, onlyIfEmpty で上書きされてはならない", ses.Effort)
+	}
 
 	// 既存値あり + onlyIfEmpty=false（/model 変更経路）→ 上書きする
-	s.applyDetectedModel(14, "claude", "Haiku 4.5", false)
+	s.applyDetectedModel(14, "claude", "Haiku 4.5", "", false)
 	if ses.Model != "Haiku 4.5" {
 		t.Fatalf("Model = %q, want %q", ses.Model, "Haiku 4.5")
+	}
+	// effort は空文字で消さない（検出できなかっただけかもしれないため）
+	if ses.Effort != "medium" {
+		t.Fatalf("Effort = %q, 空文字で消してはならない", ses.Effort)
+	}
+
+	// モデルが同じでも effort だけ変われば反映する
+	s.applyDetectedModel(14, "claude", "Haiku 4.5", "high", false)
+	if ses.Effort != "high" {
+		t.Fatalf("Effort = %q, want %q", ses.Effort, "high")
 	}
 }
 

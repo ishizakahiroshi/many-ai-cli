@@ -517,6 +517,7 @@ export function addFileChip(file, onRemove) {
 export function openLightbox(src, opts: any = {}) {
   const overlay = document.createElement('div');
   overlay.id = 'image-lightbox';
+  overlay.classList.add('aac-wheel-overlay');
   const isVideo = opts.type === 'video';
   const media: any = document.createElement(isVideo ? 'video' : 'img');
   if (isVideo) {

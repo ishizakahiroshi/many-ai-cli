@@ -3,6 +3,7 @@ package hub
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/websocket"
@@ -65,6 +66,60 @@ func TestRecoverOrphanedApprovalRules(t *testing.T) {
 	}
 	if string(data) != "# Project rules\n" {
 		t.Fatalf("AGENTS.md = %q, want the original content back", string(data))
+	}
+}
+
+// TestRecoverOrphanedApprovalRulesRestoresProfileClaudeTarget は、宛先が既定の
+// ~/.claude ではなく profile の CLAUDE.md だった場合も、その path のまま台帳へ
+// 保存され、次回起動の回収が同じ path から import 行を外すことを確かめる。
+// 台帳は path 単位なので実装は変えていないが、profile 宛先を入れた状態で
+// 一度も通っていなかった経路なのでここで固定する。
+func TestRecoverOrphanedApprovalRulesRestoresProfileClaudeTarget(t *testing.T) {
+	withApprovalTestHome(t)
+	project := t.TempDir()
+	claudeDir := t.TempDir()
+	rulesPath := filepath.Join(claudeDir, "CLAUDE.md")
+	original := "# Profile rules\n"
+	if err := os.WriteFile(rulesPath, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestServer()
+	s.cfg.Approval.Enabled = true
+	s.sessionsMu.Lock()
+	s.sessions[1] = &session{ID: 1, Provider: "claude", CWD: project, ClaudeDir: claudeDir, State: "running"}
+	s.wrappers[1] = newWrapperConn(&websocket.Conn{})
+	s.sessionsMu.Unlock()
+	s.injectApprovalRules()
+	assertClaudeImportCount(t, rulesPath, 1)
+
+	statePath := approvalStatePathForTest(t)
+	state, ok := s.readApprovalRuleState(statePath)
+	if !ok || len(state.Targets) != 1 {
+		t.Fatalf("state = %+v, ok = %v, want 1 target", state, ok)
+	}
+	if filepath.Clean(state.Targets[0].Path) != filepath.Clean(rulesPath) {
+		t.Fatalf("persisted path = %q, want the profile CLAUDE.md", state.Targets[0].Path)
+	}
+	if state.Targets[0].Mode != approvalRuleModeClaudeImport {
+		t.Fatalf("persisted mode = %q, want %q", state.Targets[0].Mode, approvalRuleModeClaudeImport)
+	}
+
+	// Hub の kill を再現する: 後始末を呼ばないまま新しい Server で回収する。
+	revived := newTestServer()
+	revived.cfg.Approval.Enabled = true
+	revived.recoverOrphanedApprovalRules()
+
+	assertClaudeImportCount(t, rulesPath, 0)
+	data, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(data)) != strings.TrimSpace(original) {
+		t.Fatalf("profile CLAUDE.md = %q, want the original content back", string(data))
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("state file should be gone after a full recovery, stat err = %v", err)
 	}
 }
 

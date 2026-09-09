@@ -108,6 +108,77 @@ func (s *Server) handleLogConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]bool{"ok": true})
 	}
 }
+
+// handleTerminalColor は GET/POST でターミナルの色方針を読み書きする。
+// 値は force / inherit / off（internal/config の TerminalColor* 定数）。
+// 設定画面から変えられるようにするための口で、config.yaml を手で編集させない。
+// 反映は次に起こすセッションから（環境変数は起動時に決まるため）。
+func (s *Server) handleTerminalColor(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		mode := config.NormalizeTerminalColor(s.cfg.Hub.TerminalColor)
+		s.cfgMu.Unlock()
+		writeJSON(w, map[string]string{"terminal_color": mode})
+	case http.MethodPost:
+		var body struct {
+			TerminalColor string `json:"terminal_color"`
+		}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		// 未知の値は既定へ丸める（利用者の設定を理由に起動を壊さない）。
+		mode := config.NormalizeTerminalColor(body.TerminalColor)
+		s.cfgMu.Lock()
+		s.cfg.Hub.TerminalColor = mode
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "terminal_color": mode})
+	}
+}
+
+// handleHandoffIntentMode は GET/POST で看板の意図層モードを読み書きする。
+// 値は done-only（既定・案 2）/ turn-summary（案 3。internal/config の
+// HandoffIntentMode* 定数）。TerminalColor と同じく、config.yaml を手で
+// 編集させないための口（docs/local/plan_session-handoff-board_c3_intent-layer.md
+// 内部 C3）。反映は次のターン終了から（次に captureGitTurnEndWorker が
+// s.maybeInjectHandoffTurnSummary を呼ぶとき、そのつどこの設定を読み直す）。
+func (s *Server) handleHandoffIntentMode(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		s.cfgMu.Lock()
+		mode := config.NormalizeHandoffIntentMode(s.cfg.Handoff.IntentMode)
+		s.cfgMu.Unlock()
+		writeJSON(w, map[string]string{"intent_mode": mode})
+	case http.MethodPost:
+		var body struct {
+			IntentMode string `json:"intent_mode"`
+		}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+		// 未知の値は既定（done-only）へ丸める（利用者の設定を理由に起動を壊さない）。
+		mode := config.NormalizeHandoffIntentMode(body.IntentMode)
+		s.cfgMu.Lock()
+		s.cfg.Handoff.IntentMode = mode
+		s.cfgMu.Unlock()
+		if err := s.persistConfig(); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "intent_mode": mode})
+	}
+}
+
 func (s *Server) handleIdleTimeout(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
@@ -324,8 +395,9 @@ func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Reques
 		providers := append([]string(nil), s.cfg.Orchestration.SpawnConfirmProviders...)
 		childTimeout := s.cfg.Orchestration.ChildTimeoutSeconds
 		timeoutRespawn := s.cfg.Orchestration.TimeoutRespawn
+		maxChildrenPerParent := s.cfg.Orchestration.MaxChildrenPerParent
 		s.cfgMu.Unlock()
-		writeJSON(w, map[string]any{"board_notify_mode": string(mode), "spawn_confirm_mode": string(spawnMode), "spawn_confirm_providers": providers, "child_timeout_seconds": childTimeout, "timeout_respawn": timeoutRespawn})
+		writeJSON(w, map[string]any{"board_notify_mode": string(mode), "spawn_confirm_mode": string(spawnMode), "spawn_confirm_providers": providers, "child_timeout_seconds": childTimeout, "timeout_respawn": timeoutRespawn, "max_children_per_parent": maxChildrenPerParent})
 	case http.MethodPost:
 		var body struct {
 			BoardNotifyMode       config.BoardNotifyMode  `json:"board_notify_mode"`

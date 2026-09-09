@@ -25,8 +25,10 @@ import (
 	"golang.org/x/net/websocket"
 	"golang.org/x/term"
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/hubruntime"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/subscription"
 )
 
 const (
@@ -78,6 +80,7 @@ type wrapperSession struct {
 	currentConn      *websocket.Conn
 	currentSID       int
 	sendWriteTimeout time.Duration
+	queuedMessages   []proto.Message
 	// maxProcessedInputSeq は PTY へ書き終えた pty_input の最大シーケンス番号。
 	// Hub は未 ack の入力を「元の seq のまま」再送するため、ここ以下の seq が
 	// 来たら「既に書いた分の再送」と判定して PTY へ二重に書かず ack だけ返す。
@@ -183,6 +186,26 @@ func (ws *wrapperSession) isCurrentConn(c *websocket.Conn) bool {
 	ws.stateMu.Lock()
 	defer ws.stateMu.Unlock()
 	return c != nil && ws.currentConn == c
+}
+
+// queueMessages retains Hub frames received while the reattach handshake is
+// waiting for its acknowledgement. The receive loop drains them before it
+// reads the live connection so a pty_input sent before reattach_ack is not lost.
+func (ws *wrapperSession) queueMessages(messages []proto.Message) {
+	if len(messages) == 0 {
+		return
+	}
+	ws.stateMu.Lock()
+	ws.queuedMessages = append(ws.queuedMessages, messages...)
+	ws.stateMu.Unlock()
+}
+
+func (ws *wrapperSession) takeQueuedMessages() []proto.Message {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	messages := ws.queuedMessages
+	ws.queuedMessages = nil
+	return messages
 }
 
 // abortCurrentConn closes the current connection without waiting for sendMu.
@@ -343,9 +366,9 @@ func (r *reconnectSupervisor) run() {
 				cols, rows = w, h
 			}
 			replay, ptyBytes := r.snapshotReplay()
-			newConn, newSID, err := dialAndReattach(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
+			newConn, newSID, queuedMessages, err := dialAndReattachWithPending(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
 			if err != nil {
-				r.logger.Debug("reconnect attempt failed", "err", err)
+				r.logger.Info("reconnect attempt failed", "err", err)
 				continue
 			}
 			if newSID == 0 {
@@ -355,6 +378,7 @@ func (r *reconnectSupervisor) run() {
 				return
 			}
 			r.logger.Info("wrapper reconnected to hub", "old_sid", r.ws.getSID(), "new_sid", newSID)
+			r.ws.queueMessages(queuedMessages)
 			if r.lastReattachAt != nil {
 				r.lastReattachAt.Store(time.Now().UnixNano())
 			}
@@ -597,6 +621,37 @@ func (w *ptyOutputWriter) finish() {
 	<-w.done
 }
 
+const loginCompleteScanLimit = 8192
+
+// watchLoginComplete closes the vendor login process once its PTY output
+// shows that sign-in finished. Some official CLIs (observed: grok login)
+// print success and stay in standby instead of exiting.
+func watchLoginComplete(loginMode bool, closer io.Closer) func([]byte) {
+	if !loginMode || closer == nil {
+		return func([]byte) {}
+	}
+	var (
+		mu   sync.Mutex
+		buf  []byte
+		done atomic.Bool
+	)
+	return func(chunk []byte) {
+		if done.Load() || len(chunk) == 0 {
+			return
+		}
+		mu.Lock()
+		buf = append(buf, chunk...)
+		if len(buf) > loginCompleteScanLimit {
+			buf = append([]byte(nil), buf[len(buf)-loginCompleteScanLimit:]...)
+		}
+		finished := subscription.LoginFinished(string(buf))
+		mu.Unlock()
+		if finished && done.CompareAndSwap(false, true) {
+			time.AfterFunc(processCloseGrace, func() { _ = closer.Close() })
+		}
+	}
+}
+
 // ptyPump は PTY 出力を読み出し、enqueue へ渡し続ける。
 // ストリーム終端まで読み切ったら closeDone を呼んで done を閉じる。
 // 戻り値は ps.Wait() で使う waitErr。
@@ -752,6 +807,35 @@ func trailingEnterDelay(provider string) time.Duration {
 	}
 }
 
+func nativePermissionModeArgs(permissionMode string) []string {
+	if permissionMode != "" && permissionMode != "default" {
+		return []string{"--permission-mode", permissionMode}
+	}
+	return nil
+}
+
+func copilotPermissionArgs(permissionMode string) []string {
+	switch permissionMode {
+	case "bypassPermissions":
+		return []string{"--allow-all"}
+	case "auto":
+		return []string{"--autopilot"}
+	default:
+		return nil
+	}
+}
+
+func cursorAgentPermissionArgs(permissionMode string) []string {
+	switch permissionMode {
+	case "bypassPermissions":
+		return []string{"--force"}
+	case "auto":
+		return []string{"--auto-review"}
+	default:
+		return nil
+	}
+}
+
 func openCodePermissionArgs(permissionMode string) []string {
 	if permissionMode == "bypassPermissions" {
 		return []string{"--auto"}
@@ -759,57 +843,138 @@ func openCodePermissionArgs(permissionMode string) []string {
 	return nil
 }
 
+// commandCodePermissionArgs は Command Code CLI 向けの承認モード引数変換。
+// v1.37.0 の `--permission-mode` は standard / plan / auto-accept の 3 値。
+// `dont-ask` は無い。`--yolo` は独立フラグ。
+func commandCodePermissionArgs(permissionMode string) []string {
+	switch permissionMode {
+	case "plan":
+		return []string{"--permission-mode", "plan"}
+	case "acceptEdits", "auto":
+		return []string{"--auto-accept"}
+	case "bypassPermissions":
+		return []string{"--yolo"}
+	default:
+		return nil
+	}
+}
+
+// customProviderFor looks up provider in cfg.CustomProviders' effective set
+// (config.EffectiveCustomProviders — built-in-collision and duplicate
+// entries already excluded, matching what internal/hub validated before
+// spawning this process). Used by Run for the session's display name and to
+// resolve Command into the argv actually executed.
+func customProviderFor(cfg *config.Config, provider string) (config.CustomProvider, bool) {
+	for _, p := range config.EffectiveCustomProviders(cfg.CustomProviders) {
+		if p.ID == provider {
+			return p, true
+		}
+	}
+	return config.CustomProvider{}, false
+}
+
+// shouldAppendModelFlag reports whether Run should add --model to a wrap
+// invocation's provider-specific extra args. A custom provider never gets
+// it (decision 2, plan_custom-provider-spawn-execution.md): no built-in CLI
+// flag has a defined meaning for an arbitrary user command.
+//
+// This is the single guard for both routes a custom provider's argv can
+// take: internal/hub/spawn_handler.go's resolveSpawnModel already forces
+// body.Model empty before building `wrap` args for a Hub-driven spawn, so
+// this only ever matters for `many-ai-cli wrap <id> --model X` invoked
+// directly at the CLI (which never goes through resolveSpawnModel).
+// Extracted as its own function so the suppression is unit-testable without
+// spawning a real wrap process, the same reason resolveSpawnModel is a
+// separate function on the Hub side (敵対レビュー 2026-09-01 Finding A: this
+// case had neither the guard nor a test before).
+func shouldAppendModelFlag(model string, isCustomProvider bool) bool {
+	return model != "" && !isCustomProvider
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
+	// 記録点フックの sink をここで 1 度だけ組み込む（既定ビルドでは no-op）。
+	installProbes(logger, cfg)
+
+	// customProvider は config.yaml の custom_providers: エントリ（見つかれば）。
+	// フラグ再構成（下の --model 抑止）・表示名・後段の起動 argv 解決（startProcess
+	// 呼び出し直前）のすべてで使うので、関数の最初に一度だけ引く。
+	//
+	// 敵対レビュー 2026-09-01 Finding A: 以前はこの判定が --model の再構成より
+	// 後（旧 ensureHub 呼び出し直後）にあり、Hub 経由の spawn は
+	// internal/hub/spawn_handler.go の resolveSpawnModel が custom provider の
+	// model を空へ強制するため実害が無かったが、`many-ai-cli wrap <custom-id>
+	// --model X` を直接叩く経路（Hub を経由しない）は resolveSpawnModel を通らず、
+	// --model がそのまま custom provider の argv へ混入していた
+	// （decision 2, plan_custom-provider-spawn-execution.md 違反）。
+	customProvider, isCustomProvider := customProviderFor(cfg, provider)
+
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
-	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot/cursor-agent/opencode: bypassPermissions maps to each CLI's full-allow option)")
+	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot auto→--autopilot bypass→--allow-all; cursor-agent auto→--auto-review bypass→--force; opencode bypass→--auto; command-code plan→--permission-mode plan, acceptEdits/auto→--auto-accept, bypass→--yolo)")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
 	utf8Session := fs.Bool("utf8", false, "set UTF-8 console encoding for this session (Windows only)")
+	subscriptionLogin := fs.Bool("subscription-login", false, "run the provider CLI's own login flow instead of an interactive session")
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
+	// Subscription login セッションは「公式 CLI のログインサブコマンドを PTY で
+	// 走らせるだけ」の使い捨てセッション。model / permission / settings 等の
+	// 通常フラグは付けない（login サブコマンドは受け付けない）。認証そのものは
+	// 公式 CLI が行い、many-ai-cli は token を一切見ない。
+	loginMode := false
+	if *subscriptionLogin {
+		adapter, ok := subscription.AdapterFor(provider)
+		if !ok {
+			return fmt.Errorf("provider %q does not support subscription profiles", provider)
+		}
+		loginMode = true
+		providerArgs = adapter.LoginArgs()
+	}
+
 	// Reconstruct provider-specific flags from wrapper-parsed flags
 	var extra []string
-	if *model != "" {
-		extra = append(extra, "--model", *model)
-	}
-	switch provider {
-	case "claude", "grok":
-		// grok CLI は claude 互換の --permission-mode（bypassPermissions 含む）をネイティブサポートする
-		if *permissionMode != "" && *permissionMode != "default" {
-			extra = append(extra, "--permission-mode", *permissionMode)
+	if !loginMode {
+		if shouldAppendModelFlag(*model, isCustomProvider) {
+			extra = append(extra, "--model", *model)
 		}
-	case "codex":
-		if *codexOSS {
-			extra = append(extra, "--oss")
+		switch provider {
+		case "claude", "grok":
+			// grok CLI は claude 互換の --permission-mode（auto / bypassPermissions 含む）をネイティブサポートする
+			extra = append(extra, nativePermissionModeArgs(*permissionMode)...)
+		case "codex":
+			if *codexOSS {
+				extra = append(extra, "--oss")
+			}
+			if *sandbox != "" {
+				extra = append(extra, "--sandbox", *sandbox)
+			}
+			if *askForApproval != "" {
+				extra = append(extra, "--ask-for-approval", *askForApproval)
+			}
+		case "copilot":
+			// auto → --autopilot。bypassPermissions → --allow-all（--yolo 相当）
+			extra = append(extra, copilotPermissionArgs(*permissionMode)...)
+		case "cursor-agent":
+			// auto → --auto-review（Smart Auto）。bypassPermissions → --force（--yolo 相当）
+			extra = append(extra, cursorAgentPermissionArgs(*permissionMode)...)
+		case "opencode":
+			// --auto: auto-approve permissions that are not explicitly denied
+			extra = append(extra, openCodePermissionArgs(*permissionMode)...)
+		case "command-code":
+			extra = append(extra, commandCodePermissionArgs(*permissionMode)...)
 		}
-		if *sandbox != "" {
-			extra = append(extra, "--sandbox", *sandbox)
-		}
-		if *askForApproval != "" {
-			extra = append(extra, "--ask-for-approval", *askForApproval)
-		}
-	case "copilot":
-		// --allow-all = --allow-all-tools --allow-all-paths --allow-all-urls の一括指定
-		if *permissionMode == "bypassPermissions" {
-			extra = append(extra, "--allow-all")
-		}
-	case "cursor-agent":
-		// --force: Force allow commands unless explicitly denied
-		if *permissionMode == "bypassPermissions" {
-			extra = append(extra, "--force")
-		}
-	case "opencode":
-		// --auto: auto-approve permissions that are not explicitly denied
-		extra = append(extra, openCodePermissionArgs(*permissionMode)...)
 	}
 	providerArgs = append(extra, providerArgs...)
-	providerArgs, agentSessionID, err := prepareClaudeSessionArgs(provider, providerArgs)
-	if err != nil {
-		return err
+	var agentSessionID string
+	if !loginMode {
+		var err error
+		providerArgs, agentSessionID, err = prepareClaudeSessionArgs(provider, providerArgs)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Hub にスポーンされた場合、起動中の Hub ポートが MANY_AI_CLI_HUB_PORT で渡される。
@@ -824,7 +989,10 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		return err
 	}
 	cwd, _ := os.Getwd()
-	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "shell": "Shell"}[provider]
+	display := map[string]string{"claude": "Claude", "codex": "Codex", "copilot": "GitHub Copilot", "cursor-agent": "Cursor Agent", "opencode": "OpenCode", "grok": "Grok Build", "command-code": "Command Code", "shell": "Shell"}[provider]
+	if display == "" && isCustomProvider {
+		display = customProvider.EffectiveLabel()
+	}
 	termCols, termRows := 0, 0
 	if w, h, err := term.GetSize(int(os.Stdin.Fd())); err == nil && w > 0 && h > 0 {
 		termCols, termRows = w, h
@@ -898,9 +1066,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// （usage_hooks.go: ClaudeSettingsOptions.CrossSessionInboundAccept 参照）。
 	// conductor と手動セッションは人間が UI を見ているので既定のままにする。
 	// ネイティブ Windows には機能自体が無いので書かない（WSL 内は GOOS=linux で対象）。
+	// login セッションには --settings を渡さない。`claude auth login` は
+	// インタラクティブセッション用のフラグを受け付けず、付けると起動に失敗する。
 	settingsOpts := ClaudeSettingsOptions{
-		StatusLine:                provider == "claude" && reg.TokenStatusbar,
-		CrossSessionInboundAccept: provider == "claude" && reg.OrchestrationID != "" && reg.Auto && runtime.GOOS != "windows",
+		StatusLine:                !loginMode && provider == "claude" && reg.TokenStatusbar,
+		CrossSessionInboundAccept: !loginMode && provider == "claude" && reg.OrchestrationID != "" && reg.Auto && runtime.GOOS != "windows",
 	}
 	if settingsOpts.enabled() {
 		exe, exeErr := os.Executable()
@@ -931,10 +1101,27 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 
+	// 子セッションへ委譲できることを AI へ伝える（delegation.go に理由と provider 別の
+	// 渡し方の正本）。利用者のファイルには何も書かず、AI にターンも消費させない。
+	// login セッションは --settings と同じ理由でフラグを受け付けないため対象外。
+	if !loginMode && DelegationPromptEnabled(cfg.UserPrefs.Spawn.DelegationAuto) {
+		dpArgs, dpCleanup, dpErr := DelegationProviderArgs(provider, sessionID)
+		switch {
+		case dpErr != nil:
+			logger.Warn("delegation prompt setup failed", "session_id", sessionID, "provider", provider, "err", dpErr)
+		case len(dpArgs) > 0:
+			logger.Info("delegation_prompt_applied", "session_id", sessionID, "provider", provider, "flag", dpArgs[0])
+			providerArgs = append(providerArgs, dpArgs...)
+			if dpCleanup != nil {
+				defer dpCleanup()
+			}
+		}
+	}
+
 	if *utf8Session {
 		applyUTF8Session()
 	}
-	if provider == "opencode" {
+	if provider == "opencode" && !loginMode {
 		permValue := "ask"
 		if *permissionMode == "bypassPermissions" {
 			permValue = "allow"
@@ -945,20 +1132,56 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			defer cleanupCfg()
 		}
 	}
-	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor / orchestration child
-	// セッションの実 CLI プロセスにだけ、`many-ai-cli orchestrate spawn` が自力で
-	// Hub API を叩けるよう session ID と Hub token を env 経由で渡す。AI がプロンプト上で
+	// 実 CLI プロセスへ session ID と Hub token を env で渡す。`many-ai-cli orchestrate`
+	// （spawn / send / relay）が自力で Hub API を叩けるようにするため。AI がプロンプト上で
 	// token を扱わずに済むよう、コマンドライン引数ではなく継承 env に載せる（usage-relay と
-	// 同じ受け渡しパターン）。オーケストレーション対象外セッションには一切付与しない
-	// （既存セッションの env 露出面を広げないため）。
-	var providerExtraEnv []string
-	if reg.OrchestrationID != "" {
-		providerExtraEnv = []string{
-			fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
-			fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
-		}
+	// 同じ受け渡しパターン）。
+	//
+	// 全セッションへ渡す理由（2026-08-29 変更・plan_cross-session-messaging-generalization.md C1）:
+	//
+	// 元は `reg.OrchestrationID != ""` のときだけ渡していた（既存セッションの env 露出面を
+	// 広げないため・plan_orchestration-spawn-ui-exposure.md C2）。しかしその条件だと、
+	// 普通に始めたセッションは途中から「この作業は子に投げたい」と思っても切り替えられない。
+	// **env はプロセス起動時にしか渡せない**（下の startProcess を通った後で環境変数を足す
+	// 方法は無い）ので、「後から昇格させる」を実現する手段は「最初から渡しておく」しか無い。
+	// Hub 側は既に昇格に対応していて、OrchestrationID を持たない親からの spawn-child でも
+	// orchestration ID を採番して markConductor する（orchestration.go の
+	// preparePromptAndWorktree）。つまり足りていなかったのはこの env だけだった。
+	//
+	// 何が広がるか（納得ずくで受け入れる）: token を持つセッションは spawn / send / relay に
+	// 加えて、token guard だけで守られている Hub API（`POST /api/sessions/:id/inject` 等）も
+	// 叩ける。これを閉じるなら endpoint 単位のスコープが要るが、**全セッションは同じユーザーの
+	// 同じマシンで動くので、token を渡さないことは OS 的な防御にならない**（その気になれば
+	// 他セッションのプロセスからでも読める）。ここで守っているのは「AI に担当外のことを
+	// させない」ガードレールであって悪意への境界ではないため、スコープ付き token の実装は
+	// 割に合わないと判断した。境界が必要になったら、その時は Hub 側に endpoint スコープを
+	// 入れる（env の配り方を戻すのではなく）。
+	providerExtraEnv := []string{
+		fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
+		fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
 	}
-	ps, err := startProcess(provider, providerArgs, cwd, initCols, initRows, providerExtraEnv)
+	// custom provider は Command（config.yaml）を argv へ分解したものを実行ファイル・
+	// 引数の先頭に据える。分解に失敗した場合（閉じない引用符・制御文字・空など）は
+	// PTY を開く前に、startProcess 失敗時と同じ診断ブロック＋session_end 経路で終了する
+	// （新しい失敗 UX を作らない・decision 7, plan_custom-provider-spawn-execution.md）。
+	var customArgv []string
+	if isCustomProvider {
+		argv, argvErr := customProvider.Argv()
+		if argvErr != nil {
+			diagnoseStartFailure(os.Stderr, provider, providerArgs, argvErr)
+			_ = websocket.JSON.Send(conn, proto.Message{
+				Type:      "session_end",
+				SessionID: sessionID,
+				State:     "error",
+				ExitCode:  1,
+				Reason:    classifyStartFailure(argvErr),
+			})
+			_ = conn.Close()
+			return argvErr
+		}
+		customArgv = argv
+	}
+	ps, err := startProcess(provider, customArgv, providerArgs, cwd, initCols, initRows, providerExtraEnv, cfg.Hub.TerminalColor)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に
@@ -1059,21 +1282,27 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 					}
 				}
 			}()
+			queued := wses.takeQueuedMessages()
 			for {
 				var m proto.Message
-				if err := websocket.JSON.Receive(c, &m); err != nil {
-					select {
-					case <-done:
+				if len(queued) > 0 {
+					m = queued[0]
+					queued = queued[1:]
+				} else {
+					if err := websocket.JSON.Receive(c, &m); err != nil {
+						select {
+						case <-done:
+							return
+						default:
+						}
+						logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
+						wasCurrent := wses.isCurrentConn(c)
+						wses.clearConn(c)
+						if wasCurrent && !transportBroken.Load() {
+							notifyReconnect()
+						}
 						return
-					default:
 					}
-					logger.Info("hub WS read failed", "session_id", wses.getSID(), "err", err)
-					wasCurrent := wses.isCurrentConn(c)
-					wses.clearConn(c)
-					if wasCurrent && !transportBroken.Load() {
-						notifyReconnect()
-					}
-					return
 				}
 				switch m.Type {
 				case "pty_input":
@@ -1086,6 +1315,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							// 二重に書くと確定 \r が 2 回入って後続プロンプトを誤承認するため、
 							// 書かずに ack だけ返して Hub の in-flight を解消する。
 							sendInputAck(m.InputSeq)
+							probe("input.pty_write_dup", "session_id", wses.getSID(),
+								"input_seq", m.InputSeq, "bytes", len(m.Data))
 							break
 						}
 						if lead, rest := splitLeadingClearControl(provider, data); lead != nil {
@@ -1152,6 +1383,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 							wses.markInputSeqProcessed(m.InputSeq)
 							sendInputAck(m.InputSeq)
 						}
+						probe("input.pty_write", "session_id", wses.getSID(),
+							"input_seq", m.InputSeq, "bytes", len(m.Data), "err", writeErr != nil)
 					}
 				case "pty_resize":
 					if m.Cols > 0 && m.Rows > 0 {
@@ -1242,7 +1475,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// carry holds an incomplete UTF-8 sequence from the previous read that must
 	// be prepended to the next chunk before decoding (pumpChunk handles this).
 	rawMaxBytes := int64(cfg.Log.SessionMaxSizeMB) * 1024 * 1024
-	ptyPump(ps, lf, rawMaxBytes, outputWriter.enqueue, outputWriter.finish, appendReplay, closeDone)
+	onLoginOutput := watchLoginComplete(loginMode, ps)
+	ptyPump(ps, lf, rawMaxBytes, func(chunk []byte) {
+		outputWriter.enqueue(chunk)
+		onLoginOutput(chunk)
+	}, outputWriter.finish, appendReplay, closeDone)
 
 	waitErr := ps.Wait()
 	state, code, signal := classifyExit(waitErr)
@@ -1293,24 +1530,28 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 	if err != nil {
 		return nil, proto.Message{}, err
 	}
-	homeDir, codexHome, claudeDir := userSkillDirs()
+	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:           "register",
-		Role:           "wrapper",
-		Provider:       provider,
-		Display:        display,
-		CWD:            cwd,
-		Label:          label,
-		Model:          model,
-		PID:            os.Getpid(),
-		Shell:          DetectShell(),
-		Token:          cfg.Token,
-		HomeDir:        homeDir,
-		CodexHome:      codexHome,
-		ClaudeDir:      claudeDir,
-		AgentSessionID: agentSessionID,
-		Cols:           termCols,
-		Rows:           termRows,
+		Type:              "register",
+		Role:              "wrapper",
+		Provider:          provider,
+		Display:           display,
+		CWD:               cwd,
+		Label:             label,
+		Model:             model,
+		PID:               os.Getpid(),
+		Shell:             DetectShell(),
+		Token:             cfg.Token,
+		HomeDir:           homeDir,
+		CodexHome:         codexHome,
+		ClaudeDir:         claudeDir,
+		GrokHome:          grokHome,
+		AgentSessionID:    agentSessionID,
+		SubscriptionID:    activeSubscriptionID(),
+		UsageProbe:        os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
+		SubscriptionLogin: os.Getenv("MANY_AI_CLI_SUBSCRIPTION_LOGIN") == "1",
+		Cols:              termCols,
+		Rows:              termRows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, proto.Message{}, err
@@ -1329,61 +1570,77 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 	return conn, reg, nil
 }
 
-func dialAndReattach(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, error) {
+func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, []proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
 	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
 	conn, err := websocket.Dial(wsURL.String(), "", origin)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
-	homeDir, codexHome, claudeDir := userSkillDirs()
+	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:           "reattach",
-		Role:           "wrapper",
-		SessionID:      sessionID,
-		Provider:       provider,
-		Display:        display,
-		CWD:            cwd,
-		Label:          label,
-		Model:          model,
-		PID:            os.Getpid(),
-		Shell:          DetectShell(),
-		Token:          cfg.Token,
-		HomeDir:        homeDir,
-		CodexHome:      codexHome,
-		ClaudeDir:      claudeDir,
-		AgentSessionID: agentSessionID,
-		Cols:           termCols,
-		Rows:           termRows,
-		StartedAt:      startedAt,
-		LogPath:        rawLogPath,
-		JSONLPath:      jsonlPath,
-		ReplayB64:      base64.StdEncoding.EncodeToString(replay),
-		PTYBytes:       ptyBytes,
+		Type:              "reattach",
+		Role:              "wrapper",
+		SessionID:         sessionID,
+		Provider:          provider,
+		Display:           display,
+		CWD:               cwd,
+		Label:             label,
+		Model:             model,
+		PID:               os.Getpid(),
+		Shell:             DetectShell(),
+		Token:             cfg.Token,
+		HomeDir:           homeDir,
+		CodexHome:         codexHome,
+		ClaudeDir:         claudeDir,
+		GrokHome:          grokHome,
+		AgentSessionID:    agentSessionID,
+		SubscriptionID:    activeSubscriptionID(),
+		UsageProbe:        os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
+		SubscriptionLogin: os.Getenv("MANY_AI_CLI_SUBSCRIPTION_LOGIN") == "1",
+		Cols:              termCols,
+		Rows:              termRows,
+		StartedAt:         startedAt,
+		LogPath:           rawLogPath,
+		JSONLPath:         jsonlPath,
+		ReplayB64:         base64.StdEncoding.EncodeToString(replay),
+		PTYBytes:          ptyBytes,
 	}); err != nil {
 		_ = conn.Close()
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
-	var resp proto.Message
-	if err := websocket.JSON.Receive(conn, &resp); err != nil {
-		_ = conn.Close()
-		return nil, 0, err
+	var queued []proto.Message
+	for {
+		var resp proto.Message
+		if err := websocket.JSON.Receive(conn, &resp); err != nil {
+			_ = conn.Close()
+			return nil, 0, nil, err
+		}
+		if resp.Type == "reattach_reject" {
+			_ = conn.Close()
+			return nil, 0, queued, nil
+		}
+		if resp.Type == "reattach_ack" {
+			if resp.SessionID <= 0 {
+				_ = conn.Close()
+				return nil, 0, nil, fmt.Errorf("unexpected reattach response: %s", resp.Type)
+			}
+			return conn, resp.SessionID, queued, nil
+		}
+		queued = append(queued, resp)
 	}
-	if resp.Type == "reattach_reject" {
-		_ = conn.Close()
-		return nil, 0, nil
-	}
-	if resp.Type != "reattach_ack" || resp.SessionID <= 0 {
-		_ = conn.Close()
-		return nil, 0, fmt.Errorf("unexpected reattach response: %s", resp.Type)
-	}
-	return conn, resp.SessionID, nil
 }
 
-func userSkillDirs() (homeDir, codexHome, claudeDir string) {
+func userSkillDirs() (homeDir, codexHome, claudeDir, grokHome string) {
 	homeDir, _ = os.UserHomeDir()
-	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR")
+	return homeDir, os.Getenv("CODEX_HOME"), os.Getenv("CLAUDE_CONFIG_DIR"), os.Getenv(subscription.GrokHomeEnv)
+}
+
+// activeSubscriptionID returns the subscription profile id the Hub selected for
+// this session, or "" when the session uses the CLI's own login environment.
+func activeSubscriptionID() string {
+	return strings.TrimSpace(os.Getenv(subscription.SessionEnvVar))
 }
 
 // probeHubAlive returns true if the Hub HTTP server responds at 127.0.0.1:port.
@@ -1413,6 +1670,10 @@ func waitForHubReady(cfg *config.Config, timeout time.Duration) bool {
 	}
 }
 
+func runningHubPort(cfg *config.Config) (int, bool) {
+	return hubruntime.RunningPort(cfg.Hub.Port, cfg.Token)
+}
+
 func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 	// Hub にスポーンされた場合（MANY_AI_CLI=1）、Hub は既に動いている。
 	// 新 Hub を起動すると PID ファイル経由で実際の Hub が kill される危険があるため
@@ -1420,7 +1681,10 @@ func ensureHub(cfg *config.Config, logger *slog.Logger) error {
 	if os.Getenv("MANY_AI_CLI") == "1" {
 		return nil
 	}
-	if probeHubAlive(cfg) {
+	if port, ok := runningHubPort(cfg); ok {
+		// The runtime ledger may point at a fallback port. Keep this effective
+		// value local to the wrapper process; it is not persisted as config.
+		cfg.Hub.Port = port
 		// 既存 Hub が古いバイナリ（ディスクの exe と内容が食い違う）で、かつ
 		// アクティブセッションが無ければ自動で停止する。停止できたら下の spawn
 		// 経路で新バイナリの Hub を起動し直す。そうでなければ既存 Hub を使う。

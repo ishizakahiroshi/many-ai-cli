@@ -135,6 +135,24 @@
 .spawn-provider-row { display: flex; align-items: center; gap: var(--space-2); }
 .spawn-provider-row .spawn-select { flex: 1; }
 .spawn-provider-row .spawn-provider-combobox { flex: 1; min-width: 0; }
+.spawn-remember-approval-label {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.spawn-remember-approval-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
 .spawn-provider-native {
   position: absolute;
   width: 1px;
@@ -203,15 +221,17 @@
   line-height: 1;
 }
 .spawn-provider-list {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
+  /* 親（#session-list）が overflow-y:auto なので absolute だと器に切られる。
+     fixed にして画面座標へ逃がし、位置と max-height は spawn-panel.ts の
+     positionSpawnProviderList() が開くたびに実測して入れる（項目が増えても
+     入る限り全件出す。入らない側にしか余地が無ければ上向きに開く）。 */
+  position: fixed;
   z-index: 220;
   background: var(--bg-elev);
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
-  max-height: 180px;
+  /* JS が px で上書きする。JS が動かない場合の保険としてだけ残す。 */
+  max-height: 60vh;
   overflow-y: auto;
   list-style: none;
   padding: 2px 0;
@@ -235,6 +255,10 @@
   background: var(--line);
   outline: none;
 }
+.spawn-provider-option[draggable="true"] { cursor: grab; }
+.spawn-provider-option.dragging { opacity: 0.4; cursor: grabbing; }
+.spawn-provider-option.drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+.spawn-provider-option.drop-after  { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .spawn-provider-option-check {
   width: 14px;
   text-align: center;
@@ -419,6 +443,18 @@
 .spawn-input:focus { border-color: var(--accent); }
 .spawn-input { font-family: Consolas, monospace; font-size: 0.78rem; }
 
+/* plan_session-handoff-board_c4_prompted-spawn.md C2: 最初に渡す指示（任意）欄。
+   spawn-input の見た目を引き継ぎつつ、複数行入力向けに resize と行間だけ足す。 */
+.spawn-initial-prompt-row { display: flex; flex-direction: column; gap: 4px; }
+.spawn-field-label { font-size: 0.76rem; color: var(--muted); }
+.spawn-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 3.4em;
+  line-height: 1.4;
+}
+
 /* iOS WebKit は font-size 16px 未満の入力欄にフォーカスすると自動ズームし、
    セッション作成パネルを開いた瞬間（spawnCwdInput.focus()）に画面が拡大して
    使いにくくなる。ターミナル入力欄 #input と同じく mobile 時は 16px を確保する。 */
@@ -430,6 +466,8 @@
 }
 
 @media (max-width: 520px) {
+  .spawn-provider-row { gap: var(--space-1); }
+  .spawn-remember-approval-label { font-size: 0.68rem; }
   .spawn-provider-trigger {
     grid-template-columns: 15px minmax(0, 1fr) 10px;
     gap: var(--space-1);
@@ -548,6 +586,36 @@
   height: 14px;
   margin: 0;
   cursor: pointer;
+}
+/* inline help 付きのチェックと ? ヘルプボタンを 1 行に並べる。 */
+.spawn-inline-help-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.spawn-inline-help-btn {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.spawn-inline-help-btn:hover { color: var(--text); border-color: var(--muted); }
+.spawn-inline-help-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.spawn-inline-help-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+/* 指で押す端末では 16px の丸は小さすぎるので、入力欄と同じ breakpoint で広げる。 */
+@media (max-width: 720px), (pointer: coarse) {
+  .spawn-inline-help-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 0.8rem;
+  }
 }
 
 /* ---- C2: Detached 設定セクション ---- */

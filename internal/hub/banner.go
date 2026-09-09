@@ -48,6 +48,10 @@ type startupBannerAccess struct {
 	AllowLoopbackWithoutToken bool
 	TrustedNetworks           []string
 	AllowedHosts              []string
+	// RemotePINSet は remote_pin_hash が設定済みかどうか。遠隔公開設定
+	//（allowed_hosts / trusted_networks）があるのに PIN 未設定のとき、
+	// バナーで知らせる（2026-09-01 監査 MAC-04 の代替。必須化はしない）。
+	RemotePINSet bool
 }
 
 func startupBanner(version, addr, token string, accessOpt ...startupBannerAccess) string {
@@ -86,6 +90,11 @@ func startupBanner(version, addr, token string, accessOpt ...startupBannerAccess
 		if len(access.AllowedHosts) > 0 {
 			lines = append(lines, fmt.Sprintf("Allowed hosts: %s", strings.Join(access.AllowedHosts, ", ")))
 		}
+	}
+	// 遠隔公開設定があるのに PIN 未設定なら 1 行知らせる。AllowLoopbackWithoutToken
+	// とは独立（allowed_hosts だけの Tailscale / WireGuard 構成でも出す）。
+	if !access.RemotePINSet && (len(access.TrustedNetworks) > 0 || len(access.AllowedHosts) > 0) {
+		lines = append(lines, "Remote PIN: NOT SET (allowed_hosts / trusted_networks are configured; you can add one in Settings > Remote access protection)")
 	}
 	if wslutil.IsWSL() {
 		// WSL2 auto-forwards 127.0.0.1 between Windows and the WSL guest, so

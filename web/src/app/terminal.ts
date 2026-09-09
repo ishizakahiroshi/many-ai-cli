@@ -2,19 +2,33 @@
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
-import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals, utf8Decoder } from './state.js';
-import { autoExpand, inputEl, sendText, updateInputClearButton } from '../app.js';
+import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
+import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
 import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
 import { ws } from './ws-client.js';
-import { scheduleApprovalCheck } from './approval.js';
+import { isSelectMenuActive, isShellProvider, scheduleApprovalCheck } from './approval.js';
+import { probe } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
 import { isGrokChatViewerOpen, openGrokChatViewer, resetGrokChatViewerForSessionChange } from './grok-chat-viewer.js';
-import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossiblePrefix, isPossibleMarkerPrefix, filterHubMarkersPure } from './hub-marker-filter.js';
+import { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith, isPossiblePrefix, filterHubMarkersPure } from './hub-marker-filter.js';
 import { altScreenEnterSeq, altScreenExitSeq, filterCursorHideBlocksPure, hideCursorSeq, shouldBypassCursorHideFilterForProvider, showCursorSeq } from './cursor-hide-filter.js';
+import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
+import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
-export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, eraseDisplayBelowBytes, bytesStartWith, isPossibleMarkerPrefix } from './hub-marker-filter.js';
+import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
+import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import {
+  resolveTerminalHistoryStrategy,
+  terminalHistoryCapabilitiesForProvider,
+  type TerminalBufferType,
+  type TerminalHistoryCapabilities,
+  type TerminalHistoryStrategy,
+  type TerminalScreenSnapshot,
+} from './terminal-history-strategy.js';
+import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
+export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
 // サブエージェント実行行・ツール要約行は "+N lines" 無しで "(ctrl+o to expand)" 単独で
@@ -42,6 +56,9 @@ export const LIVE_BATCH_AFTER_RESIZE_MS = 400;
 // TERMINAL_PENDING_MAX_BYTES より大きく取る。先頭チャンク（カーソルホーム等の
 // 制御列）を捨てると描画が崩れるので、超過時はトリムせず即時 flush する。
 export const LIVE_BATCH_MAX_BYTES = 4 * 1024 * 1024;
+// A hidden/mobile terminal must not create an unbounded rAF chain while its
+// parent remains zero-sized. A later attach starts a fresh bounded attempt.
+export const TERMINAL_LAYOUT_READY_MAX_FRAMES = 120;
 
 // セッション横断検索（P-11）から、現在の xterm scrollback に残っている一致行へ
 // 移動する。検索結果は保存済みメッセージ単位なので厳密な物理行番号を持たない。
@@ -90,19 +107,42 @@ function addSelectionToInput(text, opts: any = {}) {
   showToast(ti18n('added_to_input'), opts.anchor);
 }
 
+function sendSelectionDirect(text, opts: any = {}) {
+  const cleaned = cleanCopiedText(text);
+  if (!cleaned) return;
+  const sessionId = opts.sessionId ?? activeSessionId;
+  if (sessionId == null) return;
+  if (isSelectMenuActive(sessionId)) {
+    showToast(ti18n('toast_select_menu_active'), opts.anchor);
+    return;
+  }
+  if (isShellProvider(sessions.get(sessionId)?.provider) && !window.confirm(ti18n('term_ctx_send_confirm_shell'))) return;
+  sendQuickCommand(sessionId, cleaned);
+  showToast(ti18n('term_ctx_sent'), opts.anchor);
+}
+
 // モーダル/オーバーレイ表示中は、ターミナル上でのホイール操作を xterm に処理させない。
 // overscroll-behavior はスクロールコンテナのチェーンしか止められず、モーダルの非スクロール領域
 // （タイトルバー・余白・背景）でのホイールは xterm が拾って背後の端末がスクロールしてしまう。
 // xterm 側でホイールを無視させることで、どの経路で来ても背後の端末が動かないようにする。
+// 対象は id ではなく共通クラス `.aac-wheel-overlay` で識別する。
+// id の allowlist に個別登録する方式は、モーダルを新設するたびに登録を忘れて同じ不具合
+// （モーダル上でホイールが効かず背後の端末が動く）を踏み続けたため 2026-08-27 に廃止した
+// （docs/local/plan_overlay-wheel-scroll-exclusion-audit.md 案B）。
+// 新しいオーバーレイを足すときは、その要素へ `aac-wheel-overlay` を付けるだけでよい。
+//
+// 付ける対象: 表示中は画面全体のホイールを端末へ渡したくない要素
+//   （inset:0 の背景マスクを持つモーダル、および従来 allowlist にあったパネル/ピッカー）。
+// 付けない対象: 端末の上に重なるだけで背景を覆わないポップオーバー
+//   （Usage ドロップダウン・コストポップオーバー・ref ドロップダウン等）。
+//   こちらは画面全体を止めると端末が操作できなくなるので、target ベースの
+//   `data-wheel-native`（isWheelTargetExcluded）で自分の上のホイールだけを除外する。
 function isModalOverlayOpen() {
-  const ids = ['settings-panel', 'about-panel', 'model-picker-overlay', 'new-session-panel', 'slash-picker', 'expand-capture-popup', 'tsb-sent-modal'];
-  for (const id of ids) {
-    const el = document.getElementById(id);
-    if (!el || el.hidden) continue;
-    if (getComputedStyle(el).display !== 'none') return true;
+  for (const el of document.querySelectorAll<HTMLElement>('.aac-wheel-overlay')) {
+    if (el.hidden) continue;
+    if (getComputedStyle(el).display === 'none') continue;
+    return true;
   }
-  // ファイルプレビューモーダル（path-links.ts）はクラスのみで id を持たないため別途検出する。
-  if (document.querySelector('.aac-file-modal-overlay')) return true;
   return false;
 }
 
@@ -124,7 +164,16 @@ export function ensureTerminal(id) {
     windowsPty: { backend: 'conpty' },
     // cursor を背景色と同色にしてブロックカーソルを不可視化する。
     // 'transparent' はブラウザ実装によって輪郭線だけ □ として描画されることがある。
-    theme: { background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3' },
+    // xterm 6.0 のオーバーレイスクロールバー（.xterm-scrollable-element > .scrollbar > .slider）は
+    // 色を theme から取り、未指定なら「前景色の不透明度 20%」が既定になる（暗背景ではほぼ見えない）。
+    // 5.x 世代まで terminal.css が .xterm-viewport::-webkit-scrollbar で描いていた紫を theme 側で再現する。
+    // 常時表示（Auto のフェードアウト抑止）は terminal.css の .scrollbar.invisible 上書きが担当。
+    theme: {
+      background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3',
+      scrollbarSliderBackground: '#4f5bd5',
+      scrollbarSliderHoverBackground: '#6b74ff',
+      scrollbarSliderActiveBackground: '#8b92ff',
+    },
     disableStdin: true,
     allowProposedApi: true,
   });
@@ -330,6 +379,7 @@ export function ensureTerminal(id) {
     pendingFlushActive: false,
     pendingFlushSeq: 0,
     pendingFlushWatchdog: null,
+    layoutGeneration: 0,
     pendingFlushCallbacks: [],
     pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
@@ -340,6 +390,8 @@ export function ensureTerminal(id) {
     screenClearSeqCarry: new Uint8Array(0),
     eraseScrollbackFilterCarry: new Uint8Array(0),
     crFilterCarry: new Uint8Array(0),
+    crFilterAltScreen: false,
+    mouseMode: initialMouseModeTrackerState(),
     cursorHideFilterCarry: new Uint8Array(0),
     inCursorHideBlock: false,
     cursorHideBlockBuf: [] as number[],
@@ -369,6 +421,15 @@ export function attachTerminal(id) {
   // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
   syncLiveStatusDomForActive();
   if (t.container) {
+    if (!t.everAttached) {
+      // A prior bounded attempt may have stopped while the container was
+      // hidden. Reattach it and allow a fresh bounded attempt when the layout
+      // becomes visible again.
+      area.innerHTML = '';
+      area.appendChild(t.container);
+      whenLayoutReady(id, t.container, 0, t.layoutGeneration);
+      return;
+    }
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
     area.innerHTML = '';
@@ -380,6 +441,7 @@ export function attachTerminal(id) {
       if (!terminals.has(id) || activeSessionId !== id) return;
       area.appendChild(t.container);
       releaseHiddenWebglRenderers();
+      ensureAltScrollRail(id, t);
       t.term.scrollToBottom();
       syncViewportScrollbarToBottom(t);
       const prevCols = t.term.cols;
@@ -398,6 +460,7 @@ export function attachTerminal(id) {
   container.style.width = '100%';
   container.style.height = '100%';
   t.container = container;
+  t.layoutGeneration = (t.layoutGeneration || 0) + 1;
   area.innerHTML = '';
   area.appendChild(container);
   releaseHiddenWebglRenderers();
@@ -451,17 +514,61 @@ function refreshAllRows(t) {
   try { t.term.refresh(0, t.term.rows - 1); } catch (_) { /* 未 open 時は無視 */ }
 }
 
-export function whenLayoutReady(id, container) {
+// 必要なときだけスクロールバーを初回 reveal する（xterm 6.0 の
+// オーバーレイスクロールバー対策）。xterm は ScrollbarVisibility.Auto なので、
+// open 直後にスクロールバックがまだ空だと .invisible のままになり、後からログが
+// 増えても表示のきっかけが無い。xterm の描画後にスライダーの実寸を確認してから
+// mouseover を発火し、スクロール不要な端末にはバーを出さない。
+// reveal 後にフェードアウトした状態（.invisible.fade）は terminal.css で opacity:1 に戻して
+// 常時表示にする。bubbles:false は xterm 自身のリスナーだけを呼ぶために指定する。
+function primeScrollbarVisibility(container) {
+  if (!container) return;
+  let remaining = 12;
+  const tryReveal = () => {
+    const el = container && container.querySelector && container.querySelector('.xterm-scrollable-element');
+    if (el) {
+      const scrollbar = el.querySelector('.scrollbar.vertical');
+      const slider = scrollbar && scrollbar.querySelector('.slider');
+      if (scrollbar && scrollbar.classList.contains('visible')) return;
+      const trackHeight = scrollbar ? scrollbar.getBoundingClientRect().height : 0;
+      const sliderHeight = slider ? slider.getBoundingClientRect().height : 0;
+      if (trackHeight > sliderHeight + 1) {
+        try { el.dispatchEvent(new MouseEvent('mouseover', { bubbles: false })); } catch (_) {}
+        return;
+      }
+    }
+    // open / write 直後は xterm の寸法同期が次のフレームに回ることがある。
+    if (--remaining > 0) requestAnimationFrame(tryReveal);
+  };
+  requestAnimationFrame(tryReveal);
+}
+
+export function whenLayoutReady(id, container, attempt = 0, generation = null) {
   const t = terminals.get(id);
-  if (!t) return;
+  if (!t || t.container !== container || !container?.isConnected) return;
+  const expectedGeneration = generation == null ? t.layoutGeneration : generation;
+  if (expectedGeneration !== t.layoutGeneration) return;
   if (container.clientWidth > 0 && container.clientHeight > 0) {
     t.term.open(container);
+    primeScrollbarVisibility(container);
+    // 代替画面バッファの provider は xterm のスクロールバーが原理的に出ないため、
+    // 同じ見た目・同じ位置の疑似レールを差し込む（表示条件はレール側で判定する）。
+    ensureAltScrollRail(id, t);
     enableWebglRenderer(t);
     fitTerminalPreservingBottom(t, id);
     if (!t.scrollHandlerInstalled) {
       t.scrollHandlerInstalled = true;
       t.scrollDisposable = t.term.onScroll(() => {
         const atBottom = isTerminalAtBottom(t);
+        try {
+          probe('approval.scroll', () => ({
+            sessionId: id,
+            atBottom,
+            manual: Date.now() - lastTerminalManualScrollAt < 400,
+            viewportY: t.term?.buffer?.active?.viewportY ?? -1,
+            baseY: t.term?.buffer?.active?.baseY ?? -1,
+          }));
+        } catch (_) {}
         // autoScroll を倒すのは「ユーザーが直前に手動スクロールした」ときだけにする。
         // CLI(Claude Code 等)の TUI は頻繁に再描画し、その programmatic scroll でも
         // onScroll が発火する。これを無条件で autoScroll=false にしていたため、ユーザーが
@@ -487,10 +594,18 @@ export function whenLayoutReady(id, container) {
         updateHistoryHint(id);
       });
     }
-    const viewport = t.term.element?.querySelector('.xterm-viewport');
-    if (viewport && !t.viewportScrollIntentInstalled) {
+    // xterm 6.0 で .xterm-viewport は画面上に見えている描画レイヤー
+    // （.xterm-scrollable-element とその子孫 = 本文の canvas・新スクロールバーの
+    // スライダー）の兄弟要素になり、視覚的には重なっていてもクリックはそちら側の
+    // 要素が受け取る。.xterm-viewport への pointerdown はイベントバブリングの経路上
+    // 一切通らないため無効なコードになっていた（本文クリックとスクロールバーの
+    // スライダードラッグの両方を実機の document.elementFromPoint() で検証済み。
+    // pending_xterm6-viewport-scrolltop-deadcode.md 参照）。.xterm コンテナ自体は
+    // 両方の祖先になるため、ここへ付け替えて拾う。
+    const termEl = t.term.element as HTMLElement | null;
+    if (termEl && !t.viewportScrollIntentInstalled) {
       t.viewportScrollIntentInstalled = true;
-      viewport.addEventListener('pointerdown', () => {
+      termEl.addEventListener('pointerdown', () => {
         markTerminalManualScrollIntent();
       });
     }
@@ -514,10 +629,12 @@ export function whenLayoutReady(id, container) {
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       const sel = t.term.getSelection();
-      if (sel) openTermCtxMenu(e.clientX, e.clientY, sel);
+      if (sel) openTermCtxMenu(e.clientX, e.clientY, sel, id);
     });
+  } else if (attempt < TERMINAL_LAYOUT_READY_MAX_FRAMES) {
+    requestAnimationFrame(() => whenLayoutReady(id, container, attempt + 1, expectedGeneration));
   } else {
-    requestAnimationFrame(() => whenLayoutReady(id, container));
+    console.debug('[terminal] layout did not become measurable; stopping retry', { id, attempt });
   }
 }
 
@@ -526,6 +643,7 @@ export function whenLayoutReady(id, container) {
 // 通常コピーに加えて「1行コピー」（改行除去 → スペース join）を選べるメニューを出す。
 let termCtxMenuEl = null;
 let termCtxSelection = '';
+let termCtxSessionId: number | null = null;
 
 function ensureTermCtxMenu() {
   if (termCtxMenuEl) return termCtxMenuEl;
@@ -545,17 +663,19 @@ function ensureTermCtxMenu() {
     btn.appendChild(label);
     btn.addEventListener('click', () => {
       const sel = termCtxSelection;
+      const sessionId = termCtxSessionId;
       // closeTermCtxMenu() で display:none になると getBoundingClientRect() が
       // 全て 0 を返しトーストが左上に飛ぶため、閉じる前に座標を確保しておく
       const r = btn.getBoundingClientRect();
       const anchor = { clientX: r.right, clientY: r.top + r.height / 2 };
       closeTermCtxMenu();
-      if (sel) handler(sel, anchor);
+      if (sel) handler(sel, anchor, sessionId);
     });
     m.appendChild(btn);
   };
   mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
   mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
+  mkItem('term_ctx_send_selection', 'そのまま送信', '➤', (sel, anchor, sessionId) => sendSelectionDirect(sel, { anchor, sessionId }));
   mkItem('term_ctx_add_to_input', '入力欄に追加', '＋', (sel, anchor) => addSelectionToInput(sel, { anchor }));
   mkItem('term_ctx_save_template', 'テンプレートに登録', '▤', (sel, anchor) => {
     const body = cleanOneLineText(sel);
@@ -575,9 +695,10 @@ function ensureTermCtxMenu() {
   return m;
 }
 
-function openTermCtxMenu(x, y, selection) {
+function openTermCtxMenu(x, y, selection, sessionId) {
   const m = ensureTermCtxMenu();
   termCtxSelection = selection;
+  termCtxSessionId = sessionId;
   // 言語切替に追従するため表示のたびにラベルを引き直す
   m.querySelectorAll('.ctx-label').forEach((el) => {
     const v = ti18n(el.dataset.i18nKey);
@@ -593,6 +714,7 @@ function closeTermCtxMenu() {
   if (!termCtxMenuEl) return;
   termCtxMenuEl.classList.remove('open');
   termCtxSelection = '';
+  termCtxSessionId = null;
 }
 
 export function queuePendingTerminalChunk(id, bytes) {
@@ -720,17 +842,30 @@ export function isTerminalAtBottom(t) {
   return buf.viewportY + t.term.rows >= buf.length;
 }
 
-// xterm の内部スクロール状態（ydisp=ybase=最下部）と、ネイティブの
-// .xterm-viewport.scrollTop（青いスクロールバーのつまみ位置）は別管理で、
+// xterm の内部スクロール状態（ydisp=ybase=最下部）と、画面に見えている青いつまみ
+// （.xterm-scrollable-element > .scrollbar.vertical > .slider）は別管理で、
 // fit（リサイズ）直後に PTY 出力が来るとつまみ位置の同期が取りこぼされ、
 // 「表示は最下部なのにつまみだけ先頭に残る」状態になることがある。
 // scrollToBottom() の後にこれを呼び、つまみも実際の表示位置（最下部）へ合わせる。
+//
+// 対象要素は xterm 6.0 で .xterm-viewport（ネイティブスクロール）から
+// .xterm-scrollable-element の自前スライダーへ置き換わった（terminal.css の
+// 「ターミナルのスクロールバー」コメント参照）。.xterm-viewport は今も存在するが
+// scrollHeight===clientHeight で常にスクロール余地ゼロのため、旧実装のまま
+// viewport.scrollTop を書いても何も起きない無効なコードになっていた。
 function syncViewportScrollbarToBottom(t) {
-  const viewport = t?.term?.element?.querySelector('.xterm-viewport') as HTMLElement | null;
-  if (!viewport) return;
-  const target = viewport.scrollHeight - viewport.clientHeight;
-  if (target > 0 && Math.abs(viewport.scrollTop - target) > 1) {
-    viewport.scrollTop = target;
+  const el = t?.term?.element as HTMLElement | null;
+  if (!el) return;
+  const scrollbar = el.querySelector('.xterm-scrollable-element > .scrollbar.vertical') as HTMLElement | null;
+  const slider = scrollbar?.querySelector('.slider') as HTMLElement | null;
+  if (!scrollbar || !slider) return;
+  const trackRect = scrollbar.getBoundingClientRect();
+  const sliderRect = slider.getBoundingClientRect();
+  if (trackRect.height <= 0 || sliderRect.height <= 0) return;
+  const target = Math.max(0, trackRect.height - sliderRect.height);
+  const current = sliderRect.top - trackRect.top;
+  if (Math.abs(current - target) > 1) {
+    slider.style.top = `${target}px`;
   }
 }
 
@@ -743,7 +878,25 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   // 追従して再フィットされ、CLI 最新行がポップアップ裏に切れて隠れるのを防ぐ。
   if (!forceVisualFit && isPtyResizeSuppressed()) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
+  const geoPrevCols = t.term.cols;
+  const geoPrevRows = t.term.rows;
   t.fitAddon.fit();
+  try {
+    probe('geo.fit', () => ({
+      sessionId: id,
+      prevCols: geoPrevCols,
+      prevRows: geoPrevRows,
+      cols: t.term.cols,
+      rows: t.term.rows,
+      forceVisualFit,
+      suppressed: isPtyResizeSuppressed(),
+      lastSent: lastSentPtySize.get(id) || '',
+      elemW: t.container?.clientWidth ?? -1,
+      elemH: t.container?.clientHeight ?? -1,
+    }));
+  } catch (_) {}
+  primeScrollbarVisibility(t.term.element);
+  if (id !== null && id !== undefined) updateAltScrollRail(id);
   if (wasAtBottom) {
     t.autoScroll = true;
     t.term.scrollToBottom();
@@ -773,24 +926,124 @@ export function isAlternateBuffer(t) {
   return !!(active && active.type === 'alternate');
 }
 
-// alt buffer 中のスクロール操作は PTY 側アプリ（Codex / Grok 等の TUI）に
-// PgUp/PgDn として転送する。xterm は disableStdin:true のため、mouse tracking が
-// ON でも wheel を PTY へ送らない。
+interface TerminalHistoryRoute {
+  strategy: TerminalHistoryStrategy;
+  capabilities: TerminalHistoryCapabilities;
+}
+
+function terminalBufferType(t): TerminalBufferType {
+  const type = t?.term?.buffer?.active?.type;
+  if (type === 'alternate') return 'alternate';
+  if (type === 'normal') return 'normal';
+  return 'unknown';
+}
+
+function terminalHistoryRoute(sessionId, t): TerminalHistoryRoute {
+  const capabilities = terminalHistoryCapabilitiesForProvider(sessions.get(sessionId)?.provider);
+  const buffer = t?.term?.buffer?.active;
+  const nativeScrollbackAvailable = buffer?.type === 'normal' && buffer.length > (t?.term?.rows || 0);
+  return {
+    capabilities,
+    strategy: resolveTerminalHistoryStrategy(terminalBufferType(t), capabilities, nativeScrollbackAvailable),
+  };
+}
+
+function openTranscriptViewerForRoute(sessionId, route: TerminalHistoryRoute): boolean {
+  if (route.strategy !== 'transcript-viewer') return false;
+  if (route.capabilities.transcriptViewer === 'grok-chat') {
+    if (!isGrokChatViewerOpen()) openGrokChatViewer(sessionId);
+    return true;
+  }
+  return false;
+}
+
+export function captureTerminalScreenSnapshot(t): TerminalScreenSnapshot {
+  const term = t?.term || t;
+  const buffer = term?.buffer?.active;
+  const rows = Math.max(0, Number(term?.rows) || 0);
+  const cols = Math.max(0, Number(term?.cols) || 0);
+  const start = Math.max(0, Number(buffer?.viewportY) || 0);
+  const lines: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    lines.push(buffer?.getLine?.(start + i)?.translateToString(false) || '');
+  }
+  const rawType = buffer?.type;
+  const bufferType: TerminalBufferType = rawType === 'alternate' || rawType === 'normal' ? rawType : 'unknown';
+  return { bufferType, cols, rows, lines };
+}
+
+// 代替画面へ履歴入力を送れる戦略か。疑似スクロールレールの表示条件も同じ述語を
+// 使う。Provider 固有事情は terminal-history-strategy.ts の capability profile に閉じる。
+export function canPageAltBuffer(sessionId, t) {
+  return terminalHistoryRoute(sessionId, t).strategy === 'alt-input-confirmed';
+}
+
+// alt buffer 中のスクロール操作は PTY 側アプリ（Claude Code / opencode 等の TUI）に
+// ホイールイベントとして転送する。追跡モードを観測できないセッションでは PageUp /
+// PageDown へフォールバックする。
 // 戻り値: 転送した場合 true（呼び元は xterm scrollback 操作等をスキップ）。
 export function scrollAltBufferPage(sessionId, t, direction) {
-  if (!isAlternateBuffer(t)) return false;
-  // grok の TUI は PageUp で履歴領域に飛び、その状態で次の応答が来ると応答が画面外
-  // （履歴領域）に描画されユーザーには「Waiting のまま動かない」ように見える。
-  // trackpad 慣性や高 DPI マウスは 1 操作で wheel イベントを数発発火するため、
-  // 1 ノッチのつもりが PageUp 数連投になり確実にこの状態に陥る（s32 17:00:45〜47 に
-  // ESC[5~ が 6 回連発した実例あり）。grok 宛は wheel→PageUp 転送を停止する。
-  if (sessions.get(sessionId)?.provider === 'grok') return false;
-  const key = direction < 0 ? '\x1b[5~' : '\x1b[6~';
-  try { sendText(sessionId, key); } catch (_) {}
+  if (!canPageAltBuffer(sessionId, t)) return false;
+  // pending 中は PTY へも送らず、可視行 snapshot の再作成も避ける。
+  if (hasPendingAltScrollNotch(sessionId)) {
+    // 捨てた入力の数。ホイールを速く回したときに何回ぶん落ちているかを測る。
+    probe('altscroll.drop', () => ({ sessionId, dir: direction }));
+    return true;
+  }
+  const pending = beginAltScrollNotch(sessionId, direction, captureTerminalScreenSnapshot(t));
+  // 1 件ずつ画面変化を確認する。同じ入力が pending 中の wheel/pump はここで吸収し、
+  // PTY へ連投しない（呼び元には「代替画面経路で処理済み」と返す）。
+  if (pending === 'busy') return true;
+  const requestedMode: WheelEncoding = t.mouseMode?.tracking
+    ? (t.mouseMode.sgr ? 'sgr' : 'x10')
+    : 'page';
+  // X10 は cols/rows が大きいと座標バイトが JSON/UTF-8 経由で 2 バイト化けするため、
+  // その組み合わせのときだけ page（PageUp/PageDown）へ読み替える。
+  const mode: WheelEncoding = requestedMode === 'x10' && !isX10CoordinateSafe(t.term.cols, t.term.rows)
+    ? 'page'
+    : requestedMode;
+  const key = encodeWheelSeq(direction, t.term.cols, t.term.rows, mode);
+  try {
+    probe('geo.scroll', () => ({
+      sessionId,
+      direction,
+      mode,
+      cols: t.term.cols,
+      rows: t.term.rows,
+      lastSent: lastSentPtySize.get(sessionId) || '',
+      elemW: t.container?.clientWidth ?? -1,
+      elemH: t.container?.clientHeight ?? -1,
+    }));
+  } catch (_) {}
+  const sent = sendText(sessionId, key);
+  if (!sent) {
+    if (pending === 'started') cancelAltScrollNotch(sessionId);
+    return false;
+  }
   return true;
 }
 
+// ページ送りで CLI が過去の画面を描いている最中か。
+//
+// 代替画面バッファの provider では、ホイールも ↑up / ↓down ボタンも疑似レールも
+// scrollAltBufferPage() を通って CLI へ届く（マウス追跡が有効なら SGR/X10 ホイール、
+// 無効なら従来どおり PageUp/PageDown）。つまりここでの
+// 「スクロール」は xterm の scrollback 移動ではなく CLI 自身の再描画であり、遡って
+// いる間は画面に過去の内容が載る。Hub の承認検出は VT ミラー＝今の画面を読むので、
+// 遡り中かどうかを知らないと回答済みの承認が新しい候補として届く（実測は
+// docs/local/bugfix_approval-bar-stale-options-scroll-mismatch_2026-08-19.md の
+// 2026-08-23 追記。7 時間前に回答した承認ブロックが再描画されていた）。
+export function isTerminalShowingHistory(id): boolean {
+  return altScrollNotchesUp(id) > 0;
+}
+
 export function forwardWheelToAltBuffer(sessionId, t, deltaY) {
+  if (!canPageAltBuffer(sessionId, t)) return false;
+  // deltaY < 0 は上方向ホイール（過去へ遡る = notchesUp を増やす）
+  const dir = deltaY < 0 ? 1 : -1;
+  if (stepNotches(sessionId, dir)) {
+    return true;
+  }
   return scrollAltBufferPage(sessionId, t, deltaY < 0 ? -1 : 1);
 }
 
@@ -812,10 +1065,11 @@ export function isWheelTargetExcluded(target) {
   // ネイティブの wheel スクロールを使う。除外しないと document レベルのリスナーが
   // ターミナルへ転送して preventDefault し、サイドバー上でホイールが効かなくなる。
   if (target.closest('#session-list')) return true;
-  // ファイルタブ（ツリー / プレビュー）はネイティブの wheel スクロールを使う。
-  // これを除外しないと document レベルのリスナーがターミナルへ転送して preventDefault してしまい、
-  // プレビューのスクロールが効かなくなる。
-  if (target.closest('#files-tab-contents')) return true;
+  // #display-area の中で端末以外のペイン（files / history / approval / orchestration …）は
+  // 自前の overflow を持つ。id を 1 つずつ登録する方式は足すたびに漏れるので、
+  // 「端末以外なら除外」という構造で判定する（オーバーレイ側の .aac-wheel-overlay と同じ考え方）。
+  const inDisplayArea = target.closest('#display-area');
+  if (inDisplayArea && !target.closest('#terminal-wrapper')) return true;
   return false;
 }
 
@@ -911,22 +1165,21 @@ document.addEventListener('wheel', (e) => {
     return;
   }
 
-  // Grok で上端にいる状態の上方向ホイールは、Grok 会話履歴ビューアを自動展開する。
-  // Grok のように改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
+  // 専用 transcript viewer capability を持つ TUI で上方向ホイールが来たら、自動展開する。
+  // 改行を出さず固定位置に上書き描画する TUI では xterm のスクロールバックが
   // 育たないため、ホイール上は無反応のままになる（履歴ボタンも表示条件 buf.length>rows を
   // 満たさず出ない）。「ボタンを押す」介在を挟まず、上方向ホイールで会話履歴へ導線する。
   // 生 PTY ログ再生（history-viewer）は絶対座標フレームの機械置換で読めない表示になるため、
-  // Grok は chat_history.jsonl 由来の整形ビューア（grok-chat-viewer）を使う。
+  // 現在の grok-chat viewer は chat_history.jsonl 由来の整形表示を使う。
   const multiViewEl = document.getElementById('multi-view');
   const inMultiPane = !!(multiViewEl && !multiViewEl.hidden);
   const buf = t.term.buffer.active;
-  // alt buffer でここに到達するのは grok のみ（他 provider は forwardWheelToAltBuffer が
-  // PgUp/PgDn 転送で return 済み。grok 宛転送は事故防止で停止中 → scrollAltBufferPage 参照）。
+  // alt-input-confirmed は forwardWheelToAltBuffer で return 済み。transcript-viewer は
+  // PTY 転送をしないためここへ到達する。
   // alt buffer は scrollback を持たず「上端」概念が無いので、常にビューア導線の対象にする。
   const atTop = buf.type === 'alternate' || buf.viewportY === 0;
-  const isGrok = sessions.get(targetSessionId)?.provider === 'grok';
-  if (isGrok && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && !isGrokChatViewerOpen()) {
-    openGrokChatViewer(targetSessionId);
+  const historyRoute = terminalHistoryRoute(targetSessionId, t);
+  if (historyRoute.strategy === 'transcript-viewer' && e.deltaY < 0 && atTop && targetSessionId === activeSessionId && !inMultiPane && openTranscriptViewerForRoute(targetSessionId, historyRoute)) {
     markTerminalManualScrollIntent();
     e.preventDefault();
     e.stopPropagation();
@@ -1120,19 +1373,22 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   const t = terminals.get(activeSessionId);
   if (!t) return;
   markTerminalManualScrollIntent();
-  if (scrollAltBufferPage(activeSessionId, t, -1)) {
+  if (canPageAltBuffer(activeSessionId, t)) {
+    // レール位置は近似（alt-scroll-rail.ts 冒頭のコメント参照）なので、requestNotches が
+    // 「動く必要が無い」と正直に false を返しても CLI 側にはまだ余地があるかもしれない。
+    // その場合は 1 回だけ直接送ってから同じ分岐に合流させる（無反応に見せない）。
+    if (!stepNotches(activeSessionId, 12)) {
+      scrollAltBufferPage(activeSessionId, t, -1);
+    }
     t.autoScroll = false;
     updateScrollLockBtn(true);
     return;
   }
-  // スクロールバックが無い（Grok のように改行を出さない TUI / alt buffer）場合、
+  // スクロールバックが無い（固定位置に描く TUI / alt buffer）場合、
   // scrollToTop は無反応のままになる。ホイール経路と同じく、その状態の▲は
-  // Grok 会話履歴ビューアを開く導線として扱う（grok のみ。alt buffer 中の grok は
-  // PgUp 転送も事故防止で停止しているため、ここが唯一の履歴導線）。
-  const buf = t.term.buffer.active;
-  const isGrok = sessions.get(activeSessionId)?.provider === 'grok';
-  if (isGrok && (buf.type === 'alternate' || buf.length <= t.term.rows) && !isGrokChatViewerOpen()) {
-    openGrokChatViewer(activeSessionId);
+  // capability profile が宣言する専用 transcript viewer の導線として扱う。
+  const historyRoute = terminalHistoryRoute(activeSessionId, t);
+  if (openTranscriptViewerForRoute(activeSessionId, historyRoute)) {
     return;
   }
   t.autoScroll = false;
@@ -1144,7 +1400,10 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!t) return;
-  if (scrollAltBufferPage(activeSessionId, t, 1)) {
+  if (canPageAltBuffer(activeSessionId, t)) {
+    if (!stepNotches(activeSessionId, -12)) {
+      scrollAltBufferPage(activeSessionId, t, 1);
+    }
     t.autoScroll = true;
     updateScrollLockBtn(false);
     return;
@@ -1166,7 +1425,7 @@ export const screenClearSeqBytePatterns = [
 export const screenClearSeqCarryLength = Math.max(...screenClearSeqBytePatterns.map(pattern => pattern.length)) - 1;
 export { hideCursorSeq, showCursorSeq };
 
-// xterm 入口の [MANY-AI-CLI] ブロック・[MANY-AI-CLI-DONE] ブロック除去は
+// xterm 入口の [MANY-AI-CLI] タグ・[MANY-AI-CLI-DONE] タグ除去は
 // hub-marker-filter.ts の純関数 filterHubMarkersPure に集約されている（DOM 非依存・
 // node:test 検証可能）。本ラッパーは terminal の state（markerFilterCarry / inMarkerBlock /
 // inDoneBlock）と純関数の state を橋渡しするだけ。
@@ -1177,16 +1436,16 @@ export function filterHubMarkersForDisplay(id, bytes) {
     carry: t.markerFilterCarry || new Uint8Array(0),
     inDone: t.inDoneBlock || false,
     inMarker: t.inMarkerBlock || false,
-    markerBuf: t.markerBuf || new Uint8Array(0),
-    doneBuf: t.doneBuf || new Uint8Array(0),
+    markerSeen: t.markerSeen || 0,
+    doneSeen: t.doneSeen || 0,
     lineStart: t.markerLineStart ?? true,
     escPhase: t.markerEscPhase ?? 0,
   });
   t.markerFilterCarry = state.carry;
   t.inDoneBlock = state.inDone;
   t.inMarkerBlock = state.inMarker;
-  t.markerBuf = state.markerBuf;
-  t.doneBuf = state.doneBuf;
+  t.markerSeen = state.markerSeen;
+  t.doneSeen = state.doneSeen;
   t.markerLineStart = state.lineStart;
   t.markerEscPhase = state.escPhase;
   return out;
@@ -1377,6 +1636,12 @@ const LIVE_STATUS_HIDE_MS = 1500;
 // アニメーション（.live-spinner）で描くので再構成精度に関係なく必ず回る。
 // 再無効化したい場合は false に戻す（退路として残す）。
 const LIVE_STATUS_ENABLED = true;
+// 待機中に出す完了サマリーの上限。Hub 側で 320 文字に切られて届くが、帯は 1 行なので
+// さらに詰める。全文はセッションカードの tooltip 側で読める。
+const LIVE_STATUS_DONE_MAX_LEN = 160;
+// done-* 修飾クラスの全集合。付け外しを 1 箇所で回すために持つ
+// （個別に remove を並べると kind を増やしたときに書き忘れる）。
+const DONE_KIND_CLASSES = ['done-success', 'done-failure', 'done-aborted', 'done-needs-action', 'done-unknown'];
 const liveStatusDecoder = new TextDecoder('utf-8');
 
 // ステータスバーブロック（絶対カーソル移動 + 部分書き換え）を、セッションごとの
@@ -1646,12 +1911,21 @@ function liveStatusViewFor(sid) {
     case 'waiting':      return { mode: 'waiting', text: ti18n('live_status_waiting') };
     case 'error':        return { mode: 'idle',    text: ti18n('live_status_error') };
     case 'disconnected': return { mode: 'idle',    text: ti18n('live_status_disconnected') };
-    default:             return { mode: 'idle',    text: ti18n('live_status_idle') }; // standby ＝ 待機中（送信待ち）
+    default: {
+      // standby ＝ 待機中（送信待ち）。直前のターンが完了サマリーを出していれば、
+      // 汎用ラベルより「何が終わったか」を優先する。端末側は CLI が描いた本文が
+      // 流れていくだけなので（hub-marker-filter.ts の案 J）、ここが「直前のターンが
+      // どう終わったか」を残す唯一の表示口になる。
+      const done = doneSummaryDisplayText(getDoneSummary(sid), LIVE_STATUS_DONE_MAX_LEN);
+      if (done) return { mode: 'done', text: done };
+      return { mode: 'idle', text: ti18n('live_status_idle') };
+    }
   }
 }
 
 // ライブ進捗窓の描画。mode: 'active'（青・スピナー回転）/ 'waiting'（アンバー・承認待ち）/
-// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'hidden'（アクティブセッション無し時のみ）。
+// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'done'（直前ターンの完了サマリー）/
+// 'hidden'（アクティブセッション無し時のみ）。
 function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
@@ -1659,7 +1933,7 @@ function renderLiveStatusDom(mode, text) {
   const barEl = el.querySelector('.live-compact-bar') as HTMLElement | null;
   if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
-    el.classList.remove('idle', 'waiting');
+    el.classList.remove('idle', 'waiting', 'done', ...DONE_KIND_CLASSES);
     if (textEl) textEl.textContent = '';
     if (barEl) barEl.hidden = true;
     syncLiveStatusLongproc();
@@ -1675,17 +1949,23 @@ function renderLiveStatusDom(mode, text) {
   el.hidden = false;
   el.classList.toggle('idle', mode === 'idle');
   el.classList.toggle('waiting', mode === 'waiting');
+  el.classList.toggle('done', mode === 'done');
+  // 成否は記号（doneSummaryIcon）だけでも読めるが、色でも区別できるよう kind をクラスへ出す。
+  const doneKind = mode === 'done' && activeSessionId !== null
+    ? `done-${doneSummaryKindSuffix(getDoneSummary(activeSessionId)?.kind)}`
+    : '';
+  for (const cls of DONE_KIND_CLASSES) el.classList.toggle(cls, cls === doneKind);
   if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
   syncLiveStatusLongproc();
 }
 
 // 長時間処理中インジケータ（ライブ帯の右側・パレットボタンの左隣）。
-// アクティブセッションが running に入ってから LIVE_LONGPROC_SEC を超えて応答が続くと
-// 「⚠ 長時間処理中」を帯の右側へ出す。サイドバーのカード長時間バッジ（session-list.ts の
-// CARD_LONGPROC_SEC）と同じしきい値・同じ意味で、入力欄の真上でも気付けるようにする。
+// アクティブセッションが running に入ってからの経過と、provider transcript の停滞を
+// 見て「⚠ 長時間処理中 38m」「⚠ 応答が進んでいません 12m」を帯の右側へ出す。
+// しきい値と重大度の判定は longproc.ts が正本で、サイドバーのカードバッジ
+// （session-list.ts の cardLiveRowHtml）と完全に同じ基準を使う。
 // ライブ帯はアクティブセッションぶんしか表示しないため、追跡もアクティブ分だけ持つ。
-const LIVE_LONGPROC_SEC = 300;
 const liveStatusRunningSince = new Map<number, number>();
 const liveStatusMobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)') : null;
@@ -1698,7 +1978,8 @@ export function syncLiveStatusLongproc(): void {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const id = activeSessionId;
-  const state = id != null ? (sessions.get(id)?.state as string) : null;
+  const ses = id != null ? sessions.get(id) : null;
+  const state = ses ? (ses.state as string) : null;
   const lp = el.querySelector('.live-status-longproc') as HTMLElement | null;
   // running 以外（standby/waiting/error/切断）は追跡を捨てて非表示にする。
   if (id == null || state !== 'running') {
@@ -1708,21 +1989,31 @@ export function syncLiveStatusLongproc(): void {
   }
   let since = liveStatusRunningSince.get(id);
   if (!since) { since = Date.now(); liveStatusRunningSince.set(id, since); }
-  const sec = Math.max(0, Math.floor((Date.now() - since) / 1000));
+  const now = Date.now();
+  const sec = Math.max(0, Math.floor((now - since) / 1000));
+  const status = longprocStatus(sec, ses?.transcript_grew_at, now);
   let badge = lp;
-  const compactLabel = '⚠5m+';
-  const fullLabel = `⚠ ${ti18n('card_longproc_label')}`;
   if (!badge) {
     badge = document.createElement('span');
     badge.className = 'live-status-longproc';
-    badge.title = ti18n('card_longproc_title');
     // パレットボタンの左隣へ置く（パレットは buildUI で末尾に append される）。
     const paletteBtn = el.querySelector('.live-status-palette-btn');
     if (paletteBtn) el.insertBefore(badge, paletteBtn); else el.appendChild(badge);
   }
-  const label = isLiveStatusMobileViewport() ? compactLabel : fullLabel;
+  if (status.level === 'none') { badge.hidden = true; return; }
+  const stalled = status.level === 'stalled';
+  const dur = formatLongprocDuration(stalled ? status.stalledSec : status.elapsedSec);
+  const fullLabel = stalled
+    ? `⚠ ${ti18n('card_stalled_label')} ${dur}`
+    : `⚠ ${ti18n('card_longproc_label')} ${dur}`;
+  // スマホ幅は帯が狭いので記号 + 経過だけにする（何分かが最も知りたい情報）。
+  const label = isLiveStatusMobileViewport() ? `⚠${dur}` : fullLabel;
   if (badge.textContent !== label) badge.textContent = label;
-  badge.hidden = sec < LIVE_LONGPROC_SEC;
+  const cls = longprocBadgeClass('live-status-longproc', status.level);
+  if (badge.className !== cls) badge.className = cls;
+  const tip = stalled ? ti18n('card_stalled_title') : ti18n('card_longproc_title');
+  if (badge.title !== tip) badge.title = tip;
+  badge.hidden = false;
 }
 
 // セッション切替・状態変化時に、アクティブセッションの現在状態を DOM へ反映する。
@@ -1735,56 +2026,51 @@ export function syncLiveStatusDomForActive() {
   renderLiveStatusDom(v.mode, v.text);
 }
 
-// \r（CR）で行頭へ戻ったあと行末を消去しないと、短い上書きテキストの後ろに
-// 旧テキストの末尾が残ってスクロールバック上で混在して見える。
-// \r の直後に \x1b[K（EL: Erase Line from cursor to right）を挿入して残留を防ぐ。
-// \r\n の \r（正常な改行ペア）には挿入しない（不要かつ \n 前の空白消去になる）。
+// \r の直後へ \x1b[K（EL）を挿入して行末の残留を防ぐ本体は、node:test で検証できる
+// よう cr-erase-filter.ts の filterBareCarriageReturnPure に切り出した。挿入の目的・
+// alternate screen 中に挿入しない理由（Claude は alt buffer 上で「1 行描く → \r →
+// カーソル下移動」と描くため、EL を入れると描いた行を毎回消してしまう）もそちら参照。
+// 下のラッパーは terminal の state と純関数の state を橋渡しするだけ。
 export function filterBareCarriageReturnForDisplay(id, bytes) {
   const t = terminals.get(id);
   if (!t) return bytes;
-  const carry = t.crFilterCarry || new Uint8Array(0);
-  const combined = new Uint8Array(carry.length + bytes.length);
-  combined.set(carry, 0);
-  combined.set(bytes, carry.length);
-
-  const EL = asciiBytes('\x1b[K');
-  const out: number[] = [];
-  for (let i = 0; i < combined.length; i++) {
-    out.push(combined[i]);
-    if (combined[i] === 0x0D) {  // \r
-      if (i + 1 < combined.length) {
-        if (combined[i + 1] !== 0x0A) {  // 直後が \n でなければ EL を挿入
-          for (const b of EL) out.push(b);
-        }
-      } else {
-        // チャンク末尾の \r は次チャンクの先頭が \n かどうか未確定のため carry に残す
-        t.crFilterCarry = combined.slice(i);
-        return new Uint8Array(out.slice(0, out.length - 1));
-      }
-    }
-  }
-  t.crFilterCarry = new Uint8Array(0);
-  return new Uint8Array(out);
+  const { out, state } = filterBareCarriageReturnPure(bytes, {
+    carry: t.crFilterCarry || new Uint8Array(0),
+    altScreen: t.crFilterAltScreen || false,
+  });
+  t.crFilterCarry = state.carry;
+  t.crFilterAltScreen = state.altScreen;
+  return out;
 }
 
 export function writePTYChunk(id, term, bytes, onFlush) {
+  const t = terminals.get(id);
+  if (t) t.mouseMode = scanMouseModePure(bytes, t.mouseMode || initialMouseModeTrackerState());
   const hasScreenClearSeq = detectScreenClearSeqForAutoScroll(id, bytes);
   // Codex 等の同期描画（CSI ? 2026 h/l）は xterm.js が完成画面まで保留する。
   // ここで除去すると途中フレームが露出し、再描画が上から下へ流れて見えるため通す。
   const displayBytes = filterBareCarriageReturnForDisplay(id, filterCursorHideShowBlocksForDisplay(id, filterEraseScrollbackForDisplay(id, filterReverseVideoForDisplay(id, filterHubMarkersForDisplay(id, bytes)))));
   const wrappedFlush = () => {
     if (hasScreenClearSeq) snapToBottomAfterScreenClear(id);
+    primeScrollbarVisibility(term.element);
+    // 入力送信時点では疑似位置を動かさない。xterm が PTY 応答を描画し終え、可視本文が
+    // 実際に変わった場合だけ pending の 1 ノッチを確定する。
+    if (hasPendingAltScrollNotch(id)) {
+      confirmAltScrollNotch(id, captureTerminalScreenSnapshot(t || { term }));
+    }
+    // 代替画面への出入り（ESC[?1049h / l）は PTY 出力で起きるので、flush ごとに
+    // 疑似レールの表示条件を取り直す。
+    updateAltScrollRail(id);
     if (onFlush) onFlush();
   };
   if (displayBytes.length === 0) {
     wrappedFlush();
     return;
   }
-  if (typeof term.writeUtf8 === 'function') {
-    term.writeUtf8(displayBytes, wrappedFlush);
-    return;
-  }
-  term.write(utf8Decoder.decode(displayBytes, { stream: true }), wrappedFlush);
+  // xterm.js accepts Uint8Array directly. Keeping bytes intact here avoids a
+  // shared streaming TextDecoder carrying a partial UTF-8 sequence from one
+  // session into another session's output.
+  term.write(displayBytes, wrappedFlush);
 }
 
 // ---- バッファスキャン共通 ----
@@ -1819,10 +2105,39 @@ export function forgetSentPtySize(sessionId?: number) {
   else lastSentPtySize.delete(sessionId);
 }
 
+// 一時観測（instrumentation.json の terminal-grid-divergence）: 定期サンプラーが
+// 「xterm の実寸」と「PTY へ通知できた実寸」のずれを測るための読み取り専用アクセサ。
+// 原因が確定したら撤去する。
+export function debugLastSentPtySize(sessionId: number): string {
+  return lastSentPtySize.get(sessionId) || '';
+}
+
+// 一時観測: 「送ろうとした寸法」と「実際に送れたか」を分けて記録する。
+// dedup / ws-closed で送られなかったときは xterm 側だけが動いた可能性がある。
+function probeSendOutcome(sessionId, cols, rows, reason, outcome) {
+  try {
+    probe('geo.send', () => ({
+      sessionId,
+      cols,
+      rows,
+      reason,
+      outcome,
+      lastSent: lastSentPtySize.get(sessionId) || '',
+    }));
+  } catch (_) {}
+}
+
 export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIdentity: any = null) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    probeSendOutcome(sessionId, cols, rows, reason, 'ws-closed');
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     const size = `${cols}x${rows}`;
-    if (lastSentPtySize.get(sessionId) === size) return;
+    if (lastSentPtySize.get(sessionId) === size) {
+      probeSendOutcome(sessionId, cols, rows, reason, 'dedup');
+      return;
+    }
+    probeSendOutcome(sessionId, cols, rows, reason, 'sent');
     const approvalOptions = approvalRawOptionsCache.get(sessionId);
     const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
       ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
@@ -1858,6 +2173,16 @@ export function applyRemotePtyResize(sessionId, cols, rows) {
   beginLiveOutputBatchForResize(id);
   // PTY の実寸はこの値になった。以後の同値送信は不要（重複再描画を増やすだけ）。
   lastSentPtySize.set(id, `${nextCols}x${nextRows}`);
+  try {
+    probe('geo.apply', () => ({
+      sessionId: id,
+      ptyCols: nextCols,
+      ptyRows: nextRows,
+      cols: t.term.cols,
+      rows: t.term.rows,
+      applied: !(t.term.cols === nextCols && t.term.rows === nextRows),
+    }));
+  } catch (_) {}
   if (t.term.cols === nextCols && t.term.rows === nextRows) return;
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   try {
@@ -2001,4 +2326,3 @@ window.addEventListener('focus', reassertActivePtySize);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) reassertActivePtySize();
 });
-

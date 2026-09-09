@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/sessionstore"
 )
 
 func (s *Server) resetNativeApprovalClearMisses(id int) {
@@ -75,8 +76,8 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		}
 		return
 	}
-	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
-	candidateShape := approvalCandidateShape(ses.Provider, approval.Kind, approval.Question, approval.Options)
+	candidateKey := approvalCandidateKeyWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
+	candidateShape := approvalCandidateShapeWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
 	sourceEpoch, answered := approvalCandidateEpochLocked(ses, candidateKey)
 	legacyConsumed := ses.approvalConsumedCandidateKey == "" &&
 		ses.nativeApprovalConsumed == approval.Sig && now.Sub(ses.nativeApprovalConsumedAt) < approvalConsumedTTL
@@ -115,7 +116,19 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 			return
 		}
 		if s.sessionStore != nil && msg.Type == "approval_detected" {
-			s.sessionStore.StoreApprovalDetected(id, approval.Sig, approvalSourceGoVT, approval.Kind, approval.Question, approval.Context, approval.Options, now)
+			s.sessionStore.StoreApprovalDetected(sessionstore.ApprovalDetected{
+				LiveSessionID: id,
+				Sig:           approval.Sig,
+				Source:        approvalSourceGoVT,
+				Kind:          approval.Kind,
+				Provider:      msg.Provider,
+				Question:      approval.Question,
+				Context:       approval.Context,
+				CandidateKey:  msg.ApprovalCandidateKey,
+				SourceEpoch:   msg.ApprovalSourceEpoch,
+				Options:       approval.Options,
+				DetectedAt:    now,
+			})
 		}
 		s.broadcast(*msg)
 		if msg.Type == "approval_detected" {
@@ -145,6 +158,10 @@ func (s *Server) handleDoneSummaryMarker(id int, data []byte) {
 		s.sessionsMu.Unlock()
 		return
 	}
+	// Keep this separate from lastDoneNotifyAt: a marker can be a duplicate
+	// inside the notification interval and therefore be suppressed from the
+	// visible stream, but it still proves that this turn was marker-aware.
+	ses.doneSummaryMarkerSeen = true
 	if !ses.lastDoneNotifyAt.IsZero() && now.Sub(ses.lastDoneNotifyAt) < doneNotifyMinInterval {
 		s.sessionsMu.Unlock()
 		return
@@ -252,19 +269,54 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 			ApprovalSource:         approvalSourceGoVT,
 		}
 	}
+	ledgerSig := m.ApprovalSig
 	if candidateKey != "" && ses.approvalMarkerCandidateKey == candidateKey && ses.approvalMarkerSourceEpoch == sourceEpoch {
-		ses.approvalMarkerCandidateKey = ""
-		ses.approvalMarkerCandidateShape = ""
-		ses.approvalMarkerSourceEpoch = 0
-		ses.approvalMarkerSig = ""
+		// 台帳の行は Hub がブロック本文から取った sig で引く。ブラウザが送ってくる
+		// approval_sig は選択肢から計算した別の値なので、それで UPDATE しても
+		// 1 行も当たらず、回答済みの承認が台帳に pending のまま残っていた
+		// （bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
+		if ses.approvalMarkerSig != "" {
+			ledgerSig = ses.approvalMarkerSig
+		}
+		cleared := clearApprovalMarkerCandidateLocked(ses, m.SessionID, m.ApprovalSource)
+		if clearMsg == nil {
+			clearMsg = &cleared
+		}
 	}
 	s.sessionsMu.Unlock()
-	if s.sessionStore != nil && m.ApprovalSig != "" {
-		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
+	if s.sessionStore != nil && ledgerSig != "" {
+		s.sessionStore.StoreApprovalConsumed(m.SessionID, ledgerSig, m.SentText, now)
 	}
 	if clearMsg != nil {
 		s.broadcast(*clearMsg)
 	}
+}
+
+// clearApprovalMarkerCandidateLocked は保留中のマーカー承認を session から下ろし、
+// ブラウザへ流す approval_cleared を組み立てる。ネイティブ承認の approval_cleared と
+// 同じ型で、ApprovalKind が "marker" のときだけマーカー候補の取り下げを意味する。
+// 呼び出し側は sessionsMu を持ち、返り値の broadcast は解放後に行う。
+//
+// これまでマーカー候補の取り下げはブラウザに知らせていなかった。回答した UI は
+// 自分で閉じるが、同じ Hub を見ている別の UI や、トランスクリプト側で答えが
+// 観測された（端末へ直接入力した）場合は、閉じる合図が無いと承認パネルが残る。
+func clearApprovalMarkerCandidateLocked(ses *session, id int, source string) proto.Message {
+	cleared := proto.Message{
+		Type:                   "approval_cleared",
+		SessionID:              id,
+		Provider:               ses.Provider,
+		ApprovalSig:            ses.approvalMarkerSig,
+		ApprovalKind:           "marker",
+		ApprovalCandidateKey:   ses.approvalMarkerCandidateKey,
+		ApprovalCandidateShape: ses.approvalMarkerCandidateShape,
+		ApprovalSourceEpoch:    ses.approvalMarkerSourceEpoch,
+		ApprovalSource:         source,
+	}
+	ses.approvalMarkerCandidateKey = ""
+	ses.approvalMarkerCandidateShape = ""
+	ses.approvalMarkerSourceEpoch = 0
+	ses.approvalMarkerSig = ""
+	return cleared
 }
 
 // evaluateReplayApproval performs the single approval evaluation allowed at
@@ -275,12 +327,19 @@ func (s *Server) evaluateReplayApproval(id int) {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || ses.vt == nil || !isAIProvider(ses.Provider) || now.Before(ses.vtResizeDebounceUntil) {
+	if ses == nil || ses.vt == nil || !sessionApprovalDetectionEligible(ses) || now.Before(ses.vtResizeDebounceUntil) {
 		s.sessionsMu.Unlock()
 		return
 	}
 	provider := ses.Provider
-	marker := extractApprovalMarkerBlock(ses.vt.TailLinesWithScrollback(vtTailLinesForMarker))
+	// トランスクリプトが供給元のセッションでは、ここでも VT からマーカーを立てない。
+	// reattach ではパーサ状態を作り直すので、次の poll の prime が最後の assistant
+	// メッセージを見て、未回答の質問ならそこから配信し直す
+	// （approval_marker_transcript.go の scanTranscriptApprovalMarkers）。
+	var marker *approvalMarkerBlock
+	if !approvalMarkerSourceIsTranscriptLocked(ses) {
+		marker = extractApprovalMarkerBlockFromVT(ses.vt)
+	}
 	approval := detectNativeApproval(provider, ses.vt.TailLines(vtTailLinesForApproval))
 	s.sessionsMu.Unlock()
 	if marker != nil {

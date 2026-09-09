@@ -24,6 +24,9 @@ var defaultApprovalPatterns = map[string][]string{
 		"do you want to",
 		"esc to cancel",
 		"press enter to confirm or esc to go back",
+		"to review",
+		"to send",
+		"to dismiss",
 	},
 	"codex": {
 		"approve?",
@@ -66,10 +69,15 @@ var defaultApprovalPatterns = map[string][]string{
 		"always allow",
 		"until opencode is restarted",
 	},
-	// grok (Grok Build) は Claude Code 互換 harness（--permission-mode / CLAUDE.md）。
-	// 承認 UI も Claude Code 系と推定し、暫定で Claude 系 + 汎用文言を採用する。
-	// 実機 TUI の承認プロンプトで確定する（plan_grok-build-provider-integration.md C3）。
+	// grok (Grok Build) ツール許可カードは番号+ラジオ印（1 (•) / 2 (○)）。
+	// 実機 PTY（2026-08-20 セッション 8）のフッター・選択肢文言を正とする。
 	"grok": {
+		"always-approve mode",
+		"tab:next option",
+		"type to add feedback",
+		"ctrl+o:always-approve",
+		"yes, proceed",
+		"no, reject",
 		"do you want to",
 		"esc to cancel",
 		"press enter to confirm",
@@ -78,6 +86,9 @@ var defaultApprovalPatterns = map[string][]string{
 		"approve?",
 		"proceed?",
 	},
+	// command-code は実機 PTY の採取（親 plan C6）がまだで trigger 文言を未確認。
+	// 空 = 検出しない（誤検出は起きない）。C7 で fixture を正に埋める。
+	"command-code": {},
 	"common": {
 		"would you like to",
 		"この操作を許可",
@@ -89,7 +100,7 @@ var defaultApprovalPatterns = map[string][]string{
 
 // KnownApprovalProviders は承認パターンを管理する provider 名一覧（順序固定）。
 func KnownApprovalProviders() []string {
-	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "common"}
+	return []string{"claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code", "common"}
 }
 
 // IsKnownApprovalProvider は provider 名が管理対象か判定する。
@@ -326,7 +337,7 @@ func (s *Server) handleApprovalPatternAsset(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/approval-patterns/")
-	if !validApprovalPatternAssetName(name) {
+	if !validApprovalPatternAssetName(name) && !s.validCustomApprovalPatternAssetName(name) {
 		writeJSONError(w, http.StatusNotFound, "not_found", "not found")
 		return
 	}

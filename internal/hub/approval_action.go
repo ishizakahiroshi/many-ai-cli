@@ -39,6 +39,7 @@ type oneTapApprovalClaim struct {
 	SessionID   int          `json:"sid"`
 	ApprovalID  string       `json:"aid"`
 	ApprovalSig string       `json:"sig"`
+	SourceEpoch uint64       `json:"ep"`
 	Action      oneTapAction `json:"act"`
 	ExpiresAt   int64        `json:"exp"`
 	Nonce       string       `json:"n"`
@@ -68,8 +69,8 @@ func newOneTapApprovalManager() (*oneTapApprovalManager, error) {
 	}, nil
 }
 
-func (m *oneTapApprovalManager) issue(sessionID int, approvalID, approvalSig string, action oneTapAction) (string, error) {
-	if m == nil || sessionID <= 0 || strings.TrimSpace(approvalID) == "" || strings.TrimSpace(approvalSig) == "" || !validOneTapAction(action) {
+func (m *oneTapApprovalManager) issue(sessionID int, approvalID, approvalSig string, sourceEpoch uint64, action oneTapAction) (string, error) {
+	if m == nil || sessionID <= 0 || strings.TrimSpace(approvalID) == "" || strings.TrimSpace(approvalSig) == "" || sourceEpoch == 0 || !validOneTapAction(action) {
 		return "", errOneTapInvalid
 	}
 	nonceBytes := make([]byte, 16)
@@ -82,7 +83,7 @@ func (m *oneTapApprovalManager) issue(sessionID int, approvalID, approvalSig str
 	m.mu.Unlock()
 	claim := oneTapApprovalClaim{
 		Version: 1, SessionID: sessionID, ApprovalID: approvalID, ApprovalSig: approvalSig,
-		Action: action, ExpiresAt: now.Add(ttl).Unix(), Nonce: hex.EncodeToString(nonceBytes),
+		SourceEpoch: sourceEpoch, Action: action, ExpiresAt: now.Add(ttl).Unix(), Nonce: hex.EncodeToString(nonceBytes),
 	}
 	payload, err := json.Marshal(claim)
 	if err != nil {
@@ -109,7 +110,7 @@ func (m *oneTapApprovalManager) verify(token string) (oneTapApprovalClaim, error
 		return oneTapApprovalClaim{}, errOneTapInvalid
 	}
 	var claim oneTapApprovalClaim
-	if err := json.Unmarshal(payload, &claim); err != nil || claim.Version != 1 || claim.SessionID <= 0 || strings.TrimSpace(claim.ApprovalID) == "" || strings.TrimSpace(claim.ApprovalSig) == "" || strings.TrimSpace(claim.Nonce) == "" || !validOneTapAction(claim.Action) {
+	if err := json.Unmarshal(payload, &claim); err != nil || claim.Version != 1 || claim.SessionID <= 0 || strings.TrimSpace(claim.ApprovalID) == "" || strings.TrimSpace(claim.ApprovalSig) == "" || claim.SourceEpoch == 0 || strings.TrimSpace(claim.Nonce) == "" || !validOneTapAction(claim.Action) {
 		return oneTapApprovalClaim{}, errOneTapInvalid
 	}
 	m.mu.Lock()
@@ -199,106 +200,275 @@ func (s *Server) writeOneTapApprovalError(w http.ResponseWriter, err error) {
 }
 
 var (
-	errOneTapHighRisk   = errors.New("high-risk approval requires in-app confirmation")
-	errOneTapNoApproval = errors.New("approval is not pending")
-	errOneTapNoInput    = errors.New("approval action input is unavailable")
+	errOneTapHighRisk            = errors.New("high-risk approval requires in-app confirmation")
+	errOneTapNoApproval          = errors.New("approval is not pending")
+	errOneTapNoInput             = errors.New("approval action input is unavailable")
+	errApprovalActionBusy        = errors.New("approval action is already in progress")
+	errApprovalActionRuleChanged = errors.New("approval rule no longer matches")
 )
 
-func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
+type nativeApprovalActionRequest struct {
+	sessionID            int
+	approvalSig          string
+	expectedCandidateKey string
+	expectedSourceEpoch  uint64
+	expectedWrapper      *wrapperConn
+	action               oneTapAction
+	lowRiskOnly          bool
+	ruleID               string
+}
+
+type nativeApprovalActionResult struct {
+	sessionID    int
+	approvalSig  string
+	candidateKey string
+	sourceEpoch  uint64
+	provider     string
+	wrapper      *wrapperConn
+	approval     nativeApproval
+	input        string
+}
+
+// sendNativeApprovalAction validates the live native prompt while holding the
+// session's input lock, reserves it through the send/commit boundary, then
+// sends only that validated option. Callers must commit or release the result.
+func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nativeApprovalActionResult, error) {
+	if req.sessionID <= 0 || strings.TrimSpace(req.approvalSig) == "" || !validOneTapAction(req.action) {
+		return nativeApprovalActionResult{}, errOneTapNoApproval
+	}
 	s.sessionsMu.Lock()
-	ses := s.sessions[claim.SessionID]
+	ses := s.sessions[req.sessionID]
+	var inputMu *sync.Mutex
+	if ses != nil {
+		inputMu = ses.inputMu
+	}
 	s.sessionsMu.Unlock()
-	if ses == nil || ses.inputMu == nil {
-		return errOneTapNoApproval
+	if ses == nil || inputMu == nil {
+		return nativeApprovalActionResult{}, errOneTapNoApproval
 	}
-	ses.inputMu.Lock()
-	var (
-		wc       *wrapperConn
-		input    string
-		provider string
-		clearMsg *proto.Message
-	)
+
+	inputMu.Lock()
+	defer inputMu.Unlock()
+	reserved := false
+	releaseOnError := func(err error) (nativeApprovalActionResult, error) {
+		if reserved {
+			s.sessionsMu.Lock()
+			if s.sessions[req.sessionID] == ses {
+				clearNativeApprovalActionReservationLocked(ses)
+			}
+			s.sessionsMu.Unlock()
+		}
+		return nativeApprovalActionResult{}, err
+	}
+
 	s.sessionsMu.Lock()
-	if ses.nativeApprovalSig != claim.ApprovalSig || claim.ApprovalID != claim.ApprovalSig {
+	if s.sessions[req.sessionID] != ses || ses.vt == nil || ses.nativeApprovalSig != req.approvalSig {
 		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapNoApproval
+		return nativeApprovalActionResult{}, errOneTapNoApproval
 	}
-	if ses.vt == nil {
+	if ses.nativeApprovalActionReserved {
 		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapNoApproval
+		return nativeApprovalActionResult{}, errApprovalActionBusy
 	}
 	approval := detectNativeApproval(ses.Provider, ses.vt.Lines())
-	if approval == nil || approval.Sig != claim.ApprovalSig {
+	if approval == nil || approval.Sig != req.approvalSig {
 		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapNoApproval
+		return nativeApprovalActionResult{}, errOneTapNoApproval
 	}
-	if claim.Action == oneTapApprove && approval.Summary.Risk == proto.ApprovalRiskHigh {
+	candidateKey := approvalCandidateKeyWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
+	sourceEpoch := ensureApprovalSourceEpochLocked(ses)
+	if req.expectedCandidateKey != "" && candidateKey != req.expectedCandidateKey {
 		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapHighRisk
+		return nativeApprovalActionResult{}, errOneTapNoApproval
 	}
-	if claim.Action == oneTapApprove {
+	if req.expectedSourceEpoch != 0 && sourceEpoch != req.expectedSourceEpoch {
+		s.sessionsMu.Unlock()
+		return nativeApprovalActionResult{}, errOneTapNoApproval
+	}
+	if req.action == oneTapApprove && approval.Summary.Risk == proto.ApprovalRiskHigh {
+		s.sessionsMu.Unlock()
+		return nativeApprovalActionResult{}, errOneTapHighRisk
+	}
+	if req.action == oneTapApprove && req.lowRiskOnly && approval.Summary.Risk != proto.ApprovalRiskLow {
+		s.sessionsMu.Unlock()
+		return nativeApprovalActionResult{}, errOneTapNoApproval
+	}
+	wc := s.wrappers[req.sessionID]
+	if wc == nil || (req.expectedWrapper != nil && wc != req.expectedWrapper) {
+		s.sessionsMu.Unlock()
+		return nativeApprovalActionResult{}, errOneTapNoInput
+	}
+	command, cwd, risk := approval.Summary.Command, ses.CWD, approval.Summary.Risk
+	provider := ses.Provider
+	ses.nativeApprovalActionReserved = true
+	ses.nativeApprovalActionSig = approval.Sig
+	ses.nativeApprovalActionCandidateKey = candidateKey
+	ses.nativeApprovalActionSourceEpoch = sourceEpoch
+	ses.nativeApprovalActionWrapper = wc
+	reserved = true
+	s.sessionsMu.Unlock()
+
+	if req.ruleID != "" {
+		if !s.autoApprovalEnabled() {
+			return releaseOnError(errApprovalActionRuleChanged)
+		}
+		decision := s.evaluateAutoApprovalPolicy(command, cwd, risk)
+		if !decision.Allowed || decision.RuleID != req.ruleID {
+			return releaseOnError(errApprovalActionRuleChanged)
+		}
+	}
+	if !s.nativeApprovalActionStillCurrent(req.sessionID, ses, req.approvalSig, candidateKey, sourceEpoch, wc) {
+		return releaseOnError(errOneTapNoApproval)
+	}
+	var input string
+	if req.action == oneTapApprove {
 		input = autoApprovalInput(approval.Options)
 	} else {
 		input = oneTapRejectInput(approval.Options)
 	}
 	if input == "" {
-		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapNoInput
+		return releaseOnError(errOneTapNoInput)
 	}
-	wc = s.wrappers[claim.SessionID]
-	if wc == nil {
-		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapNoInput
+	result := nativeApprovalActionResult{
+		sessionID: req.sessionID, approvalSig: approval.Sig, candidateKey: candidateKey,
+		sourceEpoch: sourceEpoch, provider: provider, wrapper: wc, approval: *approval, input: input,
 	}
-	// Keep the one-shot nonce and native approval state intact until the PTY
-	// accepts the input.  A disconnected wrapper must leave the action
-	// retryable instead of consuming a notification action and dropping input.
-	if rem := s.trySendInput(wc, claim.SessionID, input); rem != "" {
-		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return errOneTapNoInput
+	if rem := s.trySendInputToWrapper(req.sessionID, result.wrapper, result.input); rem != "" {
+		return releaseOnError(errOneTapNoInput)
 	}
-	if err := s.oneTapApprovals.consume(claim); err != nil {
-		s.sessionsMu.Unlock()
-		ses.inputMu.Unlock()
-		return err
+	return result, nil
+}
+
+func clearNativeApprovalActionReservationLocked(ses *session) {
+	if ses == nil {
+		return
 	}
-	provider = ses.Provider
-	candidateKey := approvalCandidateKey(ses.Provider, approval.Kind, approval.Question, approval.Options)
-	sourceEpoch := markApprovalConsumedLocked(ses, candidateKey, claim.ApprovalSig)
+	ses.nativeApprovalActionReserved = false
+	ses.nativeApprovalActionSig = ""
+	ses.nativeApprovalActionCandidateKey = ""
+	ses.nativeApprovalActionSourceEpoch = 0
+	ses.nativeApprovalActionWrapper = nil
+}
+
+func nativeApprovalActionReservationMatchesLocked(ses *session, result nativeApprovalActionResult) bool {
+	return ses != nil && ses.nativeApprovalActionReserved &&
+		ses.nativeApprovalActionSig == result.approvalSig &&
+		ses.nativeApprovalActionCandidateKey == result.candidateKey &&
+		ses.nativeApprovalActionSourceEpoch == result.sourceEpoch &&
+		ses.nativeApprovalActionWrapper == result.wrapper
+}
+
+// releaseNativeApprovalAction abandons a successful send whose caller could
+// not complete the consume/commit step. It deliberately leaves the live
+// approval untouched so the same token can be retried after a send failure or
+// a failed one-shot consume.
+func (s *Server) releaseNativeApprovalAction(result nativeApprovalActionResult) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[result.sessionID]
+	var inputMu *sync.Mutex
+	if ses != nil {
+		inputMu = ses.inputMu
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil || inputMu == nil {
+		return
+	}
+	inputMu.Lock()
+	s.sessionsMu.Lock()
+	if s.sessions[result.sessionID] == ses && nativeApprovalActionReservationMatchesLocked(ses, result) {
+		clearNativeApprovalActionReservationLocked(ses)
+	}
+	s.sessionsMu.Unlock()
+	inputMu.Unlock()
+}
+
+func (s *Server) nativeApprovalActionStillCurrent(sessionID int, expectedSession *session, approvalSig, candidateKey string, sourceEpoch uint64, expectedWrapper *wrapperConn) bool {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	return ses != nil && ses == expectedSession && ses.nativeApprovalSig == approvalSig &&
+		(ses.nativeApprovalCandidateKey == "" || ses.nativeApprovalCandidateKey == candidateKey) &&
+		(ses.nativeApprovalSourceEpoch == 0 || ses.nativeApprovalSourceEpoch == sourceEpoch) && s.wrappers[sessionID] == expectedWrapper
+}
+
+// commitNativeApprovalAction changes native approval state only after the
+// corresponding PTY input was accepted by the wrapper. The final check is
+// atomic with the state transition so a newer prompt cannot be consumed.
+func (s *Server) commitNativeApprovalAction(result nativeApprovalActionResult) bool {
+	now := time.Now()
+	s.sessionsMu.Lock()
+	ses := s.sessions[result.sessionID]
+	var inputMu *sync.Mutex
+	if ses != nil {
+		inputMu = ses.inputMu
+	}
+	s.sessionsMu.Unlock()
+	if ses == nil || inputMu == nil {
+		return false
+	}
+	inputMu.Lock()
+	defer inputMu.Unlock()
+
+	s.sessionsMu.Lock()
+	if s.sessions[result.sessionID] != ses || !nativeApprovalActionReservationMatchesLocked(ses, result) ||
+		ses.nativeApprovalSig != result.approvalSig ||
+		(ses.nativeApprovalCandidateKey != "" && ses.nativeApprovalCandidateKey != result.candidateKey) ||
+		(ses.nativeApprovalSourceEpoch != 0 && ses.nativeApprovalSourceEpoch != result.sourceEpoch) || s.wrappers[result.sessionID] != result.wrapper {
+		if s.sessions[result.sessionID] == ses && nativeApprovalActionReservationMatchesLocked(ses, result) {
+			clearNativeApprovalActionReservationLocked(ses)
+		}
+		s.sessionsMu.Unlock()
+		return false
+	}
+	sourceEpoch := markApprovalConsumedLocked(ses, result.candidateKey, result.approvalSig)
+	provider := ses.Provider
 	ses.nativeApprovalSig = ""
 	ses.nativeApprovalCandidateKey = ""
 	ses.nativeApprovalCandidateShape = ""
 	ses.nativeApprovalSourceEpoch = 0
 	ses.nativeApprovalClearMisses = 0
-	clearMsg = &proto.Message{Type: "approval_cleared", SessionID: claim.SessionID, Provider: provider, ApprovalSig: claim.ApprovalSig, ApprovalCandidateKey: candidateKey, ApprovalCandidateShape: ses.approvalConsumedCandidateShape, ApprovalSourceEpoch: sourceEpoch, ApprovalSource: approvalSourceGoVT}
-	s.sessionsMu.Unlock()
-	ses.inputMu.Unlock()
-	if s.sessionStore != nil {
-		s.sessionStore.StoreApprovalConsumed(claim.SessionID, claim.ApprovalSig, input, time.Now())
+	clearNativeApprovalActionReservationLocked(ses)
+	clearMsg := proto.Message{
+		Type: "approval_cleared", SessionID: result.sessionID, Provider: provider,
+		ApprovalSig: result.approvalSig, ApprovalCandidateKey: result.candidateKey,
+		ApprovalCandidateShape: ses.approvalConsumedCandidateShape,
+		ApprovalSourceEpoch:    sourceEpoch, ApprovalSource: approvalSourceGoVT,
 	}
-	s.broadcast(*clearMsg)
+	s.sessionsMu.Unlock()
+	if s.sessionStore != nil {
+		s.sessionStore.StoreApprovalConsumed(result.sessionID, result.approvalSig, result.input, now)
+	}
+	s.broadcast(clearMsg)
+	return true
+}
+
+func (s *Server) applyOneTapApproval(claim oneTapApprovalClaim) error {
+	if claim.ApprovalID != claim.ApprovalSig {
+		return errOneTapNoApproval
+	}
+	result, err := s.sendNativeApprovalAction(nativeApprovalActionRequest{
+		sessionID: claim.SessionID, approvalSig: claim.ApprovalSig,
+		expectedSourceEpoch: claim.SourceEpoch,
+		action:              claim.Action,
+	})
+	if err != nil {
+		return err
+	}
+	if err := s.oneTapApprovals.consume(claim); err != nil {
+		s.releaseNativeApprovalAction(result)
+		return err
+	}
+	if !s.commitNativeApprovalAction(result) {
+		s.releaseNativeApprovalAction(result)
+		return errOneTapNoApproval
+	}
 	return nil
 }
 
 func oneTapRejectInput(options []proto.ApprovalOption) string {
 	for _, option := range options {
-		label := strings.ToLower(strings.TrimSpace(option.Label))
-		negative := strings.Contains(label, "reject") || strings.Contains(label, "deny") || strings.Contains(label, "cancel") || strings.Contains(label, "skip") || strings.Contains(label, "no") || strings.Contains(option.Label, "拒否") || strings.Contains(option.Label, "許可しない") || strings.Contains(option.Label, "中止")
-		if !negative {
-			continue
-		}
-		if option.SendText != "" {
-			return option.SendText
-		}
-		if option.IsCurrent {
-			return "\r"
+		if input := approvalOptionInput(option, false); input != "" {
+			return input
 		}
 	}
 	return ""

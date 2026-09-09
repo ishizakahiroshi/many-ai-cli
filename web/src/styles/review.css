@@ -189,19 +189,43 @@
 .review-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-tree-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
 
+/* ターン完了カードは #terminal-area-wrapper の上端へ絶対配置で重ねる（フローに置かない）。
+   フローに置くと出入りのたび #terminal-area が縮む／戻り、そのたび pty_resize が飛んで
+   TUI が全画面を描き直す。承認バーと同じ原則（styles/approval.css 冒頭）に揃えたもの。
+   2026-08-30 実測: このカード 3 行ぶんの SIGWINCH 1 回で Codex はトランスクリプト全文
+   約 460KB を描き直し、xterm のバッファが 573 行伸びる。切替のたびに走るため、
+   描き直しの途中経過が「表示が中途半端で、一瞬だけ最下部が出る」症状として見えていた。
+   下端ではなく上端へ置くのは、下端だと CLI の最新行と入力欄（Codex の composer）が
+   隠れ、承認バーで既に不便だと分かっている位置と同じになるため。
+   重なる以上、背景は不透明のままにする（下の PTY 出力が透けると本文が読めない）。 */
 .git-turn-card {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  right: 10px;
+  /* 読み取り専用バッジ(10) と ↑up / ↓down(20) より上、モーダル(1000 以上)より下。 */
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: 6px 10px;
+  margin: 0;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--muted) 38%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel, var(--bg)) 92%, var(--accent) 8%);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
   flex: none;
 }
 .git-turn-card[hidden] { display: none; }
+/* カード表示中は、同じ上端に常設されている 2 つをカードの下へ逃がす。
+   --turn-card-h は review-view.ts が実測して入れる（折り返しで高さが変わるため）。 */
+#terminal-area-wrapper.has-turn-card #terminal-readonly-badge {
+  top: calc(6px + var(--turn-card-h, 0px) + 6px);
+}
+#terminal-area-wrapper.has-turn-card #scroll-to-top-btn {
+  top: calc(34px + var(--turn-card-h, 0px) + 6px);
+}
 .git-turn-card-summary {
   display: flex;
   align-items: center;
@@ -246,5 +270,12 @@
   .review-tree-pane { display: none; }
   .review-scope-label span { display: none; }
   .review-scope-label select { min-width: 135px; max-width: 180px; }
-  .git-turn-card { margin: 4px 6px; padding: 8px 9px; }
+  .git-turn-card { top: 4px; left: 6px; right: 6px; padding: 8px 9px; }
+}
+
+/* タッチ端末ではセッション切替スワイプ帯（#swipe-session-handle・上端 18px）が出る。
+   カードで塞ぐとスワイプ切替が効かなくなるので、その下まで下げる。
+   条件は #swipe-session-handle 側の表示条件（styles/terminal.css）の裏返し。 */
+@media (hover: none), (pointer: coarse) {
+  .git-turn-card { top: 22px; }
 }

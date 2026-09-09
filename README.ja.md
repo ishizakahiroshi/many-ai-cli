@@ -4,9 +4,9 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
-![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
+![many-ai-cli デモ: 指揮者 AI が子 AI を 2 本立ち上げていいか聞き、承認すると子が動き、1 本が質問で止まり、1 クリックで答えると 2 本とも完了報告を出す](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
 
-**AI コーディング CLI が止まった瞬間を見逃さない — スマホからでも。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` を並列実行できる Web ダッシュボードです。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで人の手が要るようになった瞬間にデスクトップ／スマホへ通知します。ターミナルを見張り続ける必要はありません。あわせて、複数セッションの承認・監視・ターミナルを 1 画面の Web ダッシュボードで操作できます。
+**7 つの AI コーディング CLI を 1 画面に。契約を増やせるものは増やす。** `Claude Code` / `Codex CLI` / `GitHub Copilot CLI` / `Cursor Agent CLI` / `Grok Build CLI` / `opencode` / `Command Code` を並列実行できます。`many-ai-cli` は各 CLI を PTY でラップし、承認待ち・タスク完了・エラーで止まった瞬間をデスクトップ／スマホへ知らせます。積んだ契約の残量は、同じ Usage メニューに出ます。
 
 [English README](README.md) · [README tiếng Việt](README.vi.md)
 
@@ -40,7 +40,7 @@ Terminal pane #1              Terminal pane #2
             └──────────────────┘
 ```
 
-各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok`）を実行できます。図では例として2つを示しています。
+各ペインでは対応プロバイダーのいずれか（`claude` / `codex` / `copilot` / `cursor-agent` / `grok` / `opencode` / `command-code`）を実行できます。図では例として2つを示しています。
 
 ---
 
@@ -56,6 +56,7 @@ Terminal pane #1              Terminal pane #2
 | Cursor Agent CLI | `cursor-agent` | 公式 CLI。事前にサインインが必要 |
 | Grok Build CLI | `grok` | xAI 公式のターミナル型コーディングエージェント。事前にサインインが必要（**SuperGrok** または **X Premium+** のサブスクリプションが必要。base の X Premium では使えません） |
 | opencode | `opencode` | コミュニティ CLI。事前にサインインが必要。承認プロンプトのスクレイプではなく、Hub が `opencode.json` の `permission` を書き換えて制御します（通常セッションは `ask` で Hub UI へ、オーケストレーション子セッションは `allow` でバイパス）。元の `opencode.json` はセッション終了時に復元します |
+| Command Code | `command-code` | **ターミナルと spawn は対応済み。承認統合は fixture 検証待ち。** セッションは起動し承認モードの選択も各フラグへ対応しますが、承認検出は実機プロンプトの採取と突き合わせがまだで、アクションバーが拾わないときはターミナル側で答えてください。複数サブスクリプションは未対応です。OS 側のエイリアス `cmd` / `cmdc` はサブコマンドに使いません（Windows の cmd.exe と衝突するため） |
 
 **Ollama** は独立したラッパーではありません。`claude` または `codex` のラッパー経由で Ollama のモデルを使います（spawn フォームのモデルピッカーで **Ollama Cloud / Ollama Local** を選ぶと、Hub が Anthropic / OpenAI 互換エンドポイントを Ollama に向けます。「主な機能」の「モデルピッカー + Ollama route 自動切替」参照）。
 
@@ -65,7 +66,7 @@ Gemini CLI は意図的に対象外です。
 
 ## 主な機能
 
-- **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI の承認待ちをブラウザ上のアクションバーで処理
+- **承認パネル統合**: Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode の承認待ちをブラウザ上のアクションバーで処理
 - **複数質問の一括承認**: 1つの承認ブロック内の番号付き質問を選択し、まとめて PTY へ送信
 - **リアルタイム PTY 表示**: xterm.js + WebSocket で CLI 出力を表示
 - **チャット / 分割表示**: 会話ログを吹き出し形式で読み、検索・フィルタし、ライブターミナルと並べて表示
@@ -82,7 +83,7 @@ Gemini CLI は意図的に対象外です。
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
-- **UI からの新規セッション spawn**（`/api/spawn`）
+- **UI からの新規セッション spawn**（`/api/spawn`）。新規セッションパネルの「最初に渡す指示（任意）」欄に文面を入れておくと、起動直後の CLI へそのまま届く
 - **OpenCode を承認なしで起動** — spawn パネルから全許可の OpenCode セッションを起動できる。無人で走る構成になるため、確定前の spawn リスク表示にもその旨が出る
 - **古いビルドの警告** — Hub の稼働中に実行ファイルを差し替えると、ダッシュボードが「まだ古いビルドで動いている」と知らせる。修正が効かない理由を探し回らずに済む
 - **Workflow の進捗表示** — 完了エージェント数・経過時間・エージェントツリーを Hub 側で算出し、セッションカードと Workflow 画面に表示する。完了時の Web Push は任意で有効化できる
@@ -94,13 +95,76 @@ Gemini CLI は意図的に対象外です。
 
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
 
-既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、即時 Enter 付き inject で通知されるため、進行中の指揮者ターンを割り込みで中断する可能性があります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
+既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 `true`）。具体的には codex の子が `--sandbox danger-full-access --ask-for-approval never` で、それ以外は各 CLI の全許可指定に変換されて起動します。指揮者からの spawn は人間の確認を待ちます（`orchestration.spawn_confirm_mode`、既定 `on`）が、relay の子は設計上この確認を通りません。`child_full_bypass` を `false` にすると高リスク権限の自動確認は避けられますが、relay の子は答える人のいない承認プロンプトで止まります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
+
+### Orchestration relay loop
+
+relay loop は 1 つの plan を implementation → review → fix の順で、C を 1 件ずつ Hub の管理下で進めます。指揮者 AI が子セッションの spawn や review の判定をするのではなく、Hub が子の進捗・review ファイル・verdict を読み、次の指示または停止を決めます。
+
+入口は 2 つです。
+
+- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model]` と `--review provider[/model]` を渡す。`--strong provider[/model]` は任意）。
+- `orchestrate` のサブコマンドは `spawn` / `send` / `relay` の 3 つ。名前を間違えると使える名前を並べて返す。
+- Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。
+
+既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、`orchestration.max_children_per_parent` が上限です（既定値 4、通常の relay なら 2 本分）。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
+
+通常は cheap な implementation model と、任意の strong implementation model の二段構えです。既定では review に 2 回続けて失敗した C、または plan の C に `[strong]` を付けた C を、空き枠があれば strong role へ渡します。2 本を同時に strong へ上げる想定なら上限 6 以上を用意してください。`--same-tree` は明示的な例外で、子が利用者の working tree を直接編集するため、同じ tree を別の AI や利用者が並行編集してはいけません。
+
+停止理由は round 上限、timeout、verdict / review file の欠落、blocked verdict、子の終了、Stop ボタンです。Hub 再起動後は `relay.json` から状態を復元し、再開可能な停止理由なら resume できます。完了・停止は relay 通知になります。作業ファイルは `~/.many-ai-cli/orchestration/<orchestration_id>/` 配下の `board.md`、`child-<id>.md`、`review-c<k>-r<r>.md`、`relay.json` です。これは一般的な job DAG ではなく、1 つの plan の C を順番に処理する軽量な sequential runner です。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
 - **リモートサーバー / Docker 運用資材**: GHCR image、ユーザー別コンテナ、loopback 限定公開、自動更新スクリプトでサーバー運用
 - **クリーン transcript 生成**: 人間が読める `.txt` を自動生成し、`log-clean` で手動再生成も可能
 - **言語切替**（英語 / 日本語 / ベトナム語）
 - **ローカル限定**: Hub は `127.0.0.1` のみに bind。`many-ai-cli` 自身はテレメトリを送信しません
 - **リモートアクセス保護**: 設定の「リモートアクセス保護」から、token と認証 cookie を一括再生成する**全アクセス失効**（紛失時のキルスイッチ）、非 loopback アクセス時のみ要求する**任意 PIN**（既定 OFF・ロックアウト付き）、**新規デバイス接続の通知**が使えます
+- **1 つの CLI に複数のサブスクリプション**: 7 つの CLI を 1 つの Hub に。Claude / Codex / Grok / opencode は契約を足して同時に使えます。Usage メニューには Claude / Codex / Grok のプロファイル別残量が出ます（下記参照）
+
+## 1 つの CLI に複数のサブスクリプション
+
+7 つの AI コーディング CLI が 1 つのダッシュボードを共有します。そのうち 4 つ — Claude Code / Codex CLI / Grok Build CLI / opencode — は、同じ CLI の契約を複数付けて、セッションごとに使い分けられます。Copilot と Cursor はログイン 1 つのままです（認証の置き場が環境変数で移りません）。公式 CLI の「既定の記憶」は今も 1 ログインで、Hub がセッションごとに設定ディレクトリを指します。
+
+**これは API キーのルーターではありません。** 従量課金の API キーを束ねて安く回すためのものではなく、既に払っている月額契約の枠へ、既に走らせているセッションを割り振るための機能です。**プランの利用上限を回避する手段でもありません。** 同じベンダーのアカウントを複数積んで使う前に、「セキュリティ」節の注意書きを読んでください。
+
+**残量**はその掛け算の内訳であって、単独の機能ではありません。Usage メニューにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。とくに Cursor Agent CLI は残量を返すローカルファイルもコマンドも無く（Free tier で確認済み）、検知できません。数字はメニューを開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。
+
+**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<id>` を作り、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・プラン名・有効フラグだけです。
+
+| プロバイダー | 使う環境変数 | 対応 |
+|---|---|---|
+| Claude Code | `CLAUDE_CONFIG_DIR` | 対応 |
+| Codex CLI | `CODEX_HOME` | 対応 |
+| Grok Build CLI | `GROK_HOME` | 対応 |
+| opencode | `XDG_DATA_HOME` | 対応（下記の注記あり） |
+| GitHub Copilot CLI | — | **未対応**: token が OS の資格情報ストアにあり、`COPILOT_HOME` は設定は移せてもログインは移せません |
+| Cursor Agent CLI | — | **未対応**: token が `~/.cursor/cli-config.json` にあり、これを移す環境変数がありません |
+| Command Code | — | **未対応**: profile ディレクトリの配線が無く、残量の読み取りもありません |
+
+**使い方**
+
+1. 設定 →**サブスクリプション**→ 表示名を入れて**追加**。この時点では空のディレクトリができるだけで、まだ何もログインしていません
+2. **ログイン**を押します。使い捨てのセッションが開き、そのディレクトリを指定した状態で公式 CLI 自身のログインコマンド（`claude auth login` / `codex login` など）が走ります。あとは公式のログイン手順どおりに進めてください
+3. **確認**を押すとログイン済みかどうかが分かります。CLI がプラン名を返す場合はそれも表示します。アカウントのメールアドレスは取得も表示もしません
+4. profile が 2 件以上ある provider では、起動フォームに**サブスクリプション**の選択欄が出ます。先頭の `CLI 既定のログイン` は従来どおりの挙動で、`自動` は有効な profile を順番に使います（セッションには「自動」ではなく**実際に選ばれた profile の ID** が記録されます）
+
+**profile が切り替えるもの**: Claude Code / Codex / Grok では、この環境変数が CLI の**設定ディレクトリ全体**を切り替えます。ログインだけでなく、その CLI の設定・グローバル指示ファイル・スキル・コマンド・会話履歴も profile ごとに分かれます。opencode だけは例外で、認証の置き場だけが移り、設定やスキルは共有のままです。
+
+**普段の設定は自動で持ち込みます**: 分かれると困るものは、`many-ai-cli` が profile を用意するときに既定のディレクトリから運び入れます。Claude なら `CLAUDE.md` / `settings.json`（承認設定・hooks を含む）/ `skills` / `commands`、Codex と Grok なら `AGENTS.md` / `config.toml`（承認ポリシー・信頼済みフォルダを含む）/ `prompts` などです。
+
+- **既にあるものは絶対に上書きしません。** profile 側で変えた値はそのまま残り、足りないものだけが足されます
+- **フォルダはリンク**（Windows では junction）で繋ぐので、あとからスキルを 1 つ足せば全 profile に届きます。ファイルはコピーです（CLI 自身が書き換えるため、リンクにすると profile の編集が既定側へ逆流します）
+- **ただし rule ファイルだけは例外です**: 既定側の `CLAUDE.md`（Codex / Grok は `AGENTS.md`）自体が symlink のときは、profile 側もコピーではなく同じ実体へのリンクにします。既定側を編集すれば再 seed なしで全 profile に届きます。リンクを張れない環境（Windows で開発者モード未設定など）ではコピーへ自動でフォールバックし、`many-ai-cli doctor` が知らせます。profile ごとに rule を変えたい場合はリンクを消して実ファイルに置き換えれば、そのまま上書きされずに残ります
+- **認証ファイルは運びません。** `.credentials.json` や `auth.json` は対象外です。Claude の `.claude.json` はアカウント識別と好みが同居しているため、ファイルごとではなく名指しした 2 キー（ブラウザ操作の既定）だけを移します <!-- secrets-scan: allow .credentials.json -->
+- 書き込み先は `~/.many-ai-cli/subscriptions/` の中だけで、あなたの `~/.claude` / `~/.codex` / `~/.grok` は読むだけです。`many-ai-cli uninstall` で全部消えます
+- あとから既定側を変えた分は自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教えます
+
+**ブラウザ連携も設定ディレクトリに付いてきます**: Claude in Chrome は有効化の状態を設定ディレクトリの中に持ちます。この「既定で有効にするか」の設定は上記の持ち込みの対象なので新しい profile にも引き継がれますが、実際にブラウザと繋がるかは別の話です。有効化のときに書かれる native messaging host の登録は Windows ユーザー単位で 1 枠しかなく、Chrome の全ブラウザプロファイルと Edge がそれを共有します。そのため最後に有効化した設定ディレクトリだけがブラウザと繋がり、別の profile で有効化すると枠が増えるのではなく移動します。加えて、ブラウザ拡張がセッションと同じ Claude アカウントでログインしている必要があります。結果として、ブラウザを持てる設定ディレクトリは同時に 1 つだけで、2 アカウントの並行利用はできません。`many-ai-cli` は環境変数を設定するだけで、これらの状態を読み書きしません。
+
+`XDG_DATA_HOME` は opencode 専用ではなく汎用の変数なので、**そのセッションの中で**エージェントが実行する他の XDG 対応ツールも profile ディレクトリ配下へ書きます。利用者のシェルには影響しません。opencode に専用の変数ができたら、そちらへ切り替えます。
+
+**profile の削除**は `many-ai-cli` の登録解除だけを行い、公式 CLI の認証は残します。認証も消すかどうかは別の明示的な確認になっており、`profile_dir` で自分で指定した外部ディレクトリには適用されません。
+
+この欄を一度も開かなければ、動作は今までと変わりません。セッションは従来と 1 バイトも変わらない環境で起動します。
 
 ---
 
@@ -262,13 +326,13 @@ sha256sum -c SHA256SUMS.txt
    many-ai-cli setup
    ```
 
-   **Windows** ではデスクトップに **「Many AI Hub」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
+   **Windows** ではデスクトップに **「MANY-AI-CLI」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
 2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
 止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
-> **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「Many AI Hub」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。
+> **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「MANY-AI-CLI」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。旧名「Many AI Hub」は同じトレイ起動なので、`setup` が「MANY-AI-CLI」に置き換えます。
 
 > **⚠ コンソールウィンドウについて（macOS / Linux）**
 > 「Many AI Hub Start」を起動すると黒いコンソールウィンドウがブラウザと一緒に開きますが、**これが Hub サーバの実体プロセスです**。ウィンドウを `×` で閉じると Hub が終了します（邪魔な場合は閉じずに **最小化** してください）。Windows はトレイが Hub を切り離して起動するので、開いたままにしておくコンソールはありません。
@@ -553,7 +617,7 @@ Host remote-host
   HostName remote.example.com
   User ubuntu
   Port 22
-  IdentityFile C:\Users\you\.ssh\id_ed25519
+  IdentityFile ~/.ssh/id_ed25519
   ServerAliveInterval 30
 ```
 
@@ -697,6 +761,8 @@ many-ai-cli codex       # 同上
 many-ai-cli copilot     # 同上（インストール済み GitHub Copilot CLI を使用）
 many-ai-cli cursor-agent # 同上（インストール済み Cursor Agent CLI を使用）
 many-ai-cli grok        # 同上（インストール済み Grok Build CLI を使用）
+many-ai-cli opencode    # 同上（インストール済み opencode を使用）
+many-ai-cli command-code # 同上（インストール済み Command Code を使用）
 ```
 
 `many-ai-cli serve` を事前に実行しておく必要はありません。
@@ -791,6 +857,8 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `copilot [args...]` | GitHub Copilot CLI を Hub 経由で起動 |
 | `cursor-agent [args...]` | Cursor Agent CLI を Hub 経由で起動 |
 | `grok [args...]` | Grok Build CLI を Hub 経由で起動 |
+| `opencode [args...]` | opencode を Hub 経由で起動 |
+| `command-code [args...]` | Command Code を Hub 経由で起動 |
 | `wrap <provider> [args...]` | 任意 provider をラップ（デバッグ用） |
 | `shell-init` | 透過モード用のシェル関数スニペットを出力 |
 | `status` | Hub の起動状態を表示 |
@@ -804,10 +872,12 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 
 ブラウザで `http://127.0.0.1:47777/?token=<token>` を開きます。
 
+![many-ai-cli ダッシュボード](assets/readme-dashboard.png)
+
 ```
 ┌─ MANY-AI-CLI  [1][0][6] │ ● Claude:2  ● Codex:5            [⏻] [設定] ─┐
 ├──────────────────────────┬──────────────────────────────────────────────┤
-│ [+ 新しいセッション]     │ ● Codex  cwd: D:\dev\many-ai-cli   [↑最上部へ]│
+│ [+ 新しいセッション]     │ ● Codex  cwd: C:\src\many-ai-cli   [↑最上部へ]│
 │ 📁 many-ai-cli  [1][0][6] │ ターミナル出力 — Windows PowerShell          │
 │ ─────────────────────── │                                              │
 │ 📌 #7 ● Codex 実行中  × │   (xterm.js のターミナル出力)               │
@@ -1179,24 +1249,42 @@ Hub はセッションの稼働状態を **端末（PTY）出力が直近数秒�
 
 > セッション全体の `実行中` / `スタンバイ` 判定には provider 内部状態を使わないため、出力ベースのヒューリスティックに起因する既知の制限は残ります。Claude の Workflow 進捗は、後述するローカル journal メタ情報から別系統で追跡します。表示が `スタンバイ` でも、端末本体を見れば処理が続いているか確認できます。
 
+### 端末の右半分に未コミットファイルの一覧が出る（Claude Code の差分パネル）
+
+Claude Code のセッションで、端末の右半分に `5 files changed +813 -3` のようなファイル一覧と増減行数が表示されることがあります。**これは many-ai-cli の描画不具合ではなく、Claude Code 本体が端末へ描いている差分パネルです。** many-ai-cli は端末の出力をそのままダッシュボードへ映すため、このパネルもダッシュボード内に現れます。
+
+Claude Code はこの設定に一度も触れていない場合、**端末幅が 144 桁以上** かつ **カレントディレクトリが git リポジトリ** のときにパネルを自動で開きます（少なくとも 2.1.258 以降のバイナリでこの条件を確認）。タイルを広く取っているセッションだけに出るのはこのためです。untracked なファイルは増減行数の代わりに `git add` の案内が表示されます。
+
+閉じたいときは、そのセッションで `/diff` を送ってください（同じコマンドで再表示できます）。タイルの幅を 144 桁未満にしても出なくなります。閉じた状態が次のセッションへ引き継がれるかは Claude Code 側の管理なので、新しいセッションで再び出た場合はもう一度 `/diff` を送ってください。
+
 ---
 
 ## セキュリティ
 
 - Hub の HTTP / WebSocket サーバは `127.0.0.1` のみにバインドし、外部ホストから直接アクセスすることはできません
 - ランダムトークンを起動時に生成し、URL に付与します（`?token=xxx`）
-- token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。
+- token なしアクセスは明示的な opt-in です。SSH ローカルフォワードやユーザー専用 WireGuard/Docker gateway など、入口が別の私設経路で保護されている場合だけ `hub.allow_loopback_without_token: true`、`hub.trusted_networks: ["172.19.0.1/32"]`、`hub.allowed_hosts: ["10.8.0.1"]` のように狭く設定してください。公開 bind、リバースプロキシ、共有 shell ホスト、`0.0.0.0/0` のような広い CIDR では使わないでください。`/24`（IPv6 は `/64`）より広い CIDR は設定エラーになります。tailnet 全体のような広い私設範囲から届かせたい場合は `hub.trusted_networks` ではなく `hub.allowed_hosts` + token（+ 任意 PIN）を使ってください。 <!-- secrets-scan: allow 172.19.0.1 secrets-scan: allow 10.8.0.1 -->
 - `many-ai-cli` 自身はテレメトリ・利用状況の送信を一切行いません
 
 ### Claude Workflow journal のメタ情報
 
-Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript や task output ファイルも読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript は読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+
+メインセッションの transcript から Workflow の taskId が解決できた場合、Hub は Claude Code の Workflow タスク出力ファイル（`%TEMP%/claude/<munge(cwd)>/<セッションUUID>/tasks/<taskId>.output` 等）も、そのワークフローが動いている間ポーリングします（`workflow.task_detail_enabled: true` が既定）。読み取るのは `workflowProgress` フィールドのみで、各エージェントのラベル・状態・直近のツール操作・要約プレビューを Workflow モーダルに表示します。script の戻り値本文（`result`）や `log()` 出力（`logs`）はどの構造体にもデコードされず、読みません。この詳細情報はダッシュボードのモーダルにのみ表示され、ログ出力・永続化・外部送信は行いません。無効化する場合は `workflow.task_detail_enabled: false` にしてください。無効時、または taskId が解決できない場合は、従来どおり集計バー/件数表示にフォールバックします。
 
 Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_completion_notify.enabled: true`）。payload に含むのはセッション名と `N/M agents` のような集計件数だけで、journal の result 本文や agent ID は含みません。
 
 ### ローカル instruction file への書き込み
 
 **承認ボタン機能**を有効にすると、`many-ai-cli` は active な wrapped session が読む instruction file に、many-ai-cli のマーカー付き承認ルールブロックだけを追記します。Claude Code は `~/.claude/CLAUDE.md`、Codex は `$CODEX_HOME/AGENTS.md` または `~/.codex/AGENTS.md`、GitHub Copilot / Cursor Agent / Grok は project instruction root の `AGENTS.md` が対象です（Grok は Claude Code 互換 harness として `CLAUDE.md` / `AGENTS.md` の両方をネイティブに読みます）。ブロックは冪等に1つだけ入り、そのファイルを使う最後の active wrapped session が終了した時、承認ボタン機能を無効化した時、または Hub 停止時に削除されます。
+
+### セッション引き継ぎ記録（handoff）
+
+`many-ai-cli` は、利用上限に当たったセッションの作業を別の AI CLI へ引き継げるように、すべてのセッションについて「引き継ぎ看板」を記録します（無効化しない限り）。何を記録してよいかは後から伏字化するのではなく Go の型で決めており、PTY の出力・ファイルの中身・diff・環境変数を入れられるフィールドは 1 つもありません。看板が持つ自由記述のフィールド（完了ごとの要約、任意の「次の一手」1 行）だけは、他の機能と同じ秘密値マスク処理を通してから書き込みます。
+
+記録はホームディレクトリ配下の `~/.many-ai-cli/handoff/s<id>.jsonl`（ディレクトリ `0700` / ファイル `0600`）に置かれ、リポジトリの中には置きません。記録が有効かどうかに関わらず、`handoff.retention_days`（既定 14 日）より古いファイルは Hub の定期処理で削除されます。`handoff.enabled: false` で書き込み自体を止められます。`many-ai-cli doctor` はこのディレクトリのファイル件数と最古ファイルの経過日数を報告します。
+
+引き継ぎの起動は必ず人が押した操作から始まり、自動では 1 本も立ちません。入口は 2 つあります。1 つはセッションの残量が `handoff.notify_remaining_percent`（既定 10%）を下回ったときに画面の隅に出る通知、もう 1 つはサイドバーの「引き継ぎ一覧」ボタン（↪）です。一覧はライブなセッション状態ではなく看板ディレクトリを直接読むため、セッションが既に終了していても、Hub を再起動した後でも同じように開けます。どちらの入口からでも、Hub はその看板から 1 画面ぶんの markdown（素性・直近の完了・直近の変更・「次の一手」があればそれ）を組み、**どこへも送る前に画面へ表示**します。そこから起動を選ぶと、その markdown を最初の指示として持たせた新しいセッションを**別の provider**（元と同じ provider の別 subscription profile は選べません）で 1 本立てます。新しいセッション自身の看板には、どのセッションを引き継いだかが記録されます。画面上で親子関係が作られるわけではありません。
 
 ### 外部への通信について
 
@@ -1227,8 +1315,18 @@ Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_co
 
 wrap 対象 CLI のベンダーは、第三者ツール経由のアクセスや自動化を制限する方向に規約を変更する可能性があります。その場合、`many-ai-cli` 経由での利用が規約違反となる場合があります。
 
-- 実例: Google は 2026 年に「Gemini Code Assist を第三者ツール経由で利用することは ToS 違反」とする運用を開始し、OpenClaw / OpenCode / Antigravity 等の wrapper 利用ユーザーに対して `403 ToS` アカウント停止が多発しました。この前例を踏まえ、本ツールでは **Gemini CLI は意図的に wrap 対象外** としています。
+- 実例: 2026 年 2 月、Google は Gemini CLI / Antigravity の OAuth 認証を第三者ツールに横取りさせてバックエンドへアクセスしていた利用者のアカウントを `403 ToS` で停止しました。名前が挙がったのは OpenClaw / OpenCode / Pi / 9router proxy です。Google の公式見解は「第三者のソフトウェア・ツール・サービスを使って Gemini CLI の OAuth 認証を横取り・便乗し、当社のバックエンドサービスへアクセスすることは、Gemini CLI の適用規約およびポリシーへの直接的な違反である」というものです。抑止は共通のバックエンド層で効くため、停止されたアカウントは Antigravity と Gemini Code Assist の利用も同時に失いました（Antigravity は Google 自身の製品で、違反ツール側ではありません）。是正フォームの提出で復帰しましたが、2 回目の違反は恒久停止です。この前例を踏まえ、本ツールでは **Gemini CLI は意図的に wrap 対象外** としています。
 - 上表の wrap 対象 CLI についても同様のリスクがあり、ベンダーが第三者自動化を制限した場合は **予告なくサポートを終了する可能性があります**。各 CLI の最新規約はユーザー責任で確認してください。
+
+### ⚠️ 自分のアカウントを複数積む使い方は自己責任
+
+`many-ai-cli` は Claude Code / Codex CLI / Grok Build CLI / opencode に複数のサブスクリプションを紐づけられますが、やっているのはセッションごとに設定ディレクトリを切り替えることだけです。その profile の向こうにあるアカウントをそのように使ってよいかは、利用者と各ベンダーの間の問題です（Copilot と Cursor は単一ログインのままなのでこの話は発生しません）。
+
+- **アカウントを複数持つこと自体** は Anthropic / OpenAI / xAI のいずれも禁じていません。GitHub だけ例外で、無料アカウントは 1 人 1 つまでと規約にあります
+- **上限に達したら別アカウントへ切り替えて作業を続ける使い方は、また別の話です**。Anthropic / OpenAI / xAI はいずれも「レート制限や保護措置の回避」を幅広く禁じており、利用枠の積み増しをそこに読み込まれる可能性があります。判断するのはベンダー側で、停止されても返金はありません
+- **もともと別の権利をそれぞれの用途で使うのは普通の使い方です** — 会社支給アカウントで業務を、個人アカウントで個人の開発を、といった使い分けなど
+- **上限に達したときはベンダー公式の有償手段を優先してください** — Anthropic の usage credits（`/usage-credits`）や OpenAI の ChatGPT credits で、従量課金のレートでそのまま続けられます
+- 積み増して使う前に、最新の規約を自分で確認してください（[Anthropic](https://www.anthropic.com/legal/consumer-terms) / [OpenAI](https://openai.com/policies/row-terms-of-use/) / [xAI](https://x.ai/legal/acceptable-use-policy) / [GitHub](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service)）。その使い方が規約に適合するかを `many-ai-cli` 側で判定することはできません。この機能を使うかどうかは利用者の判断と自己責任です
 
 ### ⚠️ アカウントの複数人共有は禁止
 
@@ -1368,6 +1466,8 @@ docker compose up -d
 # .env を AAC_TAG=latest に戻してから:
 docker compose up -d && rm HOLD
 ```
+
+Docker をローカルビルドするときは、作業中のホームディレクトリではなく clean checkout から開始してください。Dockerfile 専用の ignore 設定が、Docker daemon へ送る前に認証情報、AI エージェントの状態、worktree メタデータ、ログ、transcript などのローカル作業物を除外します。Dockerfile は公式 base image を manifest digest で固定し、Whisper の source commit と Cursor archive の SHA-256 を展開前に検証し、provider CLI は追跡した exact version の npm lockfile からインストールします。これは Docker build input の境界を守るための検査であり、Ubuntu apt は live 更新、Cursor の hash は公式 HTTPS byte に対する literal TOFU pin のため、bit-for-bit の完全再現を意味しません。
 
 ---
 

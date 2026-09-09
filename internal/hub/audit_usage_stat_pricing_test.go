@@ -1,6 +1,9 @@
 package hub
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 // audit #31: lookupModelPricing は (1)完全一致 (2)スペース区切りの最初のトークンの完全一致 の
 // 2 段のみで、真の前方一致（価格表に無い派生 ID を短いキーへ寄せる）は意図的に行わない。
@@ -110,5 +113,30 @@ func TestAuditCalcCostUSDKnownAndUnknown(t *testing.T) {
 	}
 	if cost <= 0 {
 		t.Errorf("calcCostUSD(claude-opus-4-8, 1M in) cost = %v, want > 0", cost)
+	}
+}
+
+func TestCalcCostUSDSubtractsCachedInputOnce(t *testing.T) {
+	// Codex fixture from internal/usagerelay/usagerelay_test.go. Cached input
+	// is part of input_tokens, so only 33079-26880 is charged at input price.
+	cost, known := calcCostUSD("gpt-5", 33079, 473, 26880)
+	if !known {
+		t.Fatal("calcCostUSD(gpt-5) known = false, want true")
+	}
+	want := (6199*10.0 + 473*40.0 + 26880*2.5) / 1_000_000.0
+	if math.Abs(cost-want) > 1e-12 {
+		t.Fatalf("calcCostUSD with cache = %.12f, want %.12f", cost, want)
+	}
+}
+
+func TestCalcCostUSDCacheBoundariesNeverGoNegative(t *testing.T) {
+	base, _ := calcCostUSD("gpt-5", 100, 10, 0)
+	allCached, _ := calcCostUSD("gpt-5", 100, 10, 100)
+	cacheOverInput, _ := calcCostUSD("gpt-5", 100, 10, 200)
+	if allCached != cacheOverInput {
+		t.Fatalf("cache > input cost = %.12f, want clamp to %.12f", cacheOverInput, allCached)
+	}
+	if allCached >= base || allCached < 0 || cacheOverInput < 0 {
+		t.Fatalf("cache boundary costs = base %.12f, all %.12f, over %.12f", base, allCached, cacheOverInput)
 	}
 }

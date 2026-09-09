@@ -53,12 +53,8 @@ func (s *Server) evaluateAutoApproval(id int, approval *nativeApproval) autoappr
 		cwd, provider = ses.CWD, ses.Provider
 	}
 	s.sessionsMu.Unlock()
+	decision := s.evaluateAutoApprovalPolicy(approval.Summary.Command, cwd, approval.Summary.Risk)
 	s.autoApprovalMu.Lock()
-	policy := s.autoApprovalPolicy
-	if policy == nil {
-		policy = &autoapproval.Policy{}
-	}
-	decision := policy.Evaluate(approval.Summary.Command, cwd, approval.Summary.Risk)
 	candidate := autoApprovalCandidate{At: time.Now(), SessionID: id, Provider: provider, CWD: cwd, Summary: approval.Summary, Decision: decision}
 	s.autoApprovalHistory = append(s.autoApprovalHistory, candidate)
 	if len(s.autoApprovalHistory) > autoApprovalHistoryLimit {
@@ -71,19 +67,99 @@ func (s *Server) evaluateAutoApproval(id int, approval *nativeApproval) autoappr
 	return decision
 }
 
+func (s *Server) evaluateAutoApprovalPolicy(command, cwd string, risk proto.ApprovalRiskTier) autoapproval.Decision {
+	s.autoApprovalMu.Lock()
+	policy := s.autoApprovalPolicy
+	if policy == nil {
+		policy = &autoapproval.Policy{}
+	}
+	decision := policy.Evaluate(command, cwd, risk)
+	s.autoApprovalMu.Unlock()
+	return decision
+}
+
 func autoApprovalInput(options []proto.ApprovalOption) string {
 	for _, option := range options {
-		label := strings.ToLower(strings.TrimSpace(option.Label))
-		positive := strings.Contains(label, "allow once") || strings.Contains(label, "allow") || strings.Contains(label, "approve") || strings.Contains(label, "run") || strings.Contains(label, "continue") || strings.Contains(label, "yes") || strings.Contains(option.Label, "許可") || strings.Contains(option.Label, "実行") || strings.Contains(option.Label, "続行")
-		if !positive {
-			continue
+		if input := approvalOptionInput(option, true); input != "" {
+			return input
 		}
-		if option.SendText != "" {
-			return option.SendText
+	}
+	return ""
+}
+
+func normalizeApprovalOptionLabel(label string) string {
+	label = strings.ToLower(strings.TrimSpace(label))
+	label = strings.ReplaceAll(label, "’", "'")
+	label = strings.Join(strings.Fields(label), " ")
+	for _, suffix := range []string{
+		" (y)", " (p)", " (n)", " (esc)", " (escape)", " (!)", " (?)", " (#)", " (recommended)",
+	} {
+		if strings.HasSuffix(label, suffix) {
+			label = strings.TrimSpace(strings.TrimSuffix(label, suffix))
+			break
 		}
-		if option.IsCurrent {
-			return "\r"
+	}
+	return label
+}
+
+func isExplicitApprovalNegativeLabel(label string) bool {
+	label = normalizeApprovalOptionLabel(label)
+	if label == "" {
+		return false
+	}
+	for _, exact := range []string{
+		"no", "deny", "deny once", "reject", "cancel", "skip", "abort", "decline",
+		"do not allow", "don't allow", "do not run", "don't run",
+		"拒否", "許可しない", "中止",
+	} {
+		if label == exact {
+			return true
 		}
+	}
+	for _, prefix := range []string{"no ", "deny ", "reject ", "cancel ", "skip ", "abort ", "decline "} {
+		if strings.HasPrefix(label, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func isExplicitApprovalPositiveLabel(label string) bool {
+	label = normalizeApprovalOptionLabel(label)
+	if label == "" || isExplicitApprovalNegativeLabel(label) {
+		return false
+	}
+	// Persistent/session-wide choices are intentionally not automatic. The
+	// whitelist rule authorizes one low-risk operation, not a permission change.
+	for _, marker := range []string{"always", "don't ask", "dont ask", "all similar", "this session", "session"} {
+		if strings.Contains(label, marker) {
+			return false
+		}
+	}
+	switch label {
+	case "yes", "yes, allow once", "allow", "allow once", "approve", "run", "run command", "run (once)", "continue", "proceed", "yes, proceed", "yes proceed", "許可", "実行", "続行":
+		return true
+	default:
+		return false
+	}
+}
+
+func approvalOptionInput(option proto.ApprovalOption, positive bool) string {
+	if positive {
+		if !isExplicitApprovalPositiveLabel(option.Label) {
+			return ""
+		}
+	} else if !isExplicitApprovalNegativeLabel(option.Label) {
+		return ""
+	}
+	if option.SendText != "" {
+		return option.SendText
+	}
+	if option.IsCurrent {
+		return "\r"
+	}
+	if option.Num > 0 {
+		return fmt.Sprintf("%d\r", option.Num)
 	}
 	return ""
 }
@@ -94,22 +170,48 @@ func (s *Server) maybeAutoApprove(id int, approval *nativeApproval) bool {
 		return false
 	}
 	s.sessionsMu.Lock()
-	wc := s.wrappers[id]
 	ses := s.sessions[id]
+	expectedCandidateKey := ""
+	expectedSourceEpoch := uint64(0)
+	if ses != nil {
+		expectedCandidateKey = ses.nativeApprovalCandidateKey
+		expectedSourceEpoch = ses.nativeApprovalSourceEpoch
+	}
 	s.sessionsMu.Unlock()
-	if wc == nil || ses == nil {
+	if ses == nil {
 		return false
 	}
-	input := autoApprovalInput(approval.Options)
-	if input == "" {
-		s.logger.Warn("auto approval skipped: allow option not recognized", "session_id", id, "rule_id", decision.RuleID)
+	if expectedCandidateKey == "" {
+		expectedCandidateKey = approval.Sig
+	}
+	if expectedSourceEpoch == 0 {
+		s.sessionsMu.Lock()
+		if current := s.sessions[id]; current == ses {
+			expectedSourceEpoch = ensureApprovalSourceEpochLocked(current)
+		}
+		s.sessionsMu.Unlock()
+	}
+	result, err := s.sendNativeApprovalAction(nativeApprovalActionRequest{
+		sessionID:            id,
+		approvalSig:          approval.Sig,
+		expectedCandidateKey: expectedCandidateKey,
+		expectedSourceEpoch:  expectedSourceEpoch,
+		action:               oneTapApprove,
+		lowRiskOnly:          true,
+		ruleID:               decision.RuleID,
+	})
+	if err != nil {
+		s.logger.Warn("auto approval skipped", "session_id", id, "rule_id", decision.RuleID, "err", err)
 		return false
 	}
-	// Consume before writing input so redraws cannot send the same approval twice.
-	s.markNativeApprovalConsumed(proto.Message{SessionID: id, ApprovalSig: approval.Sig, SentText: input})
-	s.submitInput(wc, id, input)
-	s.writeAutoApprovalAudit(autoApprovalAuditRecord{Timestamp: time.Now().Format(time.RFC3339), SessionID: id, Provider: ses.Provider, RuleID: decision.RuleID, Command: sessionlog.MaskSecrets(approval.Summary.Command), Risk: string(approval.Summary.Risk)})
-	s.broadcast(proto.Message{Type: "auto_approval_applied", SessionID: id, Provider: ses.Provider, ApprovalSig: approval.Sig, ApprovalSummary: &approval.Summary, Text: decision.RuleID})
+	if !s.commitNativeApprovalAction(result) {
+		s.releaseNativeApprovalAction(result)
+		s.logger.Warn("auto approval skipped: approval changed after send", "session_id", id, "rule_id", decision.RuleID)
+		return false
+	}
+	s.writeAutoApprovalAudit(autoApprovalAuditRecord{Timestamp: time.Now().Format(time.RFC3339), SessionID: id, Provider: result.provider, RuleID: decision.RuleID, Command: sessionlog.MaskSecrets(result.approval.Summary.Command), Risk: string(result.approval.Summary.Risk)})
+	summary := result.approval.Summary
+	s.broadcast(proto.Message{Type: "auto_approval_applied", SessionID: id, Provider: result.provider, ApprovalSig: result.approvalSig, ApprovalSummary: &summary, Text: decision.RuleID})
 	return true
 }
 

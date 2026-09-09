@@ -1,6 +1,8 @@
 package wrapper
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"many-ai-cli/internal/securefile"
 )
 
 // codexConfigMu は同一プロセス内の ~/.codex/config.toml RMW を直列化する。
@@ -63,18 +67,17 @@ type UsageHookParams struct {
 //
 // Claude Code は Windows で statusLine コマンドを Git Bash（無ければ PowerShell）
 // 経由で実行する。Git Bash はバックスラッシュをエスケープ文字として扱うため、
-// `D:\dev\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
+// `C:\tools\foo\many-ai-cli.exe` のような生の Windows パスはセパレータが消えて
 // パスが壊れ、コマンドが「エラーも出さずに実行されない」（＝relay が一度も
 // POST せずトークンがステータスバーに出ない症状の根本原因）。
-// 正スラッシュ（`D:/dev/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
+// 正スラッシュ（`C:/tools/foo/many-ai-cli.exe`）なら Git Bash / PowerShell とも
 // 引用符なしで実行でき、Codex の config.toml（TOML 文字列でも `\d` 等が不正
 // エスケープになる）でも同じ変換で破損を回避できる。
 // 公式ドキュメント: https://code.claude.com/docs/en/statusline.md の
 // 「Windows configuration」節（バックスラッシュは無視されコマンドが沈黙する）。
 //
-// 注意: パスにスペースが含まれる場合の引用は Git Bash と PowerShell で必要な
-// 形式（"..." vs `& "..."`）が異なり両立しないため、ここでは行わない
-// （many-ai-cli の配置パスにスペースを含めない運用前提）。
+// 注意: パスにスペースが含まれる場合の引用は、呼出側（claudeStatusLineCmd /
+// codexStopHookBlock）で usageHookQuotePOSIX を使ってシングルクォート化する。
 func toShellPath(p string) string {
 	// filepath.ToSlash は実行時 OS の PathSeparator しか変換しないため、
 	// Linux CI 上で Windows パスを扱うテストでは `\` が残る。POSIX シェル
@@ -89,14 +92,71 @@ func toShellPath(p string) string {
 // /proc/<pid>/cmdline / ps aux から他ユーザーが token を読み取れる経路を閉じるため。
 // Claude Code は Windows でも Git Bash（POSIX）経由で statusLine を実行するので
 // 同一構文で動作する。
+//
+// exe パスはユーザーの配置場所次第でスペースを含み得るので、usageHookQuotePOSIX で
+// シングルクォート化して語分割を防ぐ。
 func claudeStatusLineCmd(p UsageHookParams) string {
 	return fmt.Sprintf("%s=%s %s usage-relay --provider claude --hub %s --session %d",
-		hubTokenEnvName, p.Token, toShellPath(p.ExePath), p.HubURL, p.SessionID)
+		hubTokenEnvName, p.Token, usageHookQuotePOSIX(toShellPath(p.ExePath)), p.HubURL, p.SessionID)
 }
 
 // hubTokenEnvName は relay 側 (internal/usagerelay/usagerelay.go) の hubTokenEnv と同値。
 // 循環 import を避けるためここに複製する。両者の値は乖離させないこと。
 const hubTokenEnvName = "MANY_AI_CLI_HUB_TOKEN"
+
+const (
+	claudeSessionSettingsPrefix = "aac-claude-settings-"
+	claudeSessionSettingsSuffix = ".json"
+	// A provider process may outlive the wrapper briefly after a forced wrapper
+	// termination. Keep old settings long enough that a quick restart cannot
+	// remove a file that a still-starting Claude process may read.
+	claudeSessionSettingsStaleAfter = 24 * time.Hour
+)
+
+var claudeSessionSettingsNameRe = regexp.MustCompile(`^aac-claude-settings-u([0-9a-f]{16})-s([0-9]+)-p([0-9]+)\.json$`)
+
+func claudeSessionSettingsOwnerID() string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		home = os.TempDir()
+	}
+	if strings.TrimSpace(home) == "" {
+		home = "unknown"
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(home)))
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// cleanupStaleClaudeSessionSettings removes only files produced by this
+// version's naming convention and this OS user. A live PID, a fresh mtime, a
+// different owner marker, a symlink, or an unparseable name is left alone.
+func cleanupStaleClaudeSessionSettings(now time.Time) {
+	cleanupStaleClaudeSessionSettingsInDir(os.TempDir(), now)
+}
+
+func cleanupStaleClaudeSessionSettingsInDir(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	ownerID := claudeSessionSettingsOwnerID()
+	for _, entry := range entries {
+		match := claudeSessionSettingsNameRe.FindStringSubmatch(entry.Name())
+		if match == nil || match[1] != ownerID {
+			continue
+		}
+		pid, err := strconv.Atoi(match[3])
+		if err != nil || pid <= 0 || processAlive(pid) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || now.Sub(info.ModTime()) < claudeSessionSettingsStaleAfter {
+			continue
+		}
+		_ = os.Remove(path)
+	}
+}
 
 // ClaudeSettingsOptions は wrapper 所有の一時 settings に何を載せるかを決める。
 // どのキーもセッション単位で必要性が違うため、呼び出し側が要るものだけ true にする。
@@ -110,8 +170,8 @@ type ClaudeSettingsOptions struct {
 	// Claude Code v2.1.224+ の cross-session messaging は、受信側が
 	// bypassPermissions クラスのとき既定で全メッセージを承認待ちに hold し、
 	// PTY 上に承認ダイアログを出す（送信側も bypass の場合のみ素通し）。
-	// orchestration の子は applyChildApprovalDefaults により必ず
-	// bypassPermissions で起動する。人間が張り付かない自走前提なので、
+	// orchestration の子は applyChildApprovalDefaults（child_full_bypass 既定 true）
+	// により bypassPermissions で起動する。人間が張り付かない自走前提なので、
 	// hold されるとダイアログが dialogExpiry（既定 5 分）まで放置され、
 	// board にも何も残らないまま停止する。accept を明示してこれを避ける。
 	// 公式: https://code.claude.com/docs/en/cross-session-messaging
@@ -149,7 +209,8 @@ func WriteClaudeSessionSettings(p UsageHookParams, opts ClaudeSettingsOptions) (
 	if err != nil {
 		return "", nil, fmt.Errorf("marshal claude session settings: %w", err)
 	}
-	name := fmt.Sprintf("aac-claude-settings-s%d-%d.json", p.SessionID, os.Getpid())
+	cleanupStaleClaudeSessionSettings(time.Now())
+	name := fmt.Sprintf("%su%s-s%d-p%d%s", claudeSessionSettingsPrefix, claudeSessionSettingsOwnerID(), p.SessionID, os.Getpid(), claudeSessionSettingsSuffix)
 	path = filepath.Join(os.TempDir(), name)
 	// 共用 /tmp での symlink 追従を防ぐ（AUDIT-4）: 既存（stale or 他ユーザーが張った
 	// symlink）を除去してから O_EXCL で排他生成する。O_EXCL は symlink 先へ追従して書き込まず、
@@ -255,7 +316,7 @@ func InjectCodexStopHook(p UsageHookParams) error {
 			// ReplaceAllLiteralString を使う。ReplaceAllString だと newBlock 中の
 			// `$name` / `${name}` が Regexp.Expand ルールで解釈され、many-ai-cli の
 			// 実行ファイルパスに `$` を含むディレクトリ（例:
-			// `C:\Users\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
+			// `C:\tools\alice\$portable\many-ai-cli.exe`）があると、対応するキャプチャ
 			// グループが無いため無言で消える（TOML 上は構文的に壊れないので気づけない）。
 			newBlock := codexStopHookBlock(p)
 			blockRe := regexp.MustCompile(`(?s)` + regexp.QuoteMeta(usageHookBlockStart) + `.*?` + regexp.QuoteMeta(usageHookBlockEnd) + `\n?`)
@@ -380,5 +441,14 @@ func writeCodexConfig(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil { // #nosec G301 -- ~/.codex は秘密情報を持つ可能性があるため 0700
 		return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
-	return os.WriteFile(path, []byte(content), 0o600) // #nosec G306,G703 -- ~/.codex/config.toml は Codex CLI の設定ファイル（0600 が意図）。path はホーム配下の固定設定パスで外部入力ではない
+	mode := os.FileMode(0o600)
+	if info, err := os.Stat(path); err == nil {
+		// Preserve a user's stricter owner-only mode while never carrying group
+		// or other-user permissions into the replacement.
+		mode = info.Mode().Perm() & 0o600
+		if mode == 0 {
+			mode = 0o600
+		}
+	}
+	return securefile.WriteAtomic(path, []byte(content), mode)
 }

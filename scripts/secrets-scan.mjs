@@ -74,6 +74,8 @@ const ALLOWED_EMAIL_DOMAINS = [
   'users.noreply.github.com',  // GitHub の noreply
   'anthropic.com',             // AI コミット footer（Co-Authored-By）
   'example.com',               // ドキュメントの例示用
+  'example.net',               // ドキュメントの例示用（RFC 2606 予約）
+  'example.org',               // ドキュメントの例示用（RFC 2606 予約）
   'example.invalid',           // テスト fixture 用（RFC 2606 予約・名前解決されない）
   // ここに各プロジェクトの公開窓口ドメインを追記する（例: 'manabi-map.app'）
 ];
@@ -345,7 +347,10 @@ function getStructuralPatterns() {
       // RFC1918 (10/8, 172.16/12, 192.168/16) のみを内部 LAN トポロジー漏洩として検知する。
       name: 'Private IPv4 (RFC1918)',
       regex: /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/g,
-      suggestion: '内部 IP を一般化または削除 / Generalize or remove internal IP',
+      // 置換先を名指しする: RFC5737 TEST-NET は CI 層（.gitleaks.toml の public-ipv4-literal）の
+      // allowlist にも入っており、この置換なら層 2 / 層 3 の両方を一度で通る（2026-09-01 制定。
+      // 「一般化」だけ案内すると CGNAT 等の公開レンジへ置換されて CI 層で二度目に止まる）。
+      suggestion: 'RFC5737 TEST-NET (192.0.2.x / 198.51.100.x / 203.0.113.x) へ置換または削除 / Replace with RFC5737 TEST-NET documentation IPs or remove',
     },
     {
       // allowlist（ALLOWED_EMAILS / ALLOWED_EMAIL_DOMAINS）に無いメールアドレスは全件ブロック。
@@ -429,6 +434,28 @@ function isSkipFilename(path) {
 
 // === Scanning ===
 
+// === Short-needle boundary rule ===
+// 2 文字以下の watchlist 名は、そのままの部分文字列一致だと乱数めいた文字列に
+// 無数に当たる（実例: YouTube の動画 ID `5vudjnGWFKc` の中の `WF` が kb のアプリ名に
+// 一致して push がブロックされた・2026-08-30）。短い needle は「前後が英数字でない」
+// ときだけ一致させる。実際の言及（`WF の設定` / `（WF）` / 行頭・行末）は引き続き当たり、
+// 検知の網は落ちない。3 文字以上は従来どおり素の部分文字列一致。
+const SHORT_NEEDLE_MAX = 2;
+const ALNUM = /[A-Za-z0-9]/;
+
+function matchesNeedle(line, needle) {
+  if (needle.length > SHORT_NEEDLE_MAX) return line.includes(needle);
+  let from = 0;
+  for (;;) {
+    const i = line.indexOf(needle, from);
+    if (i < 0) return false;
+    const before = i > 0 ? line[i - 1] : '';
+    const after = line[i + needle.length] || '';
+    if (!ALNUM.test(before) && !ALNUM.test(after)) return true;
+    from = i + 1;
+  }
+}
+
 function scanFile(path, needleMap, structuralPatterns) {
   if (!existsSync(path)) return [];
   let stat;
@@ -447,7 +474,7 @@ function scanFile(path, needleMap, structuralPatterns) {
 
     // watchlist needles (substring match)
     for (const [needle, source] of needleMap) {
-      if (line.includes(needle) && !isAllowedByDirective(line, needle)) {
+      if (matchesNeedle(line, needle) && !isAllowedByDirective(line, needle)) {
         hits.push({
           file: path,
           lineNumber: i + 1,

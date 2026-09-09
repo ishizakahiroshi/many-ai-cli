@@ -51,7 +51,7 @@ func TestSubmitInputSerializedConcurrent(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < msgsPerGoroutine; i++ {
 				// wc=nil: trySendInput が即座に combined を返し pending へ積まれる。
-				s.submitInput(nil, sessionID, "hello\r")
+				s.submitInput(sessionID, "hello\r")
 			}
 		}()
 	}
@@ -88,7 +88,7 @@ func TestSubmitInputBracketedPasteNoConcurrentInterleave(t *testing.T) {
 			defer wg.Done()
 			// bracketedPasteEnd を含む入力: splitBracketedPasteSubmit が first/delayed に分割する。
 			paste := "\x1b[200~paste content\x1b[201~\r"
-			s.submitInput(nil, sessionID, paste)
+			s.submitInput(sessionID, paste)
 		}()
 	}
 	wg.Wait()
@@ -108,7 +108,7 @@ func TestSubmitInputBracketedPasteNoConcurrentInterleave(t *testing.T) {
 func TestSubmitInputNilSessionDropped(t *testing.T) {
 	s := auditInputServer(t)
 	// sessions[99] は未登録。submitInput は早期リターンする。
-	s.submitInput(nil, 99, "hello\r")
+	s.submitInput(99, "hello\r")
 	// pendingInput に何も積まれていないことを確認。
 	s.sessionsMu.Lock()
 	got := len(s.pendingInput[99])
@@ -129,4 +129,33 @@ func TestInputMuExistsOnSession(t *testing.T) {
 	ses.inputMu.Lock()
 	//lint:ignore SA2001 intentional empty critical section — proves inputMu exists
 	ses.inputMu.Unlock()
+}
+
+func TestCurrentWrapperForInputUsesReattachedConnection(t *testing.T) {
+	s := auditInputServer(t)
+	const sessionID = 3
+	s.sessionsMu.Lock()
+	s.sessions[sessionID] = &session{ID: sessionID, inputMu: new(sync.Mutex)}
+	oldWC := &wrapperConn{}
+	newWC := &wrapperConn{}
+	s.wrappers[sessionID] = oldWC
+	s.sessionsMu.Unlock()
+
+	if got := s.currentWrapperForInput(sessionID); got != oldWC {
+		t.Fatalf("initial wrapper = %p, want %p", got, oldWC)
+	}
+
+	s.sessionsMu.Lock()
+	s.wrappers[sessionID] = newWC
+	s.sessionsMu.Unlock()
+	if got := s.currentWrapperForInput(sessionID); got != newWC {
+		t.Fatalf("reattached wrapper = %p, want %p", got, newWC)
+	}
+
+	s.sessionsMu.Lock()
+	delete(s.sessions, sessionID)
+	s.sessionsMu.Unlock()
+	if got := s.currentWrapperForInput(sessionID); got != nil {
+		t.Fatalf("dismissed wrapper = %p, want nil", got)
+	}
 }

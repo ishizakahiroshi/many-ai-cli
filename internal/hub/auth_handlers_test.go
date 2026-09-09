@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"golang.org/x/net/websocket"
+	"many-ai-cli/internal/proto"
 )
 
 func TestAuthRevokeAll_RotatesToken(t *testing.T) {
@@ -106,5 +110,58 @@ func TestAuthRevokeAll_RejectsLogicallyRemoteWithoutPIN(t *testing.T) {
 	}
 	if s.cfg.Token != "oldtok" {
 		t.Errorf("token rotated by logically-remote caller: %q (want unchanged)", s.cfg.Token)
+	}
+}
+
+func TestAuthRevokeAllInvalidatesUIWithoutClosingWrapper(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	s := newTestServer()
+	s.cfg.Token = "oldtok"
+	uiWS := &websocket.Conn{}
+	ui := newUIConn(uiWS)
+	ui.sendFunc = func(any) error { return nil }
+	ui.closeFunc = func() {}
+	wrapper := newWrapperConn(nil)
+	s.sessionsMu.Lock()
+	s.uis[uiWS] = ui
+	s.wrappers[7] = wrapper
+	s.sessionsMu.Unlock()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/revoke-all?token=oldtok", nil)
+	req.Host = "127.0.0.1:47777"
+	req.RemoteAddr = "127.0.0.1:54321"
+	w := httptest.NewRecorder()
+	s.handleAuthRevokeAll(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200: %s", w.Code, w.Body.String())
+	}
+
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	if len(s.uis) != 0 {
+		t.Fatalf("UI connections = %d, want 0 after revoke-all", len(s.uis))
+	}
+	if s.wrappers[7] != wrapper {
+		t.Fatal("revoke-all closed or replaced the provider wrapper")
+	}
+	if err := ui.sendWithDeadline(proto.Message{Type: "after-revoke"}, time.Now().Add(time.Second)); err == nil {
+		t.Fatal("invalidated UI accepted an outbound frame")
+	}
+}
+
+func TestAddUIWithHistoryRejectsStaleAuthEpoch(t *testing.T) {
+	s := newTestServer()
+	s.authEpoch = 2
+	uiWS := &websocket.Conn{}
+
+	ui, history := s.addUIWithHistoryAtEpoch(uiWS, 0, 1)
+	if ui != nil || history != nil {
+		t.Fatal("stale authentication epoch was registered")
+	}
+	if len(s.uis) != 0 {
+		t.Fatal("stale UI registration changed the live UI set")
 	}
 }

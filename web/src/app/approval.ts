@@ -1,17 +1,18 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, annotateApprovalIdentity, approvalCandidateDebugKey, approvalCandidateIdentity, approvalCandidateShape, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, clearReplayAnsweredApprovalCandidate, getApprovalSourceEpoch, isAnsweredApprovalCandidate, isApprovalReplayPending, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, noteApprovalSourceEpoch, recordAnsweredApprovalCandidate, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
+import { APPROVAL_PENDING_TEXT_TAIL_LIMIT, actionBarShownAt, activeSessionId, annotateApprovalIdentity, approvalCandidateDebugKey, approvalCandidateIdentity, approvalCandidateShape, approvalHintConfirmTimers, approvalHintConfirmTrusted, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, batchActiveQ, batchFreeText, batchSelections, clearReplayAnsweredApprovalCandidate, getApprovalSourceEpoch, isAnsweredApprovalCandidate, isApprovalReplayPending, isHubMarkerAuthoritative, isStaleHistoryRepaint, lastActionBarRender, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectFocusIdx, multiSelectSelections, noteApprovalSourceEpoch, noteHubMarkerDelivered, recordAnsweredApprovalCandidate, sequentialChoiceCache, sequentialChoiceSig, sessions, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx, terminals, utf8Decoder } from './state.js';
 import { inputEl, sendSubmittedText, sendSubmittedBody } from '../app.js';
-import { clearSuppressPtyResize, isTerminalAtBottom, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
+import { clearSuppressPtyResize, isTerminalAtBottom, isTerminalShowingHistory, refitAndStickTerminalToBottomSoon, scanBuffer, scrollTerminalToBottomSoon, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { stripAnsi } from './settings.js';
 import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
 import { approvalUiAdapter, clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { actionBarNeedsRepaint, actionBarOwnedByOther, releaseActionBarOwnership } from './approval-owner.js';
-import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
+import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, isTranscriptBackedProvider, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
+import { probe, probeScope } from '../debug/probe.js';
 
 const HIGH_RISK_HOLD_MS = 1200;
 const highRiskConfirmationInFlight = new Set<number>();
@@ -153,7 +154,7 @@ const BG_APPROVAL_TAIL_LINES = 80;
 // 質問だけを単問承認として誤描画する（行数依存の構造的バグ）。マーカーは明示デリミタ済みで
 // scrollback 誤検出の懸念が無いため、ヒューリスティック scanner（40 行）と分離して全文を渡し、
 // 取りこぼし上限は pendingTextTail の保持量（APPROVAL_PENDING_TEXT_TAIL_LIMIT 文字）に一本化する。
-function markerLinesFromTail(tail) {
+export function markerLinesFromTail(tail) {
   // 差分再描画型 TUI（Grok CLI 等）は行境界を改行ではなく絶対カーソル移動で表現するため、
   // stripAnsi で削除する前にカーソル制御を改行・空白へ変換する（normalizeVtCursorOps 参照）。
   // これを挟まないとマーカーブロック全体が 1 行に連結され、番号直後の「. 」も消えて
@@ -172,10 +173,21 @@ function resetBgApprovalMisses(id) {
   }
 }
 
+// Hub のトランスクリプト経路が立てた承認か。true の間、ブラウザは端末画面の文字照合
+// （下の trackBgApprovalMiss と detectApproval の H9 復元）でこの承認を閉じない。
+// 閉じる合図は Hub の approval_cleared（回答を UI から送ったとき、または Hub が
+// トランスクリプトで次の user メッセージを観測したとき）。理由は
+// internal/hub/approval_marker_transcript.go の scanTranscriptApprovalMarkers のコメント。
+function isHubAuthoritativeMarkerApproval(id) {
+  const src = approvalSourceCache.get(id);
+  return !!(src && src.source === 'hub_marker' && src.hubSource === 'transcript');
+}
+
 function trackBgApprovalMiss(id, tailLines) {
   const cached = approvalRawOptionsCache.get(id);
   // cache が無い（multiQ 等で visible だけ立った）場合は画面照合できないため対象外
   if (!cached || cached.length === 0) return;
+  if (isHubAuthoritativeMarkerApproval(id)) return;
   if (cachedOptionsOnScreen(tailLines, cached)) {
     resetBgApprovalMisses(id);
     return;
@@ -270,6 +282,7 @@ export function isAIProvider(provider: string): boolean {
     case 'cursor-agent':
     case 'opencode':
     case 'grok':
+    case 'command-code':
       return true;
     default:
       return false;
@@ -278,6 +291,37 @@ export function isAIProvider(provider: string): boolean {
 
 export function isShellProvider(provider: string): boolean {
   return provider === 'shell';
+}
+
+// custom_providers:（config.yaml の玄人設定）の id 集合。built-in 7種の固定リストに
+// 頼れない判定（relay 開始ボタン等）はこちらも合わせて見る
+// （plan_custom-provider-extension-triage.md C2）。/api/info の custom_providers を
+// 起動時に1回 fetch してキャッシュするだけで、spawn-panel.ts の同種 fetch とは独立。
+export const knownCustomProviderIds = new Set<string>();
+
+// loadApprovalPatterns（下）がどの custom provider id の承認パターンを fetch すれば
+// いいかを知るため、先にこちらの完了を待ってから走る。
+const knownCustomProviderIdsReady = (async function loadKnownCustomProviderIds() {
+  try {
+    const res = await fetch(`api/info?token=${encodeURIComponent(token || '')}`);
+    if (!res.ok) return;
+    const info = await res.json();
+    const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];
+    for (const entry of list) {
+      const id = entry && typeof entry.id === 'string' ? entry.id : '';
+      if (id) knownCustomProviderIds.add(id);
+    }
+  } catch (e) {
+    console.warn('custom_providers load failed', e);
+  }
+})();
+
+// Go 側の sessionApprovalDetectionEligible に対応する TS 版。isAIProvider（built-in
+// 限定）か、custom_providers に定義された id かのどちらかを受理する。relay 開始ボタン
+// のような「AI セッションか」判定は本来これを使うべきで、isAIProvider 単独は built-in
+// 限定の判定が要る箇所（フック注入相当の判定等）専用として残す。
+export function isAIOrCustomProvider(provider: string): boolean {
+  return isAIProvider(provider) || knownCustomProviderIds.has(provider);
 }
 
 // \x15(Ctrl+U) を行クリアとして解釈しない provider。送ると逆に悪さをする:
@@ -296,7 +340,10 @@ export function shouldSkipClearPrefix(provider: string): boolean {
 // Hub 起動時にデフォルトをユーザー設定ディレクトリに展開（既存ファイルは尊重）し、
 // HTTP 経由で配信する。ユーザーが直接編集して文言を追加・調整できる。
 // claude / codex は英語固定（Anthropic/OpenAI が国際化していない）、common は多言語混在。
-export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], grok: [], common: [] };
+// custom_providers: の id もキーに持てるよう Record にしている
+// （plan_custom-provider-extension-triage.md C5。built-in 分は起動時に必ず埋まるが、
+// custom 分は approval_pattern_source を設定した id だけ埋まる）。
+export const providerApprovalTriggers: Record<string, string[]> = { claude: [], codex: [], copilot: [], 'cursor-agent': [], opencode: [], grok: [], 'command-code': [], common: [] };
 
 (async function loadApprovalPatterns() {
   const fetchJson = async (name) => {
@@ -309,17 +356,25 @@ export const providerApprovalTriggers = { claude: [], codex: [], copilot: [], 'c
       return [];
     }
   };
-  const [claude, codex, copilot, cursorAgent, opencode, grok, common] = await Promise.all([
-    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('opencode'), fetchJson('grok'), fetchJson('common'),
-  ]);
   const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
+  const [claude, codex, copilot, cursorAgent, opencode, grok, commandCode, common] = await Promise.all([
+    fetchJson('claude'), fetchJson('codex'), fetchJson('copilot'), fetchJson('cursor-agent'), fetchJson('opencode'), fetchJson('grok'), fetchJson('command-code'), fetchJson('common'),
+  ]);
   providerApprovalTriggers.claude = norm(claude);
   providerApprovalTriggers.codex  = norm(codex);
   providerApprovalTriggers.copilot = norm(copilot);
   providerApprovalTriggers['cursor-agent'] = norm(cursorAgent);
   providerApprovalTriggers.opencode = norm(opencode);
   providerApprovalTriggers.grok = norm(grok);
+  providerApprovalTriggers['command-code'] = norm(commandCode);
   providerApprovalTriggers.common = norm(common);
+
+  // custom provider は approval_pattern_source を設定した id だけサーバー側に
+  // ファイルができる。未設定の id は 404 → fetchJson が [] を返すだけで無害。
+  await knownCustomProviderIdsReady;
+  await Promise.all(Array.from(knownCustomProviderIds).map(async (id) => {
+    providerApprovalTriggers[id] = norm(await fetchJson(id));
+  }));
 })();
 
 export function matchProviderApprovalTrigger(provider, line) {
@@ -468,8 +523,9 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
   const t = terminals.get(id);
   if (!t) return;
   const provider = sessions.get(id)?.provider;
-  // Shell session は approval parser の対象外
-  if (!isAIProvider(provider || '')) return;
+  // Shell session は approval parser の対象外。custom provider は対象（Go 側の
+  // sessionApprovalDetectionEligible と対応。plan_custom-provider-extension-triage.md C5）
+  if (!isAIOrCustomProvider(provider || '')) return;
   const text = decodedText !== undefined ? decodedText : (t.textDecoder || utf8Decoder).decode(bytes, { stream: true });
   t.pendingTextTail = (t.pendingTextTail + text).slice(-APPROVAL_PENDING_TEXT_TAIL_LIMIT);
 
@@ -545,6 +601,12 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
     const sig = approvalSig(markerOpts);
     const src = approvalSourceCache.get(id);
     if (src && src.source === 'hub_marker' && src.sig === sig) return;
+    // Hub がこの世代のマーカーを配信済みなら、候補を立てる役はあちらのもの。
+    // pendingTextTail は差分再描画で文字が欠けることがあり、欠けた本文は回答済み台帳を
+    // 外して回答済みの承認を再点灯させる（実測は approval-answered.ts の
+    // isHubMarkerAuthoritative コメント）。Hub がこの世代で何も配信していないときは
+    // 従来どおりここが最後の砦なので、素通しにはしない。
+    if (isHubMarkerAuthoritative(id)) return;
     approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
     approvalHintConfirmTrusted.set(id, true); // 信頼できる検出としてマーク: fallback による cancel/clear を防ぐ
     scheduleApprovalHintConfirm(id, markerOpts);
@@ -598,6 +660,13 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
   const allowBufferFallback = approvalVisibleCache.get(id) || options.length > 0 || pendingHasApprovalHint;
   const visibleRows = t?.term?.rows || 40;
   const bufferTail = (t && t.everAttached && allowBufferFallback) ? scanBuffer(id, Math.max(120, visibleRows + 60)) : [];
+  const bufProbe = probeScope('approval.buf', () => ({
+    sessionId: id,
+    site: 'chunk',
+    gate: [approvalVisibleCache.get(id) ? 'visible' : '', options.length > 0 ? 'liveopts' : '', pendingHasApprovalHint ? 'hint' : ''].filter(Boolean).join('+'),
+    liveOptions: options.slice(),
+    liveHasCursor: options.some(o => o.isCurrent),
+  }));
   if (t && t.everAttached && allowBufferFallback) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
@@ -621,6 +690,11 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
         contextCluster = bufExtraction.cluster;
       }
     }
+    bufProbe?.emit(() => ({
+      tailLines: bufferTail.length,
+      bufOptions: bufOpts,
+      afterOptions: options.slice(),
+    }));
   }
   const contextLines = approvalContextLines(contextSourceLines, contextCluster);
 
@@ -786,6 +860,8 @@ export function handleGoApprovalDetected(message) {
 	annotateApprovalIdentity(options, identity);
 	if (message.approval_candidate_key) clearReplayAnsweredApprovalCandidate(id, identity);
 	if (isAnsweredApprovalCandidate(id, options, 'native')) return;
+	// マーカー経路と同じ理由でここでも落とす（handleHubApprovalMarker のコメント参照）。
+	if (isStaleHistoryRepaint(id, identity.shape, isTerminalShowingHistory(id))) return;
   options.forEach((opt: any) => {
     opt._approvalSource = 'go_vt';
     opt._approvalSig = sig;
@@ -864,7 +940,15 @@ export function handleHubApprovalMarker(message) {
 	annotateApprovalIdentity(markerOpts, identity);
 	if (message.approval_candidate_key) clearReplayAnsweredApprovalCandidate(id, identity);
 	if (isAnsweredApprovalCandidate(id, markerOpts, 'marker')) return;
+	// ページ送りで CLI が過去の画面を描き直している最中に届いた回答済みの中身は、
+	// 状態にも触らずに捨てる。2026-08-23 の対策は showOptions（描画判定）にしか無く、
+	// パネルが出ないまま 保留中 バッジ・通知音・auto-switch だけが立って下ろせなくなっていた
+	// （bugfix_approval-waiting-stuck-after-answer_2026-08-26.md の修正 2）。
+	// cacheApprovalOptions より前に落とすのが要点。キャッシュだけ差し替えると、表示中の
+	// 承認バーの本文と選択肢が別の質問の組み合わせに入れ替わる元の症状へ戻る。
+	if (isStaleHistoryRepaint(id, identity.shape, isTerminalShowingHistory(id))) return;
 
+  noteHubMarkerDelivered(id, identity.sourceEpoch);
   cancelApprovalHintConfirm(id);
   approvalSwitchCandidates.delete(id);
   resetBgApprovalMisses(id);
@@ -889,6 +973,7 @@ export function handleHubApprovalMarker(message) {
     candidateKey: identity.candidateKey,
     sourceEpoch: identity.sourceEpoch,
     shape: approvalCandidateShape(id, markerOpts, 'marker'),
+    hubSource: String(message.approval_source || ''),
   });
 
   const wasVisible = !!approvalVisibleCache.get(id);
@@ -903,10 +988,23 @@ export function handleGoApprovalCleared(message) {
   const id = message && message.session_id;
   if (!id) return;
   const src = approvalSourceCache.get(id);
-  if (!src || src.source !== 'go_vt') return;
-  if (message.approval_sig && src.sig && message.approval_sig !== src.sig) return;
-  if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
-  if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
+  if (!src) return;
+  if (src.source === 'hub_marker') {
+    // マーカー承認の取り下げ。Hub がトランスクリプトで次の user メッセージを観測した
+    // （端末へ直接答えた）か、別の UI が回答したときに届く。sig は Hub 側の値なので
+    // 見ず、candidateKey + sourceEpoch だけで同一性を取る。
+    if (message.approval_kind !== 'marker') return;
+    if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
+    if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
+    // 台帳復元・replay で同じ質問が出戻らないよう回答済みとして記録する。
+    const cached = approvalRawOptionsCache.get(id);
+    if (Array.isArray(cached) && cached.length > 0) recordAnsweredApprovalCandidate(id, cached, 'marker');
+  } else {
+    if (src.source !== 'go_vt') return;
+    if (message.approval_sig && src.sig && message.approval_sig !== src.sig) return;
+    if (message.approval_candidate_key && src.candidateKey && message.approval_candidate_key !== src.candidateKey) return;
+    if (message.approval_source_epoch && src.sourceEpoch && message.approval_source_epoch !== src.sourceEpoch) return;
+  }
   approvalSourceCache.delete(id);
   approvalUiAdapter.clearApprovalOptions(id);
   approvalSwitchCandidates.delete(id);
@@ -991,9 +1089,10 @@ export function detectApproval(id) {
   // 早期 return しても検出機会は失われない。
   if (id !== activeSessionId) return;
   if (isApprovalReplayPending(id)) return;
-  // Shell session は approval parser の対象外
+  // Shell session は approval parser の対象外。custom provider は対象（Go 側の
+  // sessionApprovalDetectionEligible と対応。plan_custom-provider-extension-triage.md C5）
   const provider = sessions.get(id)?.provider;
-  if (!isAIProvider(provider || '')) return;
+  if (!isAIOrCustomProvider(provider || '')) return;
 
   // sendChoice 直後の誤再表示を抑制
   const suppressUntil = approvalSuppressUntil.get(id);
@@ -1102,6 +1201,10 @@ export function detectApproval(id) {
         return;
       }
       if (consumed) return; // 回答済み候補の再表示をスキップ
+      // trackApprovalHintFromChunk 側と同じ理由でローカル走査からは候補を立てない。
+      // 上の hub_marker 再描画分岐（src.sig 一致）はこの手前で return しているので、
+      // セッション切替でアクティブへ戻ったときのパネル再描画は従来どおり通る。
+      if (isHubMarkerAuthoritative(id)) return;
       approvalUiAdapter.cacheApprovalOptions(id, markerOpts);
       const wasVisible = !!approvalVisibleCache.get(id);
       approvalUiAdapter.showOptions(bar, id, markerOpts, !wasVisible);
@@ -1180,6 +1283,13 @@ export function detectApproval(id) {
   const bufferTail = (t && allowBufferFallback && id === activeSessionId)
     ? scanBuffer(id).slice(-Math.max(120, visibleRows + 60))
     : [];
+  const bufProbe = probeScope('approval.buf', () => ({
+    sessionId: id,
+    site: 'detect',
+    gate: [approvalVisibleCache.get(id) ? 'visible' : '', options.length > 0 ? 'liveopts' : '', pendingHasApprovalHint ? 'hint' : ''].filter(Boolean).join('+'),
+    liveOptions: options.slice(),
+    liveHasCursor: options.some(o => o.isCurrent),
+  }));
   if (t && bufferTail.length > 0) {
     const bufExtraction = extractApprovalOptions(bufferTail);
     const bufOpts = bufExtraction.options;
@@ -1210,6 +1320,12 @@ export function detectApproval(id) {
       contextCluster = bufExtraction.cluster;
     }
   }
+  // 何が起きたか（replace / fill1 / keep）の判定は sink 側が前後の差分から行う。
+  bufProbe?.emit(() => ({
+    tailLines: bufferTail.length,
+    bufOptions: bufferTail.length > 0 ? extractApprovalOptions(bufferTail).options : [],
+    afterOptions: options.slice(),
+  }));
 
   const contextLines = approvalContextLines(contextSourceLines, contextCluster);
   markHubChoiceDefault(options, contextLines);
@@ -1260,6 +1376,16 @@ export function detectApproval(id) {
         const cachedKind = cachedSource?.source === 'go_vt' ? 'native' : cachedSource?.source === 'hub_marker' ? 'marker' : 'fallback';
         if (isAnsweredApprovalCandidate(id, cached, cachedKind)) {
           hideActionBar(id);
+          return;
+        }
+        // Hub のトランスクリプト経路が立てた承認は、画面に選択肢が見えるかで閉じない。
+        // Ink の差分再描画で本文が欠けた 3 回の照合で未回答の承認を閉じ、閉じた後は
+        // 再配信が無いので戻せなかった（bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
+        // 閉じるのは Hub の approval_cleared（handleGoApprovalCleared）。
+        if (isHubAuthoritativeMarkerApproval(id)) {
+          h9RestoreMisses.delete(id);
+          cancelH9Revalidate(id);
+          approvalUiAdapter.showOptions(bar, id, cached);
           return;
         }
         // C3: 復元前に scanBuffer 妥当性を検証する（保留中バッジ固着対応）。
@@ -1520,6 +1646,97 @@ export function reshowActionBar(id) {
   if (id === undefined || id === null) return;
   clearManualHide(id);
   detectApproval(id);
+  const cached = approvalRawOptionsCache.get(id);
+  if (approvalVisibleCache.get(id) && Array.isArray(cached) && cached.length > 0) return;
+  void restoreApprovalFromLedger(id);
+}
+
+// 端末の再走査で戻せなかったときに、Hub の承認台帳から保留中の承認を組み直す。
+//
+// claude / codex は「その世代で Hub がマーカーを配信したら、ブラウザのローカル走査は
+// 候補を立てない」（isHubMarkerAuthoritative）ので、配信を 1 度取りこぼすと
+// detectApproval には戻す材料が無い。Hub も同じ候補を二度配信しないため、
+// 台帳が唯一の復元元になる。
+//
+// 台帳から出すときも回答済み判定は必ず通す。ここを抜くと、回答済みの承認が
+// 押すたびに蘇る（承認の同一性は candidateKey + sourceEpoch の 1 本のまま）。
+async function restoreApprovalFromLedger(id) {
+  try {
+    const res = await fetch(`/api/approval-history?session_id=${encodeURIComponent(String(id))}&state=pending&limit=1&token=${encodeURIComponent(token)}`);
+    if (!res.ok) return;
+    const body = await res.json();
+    const row = Array.isArray(body?.approvals) ? body.approvals[0] : null;
+    if (!row) return;
+    // 待っている間にセッションが変わった / 通常経路で出た場合は触らない。
+    if (id !== activeSessionId) return;
+    if (approvalVisibleCache.get(id)) return;
+    const block = String(row.block || '');
+    if (!block) return;
+    const options = extractHubMarkerApproval(markerLinesFromTail(block));
+    if (!options || options.length === 0) return;
+    // 台帳には答え終わった古い世代の行も残りうる（旧 Hub は台帳を resolved にできて
+    // いなかった）。今の世代より古い行は「止まっている質問」ではないので出さない。
+    const rowEpoch = Number(row.source_epoch || 0);
+    if (rowEpoch > 0 && rowEpoch < getApprovalSourceEpoch(id)) return;
+    const identity = {
+      candidateKey: String(row.candidate_key || ''),
+      sourceEpoch: rowEpoch || getApprovalSourceEpoch(id),
+      shape: approvalCandidateShape(id, options, 'marker'),
+    };
+    if (identity.candidateKey) annotateApprovalIdentity(options, identity);
+    if (isAnsweredApprovalCandidate(id, options, 'marker')) return;
+    const bar = document.getElementById('action-bar');
+    if (!bar) return;
+    approvalUiAdapter.cacheApprovalOptions(id, options);
+    approvalSourceCache.set(id, {
+      source: 'hub_marker',
+      sig: approvalSig(options),
+      kind: 'marker',
+      detectedAt: String(row.detected_at || ''),
+      candidateKey: identity.candidateKey,
+      sourceEpoch: identity.sourceEpoch,
+      shape: identity.shape,
+      hubSource: String(row.source || ''),
+    });
+    approvalUiAdapter.setApprovalVisible(id, true);
+    approvalUiAdapter.showOptions(bar, id, options, true);
+  } catch (_) {
+    // 取れなければ従来どおり何も出さない（押しても無反応なのは変わらないが、悪化はしない）
+  }
+}
+
+// セッション切替・再接続のあとに、表示できていない保留承認を台帳から出し直す。
+// claude / codex は Hub 配信が唯一の供給元で、ブラウザが一度落とすと（配信中の切断・
+// リロード・旧版の画面照合）取り直す材料が無い。「↻ 承認」の台帳経路を自動で通す。
+// detectApproval（切替後 300ms）が先に走って通常経路で出せたら、ここでは何もしない。
+const approvalLedgerRestoreTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const APPROVAL_LEDGER_RESTORE_DELAY_MS = 600;
+
+export function scheduleApprovalLedgerRestore(id) {
+  if (id === undefined || id === null) return;
+  const prev = approvalLedgerRestoreTimers.get(id);
+  if (prev) clearTimeout(prev);
+  approvalLedgerRestoreTimers.set(id, setTimeout(() => {
+    approvalLedgerRestoreTimers.delete(id);
+    maybeRestorePendingApprovalFromLedger(id);
+  }, APPROVAL_LEDGER_RESTORE_DELAY_MS));
+}
+
+export function cancelApprovalLedgerRestore(id) {
+  const timer = approvalLedgerRestoreTimers.get(id);
+  if (timer) {
+    clearTimeout(timer);
+    approvalLedgerRestoreTimers.delete(id);
+  }
+}
+
+function maybeRestorePendingApprovalFromLedger(id) {
+  if (id !== activeSessionId) return;
+  if (!isTranscriptBackedProvider(sessions.get(id)?.provider || '')) return;
+  if (approvalVisibleCache.get(id)) return;
+  if (manualHideState.has(id)) return; // ✕ で消したものは「↻ 承認」を押すまで戻さない
+  if (isApprovalReplayPending(id)) return;
+  void restoreApprovalFromLedger(id);
 }
 
 export function normalizeActionOptions(options) {
@@ -1546,13 +1763,28 @@ export function normalizeActionOptions(options) {
 
 // 折りたたみトグル（全文⇄コンパクト切替）。3 経路（単問/一括/複数選択）共通で使う。
 // position:absolute なので bar 直下に append すれば footer の有無に関わらず同じ位置に出る。
+function syncCollapseToggleButton(btn, collapsed = isActionBarCollapsed()) {
+  btn.textContent = collapsed ? '⊞' : '⊟';
+  const label = collapsed ? t('action_bar_expand') : t('action_bar_collapse');
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  // aria-expanded は「押したあとに見える全文表示」の状態を表す。
+  btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+  btn.setAttribute('aria-controls', 'action-bar');
+}
+
+function syncActionBarCollapseToggle(bar) {
+  const btn = bar?.querySelector('.action-collapse-btn');
+  if (btn instanceof HTMLButtonElement) syncCollapseToggleButton(btn);
+}
+
 function appendCollapseToggle(bar, sessionId) {
   const btn = document.createElement('button');
+  btn.type = 'button';
   btn.className = 'action-collapse-btn';
-  const collapsed = isActionBarCollapsed();
-  btn.textContent = collapsed ? '⊞' : '⊟';
-  btn.title = collapsed ? t('action_bar_expand') : t('action_bar_collapse');
+  syncCollapseToggleButton(btn);
   btn.onclick = (e) => {
+    e.preventDefault();
     e.stopPropagation();
     toggleActionBarCollapsed(sessionId);
   };
@@ -1571,7 +1803,9 @@ export function toggleActionBarCollapsed(sessionId) {
     showActionBar(bar, sessionId, cached, false);
   } else {
     bar.classList.toggle('collapsed', isActionBarCollapsed());
+    // options cache が無い経路でも、見た目と状態属性を同時に更新する。
   }
+  syncActionBarCollapseToggle(bar);
   setTimeout(() => inputEl.focus(), 0);
 }
 
@@ -1809,6 +2043,10 @@ function showSingleSectionBar(bar, sessionId, section, ctx) {
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
+  probe('approval.draw', () => ({
+    sessionId, mode: 'single-tabs', preamble, question, options,
+    sigSkipped: lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig,
+  }));
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2103,6 +2341,10 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
+  probe('approval.draw', () => ({
+    sessionId, mode: 'batch-tabs', preamble: (sections as any)._preamble, question: '', options: sections,
+    sigSkipped: lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig,
+  }));
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     if (chatWasAtBottomB && chatTlB) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlB));
@@ -2258,7 +2500,7 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
     }
   }
   // ===== 詳細メッセージ＋送信バーを横並びに =====
-  // 左に「送信確認 / クリア」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、
+  // 左に「クリア / 送信確認」、右にメッセージ詳細を置く。縦積みの送信バー行を無くし、
   // 承認ポップアップの高さを抑える（CLI 表示欄を広く保ち、メッセージ確認をしやすくする）。
   const detailRow = document.createElement('div');
   detailRow.className = 'action-qdetail-row';
@@ -2273,17 +2515,17 @@ export function showBatchActionBar(bar, sessionId, sections, forceStickToBottom 
   const actionBtns = document.createElement('div');
   actionBtns.className = 'action-qdetail-btns';
 
-  const submitBtn = document.createElement('button');
-  submitBtn.className = 'action-submit-btn';
-  submitBtn.textContent = t('approval_batch_confirm');
-  submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
-  actionBtns.appendChild(submitBtn);
-
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
   clearBtn.onclick = (e) => { e.stopPropagation(); clearBatchSelections(sessionId); };
   actionBtns.appendChild(clearBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'action-submit-btn';
+  submitBtn.textContent = t('approval_batch_confirm');
+  submitBtn.onclick = (e) => { e.stopPropagation(); openBatchConfirm(sessionId); };
+  actionBtns.appendChild(submitBtn);
 
   actions.appendChild(actionBtns);
   detailRow.appendChild(actions);
@@ -2408,7 +2650,7 @@ export function openBatchConfirm(sessionId) {
   removeBatchConfirmModal();
 
   const mask = document.createElement('div');
-  mask.className = 'action-confirm-mask';
+  mask.className = 'action-confirm-mask aac-wheel-overlay';
   mask.id = 'action-confirm-mask';
   const modal = document.createElement('div');
   modal.className = 'action-confirm-modal';
@@ -2535,6 +2777,10 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     v: bar.classList.contains('visible'),
     col: isActionBarCollapsed(),
   });
+  probe('approval.draw', () => ({
+    sessionId, mode: 'multi', preamble: (options as any)._preamble, question, options,
+    sigSkipped: lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig,
+  }));
   if (lastActionBarRender.sessionId === sessionId && lastActionBarRender.sig === sig) {
     if (shouldStickToBottom) refitAndStickTerminalToBottomSoon(sessionId, { force: forceStickToBottom });
     if (chatWasAtBottomM && chatTlM) requestAnimationFrame(() => scrollChatPaneToBottom(chatTlM));
@@ -2593,16 +2839,6 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
   };
   footer.appendChild(selectAllBtn);
 
-  const submitBtn = document.createElement('button');
-  submitBtn.className = 'action-submit-btn';
-  submitBtn.textContent = t('approval_batch_submit');
-  submitBtn.disabled = selected.size === 0;
-  submitBtn.onclick = (e) => {
-    e.stopPropagation();
-    sendMultiSelectChoices(sessionId);
-  };
-  footer.appendChild(submitBtn);
-
   const clearBtn = document.createElement('button');
   clearBtn.className = 'action-clear-btn';
   clearBtn.textContent = t('approval_batch_clear');
@@ -2612,6 +2848,16 @@ export function showMultiSelectActionBar(bar, sessionId, options, forceStickToBo
     clearMultiSelectSelections(sessionId);
   };
   footer.appendChild(clearBtn);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'action-submit-btn';
+  submitBtn.textContent = t('approval_batch_submit');
+  submitBtn.disabled = selected.size === 0;
+  submitBtn.onclick = (e) => {
+    e.stopPropagation();
+    sendMultiSelectChoices(sessionId);
+  };
+  footer.appendChild(submitBtn);
 
   // 「✕ 承認」と同じ manualHide（questionKey）抑止。
   const closeMultiBtn = document.createElement('button');

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:e6ce2413ae2cb566d85ce3ca7e92c461032fe15eb3e077bbc30199798c0f260f",
+  "claims": [
+    {
+      "id": "claim_e45a60a3d172438680f4efe3e7cc7b34",
+      "statement": "handleAuthRevokeAll regenerates and persists both cfg.Token and cfg.AuthCookieSecret together, which simultaneously invalidates the token URL, the token cookie, and every PIN-session cookie at once, including for the device that issued the revoke-all request itself.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/auth_handlers.go#L72-L100",
+          "version": "repo-lines-v1:sha256:89f8ef1d3e445517b9ff213d938d0c74f4bb6de3004a09ecf999d840236ee02d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmOWRlODI0ZjE4ZDhjNTVkZDE1MzYzNTIwZjM2NDViNDFjNzhiZDA4YTY3ZTRmYmE3Njk0MzEzYWI0ZTdiNDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxMjZmMzM2NmZlNGNmZTcwZjRiZWMyYTVlOWYxNDY3MDk5MzY3OTViMTZjNDJjYTQ0MWM4ZDIyMjFkZWE4NGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU3ZGI5ODZhYmE2NDBmOTE4NDg2NjIxNzIxNDQxZGQyNjQwOGE2MjM5YjI4OTk0ZWNiZTVkYTFjNjI4YTg4OWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ0NjY4MWI2ZGI0YzY1YmU2NzE0OTgzM2UxNzU0NWJkYTNhZjhmYzgxODA5NWUzMjRmOWUwYzQzYWU1NGExMzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6fcc6232328448e8a979e9c84a7b5254",
+      "statement": "If persisting the new token/secret to disk fails after handleAuthRevokeAll has already updated them in memory, the handler explicitly rolls the in-memory config back to the previous token and secret before returning an error, rather than leaving new in-memory credentials that were never written to disk or returned to any caller, which would otherwise cut off all external Hub access until a process restart.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/auth_handlers.go#L101-L111",
+          "version": "repo-lines-v1:sha256:46a08f2b7a15be249a25006d6fa1d400b10b38eb529d50c58a75adeb7bd3ffb8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4ZTg4NjkxZGNjODdiODcyODhiMjMzMjhjOGExNGU5MTUxYzNhMmFlYTc4NjRmOWRiYjIyMTI2ZDNmNDNlYmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmNWY3MjA5MGMzODljZWI1YTUzZDFkYzFjNjU2MGJiYzk1ZDBlYTVhNDgwYzRlZDg0NjUzMDU4NWY3MmM0ODYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkZDljMTZjYmI4MTU1MTQzNzRjZGJlNDQ5OWEwZDgwZTVjOGJkZGY0N2I2ZjkzZWJmODBlNjU3MzZjZjJiZDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_5b36a0d057564a3ebcc7672e8d23a6dc",
+      "statement": "handleAuthRevokeAll requires a remote (non-loopback) caller to already hold a valid PIN cookie before the revoke-all action is allowed, specifically because remotePINRequired() normally lets a bootstrap caller through when no PIN is configured yet, and without this extra gate any remote holder of the current token could rotate the token/cookie secret and lock the legitimate owner out first.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/auth_handlers.go#L76-L84",
+          "version": "repo-lines-v1:sha256:e4ff31782e731ea019b5087e7a9a7b191d2be76ed6f003939fb326225d7b7dcf:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2JkZDMwYjUyMjI4Y2E2OTc2MWY5NTExN2QwMjEyYjE1OTE0NzI0NDY5ZWQ3NjQxNDkxZDZmMGJkNDU0ZWIzNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTNkMTRhYjBhYTUxZjEzMGYxZTc2ZTIwYmEyMGU0ZDczN2RiMDYyNmU1NjZmOGI1MGE4YjBjOTQwYTE2OTc5MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmFkMzkzMTA5MzFlYjAzNTlmZjA2ODVhOTdjMzk1NzNiMGYxNmVlMTY3YjI2N2ZiYmJjNzNkNGFmNTlmZDdkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2FiNWFiYmU4ODY5MmQyZTQxZTk1M2Y5NTQ3MzZiZmY2OTE1MjZmZDZiZWMzNTRjNDIzNWQ0YTg0ZjViMjBmMiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_840a9049d53044f9891d5f38ca9acd31",
+      "statement": "POST /api/auth/logout clears only the calling browser's own token/pin cookies without rotating the shared token or cookie secret, and is authorized through guardBase (token+method+Host+Origin) without the PIN gate, on the reasoning that possessing a valid cookie already proves the caller may end that session while a request with no cookie has nothing to log out, closing off both a CSRF path and a force-logout-someone-else path.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/auth_handlers.go#L20-L29",
+          "version": "repo-lines-v1:sha256:ecdb4c7d58011cf14f2c148187d61a5d4285a9507e490f3dfcdc849898d1dbcd:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiYjBjMmM1ZWZlNTA3NWM2MjIxNWZjODMxM2ExZDI5NDQ3ZjE3YjU5YzQ0YmQ5MTE5MzZhNjVhMmZkZWM5NjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1ZjVmYzBmYmNmMDdlZGYyMTVjZTZhNTUzYjAzMzA4ODRiZTFhNWIyMzkxMjI4MWRiNTBlODUyOTU0MmEyN2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRiYWZjNTM1NTA5N2JjZGNmODk1MTVkOTZlOGIxNjg0ZjJlMTk3MWMzM2U4YmNkMDE4YjQ1MTVlMDkwZmVmYzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5MjQyZWI1ODJiZDYyNGRhZGZiZGJhMTI4NzcwZjE3YzFmZTMwM2QzOTA5MDE0YzEwMTcwN2M0OTE5YzBmNTQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2f78d8dedcd2489488b3577922aa9a17",
+      "statement": "cfg.RemotePINHash is bcrypt-hashed and off by default; when set, a successful PIN login issues a signed expiring cookie (HMAC-SHA256 over AuthCookieSecret) rather than treating the PIN as a per-request bearer credential, and that cookie is invalidated wholesale by the same AuthCookieSecret rotation that revoke-all performs on the token.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L628-L636",
+          "version": "repo-lines-v1:sha256:247d6e3cc1ce18c17b0dfa3453412542741d40f369a4f626dafec2542fd684de:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzdhMDhmZWU4ODZmZWM1ZTEwN2Q4NDU1Yzc5ZTU0NmZlMWJiNDdiYzE1NzRlMzE2ZDljMmEzMTRmNjUzZTJlMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDc3Yjg0MTFhMjMxYTRmMTU0OWIwMGJhOTg1NWYxNmU1YzM0MDRiOGQ2ZTVkYzg5ZDgzOGE1N2E0OWU0ZGNjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2JiZDM0MTllNGY1YTQyNzE4NmYzZjQ3NmM3NzNkNWYzZmQ2ZjkzOTg2MjQwYjQ3NTlhZGNmYWZmNWFlYThiMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0ea2139a68e549e2b7b843e2b31980a0",
+      "statement": "Failed PIN login attempts are rate-limited per IP with exponential backoff (5 failures triggers a 1-minute lockout, escalating to 5 minutes then 30 minutes) plus an overall cap against distributed brute-force attempts, both surfaced as HTTP 429; GET /api/auth/status and POST /api/auth/login go through guardBase (skipping the PIN gate itself), while POST /api/auth/set-pin requires the full PIN-gated guard, meaning a remote caller can only change the PIN once already PIN-authenticated; PIN values, tokens, auth cookies, and failed-PIN input are never written to the structured log.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L628-L636",
+          "version": "repo-lines-v1:sha256:247d6e3cc1ce18c17b0dfa3453412542741d40f369a4f626dafec2542fd684de:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzdhMDhmZWU4ODZmZWM1ZTEwN2Q4NDU1Yzc5ZTU0NmZlMWJiNDdiYzE1NzRlMzE2ZDljMmEzMTRmNjUzZTJlMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDc3Yjg0MTFhMjMxYTRmMTU0OWIwMGJhOTg1NWYxNmU1YzM0MDRiOGQ2ZTVkYzg5ZDgzOGE1N2E0OWU0ZGNjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2JiZDM0MTllNGY1YTQyNzE4NmYzZjQ3NmM3NzNkNWYzZmQ2ZjkzOTg2MjQwYjQ3NTlhZGNmYWZmNWFlYThiMCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_1afbd7655ded49e08789f842cb86366e",
+      "statement": "The Tailscale-based mobile connect path never changes the Hub's bind address from 127.0.0.1; tailscale serve proxies from the tailnet into that same loopback port, Tailscale Funnel (public internet exposure) is deliberately never used and the setup flow steers the user to leave it unchecked, and enabling serve idempotently adds the tailnet's own DNS name to hub.allowed_hosts so the Host/Origin guard and WebSocket handshake accept it.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L615-L627",
+          "version": "repo-lines-v1:sha256:99c097c6b3fd6c9fed31c1ec00dff44737b37322212c39b112e180878f408625:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1MTBhM2VmMzg4MTJiNjdkNTUxNDU5YmNhMzM3ZjMyNDgxZDEyMjM1ZDExM2E5ZTAyMmYxNWM1ZmI5MzE1MTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlYjcwMjU3NTkzZGEwNmY2ODJhM2RkZGE1NGE5ZDI2MGQ0ZmM1MTRmNjQ1MjM3ZjVjYTc0YjA4ZjhkYTYxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5OWU2NWJhN2U1MWI5M2E1NjM2OGZjN2Q0YjM3NjE3YzlmNzk5NGEyOWYzNjVjNzI1M2QwMDg1NGIxMmQwODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwZDYzNzk4NjBmYmEzYjc0MTNiNmNlMDZmZjUwYWMwZDZmODdhMTk2ODliNjk0M2U5MDgyOTZkMWUxNjIyNmIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_791b856214d0471e8c2483bee06bef0b",
+      "statement": "HTTPS tailscale serve is preferred over a bare tailnet IP because a plain-HTTP 127.0.0.1-bound origin loses secure-context status in the browser, disabling the service worker, Web Push, PWA installation, and microphone access; an SSH local-forward to http://127.0.0.1:<port> is kept as the one remaining plain-HTTP path that still qualifies as a secure context.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L619-L620",
+          "version": "repo-lines-v1:sha256:5d08aef25a971d964f36f8ee9869b38f0c9c416ada0271785b8b3c173d8fa907:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzZhNDc0Njc1Y2Q5ZDY3ZmU5YTRmYWJmMDhjZDZlNjRmZGYzNGYxMmJkNWI0NjdkOWM5OWU4ZDUyYmVkYWQxYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmE3NTdkYzRhMGFhYTRhYzhhMTc4ZTRlZjVkZWU2YzA2OWY3N2U3NTJjNzY3NjA5Y2FhMDFkNmQzNjkyZTE0YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjAzODJjZWU5ZTMwYmE0MDljYTNiMzYyZWQ5MjYyYWU2NzVlNDQ3NjM3MTViYmJlMTY5NzhlZjAyNTMyMWI4MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjgwNDAyNzhmMmRlNjk4MTRhNjc3YWZkZWZjNGUzYzkwZjkyOTM2MTYxMmEzYTlhMjMxMDZkOWFkYWMyMmQ0YiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_de3112bb5ee14be5a1a60302811168e5",
+      "statement": "A first connection from a device not previously seen (identified by a truncated SHA-256 hash of IP+User-Agent, not the raw values) triggers a new-device notification through the existing push/ntfy/webhook channels regardless of the user's configured notify.events filter, checked on handleIndex, on a WebSocket UI attach, and on a successful PIN login; a previously-seen device is not re-notified on every reconnect, bounded by a 24-hour TTL and a soft cap of 256 tracked devices.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L633-L633",
+          "version": "repo-lines-v1:sha256:e82fa83365f1876d2c85f013b4b05eae356727b1408625c141b839601929b082:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyZmE4MzM2NWYxODc2ZDJjODVmMDEzYjRiMDVlYWUzNTY3MjdiMTQwODYyNWMxNDFiODM5NjAxOTI5YjA4MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyZmE4MzM2NWYxODc2ZDJjODVmMDEzYjRiMDVlYWUzNTY3MjdiMTQwODYyNWMxNDFiODM5NjAxOTI5YjA4MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTc2ZDdjMmY2YTFlZjk0YjlmNGU4YWYwZmVlMDMzYzk5NDc4ZjRmODYyZDZmZGNjZDhhZjJlNGI5NTJiNDU5ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjMxZDQ0Njc0YzgwMmMwYmY1M2EwM2YwZjY2NzdkYjdjY2Q2ODQyYmI3ZjJiMWE5YzJiMDhhZDVhYTIwYTdjOCJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

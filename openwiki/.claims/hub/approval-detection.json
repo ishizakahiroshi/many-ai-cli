@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:0af73d8414239ac0521070022c2fc5f8f7ecb86e1495bc1bd96b8d464cadd00b",
+  "claims": [
+    {
+      "id": "claim_f9927a7ba225471e942c3fe59ccffc8f",
+      "statement": "approvalMarkerSourceIsTranscriptLocked determines a session's single approval-marker source: claude/codex sessions with a resolved, currently-readable agent-chat transcript path read the marker from that transcript, while every other session (and any transcript session before the path resolves) reads it from the Hub's VT terminal mirror; only one source applies per session at a time.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L9-L64",
+          "version": "repo-lines-v1:sha256:c14a1add3aa57fa4a0a50e1b6df4c40fdb3be568327b9f752a9ab9f7d2d97d42:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViYjgzMTY0NmQ1NTQyYTdlMDdmNWJmYmRlZGJiZDAwNzM1OGY0ZDAyMTc2N2UyY2E5OWU3ZjBlMDdjOTIzNmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0ZjIzOWE1ZmYwMTE3OWQ4Y2YyNTI4ZDIwMjhjODdkMzY2Y2RmZjYxNzI4ZGU2ZmE0ZjI3ZWM0ODQzOGU0ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2YWViNDVkN2M4OGFmOGE2Mzk5ZmNiNjk3ODg2MTUyN2EyODg2NTZkNDI4YTM1N2Y4YmViYzMwMmQ5M2E1YWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ff18139e60a148a0bd81508fbe25e534",
+      "statement": "The transcript-source design exists because Claude Code repaints its alternate screen at absolute Ink coordinates, so an approval answer overflowing the visible screen height is never drawn at all and is also absent from VT scrollback (which only retains lines pushed out by newLine()), making it unrecoverable from the terminal; the same content exists complete and screen-size-independent in the CLI's own transcript file.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L18-L31",
+          "version": "repo-lines-v1:sha256:7a0777ecd622939bdaa1667e4d41ad16827b115bdae7ce2e4737b51bd41e55e8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwOGQyNzk0Mjg4NWNiZTZkM2UyMzJlNjUyMzA0MDc4YzA2YTMzMGEzY2U3MDQzNTgyNWMwNDE1MDkzMDM5MjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkYjg2MGI4Y2U1NWE4ZjE4ZTgzZTU0OTkwMDM5MjQxMDJmMGNlMTY1MjM5NDI4YjkyMDlmNTRhYTU5ODZhZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiNjg0YTk2YmQwNDM1MjBkNmQwNmEwMmNlYWUwZTBjZjk0ZjE5MTU1NmUzNGQ4YzQ3ODI0MjBjMTJhZDg0ZWUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_83851a22d49648d5b93ede1741d19a76",
+      "statement": "The Hub deliberately never extracts the same approval from both the VT mirror and the transcript for one session, because a long question could be line-wrap-truncated in the VT extraction but not in the transcript extraction, producing two different candidateKey values for the same question and effectively duplicating the single approval-identity source; once a session locks onto transcript mode, both wrapperLoop's PTY-data path and the native-approval replay evaluator skip VT-side marker extraction for it.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L32-L36",
+          "version": "repo-lines-v1:sha256:b30bda871c9a7877bf42a5031800f0e58b757b136c8c771ea6bbf2bf539f8e85:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTRmZDFhMzA4YTlkYzg2ODk1NWMzMTQ5ZDM5Zjg0ODE0Mjg1NjJmY2MxZGE5Y2U3MzUxYTBhNzBjZDlkY2Q2OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDhjOTg4OTgxNzYwOGZjNjcxMDBjNDljZWNlMTM0ZTJlZDAwYThmZDAyNzg0NDEwMzk3OWU4YzJlNzVkZTYyMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2I3ZmFkOTY2MWQyM2JjNTBhNTNlZGFmOTBkMTc2MzQwYWIyYTRhZGFlMDNmMjkxZDkzYzdkNzQ1ODMwMzA2MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTc1MThiNDNiODM0MWUxOWY3YWY2YWM5ODE1NWZlYzdhOTZkODRjNDZmNzI4MjA0MmIxN2IwYzYzZTFlMWIyYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_4ccfffb916ab408b95f4677a88dc5cee",
+      "statement": "approvalMarkerSourceIsTranscriptLocked re-evaluates on every poll rather than locking irreversibly: after approvalMarkerTranscriptMissLimit (3) consecutive failed transcript reads the session falls back to the VT mirror with one logged Warn, and reverts to the transcript once it becomes readable again; 3 is chosen because polling runs on a fixed 1-second rhythm so the miss count doubles as elapsed seconds, tolerating a transient blip like log rotation or a --resume file swap without an excessive approval delay.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L14-L16",
+          "version": "repo-lines-v1:sha256:9d5110f935eb36ca5953067bd660e3eed716bd6a4e601578d93eb5059a873dea:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTI5NzI0M2YwNzczMDlkM2Y0MDJkNTdmOGE2YjYxMzg2YWI5ZmY2NTZhNDI2OGQyYzA2MmVhZWVmNzY2NDAxZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDNlOWYxMDAxMmY0OWM5NTk3Y2E5MWNlMGM2NTkxMGFiYzdmNzA1OWFmZGUyNzkxYzk1YTI5MzQzZjExNWU2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2I4NmNjZTlmZGU5ZTRiNDkzNGRiY2NiMGJiZjY5NzY4YWJjODg2NmE0MGU1Mjg1OTc3MTY2MWNmNDViZmQ0YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGMyOTBjZjcwODE4MWEzNzc4MGI0NzBjMjJmYzExNmUwMjFlZWUxYzUyZTE3YmFiYjRlZjhjYWNjYWQ4NDgxYyJ9"
+        },
+        {
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L43-L64",
+          "version": "repo-lines-v1:sha256:32564acfbf76cd44387454a982e4420f1c41eac4d99749ecef09fdc419448c14:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1MjBjMThhOWY3NWYwOWZkZDRiYmM3MDUyMjVjZjQ1OWQ0NGU3NGI4NzgzOGVlNmMwNGI4ODI4MDRjMTVkMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhZGUzZDE5OWEyYzhlMzllN2JhZGJlNjgzMzQ5NGFhYjg1YmY4ZThhNmE2Y2I5NDA2OTI1MzZhYWFmNmI1NzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2YWViNDVkN2M4OGFmOGE2Mzk5ZmNiNjk3ODg2MTUyN2EyODg2NTZkNDI4YTM1N2Y4YmViYzMwMmQ5M2E1YWYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_720eb3d0da5c468693f1c2a8fb9249de",
+      "statement": "extractApprovalMarkerBlock returns the block bounded by the last CLOSE tag and the nearest OPEN tag before it (not the first OPEN through the first CLOSE after it), because taking the first OPEN/CLOSE pair could span across terminal-scrollback generations when a CLI redraws the same question, causing the extractor to detect a nested OPEN inside the span and refuse the block as a marker_leak even with a non-greedy regex, since the span's start position remains pinned to the stale first OPEN.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_marker.go#L22-L34",
+          "version": "repo-lines-v1:sha256:a21bd1c7ac5704b978a7cebb91e205c1bd89e8daa533822b88b1003d3431dc31:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU1YmQ0MzY2YmM1MWMwMDQ4NzliODEzYjk4MzdiMmM3ODZlOGRiYzg5OWQwZDY5NGMwZjhlZDgxZTc0YWFlY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlMzkyNmZmNDJiNjQzNWM1N2Y4ZTUxNzY1ZjJhMTJiMTI2MTE3ZjQ0ZWFhNzYxOGNlNDhlYWZkZjBlM2RiNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljNmFiMGRlNjE3ZWFjMzgzZDQ0ZmNmMDA2ZTk0NDU4YTEyYzU5OTk1MDdmY2YzNjc2YmQzODkxZWJlZTUzNjgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4b0823776ead4ba581297c5968abcb37",
+      "statement": "approval_detector.go's native Go-side approval scan re-scans the VT terminal mirror tail on each new PTY chunk for approval-shaped hint tokens (for Japanese, a fixed list including 許可/承認/続行/実行しますか/よろしいですか/確認してください), and is a separate, non-overlapping code path from the browser's own approval.ts scan over the full xterm.js buffer; a shared detection signature lets the Hub deduplicate if both layers fire on the same content so neither causes a double-send.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_detector.go#L13-L30",
+          "version": "repo-lines-v1:sha256:586ed1dde560f37a2280fbbe74d5c98167085c8b1253933882a54cb92e1aa67b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5NzVhYzRlYjMwYzAyYTIzNWIxYTYyY2Y3MGQ5OWRhNTQwNTQ1YjRlZDQ4NDMwYmQzNjI0ZTNmYWM4YTkwYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRlY2ViNDU4MmYwNDlmYTRiNTMzNTRhMmNiZjQzZmQzMjkxYmQ0YjM3YjMzNWE2ZTU3ZGZkOTNiNzQ4Y2JkZTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZmODJmNjI5NTQ3OWU4NWRjODc3MzIxMGRjMjI4MzEzOTk2ODkxZmI4ZmE0ZTlmNDk3NmQ3Nzg1ZWNjYTZhYjQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_97cdf3c40aac458d88f7f2f72f997a94",
+      "statement": "approval_identity.go states it is the canonical source for the rule that exactly one piece of state, the (candidateKey, sourceEpoch) pair, answers whether an approval has already been answered; before this design (removed in v0.7), the same job was split across three mechanisms with conflicting definitions of 'same question' (a timer-expiring option signature, a permanently-marked full-block hash, and a manual-dismiss question hash), and TestApprovalSuppressionStateIsSingleSource enforces in source that a mis-display fix must not add a second suppression mechanism.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_identity.go#L17-L38",
+          "version": "repo-lines-v1:sha256:c81ea862a68b2496d295121fc6b24e9a6ac2ea3a2a25033ccad2c8a147550196:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhNGI1MjBiNjgyZTUwYzE1YjBjZjVlOGYxNTI0ZmQ2MDk0MjY1ZGZiZGNlNmZmZWQzZDg4ZGEwMDI5Yjg4MGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwNGE2NzRhZjBjYzFhNjJkODQyN2RlZjUwNzA0M2YwZDE3OTgzMWQ4ZjZmNWU5ZDdlODIyZDZmYjI5YTAxMzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3NGFiODJmM2U2NzAyODU4ZTliNzk2MjBmMjY0MDVmZjYxMmVhMDQ1Zjk3MGRkMjkyZTJiMGE3M2RmYjMyY2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2MDM0YTU2YTYwYTk0MzZlYWM0ZGI5ZDUxOTk2NWRhOWU3NzU2YzM2NDMyZmM4MDYwMTkzOTc5YzBiMDU4MzQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9995eed197db41f88502095266051a11",
+      "statement": "candidateKey is derived from provider, approval kind, normalized question text, option numbers, and send text, explicitly excluding label whitespace and box-drawing characters (which would make every TUI redraw look like a new candidate); sourceEpoch only advances at a live prompt boundary, never during replay or terminal reflow, since advancing then would make a merely-restored prompt look like a brand-new one.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_identity.go#L39-L45",
+          "version": "repo-lines-v1:sha256:f3db3263e2304e49427685b0358aa283c1e0cbc470479e07aaedc5b6bd03d9ca:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWM3MTE4N2I3ZTIxZTJiZTZhOWQ5NDE3ZmI3NzIwOTJmYTJmMzg3NmQ4Njc2ZmY1NGY2M2EzYjNlODZkYzM4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzkzMmY3ODZmYWZjMjI2ZTFhNTkwZjhmZWE1MjRhNThiZTFkN2FiNWM5MGI3NDQ0Y2QxODQ5YzI2MjIyN2ZjMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzQwODlmYjNjMzkzYjBmM2VkYTVjMzc5NWY1MTgwMjg2Y2E0NTNiOTU1YWMwZmNlZTMxNTQ5ZjI1ODRiYzE0ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGE3NjFjZTQ0YjQ4NjgzZWI1ZjFjZWNhNDhhNzI2NDYyMDI2MzNjMTliMTFhZDlmMjgwZTcwNjkzMmQ3YzBlYiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_12038c1a1f4045b9bc571d57bb7833a0",
+      "statement": "As of a 2026-08-27 decision, an answered-approval record is carried across user turns for as long as the answered block can still be extracted from the live VT mirror, not bounded by a fixed reply count as it previously was; the accepted tradeoff is that a byte-identical reissued question does not reopen the approval panel while the earlier answered copy is still visible on screen, judged better than the prior fixed-turn-count rule's guaranteed reappearance by the third turn.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_identity.go#L48-L57",
+          "version": "repo-lines-v1:sha256:d237e1ffdc0dd034e4cc84dc67370808a28a47c93343003daf3bb4d676cee830:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3OGVhN2M0MmRhNTQ3MDM2NWUwYjgyMGNmYWIyZThjMTM1MTk0ZGVhZWQwNDk5NzhmZjdhYmNiNjQ0OWNmNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkZGYwZTg1NjY2ZDBjODI2YTg5ODQ3Y2ZmNTdkMzRiMTdmOGI1NmM5ZjlhNTJiZTY2N2FlYzljNjc2OGVmNTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiOTZmMDk4YjBmMzgzMDE0NWQyZDdmNzQ1N2YyY2M3N2IyODhiYzY4ZTM5ZDk5YmE1ZDU5YzAyODljZGU0YTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjNzUyMTBiZDliYWEzODZlYzc0ZWU5YWJkY2NlNjBmZGQ0NTdhYjRhYTdjNmNjMDJmZWQ5MDBjYjdlNWVmODUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ded59feb7dec48d48a30b69d7dd24d65",
+      "statement": "internal/approval's package doc states it provides provider-neutral facts used to present and decide pending tool approvals and deliberately does not itself decide whether an approval may be bypassed, offering RiskTier only as one input a caller's own policy may use.",
+      "evidence": [
+        {
+          "resource": "repo://internal/approval/summary.go#L1-L3",
+          "version": "repo-lines-v1:sha256:a0c136f9a64d4b907041ae79fa137d01063d7d6a8ad057eeb0ed270594173d6d:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWZlY2QzODE2MWYxMzBiZGMyNjk3NGM5NDNmNDkwMDkxMDg4NjI4ODk3ZGNjYTMxNmNiOTFjYjNjNTA0NDNjNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYmYxMzQwZDNjYWM2ZTc1MjE1NjExYzFjNTY4MTJkZTM3M2RhOGFhMGMxMWI1MzllODE3OTIyNmU5YjUxZTc1MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWJmZmZiNTEyYjgyMWM2YWZiOTNjYWI5MzllZDgyZmQ0NjBkYWMzMmZmZTRlYjc4ZDc4OGNmYjkxNDM5MzY0ZSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0dc3407f32db45ce9b883d9ac345f947",
+      "statement": "internal/autoapproval's Rule type is deliberately narrow, with its package doc noting there is no deny override for a hard-blocked command, meaning a user-authored rule can only narrow what gets auto-approved and can never re-permit something the Hub already refuses to auto-approve.",
+      "evidence": [
+        {
+          "resource": "repo://internal/autoapproval/policy.go#L24-L25",
+          "version": "repo-lines-v1:sha256:e37f7cf8e824b84c88ced6aad40c9afd0903bfe0d9654d306029d84e9c98acb1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODJjNDFiYmVlYzU2NTUwMzA0ZTM3MjMyNGYyZGViMjNmYzI0MDc0M2MxMzhhYmE5OTQ3NWVlNjI4OTNhODhkNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmI3MTNhNzBjZDMxNzhkNWNmYzBjYTk2YWMzM2E5MTYyNmJiNmI5MzE0YzI2YTlmMjY0Mjg2NDRiNzQ4NDhmNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQwNTE5YTQ4YTU4MmRiNzE0YzAwMzIwMzI4OThkYjNhNmM0YzA0ZjcxMjdjMzM3NTQ1NTBhYmVhNGU5MzBkZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzZhYjY4YzlmNDRhYjk1ZjY4MTI5NThhODhjNDlkYzUzOTAzZDEyMjBiNWM4NzMzOTdlOWM5NjE2NDVmMDc4ZiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_6d5f546a925e41af9b422f363f7e77f4",
+      "statement": "internal/hub/auto_approval.go keeps a bounded in-memory history of at most autoApprovalHistoryLimit (100) auto-approval candidate records for the UI, and separately writes an audit trail through a lumberjack-rotated auto-approval.jsonl log file distinct from the main Hub log, so auto-approval decisions have a durable, size-bounded record independent of general log rotation settings.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/auto_approval.go#L18-L18",
+          "version": "repo-lines-v1:sha256:c1eda062453f7a583a84aacd2accaef59147b728cc55f515fcc5b984ef09cfe5:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzFlZGEwNjI0NTNmN2E1ODNhODRhYWNkMmFjY2FlZjU5MTQ3YjcyOGNjNTVmNTE1ZmNjNWI5ODRlZjA5Y2ZlNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzFlZGEwNjI0NTNmN2E1ODNhODRhYWNkMmFjY2FlZjU5MTQ3YjcyOGNjNTVmNTE1ZmNjNWI5ODRlZjA5Y2ZlNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzc0YWI4MmYzZTY3MDI4NThlOWI3OTYyMGYyNjQwNWZmNjEyZWEwNDVmOTcwZGQyOTJlMmIwYTczZGZiMzJjZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTdlMWE5MmVlMDBlNzhhZjVjNzQyM2U4YjNlMTcwYmZlMWE0ODA1YzA1M2EwM2VhZmQ0ODA2ZGViMjdkZjFjNyJ9"
+        },
+        {
+          "resource": "repo://internal/hub/auto_approval.go#L226-L226",
+          "version": "repo-lines-v1:sha256:e06af0e22106211766d9a2065d5841142ece6345e1ce10ed9051704a6642870c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTA2YWYwZTIyMTA2MjExNzY2ZDlhMjA2NWQ1ODQxMTQyZWNlNjM0NWUxY2UxMGVkOTA1MTcwNGE2NjQyODcwYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTA2YWYwZTIyMTA2MjExNzY2ZDlhMjA2NWQ1ODQxMTQyZWNlNjM0NWUxY2UxMGVkOTA1MTcwNGE2NjQyODcwYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzZjYjA4MzU1ZjM4NGEwNzJkM2Y4NGMwZGRhZjY2YmQ5OGRkYWJmYzQxYzg1ODI5YmJiYzdiMzYzZmYyNjliOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWVmMGMwYzFlOWJhMmZiZDVmZDdlOWI4NTg5NjJjYTViZjBlMWZhMzA5ZDYwMjcxYTVkODVjNmU1MjE1NWYwOSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/auto_approval.go#L60-L61",
+          "version": "repo-lines-v1:sha256:fb6e4bc7b3b09deb9d319a790e8d58975f9b71b29848e94f50923884cbad356f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTU0N2ExMmFmNzU3Y2EzOTNkOTgxNTI4NzI4MjJiNjdjNjhjOWQ4OWI4NzQ0ZTE3NmMyM2YzZTBmNTJjYzIyMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjA1MjNjMGI3NDllYzkxZmExZjZhN2I1ZTBiOWNhOWEzOTJiMzM0NmE0MGI5YTkxMGVhMjk1NzYzNWE1MzZmYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjFjMmFiYjFmYWE3MWQwNTZhZWMyMzZkM2MyMDI0NjE0Y2Y0ZGJjMDY0NWNmOTg5NjgwYzZjZTc3NzgzMzJkMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzNiZjM3NjE3MDkxODNkYmE3YzQzMWEyMDI3YjI3YjcwMTIzYjkzZDFhZTczZGFlODE0MmUzOGI4YTBhMTg2OSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

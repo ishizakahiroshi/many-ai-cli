@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:a96d4480c749536f47a29060d99141b3e776529d2ef0d741d482f8aa3fa31048",
+  "claims": [
+    {
+      "id": "claim_1b28b4815b29471f8d285cbcf994b416",
+      "statement": "main() delegates every subcommand to a single run(args) function that switches on args[0] with no subcommand framework; running with zero arguments checks whether a Hub is already running and either opens a browser tab against it or starts a new Hub with auto-open enabled.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/many-ai-cli/main.go#L173-L237",
+          "version": "repo-lines-v1:sha256:3fc89b1eea393dce9129f9942ccb68bd26ae80234df942db5640ec99f1a8c0ba:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyOTQ2NTBhZjgxNGIwNmExYTAxN2E4MzhjN2FiMzkwZWQzNThlOGQzMGVlNjAwZTUyOTk0ZDVhNjU3ZGI2OGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlYjVhZDY1NmQwNmE1M2I2NWEwYzViNDRiOTA5OTBlMjI1ZWE1NzY1OWJkZmI4MmI5ZTFhYjdkMzc3ZjE0YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIwNWU0MmYzODY3NzljY2E1NTQxMTI5YTk0ZWUyYjNjNzY4Mzk0YzhlNDBkMWMxMzhlNTg1NjdjMmRlZjQ3MDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8b9df956af3749d1978b1134d867d296",
+      "statement": "A top-level deferred recover() in main() catches any panic escaping run() (including the blocking serve path), logs it with a stack trace via the file logger, and exits, so a crash leaves a diagnostic trail in hub.log instead of vanishing silently.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/many-ai-cli/main.go#L75-L111",
+          "version": "repo-lines-v1:sha256:52431b29cff076060c9e2ebf38dda87c577b4c733cda541f38bb0dbfc07d6b88:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzZDM2NjZiMzgwNWQ1YmU1NDFkYWU1ZDk2ZTFhOTRjNjkzODM0OWViNTQxMGRjM2M0M2RiZjkyZjNjMTZkZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiMmRlNzc2YzYxMjk0NzQ2YjU3OTM2OWVhOWNlOWU2ZmNhZTIyOTljNzgyOTlmN2UyZGIyOWQ0YzU0Y2VhNDAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6f48175cfd514ee6a509720f7f178db0",
+      "statement": "displayVersion() is the single source every surface uses for the reported version: it prefers the ldflags-injected build version and falls back to `git describe --tags --abbrev=0` run against the repository root located by walking up from the executable/working directory for a go.mod declaring `module many-ai-cli`.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/many-ai-cli/main.go#L113-L171",
+          "version": "repo-lines-v1:sha256:632965b043e62021157651546df1874435f3d3964f35e9fede476b249a2eae71:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5NTg1YjI2NGU4YzI2Y2I5MzMxMTU3MTVhYjk5Yjk2OWQxMzI2ODhhZGY1MmMyYTA3NWRhNGI0NzRmMjk2M2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYzYjE3MTNjZGI3ZGU3ZWE4NTQ5OWU5ZGY2YWNiZWI2ZTc2YjAyMjhkZmRjZjdhMzMwZjJjNmViNmIzYTJkZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhMTZlMmQ4NTZhYzdmNzIzYWQ3MmJkZGZmYWRkODM2NTdiMjkzOGYwMTQ1OWJmNDEyNTlmNjdhYTUxYWIwYWMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_7293460cc5494ff8aba10b98adc31daa",
+      "statement": "The usage-relay and orchestrate subcommands are intentionally omitted from the printed usage() help text because they are invocation targets for provider hooks (Claude statusLine / Codex Stop) and for an AI session's own tool calls, not commands a human is expected to type.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/many-ai-cli/main.go#L372-L386",
+          "version": "repo-lines-v1:sha256:69358565e16c5556ce83168099de2fcacfbc92d9da9ae426a5d19ec39e6b73e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjY2Y5NGU3MjE5MmMwMjY0ZDFjZGQ0YzQ0ZmY1ODViZjExMDEyYmMzMDA0OWQ4YjJkZTZlY2I3MjA3MTQ1YTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjN2UzYjU5NTQwY2E3ZDgxODViMWI4ODk4YzNkY2E3Y2ZjMDE3MzA4ZmIzNzA5NWRiMDM0OWQ5NjAyM2JmY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0NmUxOTljYjBlMjk0NmFlZTk4MjllZGJkOWExYmY4ZjdhYWMzZGQ2ZWY3ZjRjN2E0MzMyYWY2MzVjZmYxMTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMzMjhiMTI3Yzk4MzliMDc4M2FlMjIzMGRmMmEyYzQyMDk0YThjYjBmMTZjYWIzZWYyNDZkY2Q1ZTA1MTI3NjkifQ"
+        },
+        {
+          "resource": "repo://cmd/many-ai-cli/main.go#L400-L403",
+          "version": "repo-lines-v1:sha256:ac8b86d876e7faf1175cce9d18570086e921ab8a199ae334a026f4e229eef6a1:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWY3ZmFmOTI2NjQ0MDM5Y2YxMDM5OWNiMTE0YmMwZWNlM2NmYjY4MTMyNDljOTJkYzMyNjQ0ZTg0ZjdiOTQ5ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmE0MDEzOWM4NDAyMjRhMGE0OWNjNDBhNGMzNjNmNjliNmQwMDQyMjhjOWQ5YTBiNDg5MzIwOWI3ZjRjNDI2NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_0529e8893c604e3d8e9dce14e1ceb8da",
+      "statement": "An unrecognized subcommand is dispatched through wrapper.Run exactly like a built-in provider id when it matches a configured custom_providers: id (cfg.IsCustomProviderID), so a custom provider gets the same direct-invocation experience as a built-in one.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/many-ai-cli/main.go#L388-L396",
+          "version": "repo-lines-v1:sha256:45d83bcb501c9c1146081ff494ac7fc6c0ccc9e12e52c4f82c4bf8c267213b9d:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmY2YTI0ZDU2MmE0YTMyZTlhMGY3NDNkZjgzOTg5ZjZhZmU3NTZkYzEyNTc2NzE4Y2ZjYTM4NDQzMDI5YmY2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTMwY2JhYTU3NDU2NzA0MjExN2MzYzY2ZWNmNTAyOWU2ZmMzOGNmOGJjZDlmNTVlODBlYTRmNDc4ZDE3N2NiMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmYyZDhhZmM3MTUzM2UzMDA1YmVmZDM1YzI4ZGFiMTRjZDAxNzRjZWRjNWZjYzIzOWJjZWMyY2M0ODViNWMzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmE0MDEzOWM4NDAyMjRhMGE0OWNjNDBhNGMzNjNmNjliNmQwMDQyMjhjOWQ5YTBiNDg5MzIwOWI3ZjRjNDI2NyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_08be287af333426eb2d568cbfc9c23d4",
+      "statement": "doctor.Run performs bounded, local-only diagnostic checks and never writes configuration or logs; four of its checks (residue, command-code, subscriptions, custom providers) are appended only when relevant so the report does not grow long for unused features.",
+      "evidence": [
+        {
+          "resource": "repo://internal/doctor/doctor.go#L50-L71",
+          "version": "repo-lines-v1:sha256:9f09f9928cbeec097718d7ebed390701c6f354ba48da704ab2fdc9b21cce83a9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmOTQ5YTdmMjZmNzBjODBhMmZhOGFiOTJmZTljYmY5ODU1YWQ5NDViYzEzNDk4YmZmZTFlNWIxMjVkYWE4YWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiNjViMWQ2M2NiNjAyZTc1MDUxYjFkMWEyNjI1N2M4NWI4Y2FiYmJhYzFiMmY3NTIxMDUyNWY0OTgwZjIwY2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhZGFkMDE0OWY5OGEzZjAzOTBmOGRjZjE1NDFjODA0MDUxMmRjNThkZTkzZDc1ZjgwNmM4ODVlZWY3M2JkZGYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_815731e72b054191b316ca9ce09df1a7",
+      "statement": "internal/doctor/residue.go enforces the design rule that a feature rewriting a user's file for a session's duration and restoring it on exit must reclaim a leftover on the NEXT start, because a hard kill skips both a defer and a graceful-shutdown restore path.",
+      "evidence": [
+        {
+          "resource": "repo://internal/doctor/residue.go#L1-L24",
+          "version": "repo-lines-v1:sha256:8616cf6a830adfdcc3ac8900bdb9da5a7596f41761aa4a96b26922dc87379999:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5ZTU5ZjcxMmZhMjNkNjZkMjQxYmZhZjBkNDM0ZGIwOGQxMWU5M2ZlYmEyOWY3MzBlY2VkYTk1ZTEwMzBmOTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0OGQ5MmEzNmY0MTk0ZTQxZWVhYmYwNTRhYjhlNTkzNmYwZmQwYTdmZmU2YmFkMWE3NjlkMGVlZDA0NWNhYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0MmQzNDhiOGJkNDhiNmEwOTA4MzFmNjVmOTI3MWU1MWMwODM3MjQ2MzMxNTJiOTI5YmRiZDFkZTExMDMxYmYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c17d4c37732e4e35be389a74d2ac0128",
+      "statement": "internal/hubruntime keeps ~/.many-ai-cli/hub-runtime.json as an atomically-written ledger of the port the Hub actually bound to (distinct from the configured port, since the Hub can fall back to a nearby free port), and RunningPortWith only trusts the ledger's port after confirming the recorded PID is still alive and re-probing /api/info on that port.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hubruntime/runtime.go#L1-L22",
+          "version": "repo-lines-v1:sha256:c3b4970ea257b2f9b6896124a17c5fe6ef00d1a64dc6a73fa37315a9dc6ff8fe:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmZDgzYmVkNjI5NzE1OTJiYjhiYmFkYzRkMWJmMzNhODQ2MDU1ZTk5NTI1NDM0ZDNmZTY1NjkwYTc4NzRkY2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliMzllMDIyZTBkODU0MTIwMDAzZDc5MGMyOGI3NTk2MmVkZDMwMzc1NmQ1MTMzM2RmNzQ1Y2ZiODZlYTExY2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU3Nzc3MDNkMWFjNDUzY2Y2M2U0ZGEyOTgwZDU0MWFhZWRlNTQ2YWQ5YTc4YWZjODgzMGQ1ZTI3NTYxOWIyNTEifQ"
+        },
+        {
+          "resource": "repo://internal/hubruntime/runtime.go#L128-L156",
+          "version": "repo-lines-v1:sha256:a03ba8bdb162df08b1f16e263d285d8fc8e7ffef803e31a6750315ac5c51ab6d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwMWY3NTM3YjEzNTM5ZTBiZGU0YWIxYTk3ZjZiZDk2MjYwMTRkNmYzNTY4ZDc4MTQ1NzEyMzc0ODMyMzUzMWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjMzlmM2ExYWVjY2FkMTE2N2E4YmQwYmQxMTZlMDE5ODlkZDExNmZjMTcwOTEyNzg3MTdmMjhjZDUxZjAxN2QifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_959fded81eca4ef99c2b00893f651783",
+      "statement": "The tray runs as its own process (many-ai-cli tray) rather than inside serve so the tray icon outlives the Hub; it opens no window, emits no OS-level notifications, and uses a named mutex to keep itself to a single instance, resolving and opening the existing Hub's URL on a second launch instead of spawning a duplicate icon.",
+      "evidence": [
+        {
+          "resource": "repo://internal/tray/tray.go#L1-L44",
+          "version": "repo-lines-v1:sha256:2f4262f02c1cf5b46e2f8eae3b6a608411277f5578487568766f681b6ad3d0fb:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1Yjc0NGIxY2M4MjQ0MGJhZmM2NDI0OTdlZGZmM2M2ZWUyMjNiY2VkYzgwZDIxY2JmN2ZmZDk3NjdiZWU4ZjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlNmEzMmMzMjU2OTA0ZjI5Yjc0ODU1NDNkZTVmZmFiZDhhMTEwOTI4MGFhZTU4ZTE1NjRmYmExNzJiZGY3OTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2YzMwZjExNGFiYWNkNWZlYTc5MWE3MGVlZGI4NTI5YTlkNDMwZTEwMTE3MWE2MjE4MTRkYjEwOWRmNGQ0NjMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_6e02645647744fae89bf810a701a660f",
+      "statement": "uninstall.Run removes the entire ~/.many-ai-cli data directory with os.RemoveAll, which does not follow symlinks (verified by TestRemoveDataDirDoesNotFollowFileSymlink and TestRemoveDataDirDoesNotFollowDirectoryJunction), and removes autostart registration unconditionally regardless of the --purge flag, since a lingering autostart entry runs on every login rather than sitting inert like a desktop icon.",
+      "evidence": [
+        {
+          "resource": "repo://internal/uninstall/uninstall.go#L11-L46",
+          "version": "repo-lines-v1:sha256:0323a5e728951637e64be409593b32f35092f3c9dcc99ae3411428834c910712:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjMzFmZWU2NjRmNDdiNDQ0ZmMyMWM0ZDlhMWE0M2NiYzdjOWVjODE2OWYwN2EwMjNmNDRmY2FlMzc3OWFiYTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkNWRlNjczOTBjZTMyYmZmZWYwZGU5NjRjMWM3MjAwOTk1ZDY4Y2EzZWVjYWRlYjNkZDA5Yjg3MmE1NGViNzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4YmU4NmM3YWVkMmYxOGFiNDgzZWRjZWZiMzc5YTU5ODE0YWIwNTFmNWNjYjAwOGEzZTYyYjQ0ZTA0N2Q5YWQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

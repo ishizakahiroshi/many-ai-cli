@@ -22,14 +22,14 @@ func Run(purge bool) error {
 		return nil
 	}
 
-	if _, err := os.Stat(dataDir); err == nil {
-		if err := os.RemoveAll(dataDir); err != nil {
-			return fmt.Errorf("データディレクトリの削除に失敗: %w", err)
-		}
-		fmt.Printf("削除しました: %s\n", dataDir)
-	} else {
-		fmt.Printf("存在しないためスキップ: %s\n", dataDir)
+	if err := removeDataDir(dataDir); err != nil {
+		return err
 	}
+
+	// ログイン時の自動起動は ~/.many-ai-cli の外にあるので、データディレクトリを
+	// 消しただけでは残る。デスクトップのアイコンと違い、放置すると毎回のログインで
+	// 動くため、こちらは黙って回収する。
+	removeAutostart()
 
 	printBrowserNote()
 
@@ -42,6 +42,25 @@ func Run(purge bool) error {
 		fmt.Printf("\nバイナリを手動で削除してください:\n  %s\n", exe)
 	}
 	fmt.Println("\nアンインストール完了。")
+	return nil
+}
+
+// removeDataDir は dataDir とその配下を丸ごと削除する。os.RemoveAll はシンボ
+// リックリンクを辿らない仕様なので、dataDir 内にリンク（subscription profile
+// が既定側の rule ファイルを指す symlink や、リンク済みの skills/commands/
+// agents ディレクトリ）があっても、消えるのはリンク自体だけで、利用者の実際の
+// ~/.claude や ~/.codex には届かない。この前提は
+// TestRemoveDataDirDoesNotFollowFileSymlink /
+// TestRemoveDataDirDoesNotFollowDirectoryJunction で固定している。
+func removeDataDir(dataDir string) error {
+	if _, err := os.Stat(dataDir); err != nil {
+		fmt.Printf("存在しないためスキップ: %s\n", dataDir)
+		return nil
+	}
+	if err := os.RemoveAll(dataDir); err != nil {
+		return fmt.Errorf("データディレクトリの削除に失敗: %w", err)
+	}
+	fmt.Printf("削除しました: %s\n", dataDir)
 	return nil
 }
 

@@ -44,6 +44,15 @@ type vtBuffer struct {
 	savedRow int
 	savedCol int
 
+	// wrapPending は「右端まで書いたが、まだ次行へは移っていない」状態
+	// （DEC の deferred wrap / pending wrap）。実端末は右端に文字を書いても
+	// カーソルを右端に留め、次の文字が来て初めて改行する。ここを即時改行に
+	// すると、行を画面幅ぴったりまで空白で埋める TUI（Claude Code / Ink）で
+	// ミラーだけが 1 行余計にスクロールし、以降の行が丸ごとずれる。
+	// ずれたミラーは Ink の差分再描画（変わっていないセルを CSI C で読み飛ばす）
+	// では二度と直らず、画面に無い文字列を混ぜたまま固定される。
+	wrapPending bool
+
 	utf8Pending []byte
 	esc         []byte
 	inOSC       bool
@@ -339,6 +348,10 @@ func renderCells(cells []rune) string {
 	return strings.TrimRight(sb.String(), " ")
 }
 
+// Rows は現在の画面高。TailLinesWithScrollback の戻り値のうち末尾何行が
+// 「今の画面」かを呼び元が知るために使う（scrollback との境界）。
+func (b *vtBuffer) Rows() int { return b.rows }
+
 func (b *vtBuffer) Lines() []string {
 	lines := make([]string, 0, b.rows)
 	for r := 0; r < b.rows; r++ {
@@ -430,6 +443,7 @@ func (b *vtBuffer) processEscape(seq string) {
 	}
 	if seq == "\x1b8" {
 		b.row, b.col = b.savedRow, b.savedCol
+		b.wrapPending = false
 		return
 	}
 	if !strings.HasPrefix(seq, "\x1b[") || len(seq) < 3 {
@@ -447,6 +461,12 @@ func (b *vtBuffer) processEscape(seq string) {
 			return def
 		}
 		return params[idx]
+	}
+
+	// カーソルを動かす操作は保留中の折り返しを解除する（実端末と同じ）。
+	switch final {
+	case 'A', 'B', 'C', 'D', 'G', 'H', 'f', 'u':
+		b.wrapPending = false
 	}
 
 	switch final {
@@ -467,6 +487,8 @@ func (b *vtBuffer) processEscape(seq string) {
 		b.eraseDisplay(p(0, 0))
 	case 'K':
 		b.eraseLine(p(0, 0))
+	case 'X':
+		b.eraseChars(p(0, 1))
 	case 's':
 		b.savedRow, b.savedCol = b.row, b.col
 	case 'u':
@@ -475,6 +497,7 @@ func (b *vtBuffer) processEscape(seq string) {
 		if private && len(params) > 0 && params[0] == 1049 {
 			b.clearAll()
 			b.row, b.col = 0, 0
+			b.wrapPending = false
 		}
 	}
 }
@@ -505,15 +528,19 @@ func (b *vtBuffer) writeRune(r rune) {
 	switch r {
 	case '\r':
 		b.col = 0
+		b.wrapPending = false
 	case '\n':
 		b.newLine()
+		b.wrapPending = false
 	case '\b':
 		if b.col > 0 {
 			b.col--
 		}
+		b.wrapPending = false
 	case '\t':
 		next := ((b.col / 8) + 1) * 8
 		b.col = clampInt(next, 0, b.cols-1)
+		b.wrapPending = false
 	default:
 		if r < 0x20 {
 			return
@@ -524,10 +551,23 @@ func (b *vtBuffer) writeRune(r rune) {
 		if w == 0 {
 			return
 		}
+		// 右端まで書いた直後の 1 文字目で、はじめて折り返す（deferred wrap）。
+		if b.wrapPending {
+			b.col = 0
+			b.newLine()
+			b.wrapPending = false
+		}
 		// 2 桁文字が右端に収まらないときは実端末同様に次行へ送る。
 		if b.col+w > b.cols {
 			b.col = 0
 			b.newLine()
+		}
+		// 実端末では 2 桁文字のセル対はどちらを踏んでも対ごと無効化される。
+		// 片割れを残すと renderCells の桁数が実画面とずれ、以降の描画が丸ごと
+		// 1 桁ずれたまま固定される（Ink の差分再描画は「前に描いた通りの画面」を
+		// 前提に空白セルを CSI C で読み飛ばすので、ずれは二度と修復されない）。
+		for i := 0; i < w && b.col+i < b.cols; i++ {
+			b.invalidateWideCell(b.row, b.col+i)
 		}
 		b.cells[b.row][b.col] = r
 		for i := 1; i < w && b.col+i < b.cols; i++ {
@@ -535,8 +575,9 @@ func (b *vtBuffer) writeRune(r rune) {
 		}
 		b.col += w
 		if b.col >= b.cols {
-			b.col = 0
-			b.newLine()
+			// 実端末はカーソルを右端に留め、次の文字が来るまで改行しない。
+			b.col = b.cols - 1
+			b.wrapPending = true
 		}
 	}
 }
@@ -585,6 +626,22 @@ func (b *vtBuffer) eraseLine(mode int) {
 	}
 }
 
+// eraseChars は ECH（CSI n X）。カーソル位置から右へ n セルを空白にし、カーソルは動かさない。
+//
+// Claude Code の Ink と Grok の TUI は、短くなった新フレームの下に残る旧フレームの行を
+// これで消す。未実装だと旧世代の終了マーカー断片がミラーにだけ残り、承認ブロックの抽出
+// （最後の CLOSE と、その手前の最後の OPEN で挟む）が旧 CLOSE を拾って marker_leak と
+// 判定し、承認バーの代わりに抑止バナーが出る。2026-09-01〜09-07 の approval-corrupt
+// ダンプ 4 件のうち marker_leak 3 件（claude 1 / grok 2）がこれで、記録寸法へ流し直すと
+// 決定的に再現し、ECH を入れると 3 件とも正常ブロックになる
+// （docs/local/archive/v0.8.x/bugfix_vt-mirror-ech-unimplemented-marker-leak_2026-09-07.md）。
+func (b *vtBuffer) eraseChars(n int) {
+	if n < 1 {
+		n = 1
+	}
+	b.clearRow(b.row, b.col, b.col+n-1)
+}
+
 func (b *vtBuffer) clearAll() {
 	for r := 0; r < b.rows; r++ {
 		b.clearRow(r, 0, b.cols-1)
@@ -597,8 +654,32 @@ func (b *vtBuffer) clearRow(row, start, end int) {
 	}
 	start = clampInt(start, 0, b.cols-1)
 	end = clampInt(end, 0, b.cols-1)
+	// 消去範囲の両端が 2 桁文字を跨いでいたら、範囲外に残る片割れも消す
+	// （writeRune の invalidateWideCell と同じ理由）。
+	b.invalidateWideCell(row, start)
+	b.invalidateWideCell(row, end)
 	for c := start; c <= end; c++ {
 		b.cells[row][c] = ' '
+	}
+}
+
+// invalidateWideCell は (row, col) が 2 桁文字のセル対のどちらかなら、対の
+// 両方を空白へ戻す。実端末は 2 桁文字の左右どちらを上書きしても対ごと無効化
+// するので、ミラーだけが片割れを残すと 1 桁ずれる。
+func (b *vtBuffer) invalidateWideCell(row, col int) {
+	if row < 0 || row >= b.rows || col < 0 || col >= b.cols {
+		return
+	}
+	if b.cells[row][col] == wideContinuation {
+		if col > 0 {
+			b.cells[row][col-1] = ' '
+		}
+		b.cells[row][col] = ' '
+		return
+	}
+	if runeCellWidth(b.cells[row][col]) == 2 && col+1 < b.cols && b.cells[row][col+1] == wideContinuation {
+		b.cells[row][col] = ' '
+		b.cells[row][col+1] = ' '
 	}
 }
 
@@ -614,4 +695,3 @@ func clampInt(v, lo, hi int) int {
 	}
 	return v
 }
-

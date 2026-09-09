@@ -29,9 +29,11 @@ cd "$COMPOSE_DIR"
 log "pulling images"
 docker compose pull --quiet
 
-# up -d はイメージが変わったコンテナだけ再作成する（変化なしなら無停止）
-log "recreating containers if image changed"
-docker compose up -d
+# up -d はイメージが変わったコンテナだけ再作成する（変化なしなら無停止）。
+# healthy（healthcheck が無い service は running）になるまで待ち、失敗時は
+# set -e で停止して prune へ進まない。直前 image を rollback 用に残す。
+log "recreating containers if image changed and waiting for health"
+docker compose up -d --wait --wait-timeout 180
 
 # 旧イメージの残骸を回収（タグなしの dangling のみ。:dev 等の名前付きは消さない）
 docker image prune -f >/dev/null

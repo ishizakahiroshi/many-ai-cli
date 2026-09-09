@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b67fb2ab77cc505002c74044796b4b9b6180ccd5250722bc6cb2602bede4e526",
+  "claims": [
+    {
+      "id": "claim_64cdd6e2744d4ab7ba67de585f2daf7d",
+      "statement": "All Hub-owned per-user state lives under ~/.many-ai-cli/, including config.yaml, the hub-runtime.json ledger, logs/, launcher-profiles.yaml, push_store.json (VAPID keys and Web Push subscriptions kept separate from config.yaml), workbench/*.json, per-profile subscription config directories, and orchestration board/relay files.",
+      "evidence": [
+        {
+          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L772-L780",
+          "version": "repo-lines-v1:sha256:18b345497554523d66f7a5707830be8ca98cec3d20d23176c774979f5b78d3b6:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTAyNjJhODllMTkxZDRhMzZhNWY5ZDFiODU0NmYwYmViMmVjNjExYWFjMzFkN2IyNzgwZjU0Y2RlZDAxYzZmMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODlmMWJiZTc3MTczYTQyYzM1ZjA5ZDIzMjU0NjA1ZWUyYTllNjRlODhhNWE2YmY2ZTBjZmM0Y2Y3ODMwMzdjOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTI5MTlmYzU0NjZlYmY5NWI1ODVjMTAxNGNjZTg3NjRlZjZiYjkwYjAzYzc3YjdlYzBlYjU3MjE4NWQxZjgyMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWZjZDdiODcyZmEzMDQ3NDRlZWIwMTg2NjBkYTMyN2ZkMWIzZTRjOGJkNTA0NjVjMGUwOGMzMjAxOTBhYmMzZSJ9"
+        },
+        {
+          "resource": "repo://internal/config/config.go#L62-L71",
+          "version": "repo-lines-v1:sha256:5d110b5ae3faf7689adc33f81b187050643e54226c0c70e924f50a5d9f926863:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0ZGYxZDg4ZDFiZjc3ODkxYzE1ZGUwYjdmMGRlZTAxZjIxYWMyYTk5MDU0ZjBlZDlkMjZjYTJmNDNhMmJkNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhMjI5ZGNiYTZiZWY3NzBhZDdhMzFmOGY3YTVjYjg2NTA2ZjdhYzRmN2IxZDBkZGYwMzQ0YzNiYjA3ZTE5YTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2OGMzYzVkZDQ4ODg4YjE5OWQ1ZmMyNWU1YTMxZTAyNzQ1ZDM3NzYxNGMwZDY3NTM4MzM0MzJjNmQzY2Q2YmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmNDk1OGVjZDU0OTdjY2FmYWRjNzNlMGEyZGFkNjViMjhhMWMwMGEzZWUzZGIzZWE4YjEwNDJmNThkNTg1NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_bbdb117eadec4c4294f4c6064bd12d7c",
+      "statement": "migrateLegacyDir performs a one-time os.Rename (not a copy) of a legacy ~/.any-ai-cli directory to ~/.many-ai-cli only when the new directory does not yet exist; it silently no-ops on any stat/rename failure and startup continues regardless.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1128-L1149",
+          "version": "repo-lines-v1:sha256:8ec76c441b89cbb78bc7ab3d60657a433a42c8c6c2423b78505ee26c1d78a546:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxYTk0YTAxMTc0Njc0MjExYThiMjA5ZTQzOWJiZTgyODViZDE0MDMyNTliZDY4OTVlNDUwNzkzYjIwM2I2YmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0Njc5ZThmZWMzZWZhN2Y3ZTIzYzAxNjI4MmM5ZTA3NzM3MzliNGYwMjRiNGY1MTUyZmM0YjM1ZGM3ZjVhMTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0NDZlM2NmYTE1YTY5ODhmYWFmOTJmYWQ5NTkzZTQ1NDc5MDdiZjUzNDI1MGVkNTEyZDA0YjdiYzViYzEzZDYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b1ec284ba17d46d6abc62c1d8e3ac734",
+      "statement": "LoadOrCreate distinguishes an unparseable existing config.yaml (backed up to config.yaml.bak and replaced with regenerated defaults) from a missing one (defaults written fresh) from any other read error (returned as a hard error rather than silently discarding an existing configuration).",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1048-L1085",
+          "version": "repo-lines-v1:sha256:aaa4695c9b6ca7fd4a55bf9816bab5d55f0f58cd7ee739326e7918bafdbbe72d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3MTU1ZjFlNzFlODY2N2JhM2RjOGZmZDZhZjllOGMyOGE4MzAxMjllODIwNDExOTllZTA5MzliZjA4OTAwYjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE3OTc2NWMyMWI4MDVlNWZkNzAyNDA2NGFiZGRhNWY1MWYyYTZlZWFkMmVlMzViOGUzZWE4YWMyNDM5Yzg0ZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiYzQ5NjcwZTRlM2U1ODY5ZGNkYmNjYjQ1NGRiYzY1NmYwYjkyODk1ODJiMzYxM2QxZDE2YjY1MzJjZjIwNDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_43c931ec0f484be28f982649f5b504c2",
+      "statement": "If cfg.Token is empty after load, LoadOrCreate fills it via ensureToken and persists the result to disk immediately, because generating a new token only in memory on every launch would invalidate the Hub URL and already-open wrapper session auth on each restart.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1086-L1099",
+          "version": "repo-lines-v1:sha256:50e7a4fac72157decaa1d68b626bb7a36df783e4eba5fc3ddfc633147124cbe3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjZjgxMjBkZjFmMTE2MzQ2OGJmMWFhOTk5ODk5ZWVhNTgwNDFmNTZjMmU0ZWJjZTU0NzZkM2M0NWFiMGNhZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjNjY5NjM4N2FkY2MwZmFjOTQ4MTkxYjM5NTQ2ZjE2YWQzYzZmZjk4MDhhZTk5NzdlMzk5Zjc0MTY2MjNhMWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4ZmI1MjMyYzQxMDU1NGM5YzBmMGY4Y2Y5OTZjMjM4MjNiMmYwYzNmMTVkYThlZTIwNzYwNjJjMDQwYzU0ODIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_4ab7494475e64f14bfaecc4974815f3a",
+      "statement": "Every config.yaml write (initial default, corrupt-config backup, token backfill, and Save) goes through writeConfigAtomic, which writes a temp file in the same directory, fsyncs it, chmods it 0o600, and os.Rename's it over the target path so a crash mid-write can never leave a partially-written config.yaml.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1217-L1246",
+          "version": "repo-lines-v1:sha256:0f3e5060ce6dd0a686f2c0262e2d00733804d54b1a9eee15a4c4de60d66d4377:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4Njc4MjRmZjYzNjA1MTU5NmQ1MTRjMTg0Yjg2ZDFmMzg3ZmM0ZTczYzMyYWVjNTQ0N2RkNDgwNDlmZmYwMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxZTY5NDAwYmRiODIyODYzYjcwYTAwMmQwN2U5YjA5NzE1MmM1NTYxZTU3NmM1OTIzODE2ZDU3ZDY3NGM4NTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzNDExMjFiZmZlZWY4NzU2M2Q4Mjk0MDhlMGYyYTM2OTI5Y2Q5NTM5MzQyMDcwYzI4MmExODdiOGNmYWUxZTgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_eed0211043e0490a93d5cb38dc75078a",
+      "statement": "Because os.Chmod(0o600) does not narrow the NTFS DACL on Windows, writeConfigAtomic additionally calls securefile.RestrictFile on the renamed path to explicitly restrict its ACL, since config.yaml holds the auth token, AuthCookieSecret, and RemotePINHash; a failure to restrict is logged/ignored rather than failing the write.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1246-L1254",
+          "version": "repo-lines-v1:sha256:a73aee3d5a18e961ea32626c7cf4cfc1f32fae4b67701447dc73a0c904a2570f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTNkMTRhYjBhYTUxZjEzMGYxZTc2ZTIwYmEyMGU0ZDczN2RiMDYyNmU1NjZmOGI1MGE4YjBjOTQwYTE2OTc5MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWFlYjkxNjQxNjVmMmM2MTk1ZGE3YWM1NDNiZDM2ODIzN2U0NDM3MjJlZWE5ZDI3N2M0MzU3NjYzYzU0ZmI0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjE5MjVhZTkyNTJmMTk5YjYyMzJjNjBlM2UyZTJlNjM2MzUyYjA4ZThlODcxYzA0ZjgwYTQzZGIyYjVlOWI1OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjEwZGRlMGExODUzNzZhOWVlM2ZkYTFmYWE2OWRiNWEwNDU5MDU4YmEzYmQxZTJkY2VhYzQ0MjlkMDQxYzMwMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e00d9db577164abba7caefb2e91c352c",
+      "statement": "Save(cfg) reapplies cfg.applyDefaults() and cfg.Validate() before writing, so a runtime config save can never persist a configuration that would fail validation on the next LoadOrCreate.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1197-L1215",
+          "version": "repo-lines-v1:sha256:614ecdbcaa5921c02776b9aae0d21a43246aeede91f977fbffbd37a9cdbd1b55:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZTdhODdhYzgxNGNiODQzYjM0ZGJmNDAyZjQzYmYxMGMzZTY2ZGRlNzEwN2M1ZjUxNWU0OTQ4NzNkZDlmZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyMDAwMDEyNjUzYWI4ZTZmM2JiMDM0NzQzNWFmY2E3NjQxZTM1NjM1OGE1ZTBmNWJhNTI5ODYwMzA0NDMyZjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyNTExZTFiYTExMjIyYWZhYjk4OWU5M2U2YjA0NjEyZjQ4ZDlkOGQxZDkzNmJjZTRkZDVlNDlmMDNhNTI4MTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_54ca117b6fa845e3bb02b6c55de67c61",
+      "statement": "custom_providers: is a field on the same Config struct as every other setting and is loaded/saved/validated through the identical LoadOrCreate/Save/Validate path; there is no separate file or dedicated writer for custom provider registration.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L948-L984",
+          "version": "repo-lines-v1:sha256:0104a8349de96c8044368f92034fb11d76489c7f7f028f33d086b6462cd37b45:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhMjg3MWI2NzQ4ODI4YzU5NjVmYzlhODc4YzM5OTVhZmIyYjdmMTk4OTdlZmVkZWU5MjRlYzY4Nzg2OTIzMTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmYTdjYTY1ZmY4ODRkZjc0NzBmYjgzYjFiZDYzYTY3YWE5NGM1MjU5NTUyMjRlYTE1ZmJiNTAwM2Y2OGQ5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MDc4NGYyNmQ3M2I2ZDZkMTgzYTEyMzFmYjU3OGJhZTE3NDJmNzAyNTY5Y2EwNjg3NjMzNzFlMGRkZjg4NDkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e240669bcf3046adb0fe6787af08457c",
+      "statement": "Config.Clone() performs a deep copy that individually copies map and slice fields so the clone can be passed to Save without holding the caller's config mutex, avoiding a concurrent-map-iteration panic during yaml.Marshal if the live config is mutated concurrently.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1257-L1261",
+          "version": "repo-lines-v1:sha256:0864e5d4da5f70529408800ef52deb95341fa1c6321f2bba4b2554fc0fba5d15:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzY1MzQ0YjFlNjg4NWM2MjBmMDBmMjkwNTYwOTdlMWE5YTA3ZGYwOTkzZjhhNDdlMDA4YzAzOTcwZWYwMDdlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjIwOWJiMzViZDRiNzdmOTBmZDg4YjYzMzg4ZGFkMWJkNGJjNjczNWRjYmUyOTQzNjYwMDQyNDFkMWJiYjU5NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzQ5MzdjNGU3MTA5MzExNjNmYmQ1NGE4NTJkZjdjMGIyMDUxMzVhNjZiYTM4NTZmYjNiMDgxNzExNmFiODRlNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTQwZjg0ZGUwNDZiOGIzMjM5MjI5ZDc0NGY0ZDE1MmI2N2ZlY2I5ZjExNzJlNzJjMDU2MTUyNzZkMWI4YTg0OSJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

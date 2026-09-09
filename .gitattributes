@@ -12,5 +12,9 @@ web/src/vendor/THIRD_PARTY_LICENSES.txt text eol=lf
 # Shell scripts must keep LF endings to remain executable on Linux runners.
 *.sh text eol=lf
 
+# Git hooks are extension-less sh scripts run by Git's own sh; keep them LF on
+# every platform so `while ... do` / variable assignments do not pick up CR.
+.githooks/* text eol=lf
+
 # Windows-only PowerShell scripts; let CRLF be the working-tree default.
 *.ps1 text eol=crlf

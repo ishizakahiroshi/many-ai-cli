@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 const (
@@ -72,7 +73,15 @@ func (s *Server) handleGitCommitAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), gitCommandTimeout)
+	// Commit all runs status -> add -A -> commit under one budget. The commit
+	// step runs the repo's pre-commit hook synchronously (this repo's
+	// secrets-scan, or lint-staged/doxguard elsewhere), which routinely takes
+	// several seconds. The shared 5s read timeout (gitCommandTimeout) kills git
+	// mid-hook, leaving the index staged but uncommitted. Give the whole
+	// sequence a commit-appropriate budget, matching push's 60s order of
+	// magnitude.
+	const gitCommitAllTimeout = 120 * time.Second
+	ctx, cancel := context.WithTimeout(r.Context(), gitCommitAllTimeout)
 	defer cancel()
 
 	statusOut, err := runGit(ctx, cwd, "status", "--short", "--porcelain=v1", "-z")
@@ -871,8 +880,10 @@ func filterOutSet(items []string, set map[string]struct{}) []string {
 }
 
 // subjectLine は Conventional Commits ハイブリッド型で subject を組む：
-//   JA: "<type>(<scope>): <symbol> を<動詞>"（handle/rename は助詞と語尾を個別処理）
-//   EN: "<type>(<scope>): <verb> <symbol>"
+//
+//	JA: "<type>(<scope>): <symbol> を<動詞>"（handle/rename は助詞と語尾を個別処理）
+//	EN: "<type>(<scope>): <verb> <symbol>"
+//
 // scope が prefix と一致・空・prefix が既に括弧付きの場合は (scope) を付けない。
 // 変更が全く検出できないレアケースは無情報の "変更なし / no changes" にフォールバック。
 func (a commitChangeAnalysis) subjectLine(ja bool) string {

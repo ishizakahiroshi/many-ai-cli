@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:b68787a2208e961c81ec532d0830c23d239f830c10612c4d60cbc99ff347a005",
+  "claims": [
+    {
+      "id": "claim_bf0a0733e6e14f6fa9a66caa2270a96a",
+      "statement": "A wsl launcher profile calls wsl.exe internally with bash -ilc (login + interactive) specifically so ~/.bashrc entries such as nvm/pnpm/cargo PATH setup are fully loaded before the Linux-side many-ai-cli binary runs, opens the Windows browser as soon as the Linux side prints the Hub URL, and automatically picks the next available port on a Windows-side collision.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L421-L421",
+          "version": "repo-lines-v1:sha256:c1a53a126991bc6b838fe08a2f467f94d8844354926b50026c39a8208a45d29a:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzFhNTNhMTI2OTkxYmM2YjgzOGZlMDhhMmY0NjdmOTRkODg0NDM1NDkyNmI1MDAyNmMzOWE4MjA4YTQ1ZDI5YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzFhNTNhMTI2OTkxYmM2YjgzOGZlMDhhMmY0NjdmOTRkODg0NDM1NDkyNmI1MDAyNmMzOWE4MjA4YTQ1ZDI5YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzE1MWU2OTlkYjg1ZmU4OTRiN2E4ZTBjOGY4NDJjY2UwYTE2NDU5ZjA0YzczOTBjODMxYWVkZmU4ZDA2MTc3YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTQ5ZjQxNDJkZTY2MGU5MTRhYTAyMGJlZjFlMjU4ZWRmOWUzZmI5MDYzYzViODMzZmIzZmQ2ZWZlNTI4N2U0MSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_767d13d189d7410e9c2181aa3151d033",
+      "statement": "cmd/many-ai-cli-launcher/main.go's own doc comment states that running with no flags (the plain double-click / direct invocation case) always opens a browser-based profile-selection page on a random loopback port, on which already-connected profiles are marked; connecting without that picker requires an explicit --profile or --last flag.",
+      "evidence": [
+        {
+          "resource": "repo://cmd/many-ai-cli-launcher/main.go#L8-L11",
+          "version": "repo-lines-v1:sha256:57843c4f948bc6a46eac0dda01d642b528bae038fdd7bcdc9d34da6889abf81c:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGZlODE0Njk4MWUyNjQ4YTc2MzRjY2RhZjI2ZmQ5OWViYmI0NjMyYTU2ZTRmMTcxYTgyZGRlYzhlYjQ4ZjRkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzU5YzMxNTBmNDkxNjE3NWRiNTI0NWY2MmMxM2YwZTQyOTMyMDlkM2QwNWZjMzBhZGI1MzZhMmQ3MGMzNmUyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmM5ZDU4OTM1NmUzNmQ0ZDI0MDk1MTIzM2Q3NzAwODE1MDQ1NTFmZjdkMWNhMTcyYzE0NDM1MWUxYzQyM2FiNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmI3Yjg5Yjg0ZGMzMjVlOGJjM2NmMjYzZTJiNTI3OWI2YjU5OTMzMWFhZjg5ZTkzNDc4MDQzM2RkMzk0OTE5YyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_fc3a74b323a44511a2211262b048e383",
+      "statement": "internal/launcher/active.go records each launcher process's established connections in ~/.many-ai-cli/launcher-active.json so other launcher processes (notably the profile-selection UI) can see which profiles are already connected and reuse the existing Hub URL instead of starting a duplicate tunnel or serve; an entry's staleness is checked with the same double-guard pattern as the Hub's own PID-file staleness check (internal/hub's killStalePid), requiring both that the recorded launcher PID is still running and that the recorded Hub URL still answers /api/info, pruning any entry that fails either check on read.",
+      "evidence": [
+        {
+          "resource": "repo://internal/launcher/active.go#L1-L15",
+          "version": "repo-lines-v1:sha256:8174b710d79aebbfff8692c7c75f348707368c384d1065668d4057b9d8ed1e51:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5NjQxMDNhN2UzZjMzNmUwNjQxNTk4MzQzNzllM2U2ZDc4Mjg1M2U4NjE0ZDA3M2RjOGU3NWJjYmIwZmYyZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxNWUyYmE5ODA2ZTdiZDJiYTUwYmI4MjlhYWQzZjVkYTI3MDlkNWQ1MDk3NDQ4ZGExOGFjOTYwOGUzZjhlZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5ZDBhMGUxNTgyYmYyODc3MDZjMmU2ZmY5NjA0NjgzOWQ3Mzc5NWIzYTE3MTEzNGNhMzJkNzYyOGVkZmI1YzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_50bdd19901e94d2a8e654540b66daee8",
+      "statement": "SSHConnector's out io.Writer field mirrors scanned child SSH process output to the normal launcher console by default (nil), but the Hub's own embedded connection flow sets it to io.Discard via a setQuiet path specifically so hosting a tunnel through the Hub UI produces no console noise and never echoes the remote Hub's URL and token to any terminal.",
+      "evidence": [
+        {
+          "resource": "repo://internal/launcher/active.go#L1-L1",
+          "version": "repo-lines-v1:sha256:0964103a7e3f336e064159834379e3e6d782853e8614d073dc8e75bcbb0ff2e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDk2NDEwM2E3ZTNmMzM2ZTA2NDE1OTgzNDM3OWUzZTZkNzgyODUzZTg2MTRkMDczZGM4ZTc1YmNiYjBmZjJlMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDk2NDEwM2E3ZTNmMzM2ZTA2NDE1OTgzNDM3OWUzZTZkNzgyODUzZTg2MTRkMDczZGM4ZTc1YmNiYjBmZjJlMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWM4MGExYjdkZmJiMzAzMmFjMDg4ZTA3ZWEzOWRmNzY1NGJiMmY4ZGY1YWJhMDc1OThjNzlkNGNhMDEyMzc2MiJ9"
+        },
+        {
+          "resource": "repo://internal/launcher/connector_ssh.go#L20-L28",
+          "version": "repo-lines-v1:sha256:4386c3fab63df75d92a58e9d8d3a1a505f27cd254ffb4fc7d67f9b06743a11b8:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUwZjgzOTBkYmNhNzQ3NjYzOGU1MDViYzk3MzljODU0MzE3NzM3NDRlMjRjM2NlMzE0M2E4M2U2NDk5ZWM2NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGZhMmZlYmY5OTJkZjAzZGViNDczMzkzMmVjMjhlNmMxZDYwOTU2YjQzYmNjNzk0NTlkMDAwMDk5NWM2YTM0NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWFjNDZkZTljZWFjODM2ZWY5OTEwYjVlZjI3MzExN2FhOGUzY2Y2NTVlODUxNjM3NjJlNjA1YzlkYWY1ODlkOSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_75e4291a6cbe41f99ffb43c12d2b0d80",
+      "statement": "Launching a process via CreateProcess from a terminal does not go through Explorer's reputation-check UI, so the SmartScreen dialog generally does not appear even for the same binary that would trigger it when double-clicked from Explorer; the Hub UI's Server button runs the SSH/WSL child process inside the Hub process itself (leaving no extra console window open), and many-ai-cli connect runs the identical connection flow as a subcommand of the main binary rather than the separate launcher executable.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L574-L579",
+          "version": "repo-lines-v1:sha256:a5cec40f432fe2a334fd7e0c42e2a7bfa19a4bb11ee3c42e9e9dd97d58987fac:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzkwNTYwYTliMDRiYmI5M2FhZjc5ZjU5ZTJhMTIxZTg4NzEwMTJmNGJlZTA4ZDRiM2IwNDIzYzM5ZDZkZmViZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzJiOGUxODMyMDY0MWE3MTAyZDJjNGRhYWM3ZDZjZGNlNzNiMzQ1NWQ3NmQyNWU5MGI0NGY4OWNmNDM3MGZhZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWU2OTU5YTgwMDU5Yzc2ZmY0MzE0NTc2MWZlNGFiODljOGNmMzY3MzQyYWUwZjdmNzVlMTM3NjA1NTYzNzUyZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGMyZjBlN2E2YWJiNGQyYzk2YTc2YTBiOGY5ZmZjMzYwNTBkN2Y1OTE3MmE0N2Q0NWVhNjk5OTk4ZjkxZmM1NCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_824907433b6d446384297cebf02b8b91",
+      "statement": "A remaining SmartScreen dialog (as opposed to an actual Defender quarantine) stems from Mark-of-the-Web on a downloaded file and is cleared by unblock-windows.cmd or a manual Unblock-File; installing via a package manager avoids acquiring Mark-of-the-Web in the first place because the binary is built/materialized locally rather than downloaded as a zip/exe.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L581-L581",
+          "version": "repo-lines-v1:sha256:01b1a2d20a8dc46e7d6e922333ac26e2675efa1c9647320ae8b8973a0e34ce72:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiMWEyZDIwYThkYzQ2ZTdkNmU5MjIzMzNhYzI2ZTI2NzVlZmExYzk2NDczMjBhZThiODk3M2EwZTM0Y2U3MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiMWEyZDIwYThkYzQ2ZTdkNmU5MjIzMzNhYzI2ZTI2NzVlZmExYzk2NDczMjBhZThiODk3M2EwZTM0Y2U3MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTBjMWI4OTRkOWNkNTUyYTAyZGU5OGNhMmQ4NGI2ODQ0NWUzNTBlYmRiODM1ZDI5NWMzYThlOTc2YWNiMjcxOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTE3MTgyMDIzYjFhYzFkZTZiZjRmNTczMjFjNjVjNTI0MDJhOWY4YTBkOWY3ZjdiZjMxODE2NDExNjJhMmFhMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_e518714bb0984886b6f40b2e60bfd134",
+      "statement": "The launcher's SSH connections run ssh.exe with -o BatchMode=yes so a password prompt fails immediately rather than falling back to interactive entry, meaning key-based authentication is mandatory; passwords and key passphrases are never saved by the launcher, SSH forwarding is 127.0.0.1-to-127.0.0.1 local forward only with no -g/GatewayPorts, and a token obtained via a tunnel profile's token_command is used only for the current session's connection and is never written into launcher-profiles.yaml.",
+      "evidence": [
+        {
+          "resource": "repo://README.md#L515-L515",
+          "version": "repo-lines-v1:sha256:8e2f4bd84a5ae53f03cb18c6b1038d46bb8bd6cb903cbd792a3d5b5d7e99c256:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGUyZjRiZDg0YTVhZTUzZjAzY2IxOGM2YjEwMzhkNDZiYjhiZDZjYjkwM2NiZDc5MmEzZDViNWQ3ZTk5YzI1NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOGUyZjRiZDg0YTVhZTUzZjAzY2IxOGM2YjEwMzhkNDZiYjhiZDZjYjkwM2NiZDc5MmEzZDViNWQ3ZTk5YzI1NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGE3NjM1MWM0Y2M5NGE5YzdmYWE3Yjk3ZDYwYmJjZDNiM2QzMDY2Nzg0N2FiOTI5OGFlOGZjYjgzMjc3MTUxMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTkxMzIyMDc0ZjM4ZDA3MDJiZjU2ZDgwYTU1Yjg1MmRmOTFiOGE4OGFjYjMzZjBlNmYzZjRlZmIyMTgzNDg3OSJ9"
+        },
+        {
+          "resource": "repo://README.md#L557-L560",
+          "version": "repo-lines-v1:sha256:0eb2daf4c02564d7ccf59b0d19b7e40098236307f63edb0636cfc1b0f0fc6fba:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTMzNWFiMTI3NGIzMjk3NzA0OGExYWIzZDZjYmRmMTVkYzUwNzVjNjQyZTA3MGJkMzliMjM0OTFkYjBkZTAxZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjQ5YmYxMjJlNDcxODg3Zjk0N2ViMzljMjI5Y2Q5Zjc4ODczYmMzODMwNDUxOTUxOTFmMjhkOWQ3N2ViYTcwOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTA0Y2FiNzc0YzBhYTZhYjIzM2M3ZjFjZWM1MmI1ODJjNWY0NWI5MDc3YTllZWY5ZTBmNGMwOTk0N2EzMTI2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTFiYjIzNDM0Njg1NmFhN2I0ZGI0ZGFmODdlNzZlZDg3YTA3MjU4YWM0MDA3YTljOWJmY2MzMGQzMDg3OGZkMyJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

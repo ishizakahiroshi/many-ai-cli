@@ -44,14 +44,19 @@ import (
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
 const (
-	idleAfter                    = 3 * time.Second
-	tickerInterval               = 200 * time.Millisecond
-	maxPTYBuf                    = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
-	replayTailForNonActive       = 64 * 1024       // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
-	uiPingInterval               = 30 * time.Second
-	branchLookupTimeout          = 250 * time.Millisecond
-	branchRefreshAfter           = 2 * time.Second
-	branchRefreshWorkers         = 4
+	idleAfter              = 3 * time.Second
+	tickerInterval         = 200 * time.Millisecond
+	maxPTYBuf              = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
+	replayTailForNonActive = 64 * 1024       // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
+	uiPingInterval         = 30 * time.Second
+	branchLookupTimeout    = 250 * time.Millisecond
+	branchRefreshAfter     = 2 * time.Second
+	branchRefreshWorkers   = 4
+	// transcriptStatAfter: 解決済み transcript を stat し直す間隔。
+	// transcriptResolveAfter: 未解決 transcript のパス再解決の間隔。解決は
+	// 3 日ぶんのディレクトリ走査 + 各候補の先頭行読みを伴うので stat より長く空ける。
+	transcriptStatAfter          = 10 * time.Second
+	transcriptResolveAfter       = 30 * time.Second
 	nativeApprovalClearMissLimit = 3
 	nativeApprovalBlankLineLimit = 2
 	vtResizeDebounce             = 200 * time.Millisecond
@@ -65,9 +70,28 @@ const (
 	approvalVisibleLease = 15 * time.Second
 	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
-	bracketedPasteStart       = "\x1b[200~"
-	bracketedPasteEnd         = "\x1b[201~"
-	bracketedPasteSubmitDelay = 50 * time.Millisecond
+	bracketedPasteStart = "\x1b[200~"
+	bracketedPasteEnd   = "\x1b[201~"
+
+	// 確定 \r（bracketed-paste 本文の submit）の送出タイミング。固定遅延ではなく
+	// 「PTY 出力が一定時間静止した」ことを待ってから 1 回だけ撃つ。値と理由は
+	// web/src/app/deferred-enter.ts と同一で、2026-07-11 の同型修正が web 経路にだけ
+	// 入り Go 側が 50ms 固定のまま残っていた分を揃えた
+	// （plan_hub-submit-enter-not-confirmed.md C1）。
+	submitEnterIdleSettle = 120 * time.Millisecond
+	submitEnterMinWait    = 120 * time.Millisecond
+	// codex / opencode（Rust TUI）は大きいペーストを [Pasted Content N chars] へ
+	// ほぼ無出力で畳み込むため、出力静止が瞬時に成立して早撃ちになる。これらは
+	// 最低待機を長く取り、ペースト確定が落ち着いてから Enter を撃つ。
+	submitEnterSlowMinWait = 700 * time.Millisecond
+	// 出力が止まらない病的ケースの保険。短すぎると畳み込みが終わる前に \r を
+	// 強制発火してビジー中の CLI に吸収されるので、通常の畳み込み時間と競合しない
+	// 大きさにする（web 側と同じ 30s）。
+	submitEnterMaxWait = 30 * time.Second
+	submitEnterPoll    = 20 * time.Millisecond
+	// 確定 \r を送った後、CLI が動き出したとみなすまでに出力を待つ時間（C2）。
+	// この窓で PTY 出力が 1 バイトも来なければ未確定とみなして \r を 1 回だけ再送する。
+	submitEnterConfirmWindow = 1500 * time.Millisecond
 
 	// OSC シーケンスをユーザーターン境界マーカーとして ptyBuf に注入する。
 	// xterm.js はこのシーケンスを画面に表示しない。
@@ -83,13 +107,15 @@ type session struct {
 	Display            string `json:"display_name"`
 	CWD                string `json:"cwd"`
 	Branch             string `json:"branch,omitempty"`
-	Label              string `json:"label,omitempty"` // UI カード 3 行目に【ラベル】として表示
+	ProjectID          string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
+	Label              string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
 	Pinned             bool   `json:"pinned,omitempty"`
 	Color              string `json:"color,omitempty"`
 	Note               string `json:"note,omitempty"`
 	AutoTitle          string `json:"auto_title,omitempty"`
-	Model              string `json:"model,omitempty"` // 使用モデル名; UI カード表示用
-	Route              string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Model              string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
+	Effort             string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
+	Route              string `json:"route,omitempty"`  // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
 	Shell              string `json:"shell,omitempty"`
 	ParentSessionID    int    `json:"parent_session_id,omitempty"`
 	Role               string `json:"role,omitempty"`
@@ -101,24 +127,55 @@ type session struct {
 	NormalWorktree     normalWorktree
 	WorktreeCleanup    string
 	BoardNotifyPending bool `json:"board_notify_pending,omitempty"`
+	// Relays are the relay loops this session conducts (relay.go), in start
+	// order. The slice is replaced, never mutated in place, so session copies
+	// taken under sessionsMu stay race-free while they are marshalled.
+	Relays []*proto.RelayStatus `json:"relays,omitempty"`
+	// CrossSessionMessages is a bounded, in-memory observation history for
+	// board-external Claude messages. Replace the slice on append so snapshots
+	// taken under sessionsMu remain race-free after the lock is released.
+	CrossSessionMessages []proto.CrossSessionMessage `json:"cross_session_messages,omitempty"`
 	// Activity is the authoritative three-axis activity model. State is kept
 	// below only as a compatibility display label for older clients.
 	Activity     SessionActivity `json:"activity"`
 	State        string          `json:"state"`
 	LastOutputAt string          `json:"last_output_at,omitempty"` // ISO 8601; UI カード「最終応答時刻」用
-	StartedAt    string          `json:"started_at,omitempty"`     // ISO 8601; UI カード「起動時刻」用
-	FirstMessage string          `json:"first_message,omitempty"`  // 最初の確定入力; UI カード表示用
-	LastMessage  string          `json:"last_message,omitempty"`   // 最新の確定入力; UI カード表示用
-	EndReason    string          `json:"end_reason,omitempty"`     // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
-	HomeDir      string          `json:"-"`
-	CodexHome    string          `json:"-"`
-	ClaudeDir    string          `json:"-"`
+	// TranscriptGrewAt: provider 自身の transcript が最後に伸びた時刻（ISO 8601）。
+	// 詳細は proto.Message.TranscriptGrewAt のコメント。
+	TranscriptGrewAt string `json:"transcript_grew_at,omitempty"`
+	StartedAt        string `json:"started_at,omitempty"`    // ISO 8601; UI カード「起動時刻」用
+	FirstMessage     string `json:"first_message,omitempty"` // 最初の確定入力; UI カード表示用
+	LastMessage      string `json:"last_message,omitempty"`  // 最新の確定入力; UI カード表示用
+	EndReason        string `json:"end_reason,omitempty"`    // session_end の reason コード（例: "exec_not_found"）。UI 側で i18n 翻訳して表示
+	HomeDir          string `json:"-"`
+	CodexHome        string `json:"-"`
+	ClaudeDir        string `json:"-"`
+	GrokHome         string `json:"-"`
+	// SubscriptionProfileID はこのセッションを起動した subscription profile の ID。
+	// 空なら「CLI 自身のログイン環境」（従来どおりの既定動作）。
+	// ID を正本にして名前を表示専用にするのは、profile を rename しても過去
+	// セッションの追跡が壊れないようにするため。認証情報は一切含まない。
+	SubscriptionProfileID   string `json:"subscription_profile_id,omitempty"`
+	SubscriptionProfileName string `json:"subscription_profile_name,omitempty"`
+	// UsageProbe is JSON-hidden and marks the short-lived internal session used
+	// to retrieve Claude subscription usage.
+	UsageProbe bool `json:"-"`
+	// SubscriptionLogin is JSON-hidden and marks a vendor-CLI login session.
+	// Hub dismisses it when the login command ends.
+	SubscriptionLogin bool `json:"-"`
 
 	// JSON 外: 状態評価用
 	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
 	approvalVisible   bool
 	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
 	branchCheckedAt   time.Time
+
+	// JSON 外: transcript 停滞検知（transcript_stall.go）。
+	// パス解決はディレクトリ走査を伴うので一度当たったらキャッシュし、以後は stat だけ回す。
+	transcriptPath       string    // 解決済み transcript のパス（未解決なら空）
+	transcriptResolvedAt time.Time // 最後にパス解決を試みた時刻（未解決時の再試行間隔用）
+	transcriptStatAt     time.Time // 最後に stat した時刻
+	transcriptSize       int64     // 直近に観測したサイズ
 
 	// JSON 外: 初期プロンプト注入ゲート。orchestration セッション（conductor / 子）の
 	// spawn 直後〜injectInitialPrompt 完了までユーザー入力を pendingInput へ保留する。
@@ -128,6 +185,9 @@ type session struct {
 	// 期限判定（initialInjectGateMaxAge）に使う。
 	initialInjectPending bool
 	initialInjectGateAt  time.Time
+
+	// JSON 外: project_id は cwd が変わらない限り不変なので 1 度取れたら再取得しない。
+	projectChecked bool
 
 	// JSON 外: git 変更統計（直近の refreshBranchForCWD で取得した値）
 	gitChecked bool
@@ -146,6 +206,26 @@ type session struct {
 
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
 	vt *vtBuffer
+	// JSON 外: Provider が登録時点で custom_providers に実在した id だったか。
+	// 零値 false は「custom ではない」という安全側の既定値になる ―― 大半の
+	// session{} リテラル（テスト含む65箇所超）はこのフィールドを一切知らない
+	// まま書かれるが、それでも isAIProvider(Provider) 側の判定は影響を受けない。
+	// 承認「検出」の可否は必ず sessionApprovalDetectionEligible(ses) 経由で
+	// 読む（isAIProvider(Provider) || ses.customProviderSession）。この値
+	// 単体を「検出できる/できない」の真偽として直接使わない。
+	//
+	// 登録時に一度だけ判定して固定する（wrapperLoop / handleReattach。cfgMu を
+	// 承認検出のホットパスへ持ち込まないため）。isAIProvider 自体はフック注入
+	// スイープ（built-in のみ・承認「検出」とは別物）でも使うため、この値で
+	// 置き換えない — plan_custom-provider-spawn-execution.md 決定事項5。
+	//
+	// 2026-09-01 敵対レビューでの訂正: 当初はこのフィールド自体に
+	// 「isAIProvider(Provider) || custom」を合成して入れる設計だったが、零値
+	// false が「検出しない」を意味してしまい、フィールドを知らない既存の
+	// session{} リテラル（TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource
+	// 等）で built-in provider の承認検出が無音で壊れた。custom 判定だけを
+	// 持たせ、isAIProvider との合成は毎回呼び出し側で行う形に直した。
+	customProviderSession bool
 	// replayEpoch identifies the current terminal restoration stream. It is
 	// independent from approvalSourceEpoch: reflow/replay must not create a
 	// new logical prompt generation.
@@ -163,6 +243,7 @@ type session struct {
 	nativeApprovalTailSig          string
 	nativeApprovalScanQueued       bool
 	nativeApprovalClearMisses      int
+	crossSessionMessageScreenSig   string
 	nativeApprovalConsumed         string
 	nativeApprovalConsumedAt       time.Time
 	approvalMarkerSig              string
@@ -213,6 +294,24 @@ type session struct {
 	workflowCompletionNotified        bool
 	workflowCompletionSignature       string
 
+	// JSON 外: Claude Workflow tasks-output 詳細（内部C1〜C3・agent-transcript
+	// detail feature）。taskId はメイン transcript の Workflow tool_use/
+	// tool_result から特定し（一発トリガー・最大5回リトライ）、特定できたら
+	// tasks output ファイルを mtime 変化検出でポーリングする。result/logs は
+	// いかなる Go 構造体にも proto にも一切載せない（意図的欠落）。
+	// taskDetailUnavailable はセッション単位で一度立ったら再トリガーしない
+	// （5 回失敗＝transcript 形式がこの実装の前提と食い違っている可能性が高く、
+	// 同一セッション内の以降の Workflow 呼び出しでも同じ理由で失敗し続ける）。
+	taskDetailWfDir           string
+	taskDetailSessionUUID     string
+	taskDetailTaskID          string
+	taskDetailResolveAttempts int
+	taskDetailUnavailable     bool
+	taskDetailGeneration      uint64
+	taskDetailTimer           *time.Timer
+	taskDetailFileState       workflowTaskDetailFileState
+	taskDetailProgress        *proto.WorkflowProgress
+
 	// JSON 外: provider-owned structured transcript tail. The path, byte cursor,
 	// and bounded ephemeral parser state are retained only for the live poll;
 	// transcript content is broadcast and never stored in many-ai-cli history.
@@ -223,6 +322,10 @@ type session struct {
 	agentChatGeneration uint64
 	agentChatRunning    bool
 	agentChatLastAt     time.Time
+	// agentChatMissStreak は連続してトランスクリプトを読めなかった poll の回数。
+	// 承認マーカーの供給元をトランスクリプトへ固定したまま戻れなくなるのを防ぐ
+	// 退避路で使う（approval_marker_transcript.go）。
+	agentChatMissStreak int
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int
@@ -230,7 +333,8 @@ type session struct {
 	controllingUI *websocket.Conn
 
 	// JSON 外: 完了サマリー通知の連投抑制用
-	lastDoneNotifyAt time.Time
+	lastDoneNotifyAt      time.Time
+	doneSummaryMarkerSeen bool
 
 	// JSON 外: Review タブ Phase 2 のターン単位 Git スナップショット。
 	// 確定したユーザー入力の直前を start tree、DONE/idle fallback を end tree とし、
@@ -241,6 +345,10 @@ type session struct {
 	gitTurnCaptureDone     chan struct{}
 	gitTurnCaptureWaiters  int
 	gitTurns               []gitTurnSnapshot
+	gitTurnIndexDir        string
+	gitTurnIndexRoot       string
+	gitTurnIndexHead       string
+	gitTurnIndexReady      bool
 
 	// JSON 外: Git タブ「Ask AI」コミットメッセージ生成の待ち受け状態。
 	// 接続中の AI セッションへ生成プロンプトを注入し、PTY 出力から
@@ -255,6 +363,16 @@ type session struct {
 	// セッション単位で累積するスキャンバッファ。commitMsgBuf と同型で上限つき。
 	// マーカー検出（あるいは十分な余白蓄積）でリセットする。
 	doneMsgBuf strings.Builder
+
+	// JSON 外: 看板の意図層・厚い記録（案3 turn-summary、既定 off）の待ち受け状態。
+	// commitMsgAwait と同型（docs/local/plan_session-handoff-board_c3_intent-layer.md
+	// 内部 C3）。reattach で引き継がなくても、待ち受け中のまま置き去りになるだけで
+	// commitMsgAwait 系と同じくタイムアウトで自然に収束するため、
+	// reattach_state.go への追加はしていない。
+	turnSummaryAwait    bool            // マーカー待ち受け中
+	turnSummaryDeadline time.Time       // 待ち受けの打ち切り時刻
+	turnSummaryTurn     int             // 対象の gitTurns 番号（Record.Turn へ載せる）
+	turnSummaryBuf      strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
@@ -285,6 +403,24 @@ type session struct {
 	// copylocks に触れるため。session 生成時に必ず new(sync.Mutex) を設定すること
 	//（未設定＝nil のまま Lock すると nil pointer panic になる）。
 	inputMu *sync.Mutex
+
+	// JSON 外: native approval の送信成功から commit 完了まで保持する予約。
+	// sendNativeApprovalAction は wrapper への送信後に呼び出し元へ戻るため、
+	// inputMu だけでは send と commit の間に同じ承認を別経路が送れてしまう。
+	// 予約の確認・解放は inputMu の内側で sessionsMu を取得する順序に統一する。
+	nativeApprovalActionReserved     bool
+	nativeApprovalActionSig          string
+	nativeApprovalActionCandidateKey string
+	nativeApprovalActionSourceEpoch  uint64
+	nativeApprovalActionWrapper      *wrapperConn
+
+	// JSON 外: 直前に PTY へ書いたのがブラケットペースト本文で、その確定 CR を
+	// 別フレームで待っている状態。UI はチャット本文を「本文」「確定 CR」の 2 通に
+	// 分けて送ってくるため、Hub 側から見ると 1 通に見えない。この印が無いと確定 CR に
+	// waitForSubmitEnterSettle / confirmOrResendSubmitEnter が一切掛からず、
+	// 本文の配送が何らかの理由で遅れた分だけ CR が本文へ密着して内側 CLI に吸収される。
+	// sessionsMu で保護。本文以外の入力を送った時点で下ろす。
+	awaitingSubmitEnter bool
 
 	// JSON 外: Hub が wrapper へ送ったが、pty_input_ack をまだ受け取っていない
 	// 入力。sessionsMu で保護し、wrapper 切断時に resendInput へ移して次の
@@ -400,11 +536,29 @@ func gitChangeStats(cwd string) (files, added, deleted int) {
 // closeOnce guarantees conn.Close is called at most once regardless of how
 // many goroutines detect a dead connection simultaneously.
 type uiConn struct {
-	ws              *websocket.Conn
-	sendMu          sync.Mutex
+	ws     *websocket.Conn
+	sendMu sync.Mutex
+	// authMu serializes the lifetime of an authenticated operation with
+	// revoke-all. A revoke waits for an operation already in progress, then
+	// prevents any later send or queued UI action from using this connection.
+	authMu      sync.RWMutex
+	authRevoked bool
+	// sendFunc is test-only transport injection. Production UI connections
+	// leave it nil and write to ws through websocket.JSON.Send.
+	sendFunc func(any) error
+	// closeFunc is test-only transport injection for zero-value websocket
+	// fixtures. Production connections leave it nil and close ws directly.
+	closeFunc       func()
 	closeOnce       sync.Once
 	activeSessionID int
+	authEpoch       uint64
 	ptySizes        map[int]ptySize
+	// priming prevents live broadcasts from overtaking the snapshot and PTY
+	// replay sent by handleWS. draining keeps the same ordering while the
+	// queued tail is flushed after the initial replay.
+	priming  bool
+	draining bool
+	queued   []any
 }
 
 // broadcastWriteTimeout は UI WebSocket への JSON フレーム書き込みデッドライン。
@@ -420,16 +574,20 @@ func newUIConn(ws *websocket.Conn) *uiConn {
 	return &uiConn{ws: ws, ptySizes: map[int]ptySize{}}
 }
 
-func (c *uiConn) send(m any) error {
-	c.sendMu.Lock()
-	defer c.sendMu.Unlock()
-	return websocket.JSON.Send(c.ws, m)
-}
-
 // sendWithDeadline は deadline までに JSON フレームを送信する（finding #4: 書き込みブロック防止）。
+// UI への全フレームがこの経路を通り、送信ごとに write deadline を張り直す
+// （F-01: sendSnapshot の残存 deadline を replay が引き継いで切断する退行を防ぐ）。
 func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	c.authMu.RLock()
+	defer c.authMu.RUnlock()
+	if c.authRevoked {
+		return errors.New("ui connection revoked")
+	}
+	if c.sendFunc != nil {
+		return c.sendFunc(m)
+	}
 	if err := c.ws.SetWriteDeadline(deadline); err != nil {
 		return err
 	}
@@ -437,7 +595,38 @@ func (c *uiConn) sendWithDeadline(m any, deadline time.Time) error {
 }
 
 func (c *uiConn) close() {
-	c.closeOnce.Do(func() { _ = c.ws.Close() })
+	c.closeOnce.Do(func() {
+		if c.closeFunc != nil {
+			c.closeFunc()
+			return
+		}
+		if c.ws != nil {
+			_ = c.ws.Close()
+		}
+	})
+}
+
+func (c *uiConn) invalidate() {
+	c.authMu.Lock()
+	c.authRevoked = true
+	c.authMu.Unlock()
+	c.close()
+}
+
+// runIfAuthorized runs one operation while revoke-all holds off. The
+// operation may enqueue follow-up work; queued UI input uses this same gate at
+// execution time so a revoke between receive and execution drops it.
+func (c *uiConn) runIfAuthorized(fn func()) bool {
+	if c == nil || fn == nil {
+		return false
+	}
+	c.authMu.RLock()
+	defer c.authMu.RUnlock()
+	if c.authRevoked {
+		return false
+	}
+	fn()
+	return true
 }
 
 // wrapperConn wraps a single wrapper WebSocket connection and serialises all
@@ -445,8 +634,11 @@ func (c *uiConn) close() {
 // notices can be sent from different goroutines, so the raw websocket.Conn must
 // not be written concurrently.
 type wrapperConn struct {
-	ws        *websocket.Conn
-	sendMu    sync.Mutex
+	ws     *websocket.Conn
+	sendMu sync.Mutex
+	// sendFunc is test-only transport injection. Production wrapper connections
+	// leave it nil and write to ws through websocket.JSON.Send.
+	sendFunc  func(any) error
 	closeOnce sync.Once
 	// inputAckSeen は旧 wrapper との互換性ガード。1 件でも ack を受け取った
 	// 接続だけを ack 対応とみなし、未 ack 入力を切断時に差し戻す。
@@ -460,11 +652,17 @@ type wrapperConn struct {
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
 
 func (c *wrapperConn) send(m any) (err error) {
-	if c == nil || c.ws == nil {
+	if c == nil {
 		return fmt.Errorf("wrapper not connected")
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	if c.sendFunc != nil {
+		return c.sendFunc(m)
+	}
+	if c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	// ゼロ値 Conn や切断済みは x/net/websocket が panic することがあるため回収する。
 	defer func() {
 		if r := recover(); r != nil {
@@ -475,11 +673,21 @@ func (c *wrapperConn) send(m any) (err error) {
 }
 
 func (c *wrapperConn) sendWithDeadline(m any, deadline time.Time) (err error) {
-	if c == nil || c.ws == nil {
+	if c == nil {
 		return fmt.Errorf("wrapper not connected")
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	// sendFunc is test-only transport injection (see the field doc on
+	// wrapperConn); mirrors the same check in send() above so a fake wrapper
+	// built with sendFunc (and no real ws) can also be used to test the
+	// deadline-bounded senders (killWrapper / killAllWrappers / handleDismiss).
+	if c.sendFunc != nil {
+		return c.sendFunc(m)
+	}
+	if c.ws == nil {
+		return fmt.Errorf("wrapper not connected")
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("wrapper send failed: %v", r)
@@ -522,16 +730,21 @@ type Server struct {
 	instanceID          string // Hub プロセス起動ごとのランダム ID。UI が Hub 再起動（live session ID の振り直し）を検出するために snapshot に同梱する
 
 	// sessionsMu guards session/connection state (nextID, sessions, wrappers,
-	// uis, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
+	// uis, authEpoch, lastUICols/Rows, idleTimer, idleGen). cfgMu guards s.cfg.
 	// Lock ordering: the two locks are never held simultaneously — snapshot cfg
 	// (snapshotCfg / snapshotLocalModels / idleTimeoutMin) and release cfgMu
 	// before taking sessionsMu.
 	sessionsMu sync.Mutex
-	// agentChatBroadcastMu serializes agent-chat generation invalidation with
-	// generation-checked UI sends. Reattach can replace a session while an old
-	// poll is parsing outside sessionsMu; this lock prevents that old poll from
-	// broadcasting after the replacement is committed.
-	agentChatBroadcastMu sync.Mutex
+	// authEpoch advances only after a persisted revoke-all rotation. It is
+	// checked while registering and processing UI WebSockets; wrappers are
+	// intentionally outside this lifecycle and remain connected.
+	authEpoch uint64
+	// subscriptionRRMu guards subscriptionRR, the per-provider round-robin cursor
+	// used when a spawn asks for the "auto" subscription. It is intentionally not
+	// covered by cfgMu: choosing a profile must not block on config I/O, and a
+	// stale cursor only affects which of several equally valid profiles is picked.
+	subscriptionRRMu sync.Mutex
+	subscriptionRR   map[string]int
 	// Test-only clock injection for deterministic tail-prime deadline cases.
 	agentChatReadClock func() time.Time
 	cfgMu              sync.Mutex
@@ -544,6 +757,26 @@ type Server struct {
 	// flushPendingInput が順番に再送するため、入力が黙って失われない。
 	// sessionsMu で保護。
 	pendingInput map[int][]string
+	// dismissedSessionIDs records explicit dismisses so a wrapper that was
+	// disconnected during the click cannot recreate the session on reattach.
+	// Session IDs are monotonic and are never reused.
+	dismissedSessionIDs map[int]struct{}
+
+	// submitEnter は確定 CR の送出・確認タイミング（input_gate.go）。
+	// ゼロ値は本番既定（submitEnter* 定数）を意味し、テストだけが実時間を
+	// 待たずに経路を検証するために埋める。
+	submitEnter submitEnterTiming
+	// injectSubmitConfirm は初期プロンプト注入後に「入力欄から本文が消えた」を待つ上限
+	// （orchestration.go の confirmInitialPromptSubmitted）。ゼロ値は本番既定
+	// orchestrationSubmitConfirmWait を意味し、テストだけが短縮する。
+	injectSubmitConfirm time.Duration
+
+	// inputChain はセッションごとの入力処理を FIFO で直列化するバトン。
+	// uiLoop は pty_input を同期処理せず、この鎖に繋いだ goroutine へ渡す
+	// （input_gate.go の enqueueInputWork）。値は「その入力の処理が終わったら
+	// 閉じられる channel」で、次の入力はそれを待ってから走る。inputChainMu で保護。
+	inputChainMu sync.Mutex
+	inputChain   map[int]chan struct{}
 
 	slashCmdMu    sync.Mutex
 	slashCmdCache map[string]*slashCmdCacheEntry // key: provider
@@ -566,7 +799,10 @@ type Server struct {
 	netHintHost    string
 	netHintEnvKind string
 
-	usageLinkCache *ttlCache[UsageLinkDefaults]
+	usageLinkCache      *ttlCache[UsageLinkDefaults]
+	subscriptionUsageMu sync.Mutex
+	subscriptionUsage   *subscriptionUsageStore
+	usageProbe          *usageProbeManager
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
@@ -575,6 +811,13 @@ type Server struct {
 	notifyMgr         *notify.Manager
 	oneTapApprovals   *oneTapApprovalManager
 	orchestration     *orchestrationManager
+	// orchestrationAdmissionMu serializes the session snapshot with child-slot
+	// reservations. Preparation and wrapper startup happen after this lock is
+	// released; only admission and reservation-map mutations use it.
+	orchestrationAdmissionMu sync.Mutex
+	// relay holds the replaceable side effects of the relay state machine
+	// (relay.go). Zero value means the production implementations.
+	relay relayDeps
 
 	// 任意リモート PIN（pin_auth.go）。lazy 生成のため pinLim() 経由でアクセスする。
 	pinLimiterMu  sync.Mutex
@@ -590,6 +833,7 @@ type Server struct {
 	whisperInstall   whisperInstallState
 	whisperCmd       *exec.Cmd
 	whisperJob       whisperProcessJob
+	whisperDone      chan struct{}
 	whisperServerURL string
 	// whisperStarting は startManagedWhisper 中の TOCTOU (HUB-3) を防ぐ排他フラグ。
 	// 未起動判定と cmd.Start() の間で別リクエストが並走して二重起動しないよう、
@@ -599,6 +843,9 @@ type Server struct {
 	branchRefreshMu       sync.Mutex
 	branchRefreshSem      chan struct{}
 	branchRefreshInFlight map[string]struct{}
+	// 実行中の cwd に来た再取得依頼の待ち行列。捨てると、その cwd のセッションだけ
+	// project_id が未解決のまま取り残される（branch_refresh.go の規則 2）。
+	branchRefreshPending map[string][]int
 
 	lastUICols int
 	lastUIRows int
@@ -607,6 +854,11 @@ type Server struct {
 
 	stopMu   sync.Mutex
 	stopFunc context.CancelFunc
+
+	// runtimePort is the port actually bound by Run. It is deliberately kept
+	// separate from cfg.Hub.Port so an auto-selected fallback port is never
+	// persisted to config.yaml by a later settings save.
+	runtimePort int
 
 	// serverConns: 内蔵リモート接続マネージャ（SSH/WSL トンネルを Hub 子プロセス
 	// として無窓で抱える）。servers.go 参照。
@@ -640,6 +892,9 @@ type branchRefreshRequest struct {
 func (s *Server) currentHubPort() int {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()
+	if s.runtimePort > 0 {
+		return s.runtimePort
+	}
 	return s.cfg.Hub.Port
 }
 
@@ -692,9 +947,12 @@ var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
 // カードにモデル名を出すため、VT バッファのレンダリング済み行をスキャンする
 // （StripANSI したテキストはカーソル移動由来のスペースが落ちて使えない）。
 //
-// Claude Code: ロゴ 2 行目 "▝▜█████▛▘  Opus 4.8 (1M context) with medium effort · Claude Max"
+// Claude Code: "Claude Code v<版>" 行の次行 "▝▜██████▀  Opus 5 with high effort · Claude Pro"
 //
-//	→ ロゴの後ろを取り、" · <プラン>" と " with <x> effort" を落とす → "Opus 4.8 (1M context)"
+//	→ 行頭のロゴを落とし、" · <プラン>" と " with <x> effort" を外して
+//	  モデル名 "Opus 5" と effort "high" を返す。ロゴのアスキーアートは
+//	  Claude Code の版で変わる（v2.1.246 で "▝▜█████▛▘" → "▝▜██████▀"）ため、
+//	  版が変わっても動く "Claude Code v<数字>" 行を足場にする。
 //
 // Codex CLI:  "│ model:       gpt-5.5 xhigh   /model to change │"
 //
@@ -709,15 +967,18 @@ var reCodexModelChanged = regexp.MustCompile(`Model changed to ([^\r\n]+)`)
 // Cursor Agent: "<cwd> · <branch>" ステータス行の直上の非空行がモデル名
 //
 //	例: "  Auto" / 応答中は "  Auto · 7.4%"（context 使用率サフィックスを落とす）
-const claudeBannerLogoRow2 = "▝▜█████▛▘"
-
 var (
-	reClaudeBannerEffort  = regexp.MustCompile(`\s+with\s+\S+\s+effort$`)
-	reCodexBannerModel    = regexp.MustCompile(`model:\s+(.+?)\s+/model to change`)
-	reCopilotStatusSplit  = regexp.MustCompile(`\s{3,}`)
-	reCopilotEffortSuffix = regexp.MustCompile(`\s+·\s+(?:low|medium|high|xhigh)$`)
-	reCopilotModelLike    = regexp.MustCompile(`^[A-Za-z][\w.\- ()]*\d`)
-	reCursorPercentSuffix = regexp.MustCompile(`\s+·\s+\d+(?:\.\d+)?%$`)
+	// reClaudeBannerVersion は起動バナー 1 行目（ロゴ + "Claude Code v2.1.246"）。
+	// モデル行はこの次の行に来る。
+	reClaudeBannerVersion = regexp.MustCompile(`Claude Code\s+v\d`)
+	// reClaudeBannerLogoPrefix は行頭のロゴ（Block Elements）と空白。
+	reClaudeBannerLogoPrefix = regexp.MustCompile(`^[\s\x{2580}-\x{259F}]+`)
+	reClaudeBannerEffort     = regexp.MustCompile(`\s+with\s+(\S+)\s+effort$`)
+	reCodexBannerModel       = regexp.MustCompile(`model:\s+(.+?)\s+/model to change`)
+	reCopilotStatusSplit     = regexp.MustCompile(`\s{3,}`)
+	reCopilotEffortSuffix    = regexp.MustCompile(`\s+·\s+(low|medium|high|xhigh)$`)
+	reCopilotModelLike       = regexp.MustCompile(`^[A-Za-z][\w.\- ()]*\d`)
+	reCursorPercentSuffix    = regexp.MustCompile(`\s+·\s+\d+(?:\.\d+)?%$`)
 )
 
 // initialModelScanMaxBytes を超えても検出できなければ諦める（バナーは起動直後に出る）。
@@ -778,6 +1039,12 @@ var (
 		[]byte("(esc)"),
 		[]byte("Yes"),
 		[]byte("No"),
+		[]byte("to review"),
+		[]byte("To review"),
+		[]byte("to send"),
+		[]byte("To send"),
+		[]byte("to dismiss"),
+		[]byte("To dismiss"),
 	}
 )
 
@@ -877,17 +1144,25 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		wrappers:              map[int]*wrapperConn{},
 		uis:                   map[*websocket.Conn]*uiConn{},
 		pendingInput:          map[int][]string{},
+		dismissedSessionIDs:   map[int]struct{}{},
 		pinSessions:           map[string]pinCookieSession{},
 		slashCmdCache:         map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
+		subscriptionUsage:     newSubscriptionUsageStore(),
+		usageProbe:            newUsageProbeManager(),
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
 		orchestration:         newOrchestrationManager(),
 		branchRefreshSem:      make(chan struct{}, branchRefreshWorkers),
 		branchRefreshInFlight: map[string]struct{}{},
+		branchRefreshPending:  map[string][]int{},
 		serverConns:           newServerConnManager(logger),
+	}
+	if dir := subscriptionConfigDir(); dir != "" {
+		s.subscriptionUsage.refreshLocal(cfg, dir, time.Now())
+		s.recoverUsageProbes(dir)
 	}
 	if actions, err := newOneTapApprovalManager(); err != nil {
 		return nil, err
@@ -975,6 +1250,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.Handle("/app-entry.js", staticHandler)
 	mux.Handle("/app.js", staticHandler)
 	mux.Handle("/app/", staticHandler)
+	// 製品コードが import する常設プローブ（web/dist/debug/probe.js）。ここから漏れると
+	// "/" のフォールバックが index.html を返し、named import が解決できずモジュール
+	// グラフ全体が評価されない（＝UI の JS が丸ごと死ぬ）。
+	mux.Handle("/debug/", staticHandler)
 	mux.Handle("/styles.css", staticHandler)
 	mux.Handle("/styles/", staticHandler)
 	mux.Handle("/icon.svg", staticHandler)
@@ -994,6 +1273,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
+	// 観測用のルートは maidebug ビルドでだけ登録される（既定ビルドでは空実装）。
+	s.registerProbeRoutes(mux)
 	mux.HandleFunc("/api/mobile-connect", s.handleMobileConnect)
 	mux.HandleFunc("/api/mobile-connect/tailscale", s.handleTailscaleStatus)
 	mux.HandleFunc("/api/mobile-connect/tailscale/serve", s.handleTailscaleServe)
@@ -1029,6 +1310,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/grok-history", s.handleGrokHistory)
 	mux.HandleFunc("/api/session-search", s.handleSessionSearch)
 	mux.HandleFunc("/api/session-history", s.handleSessionHistory)
+	mux.HandleFunc("/api/approval-history", s.handleApprovalHistory)
 	mux.HandleFunc("/api/session-store/reset", s.handleSessionStoreReset)
 	mux.HandleFunc("/api/session-store/prune-transcript-noise", s.handleSessionStorePruneTranscriptNoise)
 	mux.HandleFunc("/api/logs/purge", s.handleLogsPurge)
@@ -1036,9 +1318,17 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/attachments/purge", s.handleAttachmentsPurge)
 	mux.HandleFunc("/api/open-dir", s.handleOpenDir)
 	mux.HandleFunc("/api/idle-timeout", s.handleIdleTimeout)
+	mux.HandleFunc("/api/terminal-color", s.handleTerminalColor)
+	mux.HandleFunc("/api/handoff-intent-mode", s.handleHandoffIntentMode)
+	mux.HandleFunc("/api/handoff", s.handleHandoffList)
+	mux.HandleFunc("/api/handoff/", s.handleHandoffItem)
 	mux.HandleFunc("/api/reconnect-grace", s.handleReconnectGrace)
 	mux.HandleFunc("/api/input-config", s.handleInputConfig)
 	mux.HandleFunc("/api/orchestration-config", s.handleOrchestrationConfig)
+	mux.HandleFunc("/api/subscriptions", s.handleSubscriptions)
+	mux.HandleFunc("/api/subscriptions/", s.handleSubscriptionsItem)
+	mux.HandleFunc("/api/subscription-usage", s.handleSubscriptionUsage)
+	mux.HandleFunc("/api/subscription-usage/probe", s.handleSubscriptionUsageProbe)
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
@@ -1172,7 +1462,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	// 設定ポートが使用中の場合（例: WSL 側 Hub が先に起動済み）は空きポートへ自動移行する。
 	var ln net.Listener
-	basePort := s.currentHubPort()
+	s.cfgMu.Lock()
+	basePort := s.cfg.Hub.Port
+	s.runtimePort = 0
+	s.cfgMu.Unlock()
 	boundPort := basePort
 	for p := basePort; p < basePort+100; p++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", p)
@@ -1180,11 +1473,11 @@ func (s *Server) Run(ctx context.Context) error {
 		ln, e = net.Listen("tcp", addr)
 		if e == nil {
 			boundPort = p
+			s.cfgMu.Lock()
+			s.runtimePort = p
+			s.cfgMu.Unlock()
 			if p != basePort {
 				s.httpSrv.Addr = addr
-				s.cfgMu.Lock()
-				s.cfg.Hub.Port = p
-				s.cfgMu.Unlock()
 				s.logger.Info("preferred port in use, using alternative port", "from", basePort, "to", p)
 			}
 			break
@@ -1210,6 +1503,7 @@ func (s *Server) Run(ctx context.Context) error {
 	// return で必ず消えるよう同期的にも削除する（二重削除は無害）。同じ理由で
 	// hub.state マーカーも defer で必ず消す（プロセスの異常終了以外は消える）。
 	defer func() {
+		s.cleanupGitTurnIndexes()
 		_ = os.Remove(pidPath)
 		// hub-runtime.json は自 PID 記録時のみ削除（新しい Hub が上書き済みなら
 		// 残す）。強制終了の残骸は読み取り側の二重ガードで除外される。
@@ -1233,6 +1527,7 @@ func (s *Server) Run(ctx context.Context) error {
 		AllowLoopbackWithoutToken: cfgSnapshot.Hub.AllowLoopbackWithoutToken,
 		TrustedNetworks:           cfgSnapshot.Hub.TrustedNetworks,
 		AllowedHosts:              cfgSnapshot.Hub.AllowedHosts,
+		RemotePINSet:              strings.TrimSpace(cfgSnapshot.RemotePINHash) != "",
 	}))
 	if s.autoOpenBrowser {
 		_ = s.OpenBrowser()
@@ -1247,14 +1542,28 @@ func (s *Server) Run(ctx context.Context) error {
 		s.injectUsageHooks()
 	}
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
+	// relay.json（relay_store.go）から前回 run の relay を戻す。board ループの開始前・
+	// かつ Serve より前に同期で行う: wrapper は Hub が上がった直後に reattach して
+	// くるので、その時点で relays map に載っていないと子を再同定できない。
+	s.restoreRelays()
 	s.safeGo("orchestration_board_loop", func() { s.orchestrationBoardLoop(runCtx) })
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
+	s.safeGo("clean_orchestration_artifacts", s.cleanOrchestrationArtifacts)
+	s.safeGo("clean_handoff", s.cleanHandoff)
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
+	s.safeGo("custom_approval_patterns_sync", func() { s.syncCustomApprovalPatterns(runCtx) })
+	shutdownDone := make(chan struct{})
 	s.safeGo("shutdown_wait", func() {
+		defer func() {
+			// If one cleanup step panics, safeGo recovers it; still unblock Run
+			// and make sure Serve is not left alive forever.
+			_ = s.httpSrv.Close()
+			close(shutdownDone)
+		}()
 		<-runCtx.Done()
 		if s.approvalRulesEnabled() {
 			s.removeApprovalRules()
@@ -1285,6 +1594,10 @@ func (s *Server) Run(ctx context.Context) error {
 	})
 	err := s.httpSrv.Serve(ln)
 	if errors.Is(err, http.ErrServerClosed) {
+		// Serve can return as soon as Close unblocks the listener, while the
+		// shutdown goroutine is still releasing hooks, tunnels, and the session
+		// store. Keep Run's lifecycle contract synchronous through that cleanup.
+		<-shutdownDone
 		return nil
 	}
 	return err
@@ -1320,15 +1633,42 @@ func OpenBrowserForConfig(cfg *config.Config) error {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// guardBase で token に加え Host 許可リスト検証（DNS リバインディング防御）も通す。
+	// token に加え Host 許可リスト検証（DNS リバインディング防御）も通す。
 	// GET なので CSRF（Origin）追加チェックは課されず、PIN ゲート（guard）は通さない
 	// ので PIN 未入力でも index は返り、フロントが PIN モーダルを出せる。
-	if !s.guardBase(w, r, http.MethodGet) {
+	//
+	// guardBase をここで展開しているのは、未認証の「ページ遷移」にだけ再認証ページを
+	// 返すため。ホーム画面へ追加した PWA の cold launch は token も cookie も無い状態で
+	// 来ることがある（起動 URL は manifest に start_url が無いため追加時のアドレスバーの
+	// URL ＝ util.ts が replaceState で token を消した後の URL になる）。ここで 401 JSON を
+	// 返すとフロントが 1 行も動かず、localStorage に退避してある token を使った復帰が
+	// 始められない。詳細は writeReauthPage のコメント。
+	authed := s.validTokenOrTrustedRemote(requestToken(r), r)
+	if !authed && !wantsHTMLDocument(r) {
+		// プログラム的な取得（curl / fetch / API クライアント）は従来どおり 401 JSON。
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+	if !requireMethodOneOf(w, r, http.MethodGet) {
+		return
+	}
+	if !s.requireAllowedHubHost(w, r) {
+		return
+	}
+	if !authed {
+		writeReauthPage(w)
 		return
 	}
 	// UI が URL から token を除去した後のリロード（token なし GET /）でも
 	// 認証が通るよう、HttpOnly cookie に token を保持させる。
-	// SameSite=Strict によりクロスサイト送信されないため CSRF 経路にはならない。
+	//
+	// SameSite は Lax。Strict だと「ブラウザの外から始まったトップレベル遷移」に
+	// cookie が乗らず、ホーム画面へ追加した PWA を cold launch したときに毎回 401 に
+	// なる（2026-08-17 に iOS で再現。完全終了の直後でも 401 なので経過時間は無関係）。
+	// Lax へ落としても CSRF 防御は落ちない。状態変更系（非 GET）は cookie 属性ではなく
+	// requireAllowedRequestOrigin の Origin / Sec-Fetch-Site 検証が守っており
+	// （guardBase の stateChange 分岐を参照）、Lax はそもそも非 GET のクロスサイト送信を
+	// 許さない。GET は安全側メソッドで状態を変えない。
 	//
 	// ただし Set-Cookie は「有効な token が実際に提示された」要求にのみ行う。
 	// requireToken は allow_loopback_without_token 有効時に token 未提示の loopback
@@ -1345,7 +1685,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			HttpOnly: true,
 			Secure:   requestUsesHTTPS(r),
-			SameSite: http.SameSiteStrictMode,
+			SameSite: http.SameSiteLaxMode,
 			// 永続セッション Cookie 化を避け、失効口を与える。起動毎 token と
 			// 不一致になれば（Hub 再起動で token がローテートされた等）期限切れ後に
 			// 再認証へ倒れる。MaxAge>0 なら Expires も併せて付与される。
@@ -1375,14 +1715,126 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(b)
 }
 
+const (
+	// reauthTokenStorageKey は web/src/app/util.ts の TOKEN_STORAGE_KEY と同じ値。
+	// 再認証ページは localStorage のこのキーから token を読む。片方だけ変えると
+	// 復帰できなくなるので、必ず両方そろえて直すこと。
+	reauthTokenStorageKey = "many-ai-cli-token"
+	// reauthGuardKey は「1 回の起動につき再試行は 1 回だけ」を担保する sessionStorage キー。
+	// 本体アプリが起動できた時点で web/src/app/util.ts が削除するので、次の cold launch
+	// ではまた 1 回試せる。無効な token を保存している端末が無限に往復するのを防ぐ。
+	reauthGuardKey = "many-ai-cli-reauth"
+)
+
+// wantsHTMLDocument はブラウザのページ遷移（ドキュメント要求）かを判定する。
+// 再認証ページを返してよいのはページ遷移だけで、プログラム的な取得
+// （curl / fetch / API クライアント）には従来どおり 401 JSON を返す。
+func wantsHTMLDocument(r *http.Request) bool {
+	if strings.EqualFold(strings.TrimSpace(r.Header.Get("Sec-Fetch-Dest")), "document") {
+		return true
+	}
+	return strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html")
+}
+
+// reauthPageTemplate は未認証のページ遷移へ返す最小の再認証ページ。
+// __NONCE__ / __TOKEN_KEY__ / __GUARD_KEY__ を writeReauthPage が差し替える。
+const reauthPageTemplate = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>many-ai-cli</title>
+<style nonce="__NONCE__">
+body{background:#0e0f12;color:#e6e6e6;font:16px/1.6 system-ui,-apple-system,sans-serif;margin:0;padding:2rem}
+.box{max-width:34rem;margin:0 auto}
+h1{font-size:1.25rem;margin:0 0 1rem}
+code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>many-ai-cli</h1>
+<p id="working">Restoring this device&#39;s session&hellip;</p>
+<div id="failed" class="hide">
+<p>This device is not signed in to the Hub.</p>
+<p>Open the Hub URL that includes <code>?token=</code> once. Settings &gt; Mobile connect shows a QR code for it. After that this app restores the session on its own.</p>
+</div>
+</div>
+<script nonce="__NONCE__">
+(function () {
+  var working = document.getElementById('working');
+  var failed = document.getElementById('failed');
+  function giveUp() {
+    working.className = 'hide';
+    failed.className = '';
+  }
+  var stored = null;
+  try { stored = localStorage.getItem('__TOKEN_KEY__'); } catch (e) { /* private mode 等 */ }
+  if (!stored) { giveUp(); return; }
+  var tried = null;
+  try { tried = sessionStorage.getItem('__GUARD_KEY__'); } catch (e) { /* private mode 等 */ }
+  if (tried) { giveUp(); return; }
+  try { sessionStorage.setItem('__GUARD_KEY__', '1'); } catch (e) { /* private mode 等 */ }
+  var here = location.pathname + location.search + location.hash;
+  fetch('/', {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { 'Authorization': 'Bearer ' + stored }
+  }).then(function (res) {
+    if (res.ok) { location.replace(here); return; }
+    giveUp();
+  }).catch(function () { giveUp(); });
+})();
+</script>
+</body>
+</html>
+`
+
+// writeReauthPage は未認証のページ遷移へ、再認証を試みる最小 HTML を 401 で返す。
+//
+// 狙いは「復帰経路がまったく無い」状態を無くすこと。cookie が届かない・失効した端末に
+// 401 JSON を返すと、ブラウザは JSON を表示するだけでフロントが 1 行も動かず、
+// localStorage に退避してある token（util.ts）を使う機会が永久に来ない。利用者から見ると
+// token 付き URL を探し直す以外に戻る手段が無くなる。このページは Authorization: Bearer で
+// handleIndex を 1 回叩いて cookie を張り直し、元の URL へ戻すだけの役割を持つ。
+//
+// ステータスは 401 のまま変えない（プログラム的な取り扱いを変えないため）。ブラウザは
+// 401 の本文も描画してスクリプトを実行するので、これで両立する。
+// 認証されていない相手なので Set-Cookie も noteRemoteDevice も行わない。
+func writeReauthPage(w http.ResponseWriter) {
+	nonce, err := randomHex(16)
+	if err != nil {
+		// nonce が作れないなら inline script を許可できない。従来の 401 JSON へ倒す。
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
+		return
+	}
+	body := strings.NewReplacer(
+		"__NONCE__", nonce,
+		"__TOKEN_KEY__", reauthTokenStorageKey,
+		"__GUARD_KEY__", reauthGuardKey,
+	).Replace(reauthPageTemplate)
+	h := w.Header()
+	setSecurityHeaders(h)
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store, must-revalidate")
+	// このページ専用の最小 CSP。documentCSP は allowed_hosts を connect-src へ展開するため、
+	// 未認証の相手に設定値を見せないよう静的な CSP に差し替える。nonce は hex なので
+	// そのまま補間して安全。
+	h.Set("Content-Security-Policy",
+		"default-src 'none'; script-src 'nonce-"+nonce+"'; style-src 'nonce-"+nonce+"'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.WriteHeader(http.StatusUnauthorized)
+	_, _ = w.Write([]byte(body))
+}
+
 // wsHandshake は WebSocket ハンドシェイク時に Origin を検証する。
 // 許可: http://127.0.0.1:<port> / http://localhost:<port> / Origin ヘッダ無し（ラッパー等 CLI 由来）。
 // 不一致は handshake エラーで拒否する。
 func (s *Server) wsHandshake(cfg *websocket.Config, req *http.Request) error {
 	s.cfgMu.Lock()
-	port := s.cfg.Hub.Port
 	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
 	s.cfgMu.Unlock()
+	port := s.currentHubPort()
 	if !isAllowedHubHost(req.Host, port, allowedHosts...) {
 		return fmt.Errorf("host not allowed: %s", req.Host)
 	}
@@ -1426,6 +1878,7 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		return
 	}
 	if m.Role == "ui" {
+		authEpoch := s.currentAuthEpoch()
 		// SEC-C: リモートからの UI 接続を記録し、未知デバイスなら本人へ通知する。
 		s.noteRemoteDevice(req, "ws")
 		if m.Cols > 0 && m.Rows > 0 {
@@ -1433,12 +1886,25 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 			s.lastUICols, s.lastUIRows = m.Cols, m.Rows
 			s.sessionsMu.Unlock()
 		}
-		uc, historyItems := s.addUIWithHistory(conn, m.UIActiveSessionID)
+		uc, historyItems := s.addUIWithHistoryAtEpoch(conn, m.UIActiveSessionID, authEpoch)
+		if uc == nil {
+			// revoke-all won the handshake-to-registration race.
+			return
+		}
 		s.claimResizeOwnership(conn, m.UIActiveSessionID, m.Cols, m.Rows)
 		s.sendSnapshot(uc)
 		replaySessionIDs := make([]int, 0, len(historyItems))
 		for _, item := range historyItems {
-			_ = uc.send(item)
+			// Refresh the write deadline per frame. sendSnapshot leaves an
+			// absolute now+broadcastWriteTimeout deadline on the conn and
+			// uc.send does not reset it, so on a slow link (tailscale / SSH
+			// tunnel) a large ptyBuf replay runs past that deadline, the bufio
+			// frame writer sticks on the i/o timeout, and every later write
+			// fails — dropping the UI into a reconnect→re-replay→re-fail loop.
+			if err := uc.sendWithDeadline(item, time.Now().Add(broadcastWriteTimeout)); err != nil {
+				s.removeUI(conn)
+				return
+			}
 			if item.Type == "reattach_replay_done" {
 				replaySessionIDs = append(replaySessionIDs, item.SessionID)
 			}
@@ -1450,9 +1916,12 @@ func (s *Server) handleWS(conn *websocket.Conn) {
 		for _, sessionID := range replaySessionIDs {
 			s.evaluateReplayApproval(sessionID)
 		}
+		if !s.finishUIPriming(uc) {
+			return
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		s.safeGo("ui_ping_loop", func() { s.pingLoop(ctx, uc) })
-		s.uiLoop(conn)
+		s.uiLoopAtEpoch(conn, authEpoch)
 		cancel()
 		return
 	}
@@ -1486,36 +1955,52 @@ func limitWSReceive(conn *websocket.Conn) {
 // extractBannerModel / applyDetectedModel) は C4 追加分割で
 // internal/hub/model_detect.go へ移動した。
 
-func (s *Server) uiLoop(conn *websocket.Conn) {
+// uiLoopAtEpoch は UI WebSocket の受信ループ。認証世代（authEpoch）が進んだら
+// （全アクセス失効）、その接続からのメッセージを処理せず抜ける。
+func (s *Server) uiLoopAtEpoch(conn *websocket.Conn, authEpoch uint64) {
 	for {
+		uc, ok := s.currentUIForAuth(conn, authEpoch)
+		if !ok {
+			return
+		}
 		var m proto.Message
 		if err := websocket.JSON.Receive(conn, &m); err != nil {
 			s.logger.Info("ui WS closed", "err", err)
 			s.removeUI(conn)
 			return
 		}
+		if !s.isCurrentUI(conn, authEpoch) {
+			return
+		}
 		switch m.Type {
 		case "pty_resize":
-			s.handleResizeFromUI(conn, m)
+			uc.runIfAuthorized(func() { s.handleResizeFromUI(conn, m) })
 		case "pty_input":
-			// 入力経路の診断は内容を記録せず、受信状態だけを残す。handleInput は同期呼び出しで、
-			// この for ループが返るまで同じ UI 接続の後続メッセージ（= 確定 \r）を
-			// 受信できない。recv の刻みが無いとその待ちが測れない。
-			s.logger.Info("input_trace",
-				"stage", "recv",
-				"session_id", m.SessionID,
-				"bytes", len(m.Text),
-				"ts_ns", time.Now().UnixNano())
-			s.claimResizeOwnership(conn, m.SessionID, 0, 0)
-			s.handleInput(m)
+			// handleInput は Git ターン開始スナップショット（captureGitTurnStart）を
+			// 同期で回すため、大きい worktree では数秒返らない。ここで直接呼ぶと
+			// その間この for ループが止まり、同じ UI 接続の後続メッセージ
+			// （確定 \r・他セッションへの入力・承認回答）を一切受信できない。
+			// 溜まった分は解放と同時にまとめて PTY へ流れ、確定 \r が本文へ密着して
+			// 内側 CLI に吸収される（2026-08-30 実測: 記事・画像を抱えた作業用 repo で
+			// 3.4 秒。本文と CR と Ctrl+U が 2ms 以内に着弾して送信が消えた）。
+			// セッション単位の FIFO へ渡し、受信ループは即座に次を読む。
+			uc.runIfAuthorized(func() { s.claimResizeOwnership(conn, m.SessionID, 0, 0) })
+			s.enqueueInputWork(m.SessionID, func() {
+				if !s.isCurrentUI(conn, authEpoch) {
+					return
+				}
+				uc.runIfAuthorized(func() { s.handleInput(m) })
+			})
 		case "ui_active_session":
-			s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows)
+			uc.runIfAuthorized(func() { s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows) })
 		case "session_hint":
-			s.handleHint(m)
+			uc.runIfAuthorized(func() { s.handleHint(m) })
 		case "approval_consumed":
-			s.handleConsumed(m)
+			uc.runIfAuthorized(func() { s.handleConsumed(m) })
 		case "session_history_reset":
-			if s.handleHistoryReset(m) {
+			reset := false
+			uc.runIfAuthorized(func() { reset = s.handleHistoryReset(m) })
+			if reset {
 				continue
 			}
 		case "session_dismiss":
@@ -1529,11 +2014,15 @@ func (s *Server) uiLoop(conn *websocket.Conn) {
 				uiUA = req.UserAgent()
 			}
 			s.logger.Info("ui session_dismiss received", "session_id", m.SessionID, "ui_addr", uiAddr, "ui_ua", uiUA)
-			if s.handleDismiss(m) {
+			dismissed := false
+			uc.runIfAuthorized(func() { dismissed = s.handleDismiss(m) })
+			if dismissed {
 				continue
 			}
 		case "attach_request":
-			if s.handleAttachRequest(m) {
+			attached := false
+			uc.runIfAuthorized(func() { attached = s.handleAttachRequest(m) })
+			if attached {
 				continue
 			}
 		}
@@ -1769,14 +2258,35 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 // 理由: inject 中 dismiss → 後続 session_update で UI だけ幽霊化したケースや、
 // session_removed 取りこぼし後の再 × で、UI が永遠に消えないのを防ぐ。
 func (s *Server) handleDismiss(m proto.Message) (skip bool) {
+	// C5 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): a
+	// session holding an undecided spawn confirmation must not be dismissed
+	// out from under it — the child-spawn decision the confirmation is
+	// waiting on would become permanently unanswerable (registerSpawnConfirmation
+	// keeps at most one confirmation per parent+role, so there is nowhere else
+	// for that decision to land). The UI's own × disabling and
+	// requestSessionDismiss short-circuit are best-effort fast paths; this
+	// check is the actual gate, since session_dismiss can also arrive from an
+	// automatic dismiss path or another connected browser that never saw
+	// those UI-side guards. Checked before touching sessionsMu so this never
+	// nests inside it (orchestration.mu is acquired here, sessionsMu below).
+	if s.hasPendingSpawnConfirmation(m.SessionID) {
+		s.logger.Info("session dismiss refused: pending spawn confirmation", "session_id", m.SessionID)
+		s.broadcast(proto.Message{Type: "session_dismiss_refused", SessionID: m.SessionID})
+		return true
+	}
 	s.sessionsMu.Lock()
 	wc := s.wrappers[m.SessionID]
+	if wc == nil {
+		s.markSessionDismissedLocked(m.SessionID)
+	}
 	_, exists := s.sessions[m.SessionID]
 	var historyToClose *sessionlog.Writer
 	var jsonlPathForTranscript string
-	var endedProvider, endedCWD string
+	var endedProvider, endedCWD, endedCodexHome, endedClaudeDir string
 	var endedWorktree normalWorktree
 	var endedWorktreeCleanup string
+	var endedUsageProbe bool
+	var endedGitTurnIndexDir string
 	if exists {
 		ses := s.sessions[m.SessionID]
 		s.stopAgentChatTailLocked(ses)
@@ -1784,8 +2294,12 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
 		endedCWD = ses.CWD
+		endedCodexHome = ses.CodexHome
+		endedClaudeDir = ses.ClaudeDir
+		endedUsageProbe = ses.UsageProbe
 		endedWorktree = ses.NormalWorktree
 		endedWorktreeCleanup = ses.WorktreeCleanup
+		endedGitTurnIndexDir = ses.gitTurnIndexDir
 		ses.History = nil
 		delete(s.sessions, m.SessionID)
 		delete(s.wrappers, m.SessionID)
@@ -1794,6 +2308,17 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
+	removeGitTurnIndexDir(endedGitTurnIndexDir)
+	// The hasPendingSpawnConfirmation guard above already refused this dismiss
+	// for any parent that had a confirmation pending when the request arrived,
+	// so this normally finds nothing. It remains the safety net for a
+	// confirmation registered in the race window between that check and this
+	// point: such a confirmation cannot be answered by a human anymore (the
+	// session it belonged to is gone below), and its disappearance is not a
+	// person clicking refuse, so it is expired separately from the
+	// user_refusal path (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md
+	// C1 / C5).
+	s.expireSpawnConfirmationsForParent(m.SessionID, "dismiss")
 	if !exists {
 		// map には無いが UI 側に残っている幽霊カードを落とす。
 		s.logger.Info("session dismiss (already gone)", "session_id", m.SessionID)
@@ -1840,13 +2365,15 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if historyToClose != nil {
 		_ = historyToClose.Close()
 	}
-	s.removeInactiveApprovalRules(providerApprovalRuleTargets(endedProvider, endedCWD))
+	s.removeInactiveApprovalRules(providerApprovalRuleTargetsWithHomes(endedProvider, endedCWD, endedCodexHome, endedClaudeDir))
 	s.removeInactiveUsageHooks(endedProvider, endedCWD)
 	if err := cleanupNormalWorktree(endedWorktree, endedWorktreeCleanup); err != nil {
 		s.logger.Warn("worktree retained after session dismissal", "path", endedWorktree.Path, "err", err)
 	}
 	s.finalizeTranscript(m.SessionID, jsonlPathForTranscript)
-	s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
+	if !endedUsageProbe {
+		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
+	}
 	return false
 }
 
@@ -1927,14 +2454,17 @@ func isDigitsOnly(s string) bool {
 	return true
 }
 
+func (s *Server) sessionLogEnabled() bool {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	return s.cfg.Log.SessionEnabled
+}
+
 func (s *Server) writeHistory(sessionID int, event map[string]any) {
 	// セッションログが無効（既定）なら .jsonl・SQLite いずれにも本文を残さない。
 	// .log の抑止は wrapper 側、.jsonl writer の不生成は wrapperLoop/reattachLoop 側で
 	// 行うが、SQLite の StoreEvent もここを通るため一括でゲートする。
-	s.cfgMu.Lock()
-	sessionLogEnabled := s.cfg.Log.SessionEnabled
-	s.cfgMu.Unlock()
-	if !sessionLogEnabled {
+	if !s.sessionLogEnabled() {
 		return
 	}
 	s.sessionsMu.Lock()

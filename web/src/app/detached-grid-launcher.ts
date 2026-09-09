@@ -321,7 +321,7 @@ export function openDetachedGridLauncher(opts?: {
 
   const overlay = document.createElement('div');
   overlay.id = 'detached-grid-launcher-overlay';
-  overlay.className = 'detached-grid-launcher-overlay';
+  overlay.className = 'detached-grid-launcher-overlay aac-wheel-overlay';
 
   const tw = typeof window.t === 'function' ? window.t : (k: string, fb?: string) => fb || k;
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/hubruntime"
 	hublog "many-ai-cli/internal/log"
 	"many-ai-cli/internal/proto"
 )
@@ -22,20 +23,56 @@ func (s *Server) handleKillAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logger.Info("kill all wrappers requested via UI")
-	s.killAllWrappers()
+	s.killAllWrappers("kill_all")
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
-func (s *Server) killAllWrappers() {
+func (s *Server) killAllWrappers(reason string) {
 	s.sessionsMu.Lock()
-	conns := make([]*wrapperConn, 0, len(s.wrappers))
-	for _, wc := range s.wrappers {
-		conns = append(conns, wc)
+	ids := make([]int, 0, len(s.wrappers))
+	for id := range s.wrappers {
+		ids = append(ids, id)
 	}
 	s.sessionsMu.Unlock()
-	for _, wc := range conns {
-		wc.close()
+	// killWrapper sends-then-closes one connection at a time rather than the
+	// previous "send to all, then close all" two-phase loop. This does not
+	// change what any single wrapper observes (it still gets the dismiss
+	// message before its own connection closes); it only changes the
+	// interleaving across different wrappers, which are independent
+	// connections (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md
+	// C3 — same stop logic used once instead of twice).
+	for _, id := range ids {
+		s.killWrapper(id, reason)
 	}
+}
+
+// killWrapper stops a single session's wrapper without the full session
+// teardown handleDismiss performs (no worktree cleanup, no session removal
+// from s.sessions): it tells that one wrapper to end itself
+// (proto.TypeSessionDismissed, matching handleDismiss's own SessionID usage
+// for log/JSONL traceability) and closes the connection. The wrapper does
+// not itself look at SessionID (one wrapper is always exactly one session),
+// so this only ever affects the targeted session's own connection.
+//
+// Used by the orchestration startup-failure path (C3,
+// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md) so a child
+// that never produced anything stops taking up a slot, without touching any
+// worktree the way a dismiss would (D10). Returns false if no wrapper was
+// connected for sessionID (nothing to stop).
+func (s *Server) killWrapper(sessionID int, reason string) bool {
+	s.sessionsMu.Lock()
+	wc := s.wrappers[sessionID]
+	s.sessionsMu.Unlock()
+	if wc == nil {
+		return false
+	}
+	_ = wc.sendWithDeadline(proto.Message{
+		Type:      proto.TypeSessionDismissed,
+		SessionID: sessionID,
+		Reason:    reason,
+	}, time.Now().Add(500*time.Millisecond))
+	wc.close()
+	return true
 }
 
 func (s *Server) handleShutdown(w http.ResponseWriter, r *http.Request) {
@@ -307,9 +344,7 @@ func IsRunning(cfg *config.Config) bool {
 // this config's token. It checks the configured port first, then falls back
 // to hub-runtime.json with the double guard (PID alive + /api/info probe).
 func runningHubPort(cfg *config.Config) (int, bool) {
-	return runningHubPortWith(cfg, pidAlive, func(port int) bool {
-		return probeHubInfo(port, cfg.Token, hubProbeTimeout)
-	})
+	return hubruntime.RunningPort(cfg.Hub.Port, cfg.Token)
 }
 
 // runningHubPortWith is runningHubPort with injectable alive/probe for tests.
@@ -317,36 +352,7 @@ func runningHubPort(cfg *config.Config) (int, bool) {
 // foreign Hub (e.g. a remote Hub behind an SSH tunnel with a different
 // token) occupying a recorded port is never reported as "running".
 func runningHubPortWith(cfg *config.Config, alive func(pid int) bool, probe func(port int) bool) (int, bool) {
-	if probe(cfg.Hub.Port) {
-		return cfg.Hub.Port, true
-	}
-	rt, err := readHubRuntime()
-	if err != nil || rt == nil {
-		return 0, false
-	}
-	if !alive(rt.PID) {
-		// PID が死んでいる残骸だけ掃除する。probe 失敗のみ（PID 生存）は
-		// 一時的な無応答の可能性があるためファイルを残す。
-		removeHubRuntimeIfPID(rt.PID)
-		return 0, false
-	}
-	if rt.Port == cfg.Hub.Port || !probe(rt.Port) {
-		return 0, false
-	}
-	return rt.Port, true
-}
-
-// probeHubInfo reports whether a Hub answers 200 to /api/info on port with
-// token within timeout.
-func probeHubInfo(port int, token string, timeout time.Duration) bool {
-	url := localHubURL(port, "/api/info", token)
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(url)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	return hubruntime.RunningPortWith(cfg.Hub.Port, alive, probe)
 }
 
 func PrintStatus(cfg *config.Config) error {

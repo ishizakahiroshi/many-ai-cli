@@ -4,10 +4,11 @@
 
 import { t } from '../i18n.js';
 import { orderSessions, sessions, approvalVisibleCache, multiQuestionVisibleCache, activeSessionId, set_activeSessionId } from './state.js';
-import { activateSession, providerIconHtml } from './session-list.js';
+import { activateSession, moveSessionToSiblingFront, providerIconHtml } from './session-list.js';
 import { sessionTitle } from './approval-queue-tab.js';
 import { openServerModal } from './server-modal.js';
 import { escapeHtml } from './util.js';
+import { getSessionAgentInfo } from './token-statusbar.js';
 
 const mobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
   ? window.matchMedia('(max-width: 720px)')
@@ -205,10 +206,10 @@ function projectName(id: number): string {
 }
 
 function providerModelText(id: number): string {
-  const s = sessions.get(id);
-  const provider = String(s?.provider || 'unknown');
-  const model = String(s?.model || '').trim();
-  return model ? `${provider} · ${model}` : provider;
+  // PC 側（カード / タブチップ / ステータスバー）と同じ getSessionAgentInfo を通す。
+  const info = getSessionAgentInfo(id);
+  const provider = info.provider || 'unknown';
+  return [provider, info.model, info.effort].filter(Boolean).join(' · ');
 }
 
 // P-25 monitoring home deliberately has no direct Yes/No controls. A pending
@@ -254,6 +255,24 @@ function buildMonitoringRow(id: number): HTMLElement {
   chip.className = `mh-state-chip mh-state-chip--${bucket}`;
   chip.textContent = statusChipText(bucket);
   status.appendChild(chip);
+
+  // スマホには D&D が無いので、優先度をいじる手段はここだけになる。
+  // 器（プロジェクト、または親セッション）の中で先頭へ動かす。
+  const front = document.createElement('span');
+  front.className = 'mh-front-btn';
+  front.setAttribute('role', 'button');
+  front.setAttribute('tabindex', '0');
+  front.textContent = '⇧';
+  front.title = t('session_move_front');
+  front.setAttribute('aria-label', front.title);
+  front.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    moveSessionToSiblingFront(id);
+    renderMobileHome();
+  });
+  status.appendChild(front);
+
   row.append(main, status);
   // タップは #mobile-home への委譲 (bindMhSessionTapRoot) が処理する。
   return row;
@@ -399,17 +418,9 @@ function renderMobileHomeResults(): void {
   summary.textContent = t('mobile_home_section_pending_count', { n: pendingCount });
   results.appendChild(summary);
 
-  const pinnedIds = allIds.filter(id => !!sessions.get(id)?.pinned);
-  if (pinnedIds.length > 0) {
-    const pinned = document.createElement('section');
-    pinned.id = 'mobile-home-pinned';
-    pinned.className = 'mh-section mh-section--pinned';
-    pinned.appendChild(buildSectionHeader('mobile_pinned_sessions'));
-    for (const id of pinnedIds) pinned.appendChild(buildMonitoringRow(id));
-    results.appendChild(pinned);
-  }
-
-  const remainingIds = allIds.filter(id => !sessions.get(id)?.pinned);
+  // ピン留めだけを集めた節は廃止した。所属（どのプロジェクトの下か）を画面から
+  // 消してしまうため。優先度は各行の「先頭へ」でプロジェクトの中を並べ替える。
+  const remainingIds = allIds;
   if (remainingIds.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'mh-empty mh-empty--compact';
@@ -431,7 +442,7 @@ export function updateMobileHomeCard(id: number) {
   if (!isMobileViewport()) return;
   const container = document.getElementById('mobile-home');
   if (!container) return;
-  // A session can cross the pinned/project/filter boundaries, so a complete
+  // A session can cross the project/filter boundaries, so a complete
   // monitoring-list refresh is safer than replacing one row in place.
   renderMobileHome();
 }
@@ -565,7 +576,12 @@ function renderMobileDrawerResults(): void {
   settings.type = 'button';
   settings.className = 'mobile-drawer-action';
   settings.textContent = t('mobile_drawer_settings_server');
-  settings.addEventListener('click', () => {
+  settings.addEventListener('click', (e) => {
+    // 設定パネルは settings.ts が document の click で「外側クリック → 閉じる」を見ている。
+    // ここで自分の click を止めないと、転送した click でパネルが開いた直後に
+    // 元の click が document まで上がって同じ dispatch 内で閉じられる（＝押しても何も起きない）。
+    // 同じ理由で usage-panel.ts の転送元も stopPropagation している。
+    e.stopPropagation();
     (window as any).closeMobileSessionDrawer?.();
     document.getElementById('settings-btn')?.click();
   });

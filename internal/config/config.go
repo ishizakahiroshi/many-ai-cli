@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 
@@ -20,6 +21,42 @@ import (
 )
 
 const DirMode os.FileMode = 0o700
+
+// DefaultUsageProbeModel is the low-cost model used by the Claude usage probe.
+// It is kept in user preferences rather than resources/models because the
+// latter is a remotely refreshed execution resource.
+const DefaultUsageProbeModel = "claude-haiku-4-5"
+
+// ValidUsageProbeModel accepts the same safe, single-argument shape used for
+// provider model selection. The value is passed directly to exec.Command, but
+// rejecting shell metacharacters and whitespace keeps malformed config from
+// becoming an ambiguous provider argument.
+func ValidUsageProbeModel(raw string) bool {
+	model := strings.TrimSpace(raw)
+	if model == "" {
+		return false
+	}
+	for _, r := range model {
+		if r < 0x20 || r == 0x7f || unicode.IsSpace(r) {
+			return false
+		}
+		switch r {
+		case '"', '\'', '|', '&', '>', '<', '^', '%', '(', ')', ';', '`', '$':
+			return false
+		}
+	}
+	return true
+}
+
+// EffectiveUsageProbeModel trims a valid configured value and otherwise
+// returns the explicit, documented default.
+func EffectiveUsageProbeModel(raw string) string {
+	model := strings.TrimSpace(raw)
+	if !ValidUsageProbeModel(model) {
+		return DefaultUsageProbeModel
+	}
+	return model
+}
 
 // Dir は ~/.many-ai-cli ディレクトリのパスを返す。
 func Dir() (string, error) {
@@ -65,6 +102,90 @@ type LogConfig struct {
 	AttachmentMaxTotalMB int `yaml:"attachment_max_total_mb" json:"attachment_max_total_mb"`
 }
 
+// HandoffConfig controls the session handoff record store
+// (internal/handoff). See that package's doc comment for what a record can
+// and cannot contain.
+//
+// This is a separate config block from LogConfig on purpose: LogConfig's
+// SessionRetentionDays governs the raw PTY/session log (kept local,
+// off by default, may contain secrets in plain text), while a handoff record
+// is meant to leave the machine — a different AI CLI reads it later — so it
+// gets its own, independently configured retention
+// (docs/local/plan_session-handoff-board.md 方針 B2 = 14 days).
+type HandoffConfig struct {
+	// Enabled: 既定 true（未設定時）。false にすると Append は一切呼ばれず、
+	// 1 バイトも書かれない。ポインタなのは Orchestration.WorktreeAuto と同じ理由
+	// （yaml 上で「未設定」と「false」を区別するため。bool のゼロ値は false なので、
+	// 素の bool だと空の handoff: {} セクションが意図せず無効化してしまう）。
+	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	// RetentionDays: 既定 14。この日数を過ぎた handoff ファイルは Hub の定期処理
+	// （internal/hub/maintenance.go の cleanHandoff）が削除する。Enabled が false
+	// でも削除自体は動く（無効化後に残った古いファイルを永久に残さないため）。
+	RetentionDays int `yaml:"retention_days,omitempty" json:"retention_days,omitempty"`
+	// IntentMode: 既定 HandoffIntentModeDoneOnly（案 2）。
+	// HandoffIntentModeTurnSummary（案 3）にすると、ターンが終わるたびに現在の
+	// セッションへ短い要約プロンプトを注入し、専用マーカーで拾って
+	// kind=turn_summary として看板へ書く（internal/hub/handoff.go）。
+	// **既定 off の理由**: 同じセッションのトークンを消費し、ターンごとに 1
+	// 往復増えるため。トークンに余裕のある利用者だけが on にする
+	// （docs/local/plan_session-handoff-board.md 方針 A1 案 3）。
+	IntentMode string `yaml:"intent_mode,omitempty" json:"intent_mode,omitempty"`
+	// NotifyRemainingPercent: 残量がこの % を下回ったら、そのセッションについて
+	// 1 回だけ引き継ぎの通知を出す（子 plan: docs/local/plan_session-handoff-board_c5_handoff-md.md
+	// 内部 C2）。既定 10（未設定・0 以下）。方針 B1「人が起動を押す」の入口の
+	// ひとつで、通知はあくまで promptで、自動では何も起動しない。RetentionDays
+	// と同じ「0 以下は既定」の扱いにする（明示的な無効化スイッチは別に持たない
+	// — 誤発火の実害が出たら、この 1 値を上げるだけで足りる）。
+	NotifyRemainingPercent int `yaml:"notify_remaining_percent,omitempty" json:"notify_remaining_percent,omitempty"`
+}
+
+// Handoff intent_mode の 2 値。文字列を直書きさせず、この定数と
+// NormalizeHandoffIntentMode 経由でだけ扱う（TerminalColor と同じ扱い）。
+const (
+	HandoffIntentModeDoneOnly    = "done-only"
+	HandoffIntentModeTurnSummary = "turn-summary"
+)
+
+// NormalizeHandoffIntentMode は未知の値・空を既定（done-only）へ丸める。
+func NormalizeHandoffIntentMode(v string) string {
+	if v == HandoffIntentModeTurnSummary {
+		return HandoffIntentModeTurnSummary
+	}
+	return HandoffIntentModeDoneOnly
+}
+
+// TurnSummaryEnabled reports whether the thicker per-turn recording (案 3) is
+// on. This is the single choke point internal/hub/handoff.go reads before
+// injecting a turn-summary prompt.
+func (h HandoffConfig) TurnSummaryEnabled() bool {
+	return NormalizeHandoffIntentMode(h.IntentMode) == HandoffIntentModeTurnSummary
+}
+
+// EnabledOrDefault returns whether handoff recording is enabled, defaulting
+// to true when unset.
+func (h HandoffConfig) EnabledOrDefault() bool {
+	return h.Enabled == nil || *h.Enabled
+}
+
+// RetentionDaysOrDefault returns the configured retention in days, defaulting
+// to 14 when unset or non-positive.
+func (h HandoffConfig) RetentionDaysOrDefault() int {
+	if h.RetentionDays <= 0 {
+		return 14
+	}
+	return h.RetentionDays
+}
+
+// NotifyRemainingPercentOrDefault returns the configured threshold,
+// defaulting to 10 when unset or non-positive (子 plan 内部 C2「既定は保守的
+// にする」).
+func (h HandoffConfig) NotifyRemainingPercentOrDefault() int {
+	if h.NotifyRemainingPercent <= 0 {
+		return 10
+	}
+	return h.NotifyRemainingPercent
+}
+
 // ApprovalConfig は Hub 承認ボタン機能の設定。
 type ApprovalConfig struct {
 	Enabled          bool `yaml:"enabled"`
@@ -80,6 +201,7 @@ type SlashCmdSources struct {
 	CursorAgent string `yaml:"cursor-agent" json:"cursor-agent"`
 	Opencode    string `yaml:"opencode" json:"opencode"`
 	Grok        string `yaml:"grok" json:"grok"`
+	CommandCode string `yaml:"command-code" json:"command-code"`
 }
 
 const (
@@ -90,6 +212,7 @@ const (
 	DefaultCursorAgentSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md"
 	DefaultOpenCodeSlashCmdSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md"
 	DefaultGrokSlashCmdSource        = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/grok.md"
+	DefaultCommandCodeSlashCmdSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/command-code.md"
 )
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json"
@@ -108,6 +231,7 @@ func DefaultSlashCmdSources() SlashCmdSources {
 		CursorAgent: DefaultCursorAgentSlashCmdSource,
 		Opencode:    DefaultOpenCodeSlashCmdSource,
 		Grok:        DefaultGrokSlashCmdSource,
+		CommandCode: DefaultCommandCodeSlashCmdSource,
 	}
 }
 
@@ -134,6 +258,9 @@ func EffectiveSlashCmdSources(src SlashCmdSources) SlashCmdSources {
 	if src.Grok == "" {
 		src.Grok = defaults.Grok
 	}
+	if src.CommandCode == "" {
+		src.CommandCode = defaults.CommandCode
+	}
 	return src
 }
 
@@ -146,6 +273,7 @@ type ApprovalPatternSources struct {
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
 	Grok        string `yaml:"grok,omitempty" json:"grok,omitempty"`
+	CommandCode string `yaml:"command-code,omitempty" json:"command-code,omitempty"`
 	Common      string `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -157,6 +285,7 @@ const (
 	DefaultCommonApprovalPatternSource      = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/common.md"
 	DefaultOpenCodeApprovalPatternSource    = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/opencode.md"
 	DefaultGrokApprovalPatternSource        = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/grok.md"
+	DefaultCommandCodeApprovalPatternSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/command-code.md"
 )
 
 func DefaultApprovalPatternSources() ApprovalPatternSources {
@@ -167,6 +296,7 @@ func DefaultApprovalPatternSources() ApprovalPatternSources {
 		CursorAgent: DefaultCursorAgentApprovalPatternSource,
 		Opencode:    DefaultOpenCodeApprovalPatternSource,
 		Grok:        DefaultGrokApprovalPatternSource,
+		CommandCode: DefaultCommandCodeApprovalPatternSource,
 		Common:      DefaultCommonApprovalPatternSource,
 	}
 }
@@ -191,6 +321,9 @@ func EffectiveApprovalPatternSources(src ApprovalPatternSources) ApprovalPattern
 	if src.Grok == "" {
 		src.Grok = defaults.Grok
 	}
+	if src.CommandCode == "" {
+		src.CommandCode = defaults.CommandCode
+	}
 	if src.Common == "" {
 		src.Common = defaults.Common
 	}
@@ -213,6 +346,7 @@ type ApprovalProfiles struct {
 	CursorAgent ApprovalProfileName `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 	Opencode    ApprovalProfileName `yaml:"opencode,omitempty" json:"opencode,omitempty"`
 	Grok        ApprovalProfileName `yaml:"grok,omitempty" json:"grok,omitempty"`
+	CommandCode ApprovalProfileName `yaml:"command-code,omitempty" json:"command-code,omitempty"`
 	Common      ApprovalProfileName `yaml:"common,omitempty"  json:"common,omitempty"`
 }
 
@@ -225,6 +359,7 @@ func DefaultApprovalProfiles() ApprovalProfiles {
 		CursorAgent: ApprovalProfileOfficial,
 		Opencode:    ApprovalProfileOfficial,
 		Grok:        ApprovalProfileOfficial,
+		CommandCode: ApprovalProfileOfficial,
 		Common:      ApprovalProfileOfficial,
 	}
 }
@@ -248,6 +383,9 @@ func EffectiveApprovalProfiles(p ApprovalProfiles) ApprovalProfiles {
 	}
 	if p.Grok == "" {
 		p.Grok = ApprovalProfileOfficial
+	}
+	if p.CommandCode == "" {
+		p.CommandCode = ApprovalProfileOfficial
 	}
 	if p.Common == "" {
 		p.Common = ApprovalProfileOfficial
@@ -282,6 +420,10 @@ func (p ApprovalProfiles) For(provider string) ApprovalProfileName {
 		if p.Grok != "" {
 			return p.Grok
 		}
+	case "command-code":
+		if p.CommandCode != "" {
+			return p.CommandCode
+		}
 	case "common":
 		if p.Common != "" {
 			return p.Common
@@ -305,6 +447,8 @@ func (p ApprovalProfiles) WithProvider(provider string, name ApprovalProfileName
 		p.Opencode = name
 	case "grok":
 		p.Grok = name
+	case "command-code":
+		p.CommandCode = name
 	case "common":
 		p.Common = name
 	}
@@ -386,6 +530,7 @@ type UserPrefsUsageLinks struct {
 	CursorAgent string `yaml:"cursor-agent,omitempty" json:"cursor-agent,omitempty"`
 	Opencode    string `yaml:"opencode,omitempty" json:"opencode,omitempty"`
 	Grok        string `yaml:"grok,omitempty" json:"grok,omitempty"`
+	CommandCode string `yaml:"command-code,omitempty" json:"command-code,omitempty"`
 }
 
 // UserPrefsVoice は音声入力の設定。
@@ -404,6 +549,17 @@ type UserPrefsSpawn struct {
 	LastModel       map[string]string `yaml:"last_model,omitempty"        json:"last_model,omitempty"`
 	WorktreeAuto    bool              `yaml:"worktree_auto,omitempty"     json:"worktree_auto,omitempty"`
 	WorktreeCleanup string            `yaml:"worktree_cleanup,omitempty"  json:"worktree_cleanup,omitempty"`
+	// DelegationAuto は「子セッションへ委譲できることを AI に伝える」の既定値。
+	// 既定 false（opt-in）。止めているのは AI が委譲を知るかどうかだけで、
+	// `orchestrate` サブコマンド自体は全セッションで動く。安全策ではなく常駐文脈の
+	// コスト削減が目的（正本は internal/wrapper/delegation.go の冒頭）。
+	DelegationAuto bool `yaml:"delegation_auto,omitempty"   json:"delegation_auto,omitempty"`
+	// RoleProvider は「その役割の子を前回どの provider で起こしたか」の記憶。
+	// key は role（`review` / `implementation` …）、value は provider 名。
+	// 委譲のたびに provider を聞かれるのを避けるためのもので、実際に起動した値
+	// （承認ダイアログで書き換えられた後の値）を Hub が書き戻す。
+	// 解決順の正本は internal/hub/orchestration.go の resolveChildProvider。
+	RoleProvider map[string]string `yaml:"role_provider,omitempty"     json:"role_provider,omitempty"`
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
@@ -548,24 +704,33 @@ func sessionOrderFromAny(raw []any) SessionOrderIDs {
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
-	Trigger                  UserPrefsTrigger                  `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
-	NotifySound              UserPrefsNotifySound              `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
-	DesktopNotifications     UserPrefsDesktopNotifications     `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
-	PushNotifications        UserPrefsPushNotifications        `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
-	Approval                 UserPrefsApproval                 `yaml:"approval,omitempty"     json:"approval,omitempty"`
-	QuickCmds                UserPrefsQuickCmds                `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
-	Templates                []UserPrefsTemplate               `yaml:"templates,omitempty"    json:"templates,omitempty"`
-	TemplateSend             UserPrefsTemplateSend             `yaml:"template_send,omitempty" json:"template_send,omitempty"`
-	UsageLinks               UserPrefsUsageLinks               `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
-	Voice                    UserPrefsVoice                    `yaml:"voice,omitempty"        json:"voice,omitempty"`
-	SessionOrder             SessionOrderIDs                   `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
-	GroupOrder               []string                          `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
-	ProjectFavorites         []string                          `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
-	CwdHistory               []string                          `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
-	CwdFavorites             []string                          `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
-	Spawn                    UserPrefsSpawn                    `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
-	Display                  UserPrefsDisplay                  `yaml:"display,omitempty"          json:"display,omitempty"`
-	MigratedFromLocalstorage bool                              `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	Trigger              UserPrefsTrigger              `yaml:"trigger,omitempty"      json:"trigger,omitempty"`
+	NotifySound          UserPrefsNotifySound          `yaml:"notify_sound,omitempty" json:"notify_sound,omitempty"`
+	DesktopNotifications UserPrefsDesktopNotifications `yaml:"desktop_notifications,omitempty" json:"desktop_notifications,omitempty"`
+	PushNotifications    UserPrefsPushNotifications    `yaml:"push_notifications,omitempty" json:"push_notifications,omitempty"`
+	Approval             UserPrefsApproval             `yaml:"approval,omitempty"     json:"approval,omitempty"`
+	QuickCmds            UserPrefsQuickCmds            `yaml:"quick_cmds,omitempty"   json:"quick_cmds,omitempty"`
+	Templates            []UserPrefsTemplate           `yaml:"templates,omitempty"    json:"templates,omitempty"`
+	TemplateSend         UserPrefsTemplateSend         `yaml:"template_send,omitempty" json:"template_send,omitempty"`
+	UsageLinks           UserPrefsUsageLinks           `yaml:"usage_links,omitempty"  json:"usage_links,omitempty"`
+	// UsageProbeModel is used only for the opt-in Claude usage probe. It does
+	// not change the model of ordinary AI sessions.
+	UsageProbeModel  string          `yaml:"usage_probe_model,omitempty" json:"usage_probe_model,omitempty"`
+	Voice            UserPrefsVoice  `yaml:"voice,omitempty"        json:"voice,omitempty"`
+	SessionOrder     SessionOrderIDs `yaml:"session_order,omitempty"    json:"session_order,omitempty"`
+	GroupOrder       []string        `yaml:"group_order,omitempty"      json:"group_order,omitempty"`
+	ProjectFavorites []string        `yaml:"project_favorites,omitempty" json:"project_favorites,omitempty"`
+	// CollapsedNodes はサイドバーで畳んでいるノードのキー。プロジェクトはキーそのもの、
+	// 親セッションは "session:<id>"。端末をまたいで折りたたみ状態を保つために同期する。
+	CollapsedNodes           []string         `yaml:"collapsed_nodes,omitempty" json:"collapsed_nodes,omitempty"`
+	CwdHistory               []string         `yaml:"cwd_history,omitempty"      json:"cwd_history,omitempty"`
+	CwdFavorites             []string         `yaml:"cwd_favorites,omitempty"    json:"cwd_favorites,omitempty"`
+	Spawn                    UserPrefsSpawn   `yaml:"spawn,omitempty"            json:"spawn,omitempty"`
+	Display                  UserPrefsDisplay `yaml:"display,omitempty"          json:"display,omitempty"`
+	MigratedFromLocalstorage bool             `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
+	// SidebarPinMigrated は「旧ピン留めを兄弟順の先頭へ変換し終えた」印。1 度だけ
+	// 変換し、以後は起動のたびに利用者の並びを書き換えない。
+	SidebarPinMigrated       bool                              `yaml:"sidebar_pin_migrated,omitempty" json:"sidebar_pin_migrated,omitempty"`
 	Avatar                   string                            `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
 	DisplayName              string                            `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	TokenStatusbar           UserPrefsTokenStatusbar           `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
@@ -580,6 +745,7 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.SessionOrder = cloneSessionOrder(p.SessionOrder)
 	c.GroupOrder = cloneStringSlice(p.GroupOrder)
 	c.ProjectFavorites = cloneStringSlice(p.ProjectFavorites)
+	c.CollapsedNodes = cloneStringSlice(p.CollapsedNodes)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
 	c.Templates = append([]UserPrefsTemplate(nil), p.Templates...)
@@ -594,6 +760,7 @@ func (p UserPrefs) Clone() UserPrefs {
 		c.DoneSummaryNotify.Enabled = &v
 	}
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
+	c.Spawn.RoleProvider = cloneStringMap(p.Spawn.RoleProvider)
 	if p.TokenStatusbar.Segments != nil {
 		m := make(map[string]bool, len(p.TokenStatusbar.Segments))
 		for k, v := range p.TokenStatusbar.Segments {
@@ -659,9 +826,8 @@ type NotifyConfig struct {
 	IncludeBody bool `yaml:"include_body,omitempty" json:"include_body,omitempty"`
 }
 
-// BoardNotifyMode controls how board.md updates reach an orchestration conductor.
-// QueueUntilIdle is the safe default: AI turns are never interrupted just because a
-// child updated its progress.
+// BoardNotifyMode controls how progress-only board updates reach an
+// orchestration conductor. Actionable events use a separate reliable queue.
 type BoardNotifyMode string
 
 const (
@@ -678,7 +844,7 @@ func EffectiveBoardNotifyMode(raw BoardNotifyMode) BoardNotifyMode {
 	if raw.Valid() {
 		return raw
 	}
-	return BoardNotifyQueueUntilIdle
+	return BoardNotifySoft
 }
 
 // SpawnConfirmMode controls whether an orchestration child spawn waits for a
@@ -717,10 +883,66 @@ type OrchestrationConfig struct {
 	BoardNotifyMode       BoardNotifyMode  `yaml:"board_notify_mode,omitempty" json:"board_notify_mode,omitempty"`
 	SpawnConfirmMode      SpawnConfirmMode `yaml:"spawn_confirm_mode,omitempty" json:"spawn_confirm_mode,omitempty"`
 	SpawnConfirmProviders []string         `yaml:"spawn_confirm_providers,omitempty" json:"spawn_confirm_providers,omitempty"`
+	// 起動ハンドシェイク未達の早期検知（plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md）。
+	// ChildStartupGraceSeconds: 初期プロンプトの配送成功が記録されてから、進捗ファイルが
+	// 1 度も作られないまま standby が続くのを起動失敗とみなすまでの猶予（既定 60）。
+	ChildStartupGraceSeconds int `yaml:"child_startup_grace_seconds,omitempty" json:"child_startup_grace_seconds,omitempty"`
+	// ChildStartupFail: 起動ハンドシェイク未達の検知そのものの ON/OFF（既定 true）。
+	// フィールド名をアクセサ ChildStartupFailEnabled() と同名にできない（Go は field と
+	// method の同名を許さない）ため、WorktreeAuto/WorktreeEnabled と同じ作法で
+	// 生ポインタと別名にしてある。
+	ChildStartupFail *bool `yaml:"child_startup_fail_enabled,omitempty" json:"child_startup_fail_enabled,omitempty"`
+	// ChildStartupKill: 起動失敗と確定した子セッションを Hub 側で停止するか（既定 true）。
+	// timeout 経路の子には適用しない（D6）。
+	ChildStartupKill *bool `yaml:"child_startup_kill,omitempty" json:"child_startup_kill,omitempty"`
+	// ChildFullBypass: 子セッションの承認バイパス既定（bypassPermissions /
+	// never+danger-full-access / RiskConfirmed）を自動適用するか（既定 true）。
+	// false にすると呼び出し側が明示した承認設定のみを使い、高リスク権限は
+	// 自動確認しない（自走 UX を保ちつつ安全側へ切替可能）。
+	ChildFullBypass *bool `yaml:"child_full_bypass,omitempty" json:"child_full_bypass,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
 	return o.WorktreeAuto == nil || *o.WorktreeAuto
+}
+
+// ChildStartupFailEnabled は起動ハンドシェイク未達の検知が有効かを返す（既定 true）。
+func (o OrchestrationConfig) ChildStartupFailEnabled() bool {
+	return o.ChildStartupFail == nil || *o.ChildStartupFail
+}
+
+// ChildStartupKillEnabled は起動失敗の子セッションを Hub 側で停止するかを返す（既定 true）。
+func (o OrchestrationConfig) ChildStartupKillEnabled() bool {
+	return o.ChildStartupKill == nil || *o.ChildStartupKill
+}
+
+// ChildFullBypassEnabled は子セッションへ全許可既定を自動適用するかを返す（既定 true）。
+func (o OrchestrationConfig) ChildFullBypassEnabled() bool {
+	return o.ChildFullBypass == nil || *o.ChildFullBypass
+}
+
+// 端末の色方針（Hub.TerminalColor）。
+const (
+	// TerminalColorForce: 既定。Hub のペインは xterm.js なので色を出せる。
+	// 子 CLI へ FORCE_COLOR / CLICOLOR_FORCE を渡し、継承した NO_COLOR は落とす。
+	TerminalColorForce = "force"
+	// TerminalColorInherit: 起動元の環境をそのまま渡す。色が出るかは環境と CLI 次第。
+	TerminalColorInherit = "inherit"
+	// TerminalColorOff: 色を出さない。子 CLI へ NO_COLOR を渡し、色の強制指定は外す。
+	TerminalColorOff = "off"
+)
+
+// NormalizeTerminalColor は未知の値・空を既定（force）へ丸める。
+// 利用者が config.yaml へ打ち間違えても起動を止めない。
+func NormalizeTerminalColor(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case TerminalColorInherit:
+		return TerminalColorInherit
+	case TerminalColorOff:
+		return TerminalColorOff
+	default:
+		return TerminalColorForce
+	}
 }
 
 type Config struct {
@@ -741,6 +963,11 @@ type Config struct {
 		TrustedNetworks            []string `yaml:"trusted_networks,omitempty" json:"trusted_networks,omitempty"`
 		AllowedHosts               []string `yaml:"allowed_hosts,omitempty" json:"allowed_hosts,omitempty"`
 		EnvKind                    string   `yaml:"env_kind,omitempty" json:"env_kind,omitempty"`
+		// TerminalColor は wrap した子 CLI へ色を出させるかの方針。
+		// TerminalColorForce（既定）/ TerminalColorInherit / TerminalColorOff。
+		// 意味と、なぜ真偽値ではなく 3 択なのかは internal/wrapper/env_color.go 参照。
+		// Hub UI の設定画面からも変更できる（config.yaml を手で編集させない）。
+		TerminalColor string `yaml:"terminal_color"`
 	} `yaml:"hub"`
 	Log LogConfig `yaml:"log"`
 	// Input はブラウザ入力欄から PTY へ送る際の調整値。
@@ -756,6 +983,10 @@ type Config struct {
 		// JournalEnabled is true by default. Existing config files inherit the
 		// default because LoadOrCreate unmarshals over defaultConfig.
 		JournalEnabled bool `yaml:"journal_enabled" json:"journal_enabled"`
+		// TaskDetailEnabled gates the tasks-output-derived agent detail feature
+		// (taskId resolution + tasks output polling). True by default, same
+		// inheritance behavior as JournalEnabled.
+		TaskDetailEnabled bool `yaml:"task_detail_enabled" json:"task_detail_enabled"`
 	} `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
 	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
@@ -782,6 +1013,23 @@ type Config struct {
 	Voice         VoiceConfig         `yaml:"voice,omitempty" json:"voice,omitempty"`
 	Notify        NotifyConfig        `yaml:"notify,omitempty" json:"notify,omitempty"`
 	Orchestration OrchestrationConfig `yaml:"orchestration,omitempty" json:"orchestration,omitempty"`
+	// Handoff controls the session handoff record store (internal/handoff).
+	Handoff HandoffConfig `yaml:"handoff,omitempty" json:"handoff,omitempty"`
+	// Subscriptions は provider ごとのサブスクリプション profile 一覧。
+	// **認証情報は入らない**（実体は各 profile ディレクトリ内で vendor CLI が持つ）。
+	// 未設定なら nil で、従来どおり各 CLI の既定ログイン環境がそのまま使われる。
+	Subscriptions SubscriptionProfiles `yaml:"subscriptions,omitempty" json:"subscriptions,omitempty"`
+	// CustomProviders は利用者が自分で追加する AI CLI の一覧（玄人設定）。
+	// 置き場所はここのみで Hub UI からは追加できない
+	// （docs/local/plan_provider-user-config.md の決定事項）。未設定なら nil で
+	// 既存の built-in provider 一覧だけが選択肢になる。
+	//
+	// 起動時、Command は internal/config.SplitCommandLine（正本はそのコメント。
+	// README.md の「Custom providers」節はそれを写したもの）で argv へ分解され、
+	// built-in の provider 別引数・env（--model・permission-mode・ANTHROPIC_* /
+	// OPENAI_*・Ollama/LM Studio route・subscription profile）は一切付与しない
+	// （plan_custom-provider-spawn-execution.md 決定事項2）。
+	CustomProviders CustomProviders `yaml:"custom_providers,omitempty" json:"custom_providers,omitempty"`
 }
 
 func LoadOrCreate() (*Config, error) {
@@ -865,6 +1113,8 @@ func LoadOrCreate() (*Config, error) {
 	if cfg.UserPrefs.Spawn.LastModel == nil {
 		cfg.UserPrefs.Spawn.LastModel = map[string]string{}
 	}
+	cfg.Hub.TerminalColor = NormalizeTerminalColor(cfg.Hub.TerminalColor)
+	cfg.Handoff.IntentMode = NormalizeHandoffIntentMode(cfg.Handoff.IntentMode)
 	cfg.SlashCmdSources = EffectiveSlashCmdSources(cfg.SlashCmdSources)
 	cfg.ApprovalPatternSources = EffectiveApprovalPatternSources(cfg.ApprovalPatternSources)
 	cfg.ApprovalProfiles = EffectiveApprovalProfiles(cfg.ApprovalProfiles)
@@ -904,6 +1154,7 @@ func defaultConfig(home string) *Config {
 	cfg.Hub.OpenBrowser = true
 	cfg.Hub.AutoShutdown = true
 	cfg.Hub.StaleBinaryAutoRestart = true
+	cfg.Hub.TerminalColor = TerminalColorForce
 	// When invoked via the many-ai-cli-launcher.exe Windows launcher's WSL
 	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the
@@ -931,13 +1182,15 @@ func defaultConfig(home string) *Config {
 	cfg.Log.AttachmentRetentionDays = 7
 	cfg.Log.AttachmentMaxTotalMB = 500
 	cfg.UserPrefs = UserPrefs{}
+	cfg.UserPrefs.UsageProbeModel = DefaultUsageProbeModel
 	cfg.Workflow.JournalEnabled = true
+	cfg.Workflow.TaskDetailEnabled = true
 	cfg.Voice.Whisper.Language = "ja"
 	cfg.Voice.Whisper.TimeoutSeconds = 60
 	cfg.SlashCmdSources = DefaultSlashCmdSources()
 	cfg.ApprovalPatternSources = DefaultApprovalPatternSources()
 	cfg.ApprovalProfiles = DefaultApprovalProfiles()
-	cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+	cfg.Orchestration.BoardNotifyMode = BoardNotifySoft
 	return cfg
 }
 
@@ -1033,9 +1286,27 @@ func (cfg *Config) Clone() *Config {
 		v := *cfg.Orchestration.WorktreeAuto
 		c.Orchestration.WorktreeAuto = &v
 	}
+	if cfg.Orchestration.ChildStartupFail != nil {
+		v := *cfg.Orchestration.ChildStartupFail
+		c.Orchestration.ChildStartupFail = &v
+	}
+	if cfg.Orchestration.ChildStartupKill != nil {
+		v := *cfg.Orchestration.ChildStartupKill
+		c.Orchestration.ChildStartupKill = &v
+	}
 	c.Orchestration.SpawnConfirmProviders = cloneStringSlice(cfg.Orchestration.SpawnConfirmProviders)
+	if cfg.Handoff.Enabled != nil {
+		v := *cfg.Handoff.Enabled
+		c.Handoff.Enabled = &v
+	}
 	if cfg.Voice.Whisper.HallucinationPhrases != nil {
 		c.Voice.Whisper.HallucinationPhrases = cloneStringSlice(cfg.Voice.Whisper.HallucinationPhrases)
+	}
+	c.Subscriptions = cfg.Subscriptions.Clone()
+	if cfg.CustomProviders != nil {
+		s := make(CustomProviders, len(cfg.CustomProviders))
+		copy(s, cfg.CustomProviders)
+		c.CustomProviders = s
 	}
 	return &c
 }
@@ -1044,6 +1315,7 @@ func (cfg *Config) applyDefaults() {
 	if cfg == nil {
 		return
 	}
+	cfg.UserPrefs.UsageProbeModel = EffectiveUsageProbeModel(cfg.UserPrefs.UsageProbeModel)
 	if strings.TrimSpace(cfg.Voice.Whisper.Language) == "" {
 		cfg.Voice.Whisper.Language = "ja"
 	}
@@ -1077,14 +1349,20 @@ func (cfg *Config) applyDefaults() {
 	if cfg.Orchestration.IdleDoneThresholdSec <= 0 {
 		cfg.Orchestration.IdleDoneThresholdSec = 600
 	}
+	if cfg.Orchestration.ChildStartupGraceSeconds <= 0 {
+		cfg.Orchestration.ChildStartupGraceSeconds = 60
+	}
 	if strings.TrimSpace(cfg.Orchestration.WorktreeDirRoot) == "" {
 		cfg.Orchestration.WorktreeDirRoot = filepath.Join(".many-ai-cli", "worktrees")
 	}
 	if cfg.Orchestration.BoardNotifyMode == "" {
-		cfg.Orchestration.BoardNotifyMode = BoardNotifyQueueUntilIdle
+		cfg.Orchestration.BoardNotifyMode = BoardNotifySoft
 	}
 	if cfg.Orchestration.SpawnConfirmMode == "" {
 		cfg.Orchestration.SpawnConfirmMode = SpawnConfirmOn
+	}
+	if cfg.Handoff.RetentionDays <= 0 {
+		cfg.Handoff.RetentionDays = 14
 	}
 }
 
@@ -1137,6 +1415,8 @@ func (cfg *Config) Warnings() []string {
 			"lm_studio.base_url points to a private host (%s) but lm_studio.allow_private_hosts is false; the model list will be blocked at the transport layer. Set lm_studio.allow_private_hosts: true to use it.",
 			host))
 	}
+	warnings = append(warnings, cfg.subscriptionWarnings()...)
+	warnings = append(warnings, cfg.customProviderWarnings()...)
 	return warnings
 }
 
@@ -1250,6 +1530,17 @@ func validateTrustedNetworks(networks []string) error {
 		ones, bits := cidr.Mask.Size()
 		if bits == 0 || ones == 0 {
 			return fmt.Errorf("hub.trusted_networks %q is too broad", raw)
+		}
+		// IPv4 は /24、IPv6 は /64 より広い CIDR を拒否する（MAC-09）。
+		// trusted_networks は token 無しで全 API に到達できる範囲なので、
+		// README のセキュリティ節は gateway の /32 単一指定を案内している。
+		// tailnet 全体のような広い範囲を許したい場合は trusted_networks ではなく
+		// allowed_hosts + token（+ 任意 PIN）の経路を使う。
+		if bits == 32 && ones < 24 {
+			return fmt.Errorf("hub.trusted_networks %q is too broad: IPv4 prefix must be /24 or narrower", raw)
+		}
+		if bits == 128 && ones < 64 {
+			return fmt.Errorf("hub.trusted_networks %q is too broad: IPv6 prefix must be /64 or narrower", raw)
 		}
 	}
 	return nil

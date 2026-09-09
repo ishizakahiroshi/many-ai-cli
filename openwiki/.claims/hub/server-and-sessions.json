@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:6fd66f76b10e3e9d6af59d30fe575d2400a0d0f34ab65126cf50922266420a3b",
+  "claims": [
+    {
+      "id": "claim_694feee160304a34a30de9c4e1a9e29a",
+      "statement": "internal/proto.Message is a single flat struct used for every /ws message in both directions (UI-to-Hub and wrapper-to-Hub), disambiguated at runtime by its Type/Role fields rather than by separate typed message structs per direction, with most fields marked omitempty so a given instance only carries the fields relevant to its Type.",
+      "evidence": [
+        {
+          "resource": "repo://internal/proto/messages.go#L17-L47",
+          "version": "repo-lines-v1:sha256:24b66621eb1562005610a19791aa5f29fe3fcd92511f3983509109a15cca0910:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZTJmNjcwMzBlYTk3NTA2ZjZlNWUxZjZlMGFlYThjNTVlODY5NmVjMDM3ZGE2M2U3ZDk1ZjI2MDJiNWYyOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjYTNmMzg4ZDQyMWZjYjVjM2VmNWYyM2U5YjRmZGRmM2I1YmEzYWY4ZGQxMjBmZDliNDQyYmQwNjE2OGExZWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZjI5YThkM2RiZDI1NTI0NDZjNzkxZjAzNDBjYmM2NmUyN2M5MTRlN2FhOTUyMmVjOTJhNDVhNzNkMTBhMzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjNzg2YzkyMGY4ZTVjYzZjMTZmMmFlODIwMDJkNTA4ZWY1NjYyZTQxZTI4YWZhMTdmMzYzNWFiNTM3YzE0NzAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3cbc4933a4ca4125b915a1072e312aa4",
+      "statement": "proto.Message carries an Activity *SessionActivity pointer specifically because it can carry all four activity booleans (OutputIdle, WorkflowActive, AwaitingUser, AwaitingApproval) atomically including a false transition, which the individual omitempty flat booleans cannot distinguish from an unset/omitted field.",
+      "evidence": [
+        {
+          "resource": "repo://internal/proto/messages.go#L33-L41",
+          "version": "repo-lines-v1:sha256:6f0b7a178b028bfccb0b129cbd5515671c311d16e5c2e20cff4d88fd4071486c:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTQ5MmUzNmQzMzAyY2Q0NDI4YjA1MjE2YTFjMzkzMmE3ZDc5NzhhMGRiNzlmZWEwYWMxOWQxYzJjYWExZjk3ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUxMDNjZGVjODg3MjVjNmFkZjE5ZDliM2RjMjhlOTU5ODM5OWZiNWZmZDUwOWFlNDVhYWMyNTVjNmQwZjIzOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmM5OGJkYzUzZGY4NmI0N2Q4Yjg0ZjUwZTJlYjllYzJiZWJlNTMxMjg2YzU1MmZiYzI3YTE1ZTE2ZDNhYjRjYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2MwOTY0ZTQ1ZWVhN2E4ZDBkNjM3ODljM2M4NzBiNDJhNGY4NzIwNjBlMzc3ZTJhNGIxYzg5MDA3MjBkNGRhMSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_df5e502179be403d86bc2f2bdba4036d",
+      "statement": "SessionActivity.IsIdle() is defined as OutputIdle && !WorkflowActive, and its comment states AwaitingUser is deliberately excluded from this predicate because a prompt can safely be surfaced while output is quiet, but active workflow work must never be interrupted, meaning idle-for-interruption and awaiting-user-input are treated as two different questions rather than folded into one boolean.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/session_activity.go#L8-L20",
+          "version": "repo-lines-v1:sha256:a5b4b05f6b54500527d9dad5e5205188a108df5121bf60b142bbde9e459f02a5:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNTg2NzFkMzBjY2YxMDMyMjFlNDgyZDExODNlMjE2M2ZmMjUyNjlmNjZkNWFjZTI2ODRlN2EzZjc2NmQ3N2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjNWQ1NTkzZWJmNzBlMTM5Zjk2ZGMwMGI4ZTc5Yzc0YzA2MGFkOGIzMzVmZmRjNzk0ZWMxMTA0MDc2NWM0YzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2NzAyMDMxNDZkMWFlNzFlZDEzYjAzZGI0MzI0NWY5Y2QxMzg5MGJmYTAzMzBjMWNiOTM0OTA0ZGViYjFjOTAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ed1fba96d39645ed84a1443a4956d693",
+      "statement": "The Hub's session struct's ProjectID field records the root of the actual repository the session's CWD belongs to (not the raw cwd itself), and its own comment states the UI sidebar's project containers are built from this value.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/server.go#L110-L110",
+          "version": "repo-lines-v1:sha256:cea90190a248c8d092cd44a34cc5290e07b06b0bfa6a2c1ddb22c4ae98a8f87e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VhOTAxOTBhMjQ4YzhkMDkyY2Q0NGEzNGNjNTI5MGUwN2IwNmIwYmZhNmEyYzFkZGIyMmM0YWU5OGE4Zjg3ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VhOTAxOTBhMjQ4YzhkMDkyY2Q0NGEzNGNjNTI5MGUwN2IwNmIwYmZhNmEyYzFkZGIyMmM0YWU5OGE4Zjg3ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmM3YmJlNTkyM2YwNjc5NjJhYmI5NjU1YjgwODIyMGFiNGVhMGUzNjY4ZmExZDA1MzkxY2ZlZGNlNzUxMTQ3ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWZmNjk5NzUxZjY4NjBlMTdkM2UxNTVhYzc0Yzk3MDUzNTgyYjczM2NlYTMyMTVjZTU1NTg1NmNmYmRkMGI4YyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_a9e8d17fa1b24f3baf572a7add66cdb4",
+      "statement": "The session struct's Relays and CrossSessionMessages fields are both commented as being replaced wholesale rather than mutated in place, specifically so a session snapshot copied out from under sessionsMu for a WS broadcast or HTTP JSON response stays race-free while being marshalled concurrently with a later mutation.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/server.go#L130-L137",
+          "version": "repo-lines-v1:sha256:5e674b87d13092c107fce5a4bee8846c1040db127f9dc2bca6341ea8353085bc:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWMxOTc5YjdmNWRlZjk3YzFmMjI5Y2YzOGE5ZDAzYmJmMzM2Yjk4YmExNjE1ZTc0Mzg2NzIyZTUwODdkODJmZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjAwZDdiMGJkZTA3YTk1ZmRlY2NmMDU1ZmFjZGRmMGJhN2I5MTQ2MDVlOWU5MzU4ZjhjNGVmZWE5ODI1NmFjNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNmZWRlY2UxY2QxMmQxZTg2MTMzYTY5ZmI3MjkxM2FhN2MwNmM2ODJhY2FiMTlhZDQxMmFmOWY2NGQwMDAyNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2FlNDYwNTAxNDZiZWFkZjIzOGNjYTZhZmU4MjgwM2YyZGU4YmZlYzc3MjhlMDU4OGNmYjQwNmRmNTRhYjM5YyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_027a665466f7467095203d7c322e04c7",
+      "statement": "internal/report's CollectOptions type is explicitly documented as an allowlist: its doc comment states it contains only values approved for inclusion in a bug report and that callers must not pass serialized configuration or session logs into it; only Version, Provider, Model, UserAgent, and a *config.Config (itself reduced to an allowlisted AllowedConfig map) are representable.",
+      "evidence": [
+        {
+          "resource": "repo://internal/report/collect.go#L12-L19",
+          "version": "repo-lines-v1:sha256:6cb6aee903e8c03ef6da12b5099f25aa772b4f160a027f9371bc8ff035ddc0f9:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzNhMGRmMjg2ZTVhN2E0NjMzZTkwMmI2ZjA2N2U2YTZhNGY0ZTA5NGM3MDAwYmFmMDE4ZmI2M2E0ZGM0NzM5MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGJkMWUxYjg1YjVjYWQ1YzcwYTdiN2U1MzZjMjUzYTYxYzZhNTI4MTE1MjI3MmZkOWQ4Y2ExNjhkNjE1MzhhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTJlYzJiYTBhOGYyMTg0NTU5ZjI4ZWViNGM0Y2U0Y2JjOGNkNDQ0YzVlYTQzNWEwOGE1ZmRmODNiNjVlM2EzZiJ9"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-08T13:17:25.310Z"
+  }
+}

@@ -399,6 +399,10 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.cfgMu.Lock()
 	pinSet := strings.TrimSpace(s.cfg.RemotePINHash) != ""
+	// remote_exposed: 遠隔公開設定（allowed_hosts / trusted_networks）が入っているか。
+	// PIN 未設定のまま公開しているとき、設定画面がヒントを出すのに使う
+	//（2026-09-01 監査 MAC-04 の代替。ゲートには使わない）。
+	remoteExposed := len(s.cfg.Hub.AllowedHosts) > 0 || len(s.cfg.Hub.TrustedNetworks) > 0
 	s.cfgMu.Unlock()
 	remote := s.isLogicallyRemote(r)
 	authed := !pinSet || !remote || s.hasValidPINCookie(r)
@@ -408,11 +412,12 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, map[string]any{
-		"pin_enabled": pinSet,
-		"remote":      remote,
-		"authed":      authed,
-		"locked":      retry > 0,
-		"retry_after": retry,
+		"pin_enabled":    pinSet,
+		"remote":         remote,
+		"remote_exposed": remoteExposed,
+		"authed":         authed,
+		"locked":         retry > 0,
+		"retry_after":    retry,
 	})
 }
 

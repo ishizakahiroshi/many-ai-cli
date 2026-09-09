@@ -5,12 +5,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/hubruntime"
 )
 
 func TestReconnectGraceClampsNegative(t *testing.T) {
@@ -73,6 +75,36 @@ func TestProbeHubAliveRejectsNonOK(t *testing.T) {
 
 	if probeHubAlive(cfg) {
 		t.Fatal("probeHubAlive returned true for non-OK status")
+	}
+}
+
+func TestRunningHubPortUsesRuntimeFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/info" {
+			t.Fatalf("path = %q, want /api/info", r.URL.Path)
+		}
+		if r.URL.Query().Get("token") != "tok" {
+			t.Fatalf("token = %q, want tok", r.URL.Query().Get("token"))
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	fallbackPort := mustServerPort(t, ts)
+	if err := hubruntime.Write(fallbackPort); err != nil {
+		t.Fatalf("hubruntime.Write: %v", err)
+	}
+	defer hubruntime.RemoveIfPID(os.Getpid())
+
+	cfg := &config.Config{Token: "tok"}
+	cfg.Hub.Port = 1
+	port, ok := runningHubPort(cfg)
+	if !ok || port != fallbackPort {
+		t.Fatalf("runningHubPort = (%d, %v), want (%d, true)", port, ok, fallbackPort)
 	}
 }
 

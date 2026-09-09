@@ -5,6 +5,7 @@
 // すべてそのまま動く。本ビューは「見せ方の置き換え」だけで、データ経路には触れない。
 
 import { t } from '../i18n.js';
+// 切り分け用の計測（instrumentation.json の mobile-lite-empty）。?mtldebug=1 のときだけ動く。
 import { activeSessionId } from './state.js';
 import { getMobileTranscriptMessages, mobileTranscriptStatusText, syncMobileTranscriptFromBuffer } from './mobile-transcript.js';
 import { scanBuffer } from './terminal.js';
@@ -145,7 +146,7 @@ function openDetailModal(e?: Event): void {
   while (allLines.length > 0 && allLines[allLines.length - 1].trim() === '') allLines.pop();
 
   const overlay = document.createElement('div');
-  overlay.className = 'mtl-detail-overlay';
+  overlay.className = 'mtl-detail-overlay aac-wheel-overlay';
 
   const box = document.createElement('div');
   box.className = 'mtl-detail-box';

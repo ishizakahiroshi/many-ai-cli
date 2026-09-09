@@ -66,6 +66,16 @@ var (
 	// cursor-agent の承認メニューはキー表記が多様（(y) / (tab) / (shift+tab) / (esc or n)）。
 	// 末尾の (...) を緩く取り出し、cursorAgentKeyBinding で既知キーのみ採用する。
 	cursorAgentShortcutLineRe = regexp.MustCompile(`^\s*([-*•>❯›❱])?\s*(.+?)\s+\(([^()]+)\)\s*$`)
+	// grokRadioApprovalLineRe は Grok Build のツール許可カード。
+	// 実機 PTY（2026-08-20 セッション 8 / 08-19 s9,s10）:
+	//   1 (•) Yes, and don't ask again for anything (always-approve mode)
+	//   2 (○) Yes, proceed
+	//   3 (○) No, reject (type to add feedback)
+	// 番号の直後はピリオドではなくラジオ印。選択中は • / ● / * / - 、未選択は ○。
+	grokRadioApprovalLineRe = regexp.MustCompile(`^\s*(\d{1,2})\s+\(([•●○*\-])\)\s+(.+?)\s*$`)
+	// Claude Code の /feedback 下書きカードは、番号の直後にピリオドを置かず
+	// 「1 to review · 2 to send · 0 to dismiss」の形式で表示する。
+	claudeFeedbackActionRe = regexp.MustCompile(`(?i)(\d{1,2})\s+to\s+(review|send|dismiss)\b`)
 )
 
 func detectNativeApproval(provider string, lines []string) *nativeApproval {
@@ -338,6 +348,18 @@ func extractNativeApprovalOptions(provider string, lines []string) ([]proto.Appr
 	if provider == "opencode" {
 		return extractOpenCodeOptions(lines)
 	}
+	var feedbackOpts []proto.ApprovalOption
+	feedbackIdx := -1
+	if provider == "claude" {
+		// /feedback は 1 行のアクション列として描画されるため、通常の
+		// 「N. label」クラスタより先に専用形式を確認する。
+		for i := len(lines) - 1; i >= 0; i-- {
+			if opts, ok := parseClaudeFeedbackCardOptions(lines[i]); ok {
+				feedbackOpts, feedbackIdx = opts, i
+				break
+			}
+		}
+	}
 	type parsedLine struct {
 		opt proto.ApprovalOption
 		idx int
@@ -349,7 +371,13 @@ func extractNativeApprovalOptions(provider string, lines []string) ([]proto.Appr
 		}
 	}
 	if len(parsed) == 0 {
+		if feedbackOpts != nil {
+			return feedbackOpts, feedbackIdx, feedbackIdx
+		}
 		return nil, -1, -1
+	}
+	latestFeedback := func() bool {
+		return feedbackOpts != nil && feedbackIdx > parsed[len(parsed)-1].idx
 	}
 
 	bestStart, bestEnd := 0, 0
@@ -368,6 +396,9 @@ func extractNativeApprovalOptions(provider string, lines []string) ([]proto.Appr
 
 	cluster := parsed[bestStart : bestEnd+1]
 	if len(cluster) < 2 {
+		if latestFeedback() {
+			return feedbackOpts, feedbackIdx, feedbackIdx
+		}
 		return nil, -1, -1
 	}
 	opts := make([]proto.ApprovalOption, 0, len(cluster))
@@ -381,12 +412,66 @@ func extractNativeApprovalOptions(provider string, lines []string) ([]proto.Appr
 		opts = append(opts, item.opt)
 	}
 	if len(opts) < 2 || len(opts) > approvalMaxOptions {
+		if latestFeedback() {
+			return feedbackOpts, feedbackIdx, feedbackIdx
+		}
 		return nil, -1, -1
 	}
 	if !approvalOptionsHaveCursor(opts) && !approvalOptionsHaveSendText(opts) {
+		if latestFeedback() {
+			return feedbackOpts, feedbackIdx, feedbackIdx
+		}
 		return nil, -1, -1
 	}
+	if latestFeedback() {
+		return feedbackOpts, feedbackIdx, feedbackIdx
+	}
 	return opts, cluster[0].idx, cluster[len(cluster)-1].idx
+}
+
+func parseClaudeFeedbackCardOptions(line string) ([]proto.ApprovalOption, bool) {
+	matches := claudeFeedbackActionRe.FindAllStringSubmatch(line, -1)
+	if len(matches) != 3 {
+		return nil, false
+	}
+
+	labels := map[string]string{
+		"review":  "Review",
+		"send":    "Send",
+		"dismiss": "Dismiss",
+	}
+	seenActions := make(map[string]struct{}, len(matches))
+	seenNumbers := make(map[int]struct{}, len(matches))
+	opts := make([]proto.ApprovalOption, 0, len(matches))
+	for _, match := range matches {
+		n, err := strconv.Atoi(match[1])
+		if err != nil || n > approvalOptionNumMaxLabel {
+			return nil, false
+		}
+		action := strings.ToLower(match[2])
+		label, ok := labels[action]
+		if !ok {
+			return nil, false
+		}
+		if _, exists := seenActions[action]; exists {
+			return nil, false
+		}
+		if _, exists := seenNumbers[n]; exists {
+			return nil, false
+		}
+		seenActions[action] = struct{}{}
+		seenNumbers[n] = struct{}{}
+		opts = append(opts, proto.ApprovalOption{
+			Num:           n,
+			Label:         label,
+			SendText:      strconv.Itoa(n),
+			PreserveOrder: true,
+		})
+	}
+	if len(seenActions) != len(labels) {
+		return nil, false
+	}
+	return opts, true
 }
 
 func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, bool) {
@@ -412,6 +497,11 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 		}
 		return opt, true
 	}
+	if provider == "grok" {
+		if opt, ok := parseGrokRadioApprovalOption(trimmed); ok {
+			return opt, true
+		}
+	}
 	if provider == "cursor-agent" {
 		return parseCursorAgentShortcutOption(trimmed)
 	}
@@ -431,6 +521,23 @@ func parseNativeApprovalOption(provider, line string) (proto.ApprovalOption, boo
 		}
 	}
 	return proto.ApprovalOption{}, false
+}
+
+func parseGrokRadioApprovalOption(line string) (proto.ApprovalOption, bool) {
+	m := grokRadioApprovalLineRe.FindStringSubmatch(line)
+	if m == nil {
+		return proto.ApprovalOption{}, false
+	}
+	n, _ := strconv.Atoi(m[1])
+	label := cleanNativeApprovalLabel(m[3])
+	if label == "" || n > approvalOptionNumMaxLabel {
+		return proto.ApprovalOption{}, false
+	}
+	return proto.ApprovalOption{
+		Num:       n,
+		Label:     label,
+		IsCurrent: m[2] != "○",
+	}, true
 }
 
 // parseCursorAgentShortcutOption は cursor-agent の承認メニュー 1 行をパースする。
@@ -632,6 +739,18 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 		hasHint = strings.Contains(context, "always allow") ||
 			strings.Contains(context, "until opencode is restarted")
 	}
+	// Grok Build のツール許可カード。ラベルの always-approve は "approval" 部分一致でも
+	// 拾えるが、フッターだけが context に残った再描画でも落とさない。
+	if provider == "grok" && !hasHint {
+		hasHint = strings.Contains(context, "tab:next option") ||
+			strings.Contains(context, "always-approve") ||
+			strings.Contains(context, "type to add feedback")
+	}
+	// Claude Code の /feedback カードは承認語や質問文を持たないが、
+	// 3 つの固定アクションと裸の数字送信先が揃う強い構造シグネチャを持つ。
+	if provider == "claude" && isClaudeFeedbackCardOptions(opts) {
+		return true
+	}
 	hasApprovalLabel := false
 	for _, opt := range opts {
 		lower := strings.ToLower(opt.Label)
@@ -665,6 +784,34 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	return hasHint && hasApprovalLabel
 }
 
+func isClaudeFeedbackCardOptions(opts []proto.ApprovalOption) bool {
+	if len(opts) != 3 {
+		return false
+	}
+	seen := make(map[int]struct{}, len(opts))
+	for _, opt := range opts {
+		var wantLabel string
+		switch opt.Num {
+		case 0:
+			wantLabel = "Dismiss"
+		case 1:
+			wantLabel = "Review"
+		case 2:
+			wantLabel = "Send"
+		default:
+			return false
+		}
+		if opt.Label != wantLabel || opt.SendText != strconv.Itoa(opt.Num) || !opt.PreserveOrder {
+			return false
+		}
+		if _, exists := seen[opt.Num]; exists {
+			return false
+		}
+		seen[opt.Num] = struct{}{}
+	}
+	return len(seen) == 3
+}
+
 func approvalOptionsHaveCursor(opts []proto.ApprovalOption) bool {
 	for _, opt := range opts {
 		if opt.IsCurrent {
@@ -684,5 +831,5 @@ func approvalOptionsHaveSendText(opts []proto.ApprovalOption) bool {
 }
 
 func nativeApprovalSig(provider string, approval *nativeApproval) string {
-	return approvalCandidateKey(provider, approval.Kind, approval.Question, approval.Options)
+	return approvalCandidateKeyWithContext(provider, approval.Kind, approval.Question, approval.Context, approval.Options)
 }

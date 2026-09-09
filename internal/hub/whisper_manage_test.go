@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"testing"
+	"time"
 
 	"many-ai-cli/internal/config"
 )
@@ -43,5 +44,30 @@ func TestEnsureManagedWhisperNotInstalled(t *testing.T) {
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte(want)) {
 		t.Fatalf("body missing %s: %s", want, w.Body.String())
+	}
+}
+
+// waitManagedWhisper must not block a stop/uninstall handler forever when the
+// process ignores the kill: an uninstall request that never returns is worse
+// than a RemoveAll that reports "file in use".
+func TestWaitManagedWhisperGivesUpAfterBudget(t *testing.T) {
+	done := make(chan struct{})
+	start := time.Now()
+	if waitManagedWhisper(done) {
+		t.Fatal("waitManagedWhisper reported an exit that never happened")
+	}
+	if elapsed := time.Since(start); elapsed < whisperStopWait {
+		t.Fatalf("returned before the budget elapsed: %v", elapsed)
+	}
+}
+
+func TestWaitManagedWhisperReturnsOnExit(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	if !waitManagedWhisper(done) {
+		t.Fatal("an already-exited process should report success")
+	}
+	if !waitManagedWhisper(nil) {
+		t.Fatal("a nil wait channel means nothing to wait for")
 	}
 }

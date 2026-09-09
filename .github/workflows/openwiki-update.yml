@@ -1,0 +1,26 @@
+# OpenWiki の日次更新ワークフローを、意図的に置き石で塞いでいる。
+#
+# openwiki は `init` のときこのパスへ、OPENAI_API_KEY と LANGSMITH_API_KEY を
+# secrets から読んで毎日走る設定を書き込む。生成は「ファイルが無いときだけ」なので、
+# このファイルが存在する限り書き込まれない。消すと次の init で API 版が復活する。
+#
+# 更新は CI ではなく手元でやる。コーディングエージェント（Claude Code 等）の中で
+# 「Update this repository's OpenWiki」と頼めば、既存のサブスクリプションで走り、
+# API キーは要らない。CI にはそのサブスクリプションが無いので、CI で自動化しようと
+# すると必ず API キーの話になる。だからここでは自動化しない。
+#
+# この置き石は openwiki init を実行する前に用意しておく運用ツールが書く。
+
+name: OpenWiki Update (disabled)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  disabled:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain why this does nothing
+        run: |
+          echo "OpenWiki の自動更新は意図的に無効です。"
+          echo "更新はコーディングエージェントの中で手動実行してください。"

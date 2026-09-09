@@ -220,7 +220,7 @@ export function openFileModal(filePath, sessionId) {
   closeFileModal(); // 二重起動防止
 
   const overlay = document.createElement('div');
-  overlay.className = 'aac-file-modal-overlay';
+  overlay.className = 'aac-file-modal-overlay aac-wheel-overlay';
   const panel = document.createElement('div');
   panel.className = 'aac-file-modal';
   const body = document.createElement('div');
@@ -242,17 +242,17 @@ export function openFileModal(filePath, sessionId) {
   // FilesPreview を単体バインド（ツリー無し）。モーダルなので filesRoot/gitRoot は cwd 起点。
   FilesPreview.bind(body, { sessionId, gitRoot: cwd, filesRoot: cwd });
 
-  // FilesPreview 内蔵の閉じる(×)はプレビューを空にするだけでモーダルは残るため隠し、
+  // FilesPreview 内蔵の閉じる(✕)はプレビューを空にするだけでモーダルは残るため隠し、
   // モーダル全体を閉じる専用ボタンに差し替える。
   const toolbar = body.querySelector('.files-preview-toolbar');
   if (toolbar) {
-    toolbar.querySelectorAll('.files-preview-toolbar-btn').forEach((b) => {
-      if (b.textContent === '×') b.hidden = true;
+    toolbar.querySelectorAll('.files-preview-toolbar-btn[data-preview-close]').forEach((b) => {
+      (b as HTMLElement).hidden = true;
     });
     const modalClose = document.createElement('button');
     modalClose.className = 'files-preview-toolbar-btn';
     modalClose.title = t('files_preview_close_tooltip') || 'Close';
-    modalClose.textContent = '×';
+    modalClose.textContent = '✕';
     modalClose.addEventListener('click', () => closeFileModal());
     toolbar.appendChild(modalClose);
   }
