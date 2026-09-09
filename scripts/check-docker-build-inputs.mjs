@@ -11,7 +11,7 @@ const providerPackagePath = join(repoRoot, 'deploy', 'docker', 'provider-cli', '
 const providerLockPath = join(repoRoot, 'deploy', 'docker', 'provider-cli', 'package-lock.json');
 
 export const EXPECTED_PROVIDER_VERSIONS = Object.freeze({
-  '@anthropic-ai/claude-code': '2.1.162',
+  '@anthropic-ai/claude-code': '2.1.163',
   '@openai/codex': '0.137.0',
   '@github/copilot': '1.0.59',
 });

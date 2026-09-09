@@ -2,7 +2,7 @@
   "name": "many-ai-cli-container-providers",
   "private": true,
   "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.162",
+    "@anthropic-ai/claude-code": "2.1.163",
     "@openai/codex": "0.137.0",
     "@github/copilot": "1.0.59"
   }

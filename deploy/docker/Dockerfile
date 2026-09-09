@@ -34,7 +34,7 @@ RUN bun run build
 # --- provider CLI stage: exact versions from the tracked npm lockfile ---
 FROM node-runtime AS provider-cli-build
 WORKDIR /opt/provider-cli
-ARG PROVIDER_CLAUDE_CODE_VERSION=2.1.162
+ARG PROVIDER_CLAUDE_CODE_VERSION=2.1.163
 ARG PROVIDER_CODEX_VERSION=0.137.0
 ARG PROVIDER_COPILOT_VERSION=1.0.59
 COPY deploy/docker/provider-cli/package.json deploy/docker/provider-cli/package-lock.json ./
