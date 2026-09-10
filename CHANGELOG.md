@@ -10,7 +10,24 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Changed
+- The handoff preview is now an editable textarea instead of a read-only block,
+  so the text that becomes the successor session's `initial_prompt` can be
+  corrected before you start it. Pressing Start is still the approval by itself
+  — no extra confirmation step was added.
+
 ### Security
+- `notifyBoardSession` now strips control bytes from board notices before they
+  reach a conductor PTY. It was the one board notify path that skipped
+  `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues
+  could drift. Both now go through `sanitizeBoardConductorInject`, which also
+  caps a notice at 4 KiB as a backstop on the board path (F-AI-01). The safer
+  default flip for `orchestration.child_full_bypass` remains declined (D-12:
+  relay children would stall unattended).
+- Handoff UI fetches (`/api/handoff`, `/api/handoff/:id`, `/api/spawn`) drop
+  `?token=` and rely on the cookie-primary `apiFetch` path, matching the avatar
+  URL hygiene fix (F-WEB-05). These were the last three places in the web UI
+  still putting the Hub token in a request URL.
 - **The Claude Code bundled in the Docker image is updated to 2.1.163.** 2.1.162
   carried two advisories: a sandbox escape through git worktree path confusion
   that allowed unsandboxed code execution, and out-of-band data exfiltration via

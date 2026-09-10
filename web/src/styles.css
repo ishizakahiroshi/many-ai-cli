@@ -723,15 +723,27 @@ header {
 .handoff-dialog h2 { margin: 0 0 10px; font-size: 1rem; flex-shrink: 0; }
 .handoff-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .handoff-dialog-source { margin: 0 0 8px; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.handoff-dialog-prompt-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  color: var(--muted-2, #9aa4b2);
+}
 .handoff-dialog-markdown {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   margin: 0 0 12px;
   padding: 10px;
   max-height: 40vh;
   overflow: auto;
+  resize: vertical;
   white-space: pre-wrap;
   word-break: break-word;
+  font: inherit;
   font-size: 0.72rem;
   line-height: 1.5;
+  color: var(--text);
   background: var(--bg, #14171f);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
