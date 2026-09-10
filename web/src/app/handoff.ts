@@ -4,12 +4,16 @@
 // 起動そのものは既存の C4 の入口である POST /api/spawn（initial_prompt +
 // handoff_from）をそのまま呼ぶ。このファイルは看板からの markdown 取得・
 // プレビュー表示・provider 選択（元セッションと同じ provider は候補に出さ
-// ない）までを担う。自動では 1 本も起動しない — 人がボタンを押すことが
-// そのまま承認になる（親 plan 方針 B1）。
+// ない）までを担う。自動では 1 本も起動しない — 人がプレビューを編集し確認チェックしてから
+// 起動する（親 plan 方針 B1 + F-AI-02）。apiFetch は Cookie 主体で query
+// token を付けない（F-WEB-05）。
 import { t } from '../i18n.js';
 import type { Message } from '../types/proto.js';
-import { apiFetch, escapeHtml, showToast, token } from './util.js';
+import { apiFetch, escapeHtml, showToast } from './util.js';
 import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+
+// Matches internal/hub/spawn_handler.go spawnInitialPromptMaxLen.
+const HANDOFF_INITIAL_PROMPT_MAX = 8192;
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -139,12 +143,18 @@ function buildProviderSelect(candidates: string[]): HTMLSelectElement {
   return select;
 }
 
+function clampHandoffPrompt(raw: string): string {
+  const trimmed = raw.replace(/\u0000/g, '');
+  if (trimmed.length <= HANDOFF_INITIAL_PROMPT_MAX) return trimmed;
+  return trimmed.slice(0, HANDOFF_INITIAL_PROMPT_MAX);
+}
+
 async function startHandoffSession(sessionID: number, provider: string, cwd: string, markdown: string, onStarted: () => void): Promise<void> {
   try {
-    const response = await apiFetch(`/api/spawn?token=${encodeURIComponent(token || '')}`, {
+    const response = await apiFetch('/api/spawn', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, cwd, initial_prompt: markdown, handoff_from: sessionID }),
+      body: JSON.stringify({ provider, cwd, initial_prompt: clampHandoffPrompt(markdown), handoff_from: sessionID }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -168,10 +178,16 @@ function renderHandoffPreviewContent(backdrop: HTMLElement, sessionID: number, d
   source.className = 'handoff-dialog-source';
   source.textContent = `${tx('handoff_dialog_source', '元セッション')}: #${sessionID} ${providerLabel(String(data.provider || ''))} — ${data.cwd || ''}`;
   bodyEl.appendChild(source);
-  const pre = document.createElement('pre');
-  pre.className = 'handoff-dialog-markdown';
-  pre.textContent = String(data.markdown || '');
-  bodyEl.appendChild(pre);
+  const promptLabel = document.createElement('label');
+  promptLabel.className = 'handoff-dialog-prompt-label';
+  promptLabel.textContent = tx('handoff_dialog_prompt_label', '初期プロンプト（編集可）');
+  bodyEl.appendChild(promptLabel);
+  const textarea = document.createElement('textarea');
+  textarea.className = 'handoff-dialog-markdown';
+  textarea.value = String(data.markdown || '');
+  textarea.rows = 12;
+  textarea.spellcheck = false;
+  bodyEl.appendChild(textarea);
 
   const providerRow = document.createElement('label');
   providerRow.className = 'handoff-dialog-provider-row';
@@ -182,6 +198,20 @@ function renderHandoffPreviewContent(backdrop: HTMLElement, sessionID: number, d
   providerRow.appendChild(select);
   bodyEl.appendChild(providerRow);
 
+  const confirmRow = document.createElement('label');
+  confirmRow.className = 'handoff-dialog-confirm-row';
+  const confirm = document.createElement('input');
+  confirm.type = 'checkbox';
+  confirm.className = 'handoff-dialog-confirm';
+  const confirmText = document.createElement('span');
+  confirmText.textContent = tx(
+    'handoff_dialog_confirm',
+    'この文面を初期プロンプトとして後継セッションへ送ることを確認しました',
+  );
+  confirmRow.appendChild(confirm);
+  confirmRow.appendChild(confirmText);
+  bodyEl.appendChild(confirmRow);
+
   actionsEl.innerHTML = '';
   const cancelBtn = document.createElement('button');
   cancelBtn.type = 'button';
@@ -191,13 +221,18 @@ function renderHandoffPreviewContent(backdrop: HTMLElement, sessionID: number, d
   startBtn.type = 'button';
   startBtn.className = 'primary';
   startBtn.textContent = tx('handoff_dialog_start', '起動');
+  const refreshStartEnabled = () => {
+    startBtn.disabled = !select.value || !confirm.checked || !textarea.value.trim();
+  };
   startBtn.disabled = true;
-  select.addEventListener('change', () => { startBtn.disabled = !select.value; });
+  select.addEventListener('change', refreshStartEnabled);
+  confirm.addEventListener('change', refreshStartEnabled);
+  textarea.addEventListener('input', refreshStartEnabled);
   startBtn.addEventListener('click', () => {
-    if (!select.value || startBtn.disabled) return;
+    if (!select.value || startBtn.disabled || !confirm.checked) return;
     startBtn.disabled = true;
-    void startHandoffSession(sessionID, select.value, String(data.cwd || ''), String(data.markdown || ''), close)
-      .finally(() => { startBtn.disabled = !select.value; });
+    void startHandoffSession(sessionID, select.value, String(data.cwd || ''), textarea.value, close)
+      .finally(refreshStartEnabled);
   });
   actionsEl.appendChild(cancelBtn);
   actionsEl.appendChild(startBtn);
@@ -208,7 +243,7 @@ function renderHandoffPreviewContent(backdrop: HTMLElement, sessionID: number, d
 export async function openHandoffPreviewDialog(sessionID: number): Promise<void> {
   const { backdrop, close } = buildDialogShell('handoff_dialog_title', '引き継ぎを準備');
   try {
-    const response = await apiFetch(`/api/handoff/${encodeURIComponent(String(sessionID))}?token=${encodeURIComponent(token || '')}`);
+    const response = await apiFetch(`/api/handoff/${encodeURIComponent(String(sessionID))}`);
     const data = await response.json() as HandoffPreviewResponse;
     if (!response.ok || !data.ok) throw new Error('handoff fetch failed');
     if (!data.exists) {
@@ -239,7 +274,7 @@ export async function openHandoffListDialog(): Promise<void> {
   const body = backdrop.querySelector('.handoff-dialog-body') as HTMLElement | null;
   if (!body) return;
   try {
-    const response = await apiFetch(`/api/handoff?token=${encodeURIComponent(token || '')}`);
+    const response = await apiFetch('/api/handoff');
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error('handoff list failed');
     const entries: HandoffListEntry[] = Array.isArray(data.entries) ? data.entries : [];

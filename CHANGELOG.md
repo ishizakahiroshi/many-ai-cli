@@ -11,6 +11,20 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Security
+- Cap board/event text injected into a conductor PTY at 4 KiB after the existing
+  control-byte strip (`sanitizeBoardConductorInject`). `notifyBoardSession` now
+  uses the same sanitizer as `notifyBoardEvent`, so a runaway board notice cannot
+  flood the conductor input buffer. The safer default flip for
+  `orchestration.child_full_bypass` remains declined (D-12: relay children would
+  stall unattended); this is the F-AI-01 inject-path harden instead.
+- Handoff board start no longer one-clicks AI-authored markdown into a successor
+  `initial_prompt`: the preview is an editable textarea, Start stays disabled
+  until the operator checks an explicit review confirmation, and the prompt is
+  clamped to the same 8 KiB cap as `/api/spawn` (F-AI-02).
+- Handoff UI fetches (`/api/handoff`, `/api/handoff/:id`, `/api/spawn`) drop
+  `?token=` and rely on the cookie-primary `apiFetch` path, matching the avatar
+  URL hygiene fix (F-WEB-05).
+
 - **The Claude Code bundled in the Docker image is updated to 2.1.163.** 2.1.162
   carried two advisories: a sandbox escape through git worktree path confusion
   that allowed unsandboxed code execution, and out-of-band data exfiltration via

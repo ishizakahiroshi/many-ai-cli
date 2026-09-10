@@ -2010,6 +2010,7 @@ func authorizeBoardDoneLocked(board *orchestrationBoard, ev boardDoneEvent, writ
 // Child and ordinary session behavior remains unchanged; this is deliberately
 // scoped so P-19 does not alter normal terminal input delivery.
 func (s *Server) notifyBoardSession(boardID string, sessionID int, text string) {
+	text = sanitizeBoardConductorInject(text)
 	mode := config.EffectiveBoardNotifyMode(s.snapshotCfg().Orchestration.BoardNotifyMode)
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
@@ -3381,6 +3382,24 @@ func sanitizeInjectText(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// boardConductorInjectMaxLen caps board/event text that may be typed into a
+// conductor PTY. Hub-templated notices are short; the cap is a backstop for
+// any free-form or overflow path so a runaway board event cannot flood the
+// conductor input buffer (F-AI-01 / audit 2026-09-10). Full evidence stays on
+// board.md; the inject is only a wake-up pointer.
+const boardConductorInjectMaxLen = 4096
+
+// sanitizeBoardConductorInject applies sanitizeInjectText then a length cap
+// for board→conductor (and sibling) notify paths. notifyBoardEvent and
+// notifyBoardSession both use it so the two delivery queues cannot drift.
+func sanitizeBoardConductorInject(s string) string {
+	s = sanitizeInjectText(s)
+	if s == "" {
+		return ""
+	}
+	return truncateUTF8Bytes(s, boardConductorInjectMaxLen)
 }
 
 // buildConductorInitialPrompt は plan_orchestration-spawn-ui-exposure.md C2 の

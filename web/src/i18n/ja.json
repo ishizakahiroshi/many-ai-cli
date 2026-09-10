@@ -1692,6 +1692,8 @@
   "handoff_dialog_cancel": "キャンセル",
   "handoff_dialog_no_record": "この記録は見つかりません",
   "handoff_dialog_source": "元セッション",
+  "handoff_dialog_prompt_label": "初期プロンプト（編集可）",
+  "handoff_dialog_confirm": "この文面を初期プロンプトとして後継セッションへ送ることを確認しました",
   "handoff_dialog_provider_label": "起動する CLI",
   "handoff_dialog_provider_empty": "CLI を選択…",
   "handoff_dialog_start": "起動",

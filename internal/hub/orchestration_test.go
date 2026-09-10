@@ -1333,6 +1333,43 @@ func TestSanitizeInjectText_StripsControlBytes(t *testing.T) {
 	}
 }
 
+func TestSanitizeBoardConductorInject_StripsAndCaps(t *testing.T) {
+	raw := "wake\x07\x1b[0m " + strings.Repeat("x", boardConductorInjectMaxLen+64)
+	got := sanitizeBoardConductorInject(raw)
+	if strings.ContainsAny(got, "\x07\x1b") {
+		t.Fatalf("sanitizeBoardConductorInject left control bytes: %q", got[:64])
+	}
+	if len(got) > boardConductorInjectMaxLen {
+		t.Fatalf("sanitizeBoardConductorInject kept %d bytes, want <= %d", len(got), boardConductorInjectMaxLen)
+	}
+	if !strings.HasPrefix(got, "wake ") && !strings.HasPrefix(got, "wake") {
+		t.Fatalf("sanitizeBoardConductorInject lost prefix: %q", got[:16])
+	}
+}
+
+func Test_notifyBoardSession_sanitizesBeforeQueue(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Orchestration.BoardNotifyMode = config.BoardNotifyQueueUntilIdle
+	conductor := registerTestSession(s, 2, "claude")
+	conductor.OrchestrationID = "o1"
+	path := filepath.Join(t.TempDir(), "board.md")
+	s.registerBoardSession("o1", path, conductor.ID, "conductor")
+
+	s.notifyBoardSession("o1", conductor.ID, "\n[orchestration] progress\x07\x1bupdated\n"+strings.Repeat("y", boardConductorInjectMaxLen))
+	s.orchestration.mu.Lock()
+	queued := s.orchestration.boards["o1"].PendingNotices[conductor.ID]
+	s.orchestration.mu.Unlock()
+	if queued == "" {
+		t.Fatal("expected queued notice")
+	}
+	if strings.ContainsAny(queued, "\x07\x1b") {
+		t.Fatalf("queued notice left control bytes: %q", queued[:64])
+	}
+	if len(queued) > boardConductorInjectMaxLen {
+		t.Fatalf("queued notice len=%d, want <= %d", len(queued), boardConductorInjectMaxLen)
+	}
+}
+
 // --- C2 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md) ---
 // checkOrchestrationChildTimers' startup_failed branch / handleChildStartupFailed.
 

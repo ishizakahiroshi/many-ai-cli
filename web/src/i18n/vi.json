@@ -1692,6 +1692,8 @@
   "handoff_dialog_cancel": "Hủy",
   "handoff_dialog_no_record": "Không tìm thấy bản ghi bàn giao",
   "handoff_dialog_source": "Session gốc",
+  "handoff_dialog_prompt_label": "Prompt ban đầu (có thể chỉnh)",
+  "handoff_dialog_confirm": "Tôi đã xem lại nội dung và xác nhận gửi làm initial prompt cho session kế tiếp",
   "handoff_dialog_provider_label": "CLI sẽ khởi động",
   "handoff_dialog_provider_empty": "Chọn một CLI…",
   "handoff_dialog_start": "Khởi động",

@@ -1692,6 +1692,8 @@
   "handoff_dialog_cancel": "Cancel",
   "handoff_dialog_no_record": "No handoff record was found",
   "handoff_dialog_source": "Source session",
+  "handoff_dialog_prompt_label": "Initial prompt (editable)",
+  "handoff_dialog_confirm": "I reviewed this text and confirm sending it as the successor initial prompt",
   "handoff_dialog_provider_label": "CLI to start",
   "handoff_dialog_provider_empty": "Choose a CLI…",
   "handoff_dialog_start": "Start",

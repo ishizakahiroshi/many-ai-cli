@@ -22,7 +22,7 @@ func (s *Server) notifyBoardEvent(boardID string, sessionID int, text string) {
 	if boardID == "" || sessionID <= 0 || s.relayOwns(boardID) {
 		return
 	}
-	text = sanitizeInjectText(text)
+	text = sanitizeBoardConductorInject(text)
 
 	s.orchestration.mu.Lock()
 	board := s.orchestration.boards[boardID]
