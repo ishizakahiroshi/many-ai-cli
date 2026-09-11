@@ -374,3 +374,26 @@ func TestVTBufferOverwriteWideRuneClearsBothCells(t *testing.T) {
 		t.Fatalf("line 0 = %q, want %q", got, " xい")
 	}
 }
+
+// TestVTBufferResetPreservesAltScreen は、Reset() が画面の中身（cells/scrollback）を
+// 捨てても altScreen は保つことを検証する（bugfix_alt-screen-mode-lost-on-ui-replay_
+// 2026-09-12.md 追加分）。CLI が代替画面バッファにいるという事実は session_history_reset
+// のような「見た目の履歴を捨てる」操作とは無関係 — CLI 側へは 1 バイトも送っていない
+// ので、Reset() のたびに false へ戻ると以後 ESC[?1049h が二度と来ないセッションで
+// 前置が永久に止まる。
+func TestVTBufferResetPreservesAltScreen(t *testing.T) {
+	vt := newVTBuffer(20, 5)
+	vt.Write([]byte("\x1b[?1049h"))
+	if !vt.AltScreen() {
+		t.Fatal("ESC[?1049h を書いた直後に AltScreen() = false")
+	}
+
+	vt.Reset()
+
+	if !vt.AltScreen() {
+		t.Fatal("Reset() 後に AltScreen() = false, want true（代替画面状態は保持されるべき）")
+	}
+	if got := vt.Lines()[0]; got != "" {
+		t.Fatalf("Reset() 後の画面が空でない: line 0 = %q", got)
+	}
+}

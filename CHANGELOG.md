@@ -36,6 +36,20 @@ Release artifacts are published at
   corrected before you start it. Pressing Start is still the approval by itself
   — no extra confirmation step was added.
 
+### Fixed
+- **Reloading the dashboard could leave a Claude Code or opencode terminal
+  pane unable to scroll up, with no scrollbar and no pseudo scroll rail.**
+  The Hub replayed only the raw PTY bytes still inside its per-session ring
+  buffer; the `ESC[?1049h` that put the CLI into the alternate screen buffer
+  is sent once near session start and had long since fallen out of that
+  window, so a freshly reconnected browser rendered the replay as the normal
+  screen buffer while the CLI itself stayed on the alternate one. The Hub now
+  tracks each session's alternate-screen state as it parses PTY output and
+  prepends `ESC[?1049h` to the replay whenever a session is currently on the
+  alternate screen, after the replay window is cut so it does not get counted
+  against the window itself (`internal/hub/vt_buffer.go`,
+  `internal/hub/server.go`, `internal/hub/ui_broadcast.go`).
+
 ### Security
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped

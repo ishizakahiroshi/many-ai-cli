@@ -66,6 +66,19 @@ func (s *Server) addUIWithHistoryAtEpoch(c *websocket.Conn, activeSessionID int,
 		}
 		buf := make([]byte, len(raw))
 		copy(buf, raw)
+		if ses.altScreen {
+			// 代替画面バッファ中は、窓（maxPTYBuf / replayTailForNonActive）を切り出した
+			// "後" に前置する。切り出し前に足すと窓計算に混ざる。ブラウザの xterm は
+			// 再接続のたびに通常画面から始まるため、これを送らないと「CLI は代替画面に
+			// いるのに UI は通常画面だと思っている」食い違いが起き、上へスクロールできなく
+			// なる（docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+			// ESC[?1049l は前置しない: 通常画面が既定なので、代替画面でないときは
+			// 何も足さないのが正しい状態。
+			prefixed := make([]byte, 0, len(altScreenEnterSeq)+len(buf))
+			prefixed = append(prefixed, altScreenEnterSeq...)
+			prefixed = append(prefixed, buf...)
+			buf = prefixed
+		}
 		replayEpoch := ensureReplayEpochLocked(ses)
 		replayEpoch++
 		if replayEpoch == 0 {

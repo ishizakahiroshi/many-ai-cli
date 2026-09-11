@@ -519,6 +519,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// スクロールバックが 64KB へ切り詰められ、ブラウザ再読込で履歴が失われていた。
 	var prevPTYBuf []byte
 	var prevVT *vtBuffer
+	var prevAltScreen bool
 	var prevCols, prevRows int
 	var prevSeen int64
 	var prevInputSeq int64
@@ -581,6 +582,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		oldHistory = cur.History
 		prevPTYBuf = cur.ptyBuf
 		prevVT = cur.vt
+		prevAltScreen = cur.altScreen
 		prevCols, prevRows = cur.lastCols, cur.lastRows
 		prevSeen = cur.ptyBytesSeen
 		prevInputSeq = cur.inputSeq
@@ -621,6 +623,16 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		// 新規（Hub 再起動後の cold reattach）／PTY サイズ変更時は従来どおり
 		// replay からミラーを作り直す。旧サイズのまま書くと折り返しがずれる。
 		vt = newVTBuffer(req.Cols, req.Rows)
+		if prevExists {
+			// PTY サイズが変わっただけの reattach（wrapper 側の意図的な再接続。出力
+			// キュー溢れ時などに珍しくない）では、直前セッションの代替画面状態を種として
+			// 引き継ぐ。replay（wrapper 側 64KB リング）には ESC[?1049h が入っていない
+			// ことが多く、無条件に false から始めると CLI は代替画面のままなのに Hub 側
+			// だけ通常画面へ戻ったと誤認する
+			// （docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+			// replay 側に ESC[?1049h/l が含まれていれば、下の Write が正しく上書きする。
+			vt.altScreen = prevAltScreen
+		}
 		if len(replay) > 0 {
 			vt.Write(replay)
 		}
@@ -676,6 +688,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		ptyBuf:                         ptyBuf,
 		ptyBytesSeen:                   ptyBytesSeen,
 		vt:                             vt,
+		altScreen:                      vt.AltScreen(),
 		replayEpoch:                    replayEpoch,
 		approvalSourceEpoch:            approvalSourceEpoch,
 		approvalEpochPending:           prevApprovalEpochPending,
@@ -918,6 +931,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
 				}
 				ses.vt.Write(m.Data)
+				// ptyBuf と同じロックの内側で、vt がパースした代替画面状態を同期する
+				// （bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+				ses.altScreen = ses.vt.AltScreen()
 				provider = ses.Provider
 				if provider == "claude" && ses.OrchestrationID != "" {
 					candidate := detectCrossSessionMessage(ses.vt.Lines())

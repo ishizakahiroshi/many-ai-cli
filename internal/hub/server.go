@@ -73,6 +73,15 @@ const (
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"
 
+	// altScreenEnterSeq は代替画面バッファ（DECSET 1049）へ入る CSI シーケンス。
+	// UI 接続時の replay バイト列を組み立てるとき、セッションが代替画面中なら
+	// 窓（maxPTYBuf / replayTailForNonActive）を切り出した後の先頭へこれを前置する
+	// （ui_broadcast.go addUIWithHistoryAtEpoch）。ptyBuf の窓には代替画面へ入った
+	// 瞬間の 1049h 自体が含まれないことがあり、含まれないままだとブラウザの xterm が
+	// 通常画面のままだと思い込み、上へスクロールできなくなる
+	// （docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+	altScreenEnterSeq = "\x1b[?1049h"
+
 	// 確定 \r（bracketed-paste 本文の submit）の送出タイミング。固定遅延ではなく
 	// 「PTY 出力が一定時間静止した」ことを待ってから 1 回だけ撃つ。値と理由は
 	// web/src/app/deferred-enter.ts と同一で、2026-07-11 の同型修正が web 経路にだけ
@@ -206,6 +215,13 @@ type session struct {
 
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
 	vt *vtBuffer
+	// JSON 外: このセッションが現在、代替画面バッファ（ESC[?1049h）にいるか。
+	// vt.Write が CSI 1049 h/l をパースした結果（vt.AltScreen()）をここへ同期する。
+	// 同期は ptyBuf を更新する箇所（wrapperMessageLoop の pty_data 処理・reattach の
+	// セッション再構築）と同じ sessionsMu ロックの内側で行う。UI 接続時の replay 先頭へ
+	// ESC[?1049h を前置するかどうかの判定に使う（ui_broadcast.go addUIWithHistoryAtEpoch。
+	// docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+	altScreen bool
 	// JSON 外: Provider が登録時点で custom_providers に実在した id だったか。
 	// 零値 false は「custom ではない」という安全側の既定値になる ―― 大半の
 	// session{} リテラル（テスト含む65箇所超）はこのフィールドを一切知らない
