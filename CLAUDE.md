@@ -145,6 +145,7 @@ docs/local/               設計書・plan 等（非公開）
 
 | 項目 | パス |
 |------|------|
+| **どのファイルが何をして、どのテーブルを読み書きするか**（探す前にここ） | `.omitnix/index.json`。全ファイルの索引とテーブル逆引き。**解析できなかったファイルも名前と理由付きで載る**ので「索引に無い」と「読めなかった」を取り違えない。参照 0 件は「未使用」ではない。**`generated.commit` が HEAD と違えば索引はその commit 時点のもの**なので、古いまま断定せず `omitnix` で作り直すか、古いことを添えて答える |
 | 設計書 v0.3.0（現行・正本） | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
 | 設計書 v0.2.0 / v1（履歴） | [docs/v0.2.x-any-ai-cli-design.md](docs/v0.2.x-any-ai-cli-design.md) / [docs/local/archive/v0.1.3/cli-popup-design-v1.md](docs/local/archive/v0.1.3/cli-popup-design-v1.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
