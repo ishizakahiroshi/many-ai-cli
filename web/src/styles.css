@@ -1404,7 +1404,10 @@ header {
 @keyframes state-pulse { 50% { transform: scale(1.45); opacity: .55; } }
 @media (prefers-reduced-motion: reduce) { .card-state-pill.running .card-state-icon, .card-state-pill.workflow-active .card-state-icon { animation: none; } }
 .card-state-pill.running  { color: var(--badge-running-text); }
-.card-state-pill.running .card-state-icon { animation: state-pulse 1.4s ease-in-out infinite; }
+/* running は workflow_active と同じ破線リング(ring)の SVG を使うが、拡大縮小(state-pulse)
+   ではなく回転(state-spin)で「処理中」を示す。色を判別できなくても動きだけで伝わる。 */
+.card-state-pill.running .card-state-icon { animation: state-spin 1s linear infinite; transform-origin: 50% 50%; }
+@keyframes state-spin { to { transform: rotate(360deg); } }
 .card-state-pill.awaiting-approval .card-state-icon { animation: none; }
 .card-state-pill.waiting  { color: var(--warn-text); }
 .card-state-pill.standby  { color: var(--badge-standby-text); }

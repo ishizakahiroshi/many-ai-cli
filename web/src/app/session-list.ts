@@ -322,19 +322,21 @@ function stateActivityDecoration(s) {
   // internal/hub/idle_state.go で WorkflowActive = !OutputIdle && !AwaitingUser、
   // internal/hub/session_activity.go の DisplayState() が WorkflowActive のとき
   // "running" を返すので、running のセッションは必ず workflow_active も立っている。
-  // 逆順にすると running の緑 ● に到達できず、実行中がずっと workflow-active の
-  // グレー ◌（--muted-2）で描かれ「動いている感じがしない」表示になる。
-  if (state === 'running') return { className: '', iconKind: 'dot', label: baseLabel };
+  // 逆順にすると running の回転スピナーに到達できず、実行中がずっと workflow-active の
+  // グレーのパルス（--muted-2）で描かれ「動いている感じがしない」表示になる。
+  // running は workflow_active と同じ ring（破線円）を使うが、色（緑）と
+  // アニメーション（state-spin の回転。workflow_active は state-pulse の拡大縮小）で区別する。
+  if (state === 'running') return { className: '', iconKind: 'ring', label: baseLabel };
   if (s.workflow_active) {
     const activityLabel = ti18n('card_activity_workflow_active', 'Processing');
     return { className: 'workflow-active', iconKind: 'ring', label: `${baseLabel}: ${activityLabel}` };
   }
   if (state === 'error' || state === 'disconnected') return { className: '', iconKind: 'cross', label: baseLabel };
-  // standby も塗りつぶし ● にする。同じ状態を出す他の 2 箇所（サマリーチップの
+  // standby は塗りつぶし ● のまま。同じ状態を出す他の 2 箇所（サマリーチップの
   // .chip-dot / ステータスバーの .tsb-pdot）はどちらも state によらず塗りつぶしの
   // 丸で、色だけで区別している。ここだけ中空 ○ だと同じ状態が画面内で別の形になる。
-  // running との区別は色（--badge-running-text / --badge-standby-text）と
-  // state-pulse アニメーションの有無が担う。
+  // running との区別は、色（--badge-running-text / --badge-standby-text）に加えて
+  // 形（running は回転する破線の輪、standby は静止した塗りつぶし丸）も担う。
   return { className: '', iconKind: 'dot', label: baseLabel };
 }
 
@@ -1027,11 +1029,13 @@ export function renderSessionList() {
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
       const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
-      // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N の直後に置く。
+      // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N より前に置く
+      // （#N の桁数はカードごとに違うため、後ろに置くとアイコンの横位置がカードごとにズレる。
+      // 先頭に固定すると全カードで同じX座標に揃い、縦に並ぶ実行中セッションを一直線で拾える）。
       const stateDescription = activity.label || label;
-      const statePillHtml = ` <span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
+      const statePillHtml = `<span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
-		`<div class="card-title-row"><b>#${s.id}</b>${statePillHtml} ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
+		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
 	        metaRow;
 
       const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;

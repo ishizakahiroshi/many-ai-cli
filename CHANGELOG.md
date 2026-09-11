@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Changed
+- The running-session indicator in the session list now spins instead of pulsing.
+  The old dot only grew from about 6px to 9px on a 1.4s cycle, which was too
+  small a change to notice at a glance on a dark card. It now reuses the
+  dashed-ring icon already used for "processing" and rotates it, a much more
+  visible way to say "something is happening" that doesn't depend on spotting
+  a color change. Standby sessions are unaffected. The icon also moved to
+  sit before the `#N` session number instead of after it, so it lands at the
+  same horizontal position on every card regardless of how many digits the
+  number has — easier to scan down a long list for what's still running.
+
 - **The ✕ close buttons across panels and dialogs now look and behave the same.**
   Eleven of them had drifted apart into their own stylesheets — sizes from
   0.85rem to 1.5rem, four different hover treatments, and one (the bug report
