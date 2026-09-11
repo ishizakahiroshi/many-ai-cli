@@ -36,8 +36,8 @@
 }
 .server-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
 .server-modal-title::before { content: "🖥 "; }
-.server-modal-icon-btn,
-.server-modal-close {
+/* .server-modal-close の見た目は /styles/close-button.css（閉じるボタンの名簿）にある。 */
+.server-modal-icon-btn {
   background: transparent;
   border: none;
   color: var(--muted);
@@ -46,10 +46,9 @@
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   font-family: inherit;
+  margin-left: auto;
 }
-.server-modal-icon-btn { margin-left: auto; }
 .server-modal-icon-btn:hover { background: var(--bg-soft); color: var(--text); }
-.server-modal-close:hover { background: var(--danger-bg); color: var(--danger); }
 
 .server-modal-body {
   overflow-y: auto;

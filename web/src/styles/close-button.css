@@ -1,0 +1,117 @@
+/* 閉じるボタン（✕ U+2715）の共通スタイル。
+   Extracted from styles.css and 7 component stylesheets. Imported by /styles.css.
+
+   **このファイルが閉じるボタンの名簿。** 新しい ✕ を足すときは 2 箇所へ登録する。
+     1. 下の「共通の見た目」のセレクタ列挙（登録しないと無装飾のまま出る）
+     2. さらに下の body.close-left（登録しないとユーザーの「閉じるボタンを左へ」設定から漏れる）
+   以前は 1 が各コンポーネントの CSS へ、2 が styles.css へ散っていて、片方だけ直す事故が起きやすかった。
+
+   対象は「パネル・モーダルの隅に単独で立っているアイコン型の ✕」だけ。
+   次のものは意図して対象外にしてある（理由は docs/local/plan_close-button-style-unification.md）。
+     - .ph-close / .main-tab-close … タブ・ペインヘッダ内に収まる寸法で、hover で出現する等の別挙動を持つ
+     - .mas-close / .mtl-detail-close … モバイルのタップ領域（44px / 36px）
+     - .multi-question-banner-close / .expand-popup-close / .first-run-tour-close /
+       .session-search-close / .review-close-btn / .settings-header-btn-close
+       … 隣のボタンとルールを共有する枠線つきボタン。✕ だけ剥がすとボタン列の中で揃わなくなる
+     - .tsb-sent-close / .tsb-detail-close … token-statusbar はテーマトークンを使わない自前配色で統一されている */
+
+/* ── 共通の見た目 ── */
+.usage-dropdown-close,
+.server-modal-close,
+.wf-modal-close,
+.mc-modal-close,
+.spawn-web-dir-close,
+.dgl-close,
+.relay-dialog-close,
+.bug-report-close,
+.detail-close,
+.git-commit-close,
+.git-turn-close-btn {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  /* 寸法だけは置き場所で変わる。個別ルールはこの 2 変数だけを上書きする。 */
+  font-size: var(--close-btn-fs, 0.9rem);
+  padding: var(--close-btn-pad, 2px 6px);
+  line-height: 1;
+  /* ヘッダ側の uppercase / letter-spacing をグリフに継承させない（Usage ドロップダウン等）。 */
+  font-family: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* hover は危険色に寄せる。「閉じる」は取り消しがきかないので、押す前に気づけるほうを採る。 */
+.usage-dropdown-close:hover,
+.server-modal-close:hover,
+.wf-modal-close:hover,
+.mc-modal-close:hover,
+.spawn-web-dir-close:hover,
+.dgl-close:hover,
+.relay-dialog-close:hover,
+.bug-report-close:hover,
+.detail-close:hover,
+.git-commit-close:hover,
+.git-turn-close-btn:hover {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* ── 置き場所ごとの差分（寸法と配置だけ） ── */
+
+/* 独立したモーダルダイアログの ✕ は一回り大きくする（既定はドロップダウン・パネル向けの 0.9rem）。 */
+.mc-modal-close,
+.dgl-close,
+.relay-dialog-close,
+.bug-report-close,
+.spawn-web-dir-close { --close-btn-fs: 1rem; }
+
+.spawn-web-dir-close { --close-btn-pad: 4px 8px; }
+.relay-dialog-close { --close-btn-pad: 4px 6px; }
+.git-turn-close-btn { --close-btn-pad: 4px 6px; }
+/* Git 詳細ペインのヘッダは行の高さが固定なので、縦 padding を足さず横だけ広く取る。 */
+.detail-close { --close-btn-pad: 0 12px; }
+
+/* ヘッダ内で右端へ押し出すもの。 */
+.usage-dropdown-close,
+.wf-modal-close { margin-left: auto; }
+
+/* ── 配置: 閉じるボタンを左へ寄せる設定（body.close-left / web/src/app/ui-side.ts） ── */
+
+/* パネルの開閉・閉じるボタン（⊟/⊞/✕）を左へ寄せる。閉じるボタンはどれも flex の子なので、
+   order だけで自分の入っているヘッダの左端へ寄る（flex でないヘッダでは単に無効）。 */
+body.close-left :is(
+  .review-close-btn,
+  .git-turn-close-btn,
+  .detail-close,
+  .git-commit-close,
+  .server-modal-close,
+  .wf-modal-close,
+  .mc-modal-close,
+  .bug-report-close,
+  .dgl-close,
+  .tsb-sent-close,
+  .session-search-close,
+  .spawn-web-dir-close,
+  /* .relay-dialog-close は移設前のリストから漏れていた（2026-09-11 に本ファイルへ集約した際に発見）。
+     relay ダイアログの ✕ だけが「閉じるボタンを左へ」設定を無視していた。
+     ヘッダは display:flex なので、ここへ足すだけで他と同じように左端へ寄る。 */
+  .relay-dialog-close,
+  .first-run-tour-close,
+  .multi-question-banner-close,
+  .expand-popup-btns
+) {
+  order: -1;
+  margin-left: 0;
+}
+
+/* margin-left:auto で右端へ押し出しているものは、押し出す向きを逆にする。 */
+body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions, .usage-dropdown-close) {
+  order: -1;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* ボタンが群になっているヘッダでは、群の中でも ✕ を先頭へ。 */
+body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1; }

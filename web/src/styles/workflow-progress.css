@@ -92,18 +92,7 @@
 .wf-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
 .wf-modal-title::before { content: "⚙ "; }
 .wf-modal-counts { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
-.wf-modal-close {
-  margin-left: auto;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: 0.85rem;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-family: inherit;
-}
-.wf-modal-close:hover { background: var(--danger-bg); color: var(--danger); }
+/* .wf-modal-close の見た目と margin-left:auto は /styles/close-button.css にある。 */
 
 .wf-modal-body {
   overflow-y: auto;

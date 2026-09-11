@@ -57,13 +57,7 @@
 .bug-report-header h2 { font-size: 1.15rem; }
 .bug-report-preview-title { margin-top: 16px; font-size: 0.85rem; }
 
-.bug-report-close {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 1.5rem;
-  cursor: pointer;
-}
+/* .bug-report-close の見た目は /styles/close-button.css にある。 */
 
 .bug-report-warning {
   margin: 12px 0;

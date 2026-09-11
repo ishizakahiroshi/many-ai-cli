@@ -746,17 +746,7 @@
   border-bottom: 1px solid var(--line);
 }
 .spawn-web-dir-title { font-size: 0.92rem; font-weight: 700; }
-.spawn-web-dir-close {
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm, 6px);
-}
-.spawn-web-dir-close:hover { background: var(--danger-bg, rgba(239,68,68,0.12)); color: var(--danger, #ef4444); }
+/* .spawn-web-dir-close の見た目は /styles/close-button.css にある。 */
 .spawn-web-dir-pathrow {
   display: flex;
   gap: 6px;

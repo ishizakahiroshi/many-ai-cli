@@ -24,6 +24,7 @@
 @import url("/styles/mobile-approval-only.css");
 @import url("/styles/bug-report.css");
 @import url("/styles/subscriptions.css");
+@import url("/styles/close-button.css");
 
 #deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); }
 #deferred-send-status[hidden] { display:none; }
@@ -427,23 +428,7 @@ header {
   z-index: 1;
   background: var(--bg-elev, #1e2330);
 }
-/* 閉じるボタンは他パネル（.server-modal-close / .wf-modal-close）と同じ見た目に揃える。
-   ヘッダ側の uppercase / letter-spacing はグリフに掛けない。 */
-.usage-dropdown-close {
-  margin-left: auto;
-  padding: 2px 6px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  font-family: inherit;
-  font-size: 0.85rem;
-  line-height: 1;
-  letter-spacing: 0;
-  text-transform: none;
-  cursor: pointer;
-}
-.usage-dropdown-close:hover { background: var(--danger-bg); color: var(--danger); }
+/* .usage-dropdown-close の見た目と配置は /styles/close-button.css（閉じるボタンの名簿）にある。 */
 .usage-dropdown-item {
   display: flex;
   align-items: center;
@@ -1058,38 +1043,8 @@ header {
   body.sidebar-right #session-list { order: 2; }
 }
 
-/* パネルの開閉・閉じるボタン（⊟/⊞/✕）を左へ寄せる。閉じるボタンはどれも flex の子なので、
-   order だけで自分の入っているヘッダの左端へ寄る（flex でないヘッダでは単に無効）。 */
-body.close-left :is(
-  .review-close-btn,
-  .git-turn-close-btn,
-  .detail-close,
-  .git-commit-close,
-  .server-modal-close,
-  .wf-modal-close,
-  .mc-modal-close,
-  .bug-report-close,
-  .dgl-close,
-  .tsb-sent-close,
-  .session-search-close,
-  .spawn-web-dir-close,
-  .first-run-tour-close,
-  .multi-question-banner-close,
-  .expand-popup-btns
-) {
-  order: -1;
-  margin-left: 0;
-}
-
-/* margin-left:auto で右端へ押し出しているものは、押し出す向きを逆にする。 */
-body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-actions, .usage-dropdown-close) {
-  order: -1;
-  margin-left: 0;
-  margin-right: auto;
-}
-
-/* ボタンが群になっているヘッダでは、群の中でも ✕ を先頭へ。 */
-body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1; }
+/* 閉じるボタンを左へ寄せる設定（body.close-left）の 3 本は /styles/close-button.css へ移した。
+   閉じるボタンの名簿を「見た目」と「配置」で 2 箇所に分けないため。 */
 .no-sessions { color: var(--muted-2); font-size: 0.85rem; padding: 12px; text-align: center; }
 
 /* Responsive breakpoints:
@@ -2700,15 +2655,7 @@ button.orchestration-relay-session.active {
 }
 .relay-dialog-header { margin-bottom: 12px; }
 .relay-dialog-header h2 { margin: 0; font-size: 1rem; }
-.relay-dialog-close {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 4px 6px;
-}
-.relay-dialog-close:hover { color: var(--text); }
+/* .relay-dialog-close の見た目は /styles/close-button.css にある。 */
 .relay-dialog-target {
   display: flex;
   flex-wrap: wrap;

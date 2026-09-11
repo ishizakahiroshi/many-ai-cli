@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Changed
+- **The ✕ close buttons across panels and dialogs now look and behave the same.**
+  Eleven of them had drifted apart into their own stylesheets — sizes from
+  0.85rem to 1.5rem, four different hover treatments, and one (the bug report
+  dialog) with no hover at all. They now share one rule: the same size for a
+  dropdown or panel header, one step larger for a standalone dialog, and a red
+  hover on every one of them, since closing is not undoable. Along the way the
+  relay dialog's ✕ turned out to be missing from the "close button on the left"
+  setting entirely — it ignored that preference and stayed on the right. It is
+  registered now, so all eleven follow it.
+
 - The handoff preview is now an editable textarea instead of a read-only block,
   so the text that becomes the successor session's `initial_prompt` can be
   corrected before you start it. Pressing Start is still the approval by itself
