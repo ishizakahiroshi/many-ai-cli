@@ -1,7 +1,14 @@
-# many-ai-cli: v0.8.x の archive を正本にする。docs/local 配下（gitignore）に置く。
+# many-ai-cli: 現行リリース系列の archive を正本にする。docs/local 配下（gitignore）に置く。
 # ルート archive/ は使わない（誤って git 管理に載るのを防ぐ）。
-# 過去のリリース系 archive も v0.4.x / v0.6.x / v0.7.x と `.x` 付きで揃えてある。
-archive_dir: docs/local/archive/v0.8.x
+# 過去のリリース系 archive も v0.4.x / v0.6.x / v0.7.x / v0.8.x と `.x` 付きで揃えてある。
+# **リリースを打ったらここを次の系列へ進める**（v0.8.0 リリース後の 2026-09-11 に v0.8.x → v0.9.x へ）。
+archive_dir: docs/local/archive/v0.9.x
+
+# **`docsweep sweep` を素で走らせないこと（2026-09-11 実測）。**
+# sweep は docs/local 配下を再帰で見て、`done` / `discarded` のものを「既に archive の中にあっても」
+# すべて archive_dir へ集めようとする。2026-09-11 の --dry-run では 439 件が移送対象になり、
+# v0.2.2 / v0.3.2 / v0.5.x などの中身を 1 つのフォルダへ平らにする計画が出た。
+# 棚卸しの移送は、対象ファイルを名指しした Move で行う（relabel は `docsweep apply` でよい）。
 
 # plan を作った瞬間に「利用者に見える C は CHANGELOG 行を完了条件に含める」を本文へ出す
 # （2026-09-07 制定。plan に C を後から足したとき CHANGELOG が完了条件から抜け、commit 直前に気づいた）。
