@@ -1206,6 +1206,14 @@
             <select id="spawn-subscription" class="spawn-select"></select>
           </div>
 
+          <!-- effort: /api/info の effort_levels に写像がある provider でのみ出す。
+               無い provider では行ごと隠し、送信 JSON も従来と同一に保つ
+               （docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5）。
+               option は spawn-panel.ts が provider ごとに組む（subscription と同じ作法）。 -->
+          <div class="spawn-subscription-row" id="spawn-effort-row" hidden>
+            <select id="spawn-effort" class="spawn-select"></select>
+          </div>
+
           <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent / command-code. -->
           <div id="spawn-claude-opts">
             <button id="spawn-claude-model-btn" class="spawn-btn-browse" type="button" data-i18n="spawn_claude_model_btn">Claude /model</button>
@@ -1415,6 +1423,7 @@
                 <th data-i18n="spawn_role_table_cli">CLI</th>
                 <th data-i18n="spawn_role_table_model">Model</th>
                 <th data-i18n="spawn_role_table_subscription">Subscription</th>
+                <th data-i18n="spawn_role_table_permission">Permission tier</th>
               </tr>
             </thead>
             <tbody id="relay-role-table-body"></tbody>

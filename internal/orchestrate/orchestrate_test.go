@@ -2,6 +2,7 @@ package orchestrate
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,13 +12,43 @@ import (
 )
 
 func TestParseRelayProviderModel(t *testing.T) {
-	provider, model, err := parseRelayProviderModel(" claude/opus ")
-	if err != nil || provider != "claude" || model != "opus" {
-		t.Fatalf("parsed provider=%q model=%q err=%v", provider, model, err)
+	provider, model, effort, err := parseRelayProviderModel(" claude/opus ")
+	if err != nil || provider != "claude" || model != "opus" || effort != "" {
+		t.Fatalf("parsed provider=%q model=%q effort=%q err=%v", provider, model, effort, err)
 	}
-	provider, model, err = parseRelayProviderModel("codex")
-	if err != nil || provider != "codex" || model != "" {
-		t.Fatalf("provider-only parse = %q/%q err=%v", provider, model, err)
+	provider, model, effort, err = parseRelayProviderModel("codex")
+	if err != nil || provider != "codex" || model != "" || effort != "" {
+		t.Fatalf("provider-only parse = %q/%q@%q err=%v", provider, model, effort, err)
+	}
+}
+
+// provider[/model][@effort] の 3 形（@ 無し・model 無し・effort 無し）を固定する
+// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+// "@" が無い値は effort が導入される前とまったく同じに解釈される。
+func TestParseRelayProviderModelWithEffort(t *testing.T) {
+	cases := []struct {
+		raw, provider, model, effort string
+	}{
+		{"claude/opus@high", "claude", "opus", "high"},
+		{"claude@high", "claude", "", "high"},
+		{" codex/gpt-5.5@minimal ", "codex", "gpt-5.5", "minimal"},
+		{"claude/opus", "claude", "opus", ""},
+		{"claude", "claude", "", ""},
+	}
+	for _, tc := range cases {
+		provider, model, effort, err := parseRelayProviderModel(tc.raw)
+		if err != nil {
+			t.Fatalf("parseRelayProviderModel(%q) error = %v", tc.raw, err)
+		}
+		if provider != tc.provider || model != tc.model || effort != tc.effort {
+			t.Fatalf("parseRelayProviderModel(%q) = %q/%q@%q, want %q/%q@%q",
+				tc.raw, provider, model, effort, tc.provider, tc.model, tc.effort)
+		}
+	}
+	for _, raw := range []string{"", "@high", "claude/opus@", "claude/opus@hi gh"} {
+		if _, _, _, err := parseRelayProviderModel(raw); err == nil {
+			t.Fatalf("parseRelayProviderModel(%q) = nil error, want an error", raw)
+		}
 	}
 }
 
@@ -229,5 +260,187 @@ func TestPostChildAPISpawnTimeoutPendingMessage(t *testing.T) {
 	}
 	if !strings.Contains(msg, "delivered via orchestration notification") {
 		t.Errorf("error message missing notification delivery guidance: %s", msg)
+	}
+}
+
+// 起動要求の共通 3 項目が `orchestrate spawn` の body に載ることと、付けなかった
+// ときの body が従来と完全に一致すること（子 plan:
+// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+func TestRunSpawnSendsLaunchOptions(t *testing.T) {
+	var raw map[string]any
+	var got spawnChildRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"session_id":31,"board_path":"board.md","cwd":"/tmp/child"}`))
+	}))
+	defer server.Close()
+	port := server.Listener.Addr().String()
+	port = port[strings.LastIndex(port, ":")+1:]
+	t.Setenv(hubPortEnv, port)
+	t.Setenv(sessionIDEnv, "9")
+	t.Setenv(hubTokenEnv, "spawn-secret")
+
+	if err := runSpawn([]string{
+		"--role", "review",
+		"--provider", "claude",
+		"--effort", "high",
+		"--execution-mode", "interactive",
+		"--permission", "attended",
+		"prompt text",
+	}); err != nil {
+		t.Fatalf("runSpawn: %v", err)
+	}
+	if got.Effort != "high" || got.ExecutionMode != "interactive" || got.PermissionPreset != "attended" {
+		t.Fatalf("spawn request = %+v", got)
+	}
+
+	// 3 項目を付けない呼び出しでは、JSON にキー自体が現れない。
+	raw = nil
+	if err := runSpawn([]string{"--role", "review", "prompt text"}); err != nil {
+		t.Fatalf("runSpawn without options: %v", err)
+	}
+	for _, key := range []string{"effort", "execution_mode", "permission_preset"} {
+		if _, present := raw[key]; present {
+			t.Fatalf("body carries %q even though the flag was not passed: %v", key, raw)
+		}
+	}
+}
+
+// relay の役割は 1 役割 1 引数のまま provider/model@effort を受け、実行モードは
+// 役割共通の 1 フラグから各役割へ写る。付けなければ body は従来と完全に一致する。
+func TestRunRelaySendsRoleEffortAndExecutionMode(t *testing.T) {
+	var raw map[string]any
+	var got relayStartRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"relay":{"orchestration_id":"r9-test","mode":"worktree","max_rounds":3,"implementation_session_id":12}}`))
+	}))
+	defer server.Close()
+	port := server.Listener.Addr().String()
+	port = port[strings.LastIndex(port, ":")+1:]
+	t.Setenv(hubPortEnv, port)
+	t.Setenv(sessionIDEnv, "9")
+	t.Setenv(hubTokenEnv, "relay-secret")
+
+	if err := runRelay([]string{
+		"--plan", "docs/plan.md",
+		"--impl", "claude/opus@high",
+		"--review", "codex/gpt-5",
+		"--execution-mode", "interactive",
+	}); err != nil {
+		t.Fatalf("runRelay: %v", err)
+	}
+	impl := got.Roles["implementation"]
+	if impl.Provider != "claude" || impl.Model != "opus" || impl.Effort != "high" || impl.ExecutionMode != "interactive" {
+		t.Fatalf("implementation role = %+v", impl)
+	}
+	review := got.Roles["review"]
+	if review.Effort != "" || review.ExecutionMode != "interactive" {
+		t.Fatalf("review role = %+v (effort must stay empty, execution mode is role-common)", review)
+	}
+
+	// 何も付けない relay の役割 JSON には effort も execution_mode も現れない。
+	raw = nil
+	if err := runRelay([]string{
+		"--plan", "docs/plan.md",
+		"--impl", "claude/opus",
+		"--review", "codex/gpt-5",
+	}); err != nil {
+		t.Fatalf("runRelay without options: %v", err)
+	}
+	roles, _ := raw["roles"].(map[string]any)
+	if len(roles) == 0 {
+		t.Fatalf("relay body carries no roles: %v", raw)
+	}
+	for role, value := range roles {
+		fields, _ := value.(map[string]any)
+		for _, key := range []string{"effort", "execution_mode"} {
+			if _, present := fields[key]; present {
+				t.Fatalf("role %s carries %q even though nothing was passed: %v", role, key, fields)
+			}
+		}
+	}
+}
+
+// 権限の段は役割共通の 1 フラグで、全役割の割り当てへ同じ値が写る（子 plan:
+// docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6 の設計 7）。
+// 受理値の判断は Hub の既存検証が持つので、CLI 側では写ることだけを固定する。
+func TestRunRelaySendsRolePermissionPreset(t *testing.T) {
+	var raw map[string]any
+	var got relayStartRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request: %v", err)
+		}
+		if err := json.Unmarshal(body, &raw); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if err := json.Unmarshal(body, &got); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true,"relay":{"orchestration_id":"r9-test","mode":"worktree","max_rounds":3,"implementation_session_id":12}}`))
+	}))
+	defer server.Close()
+	port := server.Listener.Addr().String()
+	port = port[strings.LastIndex(port, ":")+1:]
+	t.Setenv(hubPortEnv, port)
+	t.Setenv(sessionIDEnv, "9")
+	t.Setenv(hubTokenEnv, "relay-secret")
+
+	if err := runRelay([]string{
+		"--plan", "docs/plan.md",
+		"--impl", "claude/opus",
+		"--review", "codex/gpt-5",
+		"--strong", "claude/opus",
+		"--permission", "bounded",
+	}); err != nil {
+		t.Fatalf("runRelay: %v", err)
+	}
+	for _, role := range []string{"implementation", "review", "implementation-strong"} {
+		if assignment := got.Roles[role]; assignment.PermissionPreset != "bounded" {
+			t.Fatalf("role %s = %+v, want permission_preset bounded on every role", role, assignment)
+		}
+	}
+
+	// 付けない relay の役割 JSON には permission_preset のキー自体が現れない。
+	raw = nil
+	if err := runRelay([]string{
+		"--plan", "docs/plan.md",
+		"--impl", "claude/opus",
+		"--review", "codex/gpt-5",
+	}); err != nil {
+		t.Fatalf("runRelay without --permission: %v", err)
+	}
+	roles, _ := raw["roles"].(map[string]any)
+	if len(roles) == 0 {
+		t.Fatalf("relay body carries no roles: %v", raw)
+	}
+	for role, value := range roles {
+		fields, _ := value.(map[string]any)
+		if _, present := fields["permission_preset"]; present {
+			t.Fatalf("role %s carries permission_preset even though --permission was not passed: %v", role, fields)
+		}
 	}
 }

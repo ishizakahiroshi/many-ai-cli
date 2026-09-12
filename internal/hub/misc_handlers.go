@@ -98,7 +98,76 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		// している RateLimit5hPct/7dPct 等から計算した残量）を見て、セッション
 		// ごとに 1 回だけ通知を出す。
 		"handoff_notify_remaining_percent": cfg.Handoff.NotifyRemainingPercentOrDefault(),
+		// 同じ帯の 2 つ目のボタン（前任に引き継ぎメモを書かせる）の扱い:
+		// ask（既定）= 人が押す / auto = 帯と同時に画面が 1 回だけ叩く / off = 出さない
+		// （子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+		// 閾値判定は今までどおりブラウザ側が usage_stat から行うので、Hub 側に
+		// 残量を見張る仕組みは増やさない。
+		"handoff_note_on_threshold": cfg.Handoff.NoteOnThresholdOrDefault(),
+		// 起動要求の共通 3 項目の候補値（子 plan:
+		// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5）。
+		// effort_levels は写像がある provider だけがキーを持つ（無い provider は
+		// キーごと出さない＝画面は欄を出さない）。execution_modes /
+		// permission_presets は「この build で選べる値」。headless / bounded は
+		// それぞれの C で解禁済みなので、今は 3 値とも返る。
+		"effort_levels":      effortLevelsByProvider(),
+		"execution_modes":    config.AvailableExecutionModes(),
+		"permission_presets": config.AvailablePermissionPresets(),
+		// headless の定義がある provider（内蔵 + config.yaml の custom_providers）。
+		// 実行モードに headless を選べるのは全 provider だが、定義が無いものは起動時に
+		// 400 になる。画面はこの一覧を見て、押す前に「この CLI には headless の定義が
+		// 無い」を権限欄と同じ場所へ 1 行出す（子 plan 内部 C6）。**判定の正本は
+		// あくまで起動時の解決**で、これはその写し。
+		"headless_providers": config.HeadlessProviders(cfg),
+		// 画面から立てる子（origin: "ui"）の実効権限。provider → 段 → 実効フラグで、
+		// 内側の "" は「段を選んでいない」＝ UI 起点の既定（段 1）。派生ダイアログは
+		// これを spawn 確認ダイアログと同じ描画関数へ渡す。確認ダイアログは spawn 時に
+		// WS で同じ表を受け取るが、派生ダイアログには対になる要求がまだ存在しない
+		// （人がこれから作る）ので、候補値と同じく /api/info から先に配る。
+		// **表示専用で、Hub はこれを読み返さない**（子 plan:
+		// docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C2）。
+		"child_permission_preview": childApprovalPreviewTiers(spawnChildRequest{Origin: launchOriginUI}, cfg),
+		// 役割 → 「次回もこの段を使う」で覚えた段（user_prefs.spawn.role_permission）。
+		// 派生ダイアログが役割を選んだ時点で段の select をこの値にし、チェックボックスを
+		// ON で開くために要る。**UI 起点の要求を Hub 側で埋めないのと対になっている**:
+		// 埋めるのは画面で、人がそこから変えた段はそのまま送られる（子 plan:
+		// docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+		// 記憶が無ければ空のオブジェクト。
+		"role_permission": rolePermissionMemory(cfg),
 	})
+}
+
+// rolePermissionMemory は /api/info が返す役割 → 権限の段の記憶を組む。
+//
+// 表に無い段は落とす。config.yaml を手で書き換えて未知の値を入れられるので、画面の
+// select に無い値をそのまま初期値として渡さないためだが、**これは表示用の写しであって
+// 受理の判断ではない**（正本は起動時の validateLaunchRequestOptions）。
+// 空でも null ではなく {} を返す（画面側で毎回オブジェクトとして扱えるようにする）。
+func rolePermissionMemory(cfg *config.Config) map[string]string {
+	out := map[string]string{}
+	if cfg == nil {
+		return out
+	}
+	for role, tier := range cfg.UserPrefs.Spawn.RolePermission {
+		if config.ValidatePermissionPreset(tier) == nil && tier != config.PermissionPresetUnset {
+			out[role] = tier
+		}
+	}
+	return out
+}
+
+// effortLevelsByProvider は /api/info が返す provider → effort 候補値の表を組む。
+// 正本は internal/config/effort.go の 1 本の表で、ここはその写しを JSON へ出すだけ。
+// 写像が無い provider はキーごと現れないので、画面は「欄を出さない」を素直に書ける。
+func effortLevelsByProvider() map[string][]string {
+	providers := config.EffortProviders()
+	out := make(map[string][]string, len(providers))
+	for _, provider := range providers {
+		if levels := config.EffortLevelsFor(provider); len(levels) > 0 {
+			out[provider] = levels
+		}
+	}
+	return out
 }
 
 // customProviderOptions は config.yaml の custom_providers: を spawn ドロップダウンが

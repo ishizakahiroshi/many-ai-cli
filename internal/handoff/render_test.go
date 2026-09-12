@@ -132,6 +132,68 @@ func TestRenderMarkdownNeverCarriesFieldsRecordCannotHold(t *testing.T) {
 	}
 }
 
+// TestRenderMarkdownTranscriptSectionOnlyWhenRecorded is the 内部 C1 completion
+// criterion of 子 plan docs/local/plan_derived-session-launch_c4_handoff-routes.md:
+// the predecessor's conversation log appears as a path plus how to read it, and
+// a provider whose transcript location cannot be resolved (grok / copilot / …)
+// gets no section at all rather than an empty one.
+func TestRenderMarkdownTranscriptSectionOnlyWhenRecorded(t *testing.T) {
+	const path = `C:\fake-home\.claude\projects\C--work-sample-repo\11111111-2222-4333-8444-555555555555.jsonl`
+	withTranscript := RenderMarkdown(1, []Record{
+		{Kind: KindSessionStart, Provider: "claude", Transcript: path},
+	})
+	if !strings.Contains(withTranscript, "前任の会話ログ") || !strings.Contains(withTranscript, path) {
+		t.Fatalf("expected the transcript section and its path, got:\n%s", withTranscript)
+	}
+	if !strings.Contains(withTranscript, "末尾") {
+		t.Fatalf("expected the section to say how to read the file, got:\n%s", withTranscript)
+	}
+
+	without := RenderMarkdown(1, []Record{{Kind: KindSessionStart, Provider: "grok"}})
+	if strings.Contains(without, "前任の会話ログ") {
+		t.Fatalf("a provider with no resolvable transcript must get no section, got:\n%s", without)
+	}
+}
+
+// TestRenderMarkdownTranscriptTakesTheNewestRecord fixes which record wins when
+// more than one carries a path: a session_end recorded after the session's log
+// moved must not be overridden by the stale session_start value.
+func TestRenderMarkdownTranscriptTakesTheNewestRecord(t *testing.T) {
+	got := RenderMarkdown(1, []Record{
+		{Kind: KindSessionStart, Provider: "codex", Transcript: "/fake/sessions/2026/09/12/rollout-old.jsonl"},
+		{Kind: KindSessionEnd, Transcript: "/fake/sessions/2026/09/12/rollout-new.jsonl"},
+	})
+	if !strings.Contains(got, "rollout-new.jsonl") {
+		t.Fatalf("expected the newest transcript path, got:\n%s", got)
+	}
+	if strings.Contains(got, "rollout-old.jsonl") {
+		t.Fatalf("expected the older transcript path to be replaced, got:\n%s", got)
+	}
+}
+
+// TestRenderMarkdownNoteSectionOnlyWhenRecorded is the 内部 C2 completion
+// criterion: the memo the predecessor wrote is pointed at (and marked as the
+// thing to read first), and a session that was never asked for one gets no
+// section.
+func TestRenderMarkdownNoteSectionOnlyWhenRecorded(t *testing.T) {
+	const path = `C:\fake-home\.many-ai-cli\handoff\s42.note.md`
+	withNote := RenderMarkdown(42, []Record{
+		{Kind: KindSessionStart, Provider: "claude"},
+		{Kind: KindNote, Note: path},
+	})
+	if !strings.Contains(withNote, "引き継ぎメモ") || !strings.Contains(withNote, path) {
+		t.Fatalf("expected the note section and its path, got:\n%s", withNote)
+	}
+	if !strings.Contains(withNote, "先に") {
+		t.Fatalf("expected the note section to say it is read first, got:\n%s", withNote)
+	}
+
+	without := RenderMarkdown(42, []Record{{Kind: KindSessionStart, Provider: "claude"}})
+	if strings.Contains(without, "引き継ぎメモ") {
+		t.Fatalf("a session with no memo must get no section, got:\n%s", without)
+	}
+}
+
 // TestRenderMarkdownHandoffFromNotesPredecessor is the internal-C3
 // completion criterion surfaced here: when the session's own session_start
 // carries HandoffFrom, the rendered identity section and instructions

@@ -42,6 +42,7 @@ import (
 	"sync"
 	"time"
 
+	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
 )
 
@@ -126,6 +127,23 @@ type errRelayRolesMissing struct{ Role string }
 func (e errRelayRolesMissing) Error() string {
 	return fmt.Sprintf("role %q needs a provider and a model", e.Role)
 }
+
+// errRelayExecutionMode is an execution mode a role cannot run in — today only
+// "headless was asked for and this provider has no headless definition". It is
+// a start-time refusal on purpose (親 plan D2): the alternative, quietly running
+// the role interactively, produces a relay that looks like it started and then
+// waits forever for a child nobody is watching.
+type errRelayExecutionMode struct {
+	Role     string
+	Provider string
+	Err      error
+}
+
+func (e errRelayExecutionMode) Error() string {
+	return fmt.Sprintf("role %q (%s): %v", e.Role, e.Provider, e.Err)
+}
+
+func (e errRelayExecutionMode) Unwrap() error { return e.Err }
 
 // errOrchestrationLimit is returned when starting the relay would exceed one
 // of the orchestration limits. Running is the number of relays already in
@@ -350,6 +368,45 @@ func (run *relayRun) roleOfLocked(childID int) string {
 
 func relayIsImplementerRole(role string) bool {
 	return role == relayRoleImplementation || role == relayRoleImplementationStrong
+}
+
+// relayResolveRoleExecutionMode decides the execution mode one relay role runs
+// in, once, at start (子 plan 内部 C4).
+//
+// The role's own value wins; an unset role falls back to
+// orchestration.relay_execution_mode, which is unset by default and therefore
+// leaves the role exactly as it ran before this mode existed.
+//
+// unattended is always true here, and that is the whole difference from
+// applyChildExecutionMode: a relay worker has nobody watching it no matter who
+// pressed the button that started the relay, so `auto` on a headless-capable
+// provider means headless even when a human started the run from the screen.
+func relayResolveRoleExecutionMode(requested, provider string, cfg *config.Config) (string, error) {
+	mode := config.NormalizeExecutionMode(requested)
+	if mode == config.ExecutionModeUnset && cfg != nil {
+		mode = cfg.Orchestration.RelayExecutionModeDefault()
+	}
+	return config.ResolveExecutionMode(mode, headlessCapableProvider(provider, cfg), config.LaunchOriginConductor, true)
+}
+
+// roleHeadlessLocked reports whether this role's children run non-interactively.
+// It reads the resolved mode startRelay stored on the assignment, so there is
+// one answer per role for the life of the relay — including after a restore,
+// because the roles are what relay.json persists.
+func (run *relayRun) roleHeadlessLocked(role string) bool {
+	return config.IsHeadlessExecutionMode(run.roles[role].ExecutionMode)
+}
+
+// anyHeadlessRoleLocked reports whether the relay has any headless role at all.
+// Used by the restore path, which cannot wait for children that have no way to
+// come back.
+func (run *relayRun) anyHeadlessRoleLocked() bool {
+	for role := range run.roles {
+		if run.roleHeadlessLocked(role) {
+			return true
+		}
+	}
+	return false
 }
 
 // awaitedChildLocked is the child whose DONE the current state waits for.
@@ -679,6 +736,7 @@ func (s *Server) startRelay(parentID int, req relayStartRequest) (*proto.RelaySt
 	if escalateAfter <= 0 {
 		escalateAfter = relayDefaultEscalateAfter
 	}
+	fullCfg := s.snapshotCfg()
 	roles := map[string]orchestrationRoleAssignment{}
 	for _, role := range []string{relayRoleImplementation, relayRoleReview, relayRoleImplementationStrong} {
 		ra, ok := req.Roles[role]
@@ -690,13 +748,23 @@ func (s *Server) startRelay(parentID int, req relayStartRequest) (*proto.RelaySt
 		if !ok || !validOrchestrationProvider(ra.Provider) || !spawnValidModelLabel(ra.Model) || strings.HasPrefix(ra.Model, "-") {
 			return nil, errRelayRolesMissing{Role: role}
 		}
+		mode, modeErr := relayResolveRoleExecutionMode(ra.ExecutionMode, ra.Provider, fullCfg)
+		if modeErr != nil {
+			return nil, errRelayExecutionMode{Role: role, Provider: ra.Provider, Err: modeErr}
+		}
+		// The **resolved** mode is stored back onto the assignment, which is what
+		// every later decision reads: which prompt route a spawn takes, whether an
+		// exit means "the relay's child died" or "that instruction finished", and —
+		// because roles are persisted in relay.json — what a restored relay knows
+		// about children that cannot come back.
+		ra.ExecutionMode = mode
 		roles[role] = ra
 	}
 	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
 		return nil, errRelayParentNotFound
 	}
-	cfg := s.snapshotCfg().Orchestration
+	cfg := fullCfg.Orchestration
 	running, _ := s.relayBudgetForParent(parentID, nil)
 	if parent.Depth >= cfg.MaxDepth {
 		return nil, errOrchestrationLimit{Limit: "depth", Running: running, Max: cfg.MaxDepth}
@@ -849,8 +917,18 @@ func (s *Server) relaySpawn(run *relayRun, role, prompt string) error {
 func (s *Server) relaySpawnWithAdmission(run *relayRun, role, prompt, admissionID string) error {
 	deps := s.relayDep()
 	ra := run.roles[role]
-	body := spawnChildRequest{Role: role, Provider: ra.Provider, Model: ra.Model, InitialPrompt: prompt, CWD: run.childCWD, Force: true, SubscriptionProfileID: ra.Subscription}
-	applyChildApprovalDefaults(&body, s.snapshotCfg().Orchestration.ChildFullBypassEnabled())
+	// 起動要求の共通 3 項目は役割の割り当てから写すだけ（子 plan:
+	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+	// 承認系フィールドはここでは埋めない: relay の子は無人なので、権限の段は
+	// 役割の permission_preset か orchestration.child_permission_default から
+	// resolveChildPermission が決める（internal/hub/child_permission.go）。
+	// Origin は空＝無人（画面から人が起動したものではない）。
+	body := spawnChildRequest{
+		Role: role, Provider: ra.Provider, Model: ra.Model, InitialPrompt: prompt,
+		CWD: run.childCWD, Force: true, SubscriptionProfileID: ra.Subscription,
+		Effort: ra.Effort, ExecutionMode: ra.ExecutionMode, PermissionPreset: ra.PermissionPreset,
+	}
+	applyChildPermission(&body, s.snapshotCfg().Orchestration)
 	prep := childSpawnPreparation{orchestrationID: run.orchestrationID, boardPath: run.boardPath, childCWD: run.childCWD}
 	parent, _, _ := s.orchestrationParentState(run.parentID)
 	if parent == nil {
@@ -864,13 +942,17 @@ func (s *Server) relaySpawnWithAdmission(run *relayRun, role, prompt, admissionI
 		s.consumeOrchestrationChildren(admissionID, 1)
 	}
 	label := s.sessionLabel(res.ID)
+	// The progress ID is cleared along with the rest: a child that has just been
+	// started writes child-<its own live id>.md. A non-zero progress ID only ever
+	// means "this child was renumbered when it reattached", which cannot be true
+	// of one that did not exist a moment ago.
 	switch role {
 	case relayRoleImplementation:
-		run.implID, run.implLabel, run.implDoneBaseline = res.ID, label, 0
+		run.implID, run.implLabel, run.implDoneBaseline, run.implProgressID = res.ID, label, 0, 0
 	case relayRoleImplementationStrong:
-		run.strongID, run.strongLabel, run.strongDoneBaseline = res.ID, label, 0
+		run.strongID, run.strongLabel, run.strongDoneBaseline, run.strongProgressID = res.ID, label, 0, 0
 	case relayRoleReview:
-		run.reviewID, run.reviewLabel, run.reviewDoneBaseline = res.ID, label, 0
+		run.reviewID, run.reviewLabel, run.reviewDoneBaseline, run.reviewProgressID = res.ID, label, 0, 0
 	}
 	run.nudged[res.ID] = false
 	s.relayPublishMetaLocked(run)
@@ -898,6 +980,74 @@ func (s *Server) relayInject(run *relayRun, role, text string) error {
 	s.relayRearmChildTimers(run.orchestrationID, id)
 	deps.inject(id, "\n"+safe+"\n")
 	return nil
+}
+
+// relayDispatch hands a role its next instruction, whichever shape its children
+// have (子 plan 内部 C4).
+//
+//	interactive  the child is alive and waiting; the text is typed into it.
+//	headless     the child ran one process for one instruction and has already
+//	             exited. The next instruction starts a **new** process with that
+//	             text as its prompt — one instruction, one process, and its exit
+//	             is what says the instruction is over.
+//
+// The interactive branch is relayInject unchanged, so a relay with no headless
+// role behaves byte for byte as it did before this existed.
+func (s *Server) relayDispatch(run *relayRun, role, text string) error {
+	if !run.roleHeadlessLocked(role) {
+		return s.relayInject(run, role, text)
+	}
+	prompt := s.relayHeadlessInstruction(run, text)
+	previous := run.childIDLocked(role)
+	s.relayBoardLocked(run, fmt.Sprintf("@%s への指示（headless: 新しいプロセスを立てる。前の子 #%d は終了済み）:\n%s",
+		role, previous, sanitizeInjectText(text)))
+	if previous == 0 {
+		return s.relaySpawn(run, role, prompt)
+	}
+	return s.relayRespawn(run, role, prompt)
+}
+
+// relayRespawn replaces the process of a role the relay already holds, without
+// taking an admission slot.
+//
+// The slot was taken when that role's first child started, and the child being
+// replaced has already exited — which is the only reason a replacement is
+// happening at all. So a replacement adds no live session, and live sessions are
+// what the children-per-parent budget is there to bound.
+//
+// Asking reserveOrchestrationChildren instead would compare against every child
+// this parent has ever had, finished ones included (sessions stay in the list
+// until they are dismissed). A headless relay runs one process per instruction,
+// so that count only goes up, and a relay would run out of budget after a
+// handful of rounds while never having more than one worker alive.
+func (s *Server) relayRespawn(run *relayRun, role, prompt string) error {
+	return s.relaySpawnWithAdmission(run, role, prompt, "")
+}
+
+// relayHeadlessInstruction wraps one instruction for a process that is about to
+// be started for it alone.
+//
+// The relay's continuation texts (proceed / fix / re-review / hand-over) were
+// written for a child that has been in the conversation since the relay
+// started: they say "the same rules" and "continue" because the standing rules
+// arrived once, in the spawn prompt. A headless run has no such history — it is
+// a new process with an empty context — so what an interactive child was told
+// at spawn has to travel with every instruction instead.
+//
+// The instruction itself is not rewritten. Two sets of relay texts, one per
+// execution mode, would drift apart; one preamble in front of the existing text
+// cannot.
+func (s *Server) relayHeadlessInstruction(run *relayRun, text string) string {
+	preamble := relayJoin(
+		run.tagLocked(),
+		"You are a relay worker started for this one instruction. You have no memory of earlier rounds of this relay, and you will exit when this instruction is finished — that exit is how the relay knows you are done.",
+		"The plan is at "+run.planPath+".",
+		run.worktreeLineLocked(),
+		"Read the repository instructions (CLAUDE.md / AGENTS.md if present) and the plan before changing anything.",
+		run.resyncLineLocked(),
+		"Your instruction follows.",
+	)
+	return sanitizeInjectText(preamble) + "\n\n" + text
 }
 
 // relayRearmChildTimers clears the idle / timeout latches of a child that is
@@ -1105,13 +1255,30 @@ func (s *Server) relayOnChildFileChange(boardID string, childID int, text string
 
 // relayProcessChildTextLocked is the transition body of relayOnChildFileChange.
 func (s *Server) relayProcessChildTextLocked(run *relayRun, childID int, text string) {
+	s.relayAdvanceChildLocked(run, childID, text, false)
+}
+
+// relayAdvanceChildLocked advances the machine from one child's progress file.
+//
+// exited is set when the child's process has already ended, which only happens
+// on the headless route: there, the exit *is* the completion signal (元設計 11
+// 節), so a work unit that produced no new `## DONE` line still counts as
+// finished rather than leaving the relay waiting for a line that can never
+// arrive. On the interactive route exited is always false and every branch below
+// behaves exactly as it did before.
+func (s *Server) relayAdvanceChildLocked(run *relayRun, childID int, text string, exited bool) {
 	role := run.roleOfLocked(childID)
 	if role == "" {
 		return
 	}
 	count, final, escalate := countDoneLines(text, role, run.progressIDLocked(role))
 	if count <= run.doneBaselineLocked(role) {
-		return
+		if !exited {
+			return
+		}
+		// `escalate=true` is a token on a DONE line. There is no such line here,
+		// so the hand-over request cannot be one that was actually made.
+		escalate = false
 	}
 	switch run.state {
 	case relayStateImplementing, relayStateFixing:
@@ -1136,7 +1303,7 @@ func (s *Server) relayProcessChildTextLocked(run *relayRun, childID int, text st
 				s.relayTransitionLocked(run, relayStateImplementing, "")
 				return
 			}
-			if err := s.relayInject(run, relayRoleImplementation, s.relaySelfImplementText(run)); err != nil {
+			if err := s.relayDispatch(run, relayRoleImplementation, s.relaySelfImplementText(run)); err != nil {
 				s.relayFinishLocked(run, relayStateStopped, relayReasonSpawnError, err.Error())
 				return
 			}
@@ -1203,7 +1370,7 @@ func (s *Server) relayImplDoneLocked(run *relayRun, final bool) {
 		if fixed {
 			text = s.relayReReviewText(run)
 		}
-		if err := s.relayInject(run, relayRoleReview, text); err != nil {
+		if err := s.relayDispatch(run, relayRoleReview, text); err != nil {
 			s.relayFinishLocked(run, relayStateStopped, relayReasonSpawnError, err.Error())
 			return
 		}
@@ -1252,7 +1419,7 @@ func (s *Server) relayReviewDoneLocked(run *relayRun, text string, doneCount int
 		// (if any) waits until it is needed again (D-22).
 		run.round = 0
 		run.activeImpl = relayRoleImplementation
-		if err := s.relayInject(run, relayRoleImplementation, s.relayProceedText(run)); err != nil {
+		if err := s.relayDispatch(run, relayRoleImplementation, s.relayProceedText(run)); err != nil {
 			s.relayFinishLocked(run, relayStateStopped, relayReasonSpawnError, err.Error())
 			return
 		}
@@ -1267,7 +1434,7 @@ func (s *Server) relayReviewDoneLocked(run *relayRun, text string, doneCount int
 			s.relayFinishLocked(run, relayStateStopped, relayReasonMaxRounds, fmt.Sprintf("must=%d still open after round %d of %d (%s)", v.Must, run.round, run.maxRounds, run.activeImpl))
 			return
 		}
-		if err := s.relayInject(run, run.activeImpl, s.relayFixText(run, v)); err != nil {
+		if err := s.relayDispatch(run, run.activeImpl, s.relayFixText(run, v)); err != nil {
 			s.relayFinishLocked(run, relayStateStopped, relayReasonSpawnError, err.Error())
 			return
 		}
@@ -1312,14 +1479,20 @@ func (s *Server) relayHandToStrong(run *relayRun, kind string, v relayVerdict) b
 			s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: spawn error (%v) reason=%s", err, reason))
 			return false
 		}
-	} else if err := s.relayInject(run, relayRoleImplementationStrong, s.relayStrongText(run, kind, v)); err != nil {
+	} else if err := s.relayDispatch(run, relayRoleImplementationStrong, s.relayStrongText(run, kind, v)); err != nil {
 		s.relayBoardLocked(run, fmt.Sprintf("escalation skipped: inject error (%v) reason=%s", err, reason))
 		return false
 	}
 	run.activeImpl = relayRoleImplementationStrong
 	run.round = 0
 	s.relayEventLocked(run, proto.RelayEvent{Kind: relayEventEscalated, C: run.currentCLocked(), Round: 0, Text: "reason=" + reason, ReviewPath: v.File})
-	if err := s.relayInject(run, relayRoleImplementation, s.relayWaitText(run)); err != nil {
+	// "Stand down, somebody else has this C" is only worth saying to a child that
+	// is sitting there waiting. A headless implementer already exited when it
+	// wrote its DONE, so telling it would mean starting a whole process to say
+	// one sentence to something with no next turn; the board records it instead.
+	if run.roleHeadlessLocked(relayRoleImplementation) {
+		s.relayBoardLocked(run, fmt.Sprintf("hand-over to %s: no wait notice sent (the headless implementer's process already exited)", relayRoleImplementationStrong))
+	} else if err := s.relayInject(run, relayRoleImplementation, s.relayWaitText(run)); err != nil {
 		s.logger.Warn("relay wait text not delivered", "orchestration_id", run.orchestrationID, "err", err)
 	}
 	return true
@@ -1328,6 +1501,11 @@ func (s *Server) relayHandToStrong(run *relayRun, kind string, v relayVerdict) b
 // relayOnChildIdle is called when the generic idle detection fired for a relay
 // child. The awaited child gets one reminder per work unit (D-15); the other
 // children are waiting for their next instruction and are left alone.
+//
+// A headless child is never nudged. The reminder exists because an interactive
+// CLI can be sitting at its prompt having forgotten to write its DONE line; a
+// headless process has no prompt to sit at, nothing would read the text, and
+// "quiet" there means "still working" — which is what the timeout is for.
 func (s *Server) relayOnChildIdle(boardID string, childID int) {
 	run := s.relayByID(boardID)
 	if run == nil {
@@ -1338,14 +1516,34 @@ func (s *Server) relayOnChildIdle(boardID string, childID int) {
 	if run.terminalLocked() || run.awaitingReconnect || childID != run.awaitedChildLocked() || run.nudged[childID] {
 		return
 	}
-	run.nudged[childID] = true
 	role := run.roleOfLocked(childID)
+	if run.roleHeadlessLocked(role) {
+		return
+	}
+	run.nudged[childID] = true
 	s.relayDep().inject(childID, "\n"+s.relayNudgeText(run, role)+"\n")
 	s.relayEventLocked(run, proto.RelayEvent{Kind: relayEventNudge, C: run.currentCLocked(), Round: run.round, Text: fmt.Sprintf("%s #%d", role, childID)})
 	s.relaySaveLocked(run)
 }
 
-// relayOnChildExit stops the relay when one of its children ends (EOF).
+// relayOnChildExit is called when one of the relay's children ends (EOF). What
+// that means depends on the role's execution mode, and this is the only place
+// the two shapes of child part company:
+//
+//	interactive  the child was supposed to stay alive for the whole relay, so
+//	             its exit is the relay losing a worker: stop (today's behaviour,
+//	             unchanged).
+//	headless     one process was started for one instruction, so its exit is
+//	             that instruction finishing. Read the progress file it left and
+//	             advance — or, on a non-zero exit, stop with the same reason
+//	             code, after putting what the child did manage to write on the
+//	             board.
+//
+// A late exit from a child that has already been replaced is ignored, because
+// roleOfLocked matches on the run's current ID for the role and an old ID
+// matches nothing. That is also what keeps the two routes into a completion —
+// this one and the board scan — from running it twice: whichever arrives first
+// spawns the next child, and the other then finds a stranger's ID.
 func (s *Server) relayOnChildExit(boardID string, childID int, state string) {
 	run := s.relayByID(boardID)
 	if run == nil {
@@ -1357,7 +1555,24 @@ func (s *Server) relayOnChildExit(boardID string, childID int, state string) {
 	if run.terminalLocked() || run.awaitingReconnect || role == "" {
 		return
 	}
-	s.relayFinishLocked(run, relayStateStopped, relayReasonChildExited, fmt.Sprintf("%s #%d state=%s", role, childID, state))
+	if !run.roleHeadlessLocked(role) {
+		s.relayFinishLocked(run, relayStateStopped, relayReasonChildExited, fmt.Sprintf("%s #%d state=%s", role, childID, state))
+		return
+	}
+	text := readFileOrEmpty(childProgressPath(run.boardPath, run.progressIDLocked(role)))
+	if state != "completed" {
+		// The exit code is the verdict (元設計 11 節), so a failed run stops the
+		// relay just like a dead interactive child does. The progress file goes on
+		// the board first: it is the only place the child could say why, and after
+		// relayFinishLocked nothing reads it again.
+		if strings.TrimSpace(text) != "" {
+			s.relayBoardLocked(run, fmt.Sprintf("headless %s session=%d exited state=%s; its progress file said:\n%s", role, childID, state, text))
+		}
+		s.relayFinishLocked(run, relayStateStopped, relayReasonChildExited, fmt.Sprintf("%s #%d state=%s", role, childID, state))
+		return
+	}
+	s.relayBoardLocked(run, fmt.Sprintf("headless %s session=%d finished its instruction (process exit, state=%s)", role, childID, state))
+	s.relayAdvanceChildLocked(run, childID, text, true)
 }
 
 // relayOnChildTimeout stops the relay when the awaited child timed out. A

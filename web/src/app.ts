@@ -132,6 +132,14 @@ export function isActiveSessionRunning() {
   return !!s && s.state === 'running';
 }
 
+// そのセッションが provider の非対話モードで動いているか。値は wrapper の申告が正本
+// （対話セッションは空を送る）なので、ここでは比較するだけ。
+export function isSessionHeadless(sessionId: number | null): boolean {
+  if (sessionId === null || sessionId === undefined) return false;
+  const s = sessions.get(sessionId);
+  return !!s && s.execution_mode === 'headless';
+}
+
 // 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。
 // grok（Grok Build CLI）は Esc では生成を中断できず Ctrl+C(0x03) のみ有効
 // （Windows 実機 v0.2.93 で確認）。他 provider は従来どおり Esc(0x1b)。
@@ -160,17 +168,25 @@ export function updateInputAffordance() {
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
   // B1a: 実行中でなく・スマホ幅で・初回ヒント未表示なら、音声入力ヒントを出す（Q12 決定）。
   const stopViaCtrlC = stopKeyForActiveSession() === '\x03';
-  if (running) {
+  // headless は打ち込む先が無いので、欄ごと無効にして理由を placeholder と tooltip に
+  // 出す（子 plan 内部 C6）。実行中の停止導線（■）もここでは意味を持たない: 止めるのは
+  // カードの × で、wrapper が runner を取り消す。
+  const headless = isSessionHeadless(activeSessionId);
+  if (headless) {
+    inputEl.placeholder = t('input_placeholder_headless');
+  } else if (running) {
     inputEl.placeholder = t(stopViaCtrlC ? 'input_placeholder_running_ctrlc' : 'input_placeholder_running');
   } else if (shouldShowMobileVoiceHintPlaceholder()) {
     inputEl.placeholder = t('mobile_voice_hint_placeholder');
   } else {
     inputEl.placeholder = t('input_placeholder');
   }
+  inputEl.disabled = headless;
+  inputEl.title = headless ? t('input_placeholder_headless') : '';
   // C2: 実行中でも入力欄にテキスト/チップ/ファイルがあれば ➤（送信）のまま。
   // 入力が空の場合のみ ■（停止）に切替える。ペースト・ファイル添付直後に送信できずもっさりする問題を解消。
   const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
-  const showStop = running && !hasContent;
+  const showStop = running && !hasContent && !headless;
   const sendBtn = document.getElementById('send-btn');
   if (sendBtn) {
     sendBtn.textContent = showStop ? '■' : '➤';
@@ -1529,6 +1545,15 @@ export function sendSubmittedText(sessionId, text, opts: any = {}) {
 }
 
 export function sendText(sessionId, text) {
+  // headless のセッションは provider 自身の非対話モードで動いていて、stdin は起動
+  // 直後に閉じている。打った文字には届く先が無いので、ここで止める。止めるのは送信
+  // 経路のこの 1 箇所だけで、入力欄の無効化（updateInputAffordance）はその見た目側
+  // ——「打てるのに何も起きない」を作らないため（子 plan:
+  // docs/local/plan_child_execution_modes_headless.md 内部 C6）。
+  if (isSessionHeadless(sessionId)) {
+    showToast(t('toast_input_headless_blocked'), undefined, 4500);
+    return false;
+  }
   if (!isWebSocketSendReady()) {
     notifySendFailure();
     return false;

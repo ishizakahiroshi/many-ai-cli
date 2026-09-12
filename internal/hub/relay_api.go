@@ -331,6 +331,19 @@ func (s *Server) relayRolesForStart(parentID int, orchestrationID string, suppli
 		if strings.TrimSpace(assignment.Subscription) != "" {
 			current.Subscription = assignment.Subscription
 		}
+		// 起動要求の共通 3 項目（子 plan:
+		// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+		// 上と同じ allowlist の形で 1 項目ずつ写す。ここに足し忘れると
+		// `orchestrate relay --impl claude/opus@high` の effort が黙って落ちる。
+		if strings.TrimSpace(assignment.Effort) != "" {
+			current.Effort = assignment.Effort
+		}
+		if strings.TrimSpace(assignment.ExecutionMode) != "" {
+			current.ExecutionMode = assignment.ExecutionMode
+		}
+		if strings.TrimSpace(assignment.PermissionPreset) != "" {
+			current.PermissionPreset = assignment.PermissionPreset
+		}
 		roles[role] = current
 	}
 	return roles
@@ -494,6 +507,13 @@ func (s *Server) writeRelayAPIError(w http.ResponseWriter, status int, code stri
 	var missing errRelayRolesMissing
 	if errors.As(err, &missing) {
 		writeJSONError(w, http.StatusBadRequest, "relay_roles_missing", fmt.Sprintf("missing role: %s", missing.Role))
+		return
+	}
+	var execMode errRelayExecutionMode
+	if errors.As(err, &execMode) {
+		// 400, not a downgrade: an explicit headless on a provider that has no
+		// headless definition fails where the user can see it (親 plan D2).
+		writeJSONError(w, http.StatusBadRequest, "relay_execution_mode", execMode.Error())
 		return
 	}
 	var limit errOrchestrationLimit

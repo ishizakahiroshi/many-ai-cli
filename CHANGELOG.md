@@ -10,7 +10,138 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **A session can now be started with a reasoning effort, an execution mode and
+  a permission tier.** The three travel together through every launch path —
+  `POST /api/spawn`, `orchestrate spawn`, `orchestrate relay` and the relay's
+  own children. The New Session form gets an effort field; the spawn
+  confirmation dialog shows all three, so whoever approves a child can see and
+  change them (or clear them) before it starts. Effort maps to each CLI's own flag (`claude --effort`,
+  `codex -c model_reasoning_effort`, `opencode --variant`); providers with no
+  such flag (Copilot, Cursor Agent, Grok, Command Code, and any custom
+  provider) simply do not show the field, and a request that names one of them
+  with an effort is rejected rather than silently ignored. On the CLI it is
+  `--effort` / `--execution-mode` / `--permission` for `orchestrate spawn`, and
+  `--impl provider[/model][@effort]` (same for `--review` / `--strong`) plus
+  role-wide `--execution-mode` and `--permission` for `orchestrate relay`; the
+  relay dialog gained a permission tier per role, next to its CLI, model and
+  subscription columns, and remembers it like every other field there. The
+  effort you pick is remembered per provider in the New Session form and per
+  role for children. **A permission tier is remembered only when you ask for
+  it**: the spawn confirmation dialog and the derive dialog carry a "use this
+  tier for this role next time" checkbox under the tier select, and that
+  checkbox is the only thing that writes `user_prefs.spawn.role_permission` —
+  an AI conductor's own request cannot, and unticking it forgets that role
+  again. What it is remembered for is the next child of that role an AI asks
+  for: the confirmation dialog opens with the remembered tier already selected,
+  so what you approve is what you chose last time.
+  (What `execution_mode` does is the headless entry below.) Leaving all three
+  out changes nothing — every existing call starts exactly the session it did
+  before.
+
+- **A 🌱 button on every AI session card starts a new session derived from that
+  one.** Two kinds: a **handoff**, a successor that continues the same work in a
+  different CLI (what the ↪ handoff board already did), and a **child**, a
+  worker with a role that reports back to this session (what until now only an
+  AI conductor's `orchestrate spawn` could start). One dialog for both, with the
+  CLI, subscription profile, model, effort, execution mode and permission tier
+  in the same place, plus the permissions the new session will actually start
+  with — the same disclosure the spawn confirmation dialog shows. The text that
+  gets sent is always visible and editable before you press Start: a handoff
+  starts from the predecessor's handoff board, a child from its role name.
+  **A child you start from the screen does not raise a spawn confirmation** —
+  you pressing the button is the approval — and it runs at the attended tier, so
+  its approvals arrive in the Hub's approval panel like any session you started
+  yourself. The depth and child-count limits still apply. The handoff board's
+  own launch form (the low-quota banner and the ↪ list) now opens this same
+  dialog, so there is one place a session gets started from another. Handoff
+  targets are unchanged: a different CLI only, never another subscription
+  profile of the same one.
+
+- **A handoff can now carry the predecessor's conversation log and a memo it
+  wrote — as paths, never as content.** Claude and Codex keep their own
+  transcript on your disk; the Hub records where (per subscription profile) on
+  the handoff board, and the handoff text now names that file and how to read
+  it. **This works after the predecessor has stopped**, which is the case the
+  board alone could never cover: a Claude session that hit its limit can be
+  continued in Codex from its own conversation. Separately, the low-quota notice
+  gains an "ask it to write a handoff memo" button: the still-running session is
+  asked once to write `~/.many-ai-cli/handoff/s<id>.note.md` (next step,
+  unverified assumptions, open questions, the md it had open), and the Hub
+  records that path once the file is there — `handoff.note_on_threshold` chooses
+  `ask` (default, you press the button), `auto` or `off`, because writing it
+  spends the predecessor's own tokens. Both paths appear in the derive dialog
+  before you press Start, and the memo is swept by the same 14-day retention as
+  the board. Nothing from inside either file passes through the Hub: the
+  successor opens them with its own tools.
+
+- **Sessions linked by a handoff now show it.** The successor's card carries a
+  `↪ #N` chip pointing back at its predecessor, a live predecessor's card
+  carries a `Successor #M` chip, and the ↪ list marks the rows that were handed
+  off. Clicking a chip switches to that session, or opens the ↪ list when that
+  session has already ended. This is a display link only — a successor is an
+  equal new parent, not a child, and nothing about grouping or the
+  orchestration tree changes.
+
+- **A session can now run in the CLI's own non-interactive mode instead of on a
+  terminal.** `execution_mode` takes `interactive` (a PTY and a TUI, what every
+  session is today), `headless` (the provider's own print mode — `claude -p`,
+  `grok -p`, `cursor-agent -p`, `opencode run`, `copilot -p`, `command-code -p`
+  — with no PTY, the instruction handed over at startup, and the process's exit
+  deciding the outcome: exit 0 completed, anything else failed), or `auto`,
+  which picks headless when nobody is watching the session and the CLI can do
+  it, and interactive otherwise. Asking for `headless` where the CLI has no
+  such mode is refused outright — never quietly downgraded to an interactive
+  session that then sits waiting for someone to type. Codex is deliberately
+  not headless-capable yet: `codex exec` rejects the approval flag every
+  unattended Codex child is started with, so a headless Codex launch would only
+  fail to parse. A headless session appears in the list like any other, with a
+  `Headless` chip, its output streaming into the terminal pane; the input box is
+  disabled there, because the CLI closed its input when it started. Stop one by
+  closing its card, which ends the whole process tree. **Any CLI with a print
+  mode can be added without a new build** — give its `custom_providers:` entry a
+  `headless:` block with the flags that select that mode and `format: text`, and
+  it becomes usable as an unattended worker. **The relay can run this way too**,
+  and there each instruction is one process: the Hub starts a worker with the
+  instruction as its prompt, the process exit says that instruction is finished,
+  and the next one starts a new worker (a `## DONE` line is no longer required,
+  though the reviewer's `verdict:` line still is). A Hub restart cannot
+  reattach to such a worker, so a headless relay stops with `hub_restart` and
+  can be resumed, which starts a fresh worker and continues from the git
+  history. **The default is unchanged: everything stays interactive.** Set
+  `orchestration.child_execution_mode` for `orchestrate spawn`'s children and
+  `orchestration.relay_execution_mode` for relay roles (each `auto` /
+  `interactive` / `headless`), or pass `--execution-mode` per launch.
+
 ### Changed
+- **Child sessions no longer have only one permission setting to choose from.**
+  Until now a child spawned by an AI conductor or by the relay was simply given
+  full access — `--permission-mode bypassPermissions`, or for Codex
+  `--sandbox danger-full-access` — because a child that stops at an approval
+  prompt nobody is watching is a child that never finishes. There are now three
+  tiers. **Attended** adds nothing at all, so the child's approvals arrive in
+  the Hub's approval panel and you answer them, the same as a session you
+  started yourself. **Bounded** asks nothing but allows only what is on a list:
+  Claude runs with `--permission-mode dontAsk` plus an `--allowedTools`
+  allowlist, Codex with `--ask-for-approval never --sandbox workspace-write`,
+  Copilot with an `--allow-tool` list (Copilot has no auto-deny, so a tool
+  outside the list still prompts and that prompt reaches the approval panel),
+  and OpenCode with `--auto` plus deny rules in `opencode.json`. **Full access** is what children get today. The
+  built-in bounded allowlist lets a child read, edit, run `go test` / `go vet` /
+  `gofmt` / `bun run check`, and record its work with `git add` / `git commit`;
+  `git push`, `git reset`, `git clean` and `rm` are deliberately left out, so a
+  child that reaches for one is blocked and says so instead of doing it. Adjust
+  it with `orchestration.bounded_allowed_tools` (per provider) in
+  `config.yaml`. The spawn confirmation dialog now has the tier as a field, and
+  the permissions it shows change as you switch tier or CLI, so what you read
+  before approving is what the child starts with. Grok and Cursor Agent have no
+  way to run unattended without granting everything, so choosing bounded for
+  them starts a full-access child and the dialog says so rather than letting a
+  narrowed request quietly become full access. **The default is unchanged**: an
+  unattended child still gets full access. Set
+  `orchestration.child_permission_default: bounded` to move unattended children
+  (the conductor's and the relay's) to the bounded tier.
+
 - The running-session indicator in the session list now spins instead of pulsing.
   The old dot only grew from about 6px to 9px on a 1.4s cycle, which was too
   small a change to notice at a glance on a dark card. It now reuses the

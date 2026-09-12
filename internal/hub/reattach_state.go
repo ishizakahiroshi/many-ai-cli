@@ -11,7 +11,10 @@ import (
 // timers, goroutine ownership, websocket pointers, and parser pointers; those
 // are stopped/reset on the old session and restarted for the replacement.
 type reattachPreservedState struct {
-	ParentSessionID              int
+	ParentSessionID int
+	// HandoffFrom は「どのセッションの続きか」で、会話に属する識別（reattach で
+	// 変わらない）。落とすとカードの「↪ #前任」チップが再接続で消える。
+	HandoffFrom                  int
 	ProjectID                    string
 	projectChecked               bool
 	Role                         string
@@ -110,6 +113,7 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 	fileState.Entries = append([]workflowTaskOutputEntry(nil), ses.taskDetailFileState.Entries...)
 	return reattachPreservedState{
 		ParentSessionID:              ses.ParentSessionID,
+		HandoffFrom:                  ses.HandoffFrom,
 		ProjectID:                    ses.ProjectID,
 		projectChecked:               ses.projectChecked,
 		Role:                         ses.Role,
@@ -229,6 +233,7 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 		return
 	}
 	dst.ParentSessionID = state.ParentSessionID
+	dst.HandoffFrom = state.HandoffFrom
 	dst.ProjectID = state.ProjectID
 	dst.projectChecked = state.projectChecked
 	dst.Role = state.Role

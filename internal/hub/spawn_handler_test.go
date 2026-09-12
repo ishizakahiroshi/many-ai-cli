@@ -426,3 +426,219 @@ func TestValidGridAIProvider(t *testing.T) {
 		}
 	}
 }
+
+// 以下は起動要求の共通 3 項目（effort / execution_mode / permission_preset）の
+// 受理と拒否を固定する（子 plan:
+// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1）。
+//
+// 「受理された」の確認は、このファイルの既存テスト
+// （TestHandleSpawnAcceptsCommandCodeProvider / ...AcceptsCustomProvider）と同じ手法で
+// 行う: 実在しない subscription profile を添えると、検証を通り抜けた要求だけが
+// その後段の subscription エラーへ到達する。実 wrap プロセスを起動させずに
+// 「3 項目の検証では弾かれていない」ことを確かめられる。
+const spawnLaunchOptionProbeProfile = "no-such-profile"
+
+func spawnLaunchOptionRequest(t *testing.T, s *Server, extra map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+	body := map[string]any{
+		"provider":                "claude",
+		"cwd":                     s.hubCWD,
+		"subscription_profile_id": spawnLaunchOptionProbeProfile,
+	}
+	for k, v := range extra {
+		body[k] = v
+	}
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", body))
+	return w
+}
+
+// 3 項目を送らない要求は、この 3 項目を知らなかった頃とまったく同じ経路を通る
+// （検証は一度も失敗しない）。不変条件 1（省略した既存の呼び出しを 1 バイトも
+// 変えない）の直接の固定。
+func TestHandleSpawnWithoutLaunchOptionsPassesValidation(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	s.cfg.CustomProviders = config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli --agent"},
+	}
+	for _, provider := range []string{"claude", "codex", "copilot", "grok", "opencode"} {
+		w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": provider})
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "subscription") {
+			t.Fatalf("provider %s: code = %d, body = %s, want the later subscription error (validation must not fire)", provider, w.Code, w.Body.String())
+		}
+	}
+	// custom provider は subscription profile を使えないので、到達する先が
+	// 別の 400 になる。どちらにせよ effort の検証では弾かれない。
+	w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": "my-cli"})
+	if !strings.Contains(w.Body.String(), "custom providers do not use subscription profiles") {
+		t.Fatalf("custom provider body = %s, want the custom-provider subscription rejection", w.Body.String())
+	}
+}
+
+// 写像がある provider の正しい effort は受理される（後段の subscription エラーまで進む）。
+func TestHandleSpawnAcceptsEffortForMappedProvider(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	cases := []struct{ provider, effort string }{
+		{"claude", "high"},
+		{"codex", "minimal"},
+		{"opencode", "low"},
+	}
+	for _, tc := range cases {
+		w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": tc.provider, "effort": tc.effort})
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "subscription") {
+			t.Fatalf("%s effort=%s: code = %d, body = %s, want the later subscription error", tc.provider, tc.effort, w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), "effort") {
+			t.Fatalf("%s effort=%s was rejected by the effort check: %s", tc.provider, tc.effort, w.Body.String())
+		}
+	}
+}
+
+// 写像が無い provider に effort を付けた要求は 400。
+func TestHandleSpawnRejectsEffortForUnmappedProvider(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	s.cfg.CustomProviders = config.CustomProviders{
+		{ID: "my-cli", Command: "my-cli --agent"},
+	}
+	for _, provider := range []string{"copilot", "grok", "cursor-agent", "command-code", "my-cli"} {
+		w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": provider, "effort": "high"})
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "effort") {
+			t.Fatalf("provider %s: code = %d, body = %s, want 400 with an effort error", provider, w.Code, w.Body.String())
+		}
+	}
+	// 写像がある provider でも、表に無い値は 400。
+	w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": "claude", "effort": "turbo"})
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "effort") {
+		t.Fatalf("claude effort=turbo: code = %d, body = %s, want 400 with an effort error", w.Code, w.Body.String())
+	}
+}
+
+// dontAsk は permission_mode の受理値。Claude / Grok は --permission-mode として
+// そのまま解釈し、他 provider では既存の変換関数が無視する（= 従来の default と同じ）。
+func TestHandleSpawnAcceptsDontAskPermissionMode(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	for _, provider := range []string{"claude", "grok"} {
+		w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": provider, "permission_mode": "dontAsk"})
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "subscription") {
+			t.Fatalf("provider %s: code = %d, body = %s, want the later subscription error (dontAsk must be accepted)", provider, w.Code, w.Body.String())
+		}
+	}
+	// 受理値の追加は dontAsk だけで、未知の値は従来どおり弾く。
+	w := spawnLaunchOptionRequest(t, s, map[string]any{"permission_mode": "dontAskEver"})
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "bad request") {
+		t.Fatalf("code = %d, body = %s, want the generic 400 for an unknown permission mode", w.Code, w.Body.String())
+	}
+}
+
+// headless は provider ごとに可否が決まる（子 plan
+// plan_child_execution_modes_headless.md 内部 C1 で解禁）。定義が無い provider への
+// 明示要求は、黙って interactive へ倒さず 400 で返す（親 plan D2）。
+func TestHandleSpawnResolvesExecutionModePerProvider(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	// 定義がある provider は通る＝後段の subscription エラーまで進む（内部 C5 で
+	// claude 以外の built-in にも定義が入った）。
+	for _, provider := range []string{"claude", "grok", "cursor-agent", "copilot"} {
+		w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": provider, "execution_mode": "headless"})
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "subscription") {
+			t.Fatalf("%s headless: code = %d, body = %s, want the later subscription error", provider, w.Code, w.Body.String())
+		}
+	}
+	// 定義が無い provider への明示 headless は 400（built-in では codex だけ）。
+	for _, provider := range []string{"codex"} {
+		w := spawnLaunchOptionRequest(t, s, map[string]any{"provider": provider, "execution_mode": "headless"})
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "headless") {
+			t.Fatalf("%s headless: code = %d, body = %s, want 400 naming headless", provider, w.Code, w.Body.String())
+		}
+	}
+	// この build で選べる値は素通しする（権限の段は 3 つとも選べる。子 plan
+	// plan_derived-session-launch_c2_permission-tiers.md 内部 C3 で bounded を解禁）。
+	// auto は画面起点なので対話のまま＝ grok でも弾かれない。
+	for _, extra := range []map[string]any{
+		{"execution_mode": "auto"},
+		{"execution_mode": "interactive"},
+		{"execution_mode": "auto", "provider": "grok"},
+		{"permission_preset": "attended"},
+		{"permission_preset": "bounded"},
+		{"permission_preset": "full"},
+	} {
+		w := spawnLaunchOptionRequest(t, s, extra)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "subscription") {
+			t.Fatalf("%v: code = %d, body = %s, want the later subscription error", extra, w.Code, w.Body.String())
+		}
+	}
+	// 未知の値は 400。
+	for _, extra := range []map[string]any{
+		{"execution_mode": "batch"},
+		{"permission_preset": "none"},
+	} {
+		w := spawnLaunchOptionRequest(t, s, extra)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%v: code = %d, want 400", extra, w.Code)
+		}
+	}
+}
+
+// TestEffortWrapArgs は Hub が `wrap` へ渡す effort フラグを固定する
+// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。
+// provider ごとの引数の形を決めるのは wrapper 側（表を読む）で、Hub は
+// 「--effort <level> を足すか、何も足さないか」だけを決める。
+func TestEffortWrapArgs(t *testing.T) {
+	for _, provider := range []string{"claude", "codex", "opencode"} {
+		got := effortWrapArgs(provider, "high")
+		if len(got) != 2 || got[0] != "--effort" || got[1] != "high" {
+			t.Fatalf("effortWrapArgs(%q, \"high\") = %v, want [--effort high]", provider, got)
+		}
+	}
+	// 写像が無い provider と、effort 未指定は 1 引数も足さない
+	// ＝この 3 項目が無かった頃の wrapArgs と完全に一致する（不変条件 1）。
+	for _, provider := range []string{"copilot", "grok", "cursor-agent", "command-code", "shell", "my-cli"} {
+		if got := effortWrapArgs(provider, "high"); got != nil {
+			t.Fatalf("effortWrapArgs(%q, \"high\") = %v, want nil", provider, got)
+		}
+	}
+	for _, provider := range []string{"claude", "codex", "opencode", "copilot", "shell"} {
+		if got := effortWrapArgs(provider, ""); got != nil {
+			t.Fatalf("effortWrapArgs(%q, \"\") = %v, want nil", provider, got)
+		}
+	}
+}
+
+// 段 2 の許可 tool も同じ形: Hub は「--allowed-tools <csv> を足すか、何も足さないか」
+// だけを決め、provider ごとのフラグ名は wrapper が決める（子 plan
+// plan_derived-session-launch_c2_permission-tiers.md 内部 C2）。
+func TestAllowedToolsWrapArgs(t *testing.T) {
+	if got := allowedToolsWrapArgs(nil); got != nil {
+		t.Fatalf("allowedToolsWrapArgs(nil) = %v, want nil", got)
+	}
+	got := allowedToolsWrapArgs([]string{"Read", " Bash(git log *) "})
+	if len(got) != 2 || got[0] != "--allowed-tools" || got[1] != "Read,Bash(git log *)" {
+		t.Fatalf("allowedToolsWrapArgs = %v", got)
+	}
+	// コマンドラインへ出せない値は落とし、全部落ちたらフラグごと足さない。
+	if got := allowedToolsWrapArgs([]string{"--oops", "rm -rf / ; echo x"}); got != nil {
+		t.Fatalf("allowedToolsWrapArgs(invalid) = %v, want nil", got)
+	}
+}
+
+// /api/spawn（New Session フォームの経路）で permission_preset が明示されたときは、
+// 子セッションと同じ表で段を解決する。画面に段の欄は足していないので、これは
+// API の約束（派生ダイアログは親 C3）。
+func TestPermissionPresetFillsLaunchApprovalFields(t *testing.T) {
+	bounded := permissionPresetApproval("claude", config.PermissionPresetBounded, config.OrchestrationConfig{})
+	if bounded.PermissionMode != "dontAsk" || len(bounded.AllowedTools) == 0 {
+		t.Fatalf("claude bounded = %+v", bounded)
+	}
+	// RiskConfirmed は段が持っていても /api/spawn では body へ写さない（高リスク確認は
+	// 人が押す経路の歯止め）。この関数が返す値をそのまま信じないことの明示。
+	if !bounded.RiskConfirmed {
+		t.Fatal("表側は確認済みで起動する値を持つ（写すかどうかは呼び出し側の判断）")
+	}
+	if none := permissionPresetApproval("claude", "", config.OrchestrationConfig{}); none.Tier != config.PermissionPresetFull {
+		t.Fatalf("空の preset は段 3 扱い: %+v", none)
+	}
+}

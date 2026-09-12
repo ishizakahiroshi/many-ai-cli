@@ -76,11 +76,14 @@ func runSpawn(args []string) error {
 	cwd := fs.String("cwd", "", "root for the child's working directory (default: parent session cwd). By default many-ai-cli creates an orchestration worktree under this directory and the child runs there, not directly in this directory; pass -same-tree to have the child run in this directory itself")
 	sameTree := fs.Bool("same-tree", false, "run the child directly in -cwd instead of an orchestration worktree (default: use a worktree; the child then edits your working tree directly, so do not edit it in parallel)")
 	force := fs.Bool("force", false, "spawn a new child even if a live child already exists for the role (default: rejected; use `orchestrate send` instead)")
+	effort := fs.String("effort", "", "reasoning effort for the child; accepted values depend on the provider (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high|xhigh|max, opencode: the model's own variant name). Providers without an effort flag (copilot / cursor-agent / grok / command-code / custom) reject a non-empty value")
+	executionMode := fs.String("execution-mode", "", "auto|interactive|headless (default: auto). headless runs the child through the provider's own non-interactive mode and needs a definition for that provider; asking for it where there is none is rejected rather than quietly downgraded")
+	permission := fs.String("permission", "", "attended|bounded|full (default: the orchestration child default). attended sends the child's approval prompts to the Hub's approval panel; bounded runs the allowlisted actions without asking and denies the rest (copilot has no auto-deny, so there anything outside the list still prompts); full allows everything")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() < 1 {
-		return errors.New(`orchestrate spawn --role <role> [--provider <provider> --model <model>] [--cwd <path>] [--same-tree] [--force] "<prompt>"`)
+		return errors.New(`orchestrate spawn --role <role> [--provider <provider> --model <model>] [--effort <level>] [--execution-mode auto|interactive|headless] [--permission attended|bounded|full] [--cwd <path>] [--same-tree] [--force] "<prompt>"`)
 	}
 	if *role == "" {
 		return errors.New("orchestrate spawn: --role is required")
@@ -103,6 +106,11 @@ func runSpawn(args []string) error {
 		InitialPrompt: prompt,
 		CWD:           *cwd,
 		Force:         *force,
+		// 3 項目はすべて省略可。空文字のときは JSON から丸ごと落ちるので、
+		// 付けずに叩いた `orchestrate spawn` の body は従来と完全に一致する。
+		Effort:           *effort,
+		ExecutionMode:    *executionMode,
+		PermissionPreset: *permission,
 	}
 	if *sameTree {
 		t := true
@@ -165,13 +173,15 @@ func runRelay(args []string) error {
 	fs := flag.NewFlagSet("orchestrate relay", flag.ContinueOnError)
 	plan := fs.String("plan", "", "plan markdown path (required)")
 	maxRounds := fs.Int("max-rounds", 0, "maximum review rounds per C (default: 3)")
-	impl := fs.String("impl", "", "implementation provider[/model]")
-	review := fs.String("review", "", "review provider[/model]")
-	strong := fs.String("strong", "", "strong implementation provider[/model]")
+	impl := fs.String("impl", "", "implementation provider[/model][@effort]")
+	review := fs.String("review", "", "review provider[/model][@effort]")
+	strong := fs.String("strong", "", "strong implementation provider[/model][@effort]")
 	escalateAfter := fs.Int("escalate-after", 0, "failed review rounds before strong implementation (default: 2)")
 	sameTree := fs.Bool("same-tree", false, "run children in the parent's working tree")
 	extraImpl := fs.String("extra-impl", "", "extra instructions for the implementation role")
 	extraReview := fs.String("extra-review", "", "extra instructions for the review role")
+	executionMode := fs.String("execution-mode", "", "auto|interactive|headless for every relay role (default: orchestration.relay_execution_mode, itself unset = interactive). headless runs each instruction as one non-interactive process of the provider's own print mode and takes its exit as the completion signal; a role whose provider has no headless definition is rejected here rather than quietly run interactively")
+	permission := fs.String("permission", "", "attended|bounded|full for every relay role (default: orchestration.child_permission_default). attended sends the child's approval prompts to the Hub's approval panel, which nobody is watching during an unattended relay; bounded runs the allowlisted actions without asking and denies the rest (copilot has no auto-deny, so there anything outside the list still prompts); full allows everything")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -192,11 +202,16 @@ func runRelay(args []string) error {
 		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		provider, model, err := parseRelayProviderModel(raw)
+		provider, model, effort, err := parseRelayProviderModel(raw)
 		if err != nil {
 			return fmt.Errorf("orchestrate relay --%s: %w", relayFlagName(role), err)
 		}
-		roles[role] = relayRoleAssignment{Provider: provider, Model: model}
+		// 実行モードと権限の段は役割共通の 1 フラグ。役割ごとの欄へ写して送る。
+		// 不正な値は Hub の検証が 400 で返す（CLI 側に 2 つ目の検証表を置かない）。
+		roles[role] = relayRoleAssignment{
+			Provider: provider, Model: model, Effort: effort,
+			ExecutionMode: *executionMode, PermissionPreset: *permission,
+		}
 	}
 	extra := map[string]string{}
 	if strings.TrimSpace(*extraImpl) != "" {
@@ -312,21 +327,32 @@ func relayFlagName(role string) string {
 	}
 }
 
-func parseRelayProviderModel(raw string) (provider, model string, err error) {
+// parseRelayProviderModel splits a relay role flag into its parts. The form
+// is provider[/model][@effort]: the model and the effort are both optional,
+// and a value without "@" parses exactly as it did before effort existed
+// (子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3).
+// Keeping effort inside the same argument is deliberate — one flag per role
+// stays one flag per role.
+func parseRelayProviderModel(raw string) (provider, model, effort string, err error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "", "", errors.New("provider is required")
+		return "", "", "", errors.New("provider is required")
 	}
-	provider, model, _ = strings.Cut(raw, "/")
+	rest, effort, hasEffort := strings.Cut(raw, "@")
+	effort = strings.TrimSpace(effort)
+	if hasEffort && effort == "" {
+		return "", "", "", errors.New("effort after \"@\" is empty")
+	}
+	provider, model, _ = strings.Cut(rest, "/")
 	provider = strings.TrimSpace(provider)
 	model = strings.TrimSpace(model)
 	if provider == "" {
-		return "", "", errors.New("provider is required")
+		return "", "", "", errors.New("provider is required")
 	}
-	if strings.Contains(provider, " ") || strings.Contains(model, " ") {
-		return "", "", errors.New("provider/model must not contain spaces")
+	if strings.Contains(provider, " ") || strings.Contains(model, " ") || strings.Contains(effort, " ") {
+		return "", "", "", errors.New("provider/model@effort must not contain spaces")
 	}
-	return provider, model, nil
+	return provider, model, effort, nil
 }
 
 type spawnChildRequest struct {
@@ -336,6 +362,12 @@ type spawnChildRequest struct {
 	InitialPrompt string `json:"initial_prompt"`
 	CWD           string `json:"cwd,omitempty"`
 	Force         bool   `json:"force,omitempty"`
+	// 起動要求の共通 3 項目。omitempty なので省略時は JSON に現れず、
+	// Hub 側の検証も素通りする（子 plan:
+	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+	Effort           string `json:"effort,omitempty"`
+	ExecutionMode    string `json:"execution_mode,omitempty"`
+	PermissionPreset string `json:"permission_preset,omitempty"`
 	// SameTree is tri-state: nil (omitted) means "follow the user's
 	// orchestration.worktree_auto setting" (default). Set to true only when
 	// -same-tree was passed. There is deliberately no way to send an explicit
@@ -366,6 +398,13 @@ type childAPIResponse struct {
 type relayRoleAssignment struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
+	// Effort は --impl claude/opus@high の "@" 以降。ExecutionMode と
+	// PermissionPreset は役割共通の --execution-mode / --permission を各役割へ
+	// 写した値。いずれも omitempty なので、付けずに叩いた relay の body は
+	// 従来と完全に一致する。
+	Effort           string `json:"effort,omitempty"`
+	ExecutionMode    string `json:"execution_mode,omitempty"`
+	PermissionPreset string `json:"permission_preset,omitempty"`
 }
 
 type relayStartRequest struct {

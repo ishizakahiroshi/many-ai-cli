@@ -72,6 +72,14 @@ type openCodeRollback struct {
 // 承認バイパスセッションでは "allow"（全許可）を渡す。
 // opencode.json が存在しない場合はファイルを新規作成し、クリーンアップ時に削除する。
 //
+// bashDeny は段 2（範囲を限った無人・子 plan
+// docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C2）で使う
+// bash コマンドの deny パターン。空なら permission は "*" だけ＝この引数が無かった
+// 頃と 1 バイトも変わらない。渡された場合は permission.bash に
+// {"*": permissionValue, <pattern>: "deny", …} を書く。opencode の規則は
+// 「最後に一致した規則が勝つ」で、encoding/json が map のキーを昇順に並べるため
+// "*" が先頭・deny が後ろに来る。
+//
 // 同一 cwd で 2 セッションが同時に起動すると、後発が先発の書き換え後を「オリジナル」として
 // 保存し、両方 defer cleanup が動いてもファイルが真のオリジナルに戻らない競合があった。
 // 排他ロックファイル (`opencode.json.many-ai-cli.lock`) を `O_EXCL` で作成し、中身に
@@ -83,7 +91,7 @@ type openCodeRollback struct {
 // として採用して cleanup で書き戻すため、permission の上書きがそのリポジトリへ永久に
 // residue として残る（orchestration 子が書く "allow" を含む）。ロックに巻き戻し情報を
 // 焼いておき、stale ロックを奪う時点で置き去りを回収してから次の書き換えに入る。
-func prepareOpenCodeConfig(cwd string, permissionValue string, logger *slog.Logger) (cleanup func(), err error) {
+func prepareOpenCodeConfig(cwd string, permissionValue string, bashDeny []string, logger *slog.Logger) (cleanup func(), err error) {
 	cfgPath := filepath.Join(cwd, OpenCodeConfigFileName)
 	lockPath := cfgPath + OpenCodeLockSuffix
 
@@ -141,6 +149,18 @@ func prepareOpenCodeConfig(cwd string, permissionValue string, logger *slog.Logg
 		perm = map[string]any{}
 	}
 	perm[OpenCodeConfigPermissionKey] = permissionValue
+	if len(bashDeny) > 0 {
+		// 既存の bash 規則があれば保持したうえで、こちらの "*" と deny を重ねる。
+		bash, _ := perm["bash"].(map[string]any)
+		if bash == nil {
+			bash = map[string]any{}
+		}
+		bash[OpenCodeConfigPermissionKey] = permissionValue
+		for _, pattern := range bashDeny {
+			bash[pattern] = "deny"
+		}
+		perm["bash"] = bash
+	}
 	merged["permission"] = perm
 
 	data, marshalErr := json.MarshalIndent(merged, "", "  ")

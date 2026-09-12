@@ -9,6 +9,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
+import { effortForSpawnBody, effortLevelsFor, setLaunchOptionChoices } from './spawn-confirm-store.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
@@ -201,6 +202,64 @@ export function resetSpawnProviderOrder(): void {
     }
     spawnSubscriptionRow.hidden = false;
   }
+
+  // ---- effort（起動要求の共通 3 項目のうち、画面から選べるのは effort だけ）----
+  // 子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5。
+  // 写像がある provider（/api/info の effort_levels にキーがある provider）でだけ欄を
+  // 出す。隠れている間は送信 JSON に effort キー自体が現れないので、写像が無い
+  // provider の起動は従来と 1 バイトも変わらない。
+  // 記憶は subscription と同じ `effort_<provider>` のフラットなキーで往復させる。
+  const EFFORT_PREF_PREFIX = 'effort_';
+  const spawnEffortRow = document.getElementById('spawn-effort-row');
+  const spawnEffortSelect = document.getElementById('spawn-effort') as HTMLSelectElement | null;
+
+  function savedEffortFor(provider: string): string {
+    const defaults = readSpawnDefaults();
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return '';
+    const v = defaults[EFFORT_PREF_PREFIX + provider];
+    return typeof v === 'string' ? v : '';
+  }
+
+  // provider が変わるたびに候補を組み直す。前の provider で選んだ値が新しい provider
+  // の候補に無ければ「指定なし」へ戻す（Hub はその値を 400 で弾くため）。
+  function syncEffortField(provider: string): void {
+    if (!spawnEffortRow || !spawnEffortSelect) return;
+    const levels = effortLevelsFor(provider);
+    if (levels.length === 0) {
+      spawnEffortRow.hidden = true;
+      spawnEffortSelect.innerHTML = '';
+      return;
+    }
+    const saved = savedEffortFor(provider);
+    const previous = levels.includes(spawnEffortSelect.value) ? spawnEffortSelect.value : saved;
+    const options = [`<option value="">${escapeHtml(t('spawn_effort_unset'))}</option>`];
+    for (const level of levels) {
+      options.push(`<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`);
+    }
+    spawnEffortSelect.innerHTML = options.join('');
+    spawnEffortSelect.value = levels.includes(previous) ? previous : '';
+    spawnEffortRow.hidden = false;
+  }
+
+  function selectedEffort(): string {
+    if (!spawnEffortRow || spawnEffortRow.hidden || !spawnEffortSelect) return '';
+    return spawnEffortSelect.value || '';
+  }
+
+  // 選んだ時点で覚える（subscription と同じ理由: 選び直してから起動をやめても
+  // 次に開いたときの初期値になる）。記憶 OFF のあいだは保存しない。
+  async function persistEffortSelection(): Promise<void> {
+    if (!spawnEffortRow || spawnEffortRow.hidden || !spawnEffortSelect) return;
+    const defaults = readSpawnDefaults();
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return;
+    const provider = (spawnProviderEl as HTMLSelectElement).value;
+    const next = { ...defaults, [EFFORT_PREF_PREFIX + provider]: spawnEffortSelect.value || '' };
+    setUserPref('spawn.defaults', next);
+    await flushUserPrefsPut();
+  }
+  spawnEffortSelect?.addEventListener('change', () => {
+    void persistEffortSelection();
+  });
 
   function selectedSubscriptionID(): string {
     if (!spawnSubscriptionRow || spawnSubscriptionRow.hidden || !spawnSubscriptionSelect) return '';
@@ -719,6 +778,9 @@ export function resetSpawnProviderOrder(): void {
       const res = await fetch(`/api/info?token=${token}`);
       if (!res.ok) return;
       const info = await res.json();
+      // 同じ応答から起動要求の共通 3 項目の候補値も取り込む（追加の fetch をしない）。
+      setLaunchOptionChoices(info);
+      syncEffortField((spawnProviderEl as HTMLSelectElement).value);
       const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];
       if (list.length === 0) return;
       const select = spawnProviderEl as HTMLSelectElement;
@@ -1032,6 +1094,7 @@ export function resetSpawnProviderOrder(): void {
     }
     spawnProviderInlineHelp.setNote(selectedNote);
     syncPermissionModeOptions(p);
+    syncEffortField(p);
   }
 
   function applySpawnApprovalSettings(provider: string, defaults: Record<string, unknown>): void {
@@ -2629,6 +2692,9 @@ export function resetSpawnProviderOrder(): void {
       // 「Default CLI login」を選んだときはキーごと送らない（従来リクエストと同一）。
       const subscriptionID = selectedSubscriptionID();
       if (subscriptionID) bodyObj.subscription_profile_id = subscriptionID;
+      // 欄が隠れている（写像が無い provider）か「指定なし」ならキーごと送らない。
+      const effortLevel = skipsAIFields ? '' : effortForSpawnBody(provider, selectedEffort());
+      if (effortLevel) bodyObj.effort = effortLevel;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
         const permMode = document.getElementById('spawn-permission-mode').value;

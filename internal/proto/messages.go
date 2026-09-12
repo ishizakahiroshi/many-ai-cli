@@ -176,12 +176,24 @@ type Message struct {
 	// UI へ届けるための session 側の経路。空文字では既存値を消さない。
 	Effort string `json:"effort,omitempty"`
 
+	// ExecutionMode / PermissionPreset: 起動要求に添えられた実行モードと権限段
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// Hub → UI の表示専用で、空文字は「指定なし」。省略した起動では送られない。
+	ExecutionMode    string `json:"execution_mode,omitempty"`
+	PermissionPreset string `json:"permission_preset,omitempty"`
+
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`
 
 	// Lightweight orchestration metadata.
-	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	ParentSessionID int `json:"parent_session_id,omitempty"`
+	// HandoffFrom is the predecessor session this one was launched to continue
+	// (子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4).
+	// It is **not** a parent/child relationship: a successor is an equal new
+	// parent, and the UI draws only a one-way link from it back to the
+	// predecessor. 0 for an ordinary launch.
+	HandoffFrom        int    `json:"handoff_from,omitempty"`
 	Auto               bool   `json:"auto,omitempty"`
 	Depth              int    `json:"depth,omitempty"`
 	OrchestrationID    string `json:"orchestration_id,omitempty"`
@@ -209,14 +221,26 @@ type Message struct {
 	// was first requested. Carried on both spawn_confirmation_requested (for
 	// the elapsed-time display) and its resend on UI connect.
 	SpawnRequestedAtMs int64 `json:"spawn_requested_at_ms,omitempty"`
-	// SpawnChildApproval carries, per provider, the approval settings the child
-	// would actually start with — what the human is granting by approving. It
-	// is keyed by provider because the dialog lets the approver change the
-	// provider before deciding, so the UI picks the entry for whatever is
-	// selected at that moment. Display only: the Hub does not read it back.
-	// Sent on spawn_confirmation_requested and on its resend to a (re)connecting
-	// UI (pending_spawn-confirm-permission-disclosure.md).
-	SpawnChildApproval map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
+	// RememberPermission is the initial state of the confirmation dialog's
+	// "use this tier for this role next time" checkbox: true when the Hub
+	// already holds a remembered tier for this role
+	// (user_prefs.spawn.role_permission). Sent on
+	// spawn_confirmation_requested and on its resend to a (re)connecting UI.
+	// It says nothing about which tier that is — the tier itself travels in
+	// PermissionPreset, pre-filled from the same memory for a conductor's
+	// request (子 plan plan_derived-session-launch_c2_permission-tiers.md 内部 C6).
+	RememberPermission bool `json:"remember_permission,omitempty"`
+	// SpawnChildApproval carries the approval settings the child would actually
+	// start with — what the human is granting by approving. It is keyed
+	// provider → permission tier, because the dialog lets the approver change
+	// both before deciding, so the UI picks the entry for whatever pair is
+	// selected at that moment without asking the Hub again. The inner key is
+	// "" for the request as it stands, plus "attended" / "bounded" / "full".
+	// Display only: the Hub does not read it back. Sent on
+	// spawn_confirmation_requested and on its resend to a (re)connecting UI
+	// (pending_spawn-confirm-permission-disclosure.md, 子 plan
+	// plan_derived-session-launch_c2_permission-tiers.md 内部 C3).
+	SpawnChildApproval map[string]map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
 	// spawn_confirmation_closed: Hub → UI. Tells every browser that a spawn
 	// confirmation is no longer open, so any dialog showing it can close.
 	// Reason is one of exactly five values (C2,
@@ -340,6 +364,13 @@ type Message struct {
 	RepoName                    string  `json:"repo_name,omitempty"`
 	RemainingPct                float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut                int     `json:"reasoning_output_tokens,omitempty"`
+
+	// handoff_note: Hub → UI。残量の帯から依頼した引き継ぎメモの結果
+	// （子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+	// NoteOK=false は「60 秒内にマーカーが来なかった / 書かれたはずのファイルが
+	// 無い」で、その場合 NotePath は空。**メモの中身は載らない**（載せる欄も無い）。
+	NoteOK   bool   `json:"note_ok,omitempty"`
+	NotePath string `json:"note_path,omitempty"`
 
 	// binary_stale: Hub → UI。稼働中 Hub の実行ファイルがディスク上で差し替わった
 	// （= 再ビルドが反映されていない）状態かどうか。状態が変化した瞬間だけ配信する。
@@ -558,7 +589,22 @@ type ChildApproval struct {
 	PermissionMode string `json:"permission_mode,omitempty"`
 	Sandbox        string `json:"sandbox,omitempty"`
 	AskForApproval string `json:"ask_for_approval,omitempty"`
+	// AllowedTools is the bounded tier's allowlist — the tool names and command
+	// patterns the child may use without asking. Empty for the other tiers.
+	AllowedTools []string `json:"allowed_tools,omitempty"`
 	// RiskConfirmed reports that the child skips the high-risk confirmation the
 	// same settings would trigger on a normal /api/spawn request.
 	RiskConfirmed bool `json:"risk_confirmed,omitempty"`
+	// Tier is the permission tier these settings came from: "attended" (the Hub
+	// adds nothing and approvals reach the approval panel), "bounded" (no
+	// prompts, but only the allowlisted actions) or "full" (today's default,
+	// approval bypass).
+	Tier string `json:"tier,omitempty"`
+	// FallbackFrom names a tier that was asked for but does not exist for this
+	// provider, so Tier is what it fell through to. Only "bounded" today
+	// (grok / cursor-agent have no way to run unattended without granting
+	// everything). The dialog turns it into a visible notice rather than
+	// letting a narrowed request silently become full access
+	// (親 plan 不変条件 5).
+	FallbackFrom string `json:"fallback_from,omitempty"`
 }

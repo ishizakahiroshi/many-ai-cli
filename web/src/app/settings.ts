@@ -13,7 +13,7 @@ import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
 import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
 import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
-import { setHandoffNotifyThresholdPercent } from './handoff.js';
+import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -1959,6 +1959,7 @@ window.addEventListener('many-binary-stale', (ev: Event) => {
     set__userAvatarUrl(info.userAvatar || '');
     set__userDisplayName(info.userDisplayName || '');
     setHandoffNotifyThresholdPercent(Number(info.handoff_notify_remaining_percent));
+    setHandoffNoteMode(info.handoff_note_on_threshold);
     document.dispatchEvent(new CustomEvent('user-info-ready'));
     // 稼働中 Hub が古いバイナリ（起動後にディスクの exe が差し替わった）なら
     // 常設バナーで再起動を促す。multi-question-banner と同じ構造・クラスを流用。

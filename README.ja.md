@@ -95,6 +95,24 @@ Gemini CLI は意図的に対象外です。
 
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
 
+子の権限は 3 段あり、起動要求の `permission_preset`（および spawn 確認ダイアログ）で選びます。`attended` は Hub が何も足さないので、子の承認プロンプトは Hub の承認パネルへ来てあなたが答えます。`bounded` は聞きませんが、許可した操作しか通しません（Claude は `--permission-mode dontAsk` + `--allowedTools`、Codex は `--ask-for-approval never --sandbox workspace-write`、Copilot は `--allow-tool` の列挙（Copilot には自動拒否が無いので、列挙外の tool は従来どおり確認プロンプトになり、それは承認パネルへ届きます）、OpenCode は `--auto` + そのセッションの `opencode.json` に書く deny 規則）。`full` は全許可です。`bounded` の内蔵許可一覧は、読み取り・編集・`go test` / `go vet` / `gofmt` / `bun run check`・`git add` / `git commit` までで、`git push` / `git reset` / `git clean` / `rm` は意図的に入れていません（`orchestration.bounded_allowed_tools` に provider ごとの一覧を書けば変更できます）。無人の子（指揮者の `orchestrate spawn` と relay の子）は、要求に段の指定が無ければ `orchestration.child_permission_default` に従います。この既定は今のところ `full` で、`bounded` にすると無人の子が範囲を限った段で動きます。Grok と Cursor Agent には範囲を限って無人で動かす設定が無いため、`bounded` を選んでも全許可で起動し、確認ダイアログにその旨が出ます。
+
+セッションは端末を持たずに動かすこともできます。`execution_mode` は `interactive`（PTY 上で CLI の TUI を起動する＝既定）、`headless`（CLI 自身の非対話モード。`claude -p` / `grok -p` / `cursor-agent -p` / `opencode run` / `copilot -p` / `command-code -p`）、`auto`（誰も見ていない起動で、その CLI が対応していれば headless、そうでなければ対話）の 3 つです。headless のセッションは最初の指示を起動時に受け取り、入力欄を持たず（CLI が起動直後に stdin を閉じるため）、プロセスの終了で完了します（終了コード 0 が完了、それ以外は失敗）。止めるときはカードを閉じます（プロセスツリーごと終了します）。**非対話モードを持たない CLI へ `headless` を明示した起動はエラー**で、黙って対話へ倒して「誰も打たないまま待ち続けるセッション」を作ることはしません。**Codex は対象外です**（`codex exec` は無人の Codex の子に必ず付く承認フラグを受け付けないため、定義を書いても必ず起動に失敗します）。print モードを持つ他の CLI は、ビルドし直さずに `custom_providers:` の `headless:` を書くだけで無人の worker にできます。
+
+```yaml
+custom_providers:
+  - id: my-cli
+    command: my-cli
+    headless:
+      args: ["--print", "--output-format", "text"]  # print モードを選ぶフラグ
+      format: text        # "text" = 出力をそのまま見せ、終了コードで結果を決める
+      prompt_via: arg     # "arg"（args の直後の位置引数）か "stdin"
+```
+
+モデル・effort・権限のフラグはここには書きません。対話の起動とまったく同じコードが後ろへ足すので、2 つのモードで食い違いません。
+
+子は画面からも立てられます。AI セッションのカードにある 🌱 ボタンで派生ダイアログが開くので、種別に「子」を選び、役割・CLI・subscription profile・モデル・effort・実行モード・権限の段を選んで、最初の指示を直してから起動します。この経路で立てた子には**確認ダイアログが出ません**（ボタンを押したことがそのまま承認です）。権限は `attended` なので、子の承認プロンプトは自分で立てた普通のセッションと同じく Hub の承認パネルへ来ます。深さと本数の上限は指揮者からの spawn とまったく同じに効きます。ダイアログにはその子が実際に持つ権限が出るので、CLI や段を切り替えると何が変わるかを起動前に読めます。**「この役割では次回もこの段を使う」**にチェックを入れると、選んだ段がその役割に記憶されます。次に同じ役割を選んだときは派生ダイアログがその段で開き、AI がその役割の子を要求したときは確認ダイアログがその段で開きます。記憶を書けるのはこのチェックボックスだけで（AI の spawn 要求からは書けません）、外せばその役割の記憶は消えます。同じダイアログのもう 1 つの種別「引き継ぎ」は[セッション引き継ぎ記録（handoff）](#セッション引き継ぎ記録handoff)節にあります。
+
 既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 `true`）。具体的には codex の子が `--sandbox danger-full-access --ask-for-approval never` で、それ以外は各 CLI の全許可指定に変換されて起動します。指揮者からの spawn は人間の確認を待ちます（`orchestration.spawn_confirm_mode`、既定 `on`）が、relay の子は設計上この確認を通りません。`child_full_bypass` を `false` にすると高リスク権限の自動確認は避けられますが、relay の子は答える人のいない承認プロンプトで止まります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
 
 ### Orchestration relay loop
@@ -103,13 +121,15 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 
 入口は 2 つです。
 
-- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model]` と `--review provider[/model]` を渡す。`--strong provider[/model]` は任意）。
+- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model][@effort]` と `--review provider[/model][@effort]` を渡す。`--strong provider[/model][@effort]` は任意）。`@effort` は子の思考の深さで省略可。`--execution-mode` と `--permission`（権限の段）は全 role 共通で 1 つ。子 1 つだけを起こす `many-ai-cli orchestrate spawn` には `--effort` / `--execution-mode` / `--permission` がある。受理値は `--help` が正典。
 - `orchestrate` のサブコマンドは `spawn` / `send` / `relay` の 3 つ。名前を間違えると使える名前を並べて返す。
-- Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。
+- Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。役割表で CLI・モデル・subscription profile・権限の段を役割ごとに選べ、次の relay まで記憶される。
 
 既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、`orchestration.max_children_per_parent` が上限です（既定値 4、通常の relay なら 2 本分）。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
 
 通常は cheap な implementation model と、任意の strong implementation model の二段構えです。既定では review に 2 回続けて失敗した C、または plan の C に `[strong]` を付けた C を、空き枠があれば strong role へ渡します。2 本を同時に strong へ上げる想定なら上限 6 以上を用意してください。`--same-tree` は明示的な例外で、子が利用者の working tree を直接編集するため、同じ tree を別の AI や利用者が並行編集してはいけません。
+
+relay の役割も headless で回せます。この経路は「1 指示 = 1 プロセス」で、Hub がその指示を初期プロンプトに持つ worker を立て、プロセスの終了がその指示の完了を意味し、次の指示はまた新しい worker を立てます。`## DONE <role>` 行は必須ではなくなり（終了が代わりになります）、review の `verdict:` 行は relay が判断に使うので今までどおり必要です。対話の worker が起動時に 1 度だけ受け取っていた常設の前提は、指示のたびに一緒に渡します。役割が実行モードを指定しないときの既定は `orchestration.relay_execution_mode`（`auto` / `interactive` / `headless`、未設定＝対話）で、1 回だけ変えるなら `--execution-mode` です。非対話モードが無い CLI の役割は relay の開始時に弾かれ、黙って対話で立つことはありません。Hub を再起動すると headless の worker には再接続できないので、その relay は `hub_restart` で止まります（再開可能な停止理由なので、resume すると新しい worker が git の履歴から続きを引き継ぎます）。
 
 停止理由は round 上限、timeout、verdict / review file の欠落、blocked verdict、子の終了、Stop ボタンです。Hub 再起動後は `relay.json` から状態を復元し、再開可能な停止理由なら resume できます。完了・停止は relay 通知になります。作業ファイルは `~/.many-ai-cli/orchestration/<orchestration_id>/` 配下の `board.md`、`child-<id>.md`、`review-c<k>-r<r>.md`、`relay.json` です。これは一般的な job DAG ではなく、1 つの plan の C を順番に処理する軽量な sequential runner です。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
@@ -1284,7 +1304,17 @@ Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_co
 
 記録はホームディレクトリ配下の `~/.many-ai-cli/handoff/s<id>.jsonl`（ディレクトリ `0700` / ファイル `0600`）に置かれ、リポジトリの中には置きません。記録が有効かどうかに関わらず、`handoff.retention_days`（既定 14 日）より古いファイルは Hub の定期処理で削除されます。`handoff.enabled: false` で書き込み自体を止められます。`many-ai-cli doctor` はこのディレクトリのファイル件数と最古ファイルの経過日数を報告します。
 
-引き継ぎの起動は必ず人が押した操作から始まり、自動では 1 本も立ちません。入口は 2 つあります。1 つはセッションの残量が `handoff.notify_remaining_percent`（既定 10%）を下回ったときに画面の隅に出る通知、もう 1 つはサイドバーの「引き継ぎ一覧」ボタン（↪）です。一覧はライブなセッション状態ではなく看板ディレクトリを直接読むため、セッションが既に終了していても、Hub を再起動した後でも同じように開けます。どちらの入口からでも、Hub はその看板から 1 画面ぶんの markdown（素性・直近の完了・直近の変更・「次の一手」があればそれ）を組み、**どこへも送る前に画面へ表示**します。そこから起動を選ぶと、その markdown を最初の指示として持たせた新しいセッションを**別の provider**（元と同じ provider の別 subscription profile は選べません）で 1 本立てます。新しいセッション自身の看板には、どのセッションを引き継いだかが記録されます。画面上で親子関係が作られるわけではありません。
+引き継ぎの起動は必ず人が押した操作から始まり、自動では 1 本も立ちません。入口は 3 つあります。セッションの残量が `handoff.notify_remaining_percent`（既定 10%）を下回ったときに画面の隅に出る通知、サイドバーの「引き継ぎ一覧」ボタン（↪）、そしてセッションカードの 🌱 ボタンです。一覧はライブなセッション状態ではなく看板ディレクトリを直接読むため、セッションが既に終了していても、Hub を再起動した後でも同じように開けます。3 つとも派生ダイアログを種別「引き継ぎ」で開きます。Hub はその看板から 1 画面ぶんの markdown（素性・直近の完了・直近の変更・「次の一手」があればそれ）を組んで編集できる欄へ入れるので、**どこへも送る前に画面に出ています**。起動を押すと、その文面を最初の指示として持たせた新しいセッションを**別の provider**（元と同じ provider の別 subscription profile は選べません）で 1 本立てます。モデル・effort・実行モード・権限の段も同じダイアログで選べます。
+
+看板に載るのは「何をしたか」までで、会話そのものは入りません。それを補うために、後継へ渡せるものが 2 つあります。どちらも**渡すのはパスだけ**で、中身は Hub を通りません。後継が自分のツールでそのファイルを開きます。
+
+1 つ目は**前任の会話ログ**です。Claude と Codex は自分の会話を手元の JSONL に書いており、Hub はその置き場を知っています（subscription profile ごとに分かれている場合もそのまま解決します）。看板にはそのパスだけが記録され、引き継ぎの文面に「前任の会話ログ」の節として、パスと読み方（末尾から最後の指示と最後の発言を読む、大きければ末尾 200 行と `grep` で足りる）が入ります。**この経路は前任が既に止まっていても効きます** — 上限に当たって動かなくなった Claude の続きを Codex に渡したい、という場面がこれで埋まります。会話ログの場所が分からない provider では、この節は出ません。
+
+2 つ目は**引き継ぎメモ**です。残量の通知に出る「引き継ぎメモを書かせる」を押すと、Hub がまだ動いている前任に「`~/.many-ai-cli/handoff/s<id>.note.md` に、次の一手・未検証の前提・開いている論点・触っていた md のパスを書いてください」と 1 回だけ頼みます。書けたという合図を受け取り、ファイルが実際にあることを確かめてから、そのパスを看板へ記録します（60 秒返事が無ければ諦めて、書かれなかったことを画面に出します）。メモも看板と同じ 14 日で消えます。この依頼は前任のトークンを使うので、既定では**押したときだけ**動きます（`handoff.note_on_threshold`: `ask` = 既定 / `auto` = 通知と同時に自動で頼む / `off` = ボタンを出さない）。前任が既に止まっていれば、頼む相手がいないので使えません（そのときは 1 つ目の会話ログが残ります）。
+
+どちらのパスも、起動を押す前に派生ダイアログに 1 行ずつ表示されます。**何が渡るのかを人が見てから押す**という点は、看板 markdown と同じです。
+
+新しいセッション自身の看板には、どのセッションを引き継いだかが記録され、それがカードにも出ます。後継のカードには前任への `↪ #N` チップ、まだ動いている前任のカードには `後継 #M` チップが付き、↪ 一覧の行にも後継の番号が出ます。チップを押すとそのセッションへ切り替わります（終了済みなら ↪ 一覧が開きます）。リンクは表示だけで、**画面上で親子関係が作られるわけではありません**（後継は子ではなく対等な新しい親です）。
 
 ### 外部への通信について
 

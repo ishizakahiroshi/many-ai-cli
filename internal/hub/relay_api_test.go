@@ -302,6 +302,29 @@ func TestRelayRolesForStartMergesSubscriptionOverrides(t *testing.T) {
 	}
 }
 
+// 役割の起動要求 3 項目が、役割対応表とのマージで落ちないことを固定する
+// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+// relayRolesForStart はフィールド単位の allowlist なので、足し忘れると
+// `orchestrate relay --impl claude/opus@high` の effort が黙って捨てられる。
+func TestRelayRolesForStartMergesLaunchOptions(t *testing.T) {
+	s := newTestServer()
+	s.orchestration.roles["mapped"] = map[string]orchestrationRoleAssignment{
+		relayRoleImplementation: {Provider: "codex", Model: "gpt-5"},
+		relayRoleReview:         {Provider: "claude", Model: "opus", Effort: "medium"},
+	}
+
+	roles := s.relayRolesForStart(0, "mapped", map[string]*orchestrationRoleAssignment{
+		relayRoleImplementation: {Provider: "claude", Model: "opus", Effort: "high", ExecutionMode: "interactive", PermissionPreset: "attended"},
+	})
+	if got := roles[relayRoleImplementation]; got.Effort != "high" || got.ExecutionMode != "interactive" || got.PermissionPreset != "attended" {
+		t.Fatalf("launch options were dropped by the merge: %+v", got)
+	}
+	// 送らなかった項目は対応表の値のまま（空で上書きしない）。
+	if got := roles[relayRoleReview]; got.Effort != "medium" {
+		t.Fatalf("mapped effort was overwritten by an absent request field: %+v", got)
+	}
+}
+
 func TestRelayFinishPublishesRelayDoneSummary(t *testing.T) {
 	h := newRelayHarness(t)
 	var got proto.DoneSummary

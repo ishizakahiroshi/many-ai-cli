@@ -1,21 +1,25 @@
-// 引き継ぎ md のプレビュー・一覧・起動（子 plan:
-// docs/local/plan_session-handoff-board_c5_handoff-md.md 内部 C1・C2・C3）。
+// 引き継ぎ md の残量通知と一覧（子 plan:
+// docs/local/plan_session-handoff-board_c5_handoff-md.md 内部 C2・C3）。
 //
-// 起動そのものは既存の C4 の入口である POST /api/spawn（initial_prompt +
-// handoff_from）をそのまま呼ぶ。このファイルは看板からの markdown 取得・
-// プレビュー表示・provider 選択（元セッションと同じ provider は候補に出さ
-// ない）までを担う。自動では 1 本も起動しない — 人が起動ボタンを押すことが
-// そのまま承認になる（親 plan 方針 B1）。プレビューは編集可能で、送る文面は
-// 押す前に直せる。apiFetch は Cookie 主体で query token を付けない（F-WEB-05）。
+// **起動はこのファイルでは行わない。** 帯の「引き継ぎを準備」も ↪ 一覧の行も、
+// 派生ダイアログ（derive-dialog.ts）を種別 = 引き継ぎで開くだけになった
+// （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C3）。
+// 看板 markdown の取得・プレビュー・provider 選択・POST /api/spawn は全部そちらに
+// あり、同じことを 2 通り書かない。ここに `/api/spawn` を呼ぶコードを戻さないこと。
 //
-// initial_prompt の制御文字除去と長さ上限はサーバ側の
-// sanitizeSpawnInitialPrompt（internal/hub/spawn_handler.go）が唯一の実施点。
-// バイト数で切るサーバに対しクライアントで文字数を数えると二重に別の位置で
-// 切れるため、ここでは textarea の値をそのまま送る。
+// 自動では 1 本も起動しない — 人が起動ボタンを押すことがそのまま承認になる
+// （親 plan 方針 B1）。apiFetch は Cookie 主体で query token を付けない（F-WEB-05）。
 import { t } from '../i18n.js';
 import type { Message } from '../types/proto.js';
 import { apiFetch, escapeHtml, showToast } from './util.js';
 import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
+import { openDeriveDialog } from './derive-dialog.js';
+import {
+  handoffNoteActionFor,
+  normalizeHandoffNoteMode,
+  remainingPercentFromUsageStat,
+  type HandoffNoteMode,
+} from './handoff-store.js';
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -46,13 +50,12 @@ export function setHandoffNotifyThresholdPercent(percent: number): void {
   if (Number.isFinite(percent) && percent > 0) notifyThresholdPercent = percent;
 }
 
-function usedPercentsFromUsageStat(m: Message): number[] {
-  const out: number[] = [];
-  if (m.claude_5h_present && typeof m.rl_5h_pct === 'number') out.push(m.rl_5h_pct);
-  if (m.claude_7d_present && typeof m.rl_7d_pct === 'number') out.push(m.rl_7d_pct);
-  if (m.codex_primary_present && typeof m.codex_primary_used_pct === 'number') out.push(m.codex_primary_used_pct);
-  if (m.codex_secondary_present && typeof m.codex_secondary_used_pct === 'number') out.push(m.codex_secondary_used_pct);
-  return out;
+// 引き継ぎメモの扱い（ask / auto / off）。閾値と同じく /api/info の値をミラーする
+// だけで、既定は保守的な ask（人が押したときだけ前任のトークンを使う）。
+let noteMode: HandoffNoteMode = 'ask';
+
+export function setHandoffNoteMode(value: unknown): void {
+  noteMode = normalizeHandoffNoteMode(value);
 }
 
 // checkHandoffNotifyFromUsageStat は ws-client.ts の usage_stat 受信フックから
@@ -63,46 +66,91 @@ function usedPercentsFromUsageStat(m: Message): number[] {
 export function checkHandoffNotifyFromUsageStat(m: Message): void {
   const sessionID = Number(m.session_id || 0);
   if (!sessionID || notifiedSessions.has(sessionID)) return;
-  const used = usedPercentsFromUsageStat(m);
-  if (used.length === 0) return;
-  const remaining = 100 - Math.max(...used);
-  if (remaining > notifyThresholdPercent) return;
+  const remaining = remainingPercentFromUsageStat(m);
+  if (remaining === null || remaining > notifyThresholdPercent) return;
   notifiedSessions.add(sessionID);
   showHandoffNotifyBanner(sessionID, String(m.provider || ''));
 }
 
 const HANDOFF_NOTIFY_AUTO_DISMISS_MS = 30000;
 
+// 帯は 30 秒で消えるが、メモの結果（WS の handoff_note）はその後に届くことが多い。
+// 生きている帯があればそこへ、無ければトーストへ出す。
+const noteBanners = new Map<number, HTMLElement>();
+
 function showHandoffNotifyBanner(sessionID: number, provider: string): void {
+  const action = handoffNoteActionFor(noteMode);
   const el = document.createElement('div');
   el.className = 'handoff-notify-banner';
   el.setAttribute('role', 'status');
+  const noteButton = action === 'button'
+    ? `<button type="button" class="handoff-notify-note">${escapeHtml(tx('handoff_notify_note', '引き継ぎメモを書かせる'))}</button>`
+    : '';
   el.innerHTML = `<div class="handoff-notify-body">${escapeHtml(tx('handoff_notify_body', 'セッション #{id}（{provider}）の残量が少なくなっています。', { id: sessionID, provider: providerLabel(provider) }))}</div>
+    <div class="handoff-notify-status" data-handoff-note-status hidden></div>
     <div class="handoff-notify-actions">
       <button type="button" class="handoff-notify-action">${escapeHtml(tx('handoff_notify_action', '引き継ぎを準備'))}</button>
+      ${noteButton}
       <button type="button" class="handoff-notify-dismiss" aria-label="${escapeHtml(tx('handoff_notify_dismiss', '閉じる'))}">×</button>
     </div>`;
   document.body.appendChild(el);
-  const remove = () => { el.remove(); };
-  el.querySelector('.handoff-notify-action')?.addEventListener('click', () => { remove(); void openHandoffPreviewDialog(sessionID); });
+  noteBanners.set(sessionID, el);
+  const remove = () => { el.remove(); if (noteBanners.get(sessionID) === el) noteBanners.delete(sessionID); };
+  el.querySelector('.handoff-notify-action')?.addEventListener('click', () => { remove(); void openDeriveDialog(sessionID, { kind: 'handoff' }); });
+  const noteBtn = el.querySelector('.handoff-notify-note') as HTMLButtonElement | null;
+  noteBtn?.addEventListener('click', () => {
+    noteBtn.disabled = true;
+    setBannerStatus(sessionID, tx('handoff_note_asked', '引き継ぎメモを依頼しました…'));
+    void requestHandoffNote(sessionID);
+  });
   el.querySelector('.handoff-notify-dismiss')?.addEventListener('click', remove);
   window.setTimeout(remove, HANDOFF_NOTIFY_AUTO_DISMISS_MS);
+  // auto は人を待たずに 1 回だけ依頼する。押す先が無いのでボタンは出していない。
+  if (action === 'auto') {
+    setBannerStatus(sessionID, tx('handoff_note_asked', '引き継ぎメモを依頼しました…'));
+    void requestHandoffNote(sessionID);
+  }
 }
 
-// ---- プレビュー + 起動ダイアログ -------------------------------------------
-
-interface HandoffPreviewResponse {
-  ok: boolean;
-  session_id: number;
-  exists: boolean;
-  live?: boolean;
-  provider?: string;
-  cwd?: string;
-  branch?: string;
-  model?: string;
-  markdown?: string;
-  candidate_providers?: string[];
+function setBannerStatus(sessionID: number, text: string): void {
+  const status = noteBanners.get(sessionID)?.querySelector('[data-handoff-note-status]') as HTMLElement | null;
+  if (!status) return;
+  status.textContent = text;
+  status.hidden = false;
 }
+
+// メモの結果は帯が残っていれば帯へ、消えていればトーストへ。どちらにも出せない
+// ときは黙る（この通知のために画面を奪わない）。
+function reportNoteResult(sessionID: number, text: string): void {
+  if (noteBanners.has(sessionID)) {
+    setBannerStatus(sessionID, text);
+    return;
+  }
+  showToast(text);
+}
+
+// POST /api/handoff/<id>/note。Hub は注入したところで返し、書けたかどうかは後から
+// WS の handoff_note で届く（前任が 1 ターン使って書くため）。
+async function requestHandoffNote(sessionID: number): Promise<void> {
+  try {
+    const res = await apiFetch(`/api/handoff/${encodeURIComponent(String(sessionID))}/note`, { method: 'POST' });
+    if (!res.ok) reportNoteResult(sessionID, tx('handoff_note_failed', 'メモは書かれませんでした'));
+  } catch (_) {
+    reportNoteResult(sessionID, tx('handoff_note_failed', 'メモは書かれませんでした'));
+  }
+}
+
+// handleHandoffNoteMessage は ws-client.ts の handoff_note 受信フックから呼ばれる。
+export function handleHandoffNoteMessage(m: Message): void {
+  const sessionID = Number(m.session_id || 0);
+  if (!sessionID) return;
+  const path = String(m.note_path || '');
+  reportNoteResult(sessionID, m.note_ok && path
+    ? tx('handoff_note_written', 'メモを書きました: {path}', { path })
+    : tx('handoff_note_failed', 'メモは書かれませんでした'));
+}
+
+// ---- 一覧ダイアログの外枠 ---------------------------------------------------
 
 function buildDialogShell(titleKey: string, titleFallback: string, extraClass = ''): { backdrop: HTMLElement; close: () => void } {
   const backdrop = document.createElement('div');
@@ -124,126 +172,6 @@ function buildDialogShell(titleKey: string, titleFallback: string, extraClass = 
   return { backdrop, close };
 }
 
-function setDialogBody(backdrop: HTMLElement, html: string): void {
-  const body = backdrop.querySelector('.handoff-dialog-body');
-  if (body) body.innerHTML = html;
-}
-
-function buildProviderSelect(candidates: string[]): HTMLSelectElement {
-  const select = document.createElement('select');
-  select.className = 'handoff-provider-select';
-  const empty = document.createElement('option');
-  empty.value = '';
-  empty.textContent = tx('handoff_dialog_provider_empty', 'CLI を選択…');
-  select.appendChild(empty);
-  candidates.forEach((value) => {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = providerLabel(value);
-    select.appendChild(option);
-  });
-  return select;
-}
-
-async function startHandoffSession(sessionID: number, provider: string, cwd: string, markdown: string, onStarted: () => void): Promise<void> {
-  try {
-    const response = await apiFetch('/api/spawn', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider, cwd, initial_prompt: markdown, handoff_from: sessionID }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      showToast(String(data?.detail || data?.error || `HTTP ${response.status}`));
-      return;
-    }
-    onStarted();
-    showToast(tx('handoff_dialog_started', '新しいセッションを起動しました'));
-  } catch (error) {
-    showToast(String(error instanceof Error ? error.message : error));
-  }
-}
-
-function renderHandoffPreviewContent(backdrop: HTMLElement, sessionID: number, data: HandoffPreviewResponse, close: () => void): void {
-  const bodyEl = backdrop.querySelector('.handoff-dialog-body') as HTMLElement | null;
-  const actionsEl = backdrop.querySelector('.handoff-dialog-actions') as HTMLElement | null;
-  if (!bodyEl || !actionsEl) return;
-
-  bodyEl.innerHTML = '';
-  const source = document.createElement('p');
-  source.className = 'handoff-dialog-source';
-  source.textContent = `${tx('handoff_dialog_source', '元セッション')}: #${sessionID} ${providerLabel(String(data.provider || ''))} — ${data.cwd || ''}`;
-  bodyEl.appendChild(source);
-  // ダイアログは同時に 1 枚しか出ないので id は固定でよい。label と textarea は
-  // 兄弟なので htmlFor で明示的に結ぶ（入れ子でないと自動では結ばれない）。
-  const promptID = 'handoff-dialog-prompt';
-  const promptLabel = document.createElement('label');
-  promptLabel.className = 'handoff-dialog-prompt-label';
-  promptLabel.htmlFor = promptID;
-  promptLabel.textContent = tx('handoff_dialog_prompt_label', '初期プロンプト（編集可）');
-  bodyEl.appendChild(promptLabel);
-  const textarea = document.createElement('textarea');
-  textarea.id = promptID;
-  textarea.className = 'handoff-dialog-markdown';
-  textarea.value = String(data.markdown || '');
-  textarea.rows = 12;
-  textarea.spellcheck = false;
-  bodyEl.appendChild(textarea);
-
-  const providerRow = document.createElement('label');
-  providerRow.className = 'handoff-dialog-provider-row';
-  const labelText = document.createElement('span');
-  labelText.textContent = tx('handoff_dialog_provider_label', '起動する CLI');
-  const select = buildProviderSelect(Array.isArray(data.candidate_providers) ? data.candidate_providers : []);
-  providerRow.appendChild(labelText);
-  providerRow.appendChild(select);
-  bodyEl.appendChild(providerRow);
-
-  actionsEl.innerHTML = '';
-  const cancelBtn = document.createElement('button');
-  cancelBtn.type = 'button';
-  cancelBtn.textContent = tx('handoff_dialog_cancel', 'キャンセル');
-  cancelBtn.addEventListener('click', close);
-  const startBtn = document.createElement('button');
-  startBtn.type = 'button';
-  startBtn.className = 'primary';
-  startBtn.textContent = tx('handoff_dialog_start', '起動');
-  // 起動できる条件は provider が選ばれていることと、送る文面が空でないこと。
-  // 押した時点が承認なので確認ステップは足さない（親 plan 方針 B1）。
-  const refreshStartEnabled = () => {
-    startBtn.disabled = !select.value || !textarea.value.trim();
-  };
-  startBtn.disabled = true;
-  select.addEventListener('change', refreshStartEnabled);
-  textarea.addEventListener('input', refreshStartEnabled);
-  startBtn.addEventListener('click', () => {
-    if (!select.value || startBtn.disabled) return;
-    startBtn.disabled = true;
-    void startHandoffSession(sessionID, select.value, String(data.cwd || ''), textarea.value, close)
-      .finally(refreshStartEnabled);
-  });
-  actionsEl.appendChild(cancelBtn);
-  actionsEl.appendChild(startBtn);
-}
-
-// openHandoffPreviewDialog is the shared entry point for both routes (経路 1
-// の通知バナーと 経路 2 の一覧、どちらもこれを呼ぶ)。
-export async function openHandoffPreviewDialog(sessionID: number): Promise<void> {
-  const { backdrop, close } = buildDialogShell('handoff_dialog_title', '引き継ぎを準備');
-  try {
-    const response = await apiFetch(`/api/handoff/${encodeURIComponent(String(sessionID))}`);
-    const data = await response.json() as HandoffPreviewResponse;
-    if (!response.ok || !data.ok) throw new Error('handoff fetch failed');
-    if (!data.exists) {
-      setDialogBody(backdrop, `<p>${escapeHtml(tx('handoff_dialog_no_record', 'この記録は見つかりません'))}</p>`);
-      return;
-    }
-    renderHandoffPreviewContent(backdrop, sessionID, data, close);
-  } catch (_) {
-    setDialogBody(backdrop, `<p>${escapeHtml(tx('handoff_dialog_no_record', 'この記録は見つかりません'))}</p>`);
-  }
-}
-
 // ---- 経路 2: 一覧から開く（Hub 再起動後も看板ディレクトリを直接読むので働く）----
 
 interface HandoffListEntry {
@@ -254,6 +182,8 @@ interface HandoffListEntry {
   live?: boolean;
   started_at?: string;
   ended_at?: string;
+  /** このセッションを引き継いだ後継（Hub 側の逆引き。無ければ 0 / 未送）。 */
+  handoff_to?: number;
 }
 
 export async function openHandoffListDialog(): Promise<void> {
@@ -279,9 +209,17 @@ export async function openHandoffListDialog(): Promise<void> {
       const status = entry.live ? tx('handoff_list_live', '実行中') : tx('handoff_list_ended', '終了');
       const main = document.createElement('div');
       main.className = 'handoff-list-row-main';
+      // 後継がいる行にはその番号を出す（子 plan:
+      // plan_derived-session-launch_c3_derive-launch.md 内部 C4）。前任の看板には
+      // 何も書かず、Hub 側が後継の handoff_from から逆引きした値をそのまま見せる。
+      const successor = Number(entry.handoff_to || 0);
+      const successorHtml = successor
+        ? `<span class="handoff-list-row-successor">${escapeHtml(tx('card_handoff_to', `Successor #${successor}`, { id: successor }))}</span>`
+        : '';
       main.innerHTML = `<span class="handoff-list-row-id">#${escapeHtml(String(entry.session_id))}</span>` +
         `<span class="handoff-list-row-provider">${escapeHtml(providerLabel(String(entry.provider || '')))}</span>` +
         `<span class="handoff-list-row-status" data-live="${entry.live ? '1' : '0'}">${escapeHtml(status)}</span>` +
+        successorHtml +
         `<span class="handoff-list-row-cwd" title="${escapeHtml(String(entry.cwd || ''))}">${escapeHtml(String(entry.cwd || ''))}</span>`;
       const previewBtn = document.createElement('button');
       previewBtn.type = 'button';
@@ -289,7 +227,9 @@ export async function openHandoffListDialog(): Promise<void> {
       previewBtn.textContent = tx('handoff_list_preview', 'プレビュー');
       previewBtn.addEventListener('click', () => {
         close();
-        void openHandoffPreviewDialog(entry.session_id);
+        // 一覧の行からも派生ダイアログ（種別 = 引き継ぎ）を開く。看板 markdown は
+        // そちらが自分で取りに行くので、ここでプレビューを組み立てない。
+        void openDeriveDialog(entry.session_id, { kind: 'handoff' });
       });
       row.appendChild(main);
       row.appendChild(previewBtn);

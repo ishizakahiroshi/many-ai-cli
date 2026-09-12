@@ -49,6 +49,42 @@ func TestHandoffConfigTurnSummaryEnabled(t *testing.T) {
 	}
 }
 
+// TestHandoffNoteOnThresholdDefaultsAndWarns is the 内部 C2 completion criterion
+// for the config half (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md):
+// an unset or misspelled value behaves as ask (the memo is never written
+// without someone pressing the button), and a misspelling is reported instead
+// of silently doing nothing.
+func TestHandoffNoteOnThresholdDefaultsAndWarns(t *testing.T) {
+	cases := map[string]string{
+		"":     HandoffNoteOnThresholdAsk,
+		"ask":  HandoffNoteOnThresholdAsk,
+		"auto": HandoffNoteOnThresholdAuto,
+		"off":  HandoffNoteOnThresholdOff,
+		"AUTO": HandoffNoteOnThresholdAsk, // IntentMode と同じ厳密一致
+		"none": HandoffNoteOnThresholdAsk,
+	}
+	for in, want := range cases {
+		if got := (HandoffConfig{NoteOnThreshold: in}).NoteOnThresholdOrDefault(); got != want {
+			t.Errorf("NoteOnThresholdOrDefault(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	cfg := &Config{}
+	cfg.Handoff.NoteOnThreshold = "auto"
+	if got := cfg.handoffWarnings(); len(got) != 0 {
+		t.Fatalf("handoffWarnings() for a valid value = %v, want none", got)
+	}
+	cfg.Handoff.NoteOnThreshold = "none"
+	warnings := cfg.handoffWarnings()
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "handoff.note_on_threshold") {
+		t.Fatalf("handoffWarnings() = %v, want one warning naming handoff.note_on_threshold", warnings)
+	}
+	// 値そのものは書き換えない（利用者が書いた綴りが残っているから警告できる）。
+	if cfg.Handoff.NoteOnThreshold != "none" {
+		t.Fatalf("note_on_threshold was rewritten to %q; it must stay as written", cfg.Handoff.NoteOnThreshold)
+	}
+}
+
 func TestUsageProbeModelDefaultsAndRejectsUnsafeValues(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if cfg.UserPrefs.UsageProbeModel != DefaultUsageProbeModel {

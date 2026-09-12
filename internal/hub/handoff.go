@@ -15,6 +15,7 @@ package hub
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,7 +69,30 @@ func (s *Server) recordHandoffSessionStart(sessionID int, provider, cwd, branch,
 		Model:          model,
 		SubscriptionID: subscriptionID,
 		HandoffFrom:    handoffFrom,
+		Transcript:     s.handoffTranscriptPathFor(sessionID),
 	})
+}
+
+// handoffTranscriptPathFor resolves the provider's own conversation log for a
+// live session, or "" when it cannot be resolved yet (子 plan:
+// docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C1).
+//
+// It deliberately owns no resolution logic of its own: the profile-aware
+// lookup (CLAUDE_CONFIG_DIR / CODEX_HOME per subscription profile, Codex's
+// Stop-hook NativeLogPath before the start-time search) already exists as
+// agentChatTranscriptPathForSnapshot, and a second copy here would drift from
+// it the first time a provider's layout changes. Providers that resolver does
+// not cover return "" — no new `case "claude":` switch is introduced here
+// (親 plan 不変条件 7).
+//
+// Only a path is returned, and only a path is ever recorded; the file itself is
+// never opened by many-ai-cli (internal/handoff/handoff.go package doc).
+func (s *Server) handoffTranscriptPathFor(sessionID int) string {
+	path, ok := agentChatTranscriptPathForSnapshot(s.agentChatSnapshot(sessionID))
+	if !ok {
+		return ""
+	}
+	return path
 }
 
 // recordHandoffSessionEnd writes a session_end line. state and reason are
@@ -76,14 +100,22 @@ func (s *Server) recordHandoffSessionStart(sessionID int, provider, cwd, branch,
 // wrapper.classifyStartFailure's reason codes such as "exec_not_found") —
 // never PTY output or user text — so folding them into Text (the allowlist's
 // one free-form field) does not widen what a Record can carry.
+//
+// The transcript path is resolved here too, not only at session_start: Codex
+// only learns its rollout file from its Stop hook (or from the start-time
+// search once the file exists), so for a Codex session this is usually the
+// first moment the path is knowable at all (子 plan 内部 C1). Every caller of
+// this function runs after the session has been marked ended but before it is
+// removed from s.sessions, so the snapshot still resolves.
 func (s *Server) recordHandoffSessionEnd(sessionID int, state, reason string) {
 	text := strings.TrimSpace(state)
 	if reason != "" {
 		text = strings.TrimSpace(text + ": " + reason)
 	}
 	s.appendHandoff(sessionID, handoff.Record{
-		Kind: handoff.KindSessionEnd,
-		Text: text,
+		Kind:       handoff.KindSessionEnd,
+		Text:       text,
+		Transcript: s.handoffTranscriptPathFor(sessionID),
 	})
 }
 
@@ -350,6 +382,150 @@ func extractHandoffTurnSummaryLine(buf string) (string, bool) {
 	return strings.Join(strings.Fields(combined), " "), true
 }
 
+// --- 引き継ぎメモ: 止まる前の前任に 1 本だけ書かせる -------------------------
+//
+// 子 plan (docs/local/plan_derived-session-launch_c4_handoff-routes.md) 内部 C2。
+// 残量の帯から人が押す（設定 handoff.note_on_threshold が auto なら帯と同時に
+// 画面が 1 回だけ叩く）。注入とマーカー拾いは上の turn-summary と同じ作りで、
+// 違うのは「1 ターンの要約」ではなく「止まる前に書き残す 1 ファイル」であること。
+//
+// **Hub はメモの中身を読まない。** 書く先のパスを指示し、書けたという合図
+// （マーカー）を拾ったらそのパスを看板へ記録するだけ（親 plan 不変条件 2）。
+const (
+	handoffNoteMarkerOpen  = "[MANY-AI-CLI-HANDOFF-NOTE]"
+	handoffNoteMarkerClose = "[/MANY-AI-CLI-HANDOFF-NOTE]"
+	// 待ち受けの打ち切り時間。turn-summary と同じ 60 秒にしてある: 求めているのは
+	// 短い md 1 本で、どちらも「1 ターン分の応答を待つ」以上の意味はない。
+	handoffNoteAwaitTimeout = handoffTurnSummaryAwaitTimeout
+	// マーカー抽出用バッファの上限（handoffTurnSummaryScanBufMax と同じ発想）。
+	handoffNoteScanBufMax = handoffTurnSummaryScanBufMax
+)
+
+// requestHandoffNote injects the memo request into one live session and starts
+// waiting for its marker. It returns an error string (a short, code-computed
+// reason — never PTY text) when the request cannot be made at all, so the HTTP
+// handler can answer 4xx instead of silently pretending it asked.
+//
+// The path is decided here, not by the caller: it is always
+// handoff.NotePathFor(sessionID), so a request can never point the AI at a file
+// of someone else's choosing.
+func (s *Server) requestHandoffNote(sessionID int) (string, string) {
+	if !s.handoffEnabled() {
+		return "", "handoff_disabled"
+	}
+	path, err := handoff.NotePathFor(sessionID)
+	if err != nil {
+		return "", "note_path_unavailable"
+	}
+	if mkErr := os.MkdirAll(filepath.Dir(path), sessionlog.PrivateDirMode); mkErr != nil {
+		// 書く側（AI）がディレクトリを作れるとは限らないので、ここで用意しておく。
+		// 失敗しても依頼自体は成り立つ（AI が自分で作れることもある）ので、
+		// 記録だけ残して続ける。
+		s.logger.Warn("handoff note dir create failed", "session_id", sessionID, "err", mkErr)
+	}
+
+	s.sessionsMu.Lock()
+	ses := s.sessions[sessionID]
+	wc := s.wrappers[sessionID]
+	if ses == nil || wc == nil || !isAIProvider(ses.Provider) {
+		s.sessionsMu.Unlock()
+		return "", "session_not_writable"
+	}
+	if ses.handoffNoteAwait {
+		s.sessionsMu.Unlock()
+		return "", "already_pending"
+	}
+	ses.handoffNoteAwait = true
+	ses.handoffNoteDeadline = time.Now().Add(handoffNoteAwaitTimeout)
+	ses.handoffNotePath = path
+	ses.handoffNoteSeq++
+	seq := ses.handoffNoteSeq
+	ses.handoffNoteBuf.Reset()
+	ja := strings.EqualFold(s.cfg.UserPrefs.Display.Lang, "ja") || strings.TrimSpace(s.cfg.UserPrefs.Display.Lang) == ""
+	s.sessionsMu.Unlock()
+
+	// 打ち切りは chunk 到着に頼らない: 枯渇して黙り込んだセッションからは 1 バイトも
+	// 来ないことがあり、それこそがこの依頼を出す場面なので、時計で必ず終わらせる。
+	time.AfterFunc(handoffNoteAwaitTimeout, func() { s.expireHandoffNote(sessionID, seq) })
+
+	s.submitInput(sessionID, bracketedPasteStart+handoffNotePrompt(path, ja)+bracketedPasteEnd+"\r")
+	return path, ""
+}
+
+// handoffNotePrompt mirrors handoffTurnSummaryPrompt's shape: one line, no
+// embedded newlines (some CLIs submit on the first one), naming both the file
+// to write and the marker to print when done.
+func handoffNotePrompt(path string, ja bool) string {
+	if ja {
+		return "[many-ai-cli] 残量が少ないので引き継ぎメモを書いてください。" + path +
+			" に markdown で、次の一手・未検証の前提・開いている論点・触っていた md のパスを書き、" +
+			"書き終えたら " + handoffNoteMarkerOpen + " written " + handoffNoteMarkerClose +
+			" を 1 行で出力してください（コードブロックで囲まない）。"
+	}
+	return "[many-ai-cli] This session is running low on quota; please write a handoff memo. Write markdown to " + path +
+		" covering the next step, unverified assumptions, open questions and the path of any plan/bugfix md you had open, " +
+		"then output " + handoffNoteMarkerOpen + " written " + handoffNoteMarkerClose +
+		" on a single line (not wrapped in a code block)."
+}
+
+// handleHandoffNoteChunk accumulates ANSI-stripped output while a memo request
+// is awaiting its marker (same shape as handleHandoffTurnSummaryChunk, and a
+// no-op for every session that is not currently awaiting one).
+func (s *Server) handleHandoffNoteChunk(id int, cleanText string) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || !ses.handoffNoteAwait {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.handoffNoteBuf.WriteString(cleanText)
+	if ses.handoffNoteBuf.Len() > handoffNoteScanBufMax {
+		trimmed := ses.handoffNoteBuf.String()
+		trimmed = trimmed[len(trimmed)-handoffNoteScanBufMax:]
+		ses.handoffNoteBuf.Reset()
+		ses.handoffNoteBuf.WriteString(trimmed)
+	}
+	if _, _, ok := extractMarkerBlock(ses.handoffNoteBuf.String(), handoffNoteMarkerOpen, handoffNoteMarkerClose); !ok {
+		s.sessionsMu.Unlock()
+		return
+	}
+	path := ses.handoffNotePath
+	ses.handoffNoteAwait = false
+	ses.handoffNoteBuf.Reset()
+	s.sessionsMu.Unlock()
+
+	// マーカーは「書いた」という AI の申告でしかないので、ファイルがあることを
+	// 自分で確かめてから記録する（中身は読まない）。
+	if !isExistingFile(path) {
+		s.finishHandoffNote(id, false, "")
+		return
+	}
+	s.appendHandoff(id, handoff.Record{Kind: handoff.KindNote, Note: path})
+	s.finishHandoffNote(id, true, path)
+}
+
+// expireHandoffNote ends a memo request whose marker never arrived. seq guards
+// against a timer from a previous request cancelling a newer one.
+func (s *Server) expireHandoffNote(id int, seq uint64) {
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || !ses.handoffNoteAwait || ses.handoffNoteSeq != seq {
+		s.sessionsMu.Unlock()
+		return
+	}
+	ses.handoffNoteAwait = false
+	ses.handoffNoteBuf.Reset()
+	s.sessionsMu.Unlock()
+	s.finishHandoffNote(id, false, "")
+}
+
+// finishHandoffNote tells the browser how the request ended. The banner that
+// asked for it may be long gone (it auto-dismisses), so the UI decides where to
+// show this; the Hub just says what happened, once.
+func (s *Server) finishHandoffNote(id int, ok bool, path string) {
+	s.broadcast(proto.Message{Type: "handoff_note", SessionID: id, NoteOK: ok, NotePath: path})
+}
+
 // --- 読み出し窓口: 引き継ぎ md とセッション一覧 -----------------------------
 //
 // 子 plan (docs/local/plan_session-handoff-board_c5_handoff-md.md) 内部 C1・
@@ -375,7 +551,21 @@ type handoffPreview struct {
 	StartedAt   string `json:"started_at,omitempty"`
 	EndedAt     string `json:"ended_at,omitempty"`
 	HandoffFrom int    `json:"handoff_from,omitempty"`
-	Markdown    string `json:"markdown,omitempty"`
+	// HandoffTo is the successor session that was launched to continue this one.
+	// It is a **reverse lookup** over the directory (handoffListEntries), not a
+	// recorded field: the predecessor is stopped — that is the whole premise of a
+	// handoff — so nothing may be appended to its own jsonl after the fact
+	// (子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4).
+	// Filled by handoffListEntries only; a single-item preview leaves it 0.
+	HandoffTo int `json:"handoff_to,omitempty"`
+	// TranscriptPath / NotePath are the two "thicker than the board" routes
+	// (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md).
+	// Both are **paths only**, and both are present only when the file is
+	// actually there right now: a path recorded 10 days ago whose file the user
+	// has since deleted must not be offered to a successor as something to read.
+	TranscriptPath string `json:"transcript_path,omitempty"`
+	NotePath       string `json:"note_path,omitempty"`
+	Markdown       string `json:"markdown,omitempty"`
 	// CandidateProviders (handleHandoffItem のみが埋める): 起動先として選べる
 	// provider の一覧。子 plan 内部 C2「同一 provider の別 subscription
 	// profile は候補に出さない」を満たすため、この一覧に元セッションの
@@ -406,8 +596,51 @@ func (s *Server) handoffIdentityFor(sessionID int) (handoffPreview, error) {
 		case handoff.KindSessionEnd:
 			preview.EndedAt = r.TS
 		}
+		// Transcript / Note are read from every kind that can carry them
+		// (session_start, session_end, and the dedicated transcript/note
+		// lines), newest wins — same rule as render.go. isExistingFile is the
+		// gate: a recorded path whose file is gone is reported as absent rather
+		// than handed to a successor that would then fail to open it.
+		if path := strings.TrimSpace(r.Transcript); path != "" && isExistingFile(path) {
+			preview.TranscriptPath = path
+		}
+		if path := strings.TrimSpace(r.Note); path != "" && isExistingFile(path) {
+			preview.NotePath = path
+		}
 	}
 	return preview, nil
+}
+
+// ensureHandoffTranscriptRecorded records the transcript path of a session that
+// is still live but whose board does not name it yet (子 plan 内部 C1).
+//
+// This is the case the whole route exists for: a predecessor that hit its quota
+// and stopped responding has not ended, so recordHandoffSessionEnd has not run,
+// and at session_start the provider had usually not created its log file yet.
+// The single-item preview (a person opening the derive dialog for that session)
+// is a human-paced action, so resolving the path here costs nothing and keeps
+// the list view — which runs over every file in the directory — untouched.
+//
+// A session with no board at all is left alone: this must never be the thing
+// that creates one (usage-probe sessions deliberately have none).
+func (s *Server) ensureHandoffTranscriptRecorded(sessionID int) {
+	if !s.handoffEnabled() {
+		return
+	}
+	path := s.handoffTranscriptPathFor(sessionID)
+	if path == "" {
+		return
+	}
+	records, err := handoff.ReadSession(sessionID)
+	if err != nil || len(records) == 0 {
+		return
+	}
+	for _, r := range records {
+		if r.Transcript == path {
+			return
+		}
+	}
+	s.appendHandoff(sessionID, handoff.Record{Kind: handoff.KindTranscript, Transcript: path})
 }
 
 // handoffPreviewFor is handoffIdentityFor plus the rendered markdown (子 plan
@@ -415,6 +648,7 @@ func (s *Server) handoffIdentityFor(sessionID int) (handoffPreview, error) {
 // internal/handoff's own tests — a GET of one session's preview is exactly
 // the "show it before sending it anywhere" step 親 plan 不変条件 3 requires.
 func (s *Server) handoffPreviewFor(sessionID int) (handoffPreview, error) {
+	s.ensureHandoffTranscriptRecorded(sessionID)
 	preview, err := s.handoffIdentityFor(sessionID)
 	if err != nil || !preview.Exists {
 		return preview, err
@@ -469,7 +703,37 @@ func (s *Server) handoffListEntries() ([]handoffPreview, error) {
 		}
 		out = append(out, preview)
 	}
+	fillHandoffSuccessors(out)
 	return out, nil
+}
+
+// fillHandoffSuccessors turns the successors' own HandoffFrom into the
+// predecessors' HandoffTo, in place.
+//
+// The link is recorded on one side only: the successor writes "I continue #N"
+// into its own session_start, and nothing is ever appended to the predecessor's
+// jsonl (it is stopped, which is why a handoff happened at all). The list view
+// wants the other direction — "this session was handed off to #M" — so it is
+// derived here rather than written anywhere.
+//
+// If several successors name the same predecessor (a handoff was prepared
+// twice), the newest one wins: entries arrive newest-first, so the first match
+// is the latest successor and later matches are skipped.
+func fillHandoffSuccessors(entries []handoffPreview) {
+	successorOf := make(map[int]int, len(entries))
+	for _, e := range entries {
+		if e.HandoffFrom == 0 {
+			continue
+		}
+		if _, seen := successorOf[e.HandoffFrom]; !seen {
+			successorOf[e.HandoffFrom] = e.SessionID
+		}
+	}
+	for i := range entries {
+		if successor, ok := successorOf[entries[i].SessionID]; ok {
+			entries[i].HandoffTo = successor
+		}
+	}
 }
 
 // handoffCandidateProviders returns the built-in providers a handoff

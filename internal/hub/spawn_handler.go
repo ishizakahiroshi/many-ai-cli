@@ -2,6 +2,8 @@ package hub
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,8 +29,25 @@ type spawnWrappedSpec struct {
 	PermissionMode string
 	Sandbox        string
 	AskForApproval string
-	Route          string
-	Utf8Session    bool
+	// AllowedTools は段 2（bounded）で provider へ渡す許可 tool の一覧。
+	// 空なら --allowed-tools を付けない＝この項目が存在しなかった頃と同じ argv。
+	// 値の出所は internal/hub/child_permission.go の表と config だけ。
+	AllowedTools []string
+	Route        string
+	Utf8Session  bool
+	// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// すべて省略可で、空文字は「指定なし」= この 3 項目が存在しなかった頃と
+	// 完全に同じ挙動。受理値の表と検証は internal/config/effort.go が持つ。
+	Effort           string
+	ExecutionMode    string
+	PermissionPreset string
+	// InitialPrompt は headless 起動でのみ使う最初の指示。対話起動では空のまま
+	// で、プロンプトは今までどおり登録後に PTY へ注入される（注入経路は 1 本の
+	// まま）。headless には注入する相手（プロンプト待ちの TUI）が無いので、
+	// 起動時に argv / stdin で渡すしかない
+	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）。
+	InitialPrompt string
 	// SubscriptionProfileID は起動に使うサブスクリプション profile。
 	// 空なら CLI 自身のログイン環境をそのまま使う（従来動作）。
 	SubscriptionProfileID string
@@ -153,6 +172,24 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
 		}
 	}
+	// effort は provider 別 switch の外で 1 度だけ足す。どの provider が effort を
+	// 受けるかは internal/config/effort.go の表だけが知っている。写像が無い
+	// provider では spec.Effort が空（検証で弾かれている）なので何も足さない。
+	if args := effortWrapArgs(spec.Provider, spec.Effort); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	// 段 2 の許可 tool も同じく switch の外で 1 度だけ。空なら何も足さない。
+	if args := allowedToolsWrapArgs(spec.AllowedTools); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	// headless は provider 別 switch の外。ここまでで組んだ model / effort /
+	// 権限のフラグはそのまま使い（headless 専用の写像を作らない・親 plan からの
+	// 差分 5）、実行モードを 1 組のフラグで足すだけにする。
+	headlessArgs, promptPath, headlessErr := s.headlessWrapArgs(spec.ExecutionMode, spec.InitialPrompt)
+	if headlessErr != nil {
+		return 0, headlessErr
+	}
+	wrapArgs = append(wrapArgs, headlessArgs...)
 	effectiveRoute := spec.Route
 	if effectiveRoute == "" {
 		localCfg := s.snapshotLocalModels()
@@ -169,6 +206,10 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 
 	id, err := s.startWrapProcess(spec, wrapArgs, subEnv, effectiveRoute, wait)
 	if err != nil {
+		// The wrapper never started, so nothing will ever read the prompt
+		// file. Take it back rather than leaving the user's own instruction
+		// sitting in a temp directory (internal/doctor/residue.go の規律).
+		removeHeadlessPromptFile(promptPath)
 		return 0, err
 	}
 	if spawnRecordsLastModel(spec, resolvedModel, effectiveRoute) {
@@ -348,6 +389,163 @@ func resolveSpawnModel(model string, isCustomProvider bool) string {
 	return strings.TrimSpace(model)
 }
 
+// validateLaunchRequestOptions trims and validates the three launch-request
+// options shared by /api/spawn, spawn-child and the relay roles (子 plan:
+// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1). It
+// mutates the values in place so every entry point stores the same trimmed
+// form. All three are optional: an empty value passes for every provider,
+// which is what keeps callers that never send them unchanged.
+//
+// The decision of which providers accept an effort level, and which execution
+// modes / permission presets this build can honour, lives in
+// internal/config/effort.go — this function must not grow a provider switch.
+func validateLaunchRequestOptions(provider string, effort, mode, preset *string) error {
+	*effort = strings.TrimSpace(*effort)
+	*mode = config.NormalizeExecutionMode(*mode)
+	*preset = config.NormalizePermissionPreset(*preset)
+	if err := config.ValidateEffort(provider, *effort); err != nil {
+		return err
+	}
+	if err := config.ValidateExecutionMode(*mode); err != nil {
+		return err
+	}
+	return config.ValidatePermissionPreset(*preset)
+}
+
+// effortWrapArgs returns the `wrap` flags that carry effort, or nil when
+// effort is empty or the provider has no mapping. Keeping it a helper (rather
+// than inlining config.EffortArgs at both call sites) means the two argument
+// builders in this file stay identical, and the wrapper flag name is written
+// down once.
+// allowedToolsWrapArgs returns the `wrap` flag carrying the bounded tier's
+// allowlist, or nil when there is none — so a launch without one produces
+// exactly the argv it did before the tier existed.
+//
+// The values are re-validated here even though they came from the table and
+// config.yaml: they end up in a child process's argument list, and on Windows
+// some launches pass through a cmd.exe shim. An entry that does not look like a
+// tool name or command pattern is dropped rather than passed on (config.Warnings
+// already told the user about it when it came from their config file).
+func allowedToolsWrapArgs(values []string) []string {
+	kept := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if config.ValidAllowedToolValue(value) {
+			kept = append(kept, value)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return []string{"--allowed-tools", strings.Join(kept, ",")}
+}
+
+// headlessWrapArgs returns the `wrap` flags that make this launch headless, and
+// the path of the prompt file it wrote. Both are empty for every other launch,
+// so an interactive spawn produces exactly the argv it produced before this
+// mode existed (親 plan 不変条件 1).
+//
+// The prompt is handed over as a file rather than as an argument because an
+// argument is visible to every process on the machine (a process list), ends up
+// in shell history where one is involved, and is bounded by the OS argv limit —
+// while the prompt is the user's own work instruction, often long. The wrapper
+// reads the file once and deletes it (takePromptFile), so the two halves are:
+// the Hub writes, the wrapper collects.
+//
+// An empty prompt is allowed: a headless launch with no instruction is a
+// no-instruction run, not an error, and the file is simply not written.
+func (s *Server) headlessWrapArgs(executionMode, prompt string) ([]string, string, error) {
+	if !config.IsHeadlessExecutionMode(executionMode) {
+		return nil, "", nil
+	}
+	args := []string{"--headless"}
+	if strings.TrimSpace(prompt) == "" {
+		return args, "", nil
+	}
+	path, err := writeHeadlessPromptFile(prompt)
+	if err != nil {
+		return nil, "", err
+	}
+	return append(args, "--prompt-file", path), path, nil
+}
+
+// writeHeadlessPromptFile writes one launch's prompt into ~/.many-ai-cli/tmp
+// with the same private modes as every other file many-ai-cli owns, and returns
+// its path.
+//
+// The name is random so two launches cannot collide and so the file name itself
+// says nothing about the work. The contents are never logged here or anywhere
+// else on this path.
+func writeHeadlessPromptFile(prompt string) (string, error) {
+	dir, err := config.Dir()
+	if err != nil {
+		return "", err
+	}
+	dir = filepath.Join(dir, "tmp")
+	if err := os.MkdirAll(dir, sessionlog.PrivateDirMode); err != nil {
+		return "", fmt.Errorf("headless prompt dir: %w", err)
+	}
+	// Collect anything an earlier run left behind before writing a new one. The
+	// wrapper deletes its own prompt file, but a kill skips that, and a leftover
+	// here is the user's own instruction sitting on disk — so the cleanup gets a
+	// path that does not depend on a graceful exit (the rule in
+	// internal/doctor/residue.go, applied to our own directory).
+	sweepStaleHeadlessPrompts(dir, time.Now())
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("headless prompt name: %w", err)
+	}
+	path := filepath.Join(dir, "prompt-"+hex.EncodeToString(raw[:])+".md")
+	if err := os.WriteFile(path, []byte(prompt), sessionlog.PrivateFileMode); err != nil {
+		return "", fmt.Errorf("headless prompt file: %w", err)
+	}
+	return path, nil
+}
+
+func removeHeadlessPromptFile(path string) {
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// headlessPromptMaxAge is how long a prompt file may sit unread before it is
+// treated as abandoned. A wrapper reads its file within seconds of starting;
+// an hour is long enough that a slow machine is never mistaken for a crash.
+const headlessPromptMaxAge = time.Hour
+
+// sweepStaleHeadlessPrompts deletes prompt files older than headlessPromptMaxAge
+// from dir. It only ever touches the names this package writes.
+func sweepStaleHeadlessPrompts(dir string, now time.Time) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, "prompt-") || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) > headlessPromptMaxAge {
+			_ = os.Remove(filepath.Join(dir, name))
+		}
+	}
+}
+
+func effortWrapArgs(provider, effort string) []string {
+	if effort == "" {
+		return nil
+	}
+	if _, ok := config.EffortSupportFor(provider); !ok {
+		return nil
+	}
+	return []string{"--effort", effort}
+}
+
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodPost) {
 		return
@@ -374,6 +572,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// SubscriptionProfileID は使用するサブスクリプション profile。
 		// 省略・空文字は「Default CLI login」で、従来のリクエストと同一の挙動になる。
 		SubscriptionProfileID string `json:"subscription_profile_id"`
+		// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+		// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1）。
+		// 省略時（空文字）はこの 3 項目を知らない呼び出し元と 1 バイトも変わらない。
+		// 受理値は internal/config/effort.go の表が持つ。
+		Effort           string `json:"effort"`
+		ExecutionMode    string `json:"execution_mode"`
+		PermissionPreset string `json:"permission_preset"`
 		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
 		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
 		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
@@ -401,9 +606,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	s.cfgMu.Lock()
 	isCustomProvider := s.cfg.IsCustomProviderID(body.Provider)
 	s.cfgMu.Unlock()
+	// dontAsk は Claude / Grok が --permission-mode としてそのまま解釈する値。
+	// 既存の変換関数を通らない provider では today の "default" と同じく無視される
+	// （子 plan: plan_derived-session-launch_c1_request-schema.md 内部 C1）。
 	validPermModes := map[string]bool{
 		"": true, "default": true, "plan": true,
 		"acceptEdits": true, "auto": true, "bypassPermissions": true,
+		"dontAsk": true,
 	}
 	validSandboxes := map[string]bool{
 		"": true, "read-only": true, "workspace-write": true, "danger-full-access": true,
@@ -422,6 +631,24 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid route")
 		return
 	}
+	// 起動要求の共通 3 項目。空文字は「指定なし」なので、この検証は 3 項目を
+	// 送ってこない既存の呼び出しでは一切失敗しない。
+	if err := validateLaunchRequestOptions(body.Provider, &body.Effort, &body.ExecutionMode, &body.PermissionPreset); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	// 実行モードを provider ごとに解決する。/api/spawn は画面の起動口なので
+	// origin は常に ui 扱い＝ auto は対話のまま。**明示 headless だけが headless**
+	// で、その provider に定義が無ければ 400（黙って対話へ倒さない・親 plan D2）。
+	// 省略した呼び出しは空のまま素通りする（子 plan:
+	// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+	resolvedExecutionMode, execModeErr := config.ResolveExecutionMode(
+		body.ExecutionMode, headlessCapableProvider(body.Provider, s.snapshotCfg()), launchOriginUI, false)
+	if execModeErr != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", execModeErr.Error())
+		return
+	}
+	body.ExecutionMode = resolvedExecutionMode
 	if !validWorktreeCleanup(body.WorktreeCleanup) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid worktree cleanup policy")
 		return
@@ -566,6 +793,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// 従来の /api/spawn（initial_prompt を知らない呼び出し元）と 1 バイトも
 	// 挙動が変わらない。
 	initialPrompt := sanitizeSpawnInitialPrompt(body.InitialPrompt)
+	headlessSpawn := config.IsHeadlessExecutionMode(body.ExecutionMode)
 	if lbl := spawnPendingLabelForInitialPrompt(body.Label, initialPrompt, time.Now()); lbl != "" {
 		body.Label = lbl
 		s.orchestration.mu.Lock()
@@ -573,7 +801,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// entry を作っていることがあるので、reserveOrchestrationConductor と
 		// 同じく上書きせずマージする。
 		meta := s.orchestration.pending[body.Label]
-		meta.InitialPrompt = initialPrompt
+		// headless では注入しない（注入する相手が無い）。文面は起動時に
+		// --prompt-file で渡す。pending 自体は残すので、引き継ぎ元の記録
+		// （HandoffFrom）は対話起動と同じように残る
+		// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）。
+		if !headlessSpawn {
+			meta.InitialPrompt = initialPrompt
+		}
 		meta.HandoffFrom = body.HandoffFrom
 		if meta.SpawnedAt.IsZero() {
 			meta.SpawnedAt = time.Now()
@@ -662,6 +896,26 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// permission_preset が明示されたときだけ、子セッションと同じ表
+	// （internal/hub/child_permission.go）で段を解決し、空欄を埋める。明示値が
+	// 優先で、preset が空なら何も埋めない＝この項目を知らない呼び出しと 1 バイトも
+	// 変わらない。**RiskConfirmed はここでは触らない**: 高リスク権限の確認は人が
+	// 押す経路の歯止めで、preset という近道で自動的に通してよいものではない
+	// （埋めた結果が高リスクなら、下の switch がいつもどおり確認を要求する）。
+	var allowedTools []string
+	if body.PermissionPreset != "" {
+		preset := permissionPresetApproval(body.Provider, body.PermissionPreset, s.snapshotCfg().Orchestration)
+		if body.PermissionMode == "" {
+			body.PermissionMode = preset.PermissionMode
+		}
+		if body.Sandbox == "" {
+			body.Sandbox = preset.Sandbox
+		}
+		if body.AskForApproval == "" {
+			body.AskForApproval = preset.AskForApproval
+		}
+		allowedTools = preset.AllowedTools
+	}
 	switch body.Provider {
 	case "claude":
 		mode := body.ModelSelection
@@ -753,6 +1007,21 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			wrapArgs = append(wrapArgs, "--permission-mode", body.PermissionMode)
 		}
 	}
+	// effort は provider 別 switch の外で 1 度だけ足す（spawnWrappedSession と同じ形）。
+	if args := effortWrapArgs(body.Provider, body.Effort); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	if args := allowedToolsWrapArgs(allowedTools); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	// headless も同じく switch の外。対話起動では 1 引数も増えない。
+	headlessArgs, promptPath, headlessErr := s.headlessWrapArgs(body.ExecutionMode, initialPrompt)
+	if headlessErr != nil {
+		cleanupIsolated()
+		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("headless prompt error", headlessErr))
+		return
+	}
+	wrapArgs = append(wrapArgs, headlessArgs...)
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
 	effectiveRoute := body.Route
@@ -830,6 +1099,8 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	setCmdSysProcAttr(cmd)
 	if err := cmd.Start(); err != nil {
 		cleanupIsolated()
+		// 読む相手が起動しなかったので、書いたプロンプトを引き取る。
+		removeHeadlessPromptFile(promptPath)
 		if stdinNull != nil {
 			_ = stdinNull.Close()
 		}

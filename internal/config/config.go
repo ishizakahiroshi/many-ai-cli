@@ -137,6 +137,16 @@ type HandoffConfig struct {
 	// と同じ「0 以下は既定」の扱いにする（明示的な無効化スイッチは別に持たない
 	// — 誤発火の実害が出たら、この 1 値を上げるだけで足りる）。
 	NotifyRemainingPercent int `yaml:"notify_remaining_percent,omitempty" json:"notify_remaining_percent,omitempty"`
+	// NoteOnThreshold: 残量の帯が出たときに、前任へ引き継ぎメモを書かせるかどうか
+	// （子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+	// ask（既定）= 帯にボタンを出し、人が押したときだけ依頼する / auto = 帯と同時に
+	// 自動で依頼する / off = ボタンも出さない。
+	//
+	// **既定を auto にしない**のは、依頼が前任セッションのトークンを消費するため
+	// （IntentMode の turn-summary を既定 off にしているのと同じ理由）。ここは
+	// IntentMode と違って読むときに正規化する（NoteOnThresholdOrDefault）。読み込み時に
+	// 値を書き換えてしまうと、綴り間違いを Warnings() が見つけられなくなる。
+	NoteOnThreshold string `yaml:"note_on_threshold,omitempty" json:"note_on_threshold,omitempty"`
 }
 
 // Handoff intent_mode の 2 値。文字列を直書きさせず、この定数と
@@ -152,6 +162,48 @@ func NormalizeHandoffIntentMode(v string) string {
 		return HandoffIntentModeTurnSummary
 	}
 	return HandoffIntentModeDoneOnly
+}
+
+// Handoff note_on_threshold の 3 値。帯（残量が閾値を切ったときの通知）から
+// 前任へ引き継ぎメモを書かせる操作の扱いを決める。
+const (
+	HandoffNoteOnThresholdAsk  = "ask"
+	HandoffNoteOnThresholdAuto = "auto"
+	HandoffNoteOnThresholdOff  = "off"
+)
+
+// NoteOnThresholdOrDefault は未知の値・空を既定（ask）へ丸める。丸めるのは読む
+// ときだけで、cfg.Handoff.NoteOnThreshold 自体は利用者が書いたまま残す
+// （handoffWarnings が「その綴りは効いていない」と言えるようにするため）。
+func (h HandoffConfig) NoteOnThresholdOrDefault() string {
+	switch strings.TrimSpace(h.NoteOnThreshold) {
+	case HandoffNoteOnThresholdAuto:
+		return HandoffNoteOnThresholdAuto
+	case HandoffNoteOnThresholdOff:
+		return HandoffNoteOnThresholdOff
+	default:
+		return HandoffNoteOnThresholdAsk
+	}
+}
+
+// handoffWarnings は「config.yaml には保存されたが効かない handoff 設定」を返す。
+// childPermissionWarnings と同じ作法: 任意機能の値の綴り間違いで Hub を止めず、
+// その設定が何もしていないことだけを伝える。
+func (cfg *Config) handoffWarnings() []string {
+	if cfg == nil {
+		return nil
+	}
+	raw := strings.TrimSpace(cfg.Handoff.NoteOnThreshold)
+	if raw == "" {
+		return nil
+	}
+	switch raw {
+	case HandoffNoteOnThresholdAsk, HandoffNoteOnThresholdAuto, HandoffNoteOnThresholdOff:
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"handoff.note_on_threshold %q is not one of ask/auto/off; the handoff memo button keeps the built-in default (%s).",
+		raw, HandoffNoteOnThresholdAsk)}
 }
 
 // TurnSummaryEnabled reports whether the thicker per-turn recording (案 3) is
@@ -560,6 +612,22 @@ type UserPrefsSpawn struct {
 	// （承認ダイアログで書き換えられた後の値）を Hub が書き戻す。
 	// 解決順の正本は internal/hub/orchestration.go の resolveChildProvider。
 	RoleProvider map[string]string `yaml:"role_provider,omitempty"     json:"role_provider,omitempty"`
+	// RoleEffort は「その役割の子を前回どの effort で起こしたか」の記憶。
+	// key は role、value は effort（`high` 等）。RoleProvider と同じ場所で
+	// 書き、同じ場所で読む（子 plan:
+	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5）。
+	// 空の記憶は「指定なし」なので、覚えていない役割は従来どおり effort 無しで起動する。
+	RoleEffort map[string]string `yaml:"role_effort,omitempty"       json:"role_effort,omitempty"`
+	// RolePermission は「その役割の子を次回もどの権限の段で起こすか」の記憶。
+	// key は role、value は段（`attended` / `bounded` / `full`）。
+	//
+	// **RoleProvider / RoleEffort と違い、人が明示したときだけ書く。** 段は
+	// 「今回はこれ」と「次回もこれ」を分ける必要がある値なので、書き込みは確認
+	// ダイアログと派生ダイアログのチェックボックス経由だけで、AI（conductor）の
+	// 起動要求からは書けない（子 plan:
+	// docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+	// 値は ValidatePermissionPreset を通ったものだけが入る。
+	RolePermission map[string]string `yaml:"role_permission,omitempty"   json:"role_permission,omitempty"`
 }
 
 // UserPrefsDoneSummaryNotify はタスク完了サマリー通知の設定。
@@ -761,6 +829,10 @@ func (p UserPrefs) Clone() UserPrefs {
 	}
 	c.Spawn.LastModel = cloneStringMap(p.Spawn.LastModel)
 	c.Spawn.RoleProvider = cloneStringMap(p.Spawn.RoleProvider)
+	// RolePermission は /api/info がスナップショット越しに JSON へ出す（misc_handlers.go）。
+	// 浅いコピーのままだと、その符号化中に rememberRolePermission の書き込みと同じ map を
+	// 触ることになる。
+	c.Spawn.RolePermission = cloneStringMap(p.Spawn.RolePermission)
 	if p.TokenStatusbar.Segments != nil {
 		m := make(map[string]bool, len(p.TokenStatusbar.Segments))
 		for k, v := range p.TokenStatusbar.Segments {
@@ -900,6 +972,31 @@ type OrchestrationConfig struct {
 	// false にすると呼び出し側が明示した承認設定のみを使い、高リスク権限は
 	// 自動確認しない（自走 UX を保ちつつ安全側へ切替可能）。
 	ChildFullBypass *bool `yaml:"child_full_bypass,omitempty" json:"child_full_bypass,omitempty"`
+	// ChildPermissionDefault: 無人の子（conductor の spawn / relay）が
+	// permission_preset を指定しなかったときに使う段（attended / bounded / full）。
+	// 未設定は full ＝今日の挙動。bounded に切り替えると無人の子が
+	// 「聞かないが何でもは許さない」で起動する。値の解釈は
+	// ChildPermissionDefaultTier()、段そのものの表は internal/hub/child_permission.go。
+	ChildPermissionDefault string `yaml:"child_permission_default,omitempty" json:"child_permission_default,omitempty"`
+	// ChildExecutionMode: 無人の子（conductor の spawn）が execution_mode を
+	// 指定しなかったときに使う実行モード（auto / interactive / headless）。
+	// 未設定は今日の挙動＝ interactive。auto にすると、headless の定義がある
+	// provider の子だけが非対話で起動する。値の解釈は ChildExecutionModeDefault()、
+	// 定義そのものの表は internal/config/headless.go。
+	// **relay の子はここでは決まらない**（relay 側の既定は RelayExecutionMode）。
+	ChildExecutionMode string `yaml:"child_execution_mode,omitempty" json:"child_execution_mode,omitempty"`
+	// RelayExecutionMode: relay の役割（implementation / implementation-strong /
+	// review）が execution_mode を指定しなかったときに使う実行モード。値は
+	// ChildExecutionMode と同じ 3 つで、未設定は今日の挙動＝対話。別設定なのは
+	// relay の子が別種の worker だから: relay は 1 指示ごとに headless の
+	// プロセスを立て直し、process exit を完了信号にする（内部 C4）。値の解釈は
+	// RelayExecutionModeDefault()。
+	RelayExecutionMode string `yaml:"relay_execution_mode,omitempty" json:"relay_execution_mode,omitempty"`
+	// BoundedAllowedTools: 段 2（bounded）で provider へ渡す許可 tool の一覧
+	// （provider → 値）。キーを書いた provider だけ内蔵既定を置き換える
+	// （追記ではなく置き換え。狭めたつもりが広がる事故を避けるため）。
+	// 内蔵既定と値の書式は internal/config/child_permission.go。
+	BoundedAllowedTools map[string][]string `yaml:"bounded_allowed_tools,omitempty" json:"bounded_allowed_tools,omitempty"`
 }
 
 func (o OrchestrationConfig) WorktreeEnabled() bool {
@@ -1306,6 +1403,18 @@ func (cfg *Config) Clone() *Config {
 	if cfg.CustomProviders != nil {
 		s := make(CustomProviders, len(cfg.CustomProviders))
 		copy(s, cfg.CustomProviders)
+		// Headless is a pointer, so the shallow copy above would let a clone
+		// and the live config share one definition. Nothing mutates a
+		// definition today; the copy is here so that stays true by
+		// construction rather than by everyone remembering.
+		for i, p := range s {
+			if p.Headless == nil {
+				continue
+			}
+			def := *p.Headless
+			def.Args = cloneStringSlice(p.Headless.Args)
+			s[i].Headless = &def
+		}
 		c.CustomProviders = s
 	}
 	return &c
@@ -1417,6 +1526,9 @@ func (cfg *Config) Warnings() []string {
 	}
 	warnings = append(warnings, cfg.subscriptionWarnings()...)
 	warnings = append(warnings, cfg.customProviderWarnings()...)
+	warnings = append(warnings, cfg.childPermissionWarnings()...)
+	warnings = append(warnings, cfg.childExecutionModeWarnings()...)
+	warnings = append(warnings, cfg.handoffWarnings()...)
 	return warnings
 }
 

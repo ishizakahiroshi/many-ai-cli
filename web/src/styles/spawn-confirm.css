@@ -114,6 +114,23 @@
 .spawn-confirm-approval-none {
   color: var(--muted);
 }
+/* 権限の段の名前。フラグより先に読ませたいので少し強める。 */
+.spawn-confirm-approval-tier {
+  font-weight: 600;
+}
+/* 段 2 で確認なしに使える操作の一覧。長くなるので折り返す。 */
+.spawn-confirm-approval-tools {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+/* 段 2 を選んだのに全許可へ落ちた旨。黙って落とさないための表示なので警告色。 */
+.spawn-confirm-approval-fallback {
+  display: block;
+  color: var(--danger);
+  font-size: 0.72rem;
+}
 /* 高リスク権限の確認を自動で通す旨。危険側の情報なので警告色に寄せる。 */
 .spawn-confirm-approval-risk {
   color: var(--danger);
@@ -168,6 +185,27 @@
   min-width: 0;
   box-sizing: border-box;
   height: var(--control-h-sm);
+}
+/* 「この役割では次回もこの段を使う」。段の select の真下に来るよう 1 行を占有する
+   （grid の 2 列目へ回り込むと、どの欄にかかる記憶なのか読めない）。
+   見た目は New Session フォームの「記憶」（styles/spawn.css の
+   .spawn-remember-approval-label）に合わせてある。 */
+.spawn-confirm-remember {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.spawn-confirm-remember input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
 }
 
 /* ── 最初の指示 ── */

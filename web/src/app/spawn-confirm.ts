@@ -25,6 +25,14 @@ import {
   selectOldestPendingConfirmationFor,
   spawnConfirmDecisionFromHttp,
   unregisterDialogController,
+  effortLevelsFor,
+  isExecutionModeAvailable,
+  isPermissionPresetAvailable,
+  EXECUTION_MODE_SCHEMA,
+  PERMISSION_PRESET_SCHEMA,
+  INTERNAL_BOUNDED_PERMISSION_MODE,
+  approvalForSelection,
+  headlessUnsupportedForSelection,
   type ChildApproval,
   type SpawnConfirmationRecord,
 } from './spawn-confirm-store.js';
@@ -83,22 +91,115 @@ function cwdDisplayHtml(record: SpawnConfirmationRecord, parent: any): string {
   return escapeHtml(t('spawn_confirm_cwd_inherit'));
 }
 
+// 起動要求の共通 3 項目の select。
+//
+// effort は provider ごとに写像がある場合だけ欄を出す（候補が無い select を
+// 見せない）。実行モードと権限段はスキーマ全体を出し、この build で選べない値は
+// disabled にする: 欄ごと消すより「まだ選べない」と分かる方がよい。受理の判断は
+// 常に Hub 側（internal/config/effort.go）が行い、ここは表示だけを決める。
+function effortFieldHidden(provider: string): boolean {
+  return effortLevelsFor(provider).length === 0;
+}
+
+function choiceOptionsHtml(
+  values: readonly string[],
+  selected: string,
+  isAvailable: (v: string) => boolean,
+  label: (v: string) => string = (v) => v,
+): string {
+  const unset = `<option value=""${selected ? '' : ' selected'}>${escapeHtml(t('spawn_confirm_option_unset'))}</option>`;
+  const opts = values.map((value) => {
+    const disabled = isAvailable(value) ? '' : ' disabled';
+    const sel = value === selected ? ' selected' : '';
+    return `<option value="${escapeHtml(value)}"${sel}${disabled}>${escapeHtml(label(value))}</option>`;
+  });
+  return [unset, ...opts].join('');
+}
+
+// 段の名前は訳す。value は raw のまま（Hub が受け取るのは attended / bounded / full）。
+// 「full」とだけ書かれていても何が起きるかは伝わらないので、選ぶ側には
+// 「全許可」と読ませ、実効フラグは下の権限欄で見せる。
+export function permissionPresetLabel(preset: string): string {
+  switch (preset) {
+    case 'attended':
+      return t('spawn_confirm_tier_attended');
+    case 'bounded':
+      return t('spawn_confirm_tier_bounded');
+    case 'full':
+      return t('spawn_confirm_tier_full');
+    default:
+      return preset;
+  }
+}
+
+function effortOptionsHtml(provider: string, selected: string): string {
+  return choiceOptionsHtml(effortLevelsFor(provider), selected, () => true);
+}
+
+function executionModeOptionsHtml(selected: string): string {
+  return choiceOptionsHtml(EXECUTION_MODE_SCHEMA, selected, isExecutionModeAvailable);
+}
+
+function permissionPresetOptionsHtml(selected: string): string {
+  return choiceOptionsHtml(PERMISSION_PRESET_SCHEMA, selected, isPermissionPresetAvailable, permissionPresetLabel);
+}
+
 // 承認する人に「この子に何を渡すのか」を見せる欄。これが無いと、role / provider /
 // model / cwd / 指示文しか出ないまま codex の子が --sandbox danger-full-access で
 // 起動する（docs/local/bugfix_spawn-confirm-permission-disclosure_2026-09-08.md）。
-// 値は Hub が applyChildApprovalDefaults を通して作ったものをそのまま出す。ここで
-// provider から権限を組み立て直すと、Hub 側の既定を変えたときに表示だけ古くなる。
-function approvalDisplayHtml(approval: ChildApproval | undefined): string {
+// 値は Hub が権限の段の表を通して作ったものをそのまま出す。ここで provider から
+// 権限を組み立て直すと、Hub 側の既定を変えたときに表示だけ古くなる。
+// export しているのは派生ダイアログ（derive-dialog.ts）が同じ開示を出すため。
+// DOM を組まず文字列を返すだけなので、呼ぶ側は innerHTML へ差すだけでよい。
+// 開示を 2 通り書くと片方だけ古くなるので、増やさずここを共有する。
+export function approvalDisplayHtml(approval: ChildApproval | undefined, headlessUnsupported = false): string {
   const flags: string[] = [];
   if (approval?.sandbox) flags.push(`--sandbox ${approval.sandbox}`);
   if (approval?.askForApproval) flags.push(`--ask-for-approval ${approval.askForApproval}`);
-  if (approval?.permissionMode) flags.push(`--permission-mode ${approval.permissionMode}`);
-  if (!flags.length) {
-    return `<span class="spawn-confirm-approval-none">${escapeHtml(t('spawn_confirm_approval_none'))}</span>`;
+  // 内部マーカーはフラグ名として出さない（実在しない起動コマンドになる）。
+  // その段が何をするかは段の名前と許可 tool の一覧の側で伝わる。
+  if (approval?.permissionMode && approval.permissionMode !== INTERNAL_BOUNDED_PERMISSION_MODE) {
+    flags.push(`--permission-mode ${approval.permissionMode}`);
   }
-  const code = `<code class="spawn-confirm-approval-flags">${escapeHtml(flags.join(' '))}</code>`;
-  if (!approval?.riskConfirmed) return code;
-  return `${code} <span class="spawn-confirm-approval-risk">${escapeHtml(t('spawn_confirm_approval_risk'))}</span>`;
+  const tools = approval?.allowedTools ?? [];
+  const parts: string[] = [];
+  if (approval?.tier) {
+    parts.push(`<span class="spawn-confirm-approval-tier">${escapeHtml(permissionPresetLabel(approval.tier))}</span>`);
+  }
+  if (flags.length) {
+    parts.push(`<code class="spawn-confirm-approval-flags">${escapeHtml(flags.join(' '))}</code>`);
+  }
+  if (tools.length) {
+    parts.push(
+      `<span class="spawn-confirm-approval-tools">${escapeHtml(t('spawn_confirm_approval_allowed_tools'))}: <code class="spawn-confirm-approval-flags">${escapeHtml(tools.join(' '))}</code></span>`,
+    );
+  }
+  if (!flags.length && !tools.length) {
+    parts.push(`<span class="spawn-confirm-approval-none">${escapeHtml(t('spawn_confirm_approval_none'))}</span>`);
+  }
+  if (approval?.riskConfirmed) {
+    parts.push(`<span class="spawn-confirm-approval-risk">${escapeHtml(t('spawn_confirm_approval_risk'))}</span>`);
+  }
+  // 段 2 を選んだのに、その CLI には範囲を限る設定が無くて全許可へ落ちた場合。
+  // 黙って落とさないのが親 plan の不変条件 5。
+  if (approval?.fallbackFrom) {
+    parts.push(`<span class="spawn-confirm-approval-fallback">${escapeHtml(t('spawn_confirm_tier_fallback'))}</span>`);
+  }
+  if (headlessUnsupported) {
+    parts.push(headlessUnsupportedNoticeHtml());
+  }
+  return parts.join(' ');
+}
+
+// headless を選んだが、この CLI には非対話モードの定義が無い、の 1 行。Hub は起動を
+// 400 で断る（黙って対話へ倒さない・親 plan D2）ので、押してから知るのではなく、
+// 権限と同じ欄で先に言う（子 plan 内部 C6）。
+//
+// 単体で export しているのは、権限の表をまだ受け取っていない（古い Hub）ときでも
+// この 1 行だけは出せるから。そこで approvalDisplayHtml を呼ぶと「何も足さない」と
+// 併記され、知らないことを断定してしまう。
+export function headlessUnsupportedNoticeHtml(): string {
+  return `<span class="spawn-confirm-approval-fallback">${escapeHtml(t('spawn_confirm_headless_unsupported'))}</span>`;
 }
 
 function outcomeMessage(reason: string, m: any): string {
@@ -165,7 +266,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       <dt>${escapeHtml(t('spawn_confirm_cwd'))}</dt>
       <dd class="spawn-confirm-path">${cwdDisplayHtml(record, parent)}</dd>
       <dt>${escapeHtml(t('spawn_confirm_approval'))}</dt>
-      <dd class="spawn-confirm-approval" data-spawn-confirm-approval>${approvalDisplayHtml(record.approval[provider])}</dd>
+      <dd class="spawn-confirm-approval" data-spawn-confirm-approval>${approvalDisplayHtml(approvalForSelection(record.approval, provider, record.permissionPreset))}</dd>
       <dt>${escapeHtml(t('spawn_confirm_elapsed_label'))}</dt>
       <dd data-spawn-confirm-elapsed>${escapeHtml(formatElapsed(record.requestedAtMs))}</dd>
     </dl>
@@ -181,6 +282,22 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       <label class="spawn-confirm-field">
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_model'))}</span>
         <input name="model" class="spawn-input" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
+      </label>
+      <label class="spawn-confirm-field" data-spawn-confirm-effort-field${effortFieldHidden(provider) ? ' hidden' : ''}>
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_effort'))}</span>
+        <select name="effort" class="spawn-select" data-spawn-confirm-effort>${effortOptionsHtml(provider, record.effort)}</select>
+      </label>
+      <label class="spawn-confirm-field">
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_execution_mode'))}</span>
+        <select name="execution_mode" class="spawn-select">${executionModeOptionsHtml(record.executionMode)}</select>
+      </label>
+      <label class="spawn-confirm-field">
+        <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_permission_preset'))}</span>
+        <select name="permission_preset" class="spawn-select">${permissionPresetOptionsHtml(record.permissionPreset)}</select>
+      </label>
+      <label class="spawn-confirm-remember">
+        <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
+        <span>${escapeHtml(t('spawn_confirm_remember_permission'))}</span>
       </label>
     </div>
     <div class="spawn-confirm-prompt-block">
@@ -205,13 +322,48 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const actionsEl = dialog.querySelector('[data-spawn-confirm-actions]') as HTMLElement | null;
 
   const approvalEl = dialog.querySelector('[data-spawn-confirm-approval]');
-  if (providerSelect && (providerIcon || approvalEl)) {
+  const effortField = dialog.querySelector('[data-spawn-confirm-effort-field]') as HTMLElement | null;
+  const effortSelect = dialog.querySelector('[data-spawn-confirm-effort]') as HTMLSelectElement | null;
+  const presetSelect = dialog.querySelector('[name=permission_preset]') as HTMLSelectElement | null;
+  const executionSelect = dialog.querySelector('[name=execution_mode]') as HTMLSelectElement | null;
+  const rememberInput = dialog.querySelector('[name=remember_permission]') as HTMLInputElement | null;
+
+  // 権限欄は provider と段の 2 つで決まる。どちらを差し替えても同じ 1 本を通して
+  // 引き直す（片方だけ追従する経路を作らない）。値は起動時に受け取った表から引くので
+  // Hub への往復は無い。実行モードも同じ 1 本に乗せる: headless を選んだ provider に
+  // 定義が無ければ、承認しても Hub が 400 で断るので、その 1 行をここへ出す。
+  function refreshApprovalDisplay(): void {
+    if (!approvalEl) return;
+    const provider = providerSelect?.value || record.provider;
+    const tier = presetSelect ? presetSelect.value : record.permissionPreset;
+    const mode = executionSelect ? executionSelect.value : record.executionMode;
+    approvalEl.innerHTML = approvalDisplayHtml(
+      approvalForSelection(record.approval, provider, tier),
+      headlessUnsupportedForSelection(provider, mode),
+    );
+  }
+
+  if (providerSelect) {
     providerSelect.addEventListener('change', () => {
       if (providerIcon) providerIcon.innerHTML = providerIconHtml(providerSelect.value);
       // provider を差し替えたら渡る権限も変わる。アイコンだけ追従して権限欄が
       // 前の provider のまま残ると、承認する人が見ている情報が実物と食い違う。
-      if (approvalEl) approvalEl.innerHTML = approvalDisplayHtml(record.approval[providerSelect.value]);
+      refreshApprovalDisplay();
+      // effort の候補も provider ごとに違う。写像が無い provider を選んだら欄を隠し、
+      // 前の provider の値を送ってしまわないよう選択も空へ戻す（Hub はその値を
+      // 400 で弾くので、残ったままだと承認できなくなる）。
+      if (effortSelect) {
+        const levels = effortLevelsFor(providerSelect.value);
+        effortSelect.innerHTML = effortOptionsHtml(providerSelect.value, levels.includes(effortSelect.value) ? effortSelect.value : '');
+        if (effortField) effortField.hidden = levels.length === 0;
+      }
     });
+  }
+  if (presetSelect) {
+    presetSelect.addEventListener('change', refreshApprovalDisplay);
+  }
+  if (executionSelect) {
+    executionSelect.addEventListener('change', refreshApprovalDisplay);
   }
 
   // 'open': まだ何も決めていない（Escape で閉じてよい・拒否は送らない）。
@@ -291,15 +443,42 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     state = 'deciding';
     if (providerSelect) providerSelect.disabled = true;
     if (modelInput) modelInput.disabled = true;
+    for (const name of ['effort', 'execution_mode', 'permission_preset']) {
+      const el = dialog.querySelector(`[name=${name}]`) as HTMLSelectElement | null;
+      if (el) el.disabled = true;
+    }
+    if (rememberInput) rememberInput.disabled = true;
     setActionsToProcessing();
     showStatus(t('spawn_confirm_processing'));
     const providerVal = providerSelect?.value || '';
     const modelVal = modelInput?.value || '';
+    // 3 項目は select が見せている実効値をそのまま送る。Hub は送られた値をそのまま
+    // 使うので、欄を触らなければ要求どおり、「指定なし」を選べば空になる。effort 欄が
+    // 隠れている provider（写像なし）では空を送り、要求時の effort を引きずらない。
+    const selectValue = (name: string): string => {
+      const el = dialog.querySelector(`[name=${name}]`) as HTMLSelectElement | null;
+      return el?.value || '';
+    };
+    const effortVal = effortField?.hidden ? '' : selectValue('effort');
+    const executionModeVal = selectValue('execution_mode');
+    const permissionPresetVal = selectValue('permission_preset');
+    // 「次回もこの段」は承認したときだけ送る。拒否は何も起きなかったのと同じなので、
+    // 記憶を消す（false を送る）指示にしない — 欄ごと送らなければ Hub は記憶を触らない。
+    const payload: Record<string, unknown> = {
+      confirmation_id: record.id,
+      approved,
+      provider: providerVal,
+      model: modelVal,
+      effort: effortVal,
+      execution_mode: executionModeVal,
+      permission_preset: permissionPresetVal,
+    };
+    if (approved) payload.remember_permission = !!rememberInput?.checked;
     try {
       const res = await fetch(`/api/sessions/${record.parentId}/spawn-confirm?token=${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirmation_id: record.id, approved, provider: providerVal, model: modelVal }),
+        body: JSON.stringify(payload),
       });
       if (state !== 'deciding') return; // 既に broadcast 経由で terminal 済み。
       const decision = spawnConfirmDecisionFromHttp(res.ok, res.status);

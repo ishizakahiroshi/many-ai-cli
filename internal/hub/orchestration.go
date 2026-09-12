@@ -17,6 +17,7 @@ import (
 	"unicode"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/headless"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
 )
@@ -121,6 +122,12 @@ type orchestrationRoleAssignment struct {
 	// profile ID（"auto" も可）。空文字は「role 別の指定なし」を意味し、
 	// resolveChildSubscription が親継承・グローバル既定へフォールバックする。
 	Subscription string `json:"subscription,omitempty"`
+	// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// 省略時は役割ごとの指定なしで、従来の役割設定と 1 バイトも変わらない。
+	Effort           string `json:"effort,omitempty"`
+	ExecutionMode    string `json:"execution_mode,omitempty"`
+	PermissionPreset string `json:"permission_preset,omitempty"`
 }
 
 type pendingChild struct {
@@ -261,6 +268,32 @@ type spawnChildRequest struct {
 	// `orchestrate relay -same-tree` と同じ語）。
 	// C3 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md)。
 	SameTree *bool `json:"same_tree"`
+	// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1）。
+	// relay の役割（orchestrationRoleAssignment）からも同じ 3 項目が入る。
+	// 省略時（空文字）は 3 項目を知らない呼び出し元と 1 バイトも変わらない。
+	Effort           string `json:"effort"`
+	ExecutionMode    string `json:"execution_mode"`
+	PermissionPreset string `json:"permission_preset"`
+	// Origin は起動の出所。"" = conductor（AI の `orchestrate spawn`）と relay、
+	// "ui" = 画面から人が起動。権限の既定を「誰が見ているか」で決めるために
+	// resolveChildPermission が読む（子 plan C2 内部 C1）。
+	// **確認ダイアログの省略と未知値の 400 は親 C3 の担当**で、この C では
+	// 段の解決にしか使わない。
+	Origin string `json:"origin"`
+	// RememberPermission は「この役割では次回もこの段を使う」のチェックボックス。
+	// 3 値で受ける: nil = 欄を送ってこない = 記憶を触らない / true = PermissionPreset を
+	// その役割の記憶にする（空文字 = 指定なし = 記憶を消す）/ false = 記憶を消す。
+	//
+	// **`Origin` が `ui` でない要求のこの欄は handleSpawnChild が捨てる。** 記憶は
+	// 利用者の設定で、AI（conductor）の起動要求が書き換えてよいものではない
+	// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+	RememberPermission *bool `json:"remember_permission"`
+	// AllowedTools は段 2（bounded）で provider へ渡す許可 tool の一覧。
+	// json:"-" は意図的: これは要求の項目ではなく、表と config から Hub が
+	// 解決する内部の値で、外から任意の値をコマンドラインへ運ばせない
+	// （値の出所は orchestration.bounded_allowed_tools と内蔵既定だけ）。
+	AllowedTools []string `json:"-"`
 }
 
 // pendingSpawnConfirmation is a spawn confirmation the Hub is holding while
@@ -318,6 +351,34 @@ type spawnConfirmationResponse struct {
 	Approved       bool   `json:"approved"`
 	Provider       string `json:"provider"`
 	Model          string `json:"model"`
+	// Effort / ExecutionMode / PermissionPreset は承認者が決めた起動要求の共通
+	// 3 項目（子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// provider / model と違い 3 値で受ける: 欄を送ってこない（nil）は「要求どおり」、
+	// 送ってきた値はダイアログが見せていた実効値そのもので、空文字は「指定なし」へ
+	// 戻す。空文字を「触らなかった」と読むと、写像の無い provider へ差し替えて欄が
+	// 隠れたときに要求時の effort が残り、検証で弾かれて承認できなくなる。
+	Effort           *string `json:"effort"`
+	ExecutionMode    *string `json:"execution_mode"`
+	PermissionPreset *string `json:"permission_preset"`
+	// RememberPermission は段の select の直下にあるチェックボックスの状態。
+	// nil = 欄を送ってこない（このダイアログを知らない UI・拒否のとき）= 記憶を
+	// 触らない / true = 決めた段をその役割の記憶にする / false = 記憶を消す。
+	// 承認した人が見ていた段がそのまま記憶になるので、決定の適用より後で読む。
+	RememberPermission *bool `json:"remember_permission"`
+}
+
+// spawnConfirmationDecision は承認ダイアログで人が決めた差し替え値。Provider / Model は
+// 空文字が「欄を触らなかった」で要求値が残る。3 項目は nil が「欄を送ってこなかった」
+// で要求値が残り、非 nil はダイアログの実効値（空文字は指定なし）。項目を増やしても
+// 呼び出し側の引数が増えないよう、1 つの構造体で持つ。
+type spawnConfirmationDecision struct {
+	Provider         string
+	Model            string
+	Effort           *string
+	ExecutionMode    *string
+	PermissionPreset *string
+	// RememberPermission は 3 値のまま要求へ写す（spawnChildRequest 側の doc 参照）。
+	RememberPermission *bool
 }
 
 // sendChildRequest は POST /api/sessions/:id/send-child のリクエスト。
@@ -723,6 +784,25 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 		writeJSONError(w, http.StatusConflict, "already_decided", "spawn confirmation has already been decided")
 		return
 	}
+	// 承認者の決定を要求へ重ねた実効値を、差し替え後の provider で検証する。ここで
+	// 弾けばダイアログへ 400 が返り、決定は未確定のまま残るのでやり直せる（黙って
+	// 無視しない）。検証を通った launch がそのまま起動に使われる（再合成しない）。
+	launch := applySpawnConfirmationDecision(pending.Body, spawnConfirmationDecision{
+		Provider:           strings.TrimSpace(body.Provider),
+		Model:              strings.TrimSpace(body.Model),
+		Effort:             body.Effort,
+		ExecutionMode:      body.ExecutionMode,
+		PermissionPreset:   body.PermissionPreset,
+		RememberPermission: body.RememberPermission,
+	})
+	if body.Approved {
+		if err := validateLaunchRequestOptions(launch.Provider, &launch.Effort, &launch.ExecutionMode, &launch.PermissionPreset); err != nil {
+			s.orchestration.mu.Unlock()
+			s.orchestrationAdmissionMu.Unlock()
+			writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+	}
 	pending.Decided = true
 	delete(s.orchestration.spawnConfirmations, body.ConfirmationID)
 	if !body.Approved {
@@ -732,11 +812,9 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 	s.orchestrationAdmissionMu.Unlock()
 
 	writeJSON(w, map[string]bool{"ok": true})
-	decidedProvider := strings.TrimSpace(body.Provider)
-	decidedModel := strings.TrimSpace(body.Model)
 	approved := body.Approved
 	s.safeGo("spawn_confirmation_decided", func() {
-		s.resolveSpawnConfirmationDecision(pending, approved, decidedProvider, decidedModel)
+		s.resolveSpawnConfirmationDecision(pending, approved, launch)
 	})
 }
 
@@ -749,7 +827,11 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 // pending.Outcome — the original HTTP handler may or may not still be
 // listening — and always broadcasts spawn_confirmation_closed so every
 // connected browser closes its dialog.
-func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmation, approved bool, decidedProvider, decidedModel string) {
+//
+// body is the launch request after the approver's decision was applied and
+// validated by handleSpawnConfirmation; a refusal ignores it and works from
+// pending.Body.
+func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmation, approved bool, body spawnChildRequest) {
 	if !approved {
 		s.releaseSpawnConfirmationAdmission(pending)
 		if parent, _, _ := s.orchestrationParentState(pending.ParentID); parent != nil {
@@ -766,12 +848,9 @@ func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmat
 	}
 	defer s.releaseOrchestrationChildren(pending.AdmissionID)
 
-	body := pending.Body
-	if decidedProvider != "" {
-		body.Provider = decidedProvider
-	}
-	if decidedModel != "" {
-		body.Model = decidedModel
+	if note := launchOptionChangeNote(pending.Body, body); note != "" {
+		s.logger.Warn("orchestration spawn-child confirmation changed launch options",
+			"parent_session_id", pending.ParentID, "role", pending.Role, "change", note)
 	}
 	var providerChangeNote string
 	if note := providerConfirmationChangeNote(pending.Body.Provider, body.Provider); note != "" {
@@ -919,6 +998,26 @@ func (e *spawnPreparationError) Error() string { return e.detail }
 
 // resolveChildRole validates and normalizes the role before it participates
 // in board paths, labels, or child prompts.
+// launchOriginValid reports whether spawnChildRequest.Origin names an origin
+// this Hub knows. The values live in internal/hub/child_permission.go
+// (launchOriginConductor / launchOriginUI) because that is where origin decides
+// something: the default permission tier.
+//
+// An unknown non-empty value is a 400 rather than a silent fall-through to the
+// conductor origin. Folding it in would mean a typo — or a value a newer client
+// invented — quietly resolving to "unattended, and therefore the configured
+// unattended default" while the caller believed it had asked for something
+// else (親 plan 不変条件 5: the tier a child starts at is never decided by a
+// value nobody read).
+func launchOriginValid(origin string) bool {
+	switch strings.TrimSpace(origin) {
+	case launchOriginConductor, launchOriginUI:
+		return true
+	default:
+		return false
+	}
+}
+
 func resolveChildRole(body *spawnChildRequest) error {
 	if strings.TrimSpace(body.Role) == "" {
 		return fmt.Errorf("role is required")
@@ -1027,6 +1126,9 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	if subscriptionID == "" {
 		subscriptionID = s.resolveChildSubscription(parent, body.Provider, body.Role)
 	}
+	// 最初の指示の渡し方は 2 通りで、どの子も必ずどちらか一方だけを通る
+	// （childLaunchPrompt がその「一方だけ」を決める唯一の場所）。
+	launchPrompt, injectAfterStart := childLaunchPrompt(body, prep.boardPath, prep.branch)
 	childID, err := s.spawnWrappedSession(spawnWrappedSpec{
 		Provider:              body.Provider,
 		CWD:                   prep.childCWD,
@@ -1037,7 +1139,12 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 		PermissionMode:        body.PermissionMode,
 		Sandbox:               body.Sandbox,
 		AskForApproval:        body.AskForApproval,
+		AllowedTools:          body.AllowedTools,
 		Route:                 body.Route,
+		Effort:                body.Effort,
+		ExecutionMode:         body.ExecutionMode,
+		PermissionPreset:      body.PermissionPreset,
+		InitialPrompt:         launchPrompt,
 		SubscriptionProfileID: subscriptionID,
 	}, 20*time.Second)
 	if err != nil {
@@ -1051,12 +1158,15 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	s.setChildRestartData(prep.orchestrationID, childID, spawnWrappedSpec{
 		Provider: body.Provider, CWD: prep.childCWD, Model: body.Model, ModelSelection: body.ModelSelection,
 		RiskConfirmed: body.RiskConfirmed, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
-		AskForApproval: body.AskForApproval, Route: body.Route,
+		AskForApproval: body.AskForApproval, AllowedTools: body.AllowedTools, Route: body.Route,
+		Effort: body.Effort, ExecutionMode: body.ExecutionMode, PermissionPreset: body.PermissionPreset,
 		SubscriptionProfileID: subscriptionID,
 	}, body.InitialPrompt, prep.branch, 0)
-	prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
-	notice := injectNotice{ParentID: parentID, BoardPath: prep.boardPath, Role: body.Role}
-	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPromptNotify(childID, prompt, notice) })
+	if injectAfterStart {
+		prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
+		notice := injectNotice{ParentID: parentID, BoardPath: prep.boardPath, Role: body.Role}
+		s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPromptNotify(childID, prompt, notice) })
+	}
 	return childSpawnResult{ID: childID, BoardPath: prep.boardPath, CWD: prep.childCWD, WorktreeBranch: prep.branch}, nil
 }
 
@@ -1104,8 +1214,19 @@ func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, prov
 	if parent == nil {
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
 	}
-	cfg := s.snapshotCfg().Orchestration
-	applyChildApprovalDefaults(&body, cfg.ChildFullBypassEnabled())
+	fullCfg := s.snapshotCfg()
+	cfg := fullCfg.Orchestration
+	// 実行モードもここで 1 度だけ解決する。**権限の段より先**でなければならない:
+	// 段の既定は実行モードを見る（headless の子は人が押しても無人）ので、
+	// 順序が逆だと確認ダイアログが見せた段と実際の段がずれる
+	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+	if err := applyChildExecutionMode(&body, fullCfg); err != nil {
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusBadRequest, code: "bad_request", detail: err.Error()}
+	}
+	// 権限の段はここで 1 度だけ解決する。確認ダイアログを通った起動では、承認者が
+	// 差し替えた permission_preset が既に body に入っているので、この 1 箇所で
+	// 最終の body を見れば足りる（再解決を足さない）。
+	applyChildPermission(&body, cfg)
 	if parent.Depth >= cfg.MaxDepth {
 		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max orchestration depth reached"}
@@ -1161,6 +1282,14 @@ func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, prov
 	if strings.TrimSpace(requestedProvider) == "" {
 		s.rememberRoleProvider(body.Role, body.Provider)
 	}
+	// effort も同じ場所で覚える。provider の記憶と違い、明示指定でも覚える:
+	// effort は「今回はこれ」ではなく役割ごとの好みとして繰り返し使われる値で、
+	// 承認ダイアログで直した値が次回の初期表示になる方が手数が減る。
+	s.rememberRoleEffort(body.Role, body.Provider, body.Effort)
+	// 権限の段は「次回もこの段を使う」を人が明示したときだけ覚える。effort と違い
+	// 自動では覚えない: 段は今回だけ上げたいことがあり、その 1 回を次回の既定にすると
+	// 黙って権限が広がったままになる（子 plan 内部 C6 の設計 1）。
+	s.applyRolePermissionMemory(body)
 	return result, nil
 }
 
@@ -1172,6 +1301,21 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	// Origin は起動の出所（"" = conductor / relay、"ui" = 画面から人が起動）。
+	// 未知の非空値は 400 で弾く。origin は権限の既定の段を決める入力なので、
+	// 知らない値を黙って conductor 扱い（＝無人・既定は全許可）へ倒すと、
+	// 誰も見ていないのに段が上がったことが誰にも伝わらない
+	// （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C1）。
+	body.Origin = strings.TrimSpace(body.Origin)
+	if !launchOriginValid(body.Origin) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid origin")
+		return
+	}
+	// 「次回もこの段を使う」は人のチェックボックスだけが立てられる。conductor
+	// （AI）の起動要求が持ってきた欄は 400 にせず黙って捨てる: 起動そのものは
+	// 正しい要求なので断る理由が無く、断らない代わりに記憶へは一切届かせない
+	// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+	body.RememberPermission = rememberPermissionForOrigin(body.Origin, body.RememberPermission)
 	if err := resolveChildRole(&body); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
@@ -1186,7 +1330,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	s.logger.Info("orchestration spawn-child requested",
 		"parent_session_id", parentID, "role", body.Role,
 		"requested_provider", requestedProvider, "requested_model", requestedModel,
-		"requested_cwd", requestedCWD, "force", body.Force)
+		"requested_cwd", requestedCWD, "force", body.Force, "origin", body.Origin)
 
 	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
@@ -1218,7 +1362,16 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model value")
 		return
 	}
-	if s.spawnConfirmationRequired(body.Provider) {
+	// 起動要求の共通 3 項目。provider が解決した後に検証する（effort の受理値は
+	// provider ごとに違うため）。3 項目を送らない呼び出しではここは必ず通る。
+	if err := validateLaunchRequestOptions(body.Provider, &body.Effort, &body.ExecutionMode, &body.PermissionPreset); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	// 画面から人が起動した子は確認ダイアログを出さない。押した本人が承認者なので、
+	// 同じ人に二度目の承認を求めるだけになる（親 plan D5）。飛ばすのは確認だけで、
+	// 深さ・本数の上限は performSpawn 側の検査をそのまま通る。
+	if body.Origin != launchOriginUI && s.spawnConfirmationRequired(body.Provider) {
 		pending, registerErr := s.registerSpawnConfirmation(parent, requestedProvider, body)
 		if registerErr != nil {
 			writeJSONError(w, registerErr.status, registerErr.code, registerErr.detail)
@@ -1261,36 +1414,21 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 }
 
 // applyChildApprovalDefaults は orchestration 子セッションの承認モード既定値を埋める。
-// fullBypass が true（既定）のとき、呼び出し側が指定しない場合はプロバイダごとの
-// 全許可（承認バイパス相当）と RiskConfirmed=true を埋める。子は自走が前提で、
-// 承認プロンプトを人間が張り付いて処理する運用は自走目的と矛盾するため。危険操作の
-// 抑制は承認ではなく worktree 隔離と board の禁止事項で行う
-// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
-// fullBypass が false（orchestration.child_full_bypass: false）のときは既定を埋めず、
-// 呼び出し側の明示値のみを使う（高リスク権限の自動確認を避ける安全側パス）。
+// 中身は internal/hub/child_permission.go の表（applyChildPermission）へ移した。
+// 残っているのはその 2 引数版で、**既定を 1 バイトも変えていないことの証明**として
+// 既存テスト（orchestration_child_defaults_test.go の 6 本）が固定している形
+// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C1）。
+// 本番経路は cfg 全体を渡す applyChildPermission を呼ぶ（child_permission_default を
+// 読むため）。
+//
+// fullBypass が true（既定）なら段 3（全許可）、false（orchestration.child_full_bypass:
+// false）なら何も埋めず呼び出し側の明示値のみを使う。子は自走が前提で、承認プロンプトを
+// 人間が張り付いて処理する運用は自走目的と矛盾する、という元の判断
+// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）は
+// 段 2 の導入後も「無人の子は聞かない」として生きている。変わったのは「聞かない＝
+// 何でも許す」だった部分だけ。
 func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
-	if !fullBypass {
-		return
-	}
-	switch body.Provider {
-	case "shell":
-		return
-	case "codex":
-		if body.AskForApproval == "" {
-			body.AskForApproval = "never"
-		}
-		if body.Sandbox == "" {
-			body.Sandbox = "danger-full-access"
-		}
-	default:
-		// claude / grok は --permission-mode をネイティブサポート。
-		// copilot / cursor-agent / opencode は wrapper 側で各 CLI の全許可指定
-		// （--allow-all / --force / opencode.json permission "*":"allow"）に変換される。
-		if body.PermissionMode == "" {
-			body.PermissionMode = "bypassPermissions"
-		}
-	}
-	body.RiskConfirmed = true
+	applyChildPermission(body, orchestrationCfgForBypass(fullBypass))
 }
 
 // childApprovalPreview reports, per provider, the approval settings the child in
@@ -1300,13 +1438,27 @@ func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
 // with --sandbox danger-full-access
 // (docs/local/bugfix_spawn-confirm-permission-disclosure_2026-09-08.md).
 //
-// It runs applyChildApprovalDefaults itself rather than restating the mapping, so
-// the dialog cannot drift from what the spawn actually does. Every provider is
-// computed from the same body because the dialog lets the approver switch
-// provider before deciding, and resolveSpawnConfirmationDecision then replaces
-// Provider/Model and nothing else — so a field the caller set explicitly stays
-// set across that switch, exactly as these entries show.
+// It resolves through the same table the spawn uses (applyChildPermission)
+// rather than restating the mapping, so the dialog cannot drift from what the
+// spawn actually does. Every provider is computed from the same body because
+// the dialog lets the approver switch provider before deciding, and
+// applySpawnConfirmationDecision replaces only the fields the approver actually
+// changed (provider / model / effort / execution mode / permission preset) — so
+// a field the caller set explicitly stays set across that switch, exactly as
+// these entries show.
+//
+// This two-argument form is what the tests pinning today's defaults call; the
+// dialog itself is sent childApprovalPreviewTiers, which covers the tier select
+// as well.
 func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]proto.ChildApproval {
+	return childApprovalPreviewWithConfig(body, &config.Config{Orchestration: orchestrationCfgForBypass(fullBypass)})
+}
+
+func childApprovalPreviewWithConfig(body spawnChildRequest, full *config.Config) map[string]proto.ChildApproval {
+	cfg := config.OrchestrationConfig{}
+	if full != nil {
+		cfg = full.Orchestration
+	}
 	providers := orchestrationProviders
 	if p := strings.TrimSpace(body.Provider); p != "" && !validOrchestrationProvider(p) {
 		// The dialog keeps an unknown requested provider as a selectable option,
@@ -1317,12 +1469,52 @@ func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]pr
 	for _, provider := range providers {
 		b := body
 		b.Provider = provider
-		applyChildApprovalDefaults(&b, fullBypass)
+		// 同じ順序で解決する（実行モード → 権限の段）。ここで手を抜くと、
+		// ダイアログが「段 1」と見せた provider が実際には無人の段で起動する。
+		// 非対応 provider への明示 headless はここではエラーにせず、要求された
+		// まま段を見せる（起動そのものは performSpawn が 400 で止める）。
+		if err := applyChildExecutionMode(&b, full); err != nil {
+			b.ExecutionMode = config.NormalizeExecutionMode(body.ExecutionMode)
+		}
+		applyChildPermission(&b, cfg)
+		resolved := resolveChildPermission(provider, b.PermissionPreset, b.ExecutionMode, b.Origin, cfg)
 		out[provider] = proto.ChildApproval{
 			PermissionMode: b.PermissionMode,
 			Sandbox:        b.Sandbox,
 			AskForApproval: b.AskForApproval,
+			AllowedTools:   b.AllowedTools,
 			RiskConfirmed:  b.RiskConfirmed,
+			Tier:           resolved.Tier,
+			FallbackFrom:   resolved.FallbackFrom,
+		}
+	}
+	return out
+}
+
+// childApprovalPreviewTiers is what the confirmation dialog gets: provider →
+// tier → the effective settings. The empty tier key is the request as it
+// stands (whatever permission_preset it carries, or none), and the three named
+// keys are what the approver would get by picking that tier in the dialog.
+//
+// It is computed up front, for every combination, because the dialog has two
+// selects that change the answer — provider and tier — and making it ask the
+// Hub again on every change would leave the disclosure lagging the selection
+// (and unavailable at all while the connection is down). The cost is one small
+// map; the property being protected is that what the approver reads is what the
+// child starts with (bugfix_spawn-confirm-permission-disclosure_2026-09-08.md).
+func childApprovalPreviewTiers(body spawnChildRequest, cfg *config.Config) map[string]map[string]proto.ChildApproval {
+	tiers := append([]string{config.PermissionPresetUnset}, config.KnownPermissionPresets()...)
+	out := map[string]map[string]proto.ChildApproval{}
+	for _, tier := range tiers {
+		b := body
+		if tier != config.PermissionPresetUnset {
+			b.PermissionPreset = tier
+		}
+		for provider, approval := range childApprovalPreviewWithConfig(b, cfg) {
+			if out[provider] == nil {
+				out[provider] = map[string]proto.ChildApproval{}
+			}
+			out[provider][tier] = approval
 		}
 	}
 	return out
@@ -1333,11 +1525,21 @@ func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]pr
 // place is what stops the resend from quietly lacking a field the fresh request
 // has — the approval preview was added here for exactly that reason.
 func (s *Server) spawnConfirmationRequestedMessage(p *pendingSpawnConfirmation) proto.Message {
+	s.cfgMu.Lock()
+	rememberPermission := s.cfg.UserPrefs.Spawn.RolePermission[p.Body.Role] != ""
+	s.cfgMu.Unlock()
 	return proto.Message{
 		Type: "spawn_confirmation_requested", SpawnConfirmationID: p.ID,
 		SessionID: p.ParentID, Role: p.Body.Role, Provider: p.Body.Provider, Model: p.Body.Model,
-		CWD: p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
-		SpawnChildApproval: childApprovalPreview(p.Body, s.snapshotCfg().Orchestration.ChildFullBypassEnabled()),
+		// 要求された起動要求の共通 3 項目。承認者はダイアログでこれを見て、
+		// 必要なら差し替えてから決める（子 plan:
+		// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C4）。
+		Effort: p.Body.Effort, ExecutionMode: p.Body.ExecutionMode, PermissionPreset: p.Body.PermissionPreset,
+		// チェックボックスの初期状態。その役割の記憶があれば ON で開く（人が前に
+		// 「次回もこの段」と決めたのだから、承認するたびに入れ直させない）。
+		RememberPermission: rememberPermission,
+		CWD:                p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
+		SpawnChildApproval: childApprovalPreviewTiers(p.Body, s.snapshotCfg()),
 	}
 }
 
@@ -1634,7 +1836,14 @@ func (s *Server) resetChildStandbySince(boardID string, sessionID int) {
 
 // childProgressPath は子専用進捗ファイルのパス（board と同じディレクトリ）。
 func childProgressPath(boardPath string, sessionID int) string {
-	return filepath.Join(filepath.Dir(boardPath), fmt.Sprintf("child-%d.md", sessionID))
+	return childProgressPathFor(boardPath, strconv.Itoa(sessionID))
+}
+
+// childProgressPathFor takes the id already rendered as text, so a headless
+// prompt can name the file with a placeholder the wrapper expands after
+// register (buildHeadlessChildInitialPrompt).
+func childProgressPathFor(boardPath, id string) string {
+	return filepath.Join(filepath.Dir(boardPath), "child-"+id+".md")
 }
 
 func newOrchestrationBoard(id, path string) *orchestrationBoard {
@@ -2676,6 +2885,7 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		ProjectID:            ses.ProjectID,
 		Label:                ses.Label,
 		Model:                ses.Model,
+		ExecutionMode:        ses.ExecutionMode,
 		Route:                ses.Route,
 		State:                ses.State,
 		OutputIdle:           ses.Activity.OutputIdle,
@@ -2687,6 +2897,7 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		LastOutputAt:         ses.LastOutputAt,
 		StartedAt:            ses.StartedAt,
 		ParentSessionID:      ses.ParentSessionID,
+		HandoffFrom:          ses.HandoffFrom,
 		Role:                 ses.Role,
 		Auto:                 ses.Auto,
 		Depth:                ses.Depth,
@@ -3348,13 +3559,50 @@ func collapseWhitespace(text string) string {
 }
 
 func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int) string {
-	id := strconv.Itoa(sessionID)
+	return buildChildInitialPromptFor(base, boardPath, role, branch, strconv.Itoa(sessionID))
+}
+
+// childLaunchPrompt decides how this child is given its first instruction, and
+// is the only place that decides it (子 plan:
+// docs/local/plan_child_execution_modes_headless.md 内部 C3).
+//
+// Two routes, never both:
+//
+//	interactive  nothing at launch; the prompt is injected after the session
+//	             registers, once the CLI's input box is actually there.
+//	headless     the prompt is handed over at launch (--prompt-file) and
+//	             nothing is injected: a non-interactive process has no input
+//	             box to type into, and the injector would wait for one forever.
+//
+// The returned prompt is only non-empty for the headless route, so an
+// interactive spawn carries exactly what it carried before this mode existed.
+func childLaunchPrompt(body spawnChildRequest, boardPath, branch string) (string, bool) {
+	if !config.IsHeadlessExecutionMode(body.ExecutionMode) {
+		return "", true
+	}
+	return buildHeadlessChildInitialPrompt(body.InitialPrompt, boardPath, body.Role, branch), false
+}
+
+// buildHeadlessChildInitialPrompt is the same prompt for a child that does not
+// have a session id yet. A headless child is handed its prompt at startup,
+// before it registers, so the id is written as a placeholder and the wrapper
+// expands it after register (internal/headless/prompt.go). Everything else —
+// the board path, the protocol, the caller's own text — is identical, because
+// the two modes must not drift into two different sets of instructions.
+func buildHeadlessChildInitialPrompt(base, boardPath, role, branch string) string {
+	return buildChildInitialPromptFor(base, boardPath, role, branch, headless.SessionIDPlaceholder)
+}
+
+// buildChildInitialPromptFor renders the prompt with id already in its final
+// textual form, which is what lets the headless variant substitute a
+// placeholder without a second copy of the instructions.
+func buildChildInitialPromptFor(base, boardPath, role, branch, id string) string {
 	var b strings.Builder
 	b.WriteString("You are an orchestration child session.\n")
 	b.WriteString("Role: " + role + "\n")
 	b.WriteString("Session ID: " + id + "\n")
 	b.WriteString("Shared board (read-only for you): " + boardPath + "\n")
-	b.WriteString("Your progress file (write here): " + childProgressPath(boardPath, sessionID) + "\n")
+	b.WriteString("Your progress file (write here): " + childProgressPathFor(boardPath, id) + "\n")
 	if branch != "" {
 		b.WriteString("Worktree branch: " + branch + "\n")
 	}
@@ -3572,6 +3820,8 @@ func (s *Server) resolveSpawnChildProvider(parent *session, body *spawnChildRequ
 	}
 	s.cfgMu.Lock()
 	remembered := s.cfg.UserPrefs.Spawn.RoleProvider[body.Role]
+	rememberedEffort := s.cfg.UserPrefs.Spawn.RoleEffort[body.Role]
+	rememberedPermission := s.cfg.UserPrefs.Spawn.RolePermission[body.Role]
 	s.cfgMu.Unlock()
 	parentProvider := ""
 	if parent != nil {
@@ -3579,6 +3829,24 @@ func (s *Server) resolveSpawnChildProvider(parent *session, body *spawnChildRequ
 	}
 	provider, source := resolveChildProvider(body.Provider, roleAssignedProvider, remembered, parentProvider)
 	body.Provider = provider
+	// effort の記憶は provider と同じ場所で読む。明示指定があればそれを優先し、
+	// 記憶が今の provider で使えないときは黙って捨てる（役割の記憶は利便性で、
+	// 起動を失敗させる理由にしない。受理の判断は handleSpawnChild の検証が行う）。
+	if strings.TrimSpace(body.Effort) == "" && rememberedEffort != "" {
+		if config.ValidateEffort(body.Provider, rememberedEffort) == nil {
+			body.Effort = rememberedEffort
+		}
+	}
+	// 権限の段の記憶は conductor 起点の要求にだけ効かせる。確認ダイアログはこの
+	// body から作られるので、埋めた段がそのまま承認者に見え、見せた段で起動する。
+	// **UI 起点はここで埋めない**: 派生ダイアログは /api/info の role_permission を
+	// 見て自分で初期値を入れており、人がそれを「指定なし」へ戻した意思を Hub が
+	// 後から上書きしてしまう（子 plan 内部 C6 の設計 3）。
+	if body.Origin == launchOriginConductor && strings.TrimSpace(body.PermissionPreset) == "" && rememberedPermission != "" {
+		if config.ValidatePermissionPreset(rememberedPermission) == nil {
+			body.PermissionPreset = rememberedPermission
+		}
+	}
 	return source
 }
 
@@ -3610,6 +3878,64 @@ func providerConfirmationChangeNote(preConfirmProvider, decidedProvider string) 
 	return fmt.Sprintf("provider changed at confirmation: requested=%s decided=%s", preConfirmProvider, decidedProvider)
 }
 
+// applySpawnConfirmationDecision は承認ダイアログの決定を要求へ重ねる。Provider /
+// Model は空文字が「欄を触らなかった」で要求値が残る。3 項目は nil が「欄を送って
+// こなかった」で要求値が残り、非 nil はダイアログの実効値で置き換える。決定が空の
+// 構造体なら、返る要求は入力と 1 バイトも変わらない（3 項目を知らない呼び出し元の経路）。
+func applySpawnConfirmationDecision(body spawnChildRequest, decided spawnConfirmationDecision) spawnChildRequest {
+	body.Provider = spawnDecidedValue(decided.Provider, body.Provider)
+	body.Model = spawnDecidedValue(decided.Model, body.Model)
+	body.Effort = spawnDecidedLaunchValue(decided.Effort, body.Effort)
+	body.ExecutionMode = spawnDecidedLaunchValue(decided.ExecutionMode, body.ExecutionMode)
+	body.PermissionPreset = spawnDecidedLaunchValue(decided.PermissionPreset, body.PermissionPreset)
+	// 記憶の指示も他の 3 項目と同じ規則で重ねる（nil = 欄を送ってこなかった＝要求値が
+	// 残る）。拒否の決定はこの欄を送らないので、拒否で記憶が動くことはない。
+	if decided.RememberPermission != nil {
+		body.RememberPermission = decided.RememberPermission
+	}
+	return body
+}
+
+// spawnDecidedValue は「承認者が入れた値」と「要求された値」から実効値を選ぶ。
+// 空文字の決定は「欄を触らなかった」なので、要求値がそのまま残る（provider / model）。
+func spawnDecidedValue(decided, requested string) string {
+	if v := strings.TrimSpace(decided); v != "" {
+		return v
+	}
+	return requested
+}
+
+// spawnDecidedLaunchValue は起動要求の共通 3 項目の実効値を選ぶ。nil は「欄を送って
+// こなかった」なので要求値が残る。非 nil はダイアログが見せていた値そのもので、
+// 空文字は「指定なし」へ戻す。写像の無い provider へ差し替えて effort 欄が隠れた
+// とき、要求時の effort を引きずらないためにこの区別が要る。
+func spawnDecidedLaunchValue(decided *string, requested string) string {
+	if decided == nil {
+		return requested
+	}
+	return strings.TrimSpace(*decided)
+}
+
+// launchOptionChangeNote は、承認ダイアログで起動要求の共通 3 項目が差し替えられた
+// ときだけ 1 行を組み立てる（providerConfirmationChangeNote と同じ形）。
+// 変更が無ければ空文字＝ログを出さない。
+func launchOptionChangeNote(requested, decided spawnChildRequest) string {
+	changes := make([]string, 0, 3)
+	for _, field := range []struct {
+		name               string
+		before, afterValue string
+	}{
+		{"effort", requested.Effort, decided.Effort},
+		{"execution_mode", requested.ExecutionMode, decided.ExecutionMode},
+		{"permission_preset", requested.PermissionPreset, decided.PermissionPreset},
+	} {
+		if field.before != field.afterValue {
+			changes = append(changes, fmt.Sprintf("%s: requested=%q decided=%q", field.name, field.before, field.afterValue))
+		}
+	}
+	return strings.Join(changes, ", ")
+}
+
 // rememberRoleProvider は実際に起動した provider を役割ごとに覚える。
 // 承認ダイアログで書き換えられた後の値がここへ来るので、「1 度直せば次から効く」が成立する。
 // 保存に失敗しても spawn は成功扱いのままにする（記憶は利便性であって正しさではない）。
@@ -3630,6 +3956,98 @@ func (s *Server) rememberRoleProvider(role, provider string) {
 	s.cfgMu.Unlock()
 	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("remember role provider failed", "role", role, "provider", provider, "err", err)
+	}
+}
+
+// rememberRoleEffort は実際に起動した effort を役割ごとに覚える
+// （rememberRoleProvider と同じ規律: 起動できた値だけ、保存の失敗は spawn を
+// 失敗させない）。空の effort は「指定なし」なので記憶も消す — 一度 high で
+// 起こした役割を effort 無しで起こし直したら、次も effort 無しが既定になる。
+func (s *Server) rememberRoleEffort(role, provider, effort string) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return
+	}
+	effort = strings.TrimSpace(effort)
+	if effort != "" && config.ValidateEffort(provider, effort) != nil {
+		return
+	}
+	s.cfgMu.Lock()
+	current, had := s.cfg.UserPrefs.Spawn.RoleEffort[role]
+	if current == effort && (had || effort == "") {
+		s.cfgMu.Unlock()
+		return
+	}
+	if effort == "" {
+		delete(s.cfg.UserPrefs.Spawn.RoleEffort, role)
+	} else {
+		if s.cfg.UserPrefs.Spawn.RoleEffort == nil {
+			s.cfg.UserPrefs.Spawn.RoleEffort = map[string]string{}
+		}
+		s.cfg.UserPrefs.Spawn.RoleEffort[role] = effort
+	}
+	s.cfgMu.Unlock()
+	if err := s.persistConfig(); err != nil {
+		s.logger.Warn("remember role effort failed", "role", role, "err", err)
+	}
+}
+
+// rememberPermissionForOrigin は「次回もこの段」の指示を受け取ってよい出所かを決める。
+// 画面（`ui`）から来たものだけを通し、conductor（AI）と relay の要求は nil へ落とす。
+// 判定を 1 つの純関数にしてあるのは、通す条件が増えたときに増やす場所が 1 か所で済み、
+// テストで両方向を固定できるから。
+func rememberPermissionForOrigin(origin string, remember *bool) *bool {
+	if strings.TrimSpace(origin) != launchOriginUI {
+		return nil
+	}
+	return remember
+}
+
+// applyRolePermissionMemory は起動できた子の body から「次回もこの段」の指示を反映する。
+// nil（欄が無い = 今日までの呼び出し全部）なら何もしない。
+func (s *Server) applyRolePermissionMemory(body spawnChildRequest) {
+	if body.RememberPermission == nil {
+		return
+	}
+	s.rememberRolePermission(body.Role, body.PermissionPreset, *body.RememberPermission)
+}
+
+// rememberRolePermission は「この役割では次回もこの段を使う」を役割ごとに覚える。
+//
+// rememberRoleProvider / rememberRoleEffort と同じ規律（起動できた値だけ、保存の失敗は
+// spawn を失敗させない）だが、**この 2 つと違って自動では書かない**。remember が true の
+// ときだけ覚え、false なら記憶を消す。tier が空（＝指定なし）で覚えようとしたときも
+// 記憶を消す: 「次回も指定なしで起こす」は記憶が無い状態そのものなので、空文字を
+// 覚えると意味の無い行が config に残る。表に無い段は覚えない（起動は済んでいるので
+// 失敗にはしない・子 plan 内部 C6 の設計 1）。
+func (s *Server) rememberRolePermission(role, tier string, remember bool) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return
+	}
+	tier = strings.TrimSpace(tier)
+	if !remember {
+		tier = ""
+	} else if config.ValidatePermissionPreset(tier) != nil {
+		return
+	}
+	s.cfgMu.Lock()
+	current, had := s.cfg.UserPrefs.Spawn.RolePermission[role]
+	if current == tier && (had || tier == "") {
+		s.cfgMu.Unlock()
+		return
+	}
+	if tier == "" {
+		delete(s.cfg.UserPrefs.Spawn.RolePermission, role)
+	} else {
+		if s.cfg.UserPrefs.Spawn.RolePermission == nil {
+			s.cfg.UserPrefs.Spawn.RolePermission = map[string]string{}
+		}
+		s.cfg.UserPrefs.Spawn.RolePermission[role] = tier
+	}
+	s.cfgMu.Unlock()
+	if err := s.persistConfig(); err != nil {
+		s.logger.Warn("remember role permission failed", "role", role, "err", err)
 	}
 }
 

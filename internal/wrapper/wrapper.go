@@ -808,16 +808,34 @@ func trailingEnterDelay(provider string) time.Duration {
 }
 
 func nativePermissionModeArgs(permissionMode string) []string {
-	if permissionMode != "" && permissionMode != "default" {
-		return []string{"--permission-mode", permissionMode}
+	if permissionMode == "" || permissionMode == "default" {
+		return nil
 	}
-	return nil
+	if permissionMode == config.PermissionModeBounded {
+		// 内部マーカーは外へ出さない。claude / grok の --permission-mode に
+		// "bounded" という値は無いので、そのまま渡せば CLI が起動に失敗する。
+		// この 2 つの provider の段 2 は表が実在の値（claude なら "dontAsk"）で
+		// 持つので、ここへ "bounded" が来るのは手打ちの wrap だけ。
+		return nil
+	}
+	return []string{"--permission-mode", permissionMode}
 }
 
 func copilotPermissionArgs(permissionMode string) []string {
 	switch permissionMode {
 	case "bypassPermissions":
 		return []string{"--allow-all"}
+	case config.PermissionModeBounded:
+		// 段 2（範囲を限った無人）: 許可する tool は --allow-tool の列挙
+		// （allowedToolArgs）で渡す。ここで足すのは --no-ask-user だけで、
+		// これは ask_user tool（利用者への追加質問）を無効にする。無人の子が
+		// 質問で止まっても誰も答えられないため、質問は止まる理由にしない。
+		// 許可していない tool は Copilot の既定どおり確認プロンプトになる
+		// （--help の --allow-tool の説明「will not prompt for permission」の裏返しで、
+		// 列挙外を自動拒否するフラグは --help に無い。2026-09-12 実測）。その
+		// プロンプトは Hub の承認パネルへ届くので、無人で回すなら allowlist を
+		// 広げるか段 3 を選ぶ。実機での挙動は未確認。
+		return []string{"--no-ask-user"}
 	case "auto":
 		return []string{"--autopilot"}
 	default:
@@ -837,15 +855,121 @@ func cursorAgentPermissionArgs(permissionMode string) []string {
 }
 
 func openCodePermissionArgs(permissionMode string) []string {
-	if permissionMode == "bypassPermissions" {
+	switch permissionMode {
+	case "bypassPermissions", config.PermissionModeBounded:
+		// --auto は「明示的に deny されていない permission を自動許可」。
+		// 段 2 と段 3 の差はフラグではなく opencode.json の permission 規則で
+		// 付ける（openCodeConfigPermission / openCodeBoundedBashDeny）。
 		return []string{"--auto"}
 	}
 	return nil
 }
 
+// openCodeBoundedBashDeny は段 2 で opencode.json の permission.bash へ書く deny 規則。
+// 取り返しのつかない操作（push / 履歴の巻き戻し / 削除 / 権限昇格）だけを塞ぎ、
+// それ以外は --auto に任せる。claude の段 2 が allowlist でこれらを外しているのと
+// 対になっていて、無人の子はここに当たると blocked として返す。
+//
+// 書式と優先順位は opencode の permission ドキュメント（2026-09-12 に確認）:
+// 値は allow / ask / deny の 3 つ、`"bash": {"*": "ask", "git *": "allow"}` のように
+// tool ごとの object でコマンドのパターンを書け、**最後に一致した規則が勝つ**。
+// encoding/json は map のキーを昇順に並べるので "*" が先頭に来て、下の deny 規則が
+// その後ろに並ぶ（= deny が勝つ）。末尾 `*` はスペース無しにしてあり、引数の無い
+// `git push` 単体にも当たる。
+var openCodeBoundedBashDeny = []string{
+	"git push*",
+	"git reset*",
+	"git clean*",
+	"rm*",
+	"sudo*",
+}
+
+// allowedToolArgs は段 2 の許可 tool を provider 自身のフラグへ写す。書式は各 CLI の
+// --help が正典（2026-09-12 に実測）:
+//
+//   - claude:  `--allowedTools, --allowed-tools <tools...>` = "Comma or
+//     space-separated list of tool names to allow (e.g. "Bash(git *) Edit")"。
+//     1 値ずつ別の引数として渡す。
+//   - copilot: `--allow-tool[=tools...]`。help の例は
+//     `copilot --allow-tool='shell(git:*)'` と `--allow-tool='write'`。
+//
+// 写像の無い provider（grok / cursor-agent / command-code / shell / custom）は nil＝
+// 何も足さない。そもそも Hub 側の表が段 2 を持たないので値も来ない。
+func allowedToolArgs(provider string, values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	switch provider {
+	case "claude":
+		return append([]string{"--allowedTools"}, values...)
+	case "copilot":
+		out := make([]string, 0, len(values))
+		for _, value := range values {
+			out = append(out, "--allow-tool="+value)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// parseAllowedToolValues splits the comma-separated --allowed-tools flag and
+// keeps only the entries that still look like a tool name or command pattern.
+// The Hub already validated what it sent, but `many-ai-cli wrap <provider>
+// --allowed-tools …` can be typed directly and never goes through the Hub —
+// the same reason effortArgsForProvider re-validates its level.
+func parseAllowedToolValues(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if config.ValidAllowedToolValue(part) {
+			out = append(out, part)
+		}
+	}
+	return out
+}
+
 // commandCodePermissionArgs は Command Code CLI 向けの承認モード引数変換。
 // v1.37.0 の `--permission-mode` は standard / plan / auto-accept の 3 値。
 // `dont-ask` は無い。`--yolo` は独立フラグ。
+// prepareProviderPermissionFiles applies the part of a permission tier that a
+// provider expresses in a config file instead of on its command line, and
+// returns the cleanup that puts the user's own file back (nil when there is
+// nothing to do or the file could not be written — a failure is a warning, not a
+// refusal to start, exactly as it was when this lived inline).
+//
+// opencode is the only such provider: --auto says "auto-approve whatever is not
+// explicitly denied", and which things are denied lives in opencode.json
+// (openCodeBoundedBashDeny). **Both execution modes go through here.** A
+// headless opencode child gets --auto like any other unattended one, so without
+// this its bounded tier would silently be the full tier — and the spawn
+// confirmation dialog would have shown a tier the child did not actually run in
+// (親 plan 不変条件 5).
+func prepareProviderPermissionFiles(provider string, loginMode bool, cwd, permissionMode string, sessionID int, logger *slog.Logger) func() {
+	if provider != "opencode" || loginMode {
+		return nil
+	}
+	permValue := "ask"
+	var bashDeny []string
+	switch permissionMode {
+	case "bypassPermissions":
+		permValue = "allow"
+	case config.PermissionModeBounded:
+		// 段 2: 全体は allow（聞かない）だが、取り返しのつかない bash だけ deny。
+		permValue = "allow"
+		bashDeny = openCodeBoundedBashDeny
+	}
+	cleanup, err := prepareOpenCodeConfig(cwd, permValue, bashDeny, logger)
+	if err != nil {
+		logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", err)
+		return nil
+	}
+	return cleanup
+}
+
 func commandCodePermissionArgs(permissionMode string) []string {
 	switch permissionMode {
 	case "plan":
@@ -891,6 +1015,28 @@ func shouldAppendModelFlag(model string, isCustomProvider bool) bool {
 	return model != "" && !isCustomProvider
 }
 
+// effortArgsForProvider resolves --effort into the provider's own arguments,
+// or reports why nothing is added. An empty effort adds nothing and is not a
+// skip: that is the ordinary case for every launch that never asked for one.
+//
+// Custom providers are excluded for the same reason they never get --model
+// (shouldAppendModelFlag / resolveSpawnModel): many-ai-cli does not know an
+// arbitrary CLI's flags. The value is re-validated here even though the Hub
+// already validated it, because `many-ai-cli wrap <provider> --effort …` can
+// be typed directly and that path never goes through the Hub.
+func effortArgsForProvider(provider, effort string, isCustomProvider bool) (args []string, skipReason string) {
+	if effort == "" {
+		return nil, ""
+	}
+	if isCustomProvider {
+		return nil, "custom provider takes no built-in flags"
+	}
+	if err := config.ValidateEffort(provider, effort); err != nil {
+		return nil, err.Error()
+	}
+	return config.EffortArgs(provider, effort), ""
+}
+
 func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string) error {
 	// 記録点フックの sink をここで 1 度だけ組み込む（既定ビルドでは no-op）。
 	installProbes(logger, cfg)
@@ -912,11 +1058,18 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	label := fs.String("label", "", "session label shown in UI card")
 	model := fs.String("model", "", "model override")
 	permissionMode := fs.String("permission-mode", "", "permission mode (claude/grok: passed through; copilot auto→--autopilot bypass→--allow-all; cursor-agent auto→--auto-review bypass→--force; opencode bypass→--auto; command-code plan→--permission-mode plan, acceptEdits/auto→--auto-accept, bypass→--yolo)")
+	effort := fs.String("effort", "", "reasoning effort (claude: --effort; codex: -c model_reasoning_effort; opencode: --variant; others: ignored)")
+	allowedTools := fs.String("allowed-tools", "", "bounded tier allowlist, comma-separated (claude: --allowedTools values; copilot: --allow-tool values; others: ignored)")
 	sandbox := fs.String("sandbox", "", "codex sandbox mode")
 	askForApproval := fs.String("ask-for-approval", "", "codex ask-for-approval")
 	codexOSS := fs.Bool("codex-oss", false, "codex: use --oss to route via local Ollama daemon")
 	utf8Session := fs.Bool("utf8", false, "set UTF-8 console encoding for this session (Windows only)")
 	subscriptionLogin := fs.Bool("subscription-login", false, "run the provider CLI's own login flow instead of an interactive session")
+	// headless / prompt-file は非対話モード（子 plan:
+	// docs/local/plan_child_execution_modes_headless.md 内部 C2）。どちらも省略が
+	// 既定なので、これらを知らない起動は 1 バイトも変わらない。
+	headless := fs.Bool("headless", false, "run the provider's own non-interactive mode (no PTY) instead of an interactive session; requires a headless definition for the provider")
+	promptFile := fs.String("prompt-file", "", "headless only: file holding the initial prompt. The wrapper reads it once and deletes it, so the prompt never sits in an argument list or a log")
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
@@ -926,6 +1079,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// 公式 CLI が行い、many-ai-cli は token を一切見ない。
 	loginMode := false
 	if *subscriptionLogin {
+		if *headless {
+			// The login flow is a person typing into the vendor's own prompt.
+			// There is nothing for a non-interactive runner to do with it.
+			return fmt.Errorf("--headless cannot be combined with --subscription-login")
+		}
 		adapter, ok := subscription.AdapterFor(provider)
 		if !ok {
 			return fmt.Errorf("provider %q does not support subscription profiles", provider)
@@ -933,12 +1091,33 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		loginMode = true
 		providerArgs = adapter.LoginArgs()
 	}
+	if strings.TrimSpace(*promptFile) != "" && !*headless {
+		return fmt.Errorf("--prompt-file is only used with --headless")
+	}
 
 	// Reconstruct provider-specific flags from wrapper-parsed flags
 	var extra []string
+	// launchEffort is the effort this process actually starts the CLI with —
+	// empty whenever nothing was added to the command line. It is what the
+	// register message reports, so the Hub records the effort that really took
+	// effect rather than the one that was asked for (同じ規律で Model は
+	// register が正本になっている)。
+	launchEffort := ""
 	if !loginMode {
 		if shouldAppendModelFlag(*model, isCustomProvider) {
 			extra = append(extra, "--model", *model)
+		}
+		// effort は --model の直後に置く。どの provider がどんな引数で受けるかは
+		// internal/config/effort.go の表だけが知っている（ここに provider の
+		// switch を増やさない。子 plan:
+		// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。
+		if effortArgs, skipped := effortArgsForProvider(provider, *effort, isCustomProvider); skipped != "" {
+			// 写像が無い provider へ渡ってきた effort は黙って捨てない。値そのものは
+			// 秘密ではないが、ログに残すのは理由だけで足りる。
+			logger.Info("effort ignored", "provider", provider, "reason", skipped)
+		} else if len(effortArgs) > 0 {
+			extra = append(extra, effortArgs...)
+			launchEffort = *effort
 		}
 		switch provider {
 		case "claude", "grok":
@@ -966,6 +1145,11 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		case "command-code":
 			extra = append(extra, commandCodePermissionArgs(*permissionMode)...)
 		}
+		// 段 2 の許可 tool も effort と同じく switch の外で 1 度だけ足す。
+		// permission mode の直後に並ぶので、claude なら
+		// `--permission-mode dontAsk --allowedTools <v1> <v2> …` になる。
+		// 値が無ければ nil ＝ argv は従来と完全に一致する。
+		extra = append(extra, allowedToolArgs(provider, parseAllowedToolValues(*allowedTools))...)
 	}
 	providerArgs = append(extra, providerArgs...)
 	var agentSessionID string
@@ -998,11 +1182,47 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		termCols, termRows = w, h
 	}
 
-	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, agentSessionID, termCols, termRows)
+	// 実行モードは wrapper の申告が正本（Model / Effort と同じ規律）。--headless を
+	// 付けて起動したプロセスだけが headless を名乗るので、Hub のセッションに
+	// 「要求はしたが実際は対話だった」が記録されることがない。
+	launchExecutionMode := ""
+	if *headless {
+		launchExecutionMode = config.ExecutionModeHeadless
+	}
+	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, launchEffort, launchExecutionMode, agentSessionID, termCols, termRows)
 	if err != nil {
 		return err
 	}
 	sessionID := reg.SessionID
+	if *headless {
+		// 非対話の実行はここで完結する。以降の PTY 前提の準備（Claude の
+		// --settings / 委譲プロンプト / UTF-8 コンソール / 再接続 supervisor）は
+		// どれも対話セッションのためのもので、headless には要らない。
+		//
+		// 権限のうち「設定ファイルで表すぶん」だけは対話と同じく適用する
+		// （opencode の opencode.json）。非対話でも段は同じでなければならず、
+		// 確認ダイアログが見せた段と実際の段がずれるのは不変条件 5 違反。
+		defer conn.Close()
+		if cleanupCfg := prepareProviderPermissionFiles(provider, loginMode, cwd, *permissionMode, sessionID, logger); cleanupCfg != nil {
+			defer cleanupCfg()
+		}
+		return runHeadlessSession(headlessSession{
+			cfg:              cfg,
+			logger:           logger,
+			conn:             conn,
+			sessionID:        sessionID,
+			provider:         provider,
+			customProvider:   customProvider,
+			isCustomProvider: isCustomProvider,
+			providerArgs:     providerArgs,
+			promptPath:       strings.TrimSpace(*promptFile),
+			cwd:              cwd,
+			extraEnv: []string{
+				fmt.Sprintf("MANY_AI_CLI_SESSION_ID=%d", sessionID),
+				fmt.Sprintf("%s=%s", hubTokenEnvName, cfg.Token),
+			},
+		})
+	}
 	setConsoleTitle(fmt.Sprintf("many-ai-cli [#%d:%s]", sessionID, provider))
 	setConsoleIcon()
 	initCols, initRows := reg.Cols, reg.Rows
@@ -1121,16 +1341,8 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	if *utf8Session {
 		applyUTF8Session()
 	}
-	if provider == "opencode" && !loginMode {
-		permValue := "ask"
-		if *permissionMode == "bypassPermissions" {
-			permValue = "allow"
-		}
-		if cleanupCfg, cfgErr := prepareOpenCodeConfig(cwd, permValue, logger); cfgErr != nil {
-			logger.Warn("opencode: failed to prepare opencode.json permission config", "session_id", sessionID, "err", cfgErr)
-		} else {
-			defer cleanupCfg()
-		}
+	if cleanupCfg := prepareProviderPermissionFiles(provider, loginMode, cwd, *permissionMode, sessionID, logger); cleanupCfg != nil {
+		defer cleanupCfg()
 	}
 	// 実 CLI プロセスへ session ID と Hub token を env で渡す。`many-ai-cli orchestrate`
 	// （spawn / send / relay）が自力で Hub API を叩けるようにするため。AI がプロンプト上で
@@ -1520,7 +1732,7 @@ func classifyExit(waitErr error) (state string, code int, signal string) {
 }
 
 // dialAndRegister opens a WS to the Hub and performs the register handshake.
-func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, agentSessionID string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
+func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, effort, executionMode, agentSessionID string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はサーバの wsHandshake 許可リスト（http://127.0.0.1:<port>）に一致させる。
 	// websocket.Dial は内部で url.ParseRequestURI(origin) を呼ぶため空文字は不可（empty url エラー）。
@@ -1531,6 +1743,13 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 		return nil, proto.Message{}, err
 	}
 	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
+	// Effort は起動時に実際に付いた reasoning effort（付かなかったときは空）。Model と
+	// 同じく「実際にその値で起動したプロセスの申告」を正本にするので、Hub 経由でも
+	// `many-ai-cli wrap <provider> --effort …` の直接起動でも、同じ 1 経路で
+	// セッションへ届く（子 plan:
+	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。
+	// ExecutionMode も同じ規律で、--headless を付けて起動したプロセスだけが
+	// "headless" を名乗る（空＝対話）。
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:              "register",
 		Role:              "wrapper",
@@ -1539,6 +1758,8 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, a
 		CWD:               cwd,
 		Label:             label,
 		Model:             model,
+		Effort:            effort,
+		ExecutionMode:     executionMode,
 		PID:               os.Getpid(),
 		Shell:             DetectShell(),
 		Token:             cfg.Token,

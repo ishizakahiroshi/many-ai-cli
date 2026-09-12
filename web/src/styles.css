@@ -747,6 +747,7 @@ header {
 .handoff-list-row-provider { flex-shrink: 0; }
 .handoff-list-row-status { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--bg, #14171f); border: 1px solid var(--line); }
 .handoff-list-row-status[data-live="1"] { color: var(--accent-text, #93c5fd); border-color: var(--accent, #3b82f6); }
+.handoff-list-row-successor { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted-2, #9aa4b2); }
 .handoff-list-row-cwd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2, #9aa4b2); }
 .handoff-list-row-preview { flex-shrink: 0; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
 .handoff-list-row-preview:hover { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }
@@ -765,10 +766,99 @@ header {
   box-shadow: 0 10px 28px rgba(0,0,0,0.4);
 }
 .handoff-notify-body { font-size: 0.78rem; line-height: 1.5; margin-bottom: 10px; }
-.handoff-notify-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+/* 引き継ぎメモの進行・結果（子 plan: plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+   パスが入るので折り返しを許す。 */
+.handoff-notify-status { font-size: 0.72rem; line-height: 1.5; margin-bottom: 10px; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.handoff-notify-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; }
 .handoff-notify-action { padding: 5px 10px; border: 1px solid var(--accent, #3b82f6); border-radius: var(--radius-sm); background: var(--accent, #3b82f6); color: #fff; font: inherit; cursor: pointer; }
+.handoff-notify-note { padding: 5px 10px; border: 1px solid var(--border, #2b3242); border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.handoff-notify-note:disabled { opacity: 0.6; cursor: default; }
 .handoff-notify-dismiss { padding: 2px 7px; border: none; background: transparent; color: var(--muted-2, #9aa4b2); font-size: 1rem; cursor: pointer; line-height: 1; }
 .handoff-notify-dismiss:hover { color: var(--text); }
+
+/* C3: plan_derived-session-launch_c3_derive-launch.md — 派生起動ダイアログ
+   （種別 = 引き継ぎ / 子）。handoff-dialog と同じ寸法・同じ配色で、欄が多い分だけ
+   少し広い。.aac-wheel-overlay は derive-dialog.ts 側で付ける
+   （scripts/check-wheel-overlays.mjs が付け忘れを止める）。 */
+.derive-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0,0,0,0.55);
+}
+.derive-dialog {
+  width: min(620px, 100%);
+  max-height: min(86vh, 780px);
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--bg-elev, #1e2330);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+}
+.derive-dialog h2 { margin: 0 0 10px; font-size: 1rem; flex-shrink: 0; }
+.derive-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.derive-dialog-source { margin: 0 0 10px; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.derive-dialog-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
+.derive-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; }
+.derive-field[hidden] { display: none; }
+.derive-field-label { color: var(--muted-2, #9aa4b2); }
+.derive-select,
+.derive-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+.derive-dialog-meta { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; margin: 0 0 12px; font-size: 0.75rem; }
+.derive-dialog-meta dt { color: var(--muted-2, #9aa4b2); }
+.derive-dialog-meta dd { margin: 0; min-width: 0; word-break: break-all; }
+.derive-dialog-meta dt[hidden], .derive-dialog-meta dd[hidden] { display: none; }
+/* 開示の中身は spawn-confirm.ts の approvalDisplayHtml が組む（spawn 確認ダイアログと
+   同じ chip クラス）。-tools / -fallback は display:block なので、ここは素の block の
+   まま行送りだけ整える（flex にすると全幅の行が潰れる）。 */
+.derive-dialog-approval { line-height: 1.6; }
+.derive-same-tree { display: flex; align-items: center; gap: 7px; margin: 0 0 12px; font-size: 0.75rem; }
+.derive-same-tree[hidden] { display: none; }
+/* 「この役割では次回もこの段を使う」。段の select の真下に来るよう、欄の grid で
+   1 行を占有する（列に並ぶと、どの欄にかかる記憶なのか読めない）。 */
+.derive-remember-permission { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; font-size: 0.75rem; color: var(--muted-2, #9aa4b2); cursor: pointer; }
+.derive-remember-permission[hidden] { display: none; }
+.derive-dialog-prompt-label { display: block; margin: 0 0 6px; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); }
+.derive-dialog-prompt {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  max-height: 40vh;
+  overflow: auto;
+  resize: vertical;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg, #14171f);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.derive-dialog-error { margin: 10px 0 0; font-size: 0.74rem; color: var(--danger, #f87171); flex-shrink: 0; }
+.derive-dialog-error[hidden] { display: none; }
+.derive-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; flex-shrink: 0; }
+.derive-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
+.derive-dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+.derive-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
 
 /* Usage ドロップダウンの広幅レイアウト。900px 未満は既定の縦 1 カラムを保つ
    （docs/local/plan_usage-panel-wide-layout.md C1〜C3）。 */
@@ -1076,6 +1166,7 @@ header {
   .session-history-reset-btn,
   .session-board-open-btn,
   .session-relay-open-btn,
+  .session-derive-open-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -1467,6 +1558,8 @@ header {
 .card-branch[data-disabled="true"]:hover { background: var(--bg-deep); color: var(--muted); }
 .card.awaiting-approval .card-ctx { opacity: .55; }
 .card-role-chip,
+.card-handoff-chip,
+.card-headless-chip,
 .card-worktree-chip {
   flex-shrink: 0;
   max-width: 11ch;
@@ -1481,6 +1574,16 @@ header {
 .card-role-chip.parent { color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
 .card-role-chip.child { color: var(--accent-text); background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
 .card-worktree-chip { max-width: 16ch; color: var(--green-text); background: color-mix(in srgb, var(--green-bg) 22%, transparent); border: 1px solid color-mix(in srgb, var(--green-text) 22%, transparent); font-family: Consolas, monospace; }
+/* C4 (plan_derived-session-launch_c3_derive-launch.md): 引き継ぎの前任 / 後継への
+   一方向リンク。画面上の親子（parent_session_id）ではないので、role chip とは別の
+   落ち着いた色にする。押すとそのセッションへ切り替わるので cursor も変える。 */
+/* 内部 C6 (plan_child_execution_modes_headless.md): 非対話で動いているセッション。
+   押せる chip ではない（状態の表示だけ）ので cursor は変えない。端末が read-only に
+   なる理由がここで分かる。 */
+.card-headless-chip { max-width: 12ch; color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); border: 1px dashed color-mix(in srgb, var(--muted) 40%, transparent); cursor: default; }
+.card-handoff-chip { max-width: 14ch; color: var(--muted); background: color-mix(in srgb, var(--line) 45%, transparent); border: 1px solid var(--line); cursor: pointer; }
+.card-handoff-chip:hover { color: var(--accent-text); border-color: var(--accent); }
+.card-handoff-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* カード右クリック context menu */
 .card-ctx-menu {
@@ -1802,7 +1905,8 @@ header {
 .star-btn,
 .session-history-reset-btn,
 .session-board-open-btn,
-.session-relay-open-btn {
+.session-relay-open-btn,
+.session-derive-open-btn {
   position: static;
   background: none;
   appearance: none;
@@ -1824,6 +1928,7 @@ header {
 .session-history-reset-btn:hover { color: var(--accent-text); }
 .session-board-open-btn:hover { color: var(--accent-text); }
 .session-relay-open-btn:hover { color: var(--accent-text); }
+.session-derive-open-btn:hover { color: var(--accent-text); }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }
@@ -2712,6 +2817,9 @@ button.orchestration-relay-session.active {
   font-size: 0.78rem;
 }
 .relay-role-table .relay-role-model:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 権限の段の列。段の名前は説明込みで長い（「有人 — 承認はあなたが答えます」）ので、
+   列の幅に収めてはみ出さないようにする。 */
+.relay-role-table .relay-role-permission { width: 100%; max-width: 100%; min-width: 0; }
 .relay-role-required { color: var(--warn); }
 .relay-strong-note { padding-inline: 0; margin-top: 3px; }
 .relay-dialog-options {

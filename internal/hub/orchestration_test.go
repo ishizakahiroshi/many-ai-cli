@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -719,6 +720,100 @@ func Test_handleSpawnChild_duplicateRoleGuard(t *testing.T) {
 		t.Fatalf("409 detail should suggest orchestrate send, body=%s", rr.Body.String())
 	}
 	_ = child
+}
+
+// pendingSpawnConfirmationsCount は「確認が登録されたか」だけを見るテスト用の覗き窓。
+func pendingSpawnConfirmationsCount(s *Server) int {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	return len(s.orchestration.spawnConfirmations)
+}
+
+// 子 plan (plan_derived-session-launch_c3_derive-launch.md) 内部 C1:
+// 画面から人が押した子起動（origin: "ui"）は確認ダイアログを経ずに performSpawn へ
+// 直行する。押した本人が承認者なので、同じ人にもう一度承認させる意味が無い（親 D5）。
+//
+// 「performSpawn まで来たこと」は重複 role ガードの 409 で見る。ここを実 spawn まで
+// 走らせると CLI を起動してしまうので、Test_handleSpawnChild_duplicateRoleGuard と
+// 同じ止め方を借りている。
+func Test_handleSpawnChild_uiOriginSkipsConfirmation(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	s.cfg.Orchestration.MaxDepth = 2
+	s.cfg.Orchestration.MaxChildrenPerParent = 4
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+	child := registerTestSession(s, 10, "codex")
+	child.ParentSessionID = parent.ID
+	child.Role = "implementation"
+	child.State = "running"
+	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
+
+	rr := httptest.NewRecorder()
+	s.handleSessionAPI(rr, orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+		spawnChildRequest{Provider: "codex", Role: "implementation", Origin: launchOriginUI}))
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (performSpawn の重複 role ガードまで到達), body=%s", rr.Code, rr.Body.String())
+	}
+	if n := pendingSpawnConfirmationsCount(s); n != 0 {
+		t.Fatalf("pending spawn confirmations = %d, want 0 (UI 起点では確認を登録しない)", n)
+	}
+}
+
+// 確認を飛ばすのは確認だけ。深さ・本数の上限は UI 起点でも同じ検査を通る
+// （画面から立てても上限を超えない）。
+func Test_handleSpawnChild_uiOriginStillEnforcesLimits(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	s.cfg.Orchestration.MaxDepth = 1
+	s.cfg.Orchestration.MaxChildrenPerParent = 4
+	s.cfg.Orchestration.MaxTotalSessions = 16
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+	parent.Depth = 1
+
+	rr := httptest.NewRecorder()
+	s.handleSessionAPI(rr, orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+		spawnChildRequest{Provider: "codex", Role: "tester", Origin: launchOriginUI}))
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429 (UI 起点でも深さ上限が効く), body=%s", rr.Code, rr.Body.String())
+	}
+	if n := pendingSpawnConfirmationsCount(s); n != 0 {
+		t.Fatalf("pending spawn confirmations = %d, want 0", n)
+	}
+}
+
+// 未知の origin は 400。黙って conductor 扱い（無人・既定の段）へ倒さない。
+func Test_handleSpawnChild_rejectsUnknownOrigin(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	rr := httptest.NewRecorder()
+	s.handleSessionAPI(rr, orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+		spawnChildRequest{Provider: "codex", Role: "tester", Origin: "x"}))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body=%s", rr.Code, rr.Body.String())
+	}
+	if n := pendingSpawnConfirmationsCount(s); n != 0 {
+		t.Fatalf("pending spawn confirmations = %d, want 0 (弾いた要求で確認を作らない)", n)
+	}
+}
+
+// UI 起点の子は段 1 で起動する＝ Hub は承認系のフィールドを 1 つも埋めない。
+// 解決そのものは child_permission_test.go の TestResolveChildPermissionUIOriginIsAttended が
+// 固定しているので、ここは「要求 body に何も書き足されない」という起動側の形を見る。
+func Test_applyChildPermission_uiOriginLeavesRequestUntouched(t *testing.T) {
+	body := &spawnChildRequest{Provider: "claude", Role: "review", Origin: launchOriginUI, ExecutionMode: config.ExecutionModeInteractive}
+	applyChildPermission(body, config.OrchestrationConfig{})
+	if body.PermissionMode != "" || body.Sandbox != "" || body.AskForApproval != "" || body.RiskConfirmed || len(body.AllowedTools) > 0 {
+		t.Fatalf("有人の子に権限が足されている: %+v", body)
+	}
 }
 
 func Test_liveChildForRole_picksLatestAndSkipsDone(t *testing.T) {
@@ -1638,7 +1733,7 @@ func Test_resolveSpawnConfirmationDecision_refusalWritesUserRefusalOnce(t *testi
 	parent.CWD = t.TempDir()
 
 	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "codex", InitialPrompt: "hi"})
-	s.resolveSpawnConfirmationDecision(pending, false, "", "")
+	s.resolveSpawnConfirmationDecision(pending, false, pending.Body)
 
 	select {
 	case outcome := <-pending.Outcome:
@@ -1772,7 +1867,7 @@ func TestSpawnConfirmationAdmissionReleasedOnDecision(t *testing.T) {
 	if got := len(s.orchestration.childAdmissions); got != 1 {
 		t.Fatalf("admissions after confirmation = %d, want 1", got)
 	}
-	s.resolveSpawnConfirmationDecision(pending, false, "", "")
+	s.resolveSpawnConfirmationDecision(pending, false, pending.Body)
 	if got := len(s.orchestration.childAdmissions); got != 0 {
 		t.Fatalf("admissions after refusal = %d, want 0", got)
 	}
@@ -2050,5 +2145,130 @@ func Test_hasPendingSpawnConfirmation(t *testing.T) {
 
 	if s.hasPendingSpawnConfirmation(parent.ID) {
 		t.Fatal("want false once the confirmation has been decided and removed")
+	}
+}
+
+// 承認ダイアログの決定が、起動要求の共通 3 項目にどう効くかを固定する（子 plan:
+// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C4）。
+// 欄を触らずに承認したときは、要求された body と 1 バイトも変わらない。
+func TestApplySpawnConfirmationDecision(t *testing.T) {
+	requested := spawnChildRequest{
+		Role: "review", Provider: "claude", Model: "opus",
+		Effort: "high", ExecutionMode: "interactive", PermissionPreset: "attended",
+		InitialPrompt: "do the thing", CWD: "/tmp/child",
+	}
+	// DeepEqual: spawnChildRequest は段 2 の許可 tool（[]string）を持つので
+	// 比較演算子では比べられない（子 plan C2 内部 C1）。意図は同じで、
+	// 「決定が空なら要求と 1 バイトも変わらない」を丸ごと突き合わせる。
+	if got := applySpawnConfirmationDecision(requested, spawnConfirmationDecision{}); !reflect.DeepEqual(got, requested) {
+		t.Fatalf("empty decision changed the request:\n got %+v\nwant %+v", got, requested)
+	}
+	// 承認者が差し替えた値だけが置き換わり、残りは要求のまま持ち越される。
+	got := applySpawnConfirmationDecision(requested, spawnConfirmationDecision{Provider: "codex", Effort: launchOptionPtr("minimal")})
+	if got.Provider != "codex" || got.Effort != "minimal" {
+		t.Fatalf("decided values were not applied: %+v", got)
+	}
+	if got.Model != "opus" || got.ExecutionMode != "interactive" || got.PermissionPreset != "attended" || got.InitialPrompt != "do the thing" {
+		t.Fatalf("untouched fields were not carried over: %+v", got)
+	}
+	// 3 項目を持たない要求は、決定も空なら 3 項目が空のまま（従来の経路）。
+	plain := spawnChildRequest{Role: "review", Provider: "codex"}
+	if got := applySpawnConfirmationDecision(plain, spawnConfirmationDecision{Model: "gpt-5"}); got.Effort != "" || got.ExecutionMode != "" || got.PermissionPreset != "" {
+		t.Fatalf("launch options appeared out of nowhere: %+v", got)
+	}
+	// 送られてきた空文字は「指定なし へ戻す」であって「触らなかった」ではない。
+	// 写像の無い provider へ差し替えたダイアログは effort 欄を隠して空を送るので、
+	// 要求時の effort を引きずらずに検証が通らなければ承認できない（敵対レビュー
+	// 2026-09-12 Finding 1）。
+	cleared := applySpawnConfirmationDecision(requested, spawnConfirmationDecision{
+		Provider: "copilot", Effort: launchOptionPtr(""), ExecutionMode: launchOptionPtr(" auto "), PermissionPreset: launchOptionPtr(""),
+	})
+	if cleared.Effort != "" || cleared.ExecutionMode != "auto" || cleared.PermissionPreset != "" {
+		t.Fatalf("sent values must replace the requested ones (empty = unset): %+v", cleared)
+	}
+	if err := validateLaunchRequestOptions(cleared.Provider, &cleared.Effort, &cleared.ExecutionMode, &cleared.PermissionPreset); err != nil {
+		t.Fatalf("a cleared effort must validate for a provider without a mapping: %v", err)
+	}
+	// 3 項目を送らない呼び出し元（nil）では、要求時の effort が残る。
+	kept := applySpawnConfirmationDecision(requested, spawnConfirmationDecision{Provider: "copilot"})
+	if kept.Effort != "high" {
+		t.Fatalf("nil must keep the requested effort: %+v", kept)
+	}
+}
+
+func launchOptionPtr(v string) *string { return &v }
+
+func TestLaunchOptionChangeNote(t *testing.T) {
+	requested := spawnChildRequest{Effort: "high"}
+	if note := launchOptionChangeNote(requested, requested); note != "" {
+		t.Fatalf("unchanged options must not produce a note: %q", note)
+	}
+	decided := spawnChildRequest{Effort: "low", ExecutionMode: "interactive"}
+	note := launchOptionChangeNote(requested, decided)
+	if !strings.Contains(note, "effort") || !strings.Contains(note, "execution_mode") {
+		t.Fatalf("note = %q, want both changed fields named", note)
+	}
+	if strings.Contains(note, "permission_preset") {
+		t.Fatalf("note = %q, want the unchanged field left out", note)
+	}
+}
+
+// 承認者が差し替えた 3 項目は、差し替え後の provider で検証する。弾かれたときは
+// 決定を確定させず（やり直せる）、400 を返す。
+func TestHandleSpawnConfirmationRejectsInvalidDecidedEffort(t *testing.T) {
+	s, _ := subsTestServer(t)
+	parent := registerTestSession(s, 1, "claude")
+	parent.CWD = t.TempDir()
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "review", Provider: "claude", InitialPrompt: "hi"})
+
+	w := httptest.NewRecorder()
+	s.handleSpawnConfirmation(w, subsRequest(t, http.MethodPost, "/api/sessions/1/spawn-confirmation", map[string]any{
+		"confirmation_id": pending.ID,
+		"approved":        true,
+		// 写像が無い provider へ差し替えつつ effort を付けた決定。
+		"provider": "copilot",
+		"effort":   "high",
+	}), 1)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "effort") {
+		t.Fatalf("code = %d, body = %s, want 400 naming effort", w.Code, w.Body.String())
+	}
+	s.orchestration.mu.Lock()
+	still := s.orchestration.spawnConfirmations[pending.ID]
+	s.orchestration.mu.Unlock()
+	if still == nil || still.Decided {
+		t.Fatal("a rejected decision must leave the confirmation pending so it can be decided again")
+	}
+
+	// スキーマに無い値も同じく 400（3 値とも解禁済みなので、弾かれるのは知らない
+	// 値の方。provider ごとの headless 可否は後段の解決が決める＝
+	// applyChildExecutionMode / TestApplyChildExecutionMode）。
+	w = httptest.NewRecorder()
+	s.handleSpawnConfirmation(w, subsRequest(t, http.MethodPost, "/api/sessions/1/spawn-confirmation", map[string]any{
+		"confirmation_id": pending.ID,
+		"approved":        true,
+		"execution_mode":  "batch",
+	}), 1)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "execution_mode") {
+		t.Fatalf("code = %d, body = %s, want 400 naming execution_mode", w.Code, w.Body.String())
+	}
+}
+
+// 確認メッセージは要求された 3 項目をそのまま UI へ運ぶ（ダイアログの初期表示）。
+func TestSpawnConfirmationRequestedMessageCarriesLaunchOptions(t *testing.T) {
+	s, _ := subsTestServer(t)
+	parent := registerTestSession(s, 1, "claude")
+	parent.CWD = t.TempDir()
+	pending := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{
+		Role: "review", Provider: "claude", InitialPrompt: "hi",
+		Effort: "high", ExecutionMode: "interactive", PermissionPreset: "attended",
+	})
+	msg := s.spawnConfirmationRequestedMessage(pending)
+	if msg.Effort != "high" || msg.ExecutionMode != "interactive" || msg.PermissionPreset != "attended" {
+		t.Fatalf("confirmation message = %+v", msg)
+	}
+	// 3 項目を持たない要求では、メッセージにも現れない（omitempty で JSON から落ちる）。
+	plain := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "tester", Provider: "claude", InitialPrompt: "hi"})
+	if m := s.spawnConfirmationRequestedMessage(plain); m.Effort != "" || m.ExecutionMode != "" || m.PermissionPreset != "" {
+		t.Fatalf("plain confirmation message carries launch options: %+v", m)
 	}
 }

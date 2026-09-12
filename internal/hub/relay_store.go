@@ -363,7 +363,22 @@ func (s *Server) restoreRelays() {
 				s.relaySetChildProgressPath(run.orchestrationID, child.id, run.progressIDLocked(child.role))
 			}
 		}
-		if !run.terminalLocked() {
+		switch {
+		case run.terminalLocked():
+		case run.anyHeadlessRoleLocked():
+			// A headless child is a plain process whose output the Hub read over
+			// one WebSocket; when the Hub goes away there is nothing left to
+			// reattach to, and the wrapper has no reconnect supervisor in that
+			// mode (元設計 22 節 accepts that for the first version). Waiting out
+			// relayReconnectGrace would spend two minutes arriving at the same
+			// place with a less truthful line on the board, so the run is stopped
+			// here — with hub_restart, which is a resumable reason, so the user
+			// can pick it back up and a fresh worker continues from the git
+			// history (D-17/D-18, 子 plan 内部 C4).
+			s.relayEventLocked(run, proto.RelayEvent{Kind: relayEventRestored, C: run.currentCLocked(), Round: run.round, Text: "hub restarted; a headless relay child cannot reattach"})
+			s.relayBoardLocked(run, fmt.Sprintf("relay restored after hub restart state=%s c=%d round=%d; this relay runs headless children, which cannot reattach — stopping. Resume it to start a fresh worker and continue from the git history", run.state, run.currentCLocked(), run.round))
+			s.relayFinishLocked(run, relayStateStopped, relayReasonHubRestart, "a headless relay child cannot reattach")
+		default:
 			run.awaitingReconnect = true
 			run.restoredAt = now
 			s.relayEventLocked(run, proto.RelayEvent{Kind: relayEventRestored, C: run.currentCLocked(), Round: run.round, Text: "hub restarted; waiting for the children to reattach"})

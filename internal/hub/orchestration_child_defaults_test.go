@@ -345,8 +345,8 @@ func TestChildApprovalPreviewEmptyWhenBypassOff(t *testing.T) {
 	}
 }
 
-// ダイアログは承認前に provider を差し替えられる。resolveSpawnConfirmationDecision は
-// Provider / Model だけを置き換えて他は持ち越すので、呼び出し側が明示した値は
+// ダイアログは承認前に provider を差し替えられる。applySpawnConfirmationDecision は
+// 承認者が差し替えた欄だけを置き換えて他は持ち越すので、呼び出し側が明示した値は
 // 差し替え後の provider でも残る。preview もそのとおりに見せる。
 func TestChildApprovalPreviewKeepsExplicitValuesAcrossProviders(t *testing.T) {
 	preview := childApprovalPreview(spawnChildRequest{Provider: "codex", PermissionMode: "acceptEdits"}, true)

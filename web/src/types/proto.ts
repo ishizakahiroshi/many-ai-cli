@@ -294,8 +294,14 @@ export interface Message {
   model?: string;
   /** reasoning effort（"high" 等）。起動バナー / モデル変更行から Hub が検出した値。 */
   effort?: string;
+  /** 起動要求に添えられた実行モード（auto / interactive / headless）。空は指定なし。 */
+  execution_mode?: string;
+  /** 起動要求に添えられた権限段（attended / bounded / full）。空は指定なし。 */
+  permission_preset?: string;
   route?: string;
   parent_session_id?: number;
+  /** このセッションが続きを引き受けた前任の ID。0 / 未送は通常起動。親子関係ではない。 */
+  handoff_from?: number;
   auto?: boolean;
   depth?: number;
   orchestration_id?: string;
@@ -310,6 +316,11 @@ export interface Message {
 	initial_prompt?: string;
 	/** epoch ms。spawn_confirmation_requested とその再送の両方に載る。 */
 	spawn_requested_at_ms?: number;
+	/**
+	 * 確認ダイアログの「この役割では次回もこの段を使う」チェックボックスの初期状態。
+	 * true = Hub がその役割の段を既に覚えている（段そのものは permission_preset）。
+	 */
+	remember_permission?: boolean;
 	/**
 	 * spawn_confirmation_closed の reason は5値のみ:
 	 * approved | refused | superseded | parent_gone | spawn_failed。
@@ -377,6 +388,11 @@ export interface Message {
   repo_name?: string;       // workspace.repo.name
   remaining_pct?: number;   // Claude Code statusLine 算出済みの context 残り%
   reasoning_output_tokens?: number; // Codex token_count.info reasoning_output_tokens
+  // handoff_note: 残量の帯から依頼した引き継ぎメモの結果（子 plan:
+  // plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。note_ok=false は
+  // 「60 秒内に合図が来なかった / ファイルが無い」で、その場合 note_path は空。
+  note_ok?: boolean;
+  note_path?: string;
   // C3: git 変更状況メタ（git_checked=true のメッセージのみ有効）
   git_checked?: boolean;
   git_files?: number;
@@ -409,6 +425,8 @@ export interface SessionSnapshot {
   route?: string;
   shell?: string;
   parent_session_id?: number;
+  /** このセッションが続きを引き受けた前任の ID。0 / 未送は通常起動。親子関係ではない。 */
+  handoff_from?: number;
   role?: string;
   auto?: boolean;
   depth?: number;

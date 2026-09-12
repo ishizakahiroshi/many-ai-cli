@@ -20,6 +20,8 @@ import { dirnameForPath } from './path-links.js';
 import { getHubWorkflowEntry, isHubWorkflowAuthoritative } from './workflow-store.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
 import { openRelayDialog } from './relay-dialog.js';
+import { openDeriveDialog } from './derive-dialog.js';
+import { openHandoffListDialog } from './handoff.js';
 import { openNextSpawnConfirmationFor, pendingSpawnConfirmationCount } from './spawn-confirm.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -55,6 +57,23 @@ export async function patchSessionMeta(id: number, patch: Record<string, unknown
 
 function sessionDisplayTitle(s: any): string {
   return String(s?.label || s?.auto_title || '');
+}
+
+// 引き継ぎの後継を逆引きする（子 plan:
+// docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
+// 記録は後継側にしか無い（前任は止まっているので後から書けない）ので、生きている
+// セッションの中から「自分を前任として立ったもの」を探す。終了した後継は
+// ↪ 一覧（/api/handoff の handoff_to）が受け持つ。
+// 2 本立てたことがあれば新しい方（ID が大きい方）を出す — Hub 側の
+// fillHandoffSuccessors と同じ選び方。
+function successorSessionIDOf(sessionID: number): number {
+  let newest = 0;
+  sessions.forEach((other: any) => {
+    if (Number(other?.handoff_from || 0) !== sessionID) return;
+    const id = Number(other?.id || 0);
+    if (id > newest) newest = id;
+  });
+  return newest;
 }
 
 function appendSessionColorFilters(root: HTMLElement): void {
@@ -1018,6 +1037,25 @@ export function renderSessionList() {
       const boardPendingHtml = s.board_notify_pending
         ? `<span class="card-role-chip parent" data-tooltip="${escapeHtml(t('card_board_update_pending_tooltip'))}">${escapeHtml(t('card_board_update_pending'))}</span>`
         : '';
+      // 非対話（headless）で動いているセッション。値は wrapper の申告が正本で、
+      // 対話セッションは空を送るので、このチップが出るのは headless のときだけ。
+      // 端末へ打ち込めないことが見た目で分かるようにするための 1 枚
+      // （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C6）。
+      const headlessHtml = s.execution_mode === 'headless'
+        ? `<span class="card-headless-chip" data-tooltip="${escapeHtml(ti18n('card_headless_tooltip', 'Headless: the provider runs non-interactively, so this terminal is read-only'))}">${escapeHtml(ti18n('card_headless', 'Headless'))}</span>`
+        : '';
+      // 引き継ぎのリンク。**画面上の親子は作らない**（後継は対等な新しい親）ので、
+      // 表示だけの一方向リンクを両側のカードへ出す
+      // （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
+      // 前任が終了済みで session 表に居ないときは ↪ 一覧を開く。
+      const handoffFromID = Number(s.handoff_from || 0);
+      const handoffToID = successorSessionIDOf(s.id);
+      const handoffFromHtml = handoffFromID
+        ? `<span class="card-handoff-chip" role="button" tabindex="0" data-handoff-open="${handoffFromID}" data-tooltip="${escapeHtml(ti18n('card_handoff_from_tooltip', `Continues #${handoffFromID}`, { id: handoffFromID }))}">↪ #${handoffFromID}</span>`
+        : '';
+      const handoffToHtml = handoffToID
+        ? `<span class="card-handoff-chip" role="button" tabindex="0" data-handoff-open="${handoffToID}" data-tooltip="${escapeHtml(ti18n('card_handoff_to_tooltip', `Handed off to #${handoffToID}`, { id: handoffToID }))}">${escapeHtml(ti18n('card_handoff_to', `Successor #${handoffToID}`, { id: handoffToID }))}</span>`
+        : '';
       c.dataset.sessionId = s.id;
       const branchStr = s.branch || '';
       const branchTip = branchStr
@@ -1028,7 +1066,7 @@ export function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
-      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${branchBadge}</div>`;
+      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${headlessHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}${branchBadge}</div>`;
       // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N より前に置く
       // （#N の桁数はカードごとに違うため、後ろに置くとアイコンの横位置がカードごとにズレる。
       // 先頭に固定すると全カードで同じX座標に揃い、縦に並ぶ実行中セッションを一直線で拾える）。
@@ -1053,6 +1091,23 @@ export function renderSessionList() {
           if (e.key === 'Enter' || e.key === ' ') toggleChildren(e);
         });
       }
+
+      c.querySelectorAll('[data-handoff-open]').forEach((chip) => {
+        const targetID = Number((chip as HTMLElement).dataset.handoffOpen || 0);
+        const openTarget = (e: Event) => {
+          e.stopPropagation();
+          if (!targetID) return;
+          // 生きていればそのセッションへ切り替える。終了済み（session 表に無い）なら
+          // ↪ 一覧を開く — 看板ディレクトリは Hub 再起動後も残るので、そこからなら
+          // 前任の記録に辿り着ける。
+          if (sessions.has(targetID)) activateSession(targetID);
+          else void openHandoffListDialog();
+        };
+        chip.addEventListener('click', openTarget);
+        chip.addEventListener('keydown', (e: any) => {
+          if (e.key === 'Enter' || e.key === ' ') openTarget(e);
+        });
+      });
 
       const actions = document.createElement('div');
       actions.className = 'card-actions';
@@ -1122,6 +1177,22 @@ export function renderSessionList() {
           openRelayDialog(s.id);
         };
         actions.appendChild(relayBtn);
+      }
+
+      // 派生起動（引き継ぎ / 子）の入口。relay と違い子カードにも出す: 子から子を
+      // 立てても深さの上限に掛かるだけで、禁止する理由が無い
+      // （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C3）。
+      if (isAIOrCustomProvider(String(s.provider || ''))) {
+        const deriveBtn = document.createElement('button');
+        deriveBtn.className = 'session-derive-open-btn';
+        deriveBtn.textContent = '🌱';
+        deriveBtn.title = t('derive_button_title');
+        deriveBtn.setAttribute('aria-label', deriveBtn.title);
+        deriveBtn.onclick = (e) => {
+          e.stopPropagation();
+          void openDeriveDialog(s.id);
+        };
+        actions.appendChild(deriveBtn);
       }
 
       const xBtn = document.createElement('button');

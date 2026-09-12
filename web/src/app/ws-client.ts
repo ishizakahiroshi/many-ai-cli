@@ -13,7 +13,7 @@ import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
-import { checkHandoffNotifyFromUsageStat } from './handoff.js';
+import { checkHandoffNotifyFromUsageStat, handleHandoffNoteMessage } from './handoff.js';
 import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
 import { dropDoneSummary, setDoneSummary } from './done-summary.js';
 import { clearAllSpawnConfirmationsForHubRestart, closeSpawnConfirmation, noteSpawnConfirmationRequested, openNextSpawnConfirmationFor } from './spawn-confirm.js';
@@ -384,6 +384,13 @@ export function _connectWs() {
     return;
   }
 
+  // 残量の帯から依頼した引き継ぎメモの結果（子 plan:
+  // plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+  if (m.type === 'handoff_note') {
+    handleHandoffNoteMessage(m);
+    return;
+  }
+
   if (m.type === 'git_turn') {
     // Review Phase 2: the view module owns the completion card and caches the
     // compact event. Reload recovery uses /api/git-turns.
@@ -608,6 +615,7 @@ export function _connectWs() {
     if (m.effort !== undefined) cur.effort      = m.effort;
     if (m.route !== undefined) cur.route       = m.route;
     if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
+    if (m.handoff_from !== undefined) cur.handoff_from = m.handoff_from;
     if (m.role !== undefined) cur.role = m.role;
     if (m.auto !== undefined) cur.auto = m.auto;
     if (m.depth !== undefined) cur.depth = m.depth;

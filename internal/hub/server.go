@@ -111,22 +111,33 @@ const (
 // SessionActivity が状態の正本で、State は互換表示用の派生値である。
 // approval_visible は UI が xterm.js バッファをスキャンして session_hint で伝える。
 type session struct {
-	ID                 int    `json:"id"`
-	Provider           string `json:"provider"`
-	Display            string `json:"display_name"`
-	CWD                string `json:"cwd"`
-	Branch             string `json:"branch,omitempty"`
-	ProjectID          string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
-	Label              string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
-	Pinned             bool   `json:"pinned,omitempty"`
-	Color              string `json:"color,omitempty"`
-	Note               string `json:"note,omitempty"`
-	AutoTitle          string `json:"auto_title,omitempty"`
-	Model              string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
-	Effort             string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
-	Route              string `json:"route,omitempty"`  // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
-	Shell              string `json:"shell,omitempty"`
-	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	ID        int    `json:"id"`
+	Provider  string `json:"provider"`
+	Display   string `json:"display_name"`
+	CWD       string `json:"cwd"`
+	Branch    string `json:"branch,omitempty"`
+	ProjectID string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
+	Label     string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
+	Pinned    bool   `json:"pinned,omitempty"`
+	Color     string `json:"color,omitempty"`
+	Note      string `json:"note,omitempty"`
+	AutoTitle string `json:"auto_title,omitempty"`
+	Model     string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
+	Effort    string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
+	// ExecutionMode は wrapper が申告した実行モード。空（＝大半のセッション）は
+	// 対話（PTY）で、"headless" は非対話 runner で走っているセッション
+	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+	// **要求値ではなく実際に起動したプロセスの申告**を持つ（Model / Effort と同じ規律）。
+	ExecutionMode   string `json:"execution_mode,omitempty"`
+	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Shell           string `json:"shell,omitempty"`
+	ParentSessionID int    `json:"parent_session_id,omitempty"`
+	// HandoffFrom は「このセッションが続きを引き受けた前任」の ID（0 = 通常起動）。
+	// 看板 jsonl の session_start にも同じ値が入るが、UI のカードへ出すには
+	// セッション本体にも要る（子 plan:
+	// docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
+	// **親子関係ではない**。後継は対等な新しい親で、画面のリンクは一方向の表示だけ。
+	HandoffFrom        int    `json:"handoff_from,omitempty"`
 	Role               string `json:"role,omitempty"`
 	Auto               bool   `json:"auto,omitempty"`
 	Depth              int    `json:"depth,omitempty"`
@@ -389,6 +400,17 @@ type session struct {
 	turnSummaryDeadline time.Time       // 待ち受けの打ち切り時刻
 	turnSummaryTurn     int             // 対象の gitTurns 番号（Record.Turn へ載せる）
 	turnSummaryBuf      strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
+
+	// JSON 外: 引き継ぎメモ依頼（残量の帯の 2 つ目のボタン）の待ち受け状態。
+	// turnSummaryAwait 一式と同型（子 plan:
+	// docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+	// handoffNoteSeq は打ち切りタイマーの世代。成功直後に次の依頼が始まったとき、
+	// 前の依頼のタイマーがそれを取り消さないようにするためだけに要る。
+	handoffNoteAwait    bool
+	handoffNoteDeadline time.Time
+	handoffNotePath     string
+	handoffNoteSeq      uint64
+	handoffNoteBuf      strings.Builder
 
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。

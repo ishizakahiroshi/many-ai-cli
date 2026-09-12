@@ -145,6 +145,67 @@ func TestHandleHandoffListNewestFirst(t *testing.T) {
 	}
 }
 
+// 子 plan (plan_derived-session-launch_c3_derive-launch.md) 内部 C4:
+// 後継の session_start にしか無い handoff_from から、前任の行へ「後継 #<id>」を
+// 逆引きで付ける。前任の jsonl には何も書かない（前任は止まっている前提）。
+func TestHandleHandoffListLinksSuccessorBackToPredecessor(t *testing.T) {
+	s, _ := subsTestServer(t)
+
+	if err := handoff.Append(60, handoff.Record{Kind: handoff.KindSessionStart, Provider: "claude"}); err != nil {
+		t.Fatalf("Append(60): %v", err)
+	}
+	if err := handoff.Append(61, handoff.Record{Kind: handoff.KindSessionStart, Provider: "codex", HandoffFrom: 60}); err != nil {
+		t.Fatalf("Append(61): %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	s.handleHandoffList(w, subsRequest(t, http.MethodGet, "/api/handoff", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d: %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		Entries []struct {
+			SessionID   int `json:"session_id"`
+			HandoffFrom int `json:"handoff_from"`
+			HandoffTo   int `json:"handoff_to"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	byID := map[int]struct {
+		SessionID   int `json:"session_id"`
+		HandoffFrom int `json:"handoff_from"`
+		HandoffTo   int `json:"handoff_to"`
+	}{}
+	for _, e := range got.Entries {
+		byID[e.SessionID] = e
+	}
+	if byID[60].HandoffTo != 61 {
+		t.Fatalf("predecessor #60 handoff_to = %d, want 61 (entries=%+v)", byID[60].HandoffTo, got.Entries)
+	}
+	if byID[60].HandoffFrom != 0 {
+		t.Fatalf("predecessor #60 must not gain a handoff_from: %+v", byID[60])
+	}
+	if byID[61].HandoffFrom != 60 || byID[61].HandoffTo != 0 {
+		t.Fatalf("successor #61 = %+v, want handoff_from=60 and no handoff_to", byID[61])
+	}
+}
+
+// 同じ前任に後継が 2 本ぶら下がったら、新しい方（ID が大きい方）を出す。
+func TestFillHandoffSuccessorsPrefersTheNewestSuccessor(t *testing.T) {
+	// handoffListEntries は新しい順（ID 降順）で渡す。
+	entries := []handoffPreview{
+		{SessionID: 9, HandoffFrom: 5},
+		{SessionID: 7, HandoffFrom: 5},
+		{SessionID: 5},
+	}
+	fillHandoffSuccessors(entries)
+	if entries[2].HandoffTo != 9 {
+		t.Fatalf("handoff_to = %d, want 9 (newest successor)", entries[2].HandoffTo)
+	}
+}
+
 // TestHandleSpawnRejectsNegativeHandoffFrom guards the new field's
 // validation: a negative handoff_from can only be a caller bug or tampering,
 // never a real predecessor session ID.
@@ -192,5 +253,38 @@ func TestHandleSpawnHandoffFromStoredInPending(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("no pending entry carries handoff_from=42; pending = %+v", s.orchestration.pending)
+	}
+}
+
+// --- 子 plan: plan_derived-session-launch_c4_handoff-routes.md 内部 C2 --------
+
+// TestHandleHandoffNoteRequiresPostAndALiveSession fixes the /note route's two
+// refusals: it is not a GET, and it cannot be asked of a session that is no
+// longer running (the memo is written by the predecessor itself).
+func TestHandleHandoffNoteRequiresPostAndALiveSession(t *testing.T) {
+	s, _ := subsTestServer(t)
+
+	w := httptest.NewRecorder()
+	s.handleHandoffItem(w, subsRequest(t, http.MethodGet, "/api/handoff/501/note", nil))
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /note code = %d, want 405: %s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	s.handleHandoffItem(w, subsRequest(t, http.MethodPost, "/api/handoff/501/note", map[string]any{}))
+	if w.Code != http.StatusNotFound || !strings.Contains(w.Body.String(), "session_not_writable") {
+		t.Fatalf("POST /note for a stopped session = %d %s, want 404 session_not_writable", w.Code, w.Body.String())
+	}
+}
+
+// TestHandleHandoffItemRejectsUnknownAction keeps the /api/handoff/ subtree from
+// silently answering paths it does not implement.
+func TestHandleHandoffItemRejectsUnknownAction(t *testing.T) {
+	s, _ := subsTestServer(t)
+
+	w := httptest.NewRecorder()
+	s.handleHandoffItem(w, subsRequest(t, http.MethodGet, "/api/handoff/501/bogus", nil))
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("code = %d, want 404: %s", w.Code, w.Body.String())
 	}
 }

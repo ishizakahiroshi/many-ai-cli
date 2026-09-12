@@ -8,7 +8,16 @@ import {
   registerDialogController,
   selectOldestPendingConfirmation,
   selectOldestPendingConfirmationFor,
+  approvalForSelection,
   recordFromMessage,
+  setLaunchOptionChoices,
+  effortLevelsFor,
+  effortForSpawnBody,
+  headlessUnsupportedForSelection,
+  isExecutionModeAvailable,
+  isHeadlessCapable,
+  isPermissionPresetAvailable,
+  rememberedRolePermission,
   spawnConfirmDecisionFromHttp,
   SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
   unregisterDialogController,
@@ -174,22 +183,39 @@ describe('spawn confirm HTTP 200 without WS close', () => {
 // malformed input must degrade to "nothing added" rather than throwing — an
 // older Hub does not send the field at all.
 describe('spawn_child_approval', () => {
-  test('is parsed per provider', () => {
+  test('is parsed per provider and per permission tier', () => {
     const rec = recordFromMessage(
       requestedMessage({
         spawn_child_approval: {
-          codex: { sandbox: 'danger-full-access', ask_for_approval: 'never', risk_confirmed: true },
-          claude: { permission_mode: 'bypassPermissions', risk_confirmed: true },
+          codex: {
+            '': { sandbox: 'danger-full-access', ask_for_approval: 'never', risk_confirmed: true, tier: 'full' },
+            bounded: { sandbox: 'workspace-write', ask_for_approval: 'never', risk_confirmed: true, tier: 'bounded' },
+          },
+          claude: {
+            '': { permission_mode: 'bypassPermissions', risk_confirmed: true, tier: 'full' },
+            bounded: { permission_mode: 'dontAsk', allowed_tools: ['Read', 'Bash(git log *)'], risk_confirmed: true, tier: 'bounded' },
+          },
+          grok: {
+            bounded: { permission_mode: 'bypassPermissions', risk_confirmed: true, tier: 'full', fallback_from: 'bounded' },
+          },
         },
       }),
     );
-    expect(rec.approval.codex).toEqual({
+    expect(rec.approval.codex['']).toEqual({
       permissionMode: '',
       sandbox: 'danger-full-access',
       askForApproval: 'never',
+      allowedTools: [],
       riskConfirmed: true,
+      tier: 'full',
+      fallbackFrom: '',
     });
-    expect(rec.approval.claude.permissionMode).toBe('bypassPermissions');
+    expect(rec.approval.claude.bounded.permissionMode).toBe('dontAsk');
+    expect(rec.approval.claude.bounded.allowedTools).toEqual(['Read', 'Bash(git log *)']);
+    // 段 2 が無い provider は段 3 へ落ちる。落ちたことが残っていないと、
+    // ダイアログは「範囲を限った」と読ませたまま全許可の子を起こす。
+    expect(rec.approval.grok.bounded.tier).toBe('full');
+    expect(rec.approval.grok.bounded.fallbackFrom).toBe('bounded');
   });
 
   test('is empty when the Hub sends nothing', () => {
@@ -198,12 +224,182 @@ describe('spawn_child_approval', () => {
 
   test('ignores a malformed payload instead of throwing', () => {
     expect(recordFromMessage(requestedMessage({ spawn_child_approval: 'nope' })).approval).toEqual({});
-    const partial = recordFromMessage(requestedMessage({ spawn_child_approval: { codex: null } }));
-    expect(partial.approval.codex).toEqual({
+    expect(recordFromMessage(requestedMessage({ spawn_child_approval: { codex: null } })).approval.codex).toEqual({});
+    const partial = recordFromMessage(requestedMessage({ spawn_child_approval: { codex: { bounded: null } } }));
+    expect(partial.approval.codex.bounded).toEqual({
       permissionMode: '',
       sandbox: '',
       askForApproval: '',
+      allowedTools: [],
       riskConfirmed: false,
+      tier: '',
+      fallbackFrom: '',
     });
+  });
+
+  // ダイアログは provider と段のどちらを差し替えても表示を引き直す。組み合わせが
+  // 無ければ「要求どおり」へ落として、権限欄を空白のままにしない。
+  test('picks the entry for the selected provider and tier', () => {
+    const approval = recordFromMessage(
+      requestedMessage({
+        spawn_child_approval: {
+          claude: {
+            '': { permission_mode: 'bypassPermissions', tier: 'full' },
+            bounded: { permission_mode: 'dontAsk', tier: 'bounded' },
+          },
+        },
+      }),
+    ).approval;
+    expect(approvalForSelection(approval, 'claude', 'bounded')?.permissionMode).toBe('dontAsk');
+    expect(approvalForSelection(approval, 'claude', '')?.permissionMode).toBe('bypassPermissions');
+    expect(approvalForSelection(approval, 'claude', 'attended')?.permissionMode).toBe('bypassPermissions');
+    expect(approvalForSelection(approval, 'codex', 'bounded')).toBeUndefined();
+  });
+});
+
+// 起動要求の共通 3 項目（子 plan:
+// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C4 / C5）。
+describe('launch options', () => {
+  test('carries the requested values into the record', () => {
+    const rec = recordFromMessage(
+      requestedMessage({ effort: 'high', execution_mode: 'interactive', permission_preset: 'attended' }),
+    );
+    expect(rec.effort).toBe('high');
+    expect(rec.executionMode).toBe('interactive');
+    expect(rec.permissionPreset).toBe('attended');
+  });
+
+  test('leaves them empty when the Hub sends nothing', () => {
+    const rec = recordFromMessage(requestedMessage());
+    expect(rec.effort).toBe('');
+    expect(rec.executionMode).toBe('');
+    expect(rec.permissionPreset).toBe('');
+  });
+
+  test('takes the choices from /api/info and keeps unmapped providers empty', () => {
+    setLaunchOptionChoices({
+      effort_levels: { claude: ['low', 'high'], codex: ['minimal'] },
+      execution_modes: ['auto', 'interactive'],
+      permission_presets: ['attended', 'full'],
+    });
+    expect(effortLevelsFor('claude')).toEqual(['low', 'high']);
+    expect(effortLevelsFor('copilot')).toEqual([]);
+    expect(isExecutionModeAvailable('interactive')).toBe(true);
+    expect(isExecutionModeAvailable('headless')).toBe(false);
+    expect(isPermissionPresetAvailable('full')).toBe(true);
+    expect(isPermissionPresetAvailable('bounded')).toBe(false);
+  });
+
+  test('ignores a malformed /api/info payload instead of throwing', () => {
+    setLaunchOptionChoices({ effort_levels: 'nope', execution_modes: 'nope' });
+    expect(effortLevelsFor('claude')).toEqual(['low', 'high']);
+    expect(isExecutionModeAvailable('interactive')).toBe(true);
+  });
+});
+
+// headless の定義がある provider（子 plan:
+// docs/local/plan_child_execution_modes_headless.md 内部 C6）。押す前に「この CLI には
+// headless の定義が無い」を出すためだけの一覧で、受理の判断は常に Hub 側。
+describe('headless capability', () => {
+  test('names the providers /api/info listed, and only those', () => {
+    setLaunchOptionChoices({ headless_providers: ['claude', 'grok'] });
+    expect(isHeadlessCapable('claude')).toBe(true);
+    expect(isHeadlessCapable('grok')).toBe(true);
+    expect(isHeadlessCapable('codex')).toBe(false);
+    expect(isHeadlessCapable('  claude  ')).toBe(true);
+  });
+
+  test('says yes when the list is unknown, so it never claims a capable CLI cannot', () => {
+    setLaunchOptionChoices({ headless_providers: 'nope' });
+    setLaunchOptionChoices({ headless_providers: [] });
+    expect(isHeadlessCapable('anything')).toBe(true);
+  });
+
+  test('only an explicit headless is refused; auto falls back on the Hub side', () => {
+    setLaunchOptionChoices({ headless_providers: ['claude'] });
+    expect(headlessUnsupportedForSelection('codex', 'headless')).toBe(true);
+    expect(headlessUnsupportedForSelection('codex', 'auto')).toBe(false);
+    expect(headlessUnsupportedForSelection('codex', '')).toBe(false);
+    expect(headlessUnsupportedForSelection('claude', 'headless')).toBe(false);
+  });
+});
+
+// New Session フォームが送る effort（子 plan 内部 C5）。写像が無い provider では
+// キーごと送らない＝従来の起動と 1 バイトも変わらない。
+describe('effortForSpawnBody', () => {
+  test('sends the selected level for a mapped provider', () => {
+    setLaunchOptionChoices({ effort_levels: { claude: ['low', 'high'] } });
+    expect(effortForSpawnBody('claude', 'high')).toBe('high');
+  });
+
+  test('sends nothing for a provider without a mapping', () => {
+    setLaunchOptionChoices({ effort_levels: { claude: ['low', 'high'] } });
+    expect(effortForSpawnBody('copilot', 'high')).toBe('');
+  });
+
+  test('sends nothing when nothing is selected or the level is unknown here', () => {
+    setLaunchOptionChoices({ effort_levels: { claude: ['low', 'high'], codex: ['minimal'] } });
+    expect(effortForSpawnBody('claude', '')).toBe('');
+    expect(effortForSpawnBody('claude', '   ')).toBe('');
+    // 前の provider で選んだ値が残っていても、候補に無ければ送らない。
+    expect(effortForSpawnBody('codex', 'high')).toBe('');
+  });
+});
+
+// 「この役割では次回もこの段を使う」（子 plan:
+// docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+describe('remember_permission', () => {
+  test('opens the checkbox ON when the Hub already remembers this role', () => {
+    expect(recordFromMessage(requestedMessage({ remember_permission: true })).rememberPermission).toBe(true);
+  });
+
+  test('is off when the Hub says so', () => {
+    expect(recordFromMessage(requestedMessage({ remember_permission: false })).rememberPermission).toBe(false);
+  });
+
+  // 欄を持たない Hub からのメッセージでも落ちず、「覚えていない」と同じ見え方になる。
+  test('is off when the field is absent', () => {
+    expect(recordFromMessage(requestedMessage()).rememberPermission).toBe(false);
+  });
+});
+
+// 派生ダイアログが役割を選んだ時点の段（/api/info の role_permission）。
+describe('rememberedRolePermission', () => {
+  test('returns the remembered tier for that role', () => {
+    setLaunchOptionChoices({
+      permission_presets: ['attended', 'bounded', 'full'],
+      role_permission: { review: 'bounded', implementation: 'full' },
+    });
+    expect(rememberedRolePermission('review')).toBe('bounded');
+    expect(rememberedRolePermission('implementation')).toBe('full');
+  });
+
+  test('returns nothing for a role with no memory', () => {
+    setLaunchOptionChoices({
+      permission_presets: ['attended', 'bounded', 'full'],
+      role_permission: { review: 'bounded' },
+    });
+    expect(rememberedRolePermission('test')).toBe('');
+    expect(rememberedRolePermission('')).toBe('');
+  });
+
+  // 選択肢に無い段を初期値にすると、見えている段と送る段が食い違う。
+  test('drops a tier this build cannot select', () => {
+    setLaunchOptionChoices({
+      permission_presets: ['attended', 'full'],
+      role_permission: { review: 'bounded' },
+    });
+    expect(rememberedRolePermission('review')).toBe('');
+  });
+
+  test('ignores a malformed payload instead of throwing', () => {
+    setLaunchOptionChoices({
+      permission_presets: ['attended', 'bounded', 'full'],
+      role_permission: { review: 'bounded' },
+    });
+    setLaunchOptionChoices({ role_permission: 'nope' });
+    expect(rememberedRolePermission('review')).toBe('bounded');
+    setLaunchOptionChoices({ role_permission: { review: null, '': 'full' } });
+    expect(rememberedRolePermission('review')).toBe('');
   });
 });

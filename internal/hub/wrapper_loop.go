@@ -146,22 +146,35 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		}, cardMeta)
 	}
 	s.sessionsMu.Lock()
+	// Effort は wrapper が起動時に実際に付けた reasoning effort（子 plan:
+	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。空なら従来
+	// どおり未設定のままで、バナー検出（applyDetectedModel）が後から埋める。起動値が
+	// 入っていれば、空文字では既存値を消さない同関数がそれを保つ。
 	ses := &session{
-		ID:              id,
-		StoreID:         storeID,
-		Provider:        reg.Provider,
-		Display:         reg.Display,
-		CWD:             reg.CWD,
-		Branch:          branch,
-		Label:           cardMeta.Label,
-		Pinned:          cardMeta.Pinned,
-		Color:           cardMeta.Color,
-		Note:            cardMeta.Note,
-		AutoTitle:       cardMeta.AutoTitle,
-		Model:           reg.Model,
+		ID:        id,
+		StoreID:   storeID,
+		Provider:  reg.Provider,
+		Display:   reg.Display,
+		CWD:       reg.CWD,
+		Branch:    branch,
+		Label:     cardMeta.Label,
+		Pinned:    cardMeta.Pinned,
+		Color:     cardMeta.Color,
+		Note:      cardMeta.Note,
+		AutoTitle: cardMeta.AutoTitle,
+		Model:     reg.Model,
+		Effort:    reg.Effort,
+		// ExecutionMode も wrapper の申告が正本。対話セッションは空を送るので、
+		// この項目が存在しなかった頃と 1 バイトも変わらない（子 plan:
+		// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+		ExecutionMode:   reg.ExecutionMode,
 		Route:           regRoute,
 		Shell:           reg.Shell,
 		ParentSessionID: childMeta.ParentSessionID,
+		// 看板 jsonl（recordHandoffSessionStart）と同じ値をセッション本体へも写す。
+		// カードの「↪ #前任」チップはこれを読む（子 plan
+		// plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
+		HandoffFrom:     childMeta.HandoffFrom,
 		Role:            childMeta.Role,
 		Auto:            childMeta.Auto,
 		Depth:           childMeta.Depth,
@@ -1059,6 +1072,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			}
 			s.handleCommitMsgChunk(id, cleanText)
 			s.handleHandoffTurnSummaryChunk(id, cleanText)
+			s.handleHandoffNoteChunk(id, cleanText)
 		case "pty_input_ack":
 			s.handlePTYInputAck(wc, id, m.InputSeq)
 		case "session_end":

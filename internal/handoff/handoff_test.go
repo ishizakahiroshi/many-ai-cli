@@ -128,6 +128,14 @@ var allowedRecordFields = map[string]bool{
 	"WorkDoc":        true,
 	"Text":           true,
 	"HandoffFrom":    true,
+	// Transcript / Note were added on 2026-09-12 as a deliberate widening
+	// (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md
+	// 内部 C1・C2, 親 plan 不変条件 2): a **path** may be recorded, its contents
+	// may not. Both name a file the successor opens with its own tools; neither
+	// is ever read by many-ai-cli. A field holding transcript text, a diff, or a
+	// memo's body still belongs nowhere on this type.
+	"Transcript": true,
+	"Note":       true,
 }
 
 func TestRecordFieldsAreTheAllowlist(t *testing.T) {
@@ -248,6 +256,36 @@ func TestPruneOlderThanRemovesOnlyStaleFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(freshPath); err != nil {
 		t.Fatalf("fresh handoff file should survive prune: %v", err)
+	}
+}
+
+// TestPruneOlderThanRemovesStaleNoteFiles is the 内部 C2 completion criterion
+// for retention (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md):
+// the memo an AI wrote is reclaimed by the same 14-day sweep as the board it is
+// named from, so a memo cannot outlive the record that points at it.
+func TestPruneOlderThanRemovesStaleNoteFiles(t *testing.T) {
+	withTempHome(t)
+
+	if err := Append(1, Record{Kind: KindSessionStart}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+	notePath, err := NotePathFor(1)
+	if err != nil {
+		t.Fatalf("NotePathFor: %v", err)
+	}
+	if err := os.WriteFile(notePath, []byte("# memo\n"), 0o600); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	if err := os.Chtimes(notePath, old, old); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	if err := PruneOlderThan(time.Now().Add(-14 * 24 * time.Hour)); err != nil {
+		t.Fatalf("PruneOlderThan: %v", err)
+	}
+	if _, err := os.Stat(notePath); !os.IsNotExist(err) {
+		t.Fatalf("expected the stale memo to be removed, stat err = %v", err)
 	}
 }
 
