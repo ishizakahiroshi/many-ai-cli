@@ -233,3 +233,116 @@ func TestFindClaudeTranscriptChoosesNearestAndRefusesTie(t *testing.T) {
 		t.Fatal("equal-time candidates should not be guessed")
 	}
 }
+
+func TestCommandCodeProjectSlug(t *testing.T) {
+	cases := []struct {
+		cwd  string
+		want string
+	}{
+		{`D:\tmp\cc-capture\workspace`, "d-tmp-cc-capture-workspace"},
+		{`D:\tmp\cc-capture\fresh-trust`, "d-tmp-cc-capture-fresh-trust"},
+		{`C:\home\alice`, "c-home-alice"},
+		{`E:\src\github\public\sample-cli`, "e-src-github-public-sample-cli"},
+		{`D:/tmp/cc-capture/workspace`, "d-tmp-cc-capture-workspace"},
+		{"", "root"},
+	}
+	for _, tc := range cases {
+		if got := commandCodeProjectSlug(tc.cwd); got != tc.want {
+			t.Errorf("commandCodeProjectSlug(%q) = %q, want %q", tc.cwd, got, tc.want)
+		}
+	}
+}
+
+func writeCommandCodeTranscript(t *testing.T, dir, name, id, cwd, timestamp string) string {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, name)
+	hdr := commandCodeSessionHeader{Type: "session", ID: id, Timestamp: timestamp, CWD: cwd}
+	line, err := json.Marshal(hdr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(line, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestFindCommandCodeTranscript(t *testing.T) {
+	home := t.TempDir()
+	cwd := `D:\tmp\cc-capture\workspace`
+	dir := commandCodeProjectDir(home, cwd)
+	wantID := "dafa1f84-9ed3-439e-a30f-6615b26c4423"
+	want := writeCommandCodeTranscript(t, dir, wantID+".jsonl", wantID, cwd, "2026-09-12T16:43:31.897Z")
+	writeCommandCodeTranscript(t, dir, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.jsonl", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", `D:\tmp\other`, "2026-09-12T16:43:31.897Z")
+
+	startedAt, err := time.Parse(time.RFC3339, "2026-09-12T16:43:32Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := findCommandCodeTranscript(home, cwd, startedAt)
+	if !ok || got != want {
+		t.Fatalf("findCommandCodeTranscript = %q, %v; want %q, true", got, ok, want)
+	}
+}
+
+func TestAgentLogForSessionCommandCode(t *testing.T) {
+	s := newTestServer()
+	home := t.TempDir()
+	cwd := `D:\tmp\cc-capture\workspace`
+	id := "dafa1f84-9ed3-439e-a30f-6615b26c4423"
+	dir := commandCodeProjectDir(home, cwd)
+	want := writeCommandCodeTranscript(t, dir, id+".jsonl", id, cwd, "2026-09-12T16:43:31.897Z")
+
+	ses := registerTestSession(s, 6, "command-code")
+	s.sessionsMu.Lock()
+	ses.CWD = cwd
+	ses.HomeDir = home
+	ses.StartedAt = "2026-09-12T16:43:32Z"
+	s.sessionsMu.Unlock()
+
+	loc := s.agentLogForSession(6)
+	if !loc.Available {
+		t.Fatalf("agent log: %+v", loc)
+	}
+	if loc.Path != want {
+		t.Fatalf("path = %q, want %q", loc.Path, want)
+	}
+	if loc.Label != "Command Code session transcript" {
+		t.Fatalf("label = %q", loc.Label)
+	}
+
+	s.sessionsMu.Lock()
+	ses.AgentSessionID = id
+	s.sessionsMu.Unlock()
+	loc = s.agentLogForSession(6)
+	if !loc.Available || loc.Path != want {
+		t.Fatalf("by AgentSessionID: %+v", loc)
+	}
+}
+
+func TestAgentLogForSessionCommandCodeFallsBackToProjectDir(t *testing.T) {
+	s := newTestServer()
+	home := t.TempDir()
+	cwd := `D:\tmp\cc-capture\workspace`
+	dir := commandCodeProjectDir(home, cwd)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	ses := registerTestSession(s, 6, "command-code")
+	s.sessionsMu.Lock()
+	ses.CWD = cwd
+	ses.HomeDir = home
+	s.sessionsMu.Unlock()
+
+	loc := s.agentLogForSession(6)
+	if !loc.Available {
+		t.Fatalf("agent log: %+v", loc)
+	}
+	if loc.Path != dir {
+		t.Fatalf("path = %q, want project dir %q", loc.Path, dir)
+	}
+}
