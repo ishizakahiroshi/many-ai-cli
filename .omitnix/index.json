@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "8325337e56814f2d53a6e622ef01455b6f8db867",
+    "commit": "2a3b3c43f08906a56cd6e809fcb80103dedcc93a",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,9 +134,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 894,
-    "analyzed": 669,
-    "unresolved": 33,
+    "discovered": 896,
+    "analyzed": 670,
+    "unresolved": 34,
     "unknown": 1,
     "unclaimed": 191,
     "skipped_by_config": 0
@@ -20412,6 +20412,43 @@
       ]
     },
     {
+      "path": "web/src/app/spawn-model-groups.ts",
+      "adapter": "tsjs",
+      "status": "unresolved",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "/api/models の groups を、選んだ CLI で絞る純関数。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "value",
+          "value": [
+            "/api/models?token=*"
+          ]
+        }
+      },
+      "unresolved": [
+        {
+          "code": "dynamic_endpoint",
+          "detail": "part of this address is filled in at run time: /api/models?token=*"
+        }
+      ]
+    },
+    {
       "path": "web/src/app/spawn-panel-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -20477,10 +20514,6 @@
         }
       },
       "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: url"
-        },
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/info?token=*"
@@ -22567,6 +22600,36 @@
     },
     {
       "path": "web/tests/spawn-confirm-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/spawn-model-groups.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

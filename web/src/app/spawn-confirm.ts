@@ -12,6 +12,12 @@
 // 見た目の正本は web/src/styles/spawn-confirm.css。
 import { t } from '../i18n.js';
 import { escapeHtml, token } from './util.js';
+import {
+  fillModelDatalist,
+  getCachedSpawnModelGroups,
+  isModelCompatibleWithProvider,
+  loadSpawnModelGroups,
+} from './spawn-model-groups.js';
 import { activeSessionId, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
@@ -281,7 +287,8 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       </label>
       <label class="spawn-confirm-field">
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_role_table_model'))}</span>
-        <input name="model" class="spawn-input" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
+        <input name="model" class="spawn-input" list="spawn-confirm-model-datalist-${escapeHtml(record.id)}" value="${escapeHtml(record.model)}" placeholder="${escapeHtml(t('spawn_confirm_model_placeholder'))}" spellcheck="false" autocomplete="off">
+        <datalist id="spawn-confirm-model-datalist-${escapeHtml(record.id)}"></datalist>
       </label>
       <label class="spawn-confirm-field" data-spawn-confirm-effort-field${effortFieldHidden(provider) ? ' hidden' : ''}>
         <span class="spawn-confirm-field-label">${escapeHtml(t('spawn_confirm_effort'))}</span>
@@ -317,6 +324,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
 
   const providerSelect = dialog.querySelector('[name=provider]') as HTMLSelectElement | null;
   const modelInput = dialog.querySelector('[name=model]') as HTMLInputElement | null;
+  const modelDatalist = dialog.querySelector('datalist') as HTMLDataListElement | null;
   const providerIcon = dialog.querySelector('[data-spawn-confirm-icon]');
   const statusEl = dialog.querySelector('[data-spawn-confirm-status]') as HTMLElement | null;
   const actionsEl = dialog.querySelector('[data-spawn-confirm-actions]') as HTMLElement | null;
@@ -343,6 +351,20 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     );
   }
 
+  async function refreshModelChoices(): Promise<void> {
+    const provider = providerSelect?.value || record.provider;
+    try {
+      await loadSpawnModelGroups(token);
+    } catch (_) {
+      // 候補が空でも手入力で承認できる。
+    }
+    const groups = getCachedSpawnModelGroups();
+    fillModelDatalist(modelDatalist, groups, provider);
+    if (modelInput && !isModelCompatibleWithProvider(groups, provider, modelInput.value)) {
+      modelInput.value = '';
+    }
+  }
+
   if (providerSelect) {
     providerSelect.addEventListener('change', () => {
       if (providerIcon) providerIcon.innerHTML = providerIconHtml(providerSelect.value);
@@ -357,6 +379,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         effortSelect.innerHTML = effortOptionsHtml(providerSelect.value, levels.includes(effortSelect.value) ? effortSelect.value : '');
         if (effortField) effortField.hidden = levels.length === 0;
       }
+      void refreshModelChoices();
     });
   }
   if (presetSelect) {
@@ -440,6 +463,14 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
 
   async function decide(approved: boolean): Promise<void> {
     if (state !== 'open') return;
+    const providerVal = providerSelect?.value || '';
+    const rawModel = (modelInput?.value || '').trim();
+    const groups = getCachedSpawnModelGroups();
+    if (approved && rawModel && !isModelCompatibleWithProvider(groups, providerVal, rawModel)) {
+      if (modelInput) modelInput.value = '';
+      showStatus(t('spawn_model_provider_mismatch'));
+      return;
+    }
     state = 'deciding';
     if (providerSelect) providerSelect.disabled = true;
     if (modelInput) modelInput.disabled = true;
@@ -450,8 +481,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     if (rememberInput) rememberInput.disabled = true;
     setActionsToProcessing();
     showStatus(t('spawn_confirm_processing'));
-    const providerVal = providerSelect?.value || '';
-    const modelVal = modelInput?.value || '';
+    const modelVal = rawModel;
     // 3 項目は select が見せている実効値をそのまま送る。Hub は送られた値をそのまま
     // 使うので、欄を触らなければ要求どおり、「指定なし」を選べば空になる。effort 欄が
     // 隠れている provider（写像なし）では空を送り、要求時の effort を引きずらない。
@@ -547,5 +577,6 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   });
 
   document.body.appendChild(dialog);
+  void refreshModelChoices();
   dialog.showModal();
 }

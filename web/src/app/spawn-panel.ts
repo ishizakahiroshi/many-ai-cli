@@ -10,6 +10,14 @@ import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestrat
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
 import { effortForSpawnBody, effortLevelsFor, setLaunchOptionChoices } from './spawn-confirm-store.js';
+import {
+  fillModelDatalist,
+  getCachedSpawnModelGroups,
+  getModelGroupsForProvider,
+  groupHasModel,
+  isModelCompatibleWithProvider,
+  loadSpawnModelGroups,
+} from './spawn-model-groups.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
@@ -473,10 +481,7 @@ export function resetSpawnProviderOrder(): void {
     spawnDetachedPreset.addEventListener('change', () => updateDetachedPreview());
   }
 
-  // /api/models から取得した groups の最新キャッシュ。
-  // populateModelDatalist と resolveRoute で共有する。
-  let spawnModelGroups = null;
-  // model id → route の即時参照 Map。
+  // model id → route の即時参照 Map。groups 本体は spawn-model-groups.ts のキャッシュ。
   const spawnModelRouteMap = new Map();
   let spawnModelFetchInFlight = null;
   let spawnProviderOpen = false;
@@ -495,47 +500,6 @@ export function resetSpawnProviderOrder(): void {
     }
   }
 
-  function getModelGroupsForProvider(provider) {
-    if (!Array.isArray(spawnModelGroups)) return [];
-    if (provider === 'copilot') {
-      return spawnModelGroups.filter(g => g && g.provider === 'copilot' && Array.isArray(g.models));
-    }
-    if (provider === 'cursor-agent') {
-      return spawnModelGroups.filter(g => g && g.provider === 'cursor-agent' && Array.isArray(g.models));
-    }
-    if (provider === 'grok') {
-      return spawnModelGroups.filter(g => g && g.provider === 'grok' && Array.isArray(g.models));
-    }
-    const groups = spawnModelGroups.filter(g => g && Array.isArray(g.models) && (!g.provider || g.provider === provider));
-    groups.sort((a, b) => {
-      const rank = (g) => {
-        if (g.provider === provider) return 0;
-        if (g.label === 'Ollama Cloud') return 1;
-        if (g.label === 'Ollama Local') return 2;
-        if (g.label === 'LM Studio') return 3;
-        return 4;
-      };
-      return rank(a) - rank(b);
-    });
-    return groups;
-  }
-
-  function groupHasModel(group, model) {
-    return !!group?.models?.some(m => m && m.id === model);
-  }
-
-  function isModelCompatibleWithProvider(provider, model) {
-    const m = (model || '').trim();
-    if (!m || !Array.isArray(spawnModelGroups)) return true;
-    let known = false;
-    for (const g of spawnModelGroups) {
-      if (!groupHasModel(g, m)) continue;
-      known = true;
-      if (!g.provider || g.provider === provider) return true;
-    }
-    return !known;
-  }
-
   function clearModelSelectionState() {
     codexModelSelection = null;
     claudeModelSelection = null;
@@ -551,7 +515,7 @@ export function resetSpawnProviderOrder(): void {
   }
 
   function clearIncompatibleModelForProvider(provider) {
-    if (!isModelCompatibleWithProvider(provider, spawnModelInput.value)) {
+    if (!isModelCompatibleWithProvider(getCachedSpawnModelGroups(), provider, spawnModelInput.value)) {
       setSpawnModelValue('');
       clearModelSelectionState();
     }
@@ -570,25 +534,7 @@ export function resetSpawnProviderOrder(): void {
   }
 
   function populateModelDatalist() {
-    if (!spawnModelDatalist) return;
-    spawnModelDatalist.innerHTML = '';
-    if (!Array.isArray(spawnModelGroups)) return;
-    const currentProvider = spawnProviderEl.value;
-    // 並び順: 同 provider 専用 → Ollama Cloud → Ollama Local。
-    // 他 provider 専用は非表示。Ollama 系は provider="" で両 provider に表示する。
-    for (const g of getModelGroupsForProvider(currentProvider)) {
-      for (const m of g.models) {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        // <option label> はブラウザ実装差があるため、フォールバックとして
-        // text content にも同じ表記を入れる。
-        const label = `[${g.label}] ${m.label || m.id}`;
-        opt.setAttribute('label', label);
-        opt.textContent = label;
-        opt.dataset.route = g.route || '';
-        spawnModelDatalist.appendChild(opt);
-      }
-    }
+    fillModelDatalist(spawnModelDatalist as HTMLDataListElement | null, getCachedSpawnModelGroups(), spawnProviderEl.value);
   }
 
   function resolveRoute(provider, model) {
@@ -603,10 +549,10 @@ export function resetSpawnProviderOrder(): void {
     if (provider === 'grok') {
       return '';
     }
-    for (const g of getModelGroupsForProvider(provider)) {
+    for (const g of getModelGroupsForProvider(getCachedSpawnModelGroups(), provider)) {
       if (groupHasModel(g, m)) return g.route || '';
     }
-    if (spawnModelRouteMap.has(m) && isModelCompatibleWithProvider(provider, m)) return spawnModelRouteMap.get(m);
+    if (spawnModelRouteMap.has(m) && isModelCompatibleWithProvider(getCachedSpawnModelGroups(), provider, m)) return spawnModelRouteMap.get(m);
     if (m.includes(':cloud')) return 'ollama';
     if (provider === 'claude') return 'anthropic';
     if (provider === 'codex')  return 'openai';
@@ -615,19 +561,14 @@ export function resetSpawnProviderOrder(): void {
 
   async function fetchModelGroups(force) {
     if (spawnModelFetchInFlight) return spawnModelFetchInFlight;
-    const method = force ? 'POST' : 'GET';
-    const url = `/api/models?token=${token}`;
     const p = (async () => {
       try {
-        const res = await fetch(url, { method });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        spawnModelGroups = Array.isArray(data.groups) ? data.groups : [];
-        rebuildModelRouteMap(spawnModelGroups);
+        const groups = await loadSpawnModelGroups(token, force);
+        rebuildModelRouteMap(groups);
         populateModelDatalist();
         clearIncompatibleModelForProvider(spawnProviderEl.value);
         clearOllamaModelDefault();
-        return data;
+        return { groups };
       } finally {
         spawnModelFetchInFlight = null;
       }
@@ -1991,7 +1932,7 @@ export function resetSpawnProviderOrder(): void {
     refreshCwdInputStatus();
     // モデル一覧を初回または stale なら裏で取得して datalist を埋める。
     // 失敗しても UI 起動はブロックしない（手入力で従来通り）。
-    if (!spawnModelGroups) {
+    if (!getCachedSpawnModelGroups()) {
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
@@ -2031,7 +1972,7 @@ export function resetSpawnProviderOrder(): void {
     spawnCwdInput.focus();
     // ドロップダウン開く前に全ルートをバックグラウンドで pre-scan してキャッシュを充填する。
     { const favs = loadCwdFavorites(); prescanRoots(deriveRootsFromFavorites(favs)); }
-    if (!spawnModelGroups) {
+    if (!getCachedSpawnModelGroups()) {
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
@@ -2638,7 +2579,7 @@ export function resetSpawnProviderOrder(): void {
     try {
       const model = spawnModelInput.value.trim();
       const label = document.getElementById('spawn-label').value.trim();
-      if (model && !isModelCompatibleWithProvider(provider, model)) {
+      if (model && !isModelCompatibleWithProvider(getCachedSpawnModelGroups(), provider, model)) {
         setSpawnModelValue('');
         clearModelSelectionState();
         showToast(t('spawn_model_provider_mismatch'));

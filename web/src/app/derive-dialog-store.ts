@@ -13,6 +13,7 @@
 // （handoff_from / origin / role / same_tree）がある。ダイアログの DOM 側に条件分岐を
 // 散らすと、欄を 1 つ足すたびに「どちらに載るのか」が読み取れなくなる。
 import { effortForSpawnBody } from './spawn-confirm-store.js';
+import { compatibleModelOrEmpty, isModelCompatibleWithProvider, type SpawnModelGroup } from './spawn-model-groups.js';
 
 export type DeriveKind = 'handoff' | 'child';
 
@@ -73,7 +74,10 @@ export function deriveRequestPath(selection: DeriveSelection): string {
  * 未チェックのときに false を送ると orchestration.worktree_auto の設定を黙って
  * 上書きしてしまう。
  */
-export function buildDeriveBody(selection: DeriveSelection): Record<string, unknown> {
+export function buildDeriveBody(
+  selection: DeriveSelection,
+  groups?: SpawnModelGroup[] | null,
+): Record<string, unknown> {
   const provider = trimmed(selection.provider);
   const prompt = String(selection.prompt ?? '');
   const body: Record<string, unknown> = { provider };
@@ -95,7 +99,7 @@ export function buildDeriveBody(selection: DeriveSelection): Record<string, unkn
     }
   }
 
-  const model = trimmed(selection.model);
+  const model = compatibleModelOrEmpty(groups, provider, trimmed(selection.model));
   if (model) body.model = model;
   // effort は写像のある provider でだけ載る。写像の無い provider へ前の選択が残った
   // まま送ると Hub が 400 で弾くので、ここで落とす（正本は /api/info の effort_levels）。
@@ -123,8 +127,13 @@ export function availableDeriveKinds(sourceLive: boolean): DeriveKind[] {
  * 引き継ぎは文面が要る（前任の看板を渡さない引き継ぎに意味が無い）。子は役割が要る
  * （Hub が role を必須にしている）。文面は空でもよい。
  */
-export function deriveSubmitBlockedReason(selection: DeriveSelection): '' | 'provider' | 'role' | 'prompt' {
+export function deriveSubmitBlockedReason(
+  selection: DeriveSelection,
+  groups?: SpawnModelGroup[] | null,
+): '' | 'provider' | 'role' | 'prompt' | 'model' {
   if (!trimmed(selection.provider)) return 'provider';
+  const model = trimmed(selection.model);
+  if (model && !isModelCompatibleWithProvider(groups, selection.provider, model)) return 'model';
   if (selection.kind === 'child') {
     return trimmed(selection.role) ? '' : 'role';
   }

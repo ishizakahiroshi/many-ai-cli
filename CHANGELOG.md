@@ -208,6 +208,12 @@ Release artifacts are published at
   — no extra confirmation step was added.
 
 ### Fixed
+- **The derive dialog (and the spawn confirmation dialog) now lists models
+  for the CLI you picked, not the CLI last selected in New Session.**
+  The model field had been sharing New Session's datalist, so handing off a
+  Codex session to Claude Code while the New Session form was on Grok showed
+  Grok models. Each dialog now has its own list, rebuilt when you change CLI,
+  and a model that belongs to another CLI is cleared instead of being sent.
 - **Reloading the dashboard could leave a Claude Code or opencode terminal
   pane unable to scroll up, with no scrollbar and no pseudo scroll rail.**
   The Hub replayed only the raw PTY bytes still inside its per-session ring

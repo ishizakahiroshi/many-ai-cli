@@ -40,6 +40,12 @@ import {
   type DeriveKind,
   type DeriveSelection,
 } from './derive-dialog-store.js';
+import {
+  fillModelDatalist,
+  getCachedSpawnModelGroups,
+  isModelCompatibleWithProvider,
+  loadSpawnModelGroups,
+} from './spawn-model-groups.js';
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -255,9 +261,10 @@ function renderDeriveForm(
         <span class="derive-field-label">${escapeHtml(tx('spawn_subscription_default', 'Subscription'))}</span>
         <select name="subscription" class="derive-select" data-derive-subscription></select>
       </label>
-      <label class="derive-field">
+      <label class="derive-field" data-derive-model-field>
         <span class="derive-field-label">${escapeHtml(tx('spawn_role_table_model', 'Model'))}</span>
-        <input name="model" class="derive-input" list="spawn-model-datalist" spellcheck="false" autocomplete="off" placeholder="${escapeHtml(tx('spawn_confirm_model_placeholder', ''))}">
+        <input name="model" class="derive-input" list="derive-model-datalist" spellcheck="false" autocomplete="off" placeholder="${escapeHtml(tx('spawn_confirm_model_placeholder', ''))}">
+        <datalist id="derive-model-datalist"></datalist>
       </label>
       <label class="derive-field" data-derive-effort-field hidden>
         <span class="derive-field-label">${escapeHtml(tx('spawn_confirm_effort', 'Reasoning effort'))}</span>
@@ -295,7 +302,9 @@ function renderDeriveForm(
   const providerSelect = bodyEl.querySelector('[data-derive-provider]') as HTMLSelectElement;
   const subscriptionField = bodyEl.querySelector('[data-derive-subscription-field]') as HTMLElement;
   const subscriptionSelect = bodyEl.querySelector('[data-derive-subscription]') as HTMLSelectElement;
+  const modelField = bodyEl.querySelector('[data-derive-model-field]') as HTMLElement;
   const modelInput = bodyEl.querySelector('[name=model]') as HTMLInputElement;
+  const modelDatalist = bodyEl.querySelector('#derive-model-datalist') as HTMLDataListElement;
   const effortField = bodyEl.querySelector('[data-derive-effort-field]') as HTMLElement;
   const effortSelect = bodyEl.querySelector('[data-derive-effort]') as HTMLSelectElement;
   const executionSelect = bodyEl.querySelector('[name=execution_mode]') as HTMLSelectElement;
@@ -364,6 +373,33 @@ function renderDeriveForm(
     );
     // 写像が無い provider では欄ごと出さない（候補の無い select を見せない）。
     effortField.hidden = levels.length === 0;
+  }
+
+  function isCustomProvider(): boolean {
+    return customProviders.some((o) => o.value === providerSelect.value);
+  }
+
+  async function refreshModelChoices(): Promise<void> {
+    const provider = providerSelect.value;
+    if (isCustomProvider()) {
+      modelField.hidden = true;
+      modelInput.value = '';
+      fillModelDatalist(modelDatalist, [], provider);
+      refreshStartEnabled();
+      return;
+    }
+    modelField.hidden = false;
+    try {
+      await loadSpawnModelGroups(token);
+    } catch (_) {
+      // 候補が空でも手入力で起動できる。新規セッション画面と同じ。
+    }
+    const groups = getCachedSpawnModelGroups();
+    fillModelDatalist(modelDatalist, groups, provider);
+    if (!isModelCompatibleWithProvider(groups, provider, modelInput.value)) {
+      modelInput.value = '';
+    }
+    refreshStartEnabled();
   }
 
   function refreshApprovalDisplay(): void {
@@ -436,11 +472,12 @@ function renderDeriveForm(
   const cancelBtn = document.createElement('button');
 
   function refreshStartEnabled(): void {
-    const reason = deriveSubmitBlockedReason(currentSelection());
+    const reason = deriveSubmitBlockedReason(currentSelection(), getCachedSpawnModelGroups());
     startBtn.disabled = submitting || reason !== '';
     startBtn.title = reason === 'provider' ? tx('derive_error_provider', 'CLI を選んでください')
       : reason === 'role' ? tx('derive_error_role', '役割を選んでください')
-        : reason === 'prompt' ? tx('derive_error_prompt', '渡す文面を入れてください') : '';
+        : reason === 'prompt' ? tx('derive_error_prompt', '渡す文面を入れてください')
+          : reason === 'model' ? tx('spawn_model_provider_mismatch', 'This model is not available for the selected provider.') : '';
   }
 
   function applyKind(): void {
@@ -458,6 +495,7 @@ function renderDeriveForm(
     rebuildProviderSelect();
     rebuildSubscriptionSelect();
     rebuildEffortSelect();
+    void refreshModelChoices();
     applyRememberedPermission();
     refreshApprovalDisplay();
     syncPrompt();
@@ -486,6 +524,7 @@ function renderDeriveForm(
     setError('');
     rebuildSubscriptionSelect();
     rebuildEffortSelect();
+    void refreshModelChoices();
     refreshApprovalDisplay();
     refreshStartEnabled();
   });
@@ -504,7 +543,7 @@ function renderDeriveForm(
     const response = await apiFetch(deriveRequestPath(selection), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildDeriveBody(selection)),
+      body: JSON.stringify(buildDeriveBody(selection, getCachedSpawnModelGroups())),
     });
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
@@ -562,6 +601,7 @@ function renderDeriveForm(
       providerSelect.value = source.provider;
       rebuildSubscriptionSelect();
       rebuildEffortSelect();
+      void refreshModelChoices();
       refreshApprovalDisplay();
     }
   }

@@ -164,4 +164,20 @@ describe('deriveSubmitBlockedReason', () => {
     expect(deriveSubmitBlockedReason(child({ prompt: '' }))).toBe('');
     expect(deriveSubmitBlockedReason(handoff())).toBe('');
   });
+
+  test('a model from another CLI blocks submit when groups are supplied', () => {
+    const groups = [{ label: 'Grok Build', provider: 'grok', models: [{ id: 'synth-grok-a' }] }];
+    expect(deriveSubmitBlockedReason(handoff({ provider: 'claude', model: 'synth-grok-a' }), groups)).toBe('model');
+    expect(deriveSubmitBlockedReason(handoff({ provider: 'claude', model: '' }), groups)).toBe('');
+    // groups を渡さない（未取得）ときは手入力を落とさない。
+    expect(deriveSubmitBlockedReason(handoff({ provider: 'claude', model: 'synth-grok-a' }))).toBe('');
+  });
+});
+
+describe('buildDeriveBody: 非互換 model は載せない', () => {
+  test('omits a dedicated-other-CLI id when groups are supplied', () => {
+    const groups = [{ label: 'Grok Build', provider: 'grok', models: [{ id: 'synth-grok-a' }] }];
+    expect('model' in buildDeriveBody(child({ provider: 'claude', model: 'synth-grok-a' }), groups)).toBe(false);
+    expect(buildDeriveBody(child({ provider: 'grok', model: 'synth-grok-a' }), groups).model).toBe('synth-grok-a');
+  });
 });
