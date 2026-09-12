@@ -238,6 +238,7 @@
   margin: 0;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6);
 }
+body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-provider-option {
   min-height: 28px;
   box-sizing: border-box;

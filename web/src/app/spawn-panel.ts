@@ -133,7 +133,6 @@ export function resetSpawnProviderOrder(): void {
     const tooltip = t('spawn_remember_approval_tooltip');
     if (spawnRememberApprovalLabel) {
       spawnRememberApprovalLabel.dataset.tooltip = tooltip;
-      spawnRememberApprovalLabel.title = tooltip;
     }
     spawnRememberApprovalSettings?.setAttribute('aria-label', tooltip);
   }
@@ -857,6 +856,7 @@ export function resetSpawnProviderOrder(): void {
   function openSpawnProviderList() {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
     spawnProviderOpen = true;
+    document.body.classList.add('spawn-provider-list-open');
     spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
     spawnProviderList.hidden = false;
     spawnProviderTrigger.setAttribute('aria-expanded', 'true');
@@ -872,6 +872,7 @@ export function resetSpawnProviderOrder(): void {
   function closeSpawnProviderList(focusTrigger = false) {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
     spawnProviderOpen = false;
+    document.body.classList.remove('spawn-provider-list-open');
     window.removeEventListener('resize', repositionSpawnProviderList);
     window.removeEventListener('scroll', repositionSpawnProviderList, true);
     spawnProviderList.hidden = true;

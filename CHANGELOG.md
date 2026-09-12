@@ -220,6 +220,8 @@ Release artifacts are published at
   alternate screen, after the replay window is cut so it does not get counted
   against the window itself (`internal/hub/vt_buffer.go`,
   `internal/hub/server.go`, `internal/hub/ui_broadcast.go`).
+- **Opening the provider selector now hides the Remember help tooltip while the
+  list is open**, so it cannot cover the available options.
 
 ### Security
 - `notifyBoardSession` now strips control bytes from board notices before they
