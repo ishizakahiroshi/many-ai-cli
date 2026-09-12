@@ -116,3 +116,35 @@ func TestSynthesizeUntrackedDiffMissingFile(t *testing.T) {
 		t.Errorf("got (%q, %d), want (\"\", 0)", diff, added)
 	}
 }
+
+func TestSynthesizeUntrackedDiffOmitsSymlinkTarget(t *testing.T) {
+	root := t.TempDir()
+	secretDir := t.TempDir()
+	secret := filepath.Join(secretDir, "id_rsa")
+	payload := "SECRET-MATERIAL-DO-NOT-FOLLOW\n"
+	if err := os.WriteFile(secret, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	rel := "link-to-secret"
+	if err := os.Symlink(secret, filepath.Join(root, rel)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	diff, added := synthesizeUntrackedDiff(root, rel)
+	if strings.Contains(diff, "SECRET-MATERIAL-DO-NOT-FOLLOW") {
+		t.Fatalf("followed symlink and leaked target contents:\n%s", diff)
+	}
+	if added != 0 {
+		t.Errorf("added = %d, want 0 for symlink placeholder", added)
+	}
+	if !strings.Contains(diff, "Symlink") {
+		t.Errorf("want symlink placeholder, got %q", diff)
+	}
+}
+
+func TestSynthesizeUntrackedDiffRejectsDotDot(t *testing.T) {
+	root := t.TempDir()
+	diff, added := synthesizeUntrackedDiff(root, filepath.FromSlash("../outside.txt"))
+	if diff != "" || added != 0 {
+		t.Errorf("got (%q, %d), want (\"\", 0)", diff, added)
+	}
+}

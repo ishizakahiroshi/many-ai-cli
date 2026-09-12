@@ -120,13 +120,19 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		// あくまで起動時の解決**で、これはその写し。
 		"headless_providers": config.HeadlessProviders(cfg),
 		// 画面から立てる子（origin: "ui"）の実効権限。provider → 段 → 実効フラグで、
-		// 内側の "" は「段を選んでいない」＝ UI 起点の既定（段 1）。派生ダイアログは
+		// 内側の "" は「段を選んでいない」＝ UI 起点の対話既定（段 1）。派生ダイアログは
 		// これを spawn 確認ダイアログと同じ描画関数へ渡す。確認ダイアログは spawn 時に
 		// WS で同じ表を受け取るが、派生ダイアログには対になる要求がまだ存在しない
 		// （人がこれから作る）ので、候補値と同じく /api/info から先に配る。
 		// **表示専用で、Hub はこれを読み返さない**（子 plan:
 		// docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C2）。
 		"child_permission_preview": childApprovalPreviewTiers(spawnChildRequest{Origin: launchOriginUI}, cfg),
+		// 無人のときの空段の着地（orchestration.child_permission_default。未設定は full）。
+		// headless は端末が無いので defaultChildPermissionTier がここへ倒れる。派生の
+		// 開示は ExecutionMode 空の表の "" キー（attended）を見ていたため、起動段と
+		// ずれた。クライアントは headless+空段のときこの値で表を引き直す。決め打ち
+		// full にしない（config で bounded / attended にできる）。D-12 の既定そのものは変えない。
+		"child_permission_default": cfg.Orchestration.ChildPermissionDefaultTier(),
 		// 役割 → 「次回もこの段を使う」で覚えた段（user_prefs.spawn.role_permission）。
 		// 派生ダイアログが役割を選んだ時点で段の select をこの値にし、チェックボックスを
 		// ON で開くために要る。**UI 起点の要求を Hub 側で埋めないのと対になっている**:

@@ -92,6 +92,7 @@ describe('buildDeriveBody: 省略可の項目はキーごと載せない', () =>
     expect(buildDeriveBody(handoff({ permissionPreset: 'full' })).permission_preset).toBe('full');
     expect('permission_preset' in buildDeriveBody(child())).toBe(false);
     expect('permission_preset' in buildDeriveBody(child({ permissionPreset: '  ' }))).toBe(false);
+    expect('permission_preset' in buildDeriveBody(child({ executionMode: 'headless' }))).toBe(false);
   });
 
   test('same_tree is sent only when checked; unchecked sends no key at all', () => {

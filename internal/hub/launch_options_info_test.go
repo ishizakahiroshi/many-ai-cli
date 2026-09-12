@@ -72,6 +72,7 @@ func TestInfoReportsChildPermissionPreviewForUIOrigin(t *testing.T) {
 			RiskConfirmed  bool   `json:"risk_confirmed"`
 			Tier           string `json:"tier"`
 		} `json:"child_permission_preview"`
+		Default string `json:"child_permission_default"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode /api/info: %v", err)
@@ -93,6 +94,9 @@ func TestInfoReportsChildPermissionPreviewForUIOrigin(t *testing.T) {
 		if unset.PermissionMode != "" || unset.Sandbox != "" || unset.AskForApproval != "" || unset.RiskConfirmed {
 			t.Errorf("child_permission_preview[%q][\"\"] = %+v, want 何も足さない", provider, unset)
 		}
+	}
+	if body.Default != "full" {
+		t.Errorf("child_permission_default = %q, want full (unset config)", body.Default)
 	}
 }
 

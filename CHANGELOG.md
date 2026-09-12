@@ -260,6 +260,17 @@ Release artifacts are published at
   title identifies its session.
 
 ### Security
+- The derive dialog's permission preview now follows execution mode. Choosing
+  headless with the tier left at "unset" used to show the attended row (Hub
+  adds nothing) while the Hub started the child at the unattended default
+  (`orchestration.child_permission_default`, unset = full). The dialog now
+  looks up that default from `/api/info`. Leaving the tier empty still omits
+  `permission_preset` from the request, so D-12's default is unchanged.
+- Git Review no longer follows untracked symlinks when synthesizing a diff. An
+  untracked symlink in the work tree that pointed outside the repository
+  (including secret-like files) could have its target contents sent to the
+  browser. The Hub now `Lstat`s first and returns a placeholder without opening
+  the target.
 - Spawn-child no longer treats client JSON `origin:"ui"` as enough to skip the
   confirmation dialog (F-AI-03). The Hub keeps UI origin only when the request
   also carries same-origin browser Fetch Metadata (`Sec-Fetch-Site: same-origin`

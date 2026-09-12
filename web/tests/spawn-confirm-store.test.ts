@@ -9,6 +9,7 @@ import {
   selectOldestPendingConfirmation,
   selectOldestPendingConfirmationFor,
   approvalForSelection,
+  childPermissionPreviewFor,
   recordFromMessage,
   setLaunchOptionChoices,
   effortLevelsFor,
@@ -321,6 +322,53 @@ describe('headless capability', () => {
     expect(headlessUnsupportedForSelection('codex', 'auto')).toBe(false);
     expect(headlessUnsupportedForSelection('codex', '')).toBe(false);
     expect(headlessUnsupportedForSelection('claude', 'headless')).toBe(false);
+  });
+});
+
+describe('childPermissionPreviewFor', () => {
+  beforeEach(() => {
+    setLaunchOptionChoices({
+      permission_presets: ['attended', 'bounded', 'full'],
+      child_permission_default: 'full',
+      child_permission_preview: {
+        claude: {
+          '': { tier: 'attended', permission_mode: '', sandbox: '', ask_for_approval: '', risk_confirmed: false },
+          attended: { tier: 'attended', permission_mode: '', sandbox: '', ask_for_approval: '', risk_confirmed: false },
+          bounded: { tier: 'bounded', permission_mode: 'bounded', sandbox: '', ask_for_approval: '', risk_confirmed: true },
+          full: { tier: 'full', permission_mode: 'bypassPermissions', sandbox: '', ask_for_approval: '', risk_confirmed: true },
+        },
+      },
+    });
+  });
+
+  test('headless with an unset tier shows the unattended default, not attended', () => {
+    const shown = childPermissionPreviewFor('claude', '', 'headless');
+    expect(shown?.tier).toBe('full');
+    expect(shown?.riskConfirmed).toBe(true);
+  });
+
+  test('an explicit attended tier stays attended even when headless', () => {
+    expect(childPermissionPreviewFor('claude', 'attended', 'headless')?.tier).toBe('attended');
+  });
+
+  test('interactive unset still uses the empty-key attended row', () => {
+    expect(childPermissionPreviewFor('claude', '', 'auto')?.tier).toBe('attended');
+    expect(childPermissionPreviewFor('claude', '')?.tier).toBe('attended');
+  });
+
+  test('a configured unattended default is not hardcoded to full', () => {
+    setLaunchOptionChoices({
+      permission_presets: ['attended', 'bounded', 'full'],
+      child_permission_default: 'bounded',
+      child_permission_preview: {
+        claude: {
+          '': { tier: 'attended', risk_confirmed: false },
+          bounded: { tier: 'bounded', risk_confirmed: true },
+          full: { tier: 'full', risk_confirmed: true },
+        },
+      },
+    });
+    expect(childPermissionPreviewFor('claude', '', 'headless')?.tier).toBe('bounded');
   });
 });
 

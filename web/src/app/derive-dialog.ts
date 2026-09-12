@@ -407,7 +407,12 @@ function renderDeriveForm(
     // headless を選んだのに定義が無い、は権限表が無くても言える（言わないと押して
     // から 400 で知ることになる）。権限欄と同じ場所へ 1 行で出す（子 plan 内部 C6）。
     const headlessUnsupported = headlessUnsupportedForSelection(providerSelect.value, executionSelect.value);
-    const approval = childPermissionPreviewFor(providerSelect.value, presetSelect.value);
+    // 子（spawn-child）だけ実行モードを渡す。引き継ぎは /api/spawn で
+    // defaultChildPermissionTier を使わない。headless+空段を full に見せると
+    // 起動とずれる。
+    const approval = kind === 'child'
+      ? childPermissionPreviewFor(providerSelect.value, presetSelect.value, executionSelect.value)
+      : childPermissionPreviewFor(providerSelect.value, presetSelect.value);
     if (!approval) {
       approvalEl.innerHTML = headlessUnsupported ? headlessUnsupportedNoticeHtml() : '';
       return;

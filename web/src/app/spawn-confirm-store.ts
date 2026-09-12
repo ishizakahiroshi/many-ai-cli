@@ -74,6 +74,12 @@ let availablePermissionPresets: string[] = ['attended', 'full'];
 // 注意書きを出さない＝古い Hub では今までどおり何も出ない。
 let headlessProviders: string[] = [];
 
+// 無人の空段が着地する段（/api/info の child_permission_default）。Hub の
+// ChildPermissionDefaultTier と同じ語彙。欠けている（古い Hub）ときは full。
+// 派生ダイアログが headless+段未指定の開示を引くときだけ使う。body の
+// permission_preset は空のまま送る。
+let childPermissionDefault = 'full';
+
 // 画面から立てる子（origin: "ui"）の実効権限。provider → 段 → 実効フラグで、
 // 形は spawn 確認ダイアログが WS で受け取るものと同じ（Hub 側は同じ
 // childApprovalPreviewTiers が作る）。確認ダイアログには対になる要求があるが、
@@ -128,6 +134,10 @@ export function setLaunchOptionChoices(info: any): void {
     }
     rolePermissionMemory = next;
   }
+  const defaultTier = String(info?.child_permission_default ?? '').trim();
+  childPermissionDefault = defaultTier === 'attended' || defaultTier === 'bounded' || defaultTier === 'full'
+    ? defaultTier
+    : 'full';
 }
 
 // その役割で覚えている段。覚えていなければ空文字（＝指定なし）。
@@ -159,8 +169,18 @@ export function headlessUnsupportedForSelection(provider: string, executionMode:
 // 派生ダイアログが「今の選択でこの子に何が渡るか」を引くための窓。返り値をそのまま
 // spawn-confirm.ts の approvalDisplayHtml へ渡す（同じ表示を 2 通り書かない）。
 // 表が空（古い Hub）なら undefined で、呼び出し側は開示欄を出さない。
-export function childPermissionPreviewFor(provider: string, tier: string): ChildApproval | undefined {
-  return approvalForSelection(childPermissionPreview, provider, tier);
+//
+// executionMode が headless かつ段が空のときは、表の ""（UI 対話既定 = attended）ではなく
+// child_permission_default の行を出す。Hub の defaultChildPermissionTier と同じ順。
+// 段を明示したときはその段。spawn 確認ダイアログは pending body 込みの表を
+// approvalForSelection で引くので、こちらは使わない。
+export function childPermissionPreviewFor(provider: string, tier: string, executionMode = ''): ChildApproval | undefined {
+  const preset = String(tier ?? '').trim();
+  const mode = String(executionMode || '').trim();
+  if (mode === 'headless' && !preset) {
+    return approvalForSelection(childPermissionPreview, provider, childPermissionDefault);
+  }
+  return approvalForSelection(childPermissionPreview, provider, preset);
 }
 
 // provider に effort の写像が無ければ空配列。呼び出し側は空なら欄ごと出さない
