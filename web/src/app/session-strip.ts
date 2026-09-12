@@ -192,6 +192,7 @@ function sessionItemHtml(s: any): string {
     : '';
   const tooltip = [`#${s.id}`, providerLabel, branch, activity.label].filter(Boolean).join(' · ');
   const classes = ['session-strip-item'];
+  if (s.state === 'running') classes.push('running');
   if (activity.className) classes.push(activity.className);
   if (s.id === activeSessionId) classes.push('active');
   return `<button type="button" class="${classes.join(' ')}" data-sid="${escapeHtml(String(s.id))}"`

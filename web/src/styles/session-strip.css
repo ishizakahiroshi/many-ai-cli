@@ -93,6 +93,7 @@
 .session-strip-state { display: inline-flex; align-items: center; }
 .session-strip-item .card-state-svg { width: 12px; height: 12px; }
 /* 状態の色分けはサイドバーのカードと同じ意味にする（形は stateIconSvgHtml が共有）。 */
+.session-strip-item.running .session-strip-state { color: var(--badge-running-text); }
 .session-strip-item.awaiting-approval .session-strip-state { color: var(--warn); }
 .session-strip-item.awaiting-input .session-strip-state { color: var(--accent-text); }
 .session-strip-item.workflow-active .session-strip-state { color: var(--muted-2); }

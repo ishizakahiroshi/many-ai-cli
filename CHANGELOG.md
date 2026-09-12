@@ -208,6 +208,9 @@ Release artifacts are published at
   — no extra confirmation step was added.
 
 ### Fixed
+- **The session strip's running-state icon now uses the same green as the
+  sidebar card**, so an active session is not a muted default colour on the
+  strip and a green badge in the list.
 - **The derive dialog (and the spawn confirmation dialog) now lists models
   for the CLI you picked, not the CLI last selected in New Session.**
   The model field had been sharing New Session's datalist, so handing off a
