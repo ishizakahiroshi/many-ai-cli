@@ -757,6 +757,50 @@ test('approval parser fixtures', () => {
     '3. Run tests',
   ];
   assert.deepEqual(detectFallback('claude', plainNumbered, triggerMatcher), []);
+
+  // Command Code（2026-09-13 Windows / 1.53.0）。番号行 + ❯。数字キーではなく ↑/↓+Enter。
+  // shortcut 型ではないので isShortcutApprovalMenu には載せない。G / A / Tool Permission はカード、
+  // git status（確認なし）は出さない。
+  const commandCodeTrust = [
+    'Do you trust the files in this folder?',
+    'Command Code may read files in this folder.',
+    '❯ 1. Yes, proceed',
+    '  2. No, exit',
+    '↑/↓ to navigate · enter to select · esc to exit',
+  ];
+  const commandCodeTrustOpts = detectFallback('command-code', commandCodeTrust, triggerMatcher);
+  assert.deepEqual(numbers(commandCodeTrustOpts), [1, 2]);
+  assert.equal(commandCodeTrustOpts[0].isCurrent, true);
+  assert.equal(commandCodeTrustOpts[0]._sendText, undefined);
+
+  const commandCodeEdit = [
+    'Edit File README.md',
+    'Do you want to make this edit to README.md?',
+    '❯ 1. Yes',
+    '  2. Yes, allow all edits this session [shift+tab]',
+    '  3. No, tell Command Code what to do differently',
+    '↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()',
+  ];
+  assert.deepEqual(numbers(detectFallback('command-code', commandCodeEdit, triggerMatcher)), [1, 2, 3]);
+
+  const commandCodeTool = [
+    'Tool Permission',
+    'Command Code needs to run powershell.',
+    '❯ 1. Yes',
+    '  2. Yes, don\'t ask again for powershell in this project',
+    '  3. No, tell Command Code what to do differently',
+    '↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()',
+  ];
+  assert.deepEqual(numbers(detectFallback('command-code', commandCodeTool, triggerMatcher)), [1, 2, 3]);
+
+  const commandCodeGitStatus = [
+    'SHELL [git status]',
+    'On branch main',
+    'Changes not staged for commit',
+    'Tip: Use shift+tab to enable auto-accept',
+    'Ask your question...',
+  ];
+  assert.deepEqual(detectFallback('command-code', commandCodeGitStatus, triggerMatcher), []);
 });
 
 // Detached Session Grid URL の layout parse ロジックを検証する。

@@ -704,6 +704,7 @@ export function trackApprovalHintFromChunk(id, bytes, decodedText, replayMeta = 
   // Ink UI は常に選択中の項目に > / ❯ カーソルを付ける（isCurrent: true）。
   // カーソル付き選択肢がない場合は AI の通常応答の箇条書きとみなして無視する。
   const hasCursorOption = options.some(o => o.isCurrent);
+  applyCommandCodeArrowSendText(provider, options);
   // 実際のCLI承認プロンプトは yes/no/allow/deny/proceed 等を含む。
   // Claude の通常回答（「パネル幅拡大...」等）との誤検出を防ぐため、
   // ラベル内容が承認系のときのみ approvalNear を評価する。
@@ -809,6 +810,19 @@ export function normalizeGoApprovalOptions(rawOptions) {
       _sendText: opt.send_text || undefined,
     }))
     .filter((opt) => Number.isFinite(opt.num) && opt.label);
+}
+
+function applyCommandCodeArrowSendText(provider, options) {
+  if (provider !== 'command-code' || !Array.isArray(options) || options.length === 0) return;
+  if (options.some((opt) => opt && opt._sendText)) return;
+  let currentIdx = options.findIndex((opt) => opt && opt.isCurrent);
+  if (currentIdx < 0) currentIdx = 0;
+  options.forEach((opt, i) => {
+    if (!opt) return;
+    const delta = i - currentIdx;
+    const arrows = delta < 0 ? '\x1b[A'.repeat(-delta) : '\x1b[B'.repeat(Math.max(0, delta));
+    opt._sendText = `${arrows}\r`;
+  });
 }
 
 function localizeOpenCodeShortcutOptions(options) {
@@ -1332,6 +1346,7 @@ export function detectApproval(id) {
   const lastOpt = options[options.length - 1];
   const hasUserSpecifies = (lastOpt && isUserSpecifiesText(lastOpt.label)) || contextLines.some(line => isUserSpecifiesText(line));
   const hasCursorOption = options.some(o => o.isCurrent);
+  applyCommandCodeArrowSendText(provider, options);
   const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel)\b/i;
   const hasApprovalLikeLabel = options.some((opt) => approvalLabelRe.test(opt.label));
   const isHubChoice = isHubChoicePrompt(contextLines, options);

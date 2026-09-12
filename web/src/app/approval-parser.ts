@@ -763,7 +763,12 @@
       lower.includes('deny all similar') ||
       (lower.includes('press enter to confirm') && !lower.includes('esc to go back')) ||
       lower.includes('enter to select') ||
+      lower.includes('enter select') ||
       lower.includes('↑/↓ to navigate') ||
+      lower.includes('do you trust the files in this folder') ||
+      lower.includes('tool permission') ||
+      lower.includes('command code needs to run') ||
+      lower.includes('do you want to make this edit') ||
       lower.includes('esc to cancel') ||
       lower.includes('tab:next option') ||
       lower.includes('always-approve mode') ||

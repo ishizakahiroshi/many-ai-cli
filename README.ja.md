@@ -1123,7 +1123,7 @@ token: ""                   # 空 = 起動時にランダム生成（再起動�
 
 初回ロード時、ブラウザはサーバから D2 の値をミラーします。以降の変更は localStorage（キャッシュ）とサーバの両方へ同時に書き込まれます。既存の localStorage 値は初回に自動でサーバへ反映されます。
 
-承認検出パターンは provider ごとに `official` / `custom` プロファイルを持ちます。`official` は GitHub 上の `resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から起動時に取得・キャッシュされ、`custom` はユーザー編集用です。
+承認検出パターンは provider ごとに `official` / `custom` プロファイルを持ちます。`official` は GitHub 上の `resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` から起動時に取得・キャッシュされ、`custom` はユーザー編集用です。
 
 カスタム通知音は `~/.many-ai-cli/notify_sound_custom.bin` にバイナリファイルとして保存され、MIME タイプは `user_prefs.notify_sound.custom_mime` に記録されます。
 
@@ -1321,7 +1321,7 @@ Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_co
 `many-ai-cli` 自体はローカル動作を前提としていますが、以下の外部 HTTPS 通信が発生し得ます。
 
 - **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
-- **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
+- **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
 - **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。ローカル処理にしたい場合は `127.0.0.1` / `localhost` のローカルサーバだけを指定してください。外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。「音声入力」節の注意書きも参照。
 - **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。

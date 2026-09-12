@@ -87,6 +87,9 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	if len(opts) == 0 {
 		return nil
 	}
+	if provider == "command-code" {
+		applyCommandCodeArrowSendText(opts)
+	}
 	before, after := approvalContextBefore, approvalContextAfter
 	if provider == "opencode" {
 		// OpenCode は start/end がダイアログ本体（"Permission required" 〜 ボタン行）を
@@ -746,6 +749,15 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 			strings.Contains(context, "always-approve") ||
 			strings.Contains(context, "type to add feedback")
 	}
+	// Command Code の確認画面。G のフッターは generic の "enter to select" で足りるが、
+	// file edit / Tool Permission は "enter select"（to 無し）で、数字キーも使わない。
+	if provider == "command-code" && !hasHint {
+		hasHint = strings.Contains(context, "do you trust the files in this folder") ||
+			strings.Contains(context, "tool permission") ||
+			strings.Contains(context, "command code needs to run") ||
+			strings.Contains(context, "do you want to make this edit") ||
+			strings.Contains(context, "enter select")
+	}
 	// Claude Code の /feedback カードは承認語や質問文を持たないが、
 	// 3 つの固定アクションと裸の数字送信先が揃う強い構造シグネチャを持つ。
 	if provider == "claude" && isClaudeFeedbackCardOptions(opts) {
@@ -810,6 +822,37 @@ func isClaudeFeedbackCardOptions(opts []proto.ApprovalOption) bool {
 		seen[opt.Num] = struct{}{}
 	}
 	return len(seen) == 3
+}
+
+// applyCommandCodeArrowSendText は Command Code の垂直メニューへ、現在項からの
+// ↓ 回数 + Enter を載せる。数字キーも Grok/OpenCode の → も使わない。
+func applyCommandCodeArrowSendText(opts []proto.ApprovalOption) {
+	if len(opts) == 0 {
+		return
+	}
+	currentIdx := 0
+	for i, opt := range opts {
+		if opt.IsCurrent {
+			currentIdx = i
+			break
+		}
+	}
+	for i := range opts {
+		delta := i - currentIdx
+		var b strings.Builder
+		if delta < 0 {
+			for n := 0; n < -delta; n++ {
+				b.WriteString("\x1b[A")
+			}
+		} else {
+			for n := 0; n < delta; n++ {
+				b.WriteString("\x1b[B")
+			}
+		}
+		b.WriteByte('\r')
+		opts[i].SendText = b.String()
+		opts[i].PreserveOrder = true
+	}
 }
 
 func approvalOptionsHaveCursor(opts []proto.ApprovalOption) bool {

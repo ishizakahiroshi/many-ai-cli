@@ -86,9 +86,16 @@ var defaultApprovalPatterns = map[string][]string{
 		"approve?",
 		"proceed?",
 	},
-	// command-code は実機 PTY の採取（親 plan C6）がまだで trigger 文言を未確認。
-	// 空 = 検出しない（誤検出は起きない）。C7 で fixture を正に埋める。
-	"command-code": {},
+	// command-code 実機 PTY（2026-09-13 Windows / Command Code 1.53.0）の採取を正とする。
+	// 選択は ↑/↓ 移動 + Enter（数字キー不使用）。Grok の "yes, proceed" と同一文字列になる句は入れない。
+	"command-code": {
+		"Do you trust the files in this folder?",
+		"Tool Permission",
+		"Command Code needs to run",
+		"Do you want to make this edit",
+		"enter to select",
+		"enter select",
+	},
 	"common": {
 		"would you like to",
 		"この操作を許可",

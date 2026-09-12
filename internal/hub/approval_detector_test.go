@@ -315,6 +315,118 @@ func TestDetectNativeApprovalOpenCodeShortcut(t *testing.T) {
 	}
 }
 
+func TestDetectNativeApprovalCommandCodeTrust(t *testing.T) {
+	// docs/local/fixtures/command-code/G-trust.windows.stripped.txt（2026-09-13）
+	lines := []string{
+		"Do you trust the files in this folder?",
+		`D:\tmp\cc-capture\workspace`,
+		"Command Code may read files in this folder. Reading untrusted files may lead Command Code to behave in unexpected ways.",
+		"With your permission Command Code may execute files in this folder. Executing untrusted code is unsafe.",
+		"❯ 1. Yes, proceed",
+		"  2. No, exit",
+		"↑/↓ to navigate · enter to select · esc to exit",
+	}
+	got := detectNativeApproval("command-code", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval(command-code) returned nil")
+	}
+	if got.Kind != "native" {
+		t.Fatalf("kind = %q", got.Kind)
+	}
+	if len(got.Options) != 2 {
+		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
+	}
+	if !got.Options[0].IsCurrent || got.Options[0].Label != "Yes, proceed" {
+		t.Fatalf("option 1 = %+v", got.Options[0])
+	}
+	if got.Options[1].IsCurrent || got.Options[1].Label != "No, exit" {
+		t.Fatalf("option 2 = %+v", got.Options[1])
+	}
+	if got.Options[0].SendText != "\r" {
+		t.Fatalf("yes send_text = %q, want \\r", got.Options[0].SendText)
+	}
+	if got.Options[1].SendText != "\x1b[B\r" {
+		t.Fatalf("no send_text = %q, want down+enter", got.Options[1].SendText)
+	}
+}
+
+func TestDetectNativeApprovalCommandCodeFileEdit(t *testing.T) {
+	// docs/local/fixtures/command-code/A-file-edit.windows.stripped.txt
+	lines := []string{
+		"Edit File README.md",
+		"   1 │   This is a capture fixture workspace.",
+		"   2 │ + ok",
+		"Do you want to make this edit to README.md?",
+		"❯ 1. Yes",
+		"  2. Yes, allow all edits this session [shift+tab]",
+		"  3. No, tell Command Code what to do differently",
+		"↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()",
+	}
+	got := detectNativeApproval("command-code", lines)
+	if got == nil {
+		t.Fatal("detectNativeApproval(command-code file edit) returned nil")
+	}
+	if len(got.Options) != 3 {
+		t.Fatalf("options len = %d (%+v)", len(got.Options), got.Options)
+	}
+	if got.Options[0].SendText != "\r" || got.Options[1].SendText != "\x1b[B\r" || got.Options[2].SendText != "\x1b[B\x1b[B\r" {
+		t.Fatalf("file edit send_text values = %+v", got.Options)
+	}
+	if got.Options[0].SendText == "\x1b[C\r" || got.Options[1].SendText == "\x1b[C\r" {
+		t.Fatal("command-code must not reuse grok/opencode right-arrow send text")
+	}
+}
+
+func TestDetectNativeApprovalCommandCodeToolPermission(t *testing.T) {
+	// C: powershell / D: read_file. どちらも Tool Permission 見出し。
+	powershell := []string{
+		"Tool Permission",
+		"Command Code needs to run powershell.",
+		"❯ 1. Yes",
+		"  2. Yes, don't ask again for powershell in this project",
+		"  3. No, tell Command Code what to do differently",
+		"↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()",
+	}
+	got := detectNativeApproval("command-code", powershell)
+	if got == nil {
+		t.Fatal("detectNativeApproval(command-code powershell) returned nil")
+	}
+	if len(got.Options) != 3 || got.Options[0].SendText != "\r" || got.Options[1].SendText != "\x1b[B\r" {
+		t.Fatalf("powershell options = %+v", got.Options)
+	}
+
+	outside := []string{
+		"Tool Permission",
+		"Command Code needs to run read_file.",
+		"⚠ Outside the workspace — neighbor/note.txt is outside workspace",
+		"❯ 1. Yes",
+		"  2. No, tell Command Code what to do differently",
+		"↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()",
+	}
+	got = detectNativeApproval("command-code", outside)
+	if got == nil {
+		t.Fatal("detectNativeApproval(command-code read_file) returned nil")
+	}
+	if len(got.Options) != 2 || got.Options[0].SendText != "\r" || got.Options[1].SendText != "\x1b[B\r" {
+		t.Fatalf("read_file options = %+v", got.Options)
+	}
+}
+
+func TestDetectNativeApprovalCommandCodeGitStatusDoesNotFire(t *testing.T) {
+	// B: git status は確認画面なし。docs/local/fixtures/command-code/B-shell.windows.stripped.txt
+	lines := []string{
+		"SHELL [git status]",
+		"On branch main",
+		"Changes not staged for commit",
+		"  (use \"git add <file>...\" to update what will be committed)",
+		"Tip: Use shift+tab to enable auto-accept",
+		"Ask your question...",
+	}
+	if got := detectNativeApproval("command-code", lines); got != nil {
+		t.Fatalf("git status must not produce a card: %+v", got)
+	}
+}
+
 // openCodeApprovalScreen は OpenCode の permission ダイアログが出ている画面 1 枚を返す。
 // status には承認とは無関係に毎フレーム書き換わる行（スピナー・経過秒）を渡す。
 func openCodeApprovalScreen(target, status string) []string {
