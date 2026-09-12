@@ -132,9 +132,9 @@ function parseCSV(text) {
 // === Watchlist loading ===
 
 // Some kb names include a parenthetical category/disambiguator
-// (e.g. "クロノス(勤怠)" / "Nextcloud(メイジエ)"). For matching purposes
+// (e.g. "ProductName(Purpose)" / "ServiceName(CompanyName)"). For matching purposes
 // we want BOTH the full string AND the bare name before the paren,
-// so a leak of just "クロノス" (without paren) is still caught.
+// so a leak of just "ProductName" (without paren) is still caught.
 function expandNameVariants(value) {
   const variants = new Set();
   countShortNeedle(value);
