@@ -761,6 +761,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
 	cfg.UserPrefs.ProjectFavorites = []string{"one"}
 	cfg.UserPrefs.CwdHistory = []string{"D:/dev/one"}
+	cfg.UserPrefs.ProjectViews = map[string]UserPrefsProjectView{"/src/box-alpha": {SessionID: 7, Tab: "git"}}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
 	cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
@@ -770,6 +771,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg.Spawn.LastModel["legacy"] = "b"
 	cfg.UserPrefs.ProjectFavorites[0] = "two"
 	cfg.UserPrefs.CwdHistory[0] = "D:/dev/two"
+	cfg.UserPrefs.ProjectViews["/src/box-alpha"] = UserPrefsProjectView{SessionID: 99, Tab: "chat"}
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
 	cfg.Hub.TrustedNetworks[0] = "172.19.0.2/32"
@@ -786,6 +788,9 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	}
 	if clone.UserPrefs.Spawn.Defaults["claude"] != "default" {
 		t.Fatalf("spawn defaults map was aliased")
+	}
+	if got := clone.UserPrefs.ProjectViews["/src/box-alpha"]; got.SessionID != 7 || got.Tab != "git" {
+		t.Fatalf("project views map was aliased: %#v", got)
 	}
 	if clone.UserPrefs.Spawn.LastModel["claude"] != "sonnet" {
 		t.Fatalf("spawn last model map was aliased")

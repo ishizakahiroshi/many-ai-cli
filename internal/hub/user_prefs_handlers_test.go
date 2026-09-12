@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"many-ai-cli/internal/config"
 )
 
 func prefsAuthReq(method, path string, body []byte, contentType string) *http.Request {
@@ -159,5 +161,65 @@ func TestAvatarImageAllowed(t *testing.T) {
 		if avatarImageAllowed(mime) {
 			t.Fatalf("%s should be rejected", mime)
 		}
+	}
+}
+
+// 箱ごとの表示記憶（project_views）と最後に開いていた箱（open_project）が
+// PUT → GET で往復することを固定する。
+//
+// PUT は UserPrefs を丸ごと置き換えるので、往復できないフィールドは「別のクライアントが
+// 保存した瞬間に消える」側の壊れ方をする。画面からは保存できているように見えて、次に
+// 開いたときだけ記憶が無い。
+func TestUserPrefsPutRoundTripsProjectViews(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	s := newTestServer()
+	s.cfg.Token = "tok"
+
+	body := []byte(`{"project_views":{"/src/box-alpha":{"session_id":7,"tab":"git"}},"open_project":"/src/box-alpha"}`)
+	w := httptest.NewRecorder()
+	s.handleUserPrefsPut(w, prefsAuthReq(http.MethodPut, "/api/user-prefs?token=tok", body, "application/json"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d body=%s, want 200", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	s.handleUserPrefsGet(w, prefsAuthReq(http.MethodGet, "/api/user-prefs?token=tok", nil, ""))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET status = %d body=%s, want 200", w.Code, w.Body.String())
+	}
+	var got config.UserPrefs
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("GET body is not UserPrefs JSON: %v (%s)", err, w.Body.String())
+	}
+	if got.OpenProject != "/src/box-alpha" {
+		t.Fatalf("OpenProject = %q, want /src/box-alpha", got.OpenProject)
+	}
+	view, ok := got.ProjectViews["/src/box-alpha"]
+	if !ok {
+		t.Fatalf("ProjectViews lost the entry: %#v", got.ProjectViews)
+	}
+	if view.SessionID != 7 || view.Tab != "git" {
+		t.Fatalf("ProjectViews entry = %#v, want {SessionID:7 Tab:git}", view)
+	}
+}
+
+// Clone が map を共有すると、/api/info 等が持ち出したスナップショットの書き換えが
+// 動いているサーバー設定へ波及する。
+func TestUserPrefsCloneDoesNotShareProjectViews(t *testing.T) {
+	var prefs config.UserPrefs
+	prefs.ProjectViews = map[string]config.UserPrefsProjectView{
+		"/src/box-alpha": {SessionID: 7, Tab: "git"},
+	}
+	clone := prefs.Clone()
+	clone.ProjectViews["/src/box-alpha"] = config.UserPrefsProjectView{SessionID: 99, Tab: "chat"}
+	clone.ProjectViews["/src/box-bravo"] = config.UserPrefsProjectView{SessionID: 1, Tab: "terminal"}
+
+	if got := prefs.ProjectViews["/src/box-alpha"]; got.SessionID != 7 || got.Tab != "git" {
+		t.Fatalf("元の entry が複製側の書き換えで変わった: %#v", got)
+	}
+	if len(prefs.ProjectViews) != 1 {
+		t.Fatalf("元の map へ複製側の追加が波及した: %#v", prefs.ProjectViews)
 	}
 }

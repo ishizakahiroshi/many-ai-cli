@@ -1,13 +1,15 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
-import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, terminals } from './state.js';
+import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
 import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectKeyForSession } from './sidebar-tree.js';
 import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
-import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, updateScrollLockBtn } from './terminal.js';
-import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, updateChatCountBadge } from './settings.js';
+import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, syncPtySizeToViewportAfterLayout, updateScrollLockBtn } from './terminal.js';
+import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, renderSessionInfoChip, setActiveTab, updateChatCountBadge } from './settings.js';
+import { pickRestoreSession } from './project-view-memory.js';
+import { readOpenProjectKey, readProjectView, runWithProjectViewRestore, saveOpenProjectKey, saveProjectView } from './project-view-store.js';
 import { syncElapsedTimer } from './ws-client.js';
 import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { detectApproval, isAIOrCustomProvider, releaseActionBarIfOwnedByOther, scheduleApprovalLedgerRestore, setActionBarFocus } from './approval.js';
@@ -23,6 +25,7 @@ import { openRelayDialog } from './relay-dialog.js';
 import { openDeriveDialog } from './derive-dialog.js';
 import { openHandoffListDialog } from './handoff.js';
 import { openNextSpawnConfirmationFor, pendingSpawnConfirmationCount } from './spawn-confirm.js';
+import { currentSessionStripTab, renderSessionStrip } from './session-strip.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -106,6 +109,9 @@ export function updateSessionListActiveCard(id) {
     const cid = parseInt(card.dataset.sessionId, 10);
     card.classList.toggle('active', cid === id);
   });
+  // 帯の「いま開いているセッション」の印も同じタイミングで付け替える
+  // （activateSession / activateSessionForMultiPane の両方がここを通る）。
+  renderSessionStrip();
 }
 
 // C4: focusSlot → activateSession → focusSlot の無限ループ防止フラグ
@@ -315,7 +321,9 @@ export function stateIconSvgHtml(kind) {
   return `<svg class="card-state-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" stroke="currentColor" aria-hidden="true">${body}</svg>`;
 }
 
-function stateActivityDecoration(s) {
+// セッション帯（session-strip.ts）も同じ記号と同じ状態の意味を使うため export する。
+// 帯だけが別の規則で状態を描くと、サイドバーと帯で同じセッションが違う状態に見える。
+export function stateActivityDecoration(s) {
   const state = s?.state || 'standby';
   const baseLabel = stateLabel(state);
   if (s.awaiting_approval) {
@@ -700,6 +708,101 @@ function consumeDuplicateSessionCardClick(id) {
   return true;
 }
 
+// ---- 箱を開く / 箱ごとの記憶の復元（C4）----------------------------------
+//
+// 由来: docs/local/plan_project-box-open-and-session-strip_c4_state-memory.md
+//
+// 記憶の保存先・検証・復元中の保存抑止は project-view-store.ts と
+// project-view-memory.ts が持つ。ここは「利用者がヘッダを押したのと同じ操作」を
+// 組み立てるだけ＝内部状態を直接書き換えない（setActiveTab は mgr.teardown() を
+// 呼んでおり、迂回すると後始末が飛ぶ）。
+
+// 起動時の復元は 1 回だけ。再接続のたびに走らせると、利用者がその場で選んだ箱を
+// 記憶で上書きしてしまう。
+let _openProjectRestoreDone = false;
+// サーバー値が localStorage へ写る前に読むと、この端末の古い値で復元してしまう。
+let _userPrefsMirroredForRestore = false;
+
+document.addEventListener('user-prefs-mirrored', () => {
+  _userPrefsMirroredForRestore = true;
+  maybeRestoreLastOpenProject();
+});
+
+/** その箱に属するセッション ID を orderSessions() の順で返す。帯と同じ並び。 */
+function sessionIdsInProject(key: string): number[] {
+  const all = Array.from(sessions.values());
+  return orderSessions()
+    .filter((s: any) => projectKeyForSession(s, all as any) === key)
+    .map((s: any) => s.id);
+}
+
+/**
+ * 箱の記憶を復元する。記憶が無ければ先頭のセッションを開く。
+ *
+ * **記憶していたセッションが消えていたときだけ保存を上書きする。** それ以外で保存を
+ * 呼ぶと、落とした先の値（先頭セッション・既定タブ）が記憶を潰す。
+ */
+function restoreProjectViewFor(key: string): void {
+  const ids = sessionIdsInProject(key);
+  const pick = pickRestoreSession(readProjectView(key), ids);
+  const sid = pick.sessionId;
+  if (sid === null) return;
+  runWithProjectViewRestore(() => {
+    activateSession(sid);
+    // tab が null なら記憶が無い＝今のタブを変えない。既定へ落とすと、multi タブを
+    // 開いたまま箱を渡り歩く使い方（C3）が、初めて開く箱で毎回途切れる。
+    if (pick.tab) setActiveTab(sid, pick.tab);
+  });
+  // 記憶が無かったときに保存する「今のタブ」は、帯が持っている現在のタブ名から取る
+  // （setActiveTab の全分岐がここを更新している＝画面に出ているタブと必ず一致する）。
+  if (pick.fallback) saveProjectView(key, sid, pick.tab || currentSessionStripTab());
+  // 復元では帯の出入りとタブの切り替えが重なるので、実寸の送信は最後に 1 回だけ。
+  // syncPtySizeToViewportAfterLayout は前の予約を解除してから張り直す＝二重に動かない。
+  syncPtySizeToViewportAfterLayout(sid, true, 400, 'project-view-restore');
+}
+
+/**
+ * 箱を開く。ヘッダのクリックと起動時の復元が共有する唯一の入口。
+ *
+ * fromRestore=true のときは「最後に開いていた箱」を保存し直さない（読んだ値をそのまま
+ * 書き戻すだけの PUT を起動のたびに出さない）。
+ */
+export function openProjectBox(key: string, opts: { fromRestore?: boolean } = {}): void {
+  if (!key) return;
+  set_openProjectKey(key);
+  // multi タブを開いたまま別の箱へ移ったとき、範囲が「この箱だけ」ならペインも
+  // 追従させる（そうしないと前の箱のセッションが並んだまま残る）。
+  // multi-pane.js は window 経由で触る＝import の循環を作らない。
+  const mgr = (window as any).multiPaneManager;
+  if (mgr && typeof mgr.onOpenProjectChanged === 'function') mgr.onOpenProjectChanged();
+  // 印（--open）を出すのに全再構築が要る。renderSessionList は差分更新しない。
+  // 折りたたみ（collapsedGroups）はここで触らない＝畳んだままでも箱は開く。
+  renderSessionList();
+  restoreProjectViewFor(key);
+  if (!opts.fromRestore) saveOpenProjectKey(key);
+}
+
+/**
+ * 起動時に「最後に開いていた箱」を開き直す。1 回だけ。
+ *
+ * **切断中には走らせない。** ws-client.ts:222 は接続が切れると sessions.clear() して
+ * 一覧を描き直す。この瞬間を「箱が消えた」と読んで何かを保存すると、切断のたびに
+ * 記憶が消える。ここは読むだけだが、0 件のときは判断材料が無いので何もしない。
+ *
+ * どの箱も開いていない状態は壊れた状態ではない（保存値が無い・箱が消えた、も同じ）。
+ */
+export function maybeRestoreLastOpenProject(): void {
+  if (_openProjectRestoreDone) return;
+  if (!_userPrefsMirroredForRestore) return;
+  if (sessions.size === 0) return;
+  // openProjectBox が renderSessionList を呼び返すので、先に立てて再入を止める。
+  _openProjectRestoreDone = true;
+  const key = readOpenProjectKey();
+  if (!key) return;
+  if (sessionIdsInProject(key).length === 0) return;
+  openProjectBox(key, { fromRestore: true });
+}
+
 export function renderSessionList() {
   const root = document.getElementById('sessions');
   const scrollEl = document.getElementById('session-list');
@@ -838,19 +941,54 @@ export function renderSessionList() {
       .filter(Boolean) as any[];
     const projectDisplayName = key === NO_PROJECT_KEY ? t('no_project') : (project.label || key);
     const isCollapsed = collapsedGroups.has(key);
+    // 箱を開く操作の対象になるのは、セッションを 1 件以上持つ箱だけ
+    // （plan_project-box-open-and-session-strip_c1_box-open.md の決定 A2）。
+    // NO_PROJECT_KEY も特別扱いしない（決定 A3）。
+    const isEmptyGroup = groupSessions.length === 0;
+    const isOpenGroup = openProjectKey === key;
     const groupEl = document.createElement('div');
     groupEl.className = 'project-group' + (project.favorite ? ' project-group--pinned' : '');
 
     const header = document.createElement('div');
-    header.className = 'project-group-header' + (isCollapsed ? ' project-group-header--collapsed' : '');
+    header.className = 'project-group-header'
+      + (isCollapsed ? ' project-group-header--collapsed' : '')
+      + (isOpenGroup ? ' project-group-header--open' : '')
+      + (isEmptyGroup ? ' project-group-header--empty' : '');
     header.dataset.project = key;
 
+    // 折りたたみの開閉はこの矢印だけが持つ。ヘッダ本体のクリックは「箱を開く」へ割り当てた
+    // ので、矢印側は必ず stopPropagation する。span のままだとキーボードで開閉できないため、
+    // card-children-toggle と同じ role / tabindex / Enter・Space を付ける。
     const chevron = document.createElement('span');
     chevron.className = 'project-group-chevron';
     chevron.textContent = '▼';
+    chevron.setAttribute('role', 'button');
+    chevron.tabIndex = 0;
+    const chevronTip = isCollapsed
+      ? ti18n('project_group_expand', 'Show session list')
+      : ti18n('project_group_collapse', 'Collapse session list');
+    chevron.dataset.tooltip = chevronTip;
+    chevron.setAttribute('aria-label', chevronTip);
+    chevron.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+    const toggleGroupCollapsed = (e: Event) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (collapsedGroups.has(key)) {
+        collapsedGroups.delete(key);
+      } else {
+        collapsedGroups.add(key);
+      }
+      saveCollapsedNodes();
+      renderSessionList();
+    };
+    chevron.addEventListener('click', toggleGroupCollapsed);
+    chevron.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') toggleGroupCollapsed(e);
+    });
     header.appendChild(chevron);
 
     const nameSpan = document.createElement('span');
+    nameSpan.className = 'project-group-name';
     nameSpan.textContent = projectDisplayName;
     header.appendChild(nameSpan);
 
@@ -925,15 +1063,15 @@ export function renderSessionList() {
 
     header.appendChild(projActions);
 
+    // ヘッダのクリックは「この箱を開く」。折りたたみの開閉は上の矢印が持つ
+    // （plan_project-box-open-and-session-strip_c1_box-open.md の決定 B1）。
+    // dragSrcGroupKey の早期 return はドラッグ中の誤発火を防いでいるのでそのまま残す。
+    // ⊞ ☆ ✕ は既に stopPropagation 済みなのでここへは伝播しない。
     header.addEventListener('click', () => {
       if (dragSrcGroupKey) return;
-      if (collapsedGroups.has(key)) {
-        collapsedGroups.delete(key);
-      } else {
-        collapsedGroups.add(key);
-      }
-      saveCollapsedNodes();
-      renderSessionList();
+      // セッション 0 件の箱は開かない（開いても中身が無い）。
+      if (isEmptyGroup) return;
+      openProjectBox(key);
     });
 
     // グループD&D
@@ -1300,6 +1438,12 @@ export function renderSessionList() {
   }
 
   updateMainTabStatus();
+  // 帯はここで作り直さない。renderSessionStrip は中身が変わったときだけ DOM に触る
+  // （renderSessionList のような全再構築を帯まで巻き込まない）。
+  renderSessionStrip();
+  // 起動時の 1 回だけ、最後に開いていた箱を開き直す（C4）。セッションが揃ってから
+  // でないと「箱が消えている」と読んでしまうので、ここ（一覧を描いた後）で試す。
+  maybeRestoreLastOpenProject();
 }
 
 
@@ -1587,6 +1731,8 @@ export function updateSessionCardStateInPlace(id) {
     if (txt) txt.textContent = stateLabel(state);
   }
   updateProjectGroupStatusChipsForSession(s);
+  // セッションの状態が変わったら帯の状態アイコンも追従させる。
+  renderSessionStrip();
   return true;
 }
 

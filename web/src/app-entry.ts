@@ -45,6 +45,7 @@ import { initBugReportModal } from './app/bug-report-modal.js';
 import { initSubscriptions } from './app/subscriptions.js';
 import { initTabBarOrder } from './app/tab-bar-order.js';
 import { initUiSide } from './app/ui-side.js';
+import { initSessionStrip } from './app/session-strip.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -79,3 +80,5 @@ initSubscriptions();
 initTabBarOrder();
 // 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）
 initUiSide();
+// 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
+initSessionStrip();

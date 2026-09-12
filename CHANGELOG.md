@@ -11,6 +11,37 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **A strip above the terminal now lists the sessions of the project you have
+  open**, so you can move between the sessions of one repository without going
+  back to the sidebar. Each entry shows the session's state, its `#number`, its
+  CLI and its branch; a long branch name is shortened in the middle rather than
+  at the end, so two relay children on `feature/…-alpha` and `feature/…-bravo`
+  stay apart, and hovering shows the whole name. Sessions outside a git
+  repository simply show no branch. The strip steps aside on the approval and
+  orchestration tabs, on the multi tab it carries the scope toggle below
+  instead of the session list, and it does not appear on a phone.
+  **Its height follows your terminal font size**, and you can drag the edge
+  between the strip and the terminal to change it — double-click that edge to
+  go back to the font-proportional default. The height you drag to is
+  remembered in that browser only.
+- **The multi tab can now show only the sessions of the project you have
+  open.** Two buttons above the grid switch between *This project only* — which
+  names the open project, so you can see which one it means — and *All*, which
+  is the default and the behaviour you had before. If more sessions match than
+  the grid has panes, the count that did not fit is shown beside the buttons.
+  The choice is remembered in that browser only, and *This project only* cannot
+  be picked until a project is open. Changing the scope never rewrites the pane
+  order you dragged into place: sessions hidden by the scope keep their spot, so
+  going back to *All* gives you the same arrangement as before.
+- **Each project now remembers the session and the tab you last had open**, and
+  reloading the page brings back the project you were last in. Going to another
+  project and coming back puts you where you left off instead of at the first
+  session. The memory is kept on the Hub, so a second browser or another
+  computer opens the same project, session and tab. If the session you were on
+  has ended, the project opens at its first session instead — no error, no blank
+  screen — and that becomes what is remembered. Nothing is remembered until you
+  open a project, and a project that no longer has any sessions is simply not
+  reopened. The strip height and the multi-tab scope stay per-browser as before.
 - **A session can now be started with a reasoning effort, an execution mode and
   a permission tier.** The three travel together through every launch path —
   `POST /api/spawn`, `orchestrate spawn`, `orchestrate relay` and the relay's
@@ -114,6 +145,15 @@ Release artifacts are published at
   `interactive` / `headless`), or pass `--execution-mode` per launch.
 
 ### Changed
+- **Clicking a project header in the sidebar now opens that project instead of
+  folding it away.** The click puts you in the project's first session, and the
+  open project is marked with a tinted header row and a line down its left edge;
+  folding and unfolding moved to the ▼ arrow beside the name, which you can now
+  also reach with Tab and press with Enter or Space. A project with no sessions
+  is not something you can open: its name is dimmed and the pointer stays an
+  arrow. The ⊞ ☆ ✕ buttons and dragging a project to reorder it work exactly as
+  before.
+
 - **Child sessions no longer have only one permission setting to choose from.**
   Until now a child spawned by an AI conductor or by the relay was simply given
   full access — `--permission-mode bypassPermissions`, or for Codex

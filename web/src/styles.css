@@ -2337,7 +2337,24 @@ header {
   user-select: none;
 }
 .project-group-header:hover { background: var(--line); }
-.project-group-chevron { transition: transform 0.15s; flex-shrink: 0; }
+/* いま開いている箱（plan_project-box-open-and-session-strip_c1_box-open.md 内部 C2）。
+   ホバーは無彩色の --line、開いている箱はアクセント色の面と左端の線。色だけで状態を示さない
+   ため背景と線を併用する。ホバーと重なったときは面をさらに濃くして、どちらの状態かが両方の
+   テーマで分かるようにする。アニメーションは付けない（prefers-reduced-motion の対象外）。
+   ★ 固定の border-left（--warn）とは別のレイヤ（inset box-shadow）なので両立する。 */
+.project-group-header--open {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.project-group-header--open:hover { background: color-mix(in srgb, var(--accent) 25%, var(--bg-elev)); }
+/* セッション 0 件の箱は押せない。薄くするのは名前だけにする（ヘッダ行ごと薄くすると
+   ☆ ✕ まで押せないように見える）。カーソルも掴む手を出さず既定の矢印へ戻す。 */
+.project-group-header--empty { cursor: default; }
+.project-group-header--empty .project-group-name { opacity: 0.5; }
+/* 0 件の箱では矢印も指の形にしない（畳んでも隠れる中身が無い）。動作自体は残す。 */
+.project-group-header--empty .project-group-chevron { cursor: default; }
+.project-group-chevron { transition: transform 0.15s; flex-shrink: 0; cursor: pointer; }
 .project-group-header--collapsed .project-group-chevron { transform: rotate(-90deg); }
 .project-group-body { padding-left: 8px; }
 .project-group-body.hidden { display: none; }

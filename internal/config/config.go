@@ -769,6 +769,17 @@ func sessionOrderFromAny(raw []any) SessionOrderIDs {
 	return out
 }
 
+// UserPrefsProjectView は「箱（サイドバーのプロジェクトグループ）ごとに最後に見ていた
+// 表示」1 件。セッション ID とタブ名だけを持つ。
+//
+// 帯の高さと multi タブの範囲はここへ載せない。どちらも画面の大きさと入力機器に依存
+// するので端末ごと（ブラウザの localStorage）と決めてある
+// （docs/local/plan_project-box-open-and-session-strip_c4_state-memory.md）。
+type UserPrefsProjectView struct {
+	SessionID int    `yaml:"session_id,omitempty" json:"session_id,omitempty"`
+	Tab       string `yaml:"tab,omitempty"        json:"tab,omitempty"`
+}
+
 // UserPrefs はサーバ側（config.yaml: user_prefs:）に保存するユーザー機能設定。
 // 端末・ポート横断で共有する D2 分類の設定を全て保持する。
 type UserPrefs struct {
@@ -798,7 +809,12 @@ type UserPrefs struct {
 	MigratedFromLocalstorage bool             `yaml:"migrated_from_localstorage,omitempty" json:"migrated_from_localstorage,omitempty"`
 	// SidebarPinMigrated は「旧ピン留めを兄弟順の先頭へ変換し終えた」印。1 度だけ
 	// 変換し、以後は起動のたびに利用者の並びを書き換えない。
-	SidebarPinMigrated       bool                              `yaml:"sidebar_pin_migrated,omitempty" json:"sidebar_pin_migrated,omitempty"`
+	SidebarPinMigrated bool `yaml:"sidebar_pin_migrated,omitempty" json:"sidebar_pin_migrated,omitempty"`
+	// ProjectViews は箱のキー → その箱で最後に見ていたセッションとタブ。
+	// OpenProject は最後に開いていた箱のキー。どちらも CollapsedNodes と同じく
+	// 端末をまたいで共有する（PUT は全体置換なので後勝ち。キー単位の合流はしない）。
+	ProjectViews             map[string]UserPrefsProjectView   `yaml:"project_views,omitempty" json:"project_views,omitempty"`
+	OpenProject              string                            `yaml:"open_project,omitempty"  json:"open_project,omitempty"`
 	Avatar                   string                            `yaml:"avatar,omitempty"       json:"avatar,omitempty"`
 	DisplayName              string                            `yaml:"display_name,omitempty" json:"display_name,omitempty"`
 	TokenStatusbar           UserPrefsTokenStatusbar           `yaml:"token_statusbar,omitempty" json:"token_statusbar,omitempty"`
@@ -816,6 +832,7 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.CollapsedNodes = cloneStringSlice(p.CollapsedNodes)
 	c.CwdHistory = cloneStringSlice(p.CwdHistory)
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
+	c.ProjectViews = cloneProjectViews(p.ProjectViews)
 	c.Templates = append([]UserPrefsTemplate(nil), p.Templates...)
 	for i := range c.Templates {
 		c.Templates[i].Providers = cloneStringSlice(p.Templates[i].Providers)
@@ -1718,6 +1735,19 @@ func cloneSessionOrder(in SessionOrderIDs) SessionOrderIDs {
 	}
 	out := make(SessionOrderIDs, len(in))
 	copy(out, in)
+	return out
+}
+
+// cloneProjectViews は箱ごとの表示記憶を複製する。値は値型なので map だけ作り直せば
+// 複製側の書き換えが元へ波及しない。
+func cloneProjectViews(in map[string]UserPrefsProjectView) map[string]UserPrefsProjectView {
+	if in == nil {
+		return nil
+	}
+	out := make(map[string]UserPrefsProjectView, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
 	return out
 }
 

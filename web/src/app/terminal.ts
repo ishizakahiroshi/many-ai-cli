@@ -146,6 +146,11 @@ function isModalOverlayOpen() {
   return false;
 }
 
+// 端末 1 行の高さ（文字サイズに対する倍率）。xterm の lineHeight オプションがこれ。
+// セッション帯（session-strip.ts）の既定の高さもこの値から導く＝端末と帯で別々の
+// 固定 px を持たない。
+export const TERMINAL_LINE_HEIGHT = 1.35;
+
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
@@ -160,7 +165,7 @@ export function ensureTerminal(id) {
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     // 一部フォントで大文字上端がクリップされるため、行高を少し広げて回避する。
     // さらに Claude Code TUI の進捗バー（1行ぶんの高さで描かれる黒帯）が細く見える問題の緩和も兼ねる。
-    lineHeight: 1.35,
+    lineHeight: TERMINAL_LINE_HEIGHT,
     windowsPty: { backend: 'conpty' },
     // cursor を背景色と同色にしてブロックカーソルを不可視化する。
     // 'transparent' はブラウザ実装によって輪郭線だけ □ として描画されることがある。
@@ -911,6 +916,22 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
 // forceVisualFit=true で「見た目のフィット」だけ強制し、ポップアップを縮めた瞬間に
 // CLI 最新行が空いた領域へ降りてくるようにする（ユーザーが手動スクロールせずに済む）。
 export function followActionBarResize(): void {
+  if (activeSessionId === null) return;
+  const t = terminals.get(activeSessionId);
+  if (!canFitTerminal(t)) return;
+  t.autoScroll = true;
+  fitTerminalPreservingBottom(t, activeSessionId, true);
+}
+
+// セッション帯（#session-strip）の高さドラッグに追従して、アクティブセッションの
+// xterm を現在の表示領域へ再フィットする。followActionBarResize と同型だが、呼び元も
+// 意味も別なので 1 本ずつ持つ（既存関数を書き換えない）。
+//
+// ドラッグ中は session-strip.ts が suppressPtyResizeForInputLayout を短く張り直して
+// いるので isPtyResizeSuppressed() は true。forceVisualFit=true で「見た目のフィット」
+// だけを行い、SIGWINCH は送らない。実寸の確定は pointerup の
+// syncPtySizeToViewportAfterLayout が 1 回だけ行う。
+export function followSessionStripResize(): void {
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!canFitTerminal(t)) return;

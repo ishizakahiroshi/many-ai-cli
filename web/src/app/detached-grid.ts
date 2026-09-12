@@ -721,6 +721,10 @@ export function initDetachedGridMode(): DetachedGridManager | null {
     'mobile-keyboard-panel',
     'about-panel',
     'model-picker-overlay',
+    // 別窓 Grid は箱を開く操作を持たない（unified-tab-bar ごと隠す）ので、
+    // セッション帯と範囲トグルも出さない。style.display を直接落とすため、
+    // session-strip.ts が後から hidden を外しても出てこない。
+    'session-strip',
   ];
   hideIds.forEach(id => {
     const el = document.getElementById(id);

@@ -226,6 +226,16 @@ export let groupOrder: string[] = readStorageArray(STORAGE_GROUP_ORDER_KEY);
 // 永続化しないとリロードのたびに全部開くので、プロジェクトが増えるほど「上に固定したい」
 // という動機だけが育つ（ピン留めが所属を書き換える機能へ育った原因のひとつ）。
 export const collapsedGroups = new Set<string>(readStorageArray(STORAGE_COLLAPSED_NODES_KEY));
+// いま「開いている箱」（サイドバーのプロジェクトグループ）のキー。null はどの箱も開いて
+// いない状態で、起動直後はここから始まる。
+//
+// これは表示の状態であって所属ではない。sidebar-tree.ts の不変条件（木の形はデータだけが
+// 決める。ユーザー操作は兄弟順と折りたたみだけを変える）には一切関与させないこと。
+// buildSidebarTree へ渡さない・orderSessions の絞り込みに使わない。
+//
+// 永続化はここではしない（plan_project-box-open-and-session-strip の C4 がサーバー保存を
+// 担当する）。collapsedGroups と違い localStorage も見ない。
+export let openProjectKey: string | null = null;
 
 export function saveProjectFavorites() {
   setUserPref('project_favorites', projectFavorites);
@@ -381,6 +391,7 @@ export function set_dragSrcId(v: number | null) { dragSrcId = v; }
 export function set_groupOrder(v: string[]) { groupOrder = v; }
 export function set_isComposing(v: boolean) { isComposing = v; }
 export function set_lastDoSendAt(v: number) { lastDoSendAt = v; }
+export function set_openProjectKey(v: string | null) { openProjectKey = v; }
 export function set_pendingAutoSwitch(v: boolean) { pendingAutoSwitch = v; }
 export function set_pendingSend(v: boolean) { pendingSend = v; }
 

@@ -1,6 +1,7 @@
 // --- ESM imports (generated) ---
 import { showToast, token } from './util.js';
 import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
+import { sanitizeProjectViews } from './project-view-memory.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -16,6 +17,12 @@ export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
 export const STORAGE_COLLAPSED_NODES_KEY     = 'ai_cli_hub_collapsed_nodes';
 // 旧ピン留めを兄弟順へ変換し終えた印。1 度だけ走らせるために端末をまたいで共有する。
 export const STORAGE_SIDEBAR_PIN_MIGRATED_KEY = 'ai_cli_hub_sidebar_pin_migrated';
+// 箱（サイドバーのプロジェクトグループ）ごとに最後に見ていたセッションとタブ。
+// 最後に開いていた箱のキーも別に持つ。どちらもサーバー同期＝端末をまたいで共有する。
+// 帯の高さ（session-strip.ts）と multi の範囲（multi-scope.ts）は端末ごとなので
+// **ここへは載せない**（plan_project-box-open-and-session-strip_c4_state-memory.md）。
+export const STORAGE_PROJECT_VIEWS_KEY       = 'ai_cli_hub_project_views';
+export const STORAGE_OPEN_PROJECT_KEY        = 'ai_cli_hub_open_project';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
 // 新規セッションの provider 並び順（端末・ブラウザ単位。サーバ同期しない）。
 export const STORAGE_SPAWN_PROVIDER_ORDER_KEY = 'ai_cli_hub_spawn_provider_order';
@@ -218,6 +225,11 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
   'collapsed_nodes':           [STORAGE_COLLAPSED_NODES_KEY,       JSON.stringify],
   'sidebar_pin_migrated':      [STORAGE_SIDEBAR_PIN_MIGRATED_KEY,  (v) => v ? '1' : '0'],
+  // PUT はサーバー側の UserPrefs を丸ごと置き換える。この表に無いフィールドは、別の
+  // クライアントが保存した瞬間に消える＝ここへ載せるのは「同期させる」ためではなく
+  // 「消されないようにする」ための必須条件。
+  'project_views':             [STORAGE_PROJECT_VIEWS_KEY,         JSON.stringify],
+  'open_project':              [STORAGE_OPEN_PROJECT_KEY,          String],
   'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
   'template_send.immediate':   [STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
@@ -267,6 +279,7 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.grok',
   'usage_links.command-code',
   'usage_probe_model',
+  'open_project',
   'display.locked_mode',
   'display.theme',
   'display.font_size',
@@ -338,6 +351,13 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
       providers: Array.isArray(item.providers) ? item.providers.filter((p) => typeof p === 'string').slice(0, 10) : [],
       tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
     })).filter((item) => item.body);
+    return { ok: true, value };
+  }
+  if (path === 'project_views') {
+    // 検証の中身は DOM を持たない project-view-memory.ts にある（node:test から叩くため）。
+    // 未知のタブ名・壊れた session_id・上限超過はそこで落ちる。
+    const value = sanitizeProjectViews(parsed);
+    if (value === null) return { ok: false };
     return { ok: true, value };
   }
   if (path === 'spawn.defaults') {

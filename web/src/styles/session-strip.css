@@ -1,0 +1,196 @@
+/* セッション帯（#session-strip）
+   統合タブバーと #display-stack の間に 1 段だけ入る、いま開いている箱のセッション一覧。
+
+   高さ（--session-strip-h）と文字サイズ（--session-strip-font-size）と掴み帯の幅
+   （--session-strip-grip-h）は session-strip.ts が :root へ入れる。ここに固定 px を
+   書かない（端末の文字サイズ設定へ比例させるため）。
+
+   由来: docs/local/plan_project-box-open-and-session-strip_c2_session-strip.md */
+
+#session-strip {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  height: var(--session-strip-h, 30px);
+  /* 下端は掴み帯のぶんだけ空ける。空けないと帯の下 8px でセッションのボタンと
+     掴み帯が重なり、ボタンの下側を押したのにドラッグが始まる。
+     （action-bar 側は「pointerdown の target がバー本体のときだけ掴む」という
+     当たり判定で同じ問題を避けている。こちらは中身が横いっぱいに広がるので、
+     場所で分ける方を採る。box-sizing: border-box なので高さは変わらない） */
+  padding: 0 8px var(--session-strip-grip-h, 8px);
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--session-strip-font-size, 13px);
+  /* 収まらないときは横スクロール。折り返して 2 段にしない。 */
+  overflow: hidden;
+}
+#session-strip[hidden] { display: none !important; }
+
+/* 箱の名前。押すとサイドバーの該当行までスクロールする。 */
+.session-strip-project {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  max-width: 22ch;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-soft, var(--text));
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.session-strip-project:hover { color: var(--text); background: var(--bg-hover); }
+.session-strip-project[hidden] { display: none !important; }
+
+/* セッションの並び。横に溢れたらここだけがスクロールする。 */
+.session-strip-items {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  /* スクロールバーの帯は出さない。帯は 1 行ぶんしか高さが無いので、横スクロールバーが
+     レイアウトの高さを食うと中身が読めなくなる（ホイール・トラックパッドでは動く）。 */
+  scrollbar-width: none;
+}
+.session-strip-items::-webkit-scrollbar { display: none; }
+
+.session-strip-item {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 30ch;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.session-strip-item:hover { background: var(--bg-hover); color: var(--text); }
+.session-strip-item.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.session-strip-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.session-strip-state { display: inline-flex; align-items: center; }
+.session-strip-item .card-state-svg { width: 12px; height: 12px; }
+/* 状態の色分けはサイドバーのカードと同じ意味にする（形は stateIconSvgHtml が共有）。 */
+.session-strip-item.awaiting-approval .session-strip-state { color: var(--warn); }
+.session-strip-item.awaiting-input .session-strip-state { color: var(--accent-text); }
+.session-strip-item.workflow-active .session-strip-state { color: var(--muted-2); }
+.session-strip-item.pending-spawn-confirm .session-strip-state { color: var(--perm); }
+
+.session-strip-id { font-weight: 600; color: var(--text-dim); }
+.session-strip-item.active .session-strip-id { color: var(--text); }
+.session-strip-provider { display: inline-flex; align-items: center; }
+
+.session-strip-branch {
+  color: var(--muted);
+  opacity: 0.85;
+  /* 真ん中の省略は session-strip-branch.ts が文字列で作る。ここで尻を落とさない。 */
+}
+
+/* 範囲トグル（multi タブ）。セッション一覧と同じ段を使う＝タブを往復しても
+   端末の高さが動かない（段が 2 本あると PTY リサイズが二重に飛ぶ）。 */
+.session-strip-scope {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  overflow: hidden;
+}
+.session-strip-scope[hidden] { display: none !important; }
+/* multi タブではセッション一覧を隠す。display: flex を持つので [hidden] を明示する。 */
+.session-strip-items[hidden] { display: none !important; }
+
+.session-strip-scope-btn {
+  flex-shrink: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 32ch;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.session-strip-scope-btn:hover:not(:disabled) { background: var(--bg-hover); color: var(--text); }
+/* 選ばれている側は色だけで示さない（背景 + 枠 + 文字の太さの 3 点で示す）。 */
+.session-strip-scope-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 700;
+}
+.session-strip-scope-btn:disabled { opacity: 0.5; cursor: default; }
+.session-strip-scope-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* 押せない「この箱だけ」の包み。理由のツールチップはここが持つ（disabled な button は
+   マウスイベントを出さないので、包みが無いと理由を読む手段が無くなる）。 */
+.session-strip-scope-hint { display: inline-flex; min-width: 0; }
+
+.session-strip-scope-label { overflow: hidden; text-overflow: ellipsis; }
+/* 箱の名前は補助情報なので、押されていても太字にしない（主は「この箱だけ」の側）。 */
+.session-strip-scope-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.session-strip-scope-more {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  opacity: 0.85;
+  white-space: nowrap;
+}
+
+/* 高さの掴み帯。端末との境界（帯の下端）8px。
+   action-bar-resize.ts の HANDLE_ZONE_PX と同じ幅で、ダブルクリックで既定へ戻るのも同じ。 */
+.session-strip-grip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--session-strip-grip-h, 8px);
+  cursor: ns-resize;
+  touch-action: none;
+}
+.session-strip-grip:hover { background: var(--accent-soft); }
+
+/* ドラッグ中は帯の上でテキスト選択させない（端末側も同様）。 */
+body.session-strip-resizing { user-select: none; cursor: ns-resize; }
+body.session-strip-resizing .session-strip-grip { background: var(--accent-soft); }
+
+/* モバイル（720px 以下）は別シェル。帯は出さない。 */
+@media (max-width: 720px) {
+  #session-strip { display: none !important; }
+}

@@ -2,6 +2,18 @@
 import { inputEl } from '../app.js';
 import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
 import { ensureAltScrollRail, stepNotches } from './alt-scroll-rail-view.js';
+import { openProjectKey } from './state.js';
+import { projectKeyForSession } from './sidebar-tree.js';
+import {
+  MULTI_SCOPE_ALL,
+  MULTI_SCOPE_BOX,
+  STORAGE_MULTI_SCOPE_KEY,
+  computeRenderPlan,
+  effectiveScope,
+  normalizeScope,
+  overflowCount,
+  reorderForScope,
+} from './multi-scope.js';
 
 // multi-pane.js — MultiPaneManager + GridPicker (C3: xterm マルチインスタンス + WS ルーティング)
 // index.html で app.js より前に読み込む
@@ -173,7 +185,13 @@ export class MultiPaneManager {
 
     // B: ユーザーが D&D で並べ替えたセッション順（sessionId の配列）。
     //    render() のたびに live セッションで再構築し、新規は末尾へ追加する。
+    //    **ここは常に全セッションの並び。** 範囲（this.scope）で絞った列は visibleIds が
+    //    別に持ち、そちらは保存しない（multi-scope.ts 冒頭の不変条件）。
     this.order = this._loadOrder();
+    // C3: 表示する範囲（'all' = 全部 / 'box' = いま開いている箱だけ）。端末ごとの設定。
+    this.scope = this._loadScope();
+    // C3: いま表示している ID の列。render() が作り直す。**保存しない。**
+    this.visibleIds = [];
     // A: 列／行ごとのサイズ比率（fr 値の配列）。境界ドラッグで更新する。
     this.colFracs = this._loadFracs('Cols', this.cols);
     this.rowFracs = this._loadFracs('Rows', this.rows);
@@ -223,23 +241,31 @@ export class MultiPaneManager {
 
     // B: order（ユーザー並べ替え順）を live セッションで再構築する。
     //    既存順のうち生存しているものを保持し、未登録の新規を sort 順で末尾追加。
+    //
+    // C3: **ここへ範囲（scope）の絞り込みを混ぜない。** 混ぜると他の箱のセッション ID が
+    //     order から落ちたまま _saveOrder() で保存され、「全部」へ戻したときに利用者が
+    //     手で並べ替えた順序が失われる（multi タブを 1 回開くだけで起きる）。
+    //     保存する列（order）と表示する列（visibleIds）は computeRenderPlan が 1 か所で
+    //     作り分ける。保存するのは前者だけ。
     const byId = new Map(sorted.map(s => [s.id, s]));
-    const liveIds = new Set(byId.keys());
-    const newOrder = this.order.filter(id => liveIds.has(id));
-    const inOrder = new Set(newOrder);
-    for (const s of sorted) {
-      if (!inOrder.has(s.id)) { newOrder.push(s.id); inOrder.add(s.id); }
-    }
-    this.order = newOrder;
+    const plan = computeRenderPlan({
+      prevOrder: this.order,
+      liveSortedIds: sorted.map(s => s.id),
+      scope: this.scope,
+      openProjectKey,
+      projectKeyOf: this._projectKeyResolver(allSorted),
+      capacity: total,
+    });
+    this.order = plan.order;
     this._saveOrder();
+    this.visibleIds = plan.visibleIds;   // 保存しない（表示のためだけの列）
+    this.scopeOverflow = plan.overflow;
 
-    // slots 配列を更新（order の先頭 total 件を表示）
-    this.slots = [];
-    for (let i = 0; i < total; i++) {
-      const id = this.order[i];
+    // slots 配列を更新（visibleIds の先頭 total 件を表示）
+    this.slots = plan.slotIds.map(id => {
       const session = (id != null) ? byId.get(id) : null;
-      this.slots.push(session ? { session } : null);
-    }
+      return session ? { session } : null;
+    });
 
     // DOM を再構築
     this.area.innerHTML = '';
@@ -549,22 +575,16 @@ export class MultiPaneManager {
   /**
    * B: スロット from を slot to の位置へ移動する。
    * - to が埋まっている場合は両者を入れ替え（swap）
-   * - to が空（order 範囲外）の場合は from を to 相当の末尾位置へ移動
+   * - to が空（表示範囲外）の場合は from を表示されている列の末尾へ移動
+   *
+   * C3: **スロット番号を this.order の添字として直接使わない。** 範囲が 'box' のときは
+   *     間が飛ぶので、そのまま添字にすると掴んでいない別の箱のセッションが動く。
+   *     変換は multi-scope.ts の orderIndexForSlot（reorderForScope が内部で通す）1 か所。
    */
   _reorderSlots(from, to) {
-    const order = this.order;
-    if (from < 0 || from >= order.length) return;
-    if (to < order.length) {
-      // swap
-      const tmp = order[from];
-      order[from] = order[to];
-      order[to] = tmp;
-    } else {
-      // 空スロットへ: from を取り出して末尾（表示範囲の末端）へ
-      const [id] = order.splice(from, 1);
-      order.push(id);
-    }
-    this.order = order;
+    const visible = Array.isArray(this.visibleIds) ? this.visibleIds : this.order;
+    if (from < 0 || from >= visible.length) return;
+    this.order = reorderForScope(this.order, visible, from, to);
     this._saveOrder();
     // フォーカスはドロップ先スロットへ移す
     this.focusedIdx = Math.min(to, this.cols * this.rows - 1);
@@ -934,6 +954,77 @@ export class MultiPaneManager {
       const arr = JSON.parse(raw);
       return Array.isArray(arr) ? arr.filter(n => Number.isFinite(n)) : [];
     } catch (_) { return []; }
+  }
+
+  // ─── C3: 表示する範囲（この箱だけ / 全部）─────────────────────
+
+  /**
+   * セッション ID → 箱のキーを返す関数。範囲が 'box' のときだけ呼ばれるので、
+   * ここで初めて表を作る（'all' では 1 度も作らない）。
+   */
+  _projectKeyResolver(allSorted) {
+    let cache = null;
+    return (id) => {
+      if (!cache) {
+        cache = new Map();
+        for (const s of allSorted) {
+          if (s) cache.set(s.id, projectKeyForSession(s, allSorted));
+        }
+      }
+      const key = cache.get(id);
+      return key === undefined ? null : key;
+    };
+  }
+
+  /** 利用者が選んでいる範囲（保存値そのまま）。 */
+  getScope() {
+    return normalizeScope(this.scope);
+  }
+
+  /**
+   * 範囲を切り替える。**行列数・比率・並び順のいずれも保存し直さない。**
+   * 端末も作り直さない（render() が detachSlot してから組み直すので Terminal は生き続ける）。
+   */
+  setScope(next) {
+    const value = normalizeScope(next);
+    if (value === normalizeScope(this.scope)) return;
+    this.scope = value;
+    this._saveScope();
+    this.render();
+  }
+
+  /**
+   * 開いている箱が変わったときの追従。範囲が 'box' で multi を表示中のときだけ描き直す。
+   * （multi を開いていなければ、次にタブを開いたときの render() で足りる）
+   */
+  onOpenProjectChanged() {
+    if (normalizeScope(this.scope) !== MULTI_SCOPE_BOX) return;
+    const view = document.getElementById('multi-view');
+    if (!view || view.hidden) return;
+    this.render();
+  }
+
+  /** 範囲トグル（session-strip.ts）が読む状態。直近の render() の結果をそのまま返す。 */
+  getScopeStatus() {
+    const capacity = this.cols * this.rows;
+    const visibleCount = Array.isArray(this.visibleIds) ? this.visibleIds.length : 0;
+    return {
+      scope: normalizeScope(this.scope),
+      effective: effectiveScope(this.scope, openProjectKey),
+      projectKey: openProjectKey,
+      visibleCount,
+      capacity,
+      overflow: Number.isFinite(this.scopeOverflow)
+        ? this.scopeOverflow
+        : overflowCount(visibleCount, capacity),
+    };
+  }
+
+  _saveScope() {
+    try { localStorage.setItem(STORAGE_MULTI_SCOPE_KEY, normalizeScope(this.scope)); } catch (_) {}
+  }
+  _loadScope() {
+    try { return normalizeScope(localStorage.getItem(STORAGE_MULTI_SCOPE_KEY)); } catch (_) { return MULTI_SCOPE_ALL; }
   }
 
   // ─── A: サイズ比率の永続化 ──────────────────────────────────

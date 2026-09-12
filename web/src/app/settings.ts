@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
-import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
+import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
@@ -14,6 +14,9 @@ import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStand
 import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
 import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
 import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.js';
+import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
+import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
+import { saveProjectView } from './project-view-store.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -914,6 +917,10 @@ export function applyFontSize(size) {
       });
     });
   } catch (_) {}
+  // セッション帯の高さと文字サイズも同じ設定へ追従させる（利用者が手で高さを決めて
+  // いればその値が優先される）。初期 IIFE から呼ばれる経路では session-strip.js が
+  // まだ評価されていないことがあるので、terminals と同じく try/catch で守る。
+  try { applySessionStripMetrics(); } catch (_) {}
   const sel = document.getElementById('fontsize-select');
   if (sel) sel.value = s;
   try { localStorage.setItem(STORAGE_FONTSIZE_KEY, s); } catch (_) {}
@@ -2377,7 +2384,10 @@ export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split
 // Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval', 'history', 'orchestration']);
+// タブ名の正本は project-view-memory.ts の VALID_TAB_NAME_LIST（DOM を持たないので
+// node:test から検証できる）。箱ごとの記憶を復元するときも同じ一覧で検証する＝
+// 「ここには有るが復元側には無い」というずれが起きない。
+export const VALID_TAB_NAMES = new Set<string>(VALID_TAB_NAME_LIST);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2542,6 +2552,24 @@ export function updateChatCountBadge() {
   badge.hidden = (n === 0);
 }
 
+/**
+ * いま開いている箱の「最後のタブ」を覚える（C4）。
+ *
+ * 呼ぶのはタブバーのクリックからだけ。setActiveTab の中では呼ばない（復元・承認の
+ * 自動移動・画面幅の変化からも通るので、利用者が触っていないタブが記憶を潰す）。
+ *
+ * いま見ているセッションが開いている箱のものでなければ、何も保存しない。別の箱の
+ * セッション ID をその箱の記憶へ書くと、次にその箱を開いたとき「箱の中に居ない
+ * セッション」を開こうとして先頭へ落ちる＝記憶が静かに消える。
+ */
+export function rememberTabForOpenProject(name: string): void {
+  if (!openProjectKey) return;
+  if (activeSessionId === null || activeSessionId === undefined) return;
+  const current = sessions.get(activeSessionId);
+  if (!current || sessionProjectKey(current) !== openProjectKey) return;
+  saveProjectView(openProjectKey, activeSessionId, name);
+}
+
 // C2 公開 API: タブを切り替える
 export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
@@ -2575,6 +2603,9 @@ export function setActiveTab(sid, name) {
       mgr.focusSlot(restoreIdx);
     }
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // multi は同じ段へ「この箱だけ／全部」の範囲トグルを出す（セッション一覧は出さない）。
+    // 段の高さは共有＝タブを往復しても端末の高さが動かない。
+    setSessionStripTab('multi');
     // C3: "Detach current grid" ボタンをタブバーに挿入（初回のみ生成）
     _ensureMultiDetachBtn();
     return;
@@ -2608,6 +2639,8 @@ export function setActiveTab(sid, name) {
       b.classList.toggle('active', b.dataset.tab === 'approval');
     });
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // 承認タブはセッション非依存の集約ビュー。帯は隠す。
+    setSessionStripTab('approval');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
         detail: { sid: activeSessionId, name },
@@ -2632,6 +2665,8 @@ export function setActiveTab(sid, name) {
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(button => button.classList.toggle('active', (button as HTMLElement).dataset.tab === name));
     window.renderOrchestrationDashboard?.();
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // オーケストレーションもセッション非依存の集約ビュー。帯は隠す。
+    setSessionStripTab('orchestration');
     return;
   }
 
@@ -2673,6 +2708,9 @@ export function setActiveTab(sid, name) {
 
   area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
+
+  // terminal / chat / split / files / git / history は帯を出すタブ。
+  setSessionStripTab(name);
 
   // タブボタンの active 切替
   document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
@@ -2756,6 +2794,9 @@ export function switchToTerminalView() {
       const name = btn.dataset.tab;
       if (!VALID_TAB_NAMES.has(name)) return;
       setActiveTab(activeSessionId, name);
+      // 箱ごとの記憶（C4）。**保存は利用者の操作からだけ**なので setActiveTab の中では
+      // なくここで呼ぶ。setActiveTab は復元・承認の自動移動・幅の変化からも呼ばれる。
+      rememberTabForOpenProject(name);
       // C5: lock 中に lock 値以外へ切替えたら、セッションごと 5 分クールダウンでトースト
       if (typeof maybeFireLockedModeToast === 'function') {
         maybeFireLockedModeToast(activeSessionId, name);

@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/styles/mobile-home.css">
   <link rel="stylesheet" href="/styles/first-run-tour.css">
+  <link rel="stylesheet" href="/styles/session-strip.css">
 </head>
 <body>
   <header>
@@ -1493,6 +1494,20 @@
       <div class="picker-presets">
         <!-- JS で 2/4/6/9/12/18 プリセットボタン生成 -->
       </div>
+    </div>
+    <!-- セッション帯（いま開いている箱のセッションを 1 段に並べる）。
+         #display-stack の中には入れない。あちらは #action-bar を absolute で重ねる
+         ための位置基準なので、中へ足すと承認バーの重なり方が変わる。
+         帯は常設で、高さが変わるのは利用者が掴み帯をドラッグしたときだけなので、
+         承認バーと違ってフローに置いてよい（そのドラッグ中だけ PTY リサイズを抑える。
+         session-strip.ts を参照）。中身は session-strip.ts が描く。 -->
+    <div id="session-strip" hidden>
+      <button id="session-strip-project" class="session-strip-project" type="button" hidden></button>
+      <div id="session-strip-items" class="session-strip-items"></div>
+      <!-- multi タブのときはセッション一覧の代わりにここへ範囲トグルを出す。
+           段を 2 本に分けない＝タブを往復しても端末の高さが動かない。 -->
+      <div id="session-strip-scope" class="session-strip-scope" hidden></div>
+      <div id="session-strip-grip" class="session-strip-grip" aria-hidden="true"></div>
     </div>
     <!-- 承認バー（#action-bar）を absolute で重ねるための位置基準。
          バーをフローに置くと表示・高さ変更のたびに #terminal-area が縮み、
