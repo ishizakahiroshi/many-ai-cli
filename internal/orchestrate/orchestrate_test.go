@@ -182,6 +182,9 @@ func TestRunRelayBuildsSameTreeRequest(t *testing.T) {
 	if got.PlanPath != wantPlan || got.Mode != "same-tree" || got.Roles["implementation"].Provider != "claude" || got.Roles["review"].Model != "gpt-5" || got.Roles["implementation-strong"].Model != "opus-strong" {
 		t.Fatalf("relay request = %+v", got)
 	}
+	if !got.AcknowledgeChildFullBypass {
+		t.Fatalf("acknowledge_child_full_bypass = false, want true (CLI start is the ack)")
+	}
 }
 
 func TestRunRelayStatusAndStop(t *testing.T) {

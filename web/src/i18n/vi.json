@@ -1696,6 +1696,7 @@
   "relay_mode_worktree_label": "Worktree relay (khuyến nghị)",
   "relay_mode_same_tree_label": "Cùng cây với parent",
   "relay_same_tree_warning": "Session con sẽ ghi trực tiếp vào cây làm việc của parent. Không chỉnh sửa song song; các thay đổi chưa commit trước khi bắt đầu cũng được review.",
+  "relay_full_bypass_note": "Bắt đầu relay đồng nghĩa bạn xác nhận các phiên con không giám sát mặc định được toàn quyền bypass trừ khi bạn đặt orchestration.child_permission_default an toàn hơn hoặc quyền theo từng vai trò.",
   "relay_extra_impl": "Chỉ thị bổ sung cho triển khai",
   "relay_extra_review": "Chỉ thị bổ sung cho review",
   "relay_roles_required": "Hãy chọn CLI và model cho triển khai và review.",

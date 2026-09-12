@@ -34,6 +34,17 @@ func orchestrationRequest(method, path string, body any) *http.Request {
 	return req
 }
 
+// orchestrationUIRequest is orchestrationRequest plus the Fetch Metadata a
+// same-origin browser fetch sends. Tests that claim origin:"ui" and expect
+// confirm-skip must use this; JSON alone no longer binds UI origin (F-AI-03).
+func orchestrationUIRequest(method, path string, body any) *http.Request {
+	req := orchestrationRequest(method, path, body)
+	req.Header.Set("Origin", "http://127.0.0.1:47777")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	return req
+}
+
 func registerTestSpawnConfirmation(t *testing.T, s *Server, parent *session, body spawnChildRequest) *pendingSpawnConfirmation {
 	t.Helper()
 	pending, err := s.registerSpawnConfirmation(parent, "", body)
@@ -752,7 +763,7 @@ func Test_handleSpawnChild_uiOriginSkipsConfirmation(t *testing.T) {
 	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
 
 	rr := httptest.NewRecorder()
-	s.handleSessionAPI(rr, orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+	s.handleSessionAPI(rr, orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child",
 		spawnChildRequest{Provider: "codex", Role: "implementation", Origin: launchOriginUI}))
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 (performSpawn の重複 role ガードまで到達), body=%s", rr.Code, rr.Body.String())
@@ -776,7 +787,7 @@ func Test_handleSpawnChild_uiOriginStillEnforcesLimits(t *testing.T) {
 	parent.Depth = 1
 
 	rr := httptest.NewRecorder()
-	s.handleSessionAPI(rr, orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+	s.handleSessionAPI(rr, orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child",
 		spawnChildRequest{Provider: "codex", Role: "tester", Origin: launchOriginUI}))
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want 429 (UI 起点でも深さ上限が効く), body=%s", rr.Code, rr.Body.String())
@@ -802,6 +813,54 @@ func Test_handleSpawnChild_rejectsUnknownOrigin(t *testing.T) {
 	}
 	if n := pendingSpawnConfirmationsCount(s); n != 0 {
 		t.Fatalf("pending spawn confirmations = %d, want 0 (弾いた要求で確認を作らない)", n)
+	}
+}
+
+// F-AI-03: JSON だけで origin:"ui" を付けても確認は飛ばない。ブラウザの
+// Fetch Metadata が無い要求は conductor 扱いへ落ち、確認待ちになる。
+func Test_handleSpawnChild_spoofedUIOriginRequiresConfirmation(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+		spawnChildRequest{Provider: "codex", Role: "tester", Origin: launchOriginUI}).WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.handleSessionAPI(httptest.NewRecorder(), req)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for pendingSpawnConfirmationsCount(s) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := pendingSpawnConfirmationsCount(s); n != 1 {
+		cancel()
+		<-done
+		t.Fatalf("pending spawn confirmations = %d, want 1 (spoofed ui must not skip confirm)", n)
+	}
+	cancel()
+	<-done
+}
+
+func Test_bindSpawnOrigin_requiresSameOriginFetchMetadata(t *testing.T) {
+	s := newTestServer()
+	plain := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", nil)
+	if got := s.bindSpawnOrigin(plain, launchOriginUI); got != launchOriginConductor {
+		t.Fatalf("unbound ui = %q, want conductor", got)
+	}
+	bound := orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child", nil)
+	if got := s.bindSpawnOrigin(bound, launchOriginUI); got != launchOriginUI {
+		t.Fatalf("bound ui = %q, want ui", got)
+	}
+	if got := s.bindSpawnOrigin(bound, launchOriginConductor); got != launchOriginConductor {
+		t.Fatalf("conductor stays %q, got %q", launchOriginConductor, got)
 	}
 }
 

@@ -239,6 +239,19 @@ Release artifacts are published at
   title identifies its session.
 
 ### Security
+- Spawn-child no longer trusts client JSON `origin:"ui"` alone to skip the
+  confirmation dialog (F-AI-03). The Hub keeps UI origin only when the request
+  carries same-origin browser Fetch Metadata (`Sec-Fetch-Site: same-origin` and
+  an allowed `Origin`). Spoofed `origin:"ui"` from curl/CLI/AI is treated as a
+  conductor start and still requires confirmation.
+- Derive-dialog `/api/info` now uses cookie-primary `apiFetch` instead of
+  `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene.
+- Starting a relay through the HTTP API now requires
+  `acknowledge_child_full_bypass:true` when unattended children would still get
+  the built-in full permission tier (F-AI-01). The relay dialog Start button and
+  `orchestrate relay` send that acknowledgment; `orchestration.child_full_bypass`
+  remains default **true** (D-12). Board start also records a short full-bypass
+  disclosure. Inject sanitize+4KiB caps from the prior audit are unchanged.
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped
   `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues

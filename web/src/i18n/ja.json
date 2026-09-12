@@ -1696,6 +1696,7 @@
   "relay_mode_worktree_label": "Relay 用 worktree（おすすめ）",
   "relay_mode_same_tree_label": "親と同じツリー",
   "relay_same_tree_warning": "子セッションが親の作業ツリーを直接書き換えます。並行して編集しないでください。開始前の未コミット変更もレビュー対象になります。",
+  "relay_full_bypass_note": "リレーを開始すると、より安全な orchestration.child_permission_default や役割ごとの権限を設定していない限り、無人の子が全許可バイパス既定になることを承認したことになります。",
   "relay_extra_impl": "実装への追加指示",
   "relay_extra_review": "レビューへの追加指示",
   "relay_roles_required": "実装役とレビュー役の CLI とモデルを選択してください。",

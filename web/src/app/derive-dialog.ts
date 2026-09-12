@@ -109,7 +109,8 @@ function providerLabel(value: string, extras: DeriveProviderOption[]): string {
 // 必要なのでここで拾う。
 async function loadLaunchOptions(): Promise<DeriveProviderOption[]> {
   try {
-    const res = await fetch(`/api/info?token=${token}`);
+    // Cookie-primary, matching handoff F-WEB-05 (F-WEB-06).
+    const res = await apiFetch('/api/info');
     if (!res.ok) return [];
     const info = await res.json();
     setLaunchOptionChoices(info);

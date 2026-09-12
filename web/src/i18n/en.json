@@ -1696,6 +1696,7 @@
   "relay_mode_worktree_label": "Relay worktree (recommended)",
   "relay_mode_same_tree_label": "Same tree as parent",
   "relay_same_tree_warning": "Child sessions write directly to the parent's working tree. Do not edit it in parallel; uncommitted changes before starting are also reviewed.",
+  "relay_full_bypass_note": "Starting a relay acknowledges that unattended children default to full permission bypass unless you set a safer orchestration.child_permission_default or per-role permission.",
   "relay_extra_impl": "Extra implementation instructions",
   "relay_extra_review": "Extra review instructions",
   "relay_roles_required": "Choose a CLI and model for implementation and review.",

@@ -27,6 +27,14 @@ type relayStartJSON struct {
 	Roles         map[string]*orchestrationRoleAssignment `json:"roles"`
 	EscalateAfter int                                     `json:"escalate_after"`
 	Extra         map[string]string                       `json:"extra"`
+	// AcknowledgeChildFullBypass must be true when this start would spawn
+	// unattended children under the full permission tier (F-AI-01 / D-12).
+	// Clicking Start in the relay dialog, or running `orchestrate relay`, is
+	// the acknowledgment; the field stops silent API callers from inheriting
+	// full bypass without an explicit signal. Not required when
+	// child_full_bypass is false, child_permission_default is safer than
+	// full, or every role already names its own permission_preset.
+	AcknowledgeChildFullBypass bool `json:"acknowledge_child_full_bypass"`
 }
 
 type relayControlAPIRequest struct {
@@ -78,6 +86,12 @@ func (s *Server) handleRelayStart(w http.ResponseWriter, r *http.Request, parent
 	}
 
 	roles := s.relayRolesForStart(parentID, parent.OrchestrationID, body.Roles)
+	orchCfg := s.snapshotCfg().Orchestration
+	if relayRequiresFullBypassAck(orchCfg, roles) && !body.AcknowledgeChildFullBypass {
+		writeJSONError(w, http.StatusBadRequest, "full_bypass_acknowledgment_required",
+			"relay children default to full permission bypass; set acknowledge_child_full_bypass:true to confirm (or set orchestration.child_full_bypass:false / child_permission_default / per-role permission_preset)")
+		return
+	}
 	status, err := s.startRelay(parentID, relayStartRequest{
 		PlanPath:      planPath,
 		MaxRounds:     maxRounds,
@@ -347,6 +361,29 @@ func (s *Server) relayRolesForStart(parentID int, orchestrationID string, suppli
 		roles[role] = current
 	}
 	return roles
+}
+
+
+// relayRequiresFullBypassAck is true when this start would apply the built-in
+// full unattended tier to at least one role that did not name its own
+// permission_preset. D-12 keeps child_full_bypass default true for relay UX;
+// the HTTP ack is the compensating disclosure (F-AI-01).
+func relayRequiresFullBypassAck(cfg config.OrchestrationConfig, roles map[string]orchestrationRoleAssignment) bool {
+	if !cfg.ChildFullBypassEnabled() {
+		return false
+	}
+	if cfg.ChildPermissionDefaultTier() != config.PermissionPresetFull {
+		return false
+	}
+	if len(roles) == 0 {
+		return true
+	}
+	for _, ra := range roles {
+		if strings.TrimSpace(ra.PermissionPreset) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveRelayPlanPath(parentCWD, raw string) (string, error) {

@@ -439,6 +439,8 @@ async function startRelay(): Promise<void> {
       implementation: extraImpl?.value.trim() || '',
       review: extraReview?.value.trim() || '',
     },
+    // Start click acknowledges full-bypass default for unattended relay children (F-AI-01 / D-12).
+    acknowledge_child_full_bypass: true,
   };
   if (strong.provider) body.roles['implementation-strong'] = roleRequestBody(strong);
   savePrefs();
