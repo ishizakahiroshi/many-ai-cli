@@ -3,6 +3,24 @@ import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { sessions } from './state.js';
 import { FilesTabManager, FilesPreview } from './files-view.js';
+import {
+  findPathCandidates,
+  isAbsolutePath,
+  trimTerminalPathCandidate,
+} from './path-detect.js';
+
+export {
+  ABS_UNIX_PATH_RE,
+  ABS_WIN_PATH_RE,
+  REL_PATH_RE,
+  findPathCandidates,
+  isAbsolutePath,
+  isLikelyRelPath,
+  isTerminalPathStartBoundary,
+  stripTerminalLineSuffix,
+  trimTerminalPathCandidate,
+  trimWindowsPathCandidate,
+} from './path-detect.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -365,34 +383,6 @@ export function computeRelPath(from, to) {
   return rel || '.';
 }
 
-export function trimTerminalPathCandidate(path) {
-  let text = String(path || '').trim().replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
-  // 拡張子の直後に全角/日本語が続く場合はそこで切る（相対パス・Unix 絶対パスにも適用）。
-  // Windows 絶対パスは下の trimWindowsPathCandidate で同等処理を行う。
-  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
-  if (/^[A-Za-z]:[\\/]/.test(text)) text = trimWindowsPathCandidate(text);
-  text = stripTerminalLineSuffix(text);
-  return text;
-}
-
-export function trimWindowsPathCandidate(path) {
-  let text = String(path || '');
-  text = text.replace(/([\\/])\s+.*$/, '$1');
-  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
-  text = text.replace(/\s+[぀-ヿ㐀-鿿＀-￯].*$/u, '');
-  text = text.replace(/\s+[A-Za-z]$/, '');
-  return text.replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
-}
-
-export function stripTerminalLineSuffix(path) {
-  const text = String(path || '');
-  return text.replace(/([^\s:]):\d+(?::\d+)?$/, '$1');
-}
-
-export function isAbsolutePath(path) {
-  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/');
-}
-
 export function joinPath(base, rel) {
   if (!base || !rel) return rel || base || '';
   const sep = base.includes('\\') ? '\\' : '/';
@@ -421,58 +411,6 @@ export function resolveTerminalPathCandidate(path, sessionId) {
   const cwd = sessions.get(sessionId)?.cwd || '';
   if (!cwd) return cleaned;
   return joinPath(cwd, cleaned);
-}
-
-// Windows drive paths can appear with either backslashes or forward slashes
-// in terminal output, e.g. D:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
-export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(])+)/g;
-// 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
-// Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
-export const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
-export const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
-
-// `Y/N` / `1/2` / `bash/zsh` 等を誤検出しないための post-filter。
-// 受理条件: `./` `../` 始まり、またはセパレータ 2 個以上、または末尾拡張子あり。
-export function isLikelyRelPath(path) {
-  if (!path) return false;
-  if (/^\.{1,2}[\\/]/.test(path)) return true;
-  const sepCount = (path.match(/[\\/]/g) || []).length;
-  if (sepCount >= 2) return true;
-  if (/\.[a-zA-Z0-9]{1,15}$/.test(path)) return true;
-  return false;
-}
-
-export function isTerminalPathStartBoundary(text, start) {
-  if (start <= 0) return true;
-  return /[\s([{"'`]/.test(text[start - 1] || '');
-}
-
-export function findPathCandidates(text) {
-  const candidates = [];
-  for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(text, m.index)) continue;
-      const pathStr = trimTerminalPathCandidate(m[1]);
-      if (pathStr.length >= 3) candidates.push({ start: m.index, end: m.index + pathStr.length, text: pathStr });
-    }
-  }
-  REL_PATH_RE.lastIndex = 0;
-  let m;
-  while ((m = REL_PATH_RE.exec(text)) !== null) {
-    const pathStr = trimTerminalPathCandidate(m[2]);
-    if (pathStr.length < 3) continue;
-    if (!isLikelyRelPath(pathStr)) continue;
-    candidates.push({ start: m.index + m[1].length, end: m.index + m[1].length + pathStr.length, text: pathStr });
-  }
-  candidates.sort((a, b) => a.start - b.start || b.end - a.end);
-  const out = [];
-  for (const c of candidates) {
-    if (out.some(x => c.start < x.end && c.end > x.start)) continue;
-    out.push(c);
-  }
-  return out;
 }
 
 export function appendLinkedText(container, text, sessionId) {

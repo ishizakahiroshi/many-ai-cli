@@ -211,6 +211,21 @@ Release artifacts are published at
   — no extra confirmation step was added.
 
 ### Fixed
+- **Right-clicking a backtick-wrapped Windows path now offers Open in
+  modal again** (and Open in MANY-AI-CLI, which uses the same check).
+  Footer paths such as `` `D:\src\…\file.ts` `` were detected with the
+  closing backtick still attached, so the dashboard treated a previewable
+  `.ts` / `.md` file as an unknown type and hid those two items. Quotes
+  were already stripped; backticks now stop the Windows path match the
+  same way Unix and relative paths already did (`web/src/app/path-detect.ts`).
+- **A file path that a CLI wraps onto the next line is once again one
+  clickable link.** Grok (and other TUIs) insert a real newline when a long
+  Windows path hits the terminal width, so the dashboard used to treat
+  `…2026-` and `09-12.md` as two different files. Clicking either fragment
+  could not open the preview or the default app. Soft wraps that xterm itself
+  makes were already joined; the same join now covers the CLI's own line
+  breaks when the next line is clearly the rest of the path
+  (`web/src/app/path-detect.ts`, `terminal.ts`).
 - **You can leave Grok conversation history without pressing Close.** Opening
   Terminal, Git, History, or another tab now dismisses the read-only overlay,
   including a second click on the already-active Terminal tab. Close and

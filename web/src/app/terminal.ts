@@ -4,7 +4,17 @@ import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
 import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
-import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
+import { resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup } from './path-links.js';
+import {
+  ABS_UNIX_PATH_RE,
+  ABS_WIN_PATH_RE,
+  REL_PATH_RE,
+  expandLogicalPathLine,
+  isLikelyRelPath,
+  isTerminalPathStartBoundary,
+  trimTerminalPathCandidate,
+  type PathWrapRow,
+} from './path-detect.js';
 import { ws } from './ws-client.js';
 import { isSelectMenuActive, isShellProvider, scheduleApprovalCheck } from './approval.js';
 import { probe } from '../debug/probe.js';
@@ -226,21 +236,6 @@ export function ensureTerminal(id) {
       const thisLine = buf.getLine(y - 1);
       if (!thisLine) { callback([]); return; }
 
-      // wrapped 継続行の場合、先頭物理行まで遡って論理行全体を処理する
-      let startY = y;
-      let startLine = thisLine;
-      if (thisLine.isWrapped) {
-        let cur = y - 1;
-        while (cur > 0) {
-          const candidate = buf.getLine(cur - 1);
-          if (!candidate) break;
-          if (!candidate.isWrapped) { startY = cur; startLine = candidate; break; }
-          cur--;
-        }
-        if (startY === y) { callback([]); return; }
-      }
-
-      // 論理行を構成する物理行（先頭行 + 後続の wrapped 継続行）を収集する
       const buildCellMap = (line) => {
         const cm = [];
         for (let x = 0; x < line.length; x++) {
@@ -249,14 +244,47 @@ export function ensureTerminal(id) {
         }
         return cm;
       };
-      const physRows = [{ y1: startY, text: startLine.translateToString(true), cellMap: buildCellMap(startLine) }];
-      let peek = startY; // getLine は 0-based。peek=startY は 1-based の startY+1 行目
-      while (true) {
-        const next = buf.getLine(peek);
-        if (!next || !next.isWrapped) break;
-        physRows.push({ y1: peek + 1, text: next.translateToString(true), cellMap: buildCellMap(next) });
-        peek++;
+      const contentWidthOf = (line) => {
+        let width = 0;
+        for (let x = 0; x < line.length; x++) {
+          const cell = line.getCell(x);
+          if (!cell || cell.getWidth() === 0) continue;
+          if (typeof cell.getCode === 'function' && cell.getCode() === 0) continue;
+          width = x + cell.getWidth();
+        }
+        return width;
+      };
+      const getRow = (index: number): PathWrapRow | null => {
+        if (index < 0) return null;
+        const line = buf.getLine(index);
+        if (!line) return null;
+        return {
+          text: line.translateToString(true),
+          isWrapped: !!line.isWrapped,
+          contentWidth: contentWidthOf(line),
+        };
+      };
+      // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス分断も結合する
+      const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols);
+
+      const physRows = [];
+      for (let i = start; i <= end; i++) {
+        const line = buf.getLine(i);
+        if (!line) break;
+        const isWrapped = !!line.isWrapped;
+        let text = line.translateToString(true);
+        let cellMap = buildCellMap(line);
+        // ハードラップ継続行の行頭インデントはパスの一部ではない
+        if (i > start && !isWrapped) {
+          const lead = (text.match(/^[ \t]*/) || [''])[0].length;
+          if (lead > 0) {
+            text = text.slice(lead);
+            cellMap = cellMap.slice(lead);
+          }
+        }
+        physRows.push({ y1: i + 1, text, cellMap });
       }
+      if (physRows.length === 0) { callback([]); return; }
 
       // 行テキストを結合し、各行の開始オフセットを記録する
       const rowOffsets = [];
