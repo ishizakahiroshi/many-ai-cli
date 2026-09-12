@@ -239,6 +239,17 @@ Release artifacts are published at
   title identifies its session.
 
 ### Security
+- Spawn-child no longer treats client JSON `origin:"ui"` as enough to skip the
+  confirmation dialog (F-AI-03). The Hub keeps UI origin only when the request
+  also carries same-origin browser Fetch Metadata (`Sec-Fetch-Site: same-origin`
+  and an allowed `Origin`). A spoofed `origin:"ui"` without those headers is
+  treated as a conductor start and still requires confirmation. This is a
+  backstop against copying the UI JSON; a client that also sends those headers
+  can still claim UI origin.
+- Derive-dialog `/api/info` now uses cookie-primary `apiFetch` instead of
+  `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene. Other
+  leftover `?token=` fetches (spawn-panel, settings, files-view, approval,
+  mobile-connect) are unchanged.
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped
   `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues
@@ -248,8 +259,7 @@ Release artifacts are published at
   relay children would stall unattended).
 - Handoff UI fetches (`/api/handoff`, `/api/handoff/:id`, `/api/spawn`) drop
   `?token=` and rely on the cookie-primary `apiFetch` path, matching the avatar
-  URL hygiene fix (F-WEB-05). These were the last three places in the web UI
-  still putting the Hub token in a request URL.
+  URL hygiene fix (F-WEB-05). Other `?token=` fetches in the web UI remain.
 - **The Claude Code bundled in the Docker image is updated to 2.1.163.** 2.1.162
   carried two advisories: a sandbox escape through git worktree path confusion
   that allowed unsandboxed code execution, and out-of-band data exfiltration via

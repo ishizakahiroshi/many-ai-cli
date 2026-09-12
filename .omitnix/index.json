@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "379c6efb1789cef71b83c33f1a4b8d3c919fc61a",
+    "commit": "6bc0d61bcb8ff5d9fa888dd7059afe73ffcf2fda",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -135,8 +135,8 @@
   },
   "coverage": {
     "discovered": 898,
-    "analyzed": 672,
-    "unresolved": 34,
+    "analyzed": 673,
+    "unresolved": 33,
     "unknown": 1,
     "unclaimed": 191,
     "skipped_by_config": 0
@@ -18300,7 +18300,7 @@
     {
       "path": "web/src/app/derive-dialog.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -18321,18 +18321,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/info?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/info?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/detached-grid-launcher.ts",
