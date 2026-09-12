@@ -17,6 +17,7 @@ import { wsConnectionState } from './ws-client.js';
 import { FilesTabManager } from './files-view.js';
 import { showPathPopup } from './path-links.js';
 import { _chatPaneMountedSid, isTranscriptBackedSession, mountChatPaneForSession, restoreChatHistoryFromStore } from './chat-history.js';
+import { sentHistoryModalOwnerMatches, type SentHistoryModalOwner } from './token-statusbar-owner.js';
 
 // セッション単位の usage データキャッシュ。
 interface UsageCacheEntry {
@@ -896,9 +897,12 @@ function formatSentDateTime(ts: any): string {
 // アクティブセッションの送信メッセージ（user role）を時系列（古い→新しい）で返す。
 // 本文ありのテキスト送信と、添付のみ（kind==='attach'）の送信の両方を対象にする。
 // 添付は saved_path（絶対パス）を持つものだけを拾う（クリックで開けないものは除外）。
-function collectSentMessages(sid: number): Array<{ ts: any; text: string; attachments: any[] }> {
+let _sentExpandedIds = new Set<string>();
+let _sentModalResizeObserver: ResizeObserver | null = null;
+
+function collectSentMessages(sid: number): Array<{ id: string; ts: any; text: string; attachments: any[] }> {
   const arr = chatHistory.get(sid) || [];
-  const out: Array<{ ts: any; text: string; attachments: any[] }> = [];
+  const out: Array<{ id: string; ts: any; text: string; attachments: any[] }> = [];
   for (const m of arr) {
     if (!m || m.role !== 'user') continue;
     const text = String(m.normalizedText || m.rawText || '').trim();
@@ -906,16 +910,67 @@ function collectSentMessages(sid: number): Array<{ ts: any; text: string; attach
       ? m.attachments.filter((a: any) => a && a.path)
       : [];
     if (!text && attachments.length === 0) continue;
-    out.push({ ts: m.ts, text, attachments });
+    const id = m.id == null ? String(m.ts ?? '') + ':' + String(out.length) : String(m.id);
+    out.push({ id, ts: m.ts, text, attachments });
   }
   return out;
 }
 
+// 折り畳み中の本文だけを上限高さで計測し、実際にはみ出す項目にだけ操作を付ける。
+function updateSentHistoryTextOverflow(row: HTMLElement, id: string): void {
+  const text = row.querySelector('.tsb-sent-text') as HTMLElement | null;
+  if (!text) return;
+  const collapsedClass = 'tsb-sent-text-collapsed';
+  const expanded = _sentExpandedIds.has(id);
+
+  // 展開中も一度上限を適用して実際の overflow を測る。同期処理内で元の状態へ戻る。
+  text.classList.add(collapsedClass);
+  const hasOverflow = text.scrollHeight > text.clientHeight + 1;
+  if (!hasOverflow) {
+    text.classList.remove(collapsedClass);
+    _sentExpandedIds.delete(id);
+    row.querySelector('.tsb-sent-expand')?.remove();
+    return;
+  }
+  text.classList.toggle(collapsedClass, !expanded);
+
+  let button = row.querySelector('.tsb-sent-expand') as HTMLButtonElement | null;
+  if (!button) {
+    button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tsb-sent-expand';
+    button.setAttribute('aria-controls', text.id);
+    button.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation(); // 履歴行のクリックコピーと分離する。
+      if (_sentExpandedIds.has(id)) _sentExpandedIds.delete(id);
+      else _sentExpandedIds.add(id);
+      updateSentHistoryTextOverflow(row, id);
+    });
+    row.insertBefore(button, text.nextSibling);
+  }
+  button.textContent = expanded ? t('tsb_sent_history_collapse') : t('tsb_sent_history_expand');
+  button.setAttribute('aria-expanded', String(expanded));
+  button.setAttribute('aria-controls', text.id);
+}
+
+function refreshSentHistoryTextOverflow(body: HTMLElement): void {
+  body.querySelectorAll<HTMLElement>('.tsb-sent-row').forEach((row) => {
+    const text = row.querySelector('.tsb-sent-text') as HTMLElement | null;
+    const id = text?.dataset.sentId;
+    if (id) updateSentHistoryTextOverflow(row, id);
+  });
+}
+
 // モーダルの件数と本文を、現在の chatHistory から作り直す。
 // loading=true の間は「まだ 0 件」ではなく読み込み中と表示する（取り込み待ちのため）。
-function renderSentHistoryContent(sid: number, loading: boolean): void {
+function renderSentHistoryContent(owner: SentHistoryModalOwner, loading: boolean): void {
   const overlay = document.getElementById('tsb-sent-modal');
-  if (!overlay) return;
+  if (!overlay || !sentHistoryModalOwnerMatches({
+    sentHistorySessionId: overlay.dataset.sentHistorySessionId,
+    sentHistoryModalInstanceId: overlay.dataset.sentHistoryModalInstanceId,
+  }, owner)) return;
+  const sid = owner.sessionId;
   const countEl = overlay.querySelector('.tsb-sent-count') as HTMLElement | null;
   const body = overlay.querySelector('.tsb-sent-body') as HTMLElement | null;
   if (!countEl || !body) return;
@@ -970,6 +1025,8 @@ function renderSentHistoryContent(sid: number, loading: boolean): void {
       meta.appendChild(copyBtn);
       const text = document.createElement('div');
       text.className = 'tsb-sent-text';
+      text.id = 'tsb-sent-text-' + it.id;
+      text.dataset.sentId = it.id;
       text.textContent = it.text;
       row.title = t('tsb_sent_history_copy_hint');
       // 添付チップのクリックがここまでバブルした場合はコピーしない。
@@ -999,6 +1056,7 @@ function renderSentHistoryContent(sid: number, loading: boolean): void {
       row.appendChild(ats);
     }
     body.appendChild(row);
+    if (it.text) updateSentHistoryTextOverflow(row, it.id);
   });
   // 新しい順（降順）で並べているので、最新の送信が見える先頭へスクロール。
   body.scrollTop = 0;
@@ -1007,7 +1065,8 @@ function renderSentHistoryContent(sid: number, loading: boolean): void {
 // 送信履歴はチャットタブと同じ chatHistory を読むが、その取り込みはチャットタブを
 // mount したときにしか走らない。チャットタブを一度も開いていないセッションでは
 // 常に 0 件になってしまうため、モーダルを開くたびにここで取り込みを起こす。
-async function refreshSentHistoryFromStore(sid: number): Promise<void> {
+async function refreshSentHistoryFromStore(owner: SentHistoryModalOwner): Promise<void> {
+  const sid = owner.sessionId;
   try {
     // claude / codex は provider 側の transcript が正本なので毎回取り直す。
     // Hub のライブ追従はアイドルで止まるので、force なしだと途中までのローカル
@@ -1019,16 +1078,20 @@ async function refreshSentHistoryFromStore(sid: number): Promise<void> {
   } catch (err) {
     console.warn('[tsb] sent history restore failed', err);
   } finally {
-    renderSentHistoryContent(sid, false);
+    renderSentHistoryContent(owner, false);
   }
 }
 
 let _sentModalKeyHandler: ((e: KeyboardEvent) => void) | null = null;
 let _sentModalDownHandler: ((e: MouseEvent | TouchEvent) => void) | null = null;
+let _sentModalInstanceId = 0;
 
 function closeSentHistoryModal(): void {
   const existing = document.getElementById('tsb-sent-modal');
   if (existing) existing.remove();
+  _sentModalResizeObserver?.disconnect();
+  _sentModalResizeObserver = null;
+  _sentExpandedIds.clear();
   if (_sentModalKeyHandler) {
     document.removeEventListener('keydown', _sentModalKeyHandler, true);
     _sentModalKeyHandler = null;
@@ -1045,9 +1108,16 @@ function openSentHistoryModal(): void {
   if (document.getElementById('tsb-sent-modal')) { closeSentHistoryModal(); return; }
   const sid = activeSessionId;
   if (sid === null) return;
+  _sentExpandedIds.clear();
+  const owner: SentHistoryModalOwner = {
+    sessionId: sid,
+    instanceId: ++_sentModalInstanceId,
+  };
 
   const overlay = document.createElement('div');
   overlay.id = 'tsb-sent-modal';
+  overlay.dataset.sentHistorySessionId = String(owner.sessionId);
+  overlay.dataset.sentHistoryModalInstanceId = String(owner.instanceId);
   overlay.classList.add('aac-wheel-overlay');
 
   const box = document.createElement('div');
@@ -1058,7 +1128,7 @@ function openSentHistoryModal(): void {
   header.className = 'tsb-sent-header';
   const title = document.createElement('span');
   title.className = 'tsb-sent-title';
-  title.textContent = t('tsb_sent_history_title');
+  title.textContent = t('tsb_sent_history_title') + ' #' + sid;
   header.appendChild(title);
   const count = document.createElement('span');
   count.className = 'tsb-sent-count';
@@ -1078,10 +1148,14 @@ function openSentHistoryModal(): void {
   box.appendChild(body);
   overlay.appendChild(box);
   document.body.appendChild(overlay);
+  if (typeof ResizeObserver !== 'undefined') {
+    _sentModalResizeObserver = new ResizeObserver(() => refreshSentHistoryTextOverflow(body));
+    _sentModalResizeObserver.observe(box);
+  }
 
   // 現在の chatHistory で即描画し、取り込みが終わったら差し替える。
-  renderSentHistoryContent(sid, true);
-  void refreshSentHistoryFromStore(sid);
+  renderSentHistoryContent(owner, true);
+  void refreshSentHistoryFromStore(owner);
 
   // 外側クリック / Esc で閉じる。
   _sentModalDownHandler = (e: MouseEvent | TouchEvent) => {

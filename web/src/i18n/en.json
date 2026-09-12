@@ -310,6 +310,8 @@
   "tsb_sent_history_loading": "Loading…",
   "tsb_sent_history_hint": "Click to view sent history in chronological order",
   "tsb_sent_history_copy_hint": "Click to copy this message",
+  "tsb_sent_history_expand": "Show full message",
+  "tsb_sent_history_collapse": "Collapse",
   "tsb_sent_history_attach_hint": "Click to open (preview / default app / folder, etc.)",
   "settings_approval_hub": "Approval Buttons",
   "settings_approval_toggle": "Approval Buttons",

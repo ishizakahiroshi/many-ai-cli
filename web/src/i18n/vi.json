@@ -310,6 +310,8 @@
   "tsb_sent_history_loading": "Đang tải…",
   "tsb_sent_history_hint": "Bấm để xem lịch sử gửi theo thời gian",
   "tsb_sent_history_copy_hint": "Bấm để sao chép tin này",
+  "tsb_sent_history_expand": "Hiện toàn bộ tin nhắn",
+  "tsb_sent_history_collapse": "Thu gọn",
   "tsb_sent_history_attach_hint": "Bấm để mở (xem trước / app mặc định / thư mục, v.v.)",
   "settings_approval_hub": "Nút phê duyệt",
   "settings_approval_toggle": "Nút phê duyệt",

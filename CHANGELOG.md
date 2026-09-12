@@ -11,6 +11,9 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Sent history now shows long messages as six-line previews** with a control
+  on each message to show the full text or collapse it again. Short messages
+  remain fully visible, and copying always includes the complete message.
 - **A strip above the terminal now lists the sessions of the project you have
   open**, so you can move between the sessions of one repository without going
   back to the sidebar. Each entry shows the session's state, its `#number`, its
@@ -231,6 +234,9 @@ Release artifacts are published at
   `internal/hub/server.go`, `internal/hub/ui_broadcast.go`).
 - **Opening the provider selector now hides the Remember help tooltip while the
   list is open**, so it cannot cover the available options.
+- **Sent history stays tied to the session that opened it.** A delayed history
+  restore can no longer replace another session's open list, and the modal
+  title identifies its session.
 
 ### Security
 - `notifyBoardSession` now strips control bytes from board notices before they

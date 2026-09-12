@@ -310,6 +310,8 @@
   "tsb_sent_history_loading": "読み込み中…",
   "tsb_sent_history_hint": "クリックで送信履歴を時系列表示",
   "tsb_sent_history_copy_hint": "クリックでこの送信内容をコピー",
+  "tsb_sent_history_expand": "全文を表示",
+  "tsb_sent_history_collapse": "折りたたむ",
   "tsb_sent_history_attach_hint": "クリックで開く（プレビュー / 既定アプリ / フォルダ など）",
   "settings_approval_hub": "承認ボタン機能",
   "settings_approval_toggle": "承認ボタン",
