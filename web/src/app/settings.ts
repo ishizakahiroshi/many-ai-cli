@@ -6,7 +6,7 @@ import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
-import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
+import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
 import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
@@ -2575,6 +2575,10 @@ export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
   name = normalizeResponsiveTabName(name);
+
+  // Grok 会話履歴 / 過去ログの読み取り専用オーバーレイはターミナル領域に重なる。
+  // タブ切替（同じターミナルタブの再クリック含む）で閉じ、閉じるボタンを挟まない。
+  dismissTerminalReadOverlays();
 
   // マルチタブはセッション非依存のビュー: セッションなしでも動作させる
   if (name === 'multi') {

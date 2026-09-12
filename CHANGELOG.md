@@ -211,6 +211,12 @@ Release artifacts are published at
   — no extra confirmation step was added.
 
 ### Fixed
+- **You can leave Grok conversation history without pressing Close.** Opening
+  Terminal, Git, History, or another tab now dismisses the read-only overlay,
+  including a second click on the already-active Terminal tab. Close and
+  Escape still work. The older PTY history overlay follows the same rule
+  (`web/src/app/settings.ts`, `terminal.ts`, `grok-chat-viewer.ts`,
+  `history-viewer.ts`).
 - **The session strip's running-state icon now uses the same green as the
   sidebar card**, so an active session is not a muted default colour on the
   strip and a green badge in the list.

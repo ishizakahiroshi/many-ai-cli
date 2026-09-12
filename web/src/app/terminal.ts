@@ -415,14 +415,20 @@ export function ensureTerminal(id) {
   });
 }
 
+// ターミナル領域に重ねる読み取り専用オーバーレイを閉じる。
+// セッション切替だけでなく、統合タブバー（ターミナル / Git / 履歴 等）の切替でも
+// 呼ぶ。閉じるボタンを押さないとタブへ戻れない状態を作らない。
+export function dismissTerminalReadOverlays() {
+  resetHistoryViewerForSessionChange();
+  resetGrokChatViewerForSessionChange();
+}
+
 export function attachTerminal(id) {
   const area = document.getElementById('terminal-area');
   if (!area) return;
   const t = terminals.get(id);
   if (!t) return;
-  // セッション切替・タブ復帰時は過去ログビューアを閉じる（別セッションの誤表示防止）
-  resetHistoryViewerForSessionChange();
-  resetGrokChatViewerForSessionChange();
+  dismissTerminalReadOverlays();
   // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
   syncLiveStatusDomForActive();
   if (t.container) {

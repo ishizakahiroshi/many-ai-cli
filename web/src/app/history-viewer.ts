@@ -240,7 +240,8 @@ export function closeHistoryViewer() {
   if (hvTerm) { try { hvTerm.reset(); } catch (_) {} }
 }
 
-// セッション切替・タブ切替時に閉じる（別セッションのログを誤表示しない）
+// セッション切替とタブ切替の両方で閉じる（別セッションのログを誤表示しない）。
+// タブ切替側の呼び出し元は setActiveTab → dismissTerminalReadOverlays。
 export function resetHistoryViewerForSessionChange() {
   closeHistoryViewer();
   hideHistoryHint();
