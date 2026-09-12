@@ -602,7 +602,9 @@ function cardWorkflowProgressHtml(s) {
 const CARD_DONE_MAX_LEN = 48;
 
 // カード 2 行目の状態情報を生成する。状態表示は 1 つに絞り、長時間・停滞、
-// 終了理由、完了サマリー、workflow 進捗の順で優先する。
+// 終了理由、workflow 進捗の順で優先する。完了サマリーはこの行に置かない
+// （長さが可変で、2 行目は折り返さず切り落とす行なので、後ろの子トグル・ctx・branch が
+//  まとめて消える。cardDoneRowHtml が専用の 3 行目へ出す）。
 function cardStatusRowHtml(s) {
   const state = s.state || 'standby';
   const sec = cardTurnElapsedSec(s.id, state);
@@ -630,18 +632,22 @@ function cardStatusRowHtml(s) {
       return `<span class="card-end-reason" data-tooltip="${escapeHtml(translated)}">${escapeHtml(translated)}</span>`;
     }
   }
-  // 直前ターンの完了サマリー。端末は今見ているセッションの今の画面しか映さないので、
-  // **見ていないセッション**の完了に気づける経路はここだけになる。
-  // 稼働中は上の長時間バッジや状態表示のほうが今知りたい情報なので、待機側の状態でだけ出す。
-  if (state !== 'running' && state !== 'waiting') {
-    const done = getDoneSummary(s.id);
-    const line = doneSummaryDisplayText(done, CARD_DONE_MAX_LEN);
-    if (line) {
-      const full = doneSummaryLine(done?.text, 0); // tooltip には切らない全文を出す
-      return `<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}">${escapeHtml(line)}</span>`;
-    }
-  }
   return cardWorkflowProgressHtml(s);
+}
+
+// 直前ターンの完了サマリー。端末は今見ているセッションの今の画面しか映さないので、
+// **見ていないセッション**の完了に気づける経路はここだけになる。
+// 稼働中は 2 行目の状態表示のほうが今知りたい情報なので、待機側の状態でだけ出す。
+// 置き場所は 2 行目ではなくカード専用の 3 行目（幅いっぱいを使えるので全文に近い量が読め、
+// 2 行目の操作子を押し出さない。bugfix_sidebar-meta-row-overflow_2026-09-12.md）。
+function cardDoneRowHtml(s) {
+  const state = s.state || 'standby';
+  if (state === 'running' || state === 'waiting') return '';
+  const done = getDoneSummary(s.id);
+  const line = doneSummaryDisplayText(done, CARD_DONE_MAX_LEN);
+  if (!line) return '';
+  const full = doneSummaryLine(done?.text, 0); // tooltip には切らない全文を出す
+  return `<span class="card-done card-done-${doneSummaryKindSuffix(done?.kind)}" data-tooltip="${escapeHtml(full)}">${escapeHtml(line)}</span>`;
 }
 
 function cardCtxHtml(s) {
@@ -653,7 +659,7 @@ function cardCtxHtml(s) {
   return `<span class="card-ctx" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="card-ctx-gauge"><span class="card-ctx-fill ${severity}" style="width:${pct}%"></span></span><span class="card-ctx-pct ${severity}">${pct}%</span>${ctx.is1m ? '<span class="card-ctx-1m">1M</span>' : ''}</span>`;
 }
 
-// 1 枚のカードの 2 行目を in-place で更新する（フル再描画を避け、スクロール位置・
+// 1 枚のカードの 2 行目と 3 行目を in-place で更新する（フル再描画を避け、スクロール位置・
 // 入力フォーカス・D&D 状態を保つため）。行そのものは常に存在させる。
 export function updateCardLiveInfo(id) {
   const root = document.getElementById('sessions');
@@ -666,6 +672,9 @@ export function updateCardLiveInfo(id) {
   if (statusSlot) statusSlot.innerHTML = cardStatusRowHtml(s);
   const ctxSlot = card.querySelector('.card-ctx-slot');
   if (ctxSlot) ctxSlot.innerHTML = cardCtxHtml(s);
+  // 3 行目（完了サマリー）も同じ経路で差し替える。空になれば :empty で行ごと消える。
+  const doneRow = card.querySelector('.card-done-row');
+  if (doneRow) doneRow.innerHTML = cardDoneRowHtml(s);
 }
 
 // 全カードの 2 行目を更新する（1Hz タイマー等から呼ぶ）。
@@ -1205,6 +1214,9 @@ export function renderSessionList() {
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
       const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${headlessHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}${branchBadge}</div>`;
+      // 3 行目は完了サマリー専用。中身が無い間は :empty で消えるので、行そのものは常に置く
+      // （updateCardLiveInfo が 1Hz でここだけ差し替えるため、器が無いと出し入れで再描画が要る）。
+      const doneRow = `<div class="card-done-row">${cardDoneRowHtml(s)}</div>`;
       // 状態は記号だけを表示し、名前は tooltip / aria-label へ残す。#N より前に置く
       // （#N の桁数はカードごとに違うため、後ろに置くとアイコンの横位置がカードごとにズレる。
       // 先頭に固定すると全カードで同じX座標に揃い、縦に並ぶ実行中セッションを一直線で拾える）。
@@ -1212,7 +1224,7 @@ export function renderSessionList() {
       const statePillHtml = `<span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
 		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
-	        metaRow;
+	        metaRow + doneRow;
 
       const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;
       if (childToggleEl) {
