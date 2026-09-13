@@ -184,7 +184,7 @@ func TestModelsRemoteCacheNegativeTTL(t *testing.T) {
 
 	// 1 回目: fetch 試行 → 失敗
 	got := cache.get(ts.URL)
-	if len(got.Anthropic) != 0 || len(got.OpenAI) != 0 || len(got.Copilot) != 0 || len(got.CursorAgent) != 0 {
+	if len(got["anthropic"]) != 0 || len(got["openai"]) != 0 || len(got["copilot"]) != 0 || len(got["cursor-agent"]) != 0 {
 		t.Fatalf("expected empty models on fetch failure, got %+v", got)
 	}
 	if n := atomic.LoadInt32(&fetchCount); n != 1 {
@@ -230,7 +230,8 @@ func TestModelsRemoteCacheNegativeTTLResetOnSuccess(t *testing.T) {
 			return
 		}
 		d := modelsDefaults{
-			Anthropic: []Model{{ID: "test-model", Label: "Test"}},
+			"anthropic":       []Model{{ID: "test-model", Label: "Test"}},
+			"future-provider": []Model{{ID: "future-model", Label: "Future"}},
 		}
 		b, _ := json.Marshal(d)
 		w.Header().Set("Content-Type", "application/json")
@@ -253,8 +254,11 @@ func TestModelsRemoteCacheNegativeTTLResetOnSuccess(t *testing.T) {
 	fail = false
 	result := cache.get(ts.URL)
 
-	if len(result.Anthropic) == 0 || result.Anthropic[0].ID != "test-model" {
+	if len(result["anthropic"]) == 0 || result["anthropic"][0].ID != "test-model" {
 		t.Fatalf("expected test-model after recovery, got %+v", result)
+	}
+	if len(result["future-provider"]) == 0 || result["future-provider"][0].ID != "future-model" {
+		t.Fatalf("expected generic catalog key to survive JSON decoding, got %+v", result)
 	}
 	// 負キャッシュがクリアされていること
 	cache.mu.Lock()

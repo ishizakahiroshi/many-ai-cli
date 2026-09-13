@@ -11,6 +11,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -47,11 +48,14 @@ type ModelsResponse struct {
 }
 
 const (
-	ollamaLocalCacheTTL   = 60 * time.Second
-	lmStudioCacheTTL      = 60 * time.Second
-	openCodeModelsTTL     = 10 * time.Minute
-	openCodeModelsNegTTL  = 3 * time.Minute
-	openCodeModelsTimeout = 30 * time.Second
+	ollamaLocalCacheTTL    = 60 * time.Second
+	lmStudioCacheTTL       = 60 * time.Second
+	openCodeModelsTTL      = 10 * time.Minute
+	openCodeModelsNegTTL   = 3 * time.Minute
+	openCodeModelsTimeout  = 30 * time.Second
+	nativeCLIModelsTTL     = 10 * time.Minute
+	nativeCLIModelsNegTTL  = 3 * time.Minute
+	nativeCLIModelsTimeout = 15 * time.Second
 )
 
 // lmStudioModelsResponse は LM Studio `/v1/models` の OpenAI 互換レスポンス構造。
@@ -103,16 +107,37 @@ type openCodeModelsFetch struct {
 	err       error
 }
 
-// modelsCache は Ollama Local `/api/tags` および LM Studio `/v1/models` の取得結果を保持する。
+type nativeCLIModelsCacheEntry struct {
+	models    []Model
+	fetchedAt time.Time
+	err       error
+}
+
+type nativeCLIModelsFetch struct {
+	done      chan struct{}
+	models    []Model
+	fetchedAt time.Time
+	err       error
+}
+
+type nativeCLIModelsCacheState struct {
+	entry *nativeCLIModelsCacheEntry
+	fetch *nativeCLIModelsFetch
+}
+
+// modelsCache は Ollama Local `/api/tags`、LM Studio `/v1/models` と、CLI から列挙する
+// provider model catalog の取得結果を保持する。
 // cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
 // 専用のキャッシュは持たない。
 type modelsCache struct {
-	mu            sync.Mutex
-	local         *ollamaTagsCacheEntry
-	localFetch    *ollamaTagsFetch
-	lmStudio      *lmStudioModelsCacheEntry
-	openCode      *openCodeModelsCacheEntry
-	openCodeFetch *openCodeModelsFetch
+	mu                    sync.Mutex
+	local                 *ollamaTagsCacheEntry
+	localFetch            *ollamaTagsFetch
+	lmStudio              *lmStudioModelsCacheEntry
+	openCode              *openCodeModelsCacheEntry
+	openCodeFetch         *openCodeModelsFetch
+	nativeCLIModels       map[string]*nativeCLIModelsCacheState
+	nativeCLIModelLoaders map[string]func(bool) ([]Model, error)
 	// openCodeLoader is nil in production. Tests use it to make the
 	// single-flight boundary deterministic without invoking a real CLI.
 	openCodeLoader func(bool) ([]Model, error)
@@ -179,6 +204,80 @@ func (c *modelsCache) getOpenCodeModels(force bool) ([]Model, time.Time, error) 
 	return append([]Model(nil), models...), entry.fetchedAt, err
 }
 
+func (c *modelsCache) getNativeCLIModels(provider string, force bool) ([]Model, time.Time, error) {
+	if c == nil {
+		return nil, time.Time{}, nil
+	}
+
+	c.mu.Lock()
+	if c.nativeCLIModels == nil {
+		c.nativeCLIModels = make(map[string]*nativeCLIModelsCacheState)
+	}
+	state := c.nativeCLIModels[provider]
+	if state == nil {
+		state = &nativeCLIModelsCacheState{}
+		c.nativeCLIModels[provider] = state
+	}
+	if entry := state.entry; entry != nil {
+		ttl := nativeCLIModelsTTL
+		if entry.err != nil {
+			ttl = nativeCLIModelsNegTTL
+		}
+		if !force && time.Since(entry.fetchedAt) < ttl {
+			models := append([]Model(nil), entry.models...)
+			fetchedAt := entry.fetchedAt
+			err := entry.err
+			c.mu.Unlock()
+			return models, fetchedAt, err
+		}
+	}
+	if fetch := state.fetch; fetch != nil {
+		c.mu.Unlock()
+		<-fetch.done
+		return append([]Model(nil), fetch.models...), fetch.fetchedAt, fetch.err
+	}
+	loader := c.nativeCLIModelLoaders[provider]
+	if loader == nil {
+		loader = nativeCLIModelsLoader(provider)
+	}
+	if loader == nil {
+		c.mu.Unlock()
+		return nil, time.Time{}, fmt.Errorf("no native model list command for %q", provider)
+	}
+	fetch := &nativeCLIModelsFetch{done: make(chan struct{})}
+	state.fetch = fetch
+	c.mu.Unlock()
+
+	models, err := loader(force)
+	entry := &nativeCLIModelsCacheEntry{
+		models:    append([]Model(nil), models...),
+		fetchedAt: time.Now(),
+		err:       err,
+	}
+	c.mu.Lock()
+	state.entry = entry
+	fetch.models = append([]Model(nil), models...)
+	fetch.fetchedAt = entry.fetchedAt
+	fetch.err = err
+	if state.fetch == fetch {
+		state.fetch = nil
+	}
+	close(fetch.done)
+	c.mu.Unlock()
+	return append([]Model(nil), models...), entry.fetchedAt, err
+}
+
+func nativeCLIModelsLoader(provider string) func(bool) ([]Model, error) {
+	switch provider {
+	case "cursor-agent":
+		return fetchCursorAgentModels
+	case "grok":
+		return fetchGrokModels
+	default:
+		return nil
+	}
+}
+
 type openCodeVerboseModel struct {
 	ID         string `json:"id"`
 	ProviderID string `json:"providerID"`
@@ -206,6 +305,96 @@ func fetchOpenCodeModels(force bool) ([]Model, error) {
 		return nil, fmt.Errorf("opencode models: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return parseOpenCodeModelsOutput(out)
+}
+
+var (
+	nativeCLIANSISequence = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+	cursorAgentModelID    = regexp.MustCompile(`(?i)^(?:auto|[a-z0-9]+(?:[._-][a-z0-9][a-z0-9._-]*)*)$`)
+	grokModelID           = regexp.MustCompile(`(?i)^grok-[a-z0-9][a-z0-9._-]*$`)
+)
+
+func fetchCursorAgentModels(bool) ([]Model, error) {
+	out, err := runNativeModelListCommand("cursor-agent", "--list-models")
+	if err != nil {
+		return nil, err
+	}
+	return parseCursorAgentModelsOutput(out)
+}
+
+func fetchGrokModels(bool) ([]Model, error) {
+	out, err := runNativeModelListCommand("grok", "models")
+	if err != nil {
+		return nil, err
+	}
+	return parseGrokModelsOutput(out)
+}
+
+func runNativeModelListCommand(command string, args ...string) ([]byte, error) {
+	bin, err := exec.LookPath(command)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), nativeCLIModelsTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("%s model list: %w", command, ctx.Err())
+		}
+		// CLI output is deliberately omitted; it may contain account or local-profile details.
+		return nil, fmt.Errorf("%s model list: %w", command, err)
+	}
+	return out, nil
+}
+
+func parseCursorAgentModelsOutput(out []byte) ([]Model, error) {
+	return parseNativeCLIModelsOutput(out, cursorAgentModelID, func(id, label string) string {
+		if label != "" {
+			return label
+		}
+		return humanizeOpenCodeModelLabel(id)
+	})
+}
+
+func parseGrokModelsOutput(out []byte) ([]Model, error) {
+	return parseNativeCLIModelsOutput(out, grokModelID, func(id, label string) string {
+		if label != "" {
+			return label
+		}
+		return "Grok " + strings.TrimPrefix(strings.ToLower(id), "grok-")
+	})
+}
+
+func parseNativeCLIModelsOutput(out []byte, validID *regexp.Regexp, labelFor func(id, label string) string) ([]Model, error) {
+	plain := nativeCLIANSISequence.ReplaceAll(out, nil)
+	lines := strings.Split(strings.ReplaceAll(string(plain), "\r\n", "\n"), "\n")
+	models := make([]Model, 0, len(lines))
+	seen := make(map[string]bool, len(lines))
+	for _, line := range lines {
+		line = strings.TrimLeft(strings.TrimSpace(line), " \t>*•○●✓")
+		if line == "" {
+			continue
+		}
+		id := line
+		label := ""
+		if sep := strings.Index(line, " - "); sep >= 0 {
+			id = strings.TrimSpace(line[:sep])
+			label = strings.TrimSpace(line[sep+3:])
+		} else if fields := strings.Fields(line); len(fields) == 1 {
+			id = fields[0]
+		} else {
+			continue
+		}
+		if !validID.MatchString(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		models = append(models, Model{ID: id, Label: labelFor(id, label)})
+	}
+	if len(models) == 0 {
+		return nil, errors.New("native model list contained no model IDs")
+	}
+	return models, nil
 }
 
 func parseOpenCodeModelsOutput(out []byte) ([]Model, error) {
@@ -308,9 +497,9 @@ func humanizeOpenCodeModelLabel(id string) string {
 	return strings.Join(parts, " ")
 }
 
-// Anthropic / OpenAI / Copilot / Cursor Agent のモデル一覧は GitHub の
-// resources/models/defaults.json から 24h TTL で取得する。
-// fetch 失敗時は空配列に倒し、静的 fallback は持たない。
+// Anthropic / OpenAI / Copilot の候補と Cursor Agent / Grok の fallback は GitHub の
+// resources/models/defaults.json から 24h TTL で取得する。Cursor Agent と Grok は、
+// 利用可能なら各 CLI の native model list を優先する。
 
 // fetchOllamaTags は指定 URL から `/api/tags` を取得して models 列に変換する。
 func fetchOllamaTags(url string, timeout time.Duration, allowPrivate ...bool) ([]Model, error) {
@@ -499,6 +688,7 @@ func (c *modelsCache) invalidate() {
 	c.mu.Lock()
 	c.local = nil
 	c.lmStudio = nil
+	c.nativeCLIModels = nil
 	c.generation++
 	c.mu.Unlock()
 }
@@ -556,15 +746,15 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	}
 
 	resp := ModelsResponse{
-		Sources: map[string]string{
-			"anthropic":           remoteSource,
-			"openai":              remoteSource,
-			"opencode":            "opencode models opencode --verbose",
-			"ollama_local":        ollamaTagsURL(ollamaBaseURL),
-			"lm_studio":           lmStudioModelsURL(lmStudioBaseURL),
-			"local_models_config": "~/.many-ai-cli/config.yaml#local_models",
-		},
+		Sources: make(map[string]string, len(defaults)+4),
 	}
+	for catalogKey := range defaults {
+		resp.Sources[catalogKey] = remoteSource
+	}
+	resp.Sources["opencode"] = "opencode models opencode --verbose"
+	resp.Sources["ollama_local"] = ollamaTagsURL(ollamaBaseURL)
+	resp.Sources["lm_studio"] = lmStudioModelsURL(lmStudioBaseURL)
+	resp.Sources["local_models_config"] = "~/.many-ai-cli/config.yaml#local_models"
 	var newest time.Time
 
 	// Anthropic（GitHub fetch only）
@@ -572,7 +762,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		Label:    "Anthropic",
 		Provider: "claude",
 		Route:    RouteAnthropic,
-		Models:   append([]Model{}, defaults.Anthropic...),
+		Models:   append([]Model{}, defaults["anthropic"]...),
 	})
 
 	// OpenAI（GitHub fetch only）
@@ -580,39 +770,58 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		Label:    "OpenAI",
 		Provider: "codex",
 		Route:    RouteOpenAI,
-		Models:   append([]Model{}, defaults.OpenAI...),
+		Models:   append([]Model{}, defaults["openai"]...),
 	})
 
 	// GitHub Copilot（GitHub fetch only）
 	// Route は空: copilot は env 注入せず `copilot --model <id>` へ素通しする。
-	if len(defaults.Copilot) > 0 {
+	if len(defaults["copilot"]) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
 			Label:    "GitHub Copilot",
 			Provider: "copilot",
 			Route:    "",
-			Models:   append([]Model{}, defaults.Copilot...),
+			Models:   append([]Model{}, defaults["copilot"]...),
 		})
 	}
 
-	// Cursor Agent（GitHub fetch only）
+	// Cursor Agent は native list を優先し、CLI が無い場合や取得失敗時は GitHub catalog を使う。
 	// Route は空: cursor-agent は env 注入せず `cursor-agent --model <id>` へ素通しする。
-	if len(defaults.CursorAgent) > 0 {
+	cursorModels := defaults["cursor-agent"]
+	cursorSource := "cursor-agent --list-models (fallback: " + remoteSource + ")"
+	if models, fetchedAt, err := cache.getNativeCLIModels("cursor-agent", force); err == nil && len(models) > 0 {
+		cursorModels = models
+		cursorSource = "cursor-agent --list-models"
+		if fetchedAt.After(newest) {
+			newest = fetchedAt
+		}
+	}
+	resp.Sources["cursor-agent"] = cursorSource
+	if len(cursorModels) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
 			Label:    "Cursor Agent",
 			Provider: "cursor-agent",
 			Route:    "",
-			Models:   append([]Model{}, defaults.CursorAgent...),
+			Models:   append([]Model{}, cursorModels...),
 		})
 	}
 
-	// Grok Build（GitHub fetch only）
-	// Route は空: grok は env 注入せず `grok --model <id>` へ素通しする。
-	if len(defaults.Grok) > 0 {
+	// Grok Build も native list を優先する。route は空で `grok --model <id>` へ素通しする。
+	grokModels := defaults["grok"]
+	grokSource := "grok models (fallback: " + remoteSource + ")"
+	if models, fetchedAt, err := cache.getNativeCLIModels("grok", force); err == nil && len(models) > 0 {
+		grokModels = models
+		grokSource = "grok models"
+		if fetchedAt.After(newest) {
+			newest = fetchedAt
+		}
+	}
+	resp.Sources["grok"] = grokSource
+	if len(grokModels) > 0 {
 		resp.Groups = append(resp.Groups, ModelGroup{
 			Label:    "Grok Build",
 			Provider: "grok",
 			Route:    "",
-			Models:   append([]Model{}, defaults.Grok...),
+			Models:   append([]Model{}, grokModels...),
 		})
 	}
 
