@@ -9,7 +9,7 @@ import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from '.
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
-import { effortForSpawnBody, effortLevelsFor, setLaunchOptionChoices } from './spawn-confirm-store.js';
+import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
 import {
   fillModelDatalist,
   getCachedSpawnModelGroups,
@@ -227,9 +227,9 @@ export function resetSpawnProviderOrder(): void {
     return typeof v === 'string' ? v : '';
   }
 
-  // provider が変わるたびに候補を組み直す。前の provider で選んだ値が新しい provider
-  // の候補に無ければ「指定なし」へ戻す（Hub はその値を 400 で弾くため）。
-  function syncEffortField(provider: string): void {
+  // provider が変わるたびに候補を組み直す。provider 切替・フォーム再表示では保存値を
+  // 優先し、候補一覧だけ更新するときは現在の選択を保つ。
+  function syncEffortField(provider: string, restoreRemembered = false): void {
     if (!spawnEffortRow || !spawnEffortSelect) return;
     const levels = effortLevelsFor(provider);
     if (levels.length === 0) {
@@ -238,13 +238,18 @@ export function resetSpawnProviderOrder(): void {
       return;
     }
     const saved = savedEffortFor(provider);
-    const previous = levels.includes(spawnEffortSelect.value) ? spawnEffortSelect.value : saved;
+    const current = spawnEffortSelect.value;
     const options = [`<option value="">${escapeHtml(t('spawn_effort_unset'))}</option>`];
     for (const level of levels) {
       options.push(`<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`);
     }
     spawnEffortSelect.innerHTML = options.join('');
-    spawnEffortSelect.value = levels.includes(previous) ? previous : '';
+    spawnEffortSelect.value = resolveSpawnEffortSelection(
+      levels,
+      current,
+      saved,
+      restoreRemembered,
+    );
     spawnEffortRow.hidden = false;
   }
 
@@ -1151,6 +1156,7 @@ export function resetSpawnProviderOrder(): void {
   function restoreProviderMemory(provider: string): void {
     const defaults = readSpawnDefaults();
     applySpawnApprovalSettings(provider, defaults);
+    syncEffortField(provider, true);
     if (spawnIsolateWorktree) {
       spawnIsolateWorktree.checked = restoreProviderBooleanSetting('isolate_worktree', provider, defaults);
       syncIsolateWorktreeNote();

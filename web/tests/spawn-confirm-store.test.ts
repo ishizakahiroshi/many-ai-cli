@@ -14,6 +14,7 @@ import {
   setLaunchOptionChoices,
   effortLevelsFor,
   effortForSpawnBody,
+  resolveSpawnEffortSelection,
   headlessUnsupportedForSelection,
   isExecutionModeAvailable,
   isHeadlessCapable,
@@ -391,6 +392,28 @@ describe('effortForSpawnBody', () => {
     expect(effortForSpawnBody('claude', '   ')).toBe('');
     // 前の provider で選んだ値が残っていても、候補に無ければ送らない。
     expect(effortForSpawnBody('codex', 'high')).toBe('');
+  });
+});
+
+describe('resolveSpawnEffortSelection', () => {
+  test('restores the new provider memory even when the previous value is also valid', () => {
+    expect(resolveSpawnEffortSelection(['low', 'high'], 'high', 'low', true)).toBe('low');
+  });
+
+  test('keeps the current choice while refreshing the same provider', () => {
+    expect(resolveSpawnEffortSelection(['low', 'high'], 'high', 'low', false)).toBe('high');
+  });
+
+  test('uses the remembered value when choices arrive after the form opens', () => {
+    expect(resolveSpawnEffortSelection(['low', 'high'], '', 'low', false)).toBe('low');
+  });
+
+  test('clears a previous provider value when the new provider has no remembered choice', () => {
+    expect(resolveSpawnEffortSelection(['low', 'high'], 'high', '', true)).toBe('');
+  });
+
+  test('drops remembered values unsupported by the provider', () => {
+    expect(resolveSpawnEffortSelection(['low', 'high'], 'low', 'max', true)).toBe('');
   });
 });
 

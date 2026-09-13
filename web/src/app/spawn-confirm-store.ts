@@ -200,6 +200,21 @@ export function effortForSpawnBody(provider: string, selected: string): string {
   return effortLevelsFor(provider).includes(level) ? level : '';
 }
 
+// 同じ provider の候補を更新しただけなら、フォームで選び直した値を保つ。
+// provider 切替やフォーム再表示では保存値を優先し、前 provider の値が候補に
+// 含まれていても引き継がない。
+export function resolveSpawnEffortSelection(
+  levels: readonly string[],
+  current: string,
+  remembered: string,
+  restoreRemembered: boolean,
+): string {
+  const preferred = restoreRemembered
+    ? remembered
+    : (levels.includes(current) ? current : remembered);
+  return levels.includes(preferred) ? preferred : '';
+}
+
 export function isExecutionModeAvailable(mode: string): boolean {
   return availableExecutionModes.includes(mode);
 }
