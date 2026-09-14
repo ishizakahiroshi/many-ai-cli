@@ -218,6 +218,13 @@ Release artifacts are published at
 
 ### Fixed
 
+- **A session running subagents is no longer reported as stalled.** Claude Code
+  writes a subagent's output to its own file rather than to the session
+  transcript, so a session that spent half an hour on a subagent was working
+  normally while the dashboard showed the "not progressing" warning — measured
+  at 33 minutes of silence in the session transcript for one subagent run. The
+  Hub now counts activity in the session's `subagents` directory as progress.
+  The warning is unchanged for sessions that really are stuck.
 - **Selecting a session card in another project now updates the open project and
   its session strip while keeping the session you selected active.**
 - **Low-quota handoff notices now identify the limiting usage window and its

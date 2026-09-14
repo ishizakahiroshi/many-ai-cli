@@ -18,9 +18,23 @@ package hub
 // transcript の中身は読まない。サイズが増えたかどうかだけを見る。transcript には
 // プロンプト・ソース断片・資格情報が入りうるため、agentLogLocation と同じく
 // 「パスとメタデータまで」に留める。
+//
+// サブエージェント（Task 等）を持つ provider ではこの前提が崩れる。Claude Code は
+// サブエージェント実行中、親 transcript には一切書かず、出力は
+// <sessionDir>/subagents/agent-<id>.jsonl 側へ流れる。親だけを見ていると、
+// サブエージェントが正常に働いている時間がそのまま停滞として積算される
+// （実測: 33 分の実行に対し親 transcript が伸びたのは 4 行だけだった）。
+// 由来: docs/local/bugfix_subagent-run-reported-as-stall_2026-09-14.md
+//
+// そのため親 transcript のサイズに加えて、サブエージェントディレクトリの直下
+// エントリの最新 mtime も「ターンが進んだ」証拠として扱う。ここでも中身は
+// 読まない・ファイル名も保持しない。provider ごとの分岐は subagentDirForTranscript
+// 1 か所に閉じてある。
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"many-ai-cli/internal/proto"
@@ -61,6 +75,55 @@ func (s *Server) collectTranscriptChecksLocked(now time.Time) []transcriptCheckR
 	return reqs
 }
 
+// subagentDirForTranscript は transcript パスからサブエージェントディレクトリを導く。
+// 該当しない場合（拡張子が違う・claude 以外等）は空文字を返し、呼び出し側は何もしない。
+//
+// **provider ごとの分岐はこの関数 1 か所に閉じる。** 他の CLI がサブエージェントの
+// ファイルを書くようになったら、ここに分岐を足す（CLAUDE.md 設計原則索引の
+// 「残量ソースは 1 本の表で持つ」と同じ考え方だが、現時点で該当するのは claude
+// だけなので表は作らず if 1 本で済ませてある）。
+//
+// claude の transcript は <sessionDir>.jsonl なので、拡張子を落とした
+// <sessionDir>/subagents がサブエージェントの出力先（internal/hub/workflow_task_detail.go
+// の transcriptPath := sessionDir + ".jsonl" と同じ対応関係の逆向き）。
+func subagentDirForTranscript(path string) string {
+	const claudeExt = ".jsonl"
+	if !strings.HasSuffix(path, claudeExt) {
+		return ""
+	}
+	sessionDir := strings.TrimSuffix(path, claudeExt)
+	if sessionDir == "" {
+		return ""
+	}
+	return filepath.Join(sessionDir, "subagents")
+}
+
+// latestSubagentMTime はサブエージェントディレクトリ直下のエントリのうち最新の
+// mtime を返す。ディレクトリが無い・読めない・該当しない provider の場合はゼロ値
+// （存在しないのが通常状態なのでエラーはログに出さない）。中身は読まず、
+// ファイル名も保持しない。
+func latestSubagentMTime(transcriptPath string) time.Time {
+	dir := subagentDirForTranscript(transcriptPath)
+	if dir == "" {
+		return time.Time{}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return time.Time{}
+	}
+	var latest time.Time
+	for _, entry := range entries {
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if mt := info.ModTime(); mt.After(latest) {
+			latest = mt
+		}
+	}
+	return latest
+}
+
 // queueTranscriptChecks は集めた要求を 1 本の goroutine で順に処理する。
 // stat 自体は軽いが、パス解決は 3 日ぶんのディレクトリ走査と候補ファイルの先頭行
 // 読み込みを伴うので、状態ティッカーの経路から切り離す。
@@ -87,17 +150,19 @@ func (s *Server) queueTranscriptChecks(reqs []transcriptCheckRequest) {
 			if info.IsDir() {
 				continue
 			}
-			s.applyTranscriptStat(req.id, path, info.Size())
+			subagentAt := latestSubagentMTime(path)
+			s.applyTranscriptStat(req.id, path, info.Size(), subagentAt)
 		}
 	}()
 }
 
-// applyTranscriptStat は観測結果を書き戻し、transcript が伸びていれば
-// TranscriptGrewAt を進めて session_update を broadcast する。
+// applyTranscriptStat は観測結果を書き戻し、transcript が伸びているか
+// サブエージェントディレクトリが動いていれば TranscriptGrewAt を進めて
+// session_update を broadcast する。
 //
 // **伸びていない間は何も送らない。** 停滞中は毎秒 broadcast する価値が無く、UI 側は
 // TranscriptGrewAt からの経過を自分で 1Hz 計算できる（カードの応答経過と同じ方式）。
-func (s *Server) applyTranscriptStat(id int, path string, size int64) {
+func (s *Server) applyTranscriptStat(id int, path string, size int64, subagentAt time.Time) {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
@@ -110,8 +175,12 @@ func (s *Server) applyTranscriptStat(id int, path string, size int64) {
 	first := ses.transcriptPath == "" || ses.TranscriptGrewAt == ""
 	ses.transcriptPath = path
 	ses.transcriptStatAt = now
-	grew := first || size > ses.transcriptSize
+	subagentGrew := subagentAt.After(ses.transcriptSubagentAt)
+	grew := first || size > ses.transcriptSize || subagentGrew
 	ses.transcriptSize = size
+	if subagentGrew {
+		ses.transcriptSubagentAt = subagentAt
+	}
 	if !grew {
 		s.sessionsMu.Unlock()
 		return
@@ -138,4 +207,5 @@ func (s *Server) applyTranscriptStat(id int, path string, size int64) {
 func resetTranscriptTrackingLocked(ses *session, now time.Time) {
 	ses.TranscriptGrewAt = now.Format(time.RFC3339)
 	ses.transcriptStatAt = time.Time{}
+	ses.transcriptSubagentAt = time.Time{}
 }

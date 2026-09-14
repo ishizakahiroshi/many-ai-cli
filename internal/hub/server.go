@@ -198,6 +198,7 @@ type session struct {
 	transcriptResolvedAt time.Time // 最後にパス解決を試みた時刻（未解決時の再試行間隔用）
 	transcriptStatAt     time.Time // 最後に stat した時刻
 	transcriptSize       int64     // 直近に観測したサイズ
+	transcriptSubagentAt time.Time // サブエージェントディレクトリ直下の最新 mtime（該当 provider のみ。無ければゼロ値）
 
 	// JSON 外: 初期プロンプト注入ゲート。orchestration セッション（conductor / 子）の
 	// spawn 直後〜injectInitialPrompt 完了までユーザー入力を pendingInput へ保留する。

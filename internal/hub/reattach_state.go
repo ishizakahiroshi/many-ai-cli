@@ -42,6 +42,7 @@ type reattachPreservedState struct {
 	transcriptResolvedAt  time.Time
 	transcriptStatAt      time.Time
 	transcriptSize        int64
+	transcriptSubagentAt  time.Time
 	initialInjectPending  bool
 	initialInjectGateAt   time.Time
 	gitChecked            bool
@@ -140,6 +141,7 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 		transcriptResolvedAt:  ses.transcriptResolvedAt,
 		transcriptStatAt:      ses.transcriptStatAt,
 		transcriptSize:        ses.transcriptSize,
+		transcriptSubagentAt:  ses.transcriptSubagentAt,
 		initialInjectPending:  ses.initialInjectPending,
 		initialInjectGateAt:   ses.initialInjectGateAt,
 		gitChecked:            ses.gitChecked,
@@ -265,6 +267,7 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.transcriptResolvedAt = state.transcriptResolvedAt
 	dst.transcriptStatAt = state.transcriptStatAt
 	dst.transcriptSize = state.transcriptSize
+	dst.transcriptSubagentAt = state.transcriptSubagentAt
 	dst.initialInjectPending = state.initialInjectPending
 	dst.initialInjectGateAt = state.initialInjectGateAt
 	dst.gitChecked = state.gitChecked
