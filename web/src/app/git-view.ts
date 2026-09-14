@@ -2,7 +2,7 @@
 import { token } from './util.js';
 import { STORAGE_LANG_KEY } from './user-prefs.js';
 import { appConfirm } from './settings.js';
-import { showFileActionsPopup, joinPath } from './path-links.js';
+import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -52,6 +52,20 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       const one = msg.replace(/\n/g, ' ↵ ');
       window.showToast(one.length > 120 ? one.slice(0, 120) + '…' : one);
     }
+  }
+  function _normalizePathForCompare(path) {
+    const normalized = String(path || '').replace(/\\/g, '/');
+    if (normalized === '/' || /^[A-Za-z]:\/$/.test(normalized)) return normalized;
+    return normalized.replace(/\/+$/, '');
+  }
+  function _isPathUnderRoot(root, candidate) {
+    const rootNorm = _normalizePathForCompare(root);
+    const candidateNorm = _normalizePathForCompare(candidate);
+    if (!rootNorm || !candidateNorm) return false;
+    const caseInsensitive = /^[A-Za-z]:\//.test(rootNorm);
+    const base = caseInsensitive ? rootNorm.toLowerCase() : rootNorm;
+    const target = caseInsensitive ? candidateNorm.toLowerCase() : candidateNorm;
+    return target === base || target.startsWith(base.endsWith('/') ? base : base + '/');
   }
   function _formatDate(iso) {
     if (!iso) return '';
@@ -396,6 +410,14 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       // 受け取り、自分のセッション宛なら待ち受け中のモーダルへ反映する。
       this._commitMsgHandler = (e) => this._handleCommitMsgEvent(e && e.detail);
       window.addEventListener('many-commit-msg', this._commitMsgHandler);
+      this._filesChangedHandler = (e) => {
+        const detail = (e && e.detail) || {};
+        if (_isPathUnderRoot(this.gitRoot, detail.oldAbs)
+            || _isPathUnderRoot(this.gitRoot, detail.newAbs)) {
+          this._fetchStatus();
+        }
+      };
+      window.addEventListener('many-ai-cli:files-changed', this._filesChangedHandler);
 
       this.load().catch(err => this._showError(err && err.message ? err.message : String(err)));
     }
@@ -672,6 +694,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       try { document.removeEventListener('click', this._docClickHandler); } catch (_) {}
       try { document.removeEventListener('keydown', this._docKeyHandler); } catch (_) {}
       try { window.removeEventListener('many-commit-msg', this._commitMsgHandler); } catch (_) {}
+      try { window.removeEventListener('many-ai-cli:files-changed', this._filesChangedHandler); } catch (_) {}
       try { this.container.innerHTML = ''; } catch (_) {}
     }
 
@@ -805,15 +828,37 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
         </div>
         <div class="git-working-files">${rows}${more}</div>
       `;
-      // working tree のファイル行クリックで、CLI 画面の右クリックと同型の軽量ポップアップ
-      //（モーダルで開く / 既定のアプリで開く）を出す。f.path は gitRoot 相対なので絶対化する。
+      // working tree のファイル行から共通プロパティメニューを開く。
       this.els.workingPreview.querySelectorAll('.git-working-file-row[data-path]').forEach(row => {
         row.addEventListener('click', (e) => {
-          const rel = row.dataset.path;
-          if (!rel) return;
-          const abs = this.gitRoot ? joinPath(this.gitRoot, rel) : rel;
-          showFileActionsPopup(abs, e.clientX, e.clientY, this.sessionId);
+          this._showGitFilePopup(row.dataset.path, e.clientX, e.clientY);
         });
+        row.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          this._showGitFilePopup(row.dataset.path, e.clientX, e.clientY);
+        });
+      });
+    }
+
+    _showGitFilePopup(relPath, clientX, clientY) {
+      const root = String(this.gitRoot || '').trim();
+      const rel = String(relPath || '').trim();
+      const segments = rel.replace(/\\/g, '/').split('/');
+      if (!root || !rel || !isAbsolutePath(root) || isAbsolutePath(rel)
+          || segments.some(segment => segment === '..')) {
+        _toast(_gt('link_open_error', 'Failed to open.'), '');
+        return;
+      }
+      const abs = joinPath(root, rel);
+      if (!isAbsolutePath(abs) || !_isPathUnderRoot(root, abs)) {
+        _toast(_gt('link_open_error', 'Failed to open.'), '');
+        return;
+      }
+      const projectKey = root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || root;
+      showPathPopup(abs, clientX, clientY, this.sessionId, 'file', [], {
+        relativeBase: root,
+        filesRoot: root,
+        projectKey,
       });
     }
 
@@ -1352,7 +1397,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       const files = Array.isArray(c.files) ? c.files : [];
       const filesSection = files.length
         ? `<div class="info-label">FILES</div><div class="info-value">${files.map(f => `
-            <div class="file-row" data-file-action="changes" data-path="${_esc(f.path)}">
+            <div class="file-row" data-file-action="changes" data-path="${_esc(f.path)}" data-git-file-path="${_esc(f.path || '')}">
               <span class="file-status ${_esc(f.status || 'M')}">${_esc(f.status || 'M')}</span>
               <span class="file-path">${_esc(f.path || '')}</span>
               <span class="file-stat-add">+${f.added || 0}</span>
@@ -1403,7 +1448,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
       const files = Array.isArray(c.files) ? c.files : [];
       if (!files.length) return `<div class="detail-empty">${_esc(_gt('git_view_no_files', 'No file changes'))}</div>`;
       return files.map(f => `
-        <div class="file-row" data-file-action="changes" data-path="${_esc(f.path)}">
+        <div class="file-row" data-file-action="changes" data-path="${_esc(f.path)}" data-git-file-path="${_esc(f.path || '')}">
           <span class="file-status ${_esc(f.status || 'M')}">${_esc(f.status || 'M')}</span>
           <span class="file-path">${_esc(f.path || '')}</span>
           <span class="file-stat-add">+${f.added || 0}</span>
@@ -1426,7 +1471,7 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
         }).join('');
         return `
           <div class="diff-file">
-            <div class="diff-file-header">
+            <div class="diff-file-header" data-git-file-path="${_esc(f.path || '')}">
               <span class="file-status ${_esc(f.status || 'M')}" style="width:16px;height:16px;font-size:10px">${_esc(f.status || 'M')}</span>
               <span style="flex:1">${_esc(f.path || '')}</span>
               <span class="file-stat-add">+${f.added || 0}</span>
@@ -1456,14 +1501,11 @@ import { showFileActionsPopup, joinPath } from './path-links.js';
           this._syncDetailTabs();
           this._renderDetailContent();
         });
-        // 左クリックの差分表示は維持し、右クリックで CLI 同型の軽量ポップアップ
-        //（モーダルで開く / 既定のアプリで開く）を出す。開く対象は working tree の現物。
+      });
+      content.querySelectorAll('[data-git-file-path]').forEach(row => {
         row.addEventListener('contextmenu', (e) => {
           e.preventDefault();
-          const rel = row.dataset.path;
-          if (!rel) return;
-          const abs = this.gitRoot ? joinPath(this.gitRoot, rel) : rel;
-          showFileActionsPopup(abs, e.clientX, e.clientY, this.sessionId);
+          this._showGitFilePopup(row.dataset.gitFilePath, e.clientX, e.clientY);
         });
       });
     }

@@ -11,6 +11,8 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Git file rows now open the same properties menu as Files**, including open,
+  copy, rename, and download actions.
 - **Command Code permission screens now show as Hub approval cards.** You can
   allow or deny folder trust, file edits, and tool runs from the dashboard
   instead of using the terminal's arrow keys. Commands that do not ask, such as

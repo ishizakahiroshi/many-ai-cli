@@ -102,11 +102,12 @@ export function getPathOpenItem(filePath, sessionId) {
   return { icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
 }
 
-export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file', extraItems: any[] = []) {
+export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file', extraItems: any[] = [], pathContext: any = {}) {
   cancelPathPopupHideTimer();
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
   popup.hidden = false;
+  const context = pathContext && typeof pathContext === 'object' ? pathContext : {};
 
   const items = [];
   const isDir = pathType === 'dir';
@@ -118,10 +119,11 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
       key: 'link_open_any_ai_cli',
       action: () => {
         const ses = sessions.get(sessionId);
-        const cwd = ses?.cwd;
-        if (!cwd) { showToast(t('link_open_error')); return; }
-        const projectKey = cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || cwd;
-        FilesTabManager.openFilesTabAtFile(sessionId, projectKey, cwd, cwd, filePath);
+        const sessionCwd = ses?.cwd || '';
+        const filesRoot = context.filesRoot || sessionCwd;
+        if (!filesRoot) { showToast(t('link_open_error')); return; }
+        const projectKey = context.projectKey || basenameForPath(filesRoot) || filesRoot;
+        FilesTabManager.openFilesTabAtFile(sessionId, projectKey, filesRoot, filesRoot, filePath);
       },
     });
     items.push({
@@ -147,8 +149,9 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
     }},
     { icon: '📋', key: 'link_copy_rel_path', action: (anchor) => {
       const ses = sessions.get(sessionId);
-      const cwd = ses?.cwd || '';
-      const rel = cwd ? computeRelPath(cwd, filePath) : filePath;
+      const sessionCwd = ses?.cwd || '';
+      const relativeBase = context.relativeBase || sessionCwd;
+      const rel = relativeBase ? computeRelPath(relativeBase, filePath) : filePath;
       return copyPathText(rel, anchor).catch(() => {});
     }},
   );
@@ -168,7 +171,7 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
 }
 
 // renderPathPopupItems は items 配列をボタン化して popup に並べ、画面端からはみ出さない
-// よう位置調整する。showPathPopup / showFileActionsPopup で共有する。
+// よう位置調整する。showPathPopup から利用する。
 export function renderPathPopupItems(popup, items, clientX, clientY) {
   for (const item of items) {
     const btn = document.createElement('button');
@@ -194,25 +197,6 @@ export function renderPathPopupItems(popup, items, clientX, clientY) {
   if (top + rect.height > vh - 8) top = clientY - rect.height - 8;
   popup.style.left = Math.max(4, left) + 'px';
   popup.style.top = Math.max(4, top) + 'px';
-}
-
-// showFileActionsPopup は Git タブのファイル行向けの軽量ポップアップ。
-// CLI 画面の右クリックメニュー（showPathPopup）と同じ部品を流用しつつ、項目を
-// 「🗔 モーダルで開く」「🚀 既定のアプリで開く」の 2 つだけに絞る。
-// プレビュー不能な拡張子のときはモーダル項目を出さず既定アプリのみにする。
-export function showFileActionsPopup(filePath, clientX, clientY, sessionId) {
-  cancelPathPopupHideTimer();
-  const popup = getOrCreatePathPopup();
-  popup.innerHTML = '';
-  popup.hidden = false;
-
-  const items = [];
-  if (isAnyAiCliPreviewable(filePath)) {
-    items.push({ icon: '🗔', key: 'link_open_modal', action: () => openFileModal(filePath, sessionId) });
-  }
-  items.push(getPathOpenItem(filePath, sessionId));
-
-  renderPathPopupItems(popup, items, clientX, clientY);
 }
 
 // ---- ファイルプレビューモーダル（FilesPreview をツリー無しで単体表示）----
