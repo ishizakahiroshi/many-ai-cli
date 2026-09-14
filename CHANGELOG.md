@@ -218,6 +218,9 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Low-quota handoff notices now identify the limiting usage window and its
+  remaining percentage**, such as `Weekly limit: 7% remaining`, instead of
+  leaving you to guess whether the 5-hour or weekly allowance triggered it.
 - Terminal scrollbar drags now remain manual scrolls when the pointer is held
   before moving, preventing bottom-follow from pinning the thumb to the bottom
   while the displayed text moves elsewhere.

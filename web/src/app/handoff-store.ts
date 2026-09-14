@@ -12,6 +12,29 @@
 // いる（internal/hub/usage_stat.go）ので、Hub に残量を見張る仕組みを増やさない。
 import type { Message } from '../types/proto.js';
 
+export interface HandoffUsageWindow {
+  usedPercent: number;
+  remainingPercent: number;
+  windowMinutes: number;
+}
+
+/**
+ * usage_stat に乗っている使用枠を、通知表示に必要な期間と残量を保ったまま集める。
+ */
+export function usageWindowsFromUsageStat(m: Message): HandoffUsageWindow[] {
+  const out: HandoffUsageWindow[] = [];
+  const push = (present: unknown, used: unknown, windowMinutes: number): void => {
+    if (!present || typeof used !== 'number' || !Number.isFinite(used)) return;
+    const normalizedMinutes = Number.isFinite(windowMinutes) && windowMinutes > 0 ? Math.round(windowMinutes) : 0;
+    out.push({ usedPercent: used, remainingPercent: 100 - used, windowMinutes: normalizedMinutes });
+  };
+  push(m.claude_5h_present, m.rl_5h_pct, 300);
+  push(m.claude_7d_present, m.rl_7d_pct, 10080);
+  push(m.codex_primary_present, m.codex_primary_used_pct, Number(m.codex_primary_window_minutes || 0));
+  push(m.codex_secondary_present, m.codex_secondary_used_pct, Number(m.codex_secondary_window_minutes || 0));
+  return out;
+}
+
 /**
  * usage_stat に乗っている「使用率%」を全部集める。
  *
@@ -20,12 +43,16 @@ import type { Message } from '../types/proto.js';
  * 読むと残量 100% に化け、帯が永久に出なくなる。
  */
 export function usedPercentsFromUsageStat(m: Message): number[] {
-  const out: number[] = [];
-  if (m.claude_5h_present && typeof m.rl_5h_pct === 'number') out.push(m.rl_5h_pct);
-  if (m.claude_7d_present && typeof m.rl_7d_pct === 'number') out.push(m.rl_7d_pct);
-  if (m.codex_primary_present && typeof m.codex_primary_used_pct === 'number') out.push(m.codex_primary_used_pct);
-  if (m.codex_secondary_present && typeof m.codex_secondary_used_pct === 'number') out.push(m.codex_secondary_used_pct);
-  return out;
+  return usageWindowsFromUsageStat(m).map((window) => window.usedPercent);
+}
+
+/** 一番残量が少なく、通知を発火させた使用枠。 */
+export function limitingUsageWindowFromUsageStat(m: Message): HandoffUsageWindow | null {
+  const windows = usageWindowsFromUsageStat(m);
+  if (windows.length === 0) return null;
+  return windows.reduce((limiting, window) => (
+    window.remainingPercent < limiting.remainingPercent ? window : limiting
+  ));
 }
 
 /**
@@ -33,9 +60,7 @@ export function usedPercentsFromUsageStat(m: Message): number[] {
  * 使用率が 1 つも読めない usage_stat では null を返す（「残量 100%」ではない）。
  */
 export function remainingPercentFromUsageStat(m: Message): number | null {
-  const used = usedPercentsFromUsageStat(m);
-  if (used.length === 0) return null;
-  return 100 - Math.max(...used);
+  return limitingUsageWindowFromUsageStat(m)?.remainingPercent ?? null;
 }
 
 /** handoff.note_on_threshold の 3 値（正本は internal/config/config.go）。 */

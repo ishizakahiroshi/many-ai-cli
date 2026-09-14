@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   handoffNoteActionFor,
+  limitingUsageWindowFromUsageStat,
   normalizeHandoffNoteMode,
   remainingPercentFromUsageStat,
+  usageWindowsFromUsageStat,
   usedPercentsFromUsageStat,
 } from '../src/app/handoff-store.ts';
 import type { Message } from '../src/types/proto.ts';
@@ -59,6 +61,33 @@ describe('remainingPercentFromUsageStat', () => {
 
   test('a window at 0% used is a real 100% remaining', () => {
     expect(remainingPercentFromUsageStat(usage({ claude_5h_present: true, rl_5h_pct: 0 }))).toBe(100);
+  });
+});
+
+describe('limitingUsageWindowFromUsageStat', () => {
+  test('keeps the Claude window identity that caused the notification', () => {
+    const limiting = limitingUsageWindowFromUsageStat(usage({
+      claude_5h_present: true, rl_5h_pct: 3,
+      claude_7d_present: true, rl_7d_pct: 93,
+    }));
+    expect(limiting).toEqual({ usedPercent: 93, remainingPercent: 7, windowMinutes: 10080 });
+  });
+
+  test('keeps Codex window_minutes with the limiting percentage', () => {
+    const windows = usageWindowsFromUsageStat(usage({
+      provider: 'codex',
+      codex_primary_present: true, codex_primary_used_pct: 94, codex_primary_window_minutes: 300,
+      codex_secondary_present: true, codex_secondary_used_pct: 40, codex_secondary_window_minutes: 10080,
+    }));
+    expect(windows).toEqual([
+      { usedPercent: 94, remainingPercent: 6, windowMinutes: 300 },
+      { usedPercent: 40, remainingPercent: 60, windowMinutes: 10080 },
+    ]);
+    expect(limitingUsageWindowFromUsageStat(usage({
+      provider: 'codex',
+      codex_primary_present: true, codex_primary_used_pct: 94, codex_primary_window_minutes: 300,
+      codex_secondary_present: true, codex_secondary_used_pct: 40, codex_secondary_window_minutes: 10080,
+    }))).toEqual({ usedPercent: 94, remainingPercent: 6, windowMinutes: 300 });
   });
 });
 

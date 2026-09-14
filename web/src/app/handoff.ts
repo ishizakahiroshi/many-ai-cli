@@ -16,10 +16,12 @@ import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
 import { openDeriveDialog } from './derive-dialog.js';
 import {
   handoffNoteActionFor,
+  limitingUsageWindowFromUsageStat,
   normalizeHandoffNoteMode,
-  remainingPercentFromUsageStat,
   type HandoffNoteMode,
+  type HandoffUsageWindow,
 } from './handoff-store.js';
+import { windowLabel } from './usage-limit.js';
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -66,10 +68,10 @@ export function setHandoffNoteMode(value: unknown): void {
 export function checkHandoffNotifyFromUsageStat(m: Message): void {
   const sessionID = Number(m.session_id || 0);
   if (!sessionID || notifiedSessions.has(sessionID)) return;
-  const remaining = remainingPercentFromUsageStat(m);
-  if (remaining === null || remaining > notifyThresholdPercent) return;
+  const limitingWindow = limitingUsageWindowFromUsageStat(m);
+  if (!limitingWindow || limitingWindow.remainingPercent > notifyThresholdPercent) return;
   notifiedSessions.add(sessionID);
-  showHandoffNotifyBanner(sessionID, String(m.provider || ''));
+  showHandoffNotifyBanner(sessionID, String(m.provider || ''), limitingWindow);
 }
 
 const HANDOFF_NOTIFY_AUTO_DISMISS_MS = 30000;
@@ -78,7 +80,19 @@ const HANDOFF_NOTIFY_AUTO_DISMISS_MS = 30000;
 // 生きている帯があればそこへ、無ければトーストへ出す。
 const noteBanners = new Map<number, HTMLElement>();
 
-function showHandoffNotifyBanner(sessionID: number, provider: string): void {
+function handoffWindowLabel(windowMinutes: number): string {
+  const label = windowLabel(windowMinutes);
+  switch (label.kind) {
+    case 'five_hour': return tx('handoff_window_5h', '5-hour limit');
+    case 'weekly': return tx('handoff_window_weekly', 'Weekly limit');
+    case 'days': return tx('usage_window_days', '{n}d', { n: label.amount });
+    case 'hours': return tx('usage_window_hours', '{n}h', { n: label.amount });
+    case 'minutes': return tx('usage_window_minutes', '{n}m', { n: label.amount });
+    default: return tx('handoff_window_generic', 'Usage limit');
+  }
+}
+
+function showHandoffNotifyBanner(sessionID: number, provider: string, usageWindow: HandoffUsageWindow): void {
   const action = handoffNoteActionFor(noteMode);
   const el = document.createElement('div');
   el.className = 'handoff-notify-banner';
@@ -86,7 +100,12 @@ function showHandoffNotifyBanner(sessionID: number, provider: string): void {
   const noteButton = action === 'button'
     ? `<button type="button" class="handoff-notify-note">${escapeHtml(tx('handoff_notify_note', '引き継ぎメモを書かせる'))}</button>`
     : '';
-  el.innerHTML = `<div class="handoff-notify-body">${escapeHtml(tx('handoff_notify_body', 'セッション #{id}（{provider}）の残量が少なくなっています。', { id: sessionID, provider: providerLabel(provider) }))}</div>
+  el.innerHTML = `<div class="handoff-notify-body">${escapeHtml(tx('handoff_notify_body', 'Session #{id} ({provider}) — {window}: {remaining}% remaining.', {
+    id: sessionID,
+    provider: providerLabel(provider),
+    window: handoffWindowLabel(usageWindow.windowMinutes),
+    remaining: Math.round(usageWindow.remainingPercent),
+  }))}</div>
     <div class="handoff-notify-status" data-handoff-note-status hidden></div>
     <div class="handoff-notify-actions">
       <button type="button" class="handoff-notify-action">${escapeHtml(tx('handoff_notify_action', '引き継ぎを準備'))}</button>
