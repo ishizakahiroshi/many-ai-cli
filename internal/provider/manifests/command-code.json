@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "command-code",
+  "display_name": "Command Code",
+  "description": "Command Code command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable": "command-code",
+    "model_args": ["--model", "{model}"],
+    "headless": {
+      "args": ["--output-format", "text", "-p"],
+      "format": "text",
+      "prompt_via": "arg"
+    }
+  },
+  "adapters": {
+    "approval": "approval:command-code-v1",
+    "transcript": "history:command-code-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

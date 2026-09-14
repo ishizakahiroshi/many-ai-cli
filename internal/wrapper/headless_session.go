@@ -62,7 +62,7 @@ type headlessSession struct {
 // and failed ends with a session_end carrying its exit code, exactly like a PTY
 // session that exited non-zero.
 func runHeadlessSession(s headlessSession) error {
-	def, ok := config.HeadlessDefFor(s.provider, s.cfg)
+	def, ok := headlessDefForProvider(s.provider, s.cfg)
 	if !ok {
 		return fmt.Errorf("provider %q has no headless definition; run it without --headless, or add a headless: block to its custom_providers entry", s.provider)
 	}

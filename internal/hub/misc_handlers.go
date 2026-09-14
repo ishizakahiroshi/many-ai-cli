@@ -53,7 +53,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 
 	sshSession, hostIP := hostNetInfo()
 	// launcher（SSH tunnel モード）が /api/net-hint で登録した接続元情報があれば
-	// 補正する。コンテナ内実行の Hub は NIC から内部 IP（例: 172.19.0.2）しか
+	// 補正する。コンテナ内実行の Hub は NIC から内部 IP（例: 192.0.2.2）しか
 	// 検出できず、SSH 経由起動の自己判定もできないため。
 	s.netHintMu.Lock()
 	if s.netHintSSH {
@@ -110,7 +110,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		// キーごと出さない＝画面は欄を出さない）。execution_modes /
 		// permission_presets は「この build で選べる値」。headless / bounded は
 		// それぞれの C で解禁済みなので、今は 3 値とも返る。
-		"effort_levels":      effortLevelsByProvider(),
+		"effort_levels":      s.effortLevelsByProvider(),
 		"execution_modes":    config.AvailableExecutionModes(),
 		"permission_presets": config.AvailablePermissionPresets(),
 		// headless の定義がある provider（内蔵 + config.yaml の custom_providers）。
@@ -118,7 +118,7 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		// 400 になる。画面はこの一覧を見て、押す前に「この CLI には headless の定義が
 		// 無い」を権限欄と同じ場所へ 1 行出す（子 plan 内部 C6）。**判定の正本は
 		// あくまで起動時の解決**で、これはその写し。
-		"headless_providers": config.HeadlessProviders(cfg),
+		"headless_providers": s.headlessProvidersFromRegistry(cfg),
 		// 画面から立てる子（origin: "ui"）の実効権限。provider → 段 → 実効フラグで、
 		// 内側の "" は「段を選んでいない」＝ UI 起点の対話既定（段 1）。派生ダイアログは
 		// これを spawn 確認ダイアログと同じ描画関数へ渡す。確認ダイアログは spawn 時に

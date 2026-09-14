@@ -44,6 +44,10 @@ const EXEMPT_PATHS = [
   '.husky/pre-commit',
   '.github/workflows/secrets-scan',
   'docs/local/',
+  // omitnix is a generated repository inventory. It records filenames from
+  // ignored personal directories as part of its reverse index, so those names
+  // are metadata rather than repository content.
+  '.omitnix/index.json',
   // 秘密情報 denylist の定義そのもの。ブロックすべきファイル名を列挙するのが役割なので、
   // watchlist パターンと一致するのは設計どおり（scripts/secrets-scan.mjs 自身と同じ理由）。
   'internal/hub/files_scope.go',

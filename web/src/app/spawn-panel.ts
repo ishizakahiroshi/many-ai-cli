@@ -4,8 +4,9 @@ import { escapeHtml, showToast, token } from './util.js';
 import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
-import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
+import { appConfirm, appConfirmOllamaEncoding, setSettingsPanelOpen } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
+import { loadProviderSummaries } from './provider-store.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
@@ -714,6 +715,7 @@ export function resetSpawnProviderOrder(): void {
   // 既知 provider だけを許可するため、subscription 欄は selectableProfiles が未知 id に
   // 対して自然に空を返すため、どちらも custom provider では追加対応なしで元々隠れる）。
   const injectedCustomProviderIds = new Set<string>();
+  const addProviderOptionValue = '__add-ai-provider__';
   function isCustomProviderValue(p: string): boolean {
     return injectedCustomProviderIds.has(p);
   }
@@ -726,8 +728,12 @@ export function resetSpawnProviderOrder(): void {
       // 同じ応答から起動要求の共通 3 項目の候補値も取り込む（追加の fetch をしない）。
       setLaunchOptionChoices(info);
       syncEffortField((spawnProviderEl as HTMLSelectElement).value);
-      const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];
-      if (list.length === 0) return;
+      const providerResponse = await loadProviderSummaries();
+      const list = providerResponse
+        ? providerResponse.providers
+          .filter((entry) => entry.origin !== 'embedded')
+          .map((entry) => ({ id: entry.id, label: entry.display_name }))
+        : (Array.isArray(info?.custom_providers) ? info.custom_providers : []);
       const select = spawnProviderEl as HTMLSelectElement;
       const existing = new Set(Array.from(select.options).map((opt) => opt.value));
       let added = false;
@@ -740,6 +746,14 @@ export function resetSpawnProviderOrder(): void {
         select.appendChild(opt);
         existing.add(id);
         injectedCustomProviderIds.add(id);
+        added = true;
+      }
+      if (!existing.has(addProviderOptionValue)) {
+        const addOption = document.createElement('option');
+        addOption.value = addProviderOptionValue;
+        addOption.textContent = '＋ AI CLIを追加…';
+        select.appendChild(addOption);
+        existing.add(addProviderOptionValue);
         added = true;
       }
       if (added) {
@@ -1065,6 +1079,15 @@ export function resetSpawnProviderOrder(): void {
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
+    if (p === addProviderOptionValue) {
+      spawnProviderEl.value = 'claude';
+      setSettingsPanelOpen(true);
+      const section = document.querySelector<HTMLElement>('[data-section="ai-providers"]');
+      if (section instanceof HTMLDetailsElement) section.open = true;
+      document.dispatchEvent(new CustomEvent('provider-enrollment-open'));
+      updateSpawnProviderIcon();
+      return;
+    }
     syncSpawnProviderFields(p);
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;

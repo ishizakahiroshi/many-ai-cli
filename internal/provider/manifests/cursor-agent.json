@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "cursor-agent",
+  "display_name": "Cursor Agent",
+  "description": "Cursor Agent command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable": "cursor-agent",
+    "model_args": ["--model", "{model}"],
+    "headless": {
+      "args": ["-p", "--output-format", "text"],
+      "format": "text",
+      "prompt_via": "arg"
+    }
+  },
+  "adapters": {
+    "approval": "approval:cursor-agent-v1",
+    "transcript": "history:cursor-agent-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

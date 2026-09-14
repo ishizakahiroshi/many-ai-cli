@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "copilot",
+  "display_name": "GitHub Copilot",
+  "description": "GitHub Copilot command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable_candidates": ["copilot", "gh"],
+    "model_args": ["--model", "{model}"],
+    "headless": {
+      "args": ["--output-format", "text", "-s", "-p"],
+      "format": "text",
+      "prompt_via": "arg"
+    }
+  },
+  "adapters": {
+    "approval": "approval:copilot-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

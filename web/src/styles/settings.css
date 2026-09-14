@@ -179,6 +179,43 @@
   gap: var(--space-2);
 }
 
+.provider-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 4px;
+}
+.provider-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.provider-manager-details {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.provider-manager-meta { color: var(--muted); font-size: 0.72rem; }
+.provider-manager-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.provider-manager-toolbar { margin-top: 8px; }
+.provider-enrollment-form {
+  margin: 10px 14px 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.provider-enrollment-form[hidden] { display: none !important; }
+@media (max-width: 560px) {
+  .provider-manager-row { align-items: flex-start; flex-direction: column; }
+  .provider-manager-actions { width: 100%; }
+}
+
 .settings-select {
   background: var(--bg);
   color: var(--text);

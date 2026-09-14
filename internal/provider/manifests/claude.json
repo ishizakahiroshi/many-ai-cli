@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "claude",
+  "display_name": "Claude",
+  "description": "Claude Code command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable": "claude",
+    "model_args": ["--model", "{model}"],
+    "effort_args": ["--effort", "{effort}"],
+    "effort_levels": ["low", "medium", "high", "xhigh", "max"],
+    "headless": {
+      "args": ["-p", "--output-format", "stream-json", "--verbose"],
+      "format": "claude-stream-json",
+      "prompt_via": "stdin"
+    }
+  },
+  "adapters": {
+    "approval": "approval:claude-v1",
+    "transcript": "history:claude-v1",
+    "usage": "usage:claude-v1",
+    "subscription": "subscription:claude-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

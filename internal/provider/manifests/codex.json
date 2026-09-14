@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "codex",
+  "display_name": "Codex",
+  "description": "Codex command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable": "codex",
+    "model_args": ["--model", "{model}"],
+    "effort_args": ["-c", "model_reasoning_effort=\"{effort}\""],
+    "effort_levels": ["minimal", "low", "medium", "high", "xhigh", "max"]
+  },
+  "adapters": {
+    "approval": "approval:codex-v1",
+    "transcript": "history:codex-v1",
+    "usage": "usage:codex-v1",
+    "subscription": "subscription:codex-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

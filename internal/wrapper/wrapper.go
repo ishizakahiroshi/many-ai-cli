@@ -27,6 +27,7 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/hubruntime"
 	"many-ai-cli/internal/proto"
+	providerdef "many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/subscription"
 )
@@ -997,6 +998,38 @@ func customProviderFor(cfg *config.Config, provider string) (config.CustomProvid
 	return config.CustomProvider{}, false
 }
 
+func providerRegistryForConfig(cfg *config.Config) *providerdef.Registry {
+	if cfg == nil {
+		return nil
+	}
+	definitions, _, err := providerdef.EmbeddedDefinitions()
+	if err != nil {
+		return nil
+	}
+	legacy, _ := config.LegacyProviderDefinitions(cfg.CustomProviders)
+	registry, _ := providerdef.Build(providerdef.Layers{Embedded: definitions, Legacy: legacy}, providerdef.DefaultAdapterCatalog())
+	return registry
+}
+
+func providerDefinitionFor(cfg *config.Config, id string) (providerdef.EffectiveDefinition, bool) {
+	registry := providerRegistryForConfig(cfg)
+	if registry == nil {
+		return providerdef.EffectiveDefinition{}, false
+	}
+	return registry.Lookup(id)
+}
+
+func headlessDefForProvider(id string, cfg *config.Config) (config.HeadlessDef, bool) {
+	if definition, ok := providerDefinitionFor(cfg, id); ok && definition.Launch != nil && definition.Launch.Headless != nil {
+		return config.HeadlessDef{
+			Args:      append([]string(nil), definition.Launch.Headless.Args...),
+			Format:    definition.Launch.Headless.Format,
+			PromptVia: definition.Launch.Headless.PromptVia,
+		}, true
+	}
+	return config.HeadlessDefFor(id, cfg)
+}
+
 // shouldAppendModelFlag reports whether Run should add --model to a wrap
 // invocation's provider-specific extra args. A custom provider never gets
 // it (decision 2, plan_custom-provider-spawn-execution.md): no built-in CLI
@@ -1013,6 +1046,23 @@ func customProviderFor(cfg *config.Config, provider string) (config.CustomProvid
 // case had neither the guard nor a test before).
 func shouldAppendModelFlag(model string, isCustomProvider bool) bool {
 	return model != "" && !isCustomProvider
+}
+
+func modelArgsForProvider(model string, isCustomProvider bool, definition providerdef.EffectiveDefinition, hasDefinition bool) ([]string, string) {
+	if model == "" {
+		return nil, ""
+	}
+	if isCustomProvider {
+		if !hasDefinition || definition.Launch == nil || len(definition.Launch.ModelArgs) == 0 {
+			return nil, "custom provider takes no built-in flags"
+		}
+		args, err := providerdef.ModelArgs(definition, model)
+		if err != nil {
+			return nil, err.Error()
+		}
+		return args, ""
+	}
+	return []string{"--model", model}, ""
 }
 
 // effortArgsForProvider resolves --effort into the provider's own arguments,
@@ -1053,6 +1103,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// --model がそのまま custom provider の argv へ混入していた
 	// （decision 2, plan_custom-provider-spawn-execution.md 違反）。
 	customProvider, isCustomProvider := customProviderFor(cfg, provider)
+	providerDefinition, hasProviderDefinition := providerDefinitionFor(cfg, provider)
 
 	fs := flag.NewFlagSet("wrap", flag.ContinueOnError)
 	label := fs.String("label", "", "session label shown in UI card")
@@ -1104,14 +1155,20 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// register が正本になっている)。
 	launchEffort := ""
 	if !loginMode {
-		if shouldAppendModelFlag(*model, isCustomProvider) {
-			extra = append(extra, "--model", *model)
+		if modelArgs, skipped := modelArgsForProvider(*model, isCustomProvider, providerDefinition, hasProviderDefinition); skipped != "" {
+			logger.Info("model ignored", "provider", provider, "reason", skipped)
+		} else if len(modelArgs) > 0 {
+			extra = append(extra, modelArgs...)
 		}
 		// effort は --model の直後に置く。どの provider がどんな引数で受けるかは
 		// internal/config/effort.go の表だけが知っている（ここに provider の
 		// switch を増やさない。子 plan:
 		// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。
-		if effortArgs, skipped := effortArgsForProvider(provider, *effort, isCustomProvider); skipped != "" {
+		effortArgs, skipped := effortArgsForProvider(provider, *effort, isCustomProvider)
+		if isCustomProvider && hasProviderDefinition {
+			effortArgs, skipped = effortArgsForDefinition(*effort, providerDefinition)
+		}
+		if skipped != "" {
 			// 写像が無い provider へ渡ってきた effort は黙って捨てない。値そのものは
 			// 秘密ではないが、ログに残すのは理由だけで足りる。
 			logger.Info("effort ignored", "provider", provider, "reason", skipped)
@@ -1378,7 +1435,19 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// （新しい失敗 UX を作らない・decision 7, plan_custom-provider-spawn-execution.md）。
 	var customArgv []string
 	if isCustomProvider {
-		argv, argvErr := customProvider.Argv()
+		var argv []string
+		var argvErr error
+		if hasProviderDefinition && providerDefinition.Launch != nil {
+			resolved, resolveErr := providerdef.ResolveLaunch(providerDefinition, providerdef.LaunchRequest{})
+			if resolveErr != nil {
+				argvErr = resolveErr
+			} else if len(resolved.ExecutableCandidates) > 0 {
+				argv = append(argv, resolved.ExecutableCandidates[0])
+				argv = append(argv, resolved.Args...)
+			}
+		} else {
+			argv, argvErr = customProvider.Argv()
+		}
 		if argvErr != nil {
 			diagnoseStartFailure(os.Stderr, provider, providerArgs, argvErr)
 			_ = websocket.JSON.Send(conn, proto.Message{
@@ -1710,6 +1779,20 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	return waitErr
 }
 
+func effortArgsForDefinition(effort string, definition providerdef.EffectiveDefinition) ([]string, string) {
+	if effort == "" {
+		return nil, ""
+	}
+	args, err := providerdef.EffortArgs(definition, effort)
+	if err != nil {
+		return nil, err.Error()
+	}
+	if len(args) == 0 {
+		return nil, "provider definition has no effort mapping"
+	}
+	return args, ""
+}
+
 // classifyExit turns ps.Wait()'s error into a coarse state label
 // ("completed"/"error") plus the concrete exit code and, on Unix when the
 // child was terminated by a signal (e.g. OOM kill, SIGTERM/SIGKILL), the
@@ -1743,6 +1826,10 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, e
 		return nil, proto.Message{}, err
 	}
 	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
+	providerRevision := ""
+	if registry := providerRegistryForConfig(cfg); registry != nil {
+		providerRevision = registry.Revision()
+	}
 	// Effort は起動時に実際に付いた reasoning effort（付かなかったときは空）。Model と
 	// 同じく「実際にその値で起動したプロセスの申告」を正本にするので、Hub 経由でも
 	// `many-ai-cli wrap <provider> --effort …` の直接起動でも、同じ 1 経路で
@@ -1754,6 +1841,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, e
 		Type:              "register",
 		Role:              "wrapper",
 		Provider:          provider,
+		ProviderRevision:  providerRevision,
 		Display:           display,
 		CWD:               cwd,
 		Label:             label,
@@ -1800,11 +1888,16 @@ func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, dis
 		return nil, 0, nil, err
 	}
 	homeDir, codexHome, claudeDir, grokHome := userSkillDirs()
+	providerRevision := ""
+	if registry := providerRegistryForConfig(cfg); registry != nil {
+		providerRevision = registry.Revision()
+	}
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:              "reattach",
 		Role:              "wrapper",
 		SessionID:         sessionID,
 		Provider:          provider,
+		ProviderRevision:  providerRevision,
 		Display:           display,
 		CWD:               cwd,
 		Label:             label,

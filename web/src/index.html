@@ -407,6 +407,37 @@
           <div class="settings-note" data-i18n="settings_subscriptions_isolation_note">A profile switches the CLI's whole config directory, so per-profile sessions do not see the global memory file, skills, or past conversations of your default profile.</div>
         </div>
       </details>
+      <details class="settings-section" data-section="ai-providers" data-settings-level="basic">
+        <summary class="settings-section-title"><span data-i18n="settings_ai_providers">AI CLI integrations</span><span class="settings-section-current" data-section="ai-providers"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_ai_providers_desc">Manage built-in and user-added command line providers. Basic registration needs only a display name and executable.</div>
+          <div id="provider-manager-list" class="provider-manager-list" aria-live="polite"></div>
+          <div class="settings-row-actions provider-manager-toolbar">
+            <button id="provider-add-btn" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_add">Add AI CLI</button>
+            <span id="provider-manager-status" class="settings-note" aria-live="polite"></span>
+          </div>
+          <form id="provider-enrollment-form" class="provider-enrollment-form" hidden>
+            <div class="settings-row">
+              <label class="settings-label" for="provider-enrollment-id" data-i18n="settings_ai_providers_id">ID</label>
+              <input id="provider-enrollment-id" class="settings-input-text" autocomplete="off" required>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="provider-enrollment-label" data-i18n="settings_ai_providers_label">Display name</label>
+              <input id="provider-enrollment-label" class="settings-input-text" autocomplete="off" required>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="provider-enrollment-executable" data-i18n="settings_ai_providers_executable">Executable or path</label>
+              <input id="provider-enrollment-executable" class="settings-input-text" autocomplete="off" required>
+            </div>
+            <div class="settings-row-actions">
+              <button id="provider-enrollment-validate" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_validate">Validate</button>
+              <button id="provider-enrollment-save" class="settings-inline-btn" type="submit" data-i18n="settings_ai_providers_save">Save provider</button>
+              <button id="provider-enrollment-cancel" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_cancel">Cancel</button>
+            </div>
+            <div id="provider-enrollment-result" class="settings-note" aria-live="polite"></div>
+          </form>
+        </div>
+      </details>
       <details class="settings-section" data-section="remote-auth">
         <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
         <div class="settings-section-body">

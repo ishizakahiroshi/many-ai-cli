@@ -29,6 +29,7 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/sessionstore"
 	"many-ai-cli/internal/wrapper"
@@ -111,19 +112,20 @@ const (
 // SessionActivity が状態の正本で、State は互換表示用の派生値である。
 // approval_visible は UI が xterm.js バッファをスキャンして session_hint で伝える。
 type session struct {
-	ID        int    `json:"id"`
-	Provider  string `json:"provider"`
-	Display   string `json:"display_name"`
-	CWD       string `json:"cwd"`
-	Branch    string `json:"branch,omitempty"`
-	ProjectID string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
-	Label     string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
-	Pinned    bool   `json:"pinned,omitempty"`
-	Color     string `json:"color,omitempty"`
-	Note      string `json:"note,omitempty"`
-	AutoTitle string `json:"auto_title,omitempty"`
-	Model     string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
-	Effort    string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
+	ID               int    `json:"id"`
+	Provider         string `json:"provider"`
+	ProviderRevision string `json:"provider_revision,omitempty"`
+	Display          string `json:"display_name"`
+	CWD              string `json:"cwd"`
+	Branch           string `json:"branch,omitempty"`
+	ProjectID        string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
+	Label            string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
+	Pinned           bool   `json:"pinned,omitempty"`
+	Color            string `json:"color,omitempty"`
+	Note             string `json:"note,omitempty"`
+	AutoTitle        string `json:"auto_title,omitempty"`
+	Model            string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
+	Effort           string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
 	// ExecutionMode は wrapper が申告した実行モード。空（＝大半のセッション）は
 	// 対話（PTY）で、"headless" は非対話 runner で走っているセッション
 	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。
@@ -746,14 +748,18 @@ func (c *wrapperConn) close() {
 }
 
 type Server struct {
-	cfg       *config.Config
-	logger    *slog.Logger
-	httpSrv   *http.Server
-	devMode   bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
-	hubCWD    string // serve 起動時の os.Getwd() を保存
-	version   string // main.version (ldflags 経由) を保持し /api/info で返す
-	gitCommit string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
-	buildTime string // main.buildTime (ldflags 経由・任意)。/api/info で返す
+	cfg                *config.Config
+	providers          *provider.Registry
+	providerRegistryMu sync.RWMutex
+	providerStore      provider.Store
+	historyStore       *provider.HistoryStore
+	logger             *slog.Logger
+	httpSrv            *http.Server
+	devMode            bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
+	hubCWD             string // serve 起動時の os.Getwd() を保存
+	version            string // main.version (ldflags 経由) を保持し /api/info で返す
+	gitCommit          string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
+	buildTime          string // main.buildTime (ldflags 経由・任意)。/api/info で返す
 	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
 	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
 	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
@@ -1167,8 +1173,41 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	for _, warning := range cfg.Warnings() {
 		logger.Warn("config warning", "warning", warning)
 	}
+	var providerStore provider.Store
+	var historyStore *provider.HistoryStore
+	providers, providerDiagnostics, providerErr := buildProviderRegistry(cfg)
+	if dir, dirErr := config.Dir(); dirErr == nil {
+		if store, storeErr := provider.NewFileStore(filepath.Join(dir, "providers.d")); storeErr == nil {
+			providerStore = store
+			if history, historyErr := provider.NewHistoryStore(filepath.Join(dir, "provider-overrides"), filepath.Join(dir, "backups", "providers")); historyErr == nil {
+				historyStore = history
+			}
+			if userDefinitions, storeDiagnostics, loadErr := store.Load(); loadErr == nil {
+				var overrides []provider.Definition
+				var historyDiagnostics []provider.Diagnostic
+				if historyStore != nil {
+					overrides, historyDiagnostics, _ = historyStore.LoadOverrides()
+				}
+				providers, providerDiagnostics, providerErr = buildProviderRegistryLayers(cfg, userDefinitions, overrides)
+				providerDiagnostics = append(providerDiagnostics, storeDiagnostics...)
+				providerDiagnostics = append(providerDiagnostics, historyDiagnostics...)
+			} else {
+				providerDiagnostics = append(providerDiagnostics, provider.Diagnostic{Code: "provider_store_load", Severity: provider.SeverityError, Field: "providers.d", Message: "user provider definitions could not be loaded"})
+			}
+		}
+	}
+	if providerErr != nil {
+		logger.Warn("provider registry unavailable", "err", providerErr)
+	} else {
+		for _, diagnostic := range providerDiagnostics {
+			logger.Warn("provider registry diagnostic", "code", diagnostic.Code, "field", diagnostic.Field, "message", diagnostic.Message)
+		}
+	}
 	s := &Server{
 		cfg:                   cfg,
+		providers:             providers,
+		providerStore:         providerStore,
+		historyStore:          historyStore,
 		logger:                logger,
 		devMode:               devMode,
 		hubCWD:                hubCWD,
@@ -1308,6 +1347,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/providers", s.handleProviders)
+	mux.HandleFunc("/api/providers/", s.handleProviderRoute)
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)

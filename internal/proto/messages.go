@@ -19,11 +19,15 @@ type Message struct {
 	Role      string `json:"role,omitempty"`
 	SessionID int    `json:"session_id,omitempty"`
 	Provider  string `json:"provider,omitempty"`
-	Display   string `json:"display_name,omitempty"`
-	CWD       string `json:"cwd,omitempty"`
-	Branch    string `json:"branch,omitempty"`
-	ProjectID string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（hub/project_id.go）
-	PID       int    `json:"pid,omitempty"`
+	// ProviderRevision identifies the effective definition snapshot used for a
+	// session. It is informational and never carries command or environment
+	// values.
+	ProviderRevision string `json:"provider_revision,omitempty"`
+	Display          string `json:"display_name,omitempty"`
+	CWD              string `json:"cwd,omitempty"`
+	Branch           string `json:"branch,omitempty"`
+	ProjectID        string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（hub/project_id.go）
+	PID              int    `json:"pid,omitempty"`
 	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
 	// acknowledge the frame after the bytes have been written to the PTY.
 	InputSeq int64  `json:"input_seq,omitempty"`

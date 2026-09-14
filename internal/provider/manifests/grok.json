@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "id": "grok",
+  "display_name": "Grok Build",
+  "description": "Grok Build command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable": "grok",
+    "model_args": ["--model", "{model}"],
+    "headless": {
+      "args": ["--output-format", "plain", "-p"],
+      "format": "text",
+      "prompt_via": "arg"
+    },
+    "effort_args": []
+  },
+  "adapters": {
+    "approval": "approval:grok-v1",
+    "subscription": "subscription:grok-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

@@ -151,19 +151,20 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	// どおり未設定のままで、バナー検出（applyDetectedModel）が後から埋める。起動値が
 	// 入っていれば、空文字では既存値を消さない同関数がそれを保つ。
 	ses := &session{
-		ID:        id,
-		StoreID:   storeID,
-		Provider:  reg.Provider,
-		Display:   reg.Display,
-		CWD:       reg.CWD,
-		Branch:    branch,
-		Label:     cardMeta.Label,
-		Pinned:    cardMeta.Pinned,
-		Color:     cardMeta.Color,
-		Note:      cardMeta.Note,
-		AutoTitle: cardMeta.AutoTitle,
-		Model:     reg.Model,
-		Effort:    reg.Effort,
+		ID:               id,
+		StoreID:          storeID,
+		Provider:         reg.Provider,
+		ProviderRevision: reg.ProviderRevision,
+		Display:          reg.Display,
+		CWD:              reg.CWD,
+		Branch:           branch,
+		Label:            cardMeta.Label,
+		Pinned:           cardMeta.Pinned,
+		Color:            cardMeta.Color,
+		Note:             cardMeta.Note,
+		AutoTitle:        cardMeta.AutoTitle,
+		Model:            reg.Model,
+		Effort:           reg.Effort,
 		// ExecutionMode も wrapper の申告が正本。対話セッションは空を送るので、
 		// この項目が存在しなかった頃と 1 バイトも変わらない（子 plan:
 		// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
@@ -541,6 +542,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevInputAckCapable bool
 	var prevAgentChatPath string
 	var prevAgentChatOffset int64
+	var prevProviderRevision string
 	var prevReplayEpoch uint64
 	var prevApprovalSourceEpoch uint64
 	var prevApprovalEpochPending bool
@@ -568,6 +570,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
 		prevReattachState = snapshotReattachStateLocked(cur)
+		prevProviderRevision = cur.ProviderRevision
 		prevAgentChatPath = cur.agentChatPath
 		prevAgentChatOffset = cur.agentChatOffset
 		prevReplayEpoch = cur.replayEpoch
@@ -608,6 +611,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevResendInput = cur.resendInput
 		prevInputAckCapable = cur.inputAckCapable
 		prevExists = true
+	}
+	if prevExists && prevProviderRevision != "" {
+		req.ProviderRevision = prevProviderRevision
 	}
 	// gap = 切断中に Hub が受け取れなかったぶん。既存 UI へはこれだけを流す。
 	gap := replay
@@ -672,6 +678,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		ID:                             acceptedID,
 		StoreID:                        storeID,
 		Provider:                       req.Provider,
+		ProviderRevision:               req.ProviderRevision,
 		Display:                        req.Display,
 		CWD:                            req.CWD,
 		Branch:                         branch,

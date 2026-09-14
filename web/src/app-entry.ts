@@ -19,6 +19,7 @@ import './app/session-swipe.js';
 import './app/chat-history.js';
 import './app/attachments.js';
 import './app/spawn-panel.js';
+import './app/provider-manager.js';
 import './app/voice.js';
 import './app/voice-whisper.js';
 import './app/git-view.js';

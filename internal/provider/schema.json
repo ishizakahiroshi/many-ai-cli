@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://many-ai-cli.dev/schemas/provider-v1.json",
+  "title": "many-ai-cli provider definition",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "id", "display_name", "launch"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 512},
+    "description": {"type": "string", "maxLength": 512},
+    "enabled": {"type": "boolean"},
+    "launch": {
+      "type": "object",
+      "properties": {
+        "executable": {"type": "string", "maxLength": 1024},
+        "executable_candidates": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "args": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "model_args": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "effort_args": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "effort_levels": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "allowed_env": {"type": "array", "maxItems": 256, "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}},
+        "headless": {"type": "object"}
+      }
+    },
+    "models": {"type": "object"},
+    "capabilities": {"type": "object", "additionalProperties": {"type": "boolean"}},
+    "adapters": {"type": "object"},
+    "presentation": {"type": "object"},
+    "approval_pattern_source": {"type": "string", "maxLength": 512},
+    "source": {"type": "object"}
+  }
+}

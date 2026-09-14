@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 )
 
@@ -71,7 +72,7 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 }
 
 func providers(ctx context.Context) Check {
-	names := config.BuiltinProviderIDs
+	names := provider.BuiltinProviderIDs
 	var found []string
 	for _, name := range names {
 		path, err := providerLookPath(name)

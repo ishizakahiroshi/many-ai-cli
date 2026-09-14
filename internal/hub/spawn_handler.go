@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/wrapper"
 )
@@ -175,7 +176,7 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	// effort は provider 別 switch の外で 1 度だけ足す。どの provider が effort を
 	// 受けるかは internal/config/effort.go の表だけが知っている。写像が無い
 	// provider では spec.Effort が空（検証で弾かれている）なので何も足さない。
-	if args := effortWrapArgs(spec.Provider, spec.Effort); len(args) > 0 {
+	if args := s.effortWrapArgsForProvider(spec.Provider, spec.Effort); len(args) > 0 {
 		wrapArgs = append(wrapArgs, args...)
 	}
 	// 段 2 の許可 tool も同じく switch の外で 1 度だけ。空なら何も足さない。
@@ -350,19 +351,14 @@ func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string,
 // a custom provider spawn, not just appear in the dropdown (敵対レビュー
 // 2026-08-31 Finding 1: this switch used to be a fixed built-in list only).
 func (s *Server) validSpawnProvider(provider string) bool {
-	switch provider {
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code", "shell":
+	if provider == "shell" {
 		return true
 	}
-	s.cfgMu.Lock()
-	custom := s.cfg.CustomProviders
-	s.cfgMu.Unlock()
-	for _, p := range config.EffectiveCustomProviders(custom) {
-		if p.ID == provider {
-			return true
-		}
+	definition, ok := s.providerDefinition(provider)
+	if !ok {
+		return false
 	}
-	return false
+	return definition.Enabled == nil || *definition.Enabled
 }
 
 // validGridAIProvider reports whether provider is valid as the AI half of
@@ -385,6 +381,13 @@ func (s *Server) validGridAIProvider(provider string) bool {
 func resolveSpawnModel(model string, isCustomProvider bool) string {
 	if isCustomProvider {
 		return ""
+	}
+	return strings.TrimSpace(model)
+}
+
+func resolveSpawnModelForDefinition(model string, isCustomProvider bool, definition provider.EffectiveDefinition, hasDefinition bool) string {
+	if !isCustomProvider || !hasDefinition || definition.Launch == nil || len(definition.Launch.ModelArgs) == 0 {
+		return resolveSpawnModel(model, isCustomProvider)
 	}
 	return strings.TrimSpace(model)
 }
@@ -643,7 +646,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// 省略した呼び出しは空のまま素通りする（子 plan:
 	// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
 	resolvedExecutionMode, execModeErr := config.ResolveExecutionMode(
-		body.ExecutionMode, headlessCapableProvider(body.Provider, s.snapshotCfg()), launchOriginUI, false)
+		body.ExecutionMode, s.headlessCapableProviderFromRegistry(body.Provider, s.snapshotCfg()), launchOriginUI, false)
 	if execModeErr != nil {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", execModeErr.Error())
 		return
@@ -823,7 +826,8 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wrapArgs := []string{"wrap", body.Provider}
-	resolvedModel := resolveSpawnModel(body.Model, isCustomProvider)
+	definition, hasDefinition := s.providerDefinition(body.Provider)
+	resolvedModel := resolveSpawnModelForDefinition(body.Model, isCustomProvider, definition, hasDefinition)
 
 	if body.Label != "" {
 		// --label=value 形式で渡す（空白区切りだと value が次フラグに化ける可能性がある）。
@@ -1007,8 +1011,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			wrapArgs = append(wrapArgs, "--permission-mode", body.PermissionMode)
 		}
 	}
+	if isCustomProvider && resolvedModel != "" {
+		if modelArgs, modelErr := provider.ModelArgs(definition, resolvedModel); modelErr == nil {
+			wrapArgs = append(wrapArgs, modelArgs...)
+		}
+	}
 	// effort は provider 別 switch の外で 1 度だけ足す（spawnWrappedSession と同じ形）。
-	if args := effortWrapArgs(body.Provider, body.Effort); len(args) > 0 {
+	if args := s.effortWrapArgsForProvider(body.Provider, body.Effort); len(args) > 0 {
 		wrapArgs = append(wrapArgs, args...)
 	}
 	if args := allowedToolsWrapArgs(allowedTools); len(args) > 0 {
@@ -1025,7 +1034,7 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
 	effectiveRoute := body.Route
-	if effectiveRoute == "" {
+	if effectiveRoute == "" && !isCustomProvider {
 		s.cfgMu.Lock()
 		localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 		s.cfgMu.Unlock()
