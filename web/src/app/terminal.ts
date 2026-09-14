@@ -647,6 +647,12 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
       termEl.addEventListener('pointerdown', () => {
         markTerminalManualScrollIntent();
       });
+      // xterm はスライダーへ pointer capture するため、枠外へのドラッグもここを通る。
+      // 押してから 400ms 以上経った移動を自動スクロールと誤認しないよう、移動でも更新する。
+      // bubble では xterm の移動処理 → onScroll の後になるので capture で先に記録する。
+      termEl.addEventListener('pointermove', (e) => {
+        if (e.buttons !== 0) markTerminalManualScrollIntent();
+      }, { capture: true });
     }
     // attachCustomWheelEventHandler が無い xterm ビルド向けのフォールバック。
     // capture 段階で遮断することで、xterm 内部のホイールリスナーと

@@ -215,6 +215,10 @@ Release artifacts are published at
   — no extra confirmation step was added.
 
 ### Fixed
+
+- Terminal scrollbar drags now remain manual scrolls when the pointer is held
+  before moving, preventing bottom-follow from pinning the thumb to the bottom
+  while the displayed text moves elsewhere.
 - **Right-clicking a backtick-wrapped Windows path now offers Open in
   modal again** (and Open in MANY-AI-CLI, which uses the same check).
   Footer paths such as `` `D:\src\…\file.ts` `` were detected with the
