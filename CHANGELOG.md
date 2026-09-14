@@ -218,6 +218,8 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Selecting a session card in another project now updates the open project and
+  its session strip while keeping the session you selected active.**
 - **Low-quota handoff notices now identify the limiting usage window and its
   remaining percentage**, such as `Weekly limit: 7% remaining`, instead of
   leaving you to guess whether the 5-hour or weekly allowance triggered it.

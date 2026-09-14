@@ -14,6 +14,7 @@ import {
   deriveProjectKeyFromCwd,
   flattenSidebarTree,
   moveToSiblingFront,
+  projectBoxKeyAfterSessionCardSelection,
 } from './sidebar-tree.js';
 
 // 合成データ。実在のパスは書かない（公開ファイルの層 1 防御）。
@@ -240,6 +241,21 @@ test('見出しの名前は key の末尾セグメント', () => {
 
   const tree = buildSidebarTree({ sessions: [ses(1)], order: [1] });
   assert.equal(tree[0].label, 'main-app');
+});
+
+test('別プロジェクトのカードを選ぶと通常表示の開く箱が切り替わる', () => {
+  const sessions = [ses(7), ses(18, { cwd: OTHER, project_id: OTHER })];
+  assert.equal(projectBoxKeyAfterSessionCardSelection(18, MAIN, false, sessions), OTHER);
+});
+
+test('同じ箱のカード選択と multi 表示のフォーカス移動では開く箱を変えない', () => {
+  const sessions = [ses(7), ses(9), ses(18, { cwd: OTHER, project_id: OTHER })];
+  assert.equal(projectBoxKeyAfterSessionCardSelection(9, MAIN, false, sessions), null);
+  assert.equal(projectBoxKeyAfterSessionCardSelection(18, MAIN, true, sessions), null);
+});
+
+test('存在しないセッション ID では開く箱を変えない', () => {
+  assert.equal(projectBoxKeyAfterSessionCardSelection(999, MAIN, false, [ses(7)]), null);
 });
 
 // ---- 「器の中で先頭へ」 ------------------------------------------------------

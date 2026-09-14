@@ -2,7 +2,7 @@
 import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
-import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectKeyForSession } from './sidebar-tree.js';
+import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectBoxKeyAfterSessionCardSelection, projectKeyForSession } from './sidebar-tree.js';
 import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
@@ -557,6 +557,12 @@ document.addEventListener('keydown', (e) => {
 export function onSessionCardActivate(id) {
   const multiView = document.getElementById('multi-view');
   const isMultiOpen = multiView && !multiView.hidden;
+  const projectKeyToOpen = projectBoxKeyAfterSessionCardSelection(
+    id,
+    openProjectKey,
+    !!isMultiOpen,
+    sessions.values(),
+  );
   if (isMultiOpen) {
     // マルチタブが開いているとき: スロット内セッションへのフォーカス移動
     const mgr = window.multiPaneManager;
@@ -571,6 +577,10 @@ export function onSessionCardActivate(id) {
   }
   // シングルビュー: 既存の動作
   activateSession(id);
+  if (projectKeyToOpen) {
+    // 利用者が選んだセッションを保持するため、箱の通常復元（restoreProjectViewFor）は通さない。
+    openProjectBox(projectKeyToOpen, { preserveActiveSessionId: id });
+  }
 }
 
 // ─── セッションカードのライブ情報（ctx% / 応答経過 / 長時間バッジ）──────────
@@ -776,7 +786,10 @@ function restoreProjectViewFor(key: string): void {
  * fromRestore=true のときは「最後に開いていた箱」を保存し直さない（読んだ値をそのまま
  * 書き戻すだけの PUT を起動のたびに出さない）。
  */
-export function openProjectBox(key: string, opts: { fromRestore?: boolean } = {}): void {
+export function openProjectBox(
+  key: string,
+  opts: { fromRestore?: boolean; preserveActiveSessionId?: number } = {},
+): void {
   if (!key) return;
   set_openProjectKey(key);
   // multi タブを開いたまま別の箱へ移ったとき、範囲が「この箱だけ」ならペインも
@@ -787,7 +800,17 @@ export function openProjectBox(key: string, opts: { fromRestore?: boolean } = {}
   // 印（--open）を出すのに全再構築が要る。renderSessionList は差分更新しない。
   // 折りたたみ（collapsedGroups）はここで触らない＝畳んだままでも箱は開く。
   renderSessionList();
-  restoreProjectViewFor(key);
+  const preserveID = opts.preserveActiveSessionId;
+  const preserved = preserveID === undefined ? null : sessions.get(preserveID);
+  const canPreserve = preserved
+    && activeSessionId === preserveID
+    && projectKeyForSession(preserved, sessions.values()) === key;
+  if (canPreserve) {
+    // 明示選択したセッションをこの箱の記憶にし、クリックしたセッションのまま開く。
+    saveProjectView(key, preserveID, currentSessionStripTab());
+  } else {
+    restoreProjectViewFor(key);
+  }
   if (!opts.fromRestore) saveOpenProjectKey(key);
 }
 
