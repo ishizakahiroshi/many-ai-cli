@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "opencode",
+  "display_name": "OpenCode",
+  "description": "OpenCode command line interface",
+  "models": {"source": "remote"},
+  "launch": {
+    "executable": "opencode",
+    "model_args": ["--model", "{model}"],
+    "effort_args": ["--variant", "{effort}"],
+    "effort_levels": ["low", "medium", "high"],
+    "headless": {
+      "args": ["run", "--format", "default"],
+      "format": "text",
+      "prompt_via": "arg"
+    }
+  },
+  "adapters": {
+    "approval": "approval:opencode-v1",
+    "transcript": "history:opencode-v1",
+    "usage": "usage:opencode-v1",
+    "subscription": "subscription:opencode-v1",
+    "permissions": "permissions:generic-v1"
+  }
+}

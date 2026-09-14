@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "9923201a802f9dfa301592aba346ead12c08ef4d",
+    "commit": "a0486c8c64d05c33a33435b0e04418ef3f7777f4",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 937,
+    "discovered": 938,
     "analyzed": 703,
     "unresolved": 35,
     "unknown": 1,
-    "unclaimed": 198,
+    "unclaimed": 199,
     "skipped_by_config": 0
   },
   "files": [
@@ -12746,6 +12746,14 @@
     },
     {
       "path": "internal/provider/manifests/grok.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "internal/provider/manifests/opencode.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
