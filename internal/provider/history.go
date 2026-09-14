@@ -207,28 +207,39 @@ func (s *HistoryStore) VerifyBackup(providerID, backupID string) (RevisionRecord
 	if err := ValidateHistoryProviderID(providerID); err != nil {
 		return RevisionRecord{}, err
 	}
-	if filepath.Base(backupID) != backupID || strings.TrimSuffix(backupID, ".json") == "" {
-		return RevisionRecord{}, fmt.Errorf("invalid backup id")
+	name, err := backupFileName(backupID)
+	if err != nil {
+		return RevisionRecord{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	name := backupID
-	if filepath.Ext(name) == "" {
-		name += ".json"
-	}
 	return readRevision(filepath.Join(s.backupRoot, providerID, name))
+}
+
+// backupFileName は backupID をファイル名へ正規化する唯一の口で、**検査もここで行う。**
+// 以前は VerifyBackup と RestoreBackup が同じ正規化を書き写していて、検査が付いて
+// いたのは VerifyBackup だけだった（RestoreBackup は backupID を素通しで Join して
+// いた）。正規化と検査を 1 本にまとめて、次の呼び出し口が同じ穴を空けられなくする。
+func backupFileName(backupID string) (string, error) {
+	if filepath.Base(backupID) != backupID || strings.TrimSuffix(backupID, ".json") == "" {
+		return "", fmt.Errorf("invalid backup id")
+	}
+	if filepath.Ext(backupID) == "" {
+		return backupID + ".json", nil
+	}
+	return backupID, nil
 }
 
 func (s *HistoryStore) RestoreBackup(providerID, backupID, expectedRevision string) (RevisionRecord, error) {
 	if err := ValidateHistoryProviderID(providerID); err != nil {
 		return RevisionRecord{}, err
 	}
+	name, err := backupFileName(backupID)
+	if err != nil {
+		return RevisionRecord{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	name := backupID
-	if filepath.Ext(name) == "" {
-		name += ".json"
-	}
 	backup, err := readRevision(filepath.Join(s.backupRoot, providerID, name))
 	if err != nil {
 		return RevisionRecord{}, err
@@ -283,14 +294,31 @@ func (s *HistoryStore) currentLocked(providerID string) (RevisionRecord, error) 
 	return s.readRevisionLocked(providerID, strings.TrimSpace(string(head)))
 }
 
+// readRevisionLocked はパスを providerID と revision から組み立てる唯一の読み取り口。
+// **両方をここで検査する。** revision だけを見ていた頃、Restore() は providerID を
+// 検査せずにこの関数を呼んでいたため、"../.." を含む providerID が root の外を指せた。
+// 公開関数の側だけで検査すると、新しい呼び出し口が増えたときに同じ穴が空く。
 func (s *HistoryStore) readRevisionLocked(providerID, revision string) (RevisionRecord, error) {
+	if err := ValidateHistoryProviderID(providerID); err != nil {
+		return RevisionRecord{}, err
+	}
 	if revision == "" || filepath.Base(revision) != revision {
 		return RevisionRecord{}, fmt.Errorf("invalid revision")
 	}
 	return readRevision(filepath.Join(s.root, providerID, "revisions", revision+".json"))
 }
 
+// writeBackupLocked の record.ProviderID は **ディスク上の revision ファイルの中身**
+// から来る（saveLocked は currentLocked が読み戻したレコードを渡す）。引数として
+// 受け取った providerID とは別物なので、書き込み先を組み立てる前にここでも検査する。
+// 検査が無いと、細工された revision ファイル 1 個で backupRoot の外へ書ける。
 func (s *HistoryStore) writeBackupLocked(record RevisionRecord) error {
+	if err := ValidateHistoryProviderID(record.ProviderID); err != nil {
+		return fmt.Errorf("backup provider id: %w", err)
+	}
+	if record.Revision == "" || filepath.Base(record.Revision) != record.Revision {
+		return fmt.Errorf("backup revision is invalid")
+	}
 	path := filepath.Join(s.backupRoot, record.ProviderID, record.Revision+".json")
 	if err := writeJSONAtomic(path, record); err != nil {
 		return fmt.Errorf("write provider backup: %w", err)
@@ -302,8 +330,15 @@ func (s *HistoryStore) writeBackupLocked(record RevisionRecord) error {
 	return nil
 }
 
+// readRevision は revision ファイルを読む唯一の関数。呼び出し口は 5 つあるが、
+// path はいずれも検査済みの部品だけで組み立てられている（providerID は
+// ValidateHistoryProviderID、revision と backupID は filepath.Base 一致、
+// 一覧経路の name は os.ReadDir が返したエントリ名）。
+// gosec の taint 解析は正規表現ベースの検証関数を sanitizer と認識できないため、
+// 検証を足しても G703 が残る。`internal/hub/approval_patterns.go` の同種の
+// 注記と同じ形で、検証している場所を名指しして抑止する。
 func readRevision(path string) (RevisionRecord, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G703 -- ValidateHistoryProviderID + filepath.Base 検査 + backupFileName を通った部品のみで組み立てたパス
 	if err != nil {
 		return RevisionRecord{}, err
 	}

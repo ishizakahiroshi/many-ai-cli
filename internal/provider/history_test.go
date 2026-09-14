@@ -63,6 +63,43 @@ func TestHistoryStoreRejectsRevisionConflictAndTraversal(t *testing.T) {
 	}
 }
 
+// TestHistoryStoreRejectsTraversalProviderIDOnRestoreAndBackup は gosec G703 で
+// 見つかった穴を塞いだままにする。Restore() は providerID を検査せずに
+// readRevisionLocked を呼んでいた（検査されていたのは revision だけ）。
+// backup 側の provider id は **ディスク上のファイルの中身**から来るので、
+// 引数の検査とは別に検査が要る。
+func TestHistoryStoreRejectsTraversalProviderIDOnRestoreAndBackup(t *testing.T) {
+	store, err := NewHistoryStore(filepath.Join(t.TempDir(), "overrides"), filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Example", Launch: &LaunchDefinition{Executable: "example"}}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// revision は正しく、providerID だけが root の外を指す。
+	if _, err := store.Restore("../escape", saved.Revision, ""); err == nil {
+		t.Fatal("Restore accepted a path traversal provider id")
+	}
+
+	// 細工された revision ファイルから読み戻したレコードを模した入力。
+	if err := store.writeBackupLocked(RevisionRecord{ProviderID: "../escape", Revision: saved.Revision}); err == nil {
+		t.Fatal("writeBackupLocked accepted a path traversal provider id from record content")
+	}
+	if err := store.writeBackupLocked(RevisionRecord{ProviderID: "example", Revision: "../escape"}); err == nil {
+		t.Fatal("writeBackupLocked accepted a path traversal revision from record content")
+	}
+
+	// RestoreBackup は backupID を検査せず Join していた（VerifyBackup 側にだけ検査があった）。
+	if _, err := store.RestoreBackup("example", "../escape", ""); err == nil {
+		t.Fatal("RestoreBackup accepted a path traversal backup id")
+	}
+	if _, err := store.VerifyBackup("example", "../escape"); err == nil {
+		t.Fatal("VerifyBackup accepted a path traversal backup id")
+	}
+}
+
 func TestLoadOverridesQuarantinesCorruptHead(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "overrides")
 	backups := filepath.Join(t.TempDir(), "backups")
