@@ -39,6 +39,26 @@ func TestValidateDefinitionRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
+func TestValidateDefinitionRejectsShellMetacharacters(t *testing.T) {
+	for _, char := range []string{"&", "|", "<", ">", "^", "%", "$(", "${", ";", "`"} {
+		raw := []byte(`{"schema_version":1,"id":"test-cli","display_name":"Test","launch":{"executable":"test","args":["arg` + char + `test"]}}`)
+		diagnostics, err := ValidateDefinition(raw, DefaultAdapterCatalog())
+		if err != nil {
+			t.Fatalf("ValidateDefinition error: %v", err)
+		}
+		found := false
+		for _, d := range diagnostics {
+			if d.Code == "invalid_arg" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected invalid_arg for metacharacter %q, got %#v", char, diagnostics)
+		}
+	}
+}
+
 func TestBuildUsesDeterministicOrderAndRevision(t *testing.T) {
 	var definition Definition
 	if err := json.Unmarshal(validDefinitionJSON(), &definition); err != nil {

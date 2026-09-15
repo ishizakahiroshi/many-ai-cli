@@ -341,7 +341,9 @@ jobs:
         if: github.event_name == 'pull_request'
         working-directory: .
         shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -q '^web/package-lock.json$'; then
+          if git diff --name-only "origin/$BASE_REF"...HEAD | grep -q '^web/package-lock.json$'; then
             echo "::warning::web/package-lock.json was modified. web/ は bun のみを使う運用です (web/README.md 参照)。npm install で更新された可能性があります。"
           fi

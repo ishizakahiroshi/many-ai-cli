@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a0486c8c64d05c33a33435b0e04418ef3f7777f4",
+    "commit": "6ffdff59d848ccad2b2e09bc80e45d8ae5331edd",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 938,
+    "discovered": 939,
     "analyzed": 703,
     "unresolved": 35,
     "unknown": 1,
-    "unclaimed": 199,
+    "unclaimed": 200,
     "skipped_by_config": 0
   },
   "files": [
@@ -392,6 +392,14 @@
     },
     {
       "path": "README.vi.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "SECURITY.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},

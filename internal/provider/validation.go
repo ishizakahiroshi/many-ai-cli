@@ -201,7 +201,7 @@ func validateArg(value, field string) error {
 	if value == "" || len(value) > MaxArgLength || containsControl(value) || strings.IndexByte(value, 0) >= 0 {
 		return fmt.Errorf("%s is empty, too long, or contains a control character", field)
 	}
-	if strings.Contains(value, "$(") || strings.Contains(value, "${") || strings.Contains(value, "&&") || strings.Contains(value, ";") || strings.Contains(value, "`") {
+	if strings.ContainsAny(value, "&|<>^%") || strings.Contains(value, "$(") || strings.Contains(value, "${") || strings.Contains(value, ";") || strings.Contains(value, "`") {
 		return fmt.Errorf("%s contains shell expansion syntax", field)
 	}
 	return nil
