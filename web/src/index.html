@@ -1626,10 +1626,12 @@
           <button id="voice-confirm-btn" class="voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
         </div>
         <!-- ライブ進捗ピル（旧 #terminal-area 内 absolute から入力欄直上へ移設）。
-             CLI のステータス更新を抽出して表示し、稼働中はスピナーが回る。更新が途切れると
+             CLI のステータス更新を抽出して表示し、稼働中は状態記号が回る。更新が途切れると
              グレーの待機表示(idle)へ変わるが枠は消さず常時残す＝「何も送られていない＝終わってる」
-             を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。 -->
-        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
+             を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。
+             先頭の記号は独自のスピナーではなく、セッション帯（タブ）・サイドバーのカードと
+             同じ SVG（session-list.ts の stateIconSvgHtml）を terminal.ts が流し込む。 -->
+        <div id="terminal-live-status" hidden><span class="live-status-state" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
         <div id="mobile-nudge-panel" aria-label="Short instructions">
           <div id="mobile-nudge-chips" aria-label="Quick instructions"></div>
           <button id="mobile-nudge-voice-btn" type="button" aria-label="Hold to speak">押して話す</button>

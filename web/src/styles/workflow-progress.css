@@ -1,6 +1,8 @@
 /* workflow-progress.css — Workflow ライブ進捗のトリガーピル + モーダル。
    親 plan: docs/local/plan_workflow-progress-modal.md
-   スピナーは terminal.css の .live-spinner / @keyframes aacli-live-spin を共用する。 */
+   状態記号はサイドバーのカード・セッション帯・ライブ帯と同じ SVG（session-list.ts の
+   stateIconSvgHtml）を共用し、回転は styles.css の @keyframes state-spin を共用する。
+   ここが持つのは色と大きさだけ。 */
 
 /* ── トリガーピル（入力欄上部・#terminal-live-status の直前） ── */
 /* 本体（クリックでモーダル）＋ ✕（dismiss）の 2 ボタン構成のコンテナ。 */
@@ -54,8 +56,10 @@
   color: var(--green-text);
   border-color: color-mix(in srgb, var(--green) 45%, transparent);
 }
-#workflow-progress-pill.wf-done .wf-pill-spinner { animation: none; border-color: var(--green); border-top-color: var(--green); }
-.wf-pill-spinner { width: 10px; height: 10px; }
+/* 完了したら記号自体がチェックへ替わる（workflow-modal.ts の renderPill）。色はピルの
+   currentColor をそのまま継ぐので、ここで塗り直さない。 */
+.wf-pill-spinner { flex: 0 0 auto; display: inline-flex; align-items: center; line-height: 0; }
+#workflow-progress-pill .card-state-svg { width: 11px; height: 11px; }
 
 /* ── モーダル ── */
 #workflow-modal {
@@ -191,16 +195,18 @@
 .wf-agent-icon {
   flex: 0 0 auto;
   width: 13px;
-  text-align: center;
-  font-size: 0.8rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
 .wf-agent-running .wf-agent-label { color: var(--text); }
+.wf-state-running { color: var(--badge-running-text); }
 .wf-state-done { color: var(--green); }
 .wf-state-failed { color: var(--red); }
 .wf-state-pending { color: var(--muted-2); }
-/* running アイコンは .live-spinner を流用するため固定サイズに揃える */
-.wf-agent-icon.live-spinner { width: 11px; height: 11px; }
+/* 記号は 4 状態とも同じ 16x16 の SVG。大きさを 1 箇所で決めて列を揃える。 */
+.wf-agent-icon .card-state-svg { width: 12px; height: 12px; }
 
 /* tasks output 由来の詳細セクション（plan_workflow-progress-agent-transcript-detail C3）。
    モデル・所要時間・トークン数・ツール呼び出し数は既存 .wf-agent-metrics に相乗り。 */

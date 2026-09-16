@@ -38,6 +38,10 @@ import {
   type TerminalScreenSnapshot,
 } from './terminal-history-strategy.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
+// 帯の状態記号は独自に作らず、サイドバーのカード・セッション帯（タブ）と同じものを借りる。
+// 同じセッションの同じ状態が画面内で 2 通りの形・色に見えないようにするため、意味づけの
+// 正本（stateActivityDecoration）と形の正本（stateIconSvgHtml）はどちらも session-list.ts。
+import { stateActivityDecoration, stateIconSvgHtml } from './session-list.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -1694,7 +1698,7 @@ const LIVE_STATUS_HIDE_MS = 1500;
 // のような断片しか出ず無効化していた（bugfix_live-status-spinner-fragments_2026-06-12.md）。
 // 現在は列アドレス（CUP/CUF）でセッションごとの 1 行へ部分更新を適用する再構成方式に
 // 置き換え、断片バグが構造的に再発しないため有効化。くるくる自体は Web 側の CSS
-// アニメーション（.live-spinner）で描くので再構成精度に関係なく必ず回る。
+// アニメーション（.live-status-state.running）で描くので再構成精度に関係なく必ず回る。
 // 再無効化したい場合は false に戻す（退路として残す）。
 const LIVE_STATUS_ENABLED = true;
 // 待機中に出す完了サマリーの上限。Hub 側で 320 文字に切られて届くが、帯は 1 行なので
@@ -1984,18 +1988,42 @@ function liveStatusViewFor(sid) {
   }
 }
 
-// ライブ進捗窓の描画。mode: 'active'（青・スピナー回転）/ 'waiting'（アンバー・承認待ち）/
-// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'done'（直前ターンの完了サマリー）/
+// 帯の先頭に出す状態記号。形も意味づけもセッション帯（タブ）・サイドバーのカードと
+// 共有する（session-list.ts の stateActivityDecoration / stateIconSvgHtml）＝帯だけが
+// 別の記号で状態を描くと、同じセッションがタブと帯で違う状態に見える。
+// ここが決めるのは「どの記号を、どのクラスで出すか」だけで、色と動きは CSS
+// （terminal.css の .live-status-state）が持つ。
+function liveStatusIconView(mode: string): { iconKind: string; classes: string[] } {
+  // フレーム流入中・compact 中は、セッション状態がまだ running へ切り替わっていなくても
+  // 回る輪にする。帯は「動いているか止まったか」を見る場所なので、ここだけは
+  // セッション状態より流入の有無を優先する（記号を静止させない）。
+  // ここはフレームごとに通るので、この場合は付帯状態の判定まで走らせない。
+  if (mode === 'active') return { iconKind: 'ring', classes: ['live-status-state', 'running'] };
+  const ses = activeSessionId !== null ? sessions.get(activeSessionId) : null;
+  if (!ses) return { iconKind: 'dot', classes: ['live-status-state'] };
+  const activity = stateActivityDecoration(ses);
+  const classes = ['live-status-state'];
+  if ((ses.state as string) === 'running') classes.push('running');
+  // 付帯状態（承認待ち・入力待ち・子起動の確認待ち・workflow）は帯もタブと同じクラス名で
+  // 出す。色の対応表は CSS 側に 1 つだけ置く。
+  if (activity.className) classes.push(activity.className);
+  return { iconKind: activity.iconKind, classes };
+}
+
+// ライブ進捗窓の描画。mode: 'active'（実行中・記号が回る）/ 'waiting'（アンバー・承認待ち）/
+// 'idle'（グレー・記号は静止・状態ラベル／枠は残す）/ 'done'（直前ターンの完了サマリー）/
 // 'hidden'（アクティブセッション無し時のみ）。
 function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const textEl = el.querySelector('.live-status-text') as HTMLElement | null;
   const barEl = el.querySelector('.live-compact-bar') as HTMLElement | null;
+  const iconEl = el.querySelector('.live-status-state') as HTMLElement | null;
   if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
     el.classList.remove('idle', 'waiting', 'done', ...DONE_KIND_CLASSES);
     if (textEl) textEl.textContent = '';
+    if (iconEl) { iconEl.className = 'live-status-state'; iconEl.innerHTML = ''; delete iconEl.dataset.iconHtml; }
     if (barEl) barEl.hidden = true;
     syncLiveStatusLongproc();
     return;
@@ -2016,6 +2044,17 @@ function renderLiveStatusDom(mode, text) {
     ? `done-${doneSummaryKindSuffix(getDoneSummary(activeSessionId)?.kind)}`
     : '';
   for (const cls of DONE_KIND_CLASSES) el.classList.toggle(cls, cls === doneKind);
+  if (iconEl) {
+    // 1Hz で呼ばれるので、変わっていないときは DOM に触らない（SVG を毎秒作り直すと
+    // running の回転アニメーションが先頭へ巻き戻って、記号が止まって見える）。
+    const view = liveStatusIconView(mode);
+    const cls = view.classes.join(' ');
+    if (iconEl.className !== cls) iconEl.className = cls;
+    if (iconEl.dataset.iconKind !== view.iconKind) {
+      iconEl.dataset.iconKind = view.iconKind;
+      iconEl.innerHTML = stateIconSvgHtml(view.iconKind);
+    }
+  }
   if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
   syncLiveStatusLongproc();

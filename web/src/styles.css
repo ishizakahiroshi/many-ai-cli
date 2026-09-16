@@ -1499,6 +1499,22 @@ header {
    ではなく回転(state-spin)で「処理中」を示す。色を判別できなくても動きだけで伝わる。 */
 .card-state-pill.running .card-state-icon { animation: state-spin 1s linear infinite; transform-origin: 50% 50%; }
 @keyframes state-spin { to { transform: rotate(360deg); } }
+/* 「実行中」の回転は、記号を出す全箇所でここ 1 箇所から掛ける。カード・ライブ帯
+   （#terminal-live-status）・ワークフローのピルと各エージェント行が同じ速さ・同じ向きで
+   回る＝同じ状態が場所ごとに違う動きに見えない。色は各所の CSS が持つ（下地が違うため）。
+   セッション帯（タブ）だけは意図的に回さない: 箱のセッションぶん並ぶので、全タブが
+   回ると端末より目立つ。形と色は同じなので状態の読み取りはぶれない。 */
+.live-status-state.running .card-state-svg,
+.wf-pill-spinner.wf-running .card-state-svg,
+.wf-agent-icon.wf-state-running .card-state-svg {
+  animation: state-spin 1s linear infinite;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-status-state.running .card-state-svg,
+  .wf-pill-spinner.wf-running .card-state-svg,
+  .wf-agent-icon.wf-state-running .card-state-svg { animation: none; }
+}
 .card-state-pill.awaiting-approval .card-state-icon { animation: none; }
 .card-state-pill.waiting  { color: var(--warn-text); }
 .card-state-pill.standby  { color: var(--badge-standby-text); }

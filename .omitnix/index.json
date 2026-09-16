@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "6ffdff59d848ccad2b2e09bc80e45d8ae5331edd",
+    "commit": "e88d919dafcf6fa889d356fbe1eeabb595c6ba27",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -18778,16 +18778,11 @@
           "state": "value",
           "value": [
             "/api/approval-history?session_id=*&state=pending&limit=1&token=*",
-            "api/info?token=*",
             "approval-patterns/*.json?token=*"
           ]
         }
       },
       "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: api/info?token=*"
-        },
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: approval-patterns/*.json?token=*"
@@ -19392,17 +19387,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/info?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
       "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/info?token=*"
-        },
         {
           "code": "dynamic_endpoint",
           "detail": "the address of this request is a run-time value: probeUrl"
@@ -20027,7 +20016,6 @@
         "screen_to_api": {
           "state": "value",
           "value": [
-            "/api/info?token=*",
             "/api/mobile-connect?token=*"
           ]
         }
@@ -20036,10 +20024,6 @@
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/mobile-connect?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/info?token=*"
         }
       ]
     },
@@ -20635,28 +20619,14 @@
         "screen_to_api": {
           "state": "value",
           "value": [
-            "/api/providers/*/history?token=*",
-            "/api/providers/*?token=*",
-            "/api/providers/*?token=*&expected_revision=*"
+            "/api/providers/*/history?token=*"
           ]
         }
       },
       "unresolved": [
         {
           "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/providers/*?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/providers/*/history?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: url"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/providers/*?token=*&expected_revision=*"
         }
       ]
     },
@@ -20692,6 +20662,10 @@
         }
       },
       "unresolved": [
+        {
+          "code": "dynamic_endpoint",
+          "detail": "the address of this request is a run-time value: url"
+        },
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/providers?token=*"
@@ -21180,7 +21154,6 @@
             "/api/approval/dismiss?token=*",
             "/api/approval/enable?token=*",
             "/api/approval/status?token=*",
-            "/api/info?token=*",
             "/api/notify-config?token=*",
             "/api/notify-generate-topic?token=*",
             "/api/notify-test?token=*",
@@ -21233,10 +21206,6 @@
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/usage-link-defaults?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/info?token=*"
         },
         {
           "code": "dynamic_endpoint",
@@ -21535,7 +21504,6 @@
           "state": "value",
           "value": [
             "/api/encoding-check?token=*",
-            "/api/info?token=*",
             "/api/list-subdirs?token=*",
             "/api/path-exists?token=*",
             "/api/pick-directory?token=*",
@@ -21544,10 +21512,6 @@
         }
       },
       "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/info?token=*"
-        },
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/list-subdirs?token=*"

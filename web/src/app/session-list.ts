@@ -311,6 +311,9 @@ const STATE_ICON_SVG = {
   dot: '<circle cx="8" cy="8" r="3.6" stroke="none"/>',
   ring: '<circle cx="8" cy="8" r="3.5" fill="none" stroke-width="1.5" stroke-dasharray="2.3 1.9"/>',
   cross: '<path d="m4.7 4.7 6.6 6.6M11.3 4.7 4.7 11.3" stroke-width="1.7" stroke-linecap="round"/>',
+  // 完了（ワークフローの各エージェント）。✓ のグリフを使うと他の記号とフォントが
+  // 変わって高さも送り幅も揃わないので、同じ 16x16 の座標系で描く。
+  check: '<path d="m3.9 8.4 2.9 2.9 5.3-6.3" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
   // 子起動の確認待ち（pending-spawn-confirm）専用の記号。既存の awaiting_approval（flag）
   // と混同されないよう、あえて別の形にしている（角丸四角＋十字＝「新しい子を追加できる」の意匠）。
   spawnPending: '<rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2" fill="none" stroke-width="1.4"/><path d="M8 5.6v4.8M5.6 8h4.8" stroke-width="1.4" stroke-linecap="round"/>',

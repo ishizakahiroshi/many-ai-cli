@@ -17,6 +17,10 @@ import { t } from '../i18n.js';
 import type { WfAgentDetail, WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
 import { activeSessionId, sessions } from './state.js';
 import { scanBuffer } from './terminal.js';
+// 状態記号はサイドバーのカード・セッション帯（タブ）・ライブ帯と同じ SVG を借りる。
+// ワークフローだけ別の丸（旧 .live-spinner の CSS スピナー）を出すと、同じ「実行中」が
+// 画面内で 2 通りの形・2 通りの色になる。
+import { stateIconSvgHtml } from './session-list.js';
 import { parseWorkflowProgress, WorkflowProgress, WfAgentState } from './workflow-progress.js';
 import {
   extrapolatedWorkflowElapsedSec,
@@ -159,7 +163,7 @@ function ensurePill(): HTMLElement {
   pill.hidden = true;
   pill.innerHTML =
     '<button type="button" class="wf-pill-open" aria-haspopup="dialog">' +
-    '<span class="wf-pill-spinner live-spinner" aria-hidden="true"></span>' +
+    '<span class="wf-pill-spinner wf-running" aria-hidden="true">' + stateIconSvgHtml('ring') + '</span>' +
     '<span class="wf-pill-text"></span></button>' +
     '<button type="button" class="wf-pill-dismiss" aria-label="dismiss">✕</button>';
   pill.querySelector('.wf-pill-open')?.addEventListener('click', toggleWorkflowModal);
@@ -315,6 +319,16 @@ function renderPill(): void {
   pill.hidden = false;
   const done = snapshotDone(snap);
   pill.classList.toggle('wf-done', done);
+  // 走行中は回る輪、終わったらチェック。記号はモーダルの各エージェント行と同じものを使う。
+  const spinnerEl = pill.querySelector('.wf-pill-spinner') as HTMLElement | null;
+  if (spinnerEl) {
+    const kind = done ? 'check' : 'ring';
+    spinnerEl.classList.toggle('wf-running', !done);
+    if (spinnerEl.dataset.iconKind !== kind) {
+      spinnerEl.dataset.iconKind = kind;
+      spinnerEl.innerHTML = stateIconSvgHtml(kind);
+    }
+  }
   const textEl = pill.querySelector('.wf-pill-text') as HTMLElement | null;
   if (textEl) {
     const elapsed = snap.result.elapsedSec && snap.result.elapsedSec > 0
@@ -435,15 +449,26 @@ export function closeWorkflowModal(): void {
   }
 }
 
+// 記号は 4 状態とも共有の SVG（stateIconSvgHtml）で描く。✓ / ✗ / ○ のグリフを混ぜると
+// 状態ごとにフォールバック先のフォントが変わり、送り幅も墨の位置も揃わない
+// （session-list.ts の STATE_ICON_SVG 冒頭に実測値）。
+const WF_STATE_ICON_KIND: Record<string, string> = {
+  running: 'ring',
+  done: 'check',
+  failed: 'cross',
+  pending: 'dot',
+};
+
 function stateIcon(state: WfAgentState): HTMLElement {
   const span = document.createElement('span');
   span.className = 'wf-agent-icon wf-state-' + state;
-  if (state === 'running') {
-    span.classList.add('live-spinner');
-    span.setAttribute('aria-hidden', 'true');
-  } else {
-    span.textContent = state === 'done' ? '✓' : state === 'failed' ? '✗' : '○';
-  }
+  // 記号を SVG にしたぶん、読み上げ用の状態名は属性で持たせる（✓ / ✗ / ○ の文字を
+  // 置いていた頃は本文として読めていた）。
+  const label = t('wf_state_' + state);
+  span.setAttribute('role', 'img');
+  span.setAttribute('aria-label', label);
+  span.title = label;
+  span.innerHTML = stateIconSvgHtml(WF_STATE_ICON_KIND[state] || 'dot');
   return span;
 }
 
