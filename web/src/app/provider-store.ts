@@ -1,4 +1,4 @@
-import { token } from './util.js';
+import { apiFetch } from './util.js';
 
 export type ProviderCapabilities = {
   launch: boolean;
@@ -90,7 +90,7 @@ async function providerFetchJSON(
   | { outcome: 'aborted' }
 > {
   try {
-    const response = await fetch(url, signal ? { ...init, signal } : init);
+    const response = await apiFetch(url, signal ? { ...init, signal } : init);
     let body: any = null;
     try {
       body = await response.json();
@@ -118,7 +118,7 @@ function providerHTTPFailure(status: number, body: any): ProviderRequestFailure 
 
 export async function loadProviderSummaries(options?: { includeDisabled?: boolean }): Promise<ProviderListResponse | null> {
   try {
-    const response = await fetch(`/api/providers?token=${encodeURIComponent(token || '')}`, {
+    const response = await apiFetch(`/api/providers`, {
       headers: { Accept: 'application/json' },
     });
     if (!response.ok) return null;
@@ -139,7 +139,7 @@ export async function loadProviderSummaries(options?: { includeDisabled?: boolea
 
 export async function validateProviderDefinition(definition: unknown): Promise<{ valid: boolean; diagnostics: ProviderDiagnostic[] } | null> {
   try {
-    const response = await fetch(`/api/providers/validate?token=${encodeURIComponent(token || '')}`, {
+    const response = await apiFetch(`/api/providers/validate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(definition),
@@ -161,7 +161,7 @@ export async function validateProviderDefinition(definition: unknown): Promise<{
 // silently ignore an aborted request instead of treating it as a failure).
 export async function loadProviderDetail(id: string, options?: { signal?: AbortSignal }): Promise<ProviderDetailResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}`,
     { headers: { Accept: 'application/json' } },
     options?.signal,
   );
@@ -182,7 +182,7 @@ export async function loadProviderDetail(id: string, options?: { signal?: AbortS
 
 export async function createProvider(definition: unknown, options?: { signal?: AbortSignal }): Promise<ProviderMutationResult> {
   const result = await providerFetchJSON(
-    `/api/providers?token=${encodeURIComponent(token || '')}`,
+    `/api/providers`,
     { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(definition) },
     options?.signal,
   );
@@ -203,7 +203,7 @@ export async function saveProviderDefinition(
   options?: { signal?: AbortSignal },
 ): Promise<ProviderMutationResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}`,
     {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -219,7 +219,7 @@ export async function saveProviderDefinition(
 // shape either way; the Hub decides which by provider.IsBuiltinID.
 export async function removeProvider(id: string, expectedRevision: string, options?: { signal?: AbortSignal }): Promise<ProviderMutationResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}?token=${encodeURIComponent(token || '')}&expected_revision=${encodeURIComponent(expectedRevision)}`,
+    `/api/providers/${encodeURIComponent(id)}?expected_revision=${encodeURIComponent(expectedRevision)}`,
     { method: 'DELETE', headers: { Accept: 'application/json' } },
     options?.signal,
   );
@@ -233,7 +233,7 @@ export async function restoreProviderRevision(
   options?: { signal?: AbortSignal },
 ): Promise<ProviderMutationResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/restore?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/restore`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -272,7 +272,7 @@ export type ProviderHistoryResult =
 
 export async function loadProviderHistory(id: string, options?: { signal?: AbortSignal }): Promise<ProviderHistoryResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/history?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/history`,
     { headers: { Accept: 'application/json' } },
     options?.signal,
   );
@@ -288,7 +288,7 @@ export type ProviderHistoryDiffResult =
 
 export async function loadProviderRevisionDiff(id: string, revision: string, options?: { signal?: AbortSignal }): Promise<ProviderHistoryDiffResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/history/${encodeURIComponent(revision)}/diff?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/history/${encodeURIComponent(revision)}/diff`,
     { headers: { Accept: 'application/json' } },
     options?.signal,
   );
@@ -304,7 +304,7 @@ export async function loadProviderRevisionDiff(id: string, revision: string, opt
 
 export async function resetProviderOverride(id: string, expectedRevision: string): Promise<ProviderMutationResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/reset?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/reset`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -325,7 +325,7 @@ export type ProviderBackupsResult =
 // backup either tool can see is the same backup the other can restore.
 export async function loadProviderBackups(id: string, options?: { signal?: AbortSignal }): Promise<ProviderBackupsResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/backups?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/backups`,
     { headers: { Accept: 'application/json' } },
     options?.signal,
   );
@@ -341,7 +341,7 @@ export type ProviderBackupVerifyResult =
 
 export async function verifyProviderBackup(id: string, backupId: string, options?: { signal?: AbortSignal }): Promise<ProviderBackupVerifyResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/backups/${encodeURIComponent(backupId)}/verify?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/backups/${encodeURIComponent(backupId)}/verify`,
     { headers: { Accept: 'application/json' } },
     options?.signal,
   );
@@ -358,7 +358,7 @@ export async function restoreProviderBackup(
   options?: { signal?: AbortSignal },
 ): Promise<ProviderMutationResult> {
   const result = await providerFetchJSON(
-    `/api/providers/${encodeURIComponent(id)}/backups/${encodeURIComponent(backupId)}/restore?token=${encodeURIComponent(token || '')}`,
+    `/api/providers/${encodeURIComponent(id)}/backups/${encodeURIComponent(backupId)}/restore`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },

@@ -311,17 +311,25 @@ Release artifacts are published at
   the target.
 - Spawn-child no longer treats client JSON `origin:"ui"` as enough to skip the
   confirmation dialog (F-AI-03). The Hub keeps UI origin only when the request
-  also carries same-origin browser Fetch Metadata (`Sec-Fetch-Site: same-origin`
-  and an allowed `Origin`). A spoofed `origin:"ui"` without those headers is
-  treated as a conductor start and still requires confirmation. This is a
-  backstop against copying the UI JSON; a client that also sends those headers
-  can still claim UI origin.
+  carries a Hub-minted `MANY_AI_CLI_ui_origin` capability cookie (issued on the
+  HTML document path; signed with a secret that is not injected into wrapper
+  environments) plus same-origin Fetch Metadata (`Sec-Fetch-Site: same-origin`
+  and an allowed `Origin`). Spoofed `origin:"ui"` from curl/CLI/AI that forges
+  Fetch Metadata without that cookie is treated as a conductor start and still
+  requires confirmation.
 - Derive-dialog `/api/info` now uses cookie-primary `apiFetch` instead of
   `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene.
 - Remaining `/api/info?token=` fetches in spawn-panel, settings, files-view,
   approval, and mobile-connect now use cookie-primary `apiFetch` as well.
-  Other endpoint fetches still put `?token=` on the URL; Hub launch URLs
-  still use `?token=` (D-11). This is not the last leftover.
+- Provider Registry UI (`provider-store.ts`) and the relay dialog now use
+  cookie-primary `apiFetch` instead of `?token=` (F-WEB-07). Other leftover
+  `?token=` fetches in `app.ts` and Hub launch URLs remain (D-11).
+- Starting a relay through the HTTP API now requires
+  `acknowledge_child_full_bypass:true` when unattended children would still get
+  the built-in full permission tier (F-AI-01). The relay dialog Start button and
+  `orchestrate relay` send that acknowledgment; `orchestration.child_full_bypass`
+  remains default **true** (D-12). Board start also records a short full-bypass
+  disclosure.
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped
   `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues

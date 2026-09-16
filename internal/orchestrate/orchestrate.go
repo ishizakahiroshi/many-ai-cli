@@ -231,12 +231,13 @@ func runRelay(args []string) error {
 		fmt.Println("warning: same-tree mode: the relay children edit your working tree directly; do not edit the repository in parallel")
 	}
 	result, err := postChildAPI(fmt.Sprintf("%s/api/sessions/%d/relay", hubURL, sessionID), token, relayStartRequest{
-		PlanPath:      planPath,
-		MaxRounds:     *maxRounds,
-		Mode:          mode,
-		Roles:         roles,
-		EscalateAfter: *escalateAfter,
-		Extra:         extra,
+		PlanPath:                   planPath,
+		MaxRounds:                  *maxRounds,
+		Mode:                       mode,
+		Roles:                      roles,
+		EscalateAfter:              *escalateAfter,
+		Extra:                      extra,
+		AcknowledgeChildFullBypass: true, // operator-started CLI relay is the ack (F-AI-01 / D-12)
 	})
 	if err != nil {
 		return err
@@ -408,12 +409,13 @@ type relayRoleAssignment struct {
 }
 
 type relayStartRequest struct {
-	PlanPath      string                         `json:"plan_path"`
-	MaxRounds     int                            `json:"max_rounds,omitempty"`
-	Mode          string                         `json:"mode,omitempty"`
-	Roles         map[string]relayRoleAssignment `json:"roles,omitempty"`
-	EscalateAfter int                            `json:"escalate_after,omitempty"`
-	Extra         map[string]string              `json:"extra,omitempty"`
+	PlanPath                   string                         `json:"plan_path"`
+	MaxRounds                  int                            `json:"max_rounds,omitempty"`
+	Mode                       string                         `json:"mode,omitempty"`
+	Roles                      map[string]relayRoleAssignment `json:"roles,omitempty"`
+	EscalateAfter              int                            `json:"escalate_after,omitempty"`
+	Extra                      map[string]string              `json:"extra,omitempty"`
+	AcknowledgeChildFullBypass bool                           `json:"acknowledge_child_full_bypass,omitempty"`
 }
 
 type relayControlRequest struct {

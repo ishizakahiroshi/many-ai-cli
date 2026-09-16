@@ -794,10 +794,14 @@ type Server struct {
 	// Test-only clock injection for deterministic tail-prime deadline cases.
 	agentChatReadClock func() time.Time
 	cfgMu              sync.Mutex
-	nextID             int
-	sessions           map[int]*session
-	wrappers           map[int]*wrapperConn
-	uis                map[*websocket.Conn]*uiConn
+	// uiOriginSecret signs the Hub-minted UI-origin capability cookie when
+	// AuthCookieSecret is unset. It stays process-local and is never injected
+	// into wrapper envs (unlike MANY_AI_CLI_HUB_TOKEN).
+	uiOriginSecret string
+	nextID         int
+	sessions       map[int]*session
+	wrappers       map[int]*wrapperConn
+	uis            map[*websocket.Conn]*uiConn
 	// pendingInput は wrapper 未接続・送信失敗で届けられなかったユーザー入力を
 	// セッションごとに順序保持でバッファする。wrapper の (再)接続時に
 	// flushPendingInput が順番に再送するため、入力が黙って失われない。
@@ -1788,6 +1792,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			MaxAge: int(tokenCookieMaxAge / time.Second),
 		})
 	}
+	// Hub-minted UI-origin capability (F-AI-03 residual): issued only on the
+	// HTML document path so spawn-child confirm-skip needs more than forgeable
+	// Sec-Fetch-* + the wrapper Hub token.
+	s.issueUIOriginCookie(w, r)
 	// SEC-C: リモートからの（token 認証済み）ページ取得を記録し、未知デバイスなら通知する。
 	// PIN 未入力でもここは通る（モーダルを出すため）。盗まれた token の使用を即検知する。
 	s.noteRemoteDevice(r, "page")

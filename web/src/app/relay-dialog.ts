@@ -1,7 +1,7 @@
 import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import { sessions } from './state.js';
-import { showToast, token } from './util.js';
+import { apiFetch, showToast } from './util.js';
 import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { permissionPresetLabel } from './spawn-confirm.js';
@@ -329,8 +329,8 @@ async function loadPlanCandidates(session: SessionSnapshot, generation: number):
   const root = planRootFor(session);
   if (!String(session.cwd || '').trim()) return;
   try {
-    const url = `/api/files-list?root=${encodeURIComponent(root)}&session=${encodeURIComponent(String(session.id))}&token=${encodeURIComponent(token || '')}`;
-    const response = await fetch(url);
+    const url = `/api/files-list?root=${encodeURIComponent(root)}&session=${encodeURIComponent(String(session.id))}`;
+    const response = await apiFetch(url);
     if (!response.ok || generation !== openGeneration) return;
     const data = await response.json();
     const listedRoot = String(data.root || root);
@@ -372,8 +372,8 @@ async function loadCapacity(sessionID: number, generation: number): Promise<void
   try {
     const base = `/api/sessions/${encodeURIComponent(String(sessionID))}`;
     const [childrenResponse, configResponse] = await Promise.all([
-      fetch(`${base}/children?token=${encodeURIComponent(token || '')}`),
-      fetch(`/api/orchestration-config?token=${encodeURIComponent(token || '')}`),
+      apiFetch(`${base}/children`),
+      apiFetch(`/api/orchestration-config`),
     ]);
     if (!childrenResponse.ok || !configResponse.ok) throw new Error('capacity request failed');
     const childrenData = await childrenResponse.json();
@@ -441,11 +441,13 @@ async function startRelay(): Promise<void> {
     },
   };
   if (strong.provider) body.roles['implementation-strong'] = roleRequestBody(strong);
+  // Start click acknowledges full-bypass default for unattended relay children (F-AI-01 / D-12).
+  body.acknowledge_child_full_bypass = true;
   savePrefs();
   submitting = true;
   updateFormState();
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(String(currentSessionID))}/relay?token=${encodeURIComponent(token || '')}`, {
+    const response = await apiFetch(`/api/sessions/${encodeURIComponent(String(currentSessionID))}/relay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

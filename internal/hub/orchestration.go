@@ -1020,13 +1020,20 @@ func launchOriginValid(origin string) bool {
 
 // uiOriginBoundByRequest reports whether this HTTP request may keep a client
 // claim of origin "ui". The JSON field alone is not enough (F-AI-03): any Hub
-// token holder can POST origin:"ui" and skip spawn confirmation. Only a
-// same-origin browser fetch — Sec-Fetch-Site: same-origin plus an allowed
-// Origin header — binds the claim to the Hub web UI. curl, CLI tools, and
-// conductor children typically send neither, so a spoofed "ui" is rewritten
-// to the conductor origin before confirm-skip / remember_permission run.
+// token holder can POST origin:"ui" and skip spawn confirmation. Binding needs:
+//  1. Hub-minted MANY_AI_CLI_ui_origin cookie (issued on handleIndex; signed with
+//     a secret that is not injected into wrapper envs), and
+//  2. same-origin browser Fetch Metadata (Sec-Fetch-Site: same-origin) plus an
+//     allowed Origin header.
+//
+// Fetch Metadata alone is forgeable by curl/AI children that hold
+// MANY_AI_CLI_HUB_TOKEN; the capability cookie raises that bar. Spoofed "ui"
+// without both is rewritten to conductor before confirm-skip / remember_permission.
 func (s *Server) uiOriginBoundByRequest(r *http.Request) bool {
 	if r == nil {
+		return false
+	}
+	if !s.hasValidUIOriginCookie(r) {
 		return false
 	}
 	if strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))) != "same-origin" {
@@ -1347,8 +1354,8 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	// （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C1）。
 	//
 	// Client JSON の origin:"ui" は確認スキップの根拠にしない（F-AI-03）。
-	// 画面から来たことだけを Sec-Fetch-Site + Origin でサーバ側に結び、
-	// 結びつかない "ui" は conductor 扱いへ落とす。
+	// 画面から来たことは Hub 発行の ui_origin cookie + Sec-Fetch-Site + Origin
+	// でサーバ側に結び、結びつかない "ui" は conductor 扱いへ落とす。
 	body.Origin = strings.TrimSpace(body.Origin)
 	if !launchOriginValid(body.Origin) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid origin")

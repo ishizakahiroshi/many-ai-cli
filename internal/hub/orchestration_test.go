@@ -35,13 +35,28 @@ func orchestrationRequest(method, path string, body any) *http.Request {
 }
 
 // orchestrationUIRequest is orchestrationRequest plus the Fetch Metadata a
-// same-origin browser fetch sends. Tests that claim origin:"ui" and expect
-// confirm-skip must use this; JSON alone no longer binds UI origin (F-AI-03).
+// same-origin browser fetch sends. Pair with attachUIOriginCapability for
+// tests that claim origin:"ui" and expect confirm-skip; JSON + headers alone
+// no longer bind UI origin (F-AI-03 residual).
 func orchestrationUIRequest(method, path string, body any) *http.Request {
 	req := orchestrationRequest(method, path, body)
 	req.Header.Set("Origin", "http://127.0.0.1:47777")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("Sec-Fetch-Mode", "cors")
+	return req
+}
+
+// attachUIOriginCapability adds the Hub-minted UI-origin cookie a real browser
+// would receive from handleIndex.
+func attachUIOriginCapability(s *Server, req *http.Request) {
+	secret := s.uiOriginHMACSecret()
+	val := signUIOriginCookie(secret, time.Now().Add(time.Hour).Unix(), "test-ui-origin-nonce")
+	req.AddCookie(&http.Cookie{Name: uiOriginCookieName, Value: val})
+}
+
+func orchestrationUIRequestBound(s *Server, method, path string, body any) *http.Request {
+	req := orchestrationUIRequest(method, path, body)
+	attachUIOriginCapability(s, req)
 	return req
 }
 
@@ -763,7 +778,7 @@ func Test_handleSpawnChild_uiOriginSkipsConfirmation(t *testing.T) {
 	s.wrappers[child.ID] = newWrapperConn(&websocket.Conn{})
 
 	rr := httptest.NewRecorder()
-	s.handleSessionAPI(rr, orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+	s.handleSessionAPI(rr, orchestrationUIRequestBound(s, http.MethodPost, "/api/sessions/1/spawn-child",
 		spawnChildRequest{Provider: "codex", Role: "implementation", Origin: launchOriginUI}))
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 (performSpawn の重複 role ガードまで到達), body=%s", rr.Code, rr.Body.String())
@@ -787,7 +802,7 @@ func Test_handleSpawnChild_uiOriginStillEnforcesLimits(t *testing.T) {
 	parent.Depth = 1
 
 	rr := httptest.NewRecorder()
-	s.handleSessionAPI(rr, orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+	s.handleSessionAPI(rr, orchestrationUIRequestBound(s, http.MethodPost, "/api/sessions/1/spawn-child",
 		spawnChildRequest{Provider: "codex", Role: "tester", Origin: launchOriginUI}))
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("status = %d, want 429 (UI 起点でも深さ上限が効く), body=%s", rr.Code, rr.Body.String())
@@ -855,13 +870,50 @@ func Test_bindSpawnOrigin_requiresSameOriginFetchMetadata(t *testing.T) {
 	if got := s.bindSpawnOrigin(plain, launchOriginUI); got != launchOriginConductor {
 		t.Fatalf("unbound ui = %q, want conductor", got)
 	}
-	bound := orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child", nil)
+	headersOnly := orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child", nil)
+	if got := s.bindSpawnOrigin(headersOnly, launchOriginUI); got != launchOriginConductor {
+		t.Fatalf("Fetch Metadata alone = %q, want conductor (capability cookie required)", got)
+	}
+	bound := orchestrationUIRequestBound(s, http.MethodPost, "/api/sessions/1/spawn-child", nil)
 	if got := s.bindSpawnOrigin(bound, launchOriginUI); got != launchOriginUI {
 		t.Fatalf("bound ui = %q, want ui", got)
 	}
 	if got := s.bindSpawnOrigin(bound, launchOriginConductor); got != launchOriginConductor {
 		t.Fatalf("conductor stays %q, got %q", launchOriginConductor, got)
 	}
+}
+
+func Test_bindSpawnOrigin_forgedFetchMetadataWithoutCapabilityRequiresConfirm(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	s.cfg.Orchestration.SpawnConfirmMode = config.SpawnConfirmOn
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// AI/curl with Hub token can forge Sec-Fetch-* + Origin; without the
+	// Hub-minted capability cookie, confirm must still be required.
+	req := orchestrationUIRequest(http.MethodPost, "/api/sessions/1/spawn-child",
+		spawnChildRequest{Provider: "codex", Role: "tester", Origin: launchOriginUI}).WithContext(ctx)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.handleSessionAPI(httptest.NewRecorder(), req)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for pendingSpawnConfirmationsCount(s) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if n := pendingSpawnConfirmationsCount(s); n != 1 {
+		cancel()
+		<-done
+		t.Fatalf("pending spawn confirmations = %d, want 1 (forged Fetch Metadata must not skip confirm)", n)
+	}
+	cancel()
+	<-done
 }
 
 // UI 起点の子は段 1 で起動する＝ Hub は承認系のフィールドを 1 つも埋めない。
