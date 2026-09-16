@@ -441,6 +441,8 @@ async function startRelay(): Promise<void> {
     },
   };
   if (strong.provider) body.roles['implementation-strong'] = roleRequestBody(strong);
+  // Start click acknowledges full-bypass default for unattended relay children (F-AI-01 / D-12).
+  body.acknowledge_child_full_bypass = true;
   savePrefs();
   submitting = true;
   updateFormState();
