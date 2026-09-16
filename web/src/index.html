@@ -1051,7 +1051,7 @@
         <summary data-i18n="settings_ai_providers_advanced_toggle">Advanced (JSON)</summary>
         <label class="settings-label" for="provider-enrollment-advanced" data-i18n="settings_ai_providers_advanced_label">Full definition (JSON)</label>
         <textarea id="provider-enrollment-advanced" class="settings-input-text provider-enrollment-advanced-textarea" rows="10" spellcheck="false"></textarea>
-        <span class="settings-note" data-i18n="settings_ai_providers_advanced_hint">Optional. When not empty, this replaces the launch/model/adapter fields above (executable included). Leave empty to use only the fields above.</span>
+        <span class="settings-note" data-i18n="settings_ai_providers_advanced_hint">Optional. Advanced fields are preserved; a non-empty executable above takes precedence over launch.executable in JSON.</span>
       </details>
       <div class="settings-row-actions">
         <button id="provider-enrollment-validate" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_validate">Validate</button>
@@ -1068,6 +1068,9 @@
         <button id="provider-history-close" class="provider-enrollment-close" type="button" aria-label="Close">✕</button>
       </div>
       <div id="provider-history-status" class="settings-note" aria-live="polite"></div>
+      <div class="settings-row-actions">
+        <button id="provider-history-reset" class="settings-inline-btn danger" type="button" data-i18n="settings_ai_providers_history_reset">Reset to distributed default</button>
+      </div>
       <div class="provider-history-section">
         <h3 data-i18n="settings_ai_providers_history_revisions">Revisions</h3>
         <div id="provider-history-revisions" class="provider-history-list"></div>

@@ -1188,24 +1188,27 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 			if dist, distErr := provider.NewDistributionStore(filepath.Join(dir, "provider-distributions")); distErr == nil {
 				distributionStore = dist
 			}
-			if userDefinitions, storeDiagnostics, loadErr := store.Load(); loadErr == nil {
-				var overrides []provider.Definition
-				var historyDiagnostics []provider.Diagnostic
-				if historyStore != nil {
-					overrides, historyDiagnostics, _ = historyStore.LoadOverrides()
-				}
-				// Reapplies whatever distribution was accepted in a prior
-				// run: without this, a Hub restart silently dropped back to
-				// only embedded/legacy/user/override layers until the next
-				// unrelated reload happened to run.
-				acceptedDefinitions, distributionDiagnostics := loadAcceptedDistributionDefinitions(distributionStore)
-				providers, providerDiagnostics, providerErr = buildProviderRegistryLayers(cfg, userDefinitions, overrides, acceptedDefinitions)
-				providerDiagnostics = append(providerDiagnostics, storeDiagnostics...)
-				providerDiagnostics = append(providerDiagnostics, historyDiagnostics...)
-				providerDiagnostics = append(providerDiagnostics, distributionDiagnostics...)
+			var userDefinitions []provider.Definition
+			var storeDiagnostics []provider.Diagnostic
+			if loaded, diagnostics, loadErr := store.Load(); loadErr == nil {
+				userDefinitions = loaded
+				storeDiagnostics = diagnostics
 			} else {
-				providerDiagnostics = append(providerDiagnostics, provider.Diagnostic{Code: "provider_store_load", Severity: provider.SeverityError, Field: "providers.d", Message: "user provider definitions could not be loaded"})
+				storeDiagnostics = append(storeDiagnostics, provider.Diagnostic{Code: "provider_store_load", Severity: provider.SeverityError, Field: "providers.d", Message: "user provider definitions could not be loaded"})
 			}
+			var overrides []provider.Definition
+			var historyDiagnostics []provider.Diagnostic
+			if historyStore != nil {
+				overrides, historyDiagnostics, _ = historyStore.LoadOverrides()
+			}
+			// Accepted distributions are independent of providers.d. A broken
+			// custom definition must not silently discard a previously accepted
+			// catalog for the entire Hub process lifetime.
+			acceptedDefinitions, distributionDiagnostics := loadAcceptedDistributionDefinitions(distributionStore)
+			providers, providerDiagnostics, providerErr = buildProviderRegistryLayers(cfg, userDefinitions, overrides, acceptedDefinitions)
+			providerDiagnostics = append(providerDiagnostics, storeDiagnostics...)
+			providerDiagnostics = append(providerDiagnostics, historyDiagnostics...)
+			providerDiagnostics = append(providerDiagnostics, distributionDiagnostics...)
 		}
 	}
 	if providerErr != nil {

@@ -94,6 +94,94 @@ func (s *HistoryStore) SaveOverride(providerID string, payload, baseline Definit
 	return s.saveLocked(providerID, merged, expectedRevision, reason)
 }
 
+// SaveEffectiveOverride accepts the complete effective definition a UI edits
+// and stores only the fields that differ from the provider's current base.
+// Keeping this conversion at the service boundary prevents callers that send
+// a full form snapshot from freezing every distribution field into the local
+// override forever.
+func (s *HistoryStore) SaveEffectiveOverride(providerID string, desired, baseline Definition, expectedRevision, reason string) (RevisionRecord, error) {
+	if s == nil {
+		return RevisionRecord{}, fmt.Errorf("history store is nil")
+	}
+	if err := ValidateHistoryProviderID(providerID); err != nil {
+		return RevisionRecord{}, err
+	}
+	if desired.ID == "" {
+		desired.ID = providerID
+	}
+	if desired.ID != providerID {
+		return RevisionRecord{}, fmt.Errorf("payload provider id does not match %q", providerID)
+	}
+	if err := validateOverrideAgainstBaseline(desired, Definition{}); err != nil {
+		return RevisionRecord{}, err
+	}
+	delta, err := definitionOverrideDelta(baseline, desired)
+	if err != nil {
+		return RevisionRecord{}, err
+	}
+	delta.ID = providerID
+	if reason == "" {
+		reason = "edit"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := validateOverrideAgainstBaseline(delta, baseline); err != nil {
+		return RevisionRecord{}, err
+	}
+	return s.saveLocked(providerID, delta, expectedRevision, reason)
+}
+
+func definitionOverrideDelta(baseline, desired Definition) (Definition, error) {
+	baseRaw, err := json.Marshal(baseline)
+	if err != nil {
+		return Definition{}, err
+	}
+	desiredRaw, err := json.Marshal(desired)
+	if err != nil {
+		return Definition{}, err
+	}
+	var baseMap, desiredMap map[string]json.RawMessage
+	if err := json.Unmarshal(baseRaw, &baseMap); err != nil {
+		return Definition{}, err
+	}
+	if err := json.Unmarshal(desiredRaw, &desiredMap); err != nil {
+		return Definition{}, err
+	}
+	delete(baseMap, "source")
+	delete(desiredMap, "source")
+	deltaMap := diffDefinitionObject(baseMap, desiredMap)
+	deltaMap["id"] = json.RawMessage(fmt.Sprintf("%q", desired.ID))
+	var delta Definition
+	if err := json.Unmarshal(marshalRawObject(deltaMap), &delta); err != nil {
+		return Definition{}, err
+	}
+	return delta, nil
+}
+
+func diffDefinitionObject(base, desired map[string]json.RawMessage) map[string]json.RawMessage {
+	out := make(map[string]json.RawMessage)
+	for key, desiredValue := range desired {
+		if key == "id" {
+			continue
+		}
+		baseValue, exists := base[key]
+		if exists && isJSONObject(baseValue) && isJSONObject(desiredValue) {
+			var baseObject, desiredObject map[string]json.RawMessage
+			_ = json.Unmarshal(baseValue, &baseObject)
+			_ = json.Unmarshal(desiredValue, &desiredObject)
+			nested := diffDefinitionObject(baseObject, desiredObject)
+			if len(nested) > 0 {
+				out[key] = marshalRawObject(nested)
+			}
+			continue
+		}
+		if !exists || string(baseValue) != string(desiredValue) {
+			out[key] = append(json.RawMessage(nil), desiredValue...)
+		}
+	}
+	return out
+}
+
 // mergeWithCurrentOverrideLocked applies payload on top of the current
 // override's payload (if any) using the exact same field-merge rule the
 // Registry itself uses to layer embedded/distribution/user/override
@@ -201,7 +289,13 @@ func (s *HistoryStore) saveLocked(providerID string, payload Definition, expecte
 	if err := os.MkdirAll(revisionDir, 0o700); err != nil {
 		return RevisionRecord{}, fmt.Errorf("create revision directory: %w", err)
 	}
+	if err := ensureInsideRoot(s.root, revisionDir); err != nil {
+		return RevisionRecord{}, err
+	}
 	revisionPath := filepath.Join(revisionDir, revision+".json")
+	if err := ensureInsideRoot(s.root, revisionPath); err != nil && !os.IsNotExist(err) {
+		return RevisionRecord{}, err
+	}
 	if err := writeJSONAtomic(revisionPath, record); err != nil {
 		return RevisionRecord{}, err
 	}
@@ -209,7 +303,11 @@ func (s *HistoryStore) saveLocked(providerID string, payload Definition, expecte
 	if err != nil || verified.ContentDigest != digest {
 		return RevisionRecord{}, fmt.Errorf("verify revision %s: %w", revision, err)
 	}
-	if err := writeTextAtomic(filepath.Join(s.root, providerID, "HEAD"), revision); err != nil {
+	headPath := filepath.Join(s.root, providerID, "HEAD")
+	if err := ensureInsideRoot(s.root, headPath); err != nil && !os.IsNotExist(err) {
+		return RevisionRecord{}, err
+	}
+	if err := writeTextAtomic(headPath, revision); err != nil {
 		return RevisionRecord{}, err
 	}
 	return record, nil
@@ -228,13 +326,65 @@ func (s *HistoryStore) Restore(providerID, revision, expectedRevision string) (R
 func (s *HistoryStore) Reset(providerID, expectedRevision string) (RevisionRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveLocked(providerID, Definition{SchemaVersion: CurrentSchemaVersion, ID: providerID, DisplayName: providerID}, expectedRevision, "reset")
+	return s.saveLocked(providerID, Definition{ID: providerID}, expectedRevision, "reset")
 }
 
 func (s *HistoryStore) Current(providerID string) (RevisionRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.currentLocked(providerID)
+}
+
+func (s *HistoryStore) GetRevision(providerID, revision string) (RevisionRecord, error) {
+	if err := ValidateHistoryProviderID(providerID); err != nil {
+		return RevisionRecord{}, err
+	}
+	if revision == "" || filepath.Base(revision) != revision {
+		return RevisionRecord{}, fmt.Errorf("revision is invalid")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.readRevisionLocked(providerID, revision)
+}
+
+// BackupSnapshot records a verified point-in-time definition without making
+// it the active override. Custom-provider CRUD uses this before destructive
+// FileStore mutations, while built-in overrides continue to use saveLocked's
+// revision/HEAD protocol.
+func (s *HistoryStore) BackupSnapshot(providerID string, payload Definition, reason string) (RevisionRecord, error) {
+	if s == nil {
+		return RevisionRecord{}, fmt.Errorf("history store is nil")
+	}
+	if err := ValidateHistoryProviderID(providerID); err != nil {
+		return RevisionRecord{}, err
+	}
+	if payload.ID != providerID {
+		return RevisionRecord{}, fmt.Errorf("payload provider id does not match %q", providerID)
+	}
+	payload.Source = SourceRef{}
+	if err := validateOverrideAgainstBaseline(payload, Definition{}); err != nil {
+		return RevisionRecord{}, err
+	}
+	if reason == "" {
+		reason = "snapshot"
+	}
+	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
+	digest := definitionDigest(payload)
+	record := RevisionRecord{
+		SchemaVersion: historySchemaVersion,
+		ProviderID:    providerID,
+		Revision:      revisionID(providerID, "", digest, createdAt),
+		CreatedAt:     createdAt,
+		Reason:        reason,
+		ContentDigest: digest,
+		Payload:       payload,
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.writeBackupLocked(record); err != nil {
+		return RevisionRecord{}, err
+	}
+	return record, nil
 }
 
 func (s *HistoryStore) List(providerID string) ([]RevisionRecord, error) {
@@ -259,7 +409,11 @@ func (s *HistoryStore) List(providerID string) ([]RevisionRecord, error) {
 	sort.Strings(paths)
 	result := make([]RevisionRecord, 0, len(paths))
 	for _, name := range paths {
-		record, readErr := readRevision(filepath.Join(s.root, providerID, "revisions", name), providerID)
+		path := filepath.Join(s.root, providerID, "revisions", name)
+		if err := ensureInsideRoot(s.root, path); err != nil {
+			return nil, err
+		}
+		record, readErr := readRevision(path, providerID)
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -290,7 +444,11 @@ func (s *HistoryStore) ListBackups(providerID string) ([]RevisionRecord, error) 
 	sort.Strings(names)
 	result := make([]RevisionRecord, 0, len(names))
 	for _, name := range names {
-		record, readErr := readRevision(filepath.Join(s.backupRoot, providerID, name), providerID)
+		path := filepath.Join(s.backupRoot, providerID, name)
+		if err := ensureInsideRoot(s.backupRoot, path); err != nil {
+			return nil, err
+		}
+		record, readErr := readRevision(path, providerID)
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -309,7 +467,11 @@ func (s *HistoryStore) VerifyBackup(providerID, backupID string) (RevisionRecord
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return readRevision(filepath.Join(s.backupRoot, providerID, name), providerID)
+	path := filepath.Join(s.backupRoot, providerID, name)
+	if err := ensureInsideRoot(s.backupRoot, path); err != nil {
+		return RevisionRecord{}, err
+	}
+	return readRevision(path, providerID)
 }
 
 // backupFileName は backupID をファイル名へ正規化する唯一の口で、**検査もここで行う。**
@@ -336,7 +498,11 @@ func (s *HistoryStore) RestoreBackup(providerID, backupID, expectedRevision stri
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	backup, err := readRevision(filepath.Join(s.backupRoot, providerID, name), providerID)
+	path := filepath.Join(s.backupRoot, providerID, name)
+	if err := ensureInsideRoot(s.backupRoot, path); err != nil {
+		return RevisionRecord{}, err
+	}
+	backup, err := readRevision(path, providerID)
 	if err != nil {
 		return RevisionRecord{}, err
 	}
@@ -388,6 +554,9 @@ func (s *HistoryStore) currentLocked(providerID string) (RevisionRecord, error) 
 		return RevisionRecord{}, err
 	}
 	headPath := filepath.Join(s.root, providerID, "HEAD")
+	if err := ensureInsideRoot(s.root, headPath); err != nil {
+		return RevisionRecord{}, err
+	}
 	recoverInterruptedAtomicReplace(headPath)
 	head, err := os.ReadFile(headPath)
 	if err != nil {
@@ -407,7 +576,11 @@ func (s *HistoryStore) readRevisionLocked(providerID, revision string) (Revision
 	if revision == "" || filepath.Base(revision) != revision {
 		return RevisionRecord{}, fmt.Errorf("invalid revision")
 	}
-	return readRevision(filepath.Join(s.root, providerID, "revisions", revision+".json"), providerID)
+	path := filepath.Join(s.root, providerID, "revisions", revision+".json")
+	if err := ensureInsideRoot(s.root, path); err != nil {
+		return RevisionRecord{}, err
+	}
+	return readRevision(path, providerID)
 }
 
 // writeBackupLocked の record.ProviderID は **ディスク上の revision ファイルの中身**
@@ -423,6 +596,9 @@ func (s *HistoryStore) writeBackupLocked(record RevisionRecord) error {
 	}
 	path := filepath.Join(s.backupRoot, record.ProviderID, record.Revision+".json")
 	if err := ensureInsideRoot(s.backupRoot, filepath.Join(s.backupRoot, record.ProviderID)); err != nil {
+		return err
+	}
+	if err := ensureInsideRoot(s.backupRoot, path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	if err := writeJSONAtomic(path, record); err != nil {
@@ -478,6 +654,15 @@ func readRevision(path, expectedProviderID string) (RevisionRecord, error) {
 	}
 	if definitionDigest(record.Payload) != record.ContentDigest {
 		return RevisionRecord{}, fmt.Errorf("revision content digest mismatch")
+	}
+	validationBase := Definition{
+		SchemaVersion: CurrentSchemaVersion,
+		ID:            expectedProviderID,
+		DisplayName:   expectedProviderID,
+		Launch:        &LaunchDefinition{Executable: "validation-placeholder"},
+	}
+	if err := validateOverrideAgainstBaseline(record.Payload, validationBase); err != nil {
+		return RevisionRecord{}, fmt.Errorf("revision payload schema is invalid: %w", err)
 	}
 	return record, nil
 }

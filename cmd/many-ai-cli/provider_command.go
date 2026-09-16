@@ -86,28 +86,23 @@ func runProviderResetCommand(history *provider.HistoryStore, args []string) erro
 	}
 	id := args[1]
 	expected := ""
+	hasExpected := false
 	for i := 2; i+1 < len(args); i++ {
 		if args[i] == "--expected-revision" {
 			expected = args[i+1]
+			hasExpected = true
 		}
 	}
-	if expected == "" {
+	if !hasExpected {
 		return errors.New("--expected-revision is required")
 	}
-	definitions, _, err := provider.EmbeddedDefinitions()
+	if !provider.IsBuiltinID(id) {
+		return fmt.Errorf("built-in provider %q was not found", id)
+	}
+	revision, err := history.Reset(id, expected)
 	if err != nil {
 		return err
 	}
-	for _, definition := range definitions {
-		if definition.ID != id {
-			continue
-		}
-		revision, saveErr := history.SaveOverride(id, definition, provider.Definition{}, expected, "reset")
-		if saveErr != nil {
-			return saveErr
-		}
-		fmt.Printf("reset\t%s\n", revision.Revision)
-		return nil
-	}
-	return fmt.Errorf("embedded provider %q was not found", id)
+	fmt.Printf("reset\t%s\n", revision.Revision)
+	return nil
 }

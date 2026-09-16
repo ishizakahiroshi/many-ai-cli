@@ -466,3 +466,39 @@ func TestHistoryStoreSymlinkProviderDirDoesNotEscapeRoot(t *testing.T) {
 		t.Fatalf("override escaped store root into %#v", entries)
 	}
 }
+
+func TestHistoryStoreSaveEffectiveOverrideKeepsOnlyChangedFields(t *testing.T) {
+	store, err := NewHistoryStore(filepath.Join(t.TempDir(), "overrides"), filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := Definition{
+		SchemaVersion: CurrentSchemaVersion,
+		ID:            "codex", DisplayName: "Codex",
+		Launch: &LaunchDefinition{Executable: "codex-v1", Args: []string{"run"}},
+	}
+	desired := base
+	desired.DisplayName = "My Codex"
+	record, err := store.SaveEffectiveOverride("codex", desired, base, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Payload.DisplayName != "My Codex" {
+		t.Fatalf("display name override = %q", record.Payload.DisplayName)
+	}
+	if record.Payload.Launch != nil {
+		t.Fatalf("unchanged launch was frozen into override: %#v", record.Payload.Launch)
+	}
+	updatedBase := base
+	updatedBase.Launch = &LaunchDefinition{Executable: "codex-v2", Args: []string{"new-run"}}
+	merged, err := mergeDefinitionValues(updatedBase, record.Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged.Launch == nil || merged.Launch.Executable != "codex-v2" {
+		t.Fatalf("unmodified launch did not follow updated base: %#v", merged.Launch)
+	}
+	if merged.DisplayName != "My Codex" {
+		t.Fatalf("modified display name was lost: %q", merged.DisplayName)
+	}
+}

@@ -201,30 +201,11 @@ func SignDistributionPayload(payload DistributionPayload, keyID string, privateK
 // previous.json) is plain JSON on disk that this store must not simply trust
 // either — so this check runs regardless of how "trusted" the source claims
 // to be.
-var distributionPathComponentPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-
-// windowsReservedDeviceNames are the base names (before any extension)
-// Windows treats as device names rather than ordinary files, even when
-// running this store on a non-Windows OS: distribution bundles are the same
-// files regardless of the platform they were produced on, and a bundle
-// crafted to try "con.json" should be rejected everywhere, not only where it
-// would misbehave.
-var windowsReservedDeviceNames = map[string]struct{}{
-	"con": {}, "prn": {}, "aux": {}, "nul": {},
-	"com1": {}, "com2": {}, "com3": {}, "com4": {}, "com5": {}, "com6": {}, "com7": {}, "com8": {}, "com9": {},
-	"lpt1": {}, "lpt2": {}, "lpt3": {}, "lpt4": {}, "lpt5": {}, "lpt6": {}, "lpt7": {}, "lpt8": {}, "lpt9": {},
-}
+var distributionPathComponentPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 func validateDistributionPathComponent(value string) error {
 	if !distributionPathComponentPattern.MatchString(value) {
-		return fmt.Errorf("invalid distribution path component %q", value)
-	}
-	if value == "." || value == ".." {
-		return fmt.Errorf("invalid distribution path component %q", value)
-	}
-	base := strings.TrimSuffix(value, filepath.Ext(value))
-	if _, reserved := windowsReservedDeviceNames[strings.ToLower(base)]; reserved {
-		return fmt.Errorf("distribution path component %q is a reserved name", value)
+		return fmt.Errorf("invalid distribution SHA-256 digest %q", value)
 	}
 	return nil
 }
@@ -238,15 +219,26 @@ func distributionContentDigest(raw []byte) string {
 // either a fixed literal ("downloaded", "accepted", "accepted.json", ...) or
 // a value that has passed validateDistributionPathComponent, and every
 // directory it writes into or reads a validated-component file from is also
-// checked with ensureInsideRoot (history.go), which follows symlinks via
-// filepath.EvalSymlinks before checking containment. On Windows, NTFS
-// junctions/reparse points that Go's os.Lstat does not report as
-// ModeSymlink are a known gap in that check (same caveat as HistoryStore);
-// this store does not attempt anything stronger than HistoryStore already
-// does for that case.
+// checked with ensureInsideRoot (history.go), which rejects a symlink at the
+// exact file and follows parent symlinks via filepath.EvalSymlinks before
+// checking containment. The supported threat model rejects persistent path
+// redirection found at an operation boundary; it does not claim to defeat a
+// malicious same-user process swapping a reparse point between that check
+// and the following OS call. Closing that TOCTOU class requires handle-based
+// platform-specific traversal rather than Go's portable filepath API.
 type DistributionStore struct {
 	mu   sync.Mutex
 	root string
+}
+
+// DistributionPointerSnapshot is an opaque copy of the mutable distribution
+// pointers. Hub handlers use it to roll disk state back if rebuilding the
+// in-memory provider registry fails after an accept or rollback.
+type DistributionPointerSnapshot struct {
+	accepted    []byte
+	previous    []byte
+	hasAccepted bool
+	hasPrevious bool
 }
 
 func NewDistributionStore(root string) (*DistributionStore, error) {
@@ -283,7 +275,11 @@ func (s *DistributionStore) SaveDownloaded(raw []byte, digest string) error {
 	if err := ensureInsideRoot(s.root, dir); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return writeBytesAtomic(filepath.Join(dir, digest+".json"), raw)
+	path := filepath.Join(dir, digest+".json")
+	if err := ensureInsideRoot(s.root, path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return writeBytesAtomic(path, raw)
 }
 
 // LoadDownloadedBundle reads a previously downloaded (not necessarily
@@ -305,19 +301,15 @@ func (s *DistributionStore) LoadDownloadedBundle(digest string) (DistributionBun
 		return DistributionBundle{}, err
 	}
 	path := filepath.Join(dir, digest+".json")
+	if err := ensureInsideRoot(s.root, path); err != nil {
+		return DistributionBundle{}, err
+	}
 	recoverInterruptedAtomicReplace(path)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return DistributionBundle{}, fmt.Errorf("read downloaded distribution: %w", err)
 	}
-	if distributionContentDigest(raw) != digest {
-		return DistributionBundle{}, fmt.Errorf("downloaded distribution content digest mismatch")
-	}
-	var bundle DistributionBundle
-	if err := json.Unmarshal(raw, &bundle); err != nil {
-		return DistributionBundle{}, fmt.Errorf("decode downloaded distribution: %w", err)
-	}
-	return bundle, nil
+	return validateStoredDistributionBundle(raw, digest, "downloaded")
 }
 
 // Accept promotes an already-downloaded bundle to the accepted pointer by
@@ -343,6 +335,9 @@ func (s *DistributionStore) Accept(digest string, trustedKeys map[string]ed25519
 		return DistributionStatus{}, err
 	}
 	downloadedPath := filepath.Join(downloadedDir, digest+".json")
+	if err := ensureInsideRoot(s.root, downloadedPath); err != nil {
+		return DistributionStatus{}, err
+	}
 	recoverInterruptedAtomicReplace(downloadedPath)
 	raw, err := os.ReadFile(downloadedPath)
 	if err != nil {
@@ -364,15 +359,23 @@ func (s *DistributionStore) Accept(digest string, trustedKeys map[string]ed25519
 		return DistributionStatus{}, err
 	}
 	pointerPath := filepath.Join(s.root, "accepted.json")
-	recoverInterruptedAtomicReplace(pointerPath)
-	if current, readErr := os.ReadFile(pointerPath); readErr == nil {
-		if writeErr := writeBytesAtomic(filepath.Join(s.root, "previous.json"), current); writeErr != nil {
-			return DistributionStatus{}, writeErr
+	previousPath := filepath.Join(s.root, "previous.json")
+	acceptedBundlePath := filepath.Join(acceptedDir, digest+".json")
+	for _, path := range []string{pointerPath, previousPath, acceptedBundlePath} {
+		if err := ensureInsideRoot(s.root, path); err != nil && !os.IsNotExist(err) {
+			return DistributionStatus{}, err
 		}
-	} else if !os.IsNotExist(readErr) {
-		return DistributionStatus{}, readErr
 	}
-	if err := writeBytesAtomic(filepath.Join(acceptedDir, digest+".json"), raw); err != nil {
+	recoverInterruptedAtomicReplace(pointerPath)
+	current, hadCurrent, err := readOptionalFile(pointerPath)
+	if err != nil {
+		return DistributionStatus{}, err
+	}
+	oldPrevious, hadPrevious, err := readOptionalFile(previousPath)
+	if err != nil {
+		return DistributionStatus{}, err
+	}
+	if err := writeBytesAtomic(acceptedBundlePath, raw); err != nil {
 		return DistributionStatus{}, err
 	}
 	status := DistributionStatus{CatalogVersion: bundle.Payload.CatalogVersion, Digest: digest, State: "accepted"}
@@ -380,7 +383,17 @@ func (s *DistributionStore) Accept(digest string, trustedKeys map[string]ed25519
 	if err != nil {
 		return DistributionStatus{}, err
 	}
+	if hadCurrent {
+		if err := writeBytesAtomic(previousPath, current); err != nil {
+			return DistributionStatus{}, err
+		}
+	} else if err := restoreOptionalFile(previousPath, nil, false); err != nil {
+		return DistributionStatus{}, err
+	}
 	if err := writeBytesAtomic(pointerPath, pointer); err != nil {
+		if restoreErr := restoreOptionalFile(previousPath, oldPrevious, hadPrevious); restoreErr != nil {
+			return DistributionStatus{}, fmt.Errorf("write accepted pointer: %w (restore previous pointer: %v)", err, restoreErr)
+		}
 		return DistributionStatus{}, err
 	}
 	return status, nil
@@ -397,6 +410,9 @@ func (s *DistributionStore) Status() (DistributionStatus, error) {
 
 func (s *DistributionStore) statusLocked() (DistributionStatus, error) {
 	pointerPath := filepath.Join(s.root, "accepted.json")
+	if err := ensureInsideRoot(s.root, pointerPath); err != nil && !os.IsNotExist(err) {
+		return DistributionStatus{}, err
+	}
 	recoverInterruptedAtomicReplace(pointerPath)
 	raw, err := os.ReadFile(pointerPath)
 	if os.IsNotExist(err) {
@@ -427,6 +443,9 @@ func (s *DistributionStore) Rollback() (DistributionStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	previousPath := filepath.Join(s.root, "previous.json")
+	if err := ensureInsideRoot(s.root, previousPath); err != nil {
+		return DistributionStatus{}, err
+	}
 	recoverInterruptedAtomicReplace(previousPath)
 	previous, err := os.ReadFile(previousPath)
 	if err != nil {
@@ -436,28 +455,41 @@ func (s *DistributionStore) Rollback() (DistributionStatus, error) {
 	if err := json.Unmarshal(previous, &accepted); err != nil {
 		return DistributionStatus{}, fmt.Errorf("decode previous distribution pointer: %w", err)
 	}
-	if accepted.Digest != "" {
-		if err := validateDistributionPathComponent(accepted.Digest); err != nil {
-			return DistributionStatus{}, fmt.Errorf("previous distribution pointer is invalid: %w", err)
-		}
-		acceptedDir := filepath.Join(s.root, "accepted")
-		if err := ensureInsideRoot(s.root, acceptedDir); err != nil {
-			return DistributionStatus{}, err
-		}
-		bundlePath := filepath.Join(acceptedDir, accepted.Digest+".json")
-		recoverInterruptedAtomicReplace(bundlePath)
-		bundleRaw, err := os.ReadFile(bundlePath)
-		if err != nil {
-			return DistributionStatus{}, fmt.Errorf("read previous distribution bundle: %w", err)
-		}
-		if distributionContentDigest(bundleRaw) != accepted.Digest {
-			return DistributionStatus{}, fmt.Errorf("previous distribution bundle content digest mismatch")
-		}
+	if accepted.Digest == "" {
+		return DistributionStatus{}, fmt.Errorf("previous distribution pointer has no digest")
+	}
+	if accepted.State != "" && accepted.State != "accepted" {
+		return DistributionStatus{}, fmt.Errorf("previous distribution pointer has invalid state %q", accepted.State)
+	}
+	if err := validateDistributionPathComponent(accepted.Digest); err != nil {
+		return DistributionStatus{}, fmt.Errorf("previous distribution pointer is invalid: %w", err)
+	}
+	acceptedDir := filepath.Join(s.root, "accepted")
+	if err := ensureInsideRoot(s.root, acceptedDir); err != nil {
+		return DistributionStatus{}, err
+	}
+	bundlePath := filepath.Join(acceptedDir, accepted.Digest+".json")
+	if err := ensureInsideRoot(s.root, bundlePath); err != nil {
+		return DistributionStatus{}, err
+	}
+	recoverInterruptedAtomicReplace(bundlePath)
+	bundleRaw, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return DistributionStatus{}, fmt.Errorf("read previous distribution bundle: %w", err)
+	}
+	if _, err := validateStoredDistributionBundle(bundleRaw, accepted.Digest, "previous"); err != nil {
+		return DistributionStatus{}, err
 	}
 	currentPath := filepath.Join(s.root, "accepted.json")
+	rollbackPath := filepath.Join(s.root, "rollback-before.json")
+	for _, path := range []string{currentPath, rollbackPath} {
+		if err := ensureInsideRoot(s.root, path); err != nil && !os.IsNotExist(err) {
+			return DistributionStatus{}, err
+		}
+	}
 	recoverInterruptedAtomicReplace(currentPath)
 	if current, readErr := os.ReadFile(currentPath); readErr == nil {
-		if writeErr := writeBytesAtomic(filepath.Join(s.root, "rollback-before.json"), current); writeErr != nil {
+		if writeErr := writeBytesAtomic(rollbackPath, current); writeErr != nil {
 			return DistributionStatus{}, writeErr
 		}
 	} else if !os.IsNotExist(readErr) {
@@ -500,22 +532,117 @@ func (s *DistributionStore) LoadAcceptedBundle() (DistributionBundle, error) {
 		return DistributionBundle{}, err
 	}
 	bundlePath := filepath.Join(acceptedDir, status.Digest+".json")
+	if err := ensureInsideRoot(s.root, bundlePath); err != nil {
+		return DistributionBundle{}, err
+	}
 	recoverInterruptedAtomicReplace(bundlePath)
 	raw, err := os.ReadFile(bundlePath)
 	if err != nil {
 		return DistributionBundle{}, err
 	}
-	if distributionContentDigest(raw) != status.Digest {
-		return DistributionBundle{}, fmt.Errorf("accepted distribution content digest mismatch")
+	return validateStoredDistributionBundle(raw, status.Digest, "accepted")
+}
+
+// SnapshotPointers captures only the mutable pointer files; content-addressed
+// bundle files are inert and may safely remain after a failed transaction.
+func (s *DistributionStore) SnapshotPointers() (DistributionPointerSnapshot, error) {
+	if s == nil {
+		return DistributionPointerSnapshot{}, fmt.Errorf("distribution store is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	acceptedPath := filepath.Join(s.root, "accepted.json")
+	previousPath := filepath.Join(s.root, "previous.json")
+	for _, path := range []string{acceptedPath, previousPath} {
+		if err := ensureInsideRoot(s.root, path); err != nil && !os.IsNotExist(err) {
+			return DistributionPointerSnapshot{}, err
+		}
+	}
+	accepted, hasAccepted, err := readOptionalFile(acceptedPath)
+	if err != nil {
+		return DistributionPointerSnapshot{}, err
+	}
+	previous, hasPrevious, err := readOptionalFile(previousPath)
+	if err != nil {
+		return DistributionPointerSnapshot{}, err
+	}
+	return DistributionPointerSnapshot{accepted: accepted, previous: previous, hasAccepted: hasAccepted, hasPrevious: hasPrevious}, nil
+}
+
+func (s *DistributionStore) RestorePointers(snapshot DistributionPointerSnapshot) error {
+	if s == nil {
+		return fmt.Errorf("distribution store is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	acceptedPath := filepath.Join(s.root, "accepted.json")
+	previousPath := filepath.Join(s.root, "previous.json")
+	for _, path := range []string{acceptedPath, previousPath} {
+		if err := ensureInsideRoot(s.root, path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if err := restoreOptionalFile(acceptedPath, snapshot.accepted, snapshot.hasAccepted); err != nil {
+		return err
+	}
+	return restoreOptionalFile(previousPath, snapshot.previous, snapshot.hasPrevious)
+}
+
+func validateStoredDistributionBundle(raw []byte, digest, label string) (DistributionBundle, error) {
+	if len(raw) > MaxDistributionBundleBytes {
+		return DistributionBundle{}, fmt.Errorf("%s distribution bundle exceeds %d bytes", label, MaxDistributionBundleBytes)
+	}
+	if distributionContentDigest(raw) != digest {
+		return DistributionBundle{}, fmt.Errorf("%s distribution content digest mismatch", label)
 	}
 	var bundle DistributionBundle
-	if err := json.Unmarshal(raw, &bundle); err != nil {
-		return DistributionBundle{}, fmt.Errorf("decode accepted distribution: %w", err)
+	if err := decodeSingleJSON(raw, &bundle); err != nil {
+		return DistributionBundle{}, fmt.Errorf("decode %s distribution: %w", label, err)
 	}
-	if bundle.Payload.SchemaVersion != CurrentSchemaVersion {
-		return DistributionBundle{}, fmt.Errorf("accepted distribution schema is invalid")
+	if bundle.Payload.SchemaVersion != CurrentSchemaVersion || strings.TrimSpace(bundle.Payload.CatalogVersion) == "" {
+		return DistributionBundle{}, fmt.Errorf("%s distribution schema is invalid", label)
+	}
+	if len(bundle.Payload.Definitions) > MaxDefinitionItems {
+		return DistributionBundle{}, fmt.Errorf("%s distribution contains too many definitions", label)
+	}
+	seen := make(map[string]struct{}, len(bundle.Payload.Definitions))
+	for _, definition := range bundle.Payload.Definitions {
+		if _, exists := seen[definition.ID]; exists {
+			return DistributionBundle{}, fmt.Errorf("%s distribution contains duplicate provider %q", label, definition.ID)
+		}
+		seen[definition.ID] = struct{}{}
+		definitionRaw, err := json.Marshal(definition)
+		if err != nil {
+			return DistributionBundle{}, err
+		}
+		diagnostics, err := ValidateDefinition(definitionRaw, DefaultAdapterCatalog())
+		if err != nil || hasDiagnosticError(diagnostics) {
+			return DistributionBundle{}, fmt.Errorf("%s distribution definition %q is invalid", label, definition.ID)
+		}
+		if expected := bundle.Payload.Digests[definition.ID]; expected == "" || expected != definitionDigest(definition) {
+			return DistributionBundle{}, fmt.Errorf("%s distribution digest mismatch for %q", label, definition.ID)
+		}
 	}
 	return bundle, nil
+}
+
+func readOptionalFile(path string) ([]byte, bool, error) {
+	recoverInterruptedAtomicReplace(path)
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	return raw, err == nil, err
+}
+
+func restoreOptionalFile(path string, raw []byte, exists bool) error {
+	if exists {
+		return writeBytesAtomic(path, raw)
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func compareVersions(left, right string) int {

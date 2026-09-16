@@ -153,6 +153,11 @@ func (s *Server) handleProviderDistributionAccept(w http.ResponseWriter, r *http
 		writeJSONError(w, http.StatusBadRequest, "digest_required", "digest is required")
 		return
 	}
+	snapshot, err := s.distributionStore.SnapshotPointers()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "distribution_snapshot_failed", err.Error())
+		return
+	}
 	status, err := s.distributionStore.Accept(digest, trustedKeys, s.version)
 	if err != nil {
 		writeJSONError(w, http.StatusUnprocessableEntity, "distribution_accept_failed", err.Error())
@@ -160,7 +165,12 @@ func (s *Server) handleProviderDistributionAccept(w http.ResponseWriter, r *http
 	}
 	diagnostics, reloadErr := s.reloadProviderRegistry()
 	if reloadErr != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", reloadErr.Error())
+		if restoreErr := s.distributionStore.RestorePointers(snapshot); restoreErr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "provider_reload_restore_failed", reloadErr.Error()+"; restore distribution pointers: "+restoreErr.Error())
+			return
+		}
+		_, _ = s.reloadProviderRegistry()
+		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", reloadErr.Error()+"; distribution acceptance was reverted")
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "status": status, "diagnostics": diagnostics})
@@ -174,6 +184,11 @@ func (s *Server) handleProviderDistributionRollback(w http.ResponseWriter, r *ht
 		writeJSONError(w, http.StatusServiceUnavailable, "distribution_store_unavailable", "distribution store is unavailable")
 		return
 	}
+	snapshot, err := s.distributionStore.SnapshotPointers()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "distribution_snapshot_failed", err.Error())
+		return
+	}
 	status, err := s.distributionStore.Rollback()
 	if err != nil {
 		writeJSONError(w, http.StatusUnprocessableEntity, "distribution_rollback_failed", err.Error())
@@ -185,7 +200,12 @@ func (s *Server) handleProviderDistributionRollback(w http.ResponseWriter, r *ht
 	// what the running Hub actually resolved providers from.
 	diagnostics, reloadErr := s.reloadProviderRegistry()
 	if reloadErr != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", reloadErr.Error())
+		if restoreErr := s.distributionStore.RestorePointers(snapshot); restoreErr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "provider_reload_restore_failed", reloadErr.Error()+"; restore distribution pointers: "+restoreErr.Error())
+			return
+		}
+		_, _ = s.reloadProviderRegistry()
+		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", reloadErr.Error()+"; distribution rollback was reverted")
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "status": status, "diagnostics": diagnostics})

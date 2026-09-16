@@ -3,6 +3,7 @@ package hub
 import (
 	"crypto/ed25519"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -11,6 +12,15 @@ import (
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/provider"
 )
+
+type failingProviderLoadStore struct{}
+
+func (failingProviderLoadStore) Load() ([]provider.Definition, []provider.Diagnostic, error) {
+	return nil, nil, errors.New("injected provider load failure")
+}
+func (failingProviderLoadStore) CreateNew(provider.Definition) error { return nil }
+func (failingProviderLoadStore) Save(provider.Definition) error      { return nil }
+func (failingProviderLoadStore) Delete(string) error                 { return nil }
 
 func TestBuildProviderRegistryIncludesEmbeddedAndLegacyProviders(t *testing.T) {
 	cfg := &config.Config{CustomProviders: config.CustomProviders{{ID: "my-cli", Command: "my-cli --agent"}}}
@@ -176,5 +186,42 @@ func TestProviderDistributionRollbackReloadsRegistry(t *testing.T) {
 	}
 	if _, ok := s.providerRegistrySnapshot().Lookup("dist-cli-one"); !ok {
 		t.Fatal("rollback did not restore v1's definition in the reloaded registry")
+	}
+}
+
+func TestProviderDistributionRollbackRestoresPointerWhenRegistryReloadFails(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := provider.NewDistributionStore(filepath.Join(t.TempDir(), "provider-distributions"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signAndAcceptDistribution(t, store, "v1", "dist-cli-one", privateKey, publicKey)
+	signAndAcceptDistribution(t, store, "v2", "dist-cli-two", privateKey, publicKey)
+	before, err := store.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestServer()
+	s.cfg.Token = "test-token"
+	s.distributionStore = store
+	s.providerStore = failingProviderLoadStore{}
+	req := httptest.NewRequest(http.MethodPost, "/api/provider-distributions/rollback?token=test-token", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:47777")
+	req.Host = "127.0.0.1:47777"
+	resp := httptest.NewRecorder()
+	s.handleProviderDistributionRollback(resp, req)
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("rollback status = %d, want 500; body=%s", resp.Code, resp.Body.String())
+	}
+	after, err := store.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("reload failure left disk pointer changed: before=%#v after=%#v", before, after)
 	}
 }

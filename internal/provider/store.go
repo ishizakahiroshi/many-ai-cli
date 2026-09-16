@@ -164,39 +164,9 @@ func (s *FileStore) Save(definition Definition) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := os.MkdirAll(s.root, 0o700); err != nil {
-		return fmt.Errorf("create provider store: %w", err)
-	}
-	tmp, err := os.CreateTemp(s.root, ".provider-*.json")
-	if err != nil {
-		return fmt.Errorf("create provider temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("chmod provider temp file: %w", err)
-	}
-	if _, err := tmp.Write(raw); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write provider definition: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close provider definition: %w", err)
-	}
 	target := filepath.Join(s.root, definition.ID+".json")
-	if err := os.Rename(tmpName, target); err != nil {
-		// Windows does not replace an existing file with Rename. Keep the
-		// fallback narrow; C9 will add the verified backup/replace protocol.
-		if _, statErr := os.Stat(target); statErr != nil {
-			return fmt.Errorf("replace provider definition: %w", err)
-		}
-		if removeErr := os.Remove(target); removeErr != nil {
-			return fmt.Errorf("replace provider definition: %w", err)
-		}
-		if renameErr := os.Rename(tmpName, target); renameErr != nil {
-			return fmt.Errorf("replace provider definition: %w", renameErr)
-		}
+	if err := writeBytesAtomic(target, raw); err != nil {
+		return fmt.Errorf("replace provider definition: %w", err)
 	}
 	return nil
 }

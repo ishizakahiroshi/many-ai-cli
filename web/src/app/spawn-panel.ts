@@ -716,6 +716,8 @@ export function resetSpawnProviderOrder(): void {
   // 既知 provider だけを許可するため、subscription 欄は selectableProfiles が未知 id に
   // 対して自然に空を返すため、どちらも custom provider では追加対応なしで元々隠れる）。
   const injectedCustomProviderIds = new Set<string>();
+  const registryBuiltinProviderIds = new Set(['claude', 'codex', 'copilot', 'cursor-agent', 'opencode', 'grok', 'command-code']);
+  let providerOptionsGeneration = 0;
   const addProviderOptionValue = '__add-ai-provider__';
   function addProviderOptionLabel(): string {
     const label = t('settings_ai_providers_add_option');
@@ -726,17 +728,21 @@ export function resetSpawnProviderOrder(): void {
   }
   async function injectCustomProviderOptions(): Promise<void> {
     if (!spawnProviderEl) return;
+    const generation = ++providerOptionsGeneration;
     try {
       const res = await apiFetch('/api/info');
+      if (generation !== providerOptionsGeneration) return;
       if (!res.ok) return;
       const info = await res.json();
+      if (generation !== providerOptionsGeneration) return;
       // 同じ応答から起動要求の共通 3 項目の候補値も取り込む（追加の fetch をしない）。
       setLaunchOptionChoices(info);
       syncEffortField((spawnProviderEl as HTMLSelectElement).value);
-      const providerResponse = await loadProviderSummaries();
+      const providerResponse = await loadProviderSummaries({ includeDisabled: true });
+      if (generation !== providerOptionsGeneration) return;
       const list = providerResponse
         ? providerResponse.providers
-          .filter((entry) => entry.origin !== 'embedded')
+          .filter((entry) => !registryBuiltinProviderIds.has(entry.id))
           .map((entry) => ({ id: entry.id, label: entry.display_name }))
         : (Array.isArray(info?.custom_providers) ? info.custom_providers : []);
       const select = spawnProviderEl as HTMLSelectElement;
@@ -788,6 +794,28 @@ export function resetSpawnProviderOrder(): void {
         existing.add(entry.id);
         injectedCustomProviderIds.add(entry.id);
         changed = true;
+      }
+      if (providerResponse) {
+        for (const entry of providerResponse.providers) {
+          const option = Array.from(select.options).find((candidate) => candidate.value === entry.id);
+          if (!option) continue;
+          if (injectedCustomProviderIds.has(entry.id) && option.textContent !== entry.display_name) {
+            option.textContent = entry.display_name || entry.id;
+            changed = true;
+          }
+          const disabled = entry.enabled === false;
+          if (option.disabled !== disabled) {
+            option.disabled = disabled;
+            changed = true;
+          }
+          if (disabled && select.value === entry.id) {
+            const fallback = Array.from(select.options).find((candidate) => (
+              !candidate.disabled && candidate.value !== addProviderOptionValue
+            ));
+            select.value = fallback?.value || '';
+            select.dispatchEvent(new Event('change'));
+          }
+        }
       }
       if (!existing.has(addProviderOptionValue)) {
         const addOption = document.createElement('option');

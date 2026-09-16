@@ -112,7 +112,7 @@ export function providerErrorMessage(failure: ProviderRequestFailureLike): { key
     return { key: 'settings_ai_providers_offline', fallback: 'You appear to be offline. Check your connection and try again.', vars: {} };
   }
   if (failure.kind === 'http' && failure.status === 409) {
-    return { key: 'settings_ai_providers_conflict', fallback: 'This was changed elsewhere. Reload and try again.', vars: {} };
+    return { key: 'settings_ai_providers_revision_conflict', fallback: 'This was changed elsewhere. Reload and try again.', vars: {} };
   }
   if (failure.kind === 'http' && (failure.status ?? 0) >= 500) {
     return { key: 'settings_ai_providers_server_error', fallback: 'Server error ({status}). Try again shortly.', vars: { status: failure.status ?? 0 } };

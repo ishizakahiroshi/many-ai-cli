@@ -84,6 +84,64 @@ func TestBuiltinProviderFirstOverrideSucceeds(t *testing.T) {
 	}
 }
 
+func TestBuiltinProviderHistoryDiffAndResetRoutes(t *testing.T) {
+	s := newProviderAPITestServer(t)
+	definition, ok := s.providerRegistrySnapshot().Lookup("claude")
+	if !ok {
+		t.Fatal("claude is not registered")
+	}
+	definition.Definition.DisplayName = "Claude first edit"
+	first := patchProviderRequest(t, s, "claude", "", definition.Definition)
+	if first.Code != http.StatusOK {
+		t.Fatalf("first PATCH status = %d, body=%s", first.Code, first.Body.String())
+	}
+	firstRevision, err := s.historyStore.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition.Definition.DisplayName = "Claude second edit"
+	second := patchProviderRequest(t, s, "claude", firstRevision.Revision, definition.Definition)
+	if second.Code != http.StatusOK {
+		t.Fatalf("second PATCH status = %d, body=%s", second.Code, second.Body.String())
+	}
+	current, err := s.historyStore.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	diffReq := httptest.NewRequest(http.MethodGet, "/api/providers/claude/history/"+firstRevision.Revision+"/diff?token=test-token", nil)
+	diffReq.Header.Set("Origin", "http://127.0.0.1:47777")
+	diffReq.Host = "127.0.0.1:47777"
+	diffResp := httptest.NewRecorder()
+	s.handleProviderRoute(diffResp, diffReq)
+	if diffResp.Code != http.StatusOK {
+		t.Fatalf("history diff status = %d, body=%s", diffResp.Code, diffResp.Body.String())
+	}
+	var diffBody struct {
+		Diff []provider.DistributionProviderDiff `json:"diff"`
+	}
+	if err := json.Unmarshal(diffResp.Body.Bytes(), &diffBody); err != nil {
+		t.Fatal(err)
+	}
+	if len(diffBody.Diff) != 1 || diffBody.Diff[0].Status != "changed" {
+		t.Fatalf("history diff = %#v, want one changed provider", diffBody.Diff)
+	}
+
+	resetBody := bytes.NewReader(mustJSON(t, map[string]any{"expected_revision": current.Revision}))
+	resetReq := httptest.NewRequest(http.MethodPost, "/api/providers/claude/reset?token=test-token", resetBody)
+	resetReq.Header.Set("Origin", "http://127.0.0.1:47777")
+	resetReq.Host = "127.0.0.1:47777"
+	resetResp := httptest.NewRecorder()
+	s.handleProviderRoute(resetResp, resetReq)
+	if resetResp.Code != http.StatusOK {
+		t.Fatalf("reset status = %d, body=%s", resetResp.Code, resetResp.Body.String())
+	}
+	resetDefinition, ok := s.providerRegistrySnapshot().Lookup("claude")
+	if !ok || resetDefinition.Definition.DisplayName == "Claude second edit" {
+		t.Fatalf("reset did not restore base definition: %#v", resetDefinition)
+	}
+}
+
 func TestBuiltinProviderSecondOverrideAndStaleConflict(t *testing.T) {
 	s := newProviderAPITestServer(t)
 	definition, _ := s.providerRegistrySnapshot().Lookup("claude")
@@ -371,6 +429,13 @@ func TestProviderCreatePatchDeleteAPIUsesRevision(t *testing.T) {
 	s.handleProviderRoute(deleteResp, deleteReq)
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("DELETE provider status = %d, body=%s", deleteResp.Code, deleteResp.Body.String())
+	}
+	backups, err := s.historyStore.ListBackups("example-cli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backups) < 3 {
+		t.Fatalf("custom CRUD produced %d backups, want create/before-edit/before-delete", len(backups))
 	}
 }
 

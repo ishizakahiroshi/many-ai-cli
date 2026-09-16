@@ -70,71 +70,97 @@ func indexDefinitions(definitions []Definition) map[string]Definition {
 }
 
 func fieldDiffs(current, candidate, override Definition) []DistributionFieldDiff {
-	fields := []struct {
-		name string
-		cur  string
-		cand string
-		over string
-	}{
-		{"display_name", current.DisplayName, candidate.DisplayName, override.DisplayName},
-		{"launch.executable", launchExecutable(current), launchExecutable(candidate), launchExecutable(override)},
-		{"launch.args", encodeJSON(launchArgs(current)), encodeJSON(launchArgs(candidate)), encodeJSON(launchArgs(override))},
-		{"adapters", encodeJSON(current.Adapters), encodeJSON(candidate.Adapters), encodeJSON(override.Adapters)},
-		{"capabilities", encodeJSON(current.Capabilities), encodeJSON(candidate.Capabilities), encodeJSON(override.Capabilities)},
+	currentFields := flattenDefinitionForDiff(current)
+	candidateFields := flattenDefinitionForDiff(candidate)
+	overrideFields := flattenDefinitionForDiff(override)
+	fieldNames := make(map[string]struct{}, len(currentFields)+len(candidateFields)+len(overrideFields))
+	for name := range currentFields {
+		fieldNames[name] = struct{}{}
 	}
+	for name := range candidateFields {
+		fieldNames[name] = struct{}{}
+	}
+	for name := range overrideFields {
+		fieldNames[name] = struct{}{}
+	}
+	ordered := make([]string, 0, len(fieldNames))
+	for name := range fieldNames {
+		if name != "id" {
+			ordered = append(ordered, name)
+		}
+	}
+	sort.Strings(ordered)
 	var changes []DistributionFieldDiff
-	for _, field := range fields {
-		if field.cur == field.cand && field.over == "" {
+	for _, name := range ordered {
+		cur := currentFields[name]
+		cand := candidateFields[name]
+		over, hasOverride := overrideFields[name]
+		if cur == cand && !hasOverride {
 			continue
 		}
-		if field.cur == field.cand && field.over == field.cur {
+		if cur == cand && over == cur {
 			continue
 		}
-		if field.cur == field.cand && field.over != "" && field.over != field.cur {
+		if cur == cand && hasOverride {
 			changes = append(changes, DistributionFieldDiff{
-				Field:    field.name,
-				Current:  field.cur,
-				Override: field.over,
+				Field:    name,
+				Current:  cur,
+				Override: over,
 				Conflict: false,
 			})
 			continue
 		}
-		if field.cur == field.cand {
-			continue
-		}
-		conflict := field.over != "" && field.over != field.cand && field.over != field.cur
+		conflict := hasOverride && over != cand && over != cur
 		changes = append(changes, DistributionFieldDiff{
-			Field:     field.name,
-			Current:   field.cur,
-			Candidate: field.cand,
-			Override:  field.over,
+			Field:     name,
+			Current:   cur,
+			Candidate: cand,
+			Override:  over,
 			Conflict:  conflict,
 		})
 	}
 	return changes
 }
 
-func launchExecutable(definition Definition) string {
-	if definition.Launch == nil {
-		return ""
-	}
-	return definition.Launch.Executable
-}
-
-func launchArgs(definition Definition) []string {
-	if definition.Launch == nil {
+func flattenDefinitionForDiff(definition Definition) map[string]string {
+	raw, err := json.Marshal(definition)
+	if err != nil {
 		return nil
 	}
-	return definition.Launch.Args
+	var value map[string]any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil
+	}
+	out := make(map[string]string)
+	flattenDistributionValue(out, "", value)
+	return out
 }
 
-func encodeJSON(value any) string {
-	if value == nil {
-		return ""
+func flattenDistributionValue(out map[string]string, prefix string, value any) {
+	if object, ok := value.(map[string]any); ok {
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			name := key
+			if prefix != "" {
+				name = prefix + "." + key
+			}
+			flattenDistributionValue(out, name, object[key])
+		}
+		return
+	}
+	if prefix == "" {
+		return
+	}
+	if text, ok := value.(string); ok {
+		out[prefix] = text
+		return
 	}
 	raw, err := json.Marshal(value)
-	if err != nil || string(raw) == "null" || string(raw) == "{}" || string(raw) == "[]" {
-		return ""
+	if err == nil {
+		out[prefix] = string(raw)
 	}
-	return string(raw)
 }

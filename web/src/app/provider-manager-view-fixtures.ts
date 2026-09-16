@@ -59,7 +59,7 @@ test('isBuiltinProviderID: 組み込み7種のみ true、shell と custom は fa
 
 test('providerErrorMessage: offline / 409 / 5xx / その他 で別キーを返す', () => {
   assert.equal(providerErrorMessage({ kind: 'network' }).key, 'settings_ai_providers_offline');
-  assert.equal(providerErrorMessage({ kind: 'http', status: 409 }).key, 'settings_ai_providers_conflict');
+  assert.equal(providerErrorMessage({ kind: 'http', status: 409 }).key, 'settings_ai_providers_revision_conflict');
   const serverError = providerErrorMessage({ kind: 'http', status: 503 });
   assert.equal(serverError.key, 'settings_ai_providers_server_error');
   assert.equal(serverError.vars.status, 503);

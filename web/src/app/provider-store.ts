@@ -282,6 +282,39 @@ export async function loadProviderHistory(id: string, options?: { signal?: Abort
   return { ok: true, revisions: Array.isArray(result.body?.revisions) ? result.body.revisions : [] };
 }
 
+export type ProviderHistoryDiffResult =
+  | { ok: true; diff: unknown[]; currentRevision: string }
+  | ProviderRequestFailure;
+
+export async function loadProviderRevisionDiff(id: string, revision: string, options?: { signal?: AbortSignal }): Promise<ProviderHistoryDiffResult> {
+  const result = await providerFetchJSON(
+    `/api/providers/${encodeURIComponent(id)}/history/${encodeURIComponent(revision)}/diff?token=${encodeURIComponent(token || '')}`,
+    { headers: { Accept: 'application/json' } },
+    options?.signal,
+  );
+  if (result.outcome === 'aborted') return { ok: false, kind: 'aborted' };
+  if (result.outcome === 'network') return { ok: false, kind: 'network' };
+  if (result.outcome === 'http-error') return providerHTTPFailure(result.status, result.body);
+  return {
+    ok: true,
+    diff: Array.isArray(result.body?.diff) ? result.body.diff : [],
+    currentRevision: typeof result.body?.current_revision === 'string' ? result.body.current_revision : '',
+  };
+}
+
+export async function resetProviderOverride(id: string, expectedRevision: string): Promise<ProviderMutationResult> {
+  const result = await providerFetchJSON(
+    `/api/providers/${encodeURIComponent(id)}/reset?token=${encodeURIComponent(token || '')}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ expected_revision: expectedRevision }),
+    },
+    undefined,
+  );
+  return providerMutationOutcome(result);
+}
+
 export type ProviderBackupsResult =
   | { ok: true; backups: ProviderRevisionRecord[] }
   | ProviderRequestFailure;

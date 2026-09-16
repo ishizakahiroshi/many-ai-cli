@@ -141,6 +141,13 @@ func (s *Server) handleProviderCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnprocessableEntity, "provider_save_failed", err.Error())
 		return
 	}
+	if s.historyStore != nil {
+		if _, err := s.historyStore.BackupSnapshot(definition.ID, definition, "create"); err != nil {
+			_ = s.providerStore.Delete(definition.ID)
+			writeJSONError(w, http.StatusInternalServerError, "provider_backup_failed", err.Error())
+			return
+		}
+	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
 		return
@@ -158,6 +165,14 @@ func (s *Server) handleProviderRoute(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(path, "/")
 	if len(parts) == 2 && parts[1] == "history" {
 		s.handleProviderHistory(w, r, parts[0])
+		return
+	}
+	if len(parts) == 4 && parts[1] == "history" && parts[3] == "diff" {
+		s.handleProviderHistoryDiff(w, r, parts[0], parts[2])
+		return
+	}
+	if len(parts) == 2 && parts[1] == "reset" {
+		s.handleProviderReset(w, r, parts[0])
 		return
 	}
 	if len(parts) == 2 && parts[1] == "restore" {
@@ -292,7 +307,7 @@ func (s *Server) handleProviderPatch(w http.ResponseWriter, r *http.Request, id 
 			writeJSONError(w, http.StatusServiceUnavailable, "history_store_unavailable", "provider history store is unavailable")
 			return
 		}
-		if _, err := s.historyStore.SaveOverride(id, body.Definition, s.baselineProviderDefinition(id), expected, "edit"); err != nil {
+		if _, err := s.historyStore.SaveEffectiveOverride(id, body.Definition, s.baselineProviderDefinition(id), expected, "edit"); err != nil {
 			writeProviderHistoryError(w, "provider_override_failed", err)
 			return
 		}
@@ -308,6 +323,12 @@ func (s *Server) handleProviderPatch(w http.ResponseWriter, r *http.Request, id 
 	if registry == nil || registry.Revision() != expected {
 		writeJSONError(w, http.StatusConflict, "revision_conflict", "provider registry changed; reload and try again")
 		return
+	}
+	if current, ok := registry.Lookup(id); ok && s.historyStore != nil {
+		if _, err := s.historyStore.BackupSnapshot(id, current.Definition, "before-edit"); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "provider_backup_failed", err.Error())
+			return
+		}
 	}
 	if err := s.providerStore.Save(body.Definition); err != nil {
 		writeJSONError(w, http.StatusUnprocessableEntity, "provider_save_failed", err.Error())
@@ -380,6 +401,12 @@ func (s *Server) handleProviderDelete(w http.ResponseWriter, r *http.Request, id
 		writeJSONError(w, http.StatusConflict, "revision_conflict", "provider registry changed; reload and try again")
 		return
 	}
+	if current, ok := registry.Lookup(id); ok && s.historyStore != nil {
+		if _, err := s.historyStore.BackupSnapshot(id, current.Definition, "before-delete"); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "provider_backup_failed", err.Error())
+			return
+		}
+	}
 	if err := s.providerStore.Delete(id); err != nil {
 		writeJSONError(w, http.StatusNotFound, "provider_delete_failed", err.Error())
 		return
@@ -406,6 +433,66 @@ func (s *Server) handleProviderHistory(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 	writeJSON(w, map[string]any{"provider_id": id, "revisions": revisions})
+}
+
+func (s *Server) handleProviderHistoryDiff(w http.ResponseWriter, r *http.Request, id, revision string) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	if s.historyStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "history_store_unavailable", "provider history store is unavailable")
+		return
+	}
+	selected, err := s.historyStore.GetRevision(id, revision)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "history_not_found", err.Error())
+		return
+	}
+	current, err := s.historyStore.Current(id)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "history_not_found", err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{
+		"provider_id":      id,
+		"revision":         revision,
+		"current_revision": current.Revision,
+		"diff":             provider.DiffDistribution([]provider.Definition{current.Payload}, []provider.Definition{selected.Payload}, nil),
+	})
+}
+
+func (s *Server) handleProviderReset(w http.ResponseWriter, r *http.Request, id string) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	if !provider.IsBuiltinID(id) {
+		writeJSONError(w, http.StatusBadRequest, "provider_reset_not_builtin", "only built-in providers can be reset")
+		return
+	}
+	if s.historyStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "history_store_unavailable", "provider history store is unavailable")
+		return
+	}
+	var body struct {
+		ExpectedRevision *string `json:"expected_revision"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if body.ExpectedRevision == nil {
+		writeJSONError(w, http.StatusBadRequest, "expected_revision_required", "expected_revision is required")
+		return
+	}
+	if _, err := s.historyStore.Reset(id, *body.ExpectedRevision); err != nil {
+		writeProviderHistoryError(w, "provider_reset_failed", err)
+		return
+	}
+	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		return
+	} else {
+		writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
+	}
 }
 
 func (s *Server) handleProviderRestore(w http.ResponseWriter, r *http.Request, id string) {
@@ -486,16 +573,16 @@ func (s *Server) handleProviderBackupRestore(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var body struct {
-		ExpectedRevision string `json:"expected_revision"`
+		ExpectedRevision *string `json:"expected_revision"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	if strings.TrimSpace(body.ExpectedRevision) == "" {
+	if body.ExpectedRevision == nil {
 		writeJSONError(w, http.StatusBadRequest, "expected_revision_required", "expected_revision is required")
 		return
 	}
-	if _, err := s.historyStore.RestoreBackup(id, backupID, body.ExpectedRevision); err != nil {
+	if _, err := s.historyStore.RestoreBackup(id, backupID, *body.ExpectedRevision); err != nil {
 		writeProviderHistoryError(w, "backup_restore_failed", err)
 		return
 	}

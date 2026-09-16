@@ -87,6 +87,50 @@ func TestDiffDistributionMarksConflictsWithoutResolvingThem(t *testing.T) {
 	}
 }
 
+func TestDiffDistributionIncludesAllDefinitionFields(t *testing.T) {
+	enabled := true
+	disabled := false
+	current := []Definition{{
+		SchemaVersion: 1,
+		ID:            "example",
+		DisplayName:   "Example",
+		Enabled:       &enabled,
+		Models:        &ModelsDefinition{Items: []ModelDefinition{{ID: "old-model", Label: "Old"}}},
+		Launch: &LaunchDefinition{
+			Executable:           "example",
+			ExecutableCandidates: []string{"example-old"},
+			ModelArgs:            []string{"--model", "{model}"},
+			Headless:             &HeadlessDefinition{Args: []string{"--headless"}},
+		},
+	}}
+	candidate := []Definition{{
+		SchemaVersion: 1,
+		ID:            "example",
+		DisplayName:   "Example",
+		Enabled:       &disabled,
+		Models:        &ModelsDefinition{Items: []ModelDefinition{{ID: "new-model", Label: "New"}}},
+		Launch: &LaunchDefinition{
+			Executable:           "example",
+			ExecutableCandidates: []string{"example-new"},
+			ModelArgs:            []string{"--model-id", "{model}"},
+			Headless:             &HeadlessDefinition{Args: []string{"--batch"}},
+		},
+	}}
+	diff := DiffDistribution(current, candidate, nil)
+	if len(diff) != 1 || diff[0].Status != "changed" {
+		t.Fatalf("diff = %#v, want changed", diff)
+	}
+	fields := make(map[string]bool)
+	for _, change := range diff[0].Changes {
+		fields[change.Field] = true
+	}
+	for _, field := range []string{"enabled", "models.items", "launch.executable_candidates", "launch.model_args", "launch.headless.args"} {
+		if !fields[field] {
+			t.Errorf("diff fields = %#v, missing %q", fields, field)
+		}
+	}
+}
+
 // signTestBundle builds+signs a single-provider distribution payload and
 // returns its raw wire bytes and content digest, ready for SaveDownloaded.
 func signTestBundle(t *testing.T, catalogVersion, displayName string, privateKey ed25519.PrivateKey, keyID string, publicKey ed25519.PublicKey) ([]byte, string) {
@@ -324,6 +368,109 @@ func TestDistributionStoreRollbackRejectsBrokenPreviousBundle(t *testing.T) {
 	loaded, err := store.LoadAcceptedBundle()
 	if err != nil || loaded.Payload.CatalogVersion != "v2" {
 		t.Fatalf("failed rollback left an unreadable/wrong accepted bundle: %#v, %v", loaded.Payload, err)
+	}
+}
+
+func TestDistributionStoreRollbackRejectsEmptyDigestWithoutChangingAccepted(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	store, err := NewDistributionStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, digest := signTestBundle(t, "v1", "One", privateKey, "test-key", publicKey)
+	if err := store.SaveDownloaded(raw, digest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Accept(digest, map[string]ed25519.PublicKey{"test-key": publicKey}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "previous.json"), []byte(`{"state":"accepted"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := store.Status()
+	if _, err := store.Rollback(); err == nil {
+		t.Fatal("rollback accepted a previous pointer without a digest")
+	}
+	after, _ := store.Status()
+	if after != before {
+		t.Fatalf("failed rollback changed accepted pointer: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestDistributionStoreRollbackRejectsSchemaInvalidSelfConsistentBundle(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	store, err := NewDistributionStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, digest := signTestBundle(t, "v1", "One", privateKey, "test-key", publicKey)
+	if err := store.SaveDownloaded(raw, digest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Accept(digest, map[string]ed25519.PublicKey{"test-key": publicKey}, ""); err != nil {
+		t.Fatal(err)
+	}
+	invalidBundle := DistributionBundle{Payload: DistributionPayload{
+		SchemaVersion:  CurrentSchemaVersion,
+		CatalogVersion: "invalid",
+		Definitions:    []Definition{{SchemaVersion: CurrentSchemaVersion, ID: "broken", DisplayName: "Broken"}},
+		Digests:        map[string]string{},
+	}}
+	invalidRaw, err := json.Marshal(invalidBundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalidDigest := distributionContentDigest(invalidRaw)
+	acceptedDir := filepath.Join(root, "accepted")
+	if err := os.WriteFile(filepath.Join(acceptedDir, invalidDigest+".json"), invalidRaw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pointer, _ := json.Marshal(DistributionStatus{CatalogVersion: "invalid", Digest: invalidDigest, State: "accepted"})
+	if err := os.WriteFile(filepath.Join(root, "previous.json"), pointer, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := store.Status()
+	if _, err := store.Rollback(); err == nil {
+		t.Fatal("rollback accepted a schema-invalid self-consistent bundle")
+	}
+	after, _ := store.Status()
+	if after != before {
+		t.Fatalf("failed rollback changed accepted pointer: before=%#v after=%#v", before, after)
+	}
+}
+
+func TestDistributionStoreRejectsSymlinkBundleFile(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	store, err := NewDistributionStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, digest := signTestBundle(t, "v1", "One", privateKey, "test-key", publicKey)
+	downloadedDir := filepath.Join(root, "downloaded")
+	if err := os.MkdirAll(downloadedDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "bundle.json")
+	if err := os.WriteFile(outside, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(downloadedDir, digest+".json")); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	if _, err := store.LoadDownloadedBundle(digest); err == nil {
+		t.Fatal("downloaded bundle symlink was accepted")
 	}
 }
 

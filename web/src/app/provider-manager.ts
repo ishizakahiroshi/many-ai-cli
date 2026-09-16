@@ -15,8 +15,10 @@ import {
   loadProviderBackups,
   loadProviderDetail,
   loadProviderHistory,
+  loadProviderRevisionDiff,
   loadProviderSummaries,
   removeProvider as requestRemoveProvider,
+  resetProviderOverride,
   restoreProviderBackup,
   restoreProviderRevision,
   saveProviderDefinition,
@@ -50,7 +52,6 @@ function definitionForAdvancedPreview(definition: ProviderEffectiveDefinition): 
   delete rest.schema_version;
   delete rest.id;
   delete rest.display_name;
-  delete rest.enabled;
   delete rest.source;
   delete rest.effective_source;
   delete rest.revision;
@@ -80,10 +81,11 @@ function initProviderManager(): void {
   const historyPanel = document.getElementById('provider-history-panel') as HTMLElement | null;
   const historyCloseButton = document.getElementById('provider-history-close');
   const historyStatus = document.getElementById('provider-history-status') as HTMLElement | null;
+  const historyResetButton = document.getElementById('provider-history-reset') as HTMLButtonElement | null;
   const historyRevisionsList = document.getElementById('provider-history-revisions');
   const historyBackupsList = document.getElementById('provider-history-backups');
   if (!list || !addButton || !status || !overlay || !form || !title || !idInput || !labelInput || !executableInput || !advancedInput || !validateButton || !saveButton || !cancelButton || !closeButton || !result
-    || !historyOverlay || !historyPanel || !historyCloseButton || !historyStatus || !historyRevisionsList || !historyBackupsList) return;
+    || !historyOverlay || !historyPanel || !historyCloseButton || !historyStatus || !historyResetButton || !historyRevisionsList || !historyBackupsList) return;
 
   let editing: ProviderFormState = null;
   let currentRevision = '';
@@ -91,11 +93,13 @@ function initProviderManager(): void {
   let previousFocus: HTMLElement | null = null;
   let keyHandler: ((event: KeyboardEvent) => void) | null = null;
   let detailAbort: AbortController | null = null;
+  let saving = false;
   const detailGuard = createRequestGuard();
   const listGuard = createRequestGuard();
   let historyPreviousFocus: HTMLElement | null = null;
   let historyKeyHandler: ((event: KeyboardEvent) => void) | null = null;
   let historyAbort: AbortController | null = null;
+  let historyProvider: ProviderSummary | null = null;
   const historyGuard = createRequestGuard();
 
   const setStatus = (message: string, warning = false): void => {
@@ -125,6 +129,8 @@ function initProviderManager(): void {
   const setFormBusy = (busy: boolean): void => {
     validateButton.disabled = busy;
     saveButton.disabled = busy;
+    (cancelButton as HTMLButtonElement).disabled = busy;
+    (closeButton as HTMLButtonElement).disabled = busy;
   };
 
   // definitionFromForm merges the required basic fields with the optional
@@ -135,11 +141,12 @@ function initProviderManager(): void {
   // adapters, presentation, launch.args/model_args/effort_*/headless, ...)
   // passes through untouched.
   const definitionFromForm = (): { ok: true; definition: Record<string, unknown> } | { ok: false; message: string } => {
+    const executable = executableInput.value.trim();
     const base: Record<string, unknown> = {
       schema_version: 1,
       id: idInput.value.trim(),
       display_name: labelInput.value.trim(),
-      launch: { executable: executableInput.value.trim() },
+      launch: executable ? { executable } : {},
     };
     const advancedRaw = advancedInput.value.trim();
     if (!advancedRaw) return { ok: true, definition: base };
@@ -188,6 +195,7 @@ function initProviderManager(): void {
   };
 
   const showForm = (value: ProviderSummary | null = null): void => {
+    detailGuard.begin();
     detailAbort?.abort();
     detailAbort = null;
     const isBuiltin = value ? isBuiltinProviderID(value.id) : false;
@@ -197,6 +205,7 @@ function initProviderManager(): void {
     idInput.disabled = !!value;
     labelInput.value = value?.display_name || '';
     executableInput.value = '';
+    executableInput.required = true;
     advancedInput.value = '';
     setFormBusy(!!editing?.pending);
     setResult('', '');
@@ -214,6 +223,8 @@ function initProviderManager(): void {
   };
 
   const hideForm = (): void => {
+    if (saving) return;
+    detailGuard.begin();
     detailAbort?.abort();
     detailAbort = null;
     editing = null;
@@ -353,6 +364,8 @@ function initProviderManager(): void {
     const definition = detail.provider;
     const launch = (definition.launch && typeof definition.launch === 'object') ? definition.launch as Record<string, unknown> : {};
     executableInput.value = typeof launch.executable === 'string' ? launch.executable : '';
+    const candidates = Array.isArray(launch.executable_candidates) ? launch.executable_candidates : [];
+    executableInput.required = !(isBuiltin && !executableInput.value && candidates.length > 0);
     advancedInput.value = definitionForAdvancedPreview(definition);
     editing = {
       id: provider.id,
@@ -398,6 +411,33 @@ function initProviderManager(): void {
       return;
     }
     setHistoryStatus(tx('settings_ai_providers_history_verified', 'Verified.'), 'ok');
+  };
+
+  const showRevisionDiff = async (providerId: string, revision: string): Promise<void> => {
+    const diff = await loadProviderRevisionDiff(providerId, revision);
+    if (diff.ok === false) {
+      if (diff.kind !== 'aborted') setHistoryStatus(providerFailureText(diff), 'error');
+      return;
+    }
+    setHistoryStatus(JSON.stringify(diff.diff, null, 2), 'ok');
+  };
+
+  const resetHistoryProvider = async (): Promise<void> => {
+    const provider = historyProvider;
+    if (!provider || !isBuiltinProviderID(provider.id)) return;
+    const detail = await loadProviderDetail(provider.id);
+    if (detail.ok === false) {
+      if (detail.kind !== 'aborted') setHistoryStatus(providerFailureText(detail), 'error');
+      return;
+    }
+    const reset = await resetProviderOverride(provider.id, detail.provider.effective_source?.revision || '');
+    if (reset.ok === false) {
+      if (reset.kind !== 'aborted') setHistoryStatus(providerFailureText(reset), 'error');
+      return;
+    }
+    setHistoryStatus(tx('settings_ai_providers_history_reset_done', 'Reset to distributed default.'), 'ok');
+    await load();
+    await loadHistoryContent(provider.id, provider.display_name || provider.id);
   };
 
   const restoreAction = async (
@@ -474,6 +514,14 @@ function initProviderManager(): void {
         verifyButton.addEventListener('click', () => void verifyBackupAction(providerId, record.revision));
         actions.append(verifyButton);
       }
+      if (kind === 'revision') {
+        const diffButton = document.createElement('button');
+        diffButton.className = 'settings-inline-btn';
+        diffButton.type = 'button';
+        diffButton.textContent = tx('settings_ai_providers_history_diff', 'Diff');
+        diffButton.addEventListener('click', () => void showRevisionDiff(providerId, record.revision));
+        actions.append(diffButton);
+      }
       if (!isCurrent) {
         const restoreButton = document.createElement('button');
         restoreButton.className = 'settings-inline-btn';
@@ -520,6 +568,8 @@ function initProviderManager(): void {
     historyRevisionsList.innerHTML = '';
     historyBackupsList.innerHTML = '';
     historyPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    historyProvider = provider;
+    historyResetButton.hidden = !isBuiltinProviderID(provider.id);
     historyOverlay.hidden = false;
     if (!historyKeyHandler) {
       historyKeyHandler = onHistoryKeyDown;
@@ -529,8 +579,8 @@ function initProviderManager(): void {
     await loadHistoryContent(provider.id, provider.display_name || provider.id);
   };
 
-  const validate = async (): Promise<boolean> => {
-    const definition = currentDefinitionOrShowError();
+  const validate = async (capturedDefinition?: Record<string, unknown>): Promise<boolean> => {
+    const definition = capturedDefinition || currentDefinitionOrShowError();
     if (!definition) return false;
     const response = await validateProviderDefinition(definition);
     if (!response) {
@@ -548,18 +598,33 @@ function initProviderManager(): void {
   };
 
   const save = async (): Promise<void> => {
-    if (editing?.pending) return;
-    if (!(await validate())) return;
     const definition = currentDefinitionOrShowError();
     if (!definition) return;
+    if (editing?.pending || saving) return;
+    const submittedEditing = editing ? { ...editing } : null;
+    const requestToken = detailGuard.begin();
+    saving = true;
+    setFormBusy(true);
+    if (!(await validate(definition)) || !detailGuard.isCurrent(requestToken)) {
+      saving = false;
+      setFormBusy(false);
+      return;
+    }
     const savedId = String(definition.id || '');
 
-    const mutation: ProviderMutationResult = editing
-      ? await saveProviderDefinition(editing.id, editing.revision, definition)
+    const mutation: ProviderMutationResult = submittedEditing
+      ? await saveProviderDefinition(submittedEditing.id, submittedEditing.revision, definition)
       : await createProvider(definition);
+    if (!detailGuard.isCurrent(requestToken)) {
+      saving = false;
+      setFormBusy(false);
+      return;
+    }
+    saving = false;
+    setFormBusy(false);
     if (mutation.ok === false) {
       if (mutation.kind === 'aborted') return;
-      if (!editing && mutation.kind === 'http' && mutation.status === 409) {
+      if (!submittedEditing && mutation.kind === 'http' && mutation.status === 409) {
         // Create-time 409 is "this id already exists", a different situation
         // from the revision-conflict 409 an edit gets, so it keeps its own
         // specific wording instead of the generic providerErrorMessage copy.
@@ -640,6 +705,7 @@ function initProviderManager(): void {
     if (event.target === overlay) hideForm();
   });
   historyCloseButton.addEventListener('click', hideHistoryOverlay);
+  historyResetButton.addEventListener('click', () => void resetHistoryProvider());
   historyOverlay.addEventListener('click', (event) => {
     if (event.target === historyOverlay) hideHistoryOverlay();
   });
