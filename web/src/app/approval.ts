@@ -9,7 +9,7 @@ import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, ex
 import { approvalUiAdapter, clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { actionBarNeedsRepaint, actionBarOwnedByOther, releaseActionBarOwnership } from './approval-owner.js';
 import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, isTranscriptBackedProvider, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
-import { token } from './util.js';
+import { apiFetch, token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
 import { probe, probeScope } from '../debug/probe.js';
@@ -303,7 +303,7 @@ export const knownCustomProviderIds = new Set<string>();
 // いいかを知るため、先にこちらの完了を待ってから走る。
 const knownCustomProviderIdsReady = (async function loadKnownCustomProviderIds() {
   try {
-    const res = await fetch(`api/info?token=${encodeURIComponent(token || '')}`);
+    const res = await apiFetch('/api/info');
     if (!res.ok) return;
     const info = await res.json();
     const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];

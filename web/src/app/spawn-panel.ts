@@ -1,12 +1,13 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, showToast, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, token } from './util.js';
 import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
-import { appConfirm, appConfirmOllamaEncoding, setSettingsPanelOpen } from './settings.js';
+import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { loadProviderSummaries } from './provider-store.js';
+import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
@@ -716,13 +717,17 @@ export function resetSpawnProviderOrder(): void {
   // 対して自然に空を返すため、どちらも custom provider では追加対応なしで元々隠れる）。
   const injectedCustomProviderIds = new Set<string>();
   const addProviderOptionValue = '__add-ai-provider__';
+  function addProviderOptionLabel(): string {
+    const label = t('settings_ai_providers_add_option');
+    return label === 'settings_ai_providers_add_option' ? '＋ Add AI CLI…' : label;
+  }
   function isCustomProviderValue(p: string): boolean {
     return injectedCustomProviderIds.has(p);
   }
   async function injectCustomProviderOptions(): Promise<void> {
     if (!spawnProviderEl) return;
     try {
-      const res = await fetch(`/api/info?token=${token}`);
+      const res = await apiFetch('/api/info');
       if (!res.ok) return;
       const info = await res.json();
       // 同じ応答から起動要求の共通 3 項目の候補値も取り込む（追加の fetch をしない）。
@@ -736,29 +741,70 @@ export function resetSpawnProviderOrder(): void {
         : (Array.isArray(info?.custom_providers) ? info.custom_providers : []);
       const select = spawnProviderEl as HTMLSelectElement;
       const existing = new Set(Array.from(select.options).map((opt) => opt.value));
-      let added = false;
-      for (const entry of list) {
-        const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
-        if (!id || existing.has(id)) continue; // built-in や重複と衝突する id は表示しない
+      let changed = false;
+
+      // reconcileSpawnProviderOptions は削除直後に注入済みの <option> が残るのを
+      // 防ぐための純粋な差分計算（see spawn-provider-options.ts）。以前はここが
+      // 「追加するだけ」だったので、Provider Manager で custom provider を削除
+      // しても、この関数が何かのきっかけで再実行されるまで select には消えた
+      // はずの選択肢が残っていた。削除の突き合わせは providerResponse（provider
+      // API の一覧）が取れた時だけ行う（reconcileRemovals）。/api/info の legacy
+      // custom_providers フォールバック（オフライン等で providerResponse が
+      // null のとき）を正とみなして削除すると、一時的な取得失敗のたびに選択肢
+      // が消えかねない。
+      const freshEntries = list
+        .map((entry: { id?: unknown; label?: unknown }) => ({
+          id: typeof entry?.id === 'string' ? entry.id.trim() : '',
+          label: typeof entry?.label === 'string' && entry.label ? entry.label : (typeof entry?.id === 'string' ? entry.id : ''),
+        }))
+        .filter((entry: { id: string }) => entry.id.length > 0);
+      const diff = reconcileSpawnProviderOptions({
+        injectedIds: Array.from(injectedCustomProviderIds),
+        freshEntries,
+        existingOptionValues: Array.from(existing),
+        selectedValue: select.value,
+        reconcileRemovals: !!providerResponse,
+      });
+
+      for (const id of diff.toRemove) {
+        const stale = Array.from(select.options).find((opt) => opt.value === id);
+        if (stale) stale.remove();
+        injectedCustomProviderIds.delete(id);
+        existing.delete(id);
+        changed = true;
+      }
+      if (diff.resetSelection) {
+        // 消えた選択肢が選択中だった分は、実際にユーザーが選び直したのと
+        // 同じ経路（change イベント）で安全な既定値へ戻す。
+        select.value = 'claude';
+        select.dispatchEvent(new Event('change'));
+      }
+
+      for (const entry of diff.toAdd) {
         const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = typeof entry?.label === 'string' && entry.label ? entry.label : id;
+        opt.value = entry.id;
+        opt.textContent = entry.label;
         select.appendChild(opt);
-        existing.add(id);
-        injectedCustomProviderIds.add(id);
-        added = true;
+        existing.add(entry.id);
+        injectedCustomProviderIds.add(entry.id);
+        changed = true;
       }
       if (!existing.has(addProviderOptionValue)) {
         const addOption = document.createElement('option');
         addOption.value = addProviderOptionValue;
-        addOption.textContent = '＋ AI CLIを追加…';
+        addOption.textContent = addProviderOptionLabel();
         select.appendChild(addOption);
         existing.add(addProviderOptionValue);
-        added = true;
+        changed = true;
+      } else {
+        const addOption = select.querySelector(`option[value="${addProviderOptionValue}"]`);
+        if (addOption) addOption.textContent = addProviderOptionLabel();
       }
-      if (added) {
+      if (changed) {
         updateSpawnProviderIcon();
         syncSpawnProviderFields(spawnProviderEl.value);
+      } else {
+        updateSpawnProviderIcon();
       }
     } catch (_) { /* オフライン等: 追加されないだけで既存の選択肢はそのまま動く */ }
   }
@@ -1076,18 +1122,17 @@ export function resetSpawnProviderOrder(): void {
     }
   }
 
+  let lastSpawnProviderValue = spawnProviderEl.value || 'claude';
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
     if (p === addProviderOptionValue) {
-      spawnProviderEl.value = 'claude';
-      setSettingsPanelOpen(true);
-      const section = document.querySelector<HTMLElement>('[data-section="ai-providers"]');
-      if (section instanceof HTMLDetailsElement) section.open = true;
+      spawnProviderEl.value = lastSpawnProviderValue || 'claude';
       document.dispatchEvent(new CustomEvent('provider-enrollment-open'));
       updateSpawnProviderIcon();
       return;
     }
+    lastSpawnProviderValue = p;
     syncSpawnProviderFields(p);
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
@@ -1101,6 +1146,23 @@ export function resetSpawnProviderOrder(): void {
   updateSpawnProviderIcon();
   document.addEventListener('i18n-ready', () => {
     syncPermissionModeOptions(spawnProviderEl.value);
+    void injectCustomProviderOptions();
+  });
+  document.addEventListener('provider-enrollment-saved', (event: Event) => {
+    const id = String((event as CustomEvent).detail?.id || '');
+    void injectCustomProviderOptions().then(() => {
+      if (!id) return;
+      spawnProviderEl.value = id;
+      lastSpawnProviderValue = id;
+      updateSpawnProviderIcon();
+      syncSpawnProviderFields(id);
+    });
+  });
+  // custom provider の削除も一覧の突き合わせをやり直す。除去自体は
+  // injectCustomProviderOptions 内の freshIds 突き合わせが行う（このリスナーは
+  // それを起動するだけ）。
+  document.addEventListener('provider-enrollment-deleted', () => {
+    void injectCustomProviderOptions();
   });
 
   // フォーカス時に入力値を一時クリアして datalist の全候補を表示し、
@@ -1951,7 +2013,7 @@ export function resetSpawnProviderOrder(): void {
     const hasSavedCwd = loadSpawnSettings();
     if (!hasSavedCwd) {
       try {
-        const res = await fetch(`/api/info?token=${token}`);
+        const res = await apiFetch('/api/info');
         if (res.ok) spawnCwdInput.value = (await res.json()).cwd || '';
       } catch (_) {}
     }
@@ -1986,7 +2048,7 @@ export function resetSpawnProviderOrder(): void {
       spawnCwdInput.value = cwd;
     } else if (!spawnCwdInput.value) {
       try {
-        const res = await fetch(`/api/info?token=${token}`);
+        const res = await apiFetch('/api/info');
         if (res.ok) spawnCwdInput.value = (await res.json()).cwd || '';
       } catch (_) {}
     }
@@ -2219,7 +2281,7 @@ export function resetSpawnProviderOrder(): void {
     let start = String(startPath || spawnCwdInput.value || '').trim();
     if (!start || !/[/\\]/.test(start) && !/^[A-Za-z]:/.test(start)) {
       try {
-        const res = await fetch(`/api/info?token=${token}`);
+        const res = await apiFetch('/api/info');
         if (res.ok) {
           const info = await res.json();
           if (info?.cwd) start = String(info.cwd);
@@ -2240,7 +2302,7 @@ export function resetSpawnProviderOrder(): void {
   async function shouldPreferWebDirBrowser(): Promise<boolean> {
     // Remote Hub: native OS dialogs open on the server host, never in the user's browser.
     try {
-      const res = await fetch(`/api/info?token=${token}`);
+      const res = await apiFetch('/api/info');
       if (res.ok) {
         const info = await res.json();
         if (info?.env_kind === 'remote') return true;

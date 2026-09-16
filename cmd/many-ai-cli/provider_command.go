@@ -102,7 +102,7 @@ func runProviderResetCommand(history *provider.HistoryStore, args []string) erro
 		if definition.ID != id {
 			continue
 		}
-		revision, saveErr := history.SaveOverride(id, definition, expected, "reset")
+		revision, saveErr := history.SaveOverride(id, definition, provider.Definition{}, expected, "reset")
 		if saveErr != nil {
 			return saveErr
 		}

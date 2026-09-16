@@ -522,7 +522,7 @@ Mở `http://127.0.0.1:47777/?token=<token>`.
 ### Bố cục (tóm tắt)
 
 - **Header**: chip `[running][waiting][standby]`, đếm theo provider; `⏻` dừng Hub; Settings.  
-- **Sidebar trái**: `+ New Session`; session nhóm theo project folder; pin / đóng / state badge / branch / last response.  
+- **Sidebar trái**: `+ New Session`; session nhóm theo project folder; pin / đóng / state badge / branch / last response. Cuối danh sách provider có **Thêm AI CLI**, cùng dialog với **Settings → Tích hợp AI CLI**.
 - **Pane phải**: terminal xterm.js + ô nhập + attach + slash picker.  
 - **Tab**: Terminal, Chat, Split, Multi, Files, Git (Files/Git lazy).  
 - **Action-bar phê duyệt** phía trên input khi chờ; multi-question có Submit all.  

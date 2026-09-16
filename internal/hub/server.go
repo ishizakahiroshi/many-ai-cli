@@ -754,6 +754,7 @@ type Server struct {
 	providerRegistryMu sync.RWMutex
 	providerStore      provider.Store
 	historyStore       *provider.HistoryStore
+	distributionStore  *provider.DistributionStore
 	logger             *slog.Logger
 	httpSrv            *http.Server
 	devMode            bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
@@ -1176,6 +1177,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	}
 	var providerStore provider.Store
 	var historyStore *provider.HistoryStore
+	var distributionStore *provider.DistributionStore
 	providers, providerDiagnostics, providerErr := buildProviderRegistry(cfg)
 	if dir, dirErr := config.Dir(); dirErr == nil {
 		if store, storeErr := provider.NewFileStore(filepath.Join(dir, "providers.d")); storeErr == nil {
@@ -1183,15 +1185,24 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 			if history, historyErr := provider.NewHistoryStore(filepath.Join(dir, "provider-overrides"), filepath.Join(dir, "backups", "providers")); historyErr == nil {
 				historyStore = history
 			}
+			if dist, distErr := provider.NewDistributionStore(filepath.Join(dir, "provider-distributions")); distErr == nil {
+				distributionStore = dist
+			}
 			if userDefinitions, storeDiagnostics, loadErr := store.Load(); loadErr == nil {
 				var overrides []provider.Definition
 				var historyDiagnostics []provider.Diagnostic
 				if historyStore != nil {
 					overrides, historyDiagnostics, _ = historyStore.LoadOverrides()
 				}
-				providers, providerDiagnostics, providerErr = buildProviderRegistryLayers(cfg, userDefinitions, overrides)
+				// Reapplies whatever distribution was accepted in a prior
+				// run: without this, a Hub restart silently dropped back to
+				// only embedded/legacy/user/override layers until the next
+				// unrelated reload happened to run.
+				acceptedDefinitions, distributionDiagnostics := loadAcceptedDistributionDefinitions(distributionStore)
+				providers, providerDiagnostics, providerErr = buildProviderRegistryLayers(cfg, userDefinitions, overrides, acceptedDefinitions)
 				providerDiagnostics = append(providerDiagnostics, storeDiagnostics...)
 				providerDiagnostics = append(providerDiagnostics, historyDiagnostics...)
+				providerDiagnostics = append(providerDiagnostics, distributionDiagnostics...)
 			} else {
 				providerDiagnostics = append(providerDiagnostics, provider.Diagnostic{Code: "provider_store_load", Severity: provider.SeverityError, Field: "providers.d", Message: "user provider definitions could not be loaded"})
 			}
@@ -1209,6 +1220,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		providers:             providers,
 		providerStore:         providerStore,
 		historyStore:          historyStore,
+		distributionStore:     distributionStore,
 		logger:                logger,
 		devMode:               devMode,
 		hubCWD:                hubCWD,
@@ -1350,6 +1362,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/providers", s.handleProviders)
 	mux.HandleFunc("/api/providers/", s.handleProviderRoute)
+	mux.HandleFunc("/api/provider-distributions/", s.handleProviderDistributions)
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,15 @@ import (
 )
 
 const historySchemaVersion = 1
+
+// ErrRevisionConflict is the sentinel a caller checks with errors.Is to tell a
+// stale optimistic-lock write apart from every other validation failure.
+// Callers on the API boundary map it to HTTP 409; everything else stays a
+// generic failure. Before this existed, the Hub handlers had no way to
+// distinguish "you were editing an old copy" from "the payload is invalid",
+// and collapsed the built-in provider's very first override (parent == "")
+// into the same conflict as a stale one.
+var ErrRevisionConflict = errors.New("provider revision conflict")
 
 type RevisionRecord struct {
 	SchemaVersion  int        `json:"schema_version"`
@@ -39,7 +49,24 @@ func NewHistoryStore(root, backupRoot string) (*HistoryStore, error) {
 	return &HistoryStore{root: filepath.Clean(root), backupRoot: filepath.Clean(backupRoot)}, nil
 }
 
-func (s *HistoryStore) SaveOverride(providerID string, payload Definition, expectedRevision, reason string) (RevisionRecord, error) {
+// SaveOverride merges payload onto whatever is currently overridden for
+// providerID (if anything) and saves the result as a new revision, instead
+// of replacing the previous override wholesale. Without this, saving any
+// override — even one that only sets a single field, like the enabled
+// toggle DELETE uses to soft-disable a built-in provider — discarded every
+// other field a prior edit had customized, and froze the *entire* resolved
+// definition (including fields the caller never touched) into the override
+// forever, so it stopped tracking updates to the embedded/distribution base
+// even for fields nobody had asked to override.
+//
+// baseline is what this provider resolves to without any override (the
+// caller's embedded/distribution/user layers) — never written to disk,
+// used only so a payload that is genuinely partial (e.g. {enabled: false}
+// alone, with no history yet to merge onto) can still be validated as a
+// complete, schema-valid Definition once merged with something. Passing
+// Definition{} is fine when payload is already self-sufficient (has its own
+// launch.executable, as every existing caller's full-snapshot payload does).
+func (s *HistoryStore) SaveOverride(providerID string, payload, baseline Definition, expectedRevision, reason string) (RevisionRecord, error) {
 	if s == nil {
 		return RevisionRecord{}, fmt.Errorf("history store is nil")
 	}
@@ -52,26 +79,95 @@ func (s *HistoryStore) SaveOverride(providerID string, payload Definition, expec
 	if payload.ID != providerID {
 		return RevisionRecord{}, fmt.Errorf("payload provider id does not match %q", providerID)
 	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return RevisionRecord{}, fmt.Errorf("encode override payload: %w", err)
-	}
-	diagnostics, err := ValidateDefinition(raw, DefaultAdapterCatalog())
-	if err != nil {
-		return RevisionRecord{}, err
-	}
-	if hasDiagnosticError(diagnostics) {
-		return RevisionRecord{}, fmt.Errorf("override payload is invalid")
-	}
 	if reason == "" {
 		reason = "edit"
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveLocked(providerID, payload, expectedRevision, reason)
+	merged, err := s.mergeWithCurrentOverrideLocked(providerID, payload)
+	if err != nil {
+		return RevisionRecord{}, err
+	}
+	if err := validateOverrideAgainstBaseline(merged, baseline); err != nil {
+		return RevisionRecord{}, err
+	}
+	return s.saveLocked(providerID, merged, expectedRevision, reason)
+}
+
+// mergeWithCurrentOverrideLocked applies payload on top of the current
+// override's payload (if any) using the exact same field-merge rule the
+// Registry itself uses to layer embedded/distribution/user/override
+// definitions (mergeDefinition in merge.go): a key payload does not set is
+// left as whatever the current override already had, and nested objects
+// (launch, models, adapters, ...) merge per sub-field rather than being
+// replaced wholesale.
+func (s *HistoryStore) mergeWithCurrentOverrideLocked(providerID string, payload Definition) (Definition, error) {
+	current, err := s.currentLocked(providerID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return payload, nil
+		}
+		return Definition{}, err
+	}
+	return mergeDefinitionValues(current.Payload, payload)
+}
+
+// validateOverrideAgainstBaseline checks that payload merged onto baseline
+// (never onto payload alone) is a complete, schema-valid Definition. This
+// is deliberately not "validate payload in isolation": a sparse override
+// like {enabled: false} has no launch.executable of its own, and never
+// will — completeness only exists once it is combined with whatever
+// embedded/distribution layer actually supplies the base defaults, which is
+// also how the Registry itself validates the final merged result.
+func validateOverrideAgainstBaseline(payload, baseline Definition) error {
+	effective, err := mergeDefinitionValues(baseline, payload)
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(effective)
+	if err != nil {
+		return fmt.Errorf("encode override payload: %w", err)
+	}
+	diagnostics, err := ValidateDefinition(raw, DefaultAdapterCatalog())
+	if err != nil {
+		return err
+	}
+	if hasDiagnosticError(diagnostics) {
+		return fmt.Errorf("override payload is invalid")
+	}
+	return nil
+}
+
+func mergeDefinitionValues(base, overlay Definition) (Definition, error) {
+	baseRaw, err := json.Marshal(base)
+	if err != nil {
+		return Definition{}, fmt.Errorf("encode override base: %w", err)
+	}
+	overlayRaw, err := json.Marshal(overlay)
+	if err != nil {
+		return Definition{}, fmt.Errorf("encode override payload: %w", err)
+	}
+	var baseMap, overlayMap map[string]json.RawMessage
+	if err := json.Unmarshal(baseRaw, &baseMap); err != nil {
+		return Definition{}, err
+	}
+	if err := json.Unmarshal(overlayRaw, &overlayMap); err != nil {
+		return Definition{}, err
+	}
+	var merged Definition
+	if err := json.Unmarshal(marshalRawObject(mergeDefinition(baseMap, overlayMap)), &merged); err != nil {
+		return Definition{}, err
+	}
+	return merged, nil
 }
 
 func (s *HistoryStore) saveLocked(providerID string, payload Definition, expectedRevision, reason string) (RevisionRecord, error) {
+	if err := ensureInsideRoot(s.root, filepath.Join(s.root, providerID)); err != nil {
+		return RevisionRecord{}, err
+	}
+	if err := ensureInsideRoot(s.backupRoot, filepath.Join(s.backupRoot, providerID)); err != nil && !os.IsNotExist(err) {
+		return RevisionRecord{}, err
+	}
 	current, currentErr := s.currentLocked(providerID)
 	if currentErr != nil && !os.IsNotExist(currentErr) {
 		return RevisionRecord{}, currentErr
@@ -80,8 +176,8 @@ func (s *HistoryStore) saveLocked(providerID string, payload Definition, expecte
 	if currentErr == nil {
 		parent = current.Revision
 	}
-	if expectedRevision != "" && expectedRevision != parent {
-		return RevisionRecord{}, fmt.Errorf("revision conflict: expected %s, current %s", expectedRevision, parent)
+	if expectedRevision != parent {
+		return RevisionRecord{}, fmt.Errorf("%w: expected %q, current %q", ErrRevisionConflict, expectedRevision, parent)
 	}
 	if currentErr == nil {
 		if err := s.writeBackupLocked(current); err != nil {
@@ -109,7 +205,7 @@ func (s *HistoryStore) saveLocked(providerID string, payload Definition, expecte
 	if err := writeJSONAtomic(revisionPath, record); err != nil {
 		return RevisionRecord{}, err
 	}
-	verified, err := readRevision(revisionPath)
+	verified, err := readRevision(revisionPath, providerID)
 	if err != nil || verified.ContentDigest != digest {
 		return RevisionRecord{}, fmt.Errorf("verify revision %s: %w", revision, err)
 	}
@@ -163,7 +259,7 @@ func (s *HistoryStore) List(providerID string) ([]RevisionRecord, error) {
 	sort.Strings(paths)
 	result := make([]RevisionRecord, 0, len(paths))
 	for _, name := range paths {
-		record, readErr := readRevision(filepath.Join(s.root, providerID, "revisions", name))
+		record, readErr := readRevision(filepath.Join(s.root, providerID, "revisions", name), providerID)
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -194,7 +290,7 @@ func (s *HistoryStore) ListBackups(providerID string) ([]RevisionRecord, error) 
 	sort.Strings(names)
 	result := make([]RevisionRecord, 0, len(names))
 	for _, name := range names {
-		record, readErr := readRevision(filepath.Join(s.backupRoot, providerID, name))
+		record, readErr := readRevision(filepath.Join(s.backupRoot, providerID, name), providerID)
 		if readErr != nil {
 			return nil, readErr
 		}
@@ -213,7 +309,7 @@ func (s *HistoryStore) VerifyBackup(providerID, backupID string) (RevisionRecord
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return readRevision(filepath.Join(s.backupRoot, providerID, name))
+	return readRevision(filepath.Join(s.backupRoot, providerID, name), providerID)
 }
 
 // backupFileName は backupID をファイル名へ正規化する唯一の口で、**検査もここで行う。**
@@ -240,7 +336,7 @@ func (s *HistoryStore) RestoreBackup(providerID, backupID, expectedRevision stri
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	backup, err := readRevision(filepath.Join(s.backupRoot, providerID, name))
+	backup, err := readRevision(filepath.Join(s.backupRoot, providerID, name), providerID)
 	if err != nil {
 		return RevisionRecord{}, err
 	}
@@ -271,6 +367,10 @@ func (s *HistoryStore) LoadOverrides() ([]Definition, []Diagnostic, error) {
 			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_override_id", Severity: SeverityError, Field: id, Message: "invalid override directory"})
 			continue
 		}
+		if err := ensureInsideRoot(s.root, filepath.Join(s.root, id)); err != nil {
+			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_override_path", Severity: SeverityError, Field: id, Message: "override directory is outside the store root"})
+			continue
+		}
 		record, readErr := s.currentLocked(id)
 		if readErr != nil {
 			_, _ = QuarantineFile(filepath.Join(s.root, id, "HEAD"), filepath.Join(s.backupRoot, "quarantine"), "invalid override HEAD")
@@ -287,7 +387,9 @@ func (s *HistoryStore) currentLocked(providerID string) (RevisionRecord, error) 
 	if err := ValidateHistoryProviderID(providerID); err != nil {
 		return RevisionRecord{}, err
 	}
-	head, err := os.ReadFile(filepath.Join(s.root, providerID, "HEAD"))
+	headPath := filepath.Join(s.root, providerID, "HEAD")
+	recoverInterruptedAtomicReplace(headPath)
+	head, err := os.ReadFile(headPath)
 	if err != nil {
 		return RevisionRecord{}, err
 	}
@@ -305,7 +407,7 @@ func (s *HistoryStore) readRevisionLocked(providerID, revision string) (Revision
 	if revision == "" || filepath.Base(revision) != revision {
 		return RevisionRecord{}, fmt.Errorf("invalid revision")
 	}
-	return readRevision(filepath.Join(s.root, providerID, "revisions", revision+".json"))
+	return readRevision(filepath.Join(s.root, providerID, "revisions", revision+".json"), providerID)
 }
 
 // writeBackupLocked の record.ProviderID は **ディスク上の revision ファイルの中身**
@@ -320,10 +422,13 @@ func (s *HistoryStore) writeBackupLocked(record RevisionRecord) error {
 		return fmt.Errorf("backup revision is invalid")
 	}
 	path := filepath.Join(s.backupRoot, record.ProviderID, record.Revision+".json")
+	if err := ensureInsideRoot(s.backupRoot, filepath.Join(s.backupRoot, record.ProviderID)); err != nil {
+		return err
+	}
 	if err := writeJSONAtomic(path, record); err != nil {
 		return fmt.Errorf("write provider backup: %w", err)
 	}
-	verified, err := readRevision(path)
+	verified, err := readRevision(path, record.ProviderID)
 	if err != nil || verified.ContentDigest != record.ContentDigest {
 		return fmt.Errorf("verify provider backup: %w", err)
 	}
@@ -337,7 +442,20 @@ func (s *HistoryStore) writeBackupLocked(record RevisionRecord) error {
 // gosec の taint 解析は正規表現ベースの検証関数を sanitizer と認識できないため、
 // 検証を足しても G703 が残る。`internal/hub/approval_patterns.go` の同種の
 // 注記と同じ形で、検証している場所を名指しして抑止する。
-func readRevision(path string) (RevisionRecord, error) {
+//
+// expectedProviderID は呼び出し口が「このディレクトリ／この provider 向けの
+// はず」として持っている provider ID で、読み込んだレコードの ProviderID・
+// Payload.ID の両方と突き合わせる。ContentDigest は record.Payload 自身との
+// 整合性しか見ないため、provider A のディレクトリから読み込んだ自己整合的な
+// revision ファイルをそのまま provider B のディレクトリへコピーされても、
+// digest チェックだけでは検出できない。呼び出し口はどれもディレクトリを
+// providerID から組み立てているので、この不一致は「別 provider の
+// metadata / payload が混入した revision」の唯一の検出点になる。
+// 同様に record.Revision もファイル名（拡張子を除いた部分）と突き合わせる。
+// ContentDigest は Payload の整合性しか見ないため、ファイル名と食い違う
+// Revision を record 内に書いても検出できない別経路になる。
+func readRevision(path, expectedProviderID string) (RevisionRecord, error) {
+	recoverInterruptedAtomicReplace(path)
 	raw, err := os.ReadFile(path) // #nosec G703 -- ValidateHistoryProviderID + filepath.Base 検査 + backupFileName を通った部品のみで組み立てたパス
 	if err != nil {
 		return RevisionRecord{}, err
@@ -348,6 +466,15 @@ func readRevision(path string) (RevisionRecord, error) {
 	}
 	if record.SchemaVersion != historySchemaVersion || record.Revision == "" || record.ContentDigest == "" {
 		return RevisionRecord{}, fmt.Errorf("invalid revision metadata")
+	}
+	if expectedRevision := strings.TrimSuffix(filepath.Base(path), ".json"); record.Revision != expectedRevision {
+		return RevisionRecord{}, fmt.Errorf("revision id mismatch: filename implies %q, record has %q", expectedRevision, record.Revision)
+	}
+	if record.ProviderID != expectedProviderID {
+		return RevisionRecord{}, fmt.Errorf("revision provider id mismatch: expected %q, found %q", expectedProviderID, record.ProviderID)
+	}
+	if record.Payload.ID != expectedProviderID {
+		return RevisionRecord{}, fmt.Errorf("revision payload id mismatch: expected %q, found %q", expectedProviderID, record.Payload.ID)
 	}
 	if definitionDigest(record.Payload) != record.ContentDigest {
 		return RevisionRecord{}, fmt.Errorf("revision content digest mismatch")
@@ -372,6 +499,54 @@ func ValidateHistoryProviderID(id string) error {
 	}
 	if id == "shell" {
 		return fmt.Errorf("shell is reserved")
+	}
+	return nil
+}
+
+func ensureInsideRoot(root, path string) error {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(absPath)
+	if os.IsNotExist(err) {
+		if filepath.Clean(absPath) == filepath.Clean(absRoot) {
+			return nil
+		}
+		parent := filepath.Dir(absPath)
+		if parent == absPath {
+			return fmt.Errorf("path escapes store root")
+		}
+		return ensureInsideRoot(root, parent)
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("store path must not be a symlink")
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(absRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			resolvedRoot = absRoot
+		} else {
+			return err
+		}
+	}
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(filepath.Clean(resolvedRoot), filepath.Clean(resolvedPath))
+	if err != nil {
+		return err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("path escapes store root")
 	}
 	return nil
 }

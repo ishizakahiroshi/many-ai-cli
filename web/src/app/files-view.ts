@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
 import { refitActiveTerminalAfterLayout } from './terminal.js';
@@ -953,7 +953,7 @@ export const FilesTabManager = (function () {
     // /api/info からセッション一覧を取得して gitRoot → projectKey のマッピングを試みる
     let sessions = [];
     try {
-      const res = await fetch(`/api/info?token=${encodeURIComponent(token)}`);
+      const res = await apiFetch('/api/info');
       if (res.ok) { const d = await res.json(); sessions = d.sessions || []; }
     } catch (err) {
       console.warn('[FilesTabManager] /api/info fetch error:', err);

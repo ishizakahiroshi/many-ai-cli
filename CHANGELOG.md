@@ -11,6 +11,22 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **You can add an AI CLI from the Hub UI.** Open Settings → AI CLI
+  integrations, or pick *Add AI CLI* at the end of the New Session provider
+  list. The dialog asks for a display name and executable, then Validate and
+  Save. A failed check or save keeps what you typed. After a save from New
+  Session, the new CLI is selected so you can start it without reopening
+  Settings. JSON editing is not required.
+- **Provider settings now keep a local history and automatic backups.** A
+  failed save or a damaged file does not delete the last good revision; the
+  broken copy is quarantined. You can restore from history in Settings or
+  with `provider backup list`, `provider backup verify`, `provider backup
+  restore`, and `provider reset --distributed`.
+- **Official AI CLI catalog import is prepared but stays off.** Hub can
+  compare a signed catalog with your overrides and roll back an accepted
+  pointer, but it will not download or activate a remote catalog until
+  signing keys are configured. A downloaded definition is never applied
+  automatically.
 - **Git file rows now open the same properties menu as Files**, including open,
   copy, rename, and download actions.
 - **Command Code permission screens now show as Hub approval cards.** You can
@@ -301,9 +317,11 @@ Release artifacts are published at
   backstop against copying the UI JSON; a client that also sends those headers
   can still claim UI origin.
 - Derive-dialog `/api/info` now uses cookie-primary `apiFetch` instead of
-  `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene. Other
-  leftover `?token=` fetches (spawn-panel, settings, files-view, approval,
-  mobile-connect) are unchanged.
+  `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene.
+- Remaining `/api/info?token=` fetches in spawn-panel, settings, files-view,
+  approval, and mobile-connect now use cookie-primary `apiFetch` as well.
+  Other endpoint fetches still put `?token=` on the URL; Hub launch URLs
+  still use `?token=` (D-11). This is not the last leftover.
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped
   `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues

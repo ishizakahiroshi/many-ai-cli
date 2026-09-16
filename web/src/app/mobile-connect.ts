@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { token, showToast, el } from './util.js';
+import { apiFetch, token, showToast, el } from './util.js';
 // serve 状態の取得は外部公開トグルと共有（plan_tailscale-serve-host-toggle.md C2）。
 // 有効化/停止操作はツールバーの 🌐外部公開へ一本化したため、ここでは状態取得のみ参照する。
 import { fetchExposeStatus, enableExpose, type TailscaleStatus, type TailscaleStateName } from './host-expose.js';
@@ -1024,7 +1024,7 @@ async function loadInfo(force: boolean): Promise<void> {
 // A2/IP-4: env_kind を /api/info から取得（メッセージ出し分け用）。失敗時は 'local' 据え置き。
 async function loadEnvKind(): Promise<void> {
   try {
-    const res = await fetch(`/api/info?token=${encodeURIComponent(token || '')}`, { cache: 'no-store' });
+    const res = await apiFetch('/api/info', { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json() as { env_kind?: string };
     const raw = String(data?.env_kind || '').trim().toLowerCase().replace(/_/g, '-');

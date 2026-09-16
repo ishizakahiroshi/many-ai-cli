@@ -15,6 +15,7 @@ import {
   splitCwdPath,
   splitCwdTypeahead,
 } from './cwd-path.js';
+import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 
 // 合成データ。実在のパスは書かない（公開ファイルの層 1 防御）。
 const PARENT = 'C:\\dev\\public';
@@ -224,4 +225,72 @@ test('joinCwdChild: 親が区切りで終わっていれば二重に置かない
   assert.equal(joinCwdChild('/', '/', 'orbit'), '/orbit');
   // 区切りが混在した入力（parent は \ 終わり、sep は /）でも二重にしない
   assert.equal(joinCwdChild('C:\\', '/', 'orbit'), 'C:\\orbit');
+});
+
+// ---- reconcileSpawnProviderOptions ----
+// 由来: docs/local/bugfix_provider-registry-adversarial-review-remediation_2026-09-16.md C2
+// (custom provider 削除直後に stale な spawn option が残らない)
+
+test('reconcileSpawnProviderOptions: 一覧から消えた注入済み id を削除対象にする', () => {
+  const diff = reconcileSpawnProviderOptions({
+    injectedIds: ['my-cli', 'other-cli'],
+    freshEntries: [{ id: 'other-cli', label: 'Other CLI' }],
+    existingOptionValues: ['claude', 'codex', 'my-cli', 'other-cli', '__add-ai-provider__'],
+    selectedValue: 'codex',
+    reconcileRemovals: true,
+  });
+  assert.deepEqual(diff.toRemove, ['my-cli']);
+  assert.deepEqual(diff.toAdd, []);
+  assert.equal(diff.resetSelection, false);
+});
+
+test('reconcileSpawnProviderOptions: 削除される id が選択中なら resetSelection', () => {
+  const diff = reconcileSpawnProviderOptions({
+    injectedIds: ['my-cli'],
+    freshEntries: [],
+    existingOptionValues: ['claude', 'my-cli'],
+    selectedValue: 'my-cli',
+    reconcileRemovals: true,
+  });
+  assert.deepEqual(diff.toRemove, ['my-cli']);
+  assert.equal(diff.resetSelection, true);
+});
+
+test('reconcileSpawnProviderOptions: reconcileRemovals=false では取得失敗を消滅と誤認しない', () => {
+  // /api/info の legacy custom_providers フォールバックしか取れなかった回。
+  const diff = reconcileSpawnProviderOptions({
+    injectedIds: ['my-cli'],
+    freshEntries: [],
+    existingOptionValues: ['claude', 'my-cli'],
+    selectedValue: 'my-cli',
+    reconcileRemovals: false,
+  });
+  assert.deepEqual(diff.toRemove, []);
+  assert.equal(diff.resetSelection, false);
+});
+
+test('reconcileSpawnProviderOptions: 新規 id は追加対象、既存 id は対象外', () => {
+  const diff = reconcileSpawnProviderOptions({
+    injectedIds: ['my-cli'],
+    freshEntries: [{ id: 'my-cli', label: 'My CLI' }, { id: 'new-cli', label: 'New CLI' }],
+    existingOptionValues: ['claude', 'my-cli'],
+    selectedValue: 'my-cli',
+    reconcileRemovals: true,
+  });
+  assert.deepEqual(diff.toRemove, []);
+  assert.deepEqual(diff.toAdd, [{ id: 'new-cli', label: 'New CLI' }]);
+  assert.equal(diff.resetSelection, false);
+});
+
+test('reconcileSpawnProviderOptions: 削除と追加が同時に起きても互いに干渉しない', () => {
+  const diff = reconcileSpawnProviderOptions({
+    injectedIds: ['old-cli'],
+    freshEntries: [{ id: 'new-cli', label: 'New CLI' }],
+    existingOptionValues: ['claude', 'old-cli'],
+    selectedValue: 'old-cli',
+    reconcileRemovals: true,
+  });
+  assert.deepEqual(diff.toRemove, ['old-cli']);
+  assert.deepEqual(diff.toAdd, [{ id: 'new-cli', label: 'New CLI' }]);
+  assert.equal(diff.resetSelection, true);
 });

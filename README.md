@@ -191,7 +191,11 @@ If you never open this section, nothing changes: sessions launch with the enviro
 
 ## Custom providers (power users)
 
-Beyond the [seven built-in CLIs](#supported-providers), you can register your own AI CLI as a spawn option by hand-editing `custom_providers:` in `config.yaml`. There is no "Add provider" button anywhere in the Hub UI — writing `config.yaml` yourself is the only way in, and the only way to change or remove an entry too. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection.
+Beyond the [seven built-in CLIs](#supported-providers), you can register your own AI CLI from the Hub UI. Open **Settings → AI CLI integrations**, or choose **Add AI CLI** at the end of the **+ New Session** provider list. Enter a display name and executable, press Validate, then Save. If validation or save fails, the dialog keeps your input so you can correct it. After a save from New Session, the new CLI is selected. JSON editing is not required.
+
+Editing a built-in provider (or disabling/re-enabling it) saves your change as an override on top of the built-in definition; the built-in definition itself is never modified. Each save creates a new revision and an automatic backup, so a bad edit or a corrupted file never loses the last good state. Open **History** on a provider row to see revisions and backups, verify a backup's integrity, or restore from it; the same actions are available without the UI via `many-ai-cli provider backup list|verify|restore` and `many-ai-cli provider reset --distributed`.
+
+Power users can still hand-edit `custom_providers:` in `config.yaml`. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection. Official catalog import is prepared in the Hub but stays off until signing keys are configured; a downloaded definition is never applied automatically.
 
 ```yaml
 custom_providers:
@@ -969,7 +973,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`.
   - Right edge: `⏻` (stop the Hub) and `Settings` (language, theme, timeouts, log dir, etc.).
 - **Left sidebar (session list)**
-  - Top: `+ New Session` button (opens the spawn dialog).
+  - Top: `+ New Session` button (opens the spawn dialog). The provider list ends with **Add AI CLI**, which opens the same dialog as **Settings → AI CLI integrations**.
   - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
   - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.

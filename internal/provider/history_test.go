@@ -3,6 +3,7 @@ package provider
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -13,11 +14,11 @@ func TestHistoryStoreCreatesImmutableRevisionsAndBackups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}, "", "edit")
+	first, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}, Definition{}, "", "edit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Changed", Launch: &LaunchDefinition{Executable: "claude"}}, first.Revision, "edit")
+	second, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Changed", Launch: &LaunchDefinition{Executable: "claude"}}, Definition{}, first.Revision, "edit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,11 +49,11 @@ func TestHistoryStoreRejectsRevisionConflictAndTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Example", Launch: &LaunchDefinition{Executable: "example"}}, "", "edit")
+	first, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Example", Launch: &LaunchDefinition{Executable: "example"}}, Definition{}, "", "edit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Other", Launch: &LaunchDefinition{Executable: "example"}}, "wrong", "edit"); err == nil {
+	if _, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Other", Launch: &LaunchDefinition{Executable: "example"}}, Definition{}, "wrong", "edit"); err == nil {
 		t.Fatal("stale expected revision was accepted")
 	}
 	if _, err := store.Current("../escape"); err == nil {
@@ -73,7 +74,7 @@ func TestHistoryStoreRejectsTraversalProviderIDOnRestoreAndBackup(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Example", Launch: &LaunchDefinition{Executable: "example"}}, "", "edit")
+	saved, err := store.SaveOverride("example", Definition{SchemaVersion: 1, ID: "example", DisplayName: "Example", Launch: &LaunchDefinition{Executable: "example"}}, Definition{}, "", "edit")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func TestLoadOverridesQuarantinesCorruptHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}, "", "edit"); err != nil {
+	if _, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}, Definition{}, "", "edit"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "claude", "HEAD"), []byte("missing-revision\n"), 0o600); err != nil {
@@ -124,6 +125,9 @@ func TestLoadOverridesQuarantinesCorruptHead(t *testing.T) {
 	if err != nil || len(entries) == 0 {
 		t.Fatalf("quarantine entries = %#v, %v", entries, err)
 	}
+	if _, err := os.Stat(filepath.Join(root, "claude", "HEAD")); err != nil {
+		t.Fatalf("corrupt HEAD was deleted instead of copied: %v", err)
+	}
 }
 
 func TestVerifyBackupRejectsCorruptBackup(t *testing.T) {
@@ -133,11 +137,11 @@ func TestVerifyBackupRejectsCorruptBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}, "", "edit")
+	first, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}, Definition{}, "", "edit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Changed", Launch: &LaunchDefinition{Executable: "claude"}}, first.Revision, "edit"); err != nil {
+	if _, err := store.SaveOverride("claude", Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Changed", Launch: &LaunchDefinition{Executable: "claude"}}, Definition{}, first.Revision, "edit"); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(backups, "claude", first.Revision+".json"), []byte("{}"), 0o600); err != nil {
@@ -145,5 +149,320 @@ func TestVerifyBackupRejectsCorruptBackup(t *testing.T) {
 	}
 	if _, err := store.VerifyBackup("claude", first.Revision); err == nil {
 		t.Fatal("corrupt backup was accepted")
+	}
+}
+
+func testOverride(id, name string) Definition {
+	return Definition{SchemaVersion: 1, ID: id, DisplayName: name, Launch: &LaunchDefinition{Executable: id}}
+}
+
+func TestHistoryStoreMissingRevisionRestoreKeepsCurrent(t *testing.T) {
+	store, err := NewHistoryStore(filepath.Join(t.TempDir(), "overrides"), filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.SaveOverride("example", testOverride("example", "Example"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Restore("example", "missing-revision", first.Revision); err == nil {
+		t.Fatal("missing revision restore was accepted")
+	}
+	current, err := store.Current("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != first.Revision {
+		t.Fatalf("current revision = %s, want %s", current.Revision, first.Revision)
+	}
+}
+
+func TestHistoryStoreCorruptBackupRestoreKeepsCurrent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.SaveOverride("example", testOverride("example", "Example"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.SaveOverride("example", testOverride("example", "Changed"), Definition{}, first.Revision, "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(backups, "example", first.Revision+".json"), []byte("{not-json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RestoreBackup("example", first.Revision, second.Revision); err == nil {
+		t.Fatal("corrupt backup restore was accepted")
+	}
+	current, err := store.Current("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != second.Revision {
+		t.Fatalf("current revision = %s, want %s", current.Revision, second.Revision)
+	}
+}
+
+func TestHistoryStoreOldSchemaRevisionIsRejected(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	store, err := NewHistoryStore(root, filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.SaveOverride("example", testOverride("example", "Example"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "example", "revisions", first.Revision+".json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"schema_version":99,"provider_id":"example","revision":"`+first.Revision+`","content_digest":"deadbeef","payload":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Current("example"); err == nil {
+		t.Fatal("old schema revision was accepted")
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.Current("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != first.Revision {
+		t.Fatalf("restored original revision = %s, want %s", current.Revision, first.Revision)
+	}
+}
+
+func TestHistoryStoreRejectsSecretEnvValuesAndHugePayload(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	store, err := NewHistoryStore(root, filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := testOverride("example", "Example")
+	secret.Launch.AllowedEnv = []string{"TOKEN=not-a-name"}
+	if _, err := store.SaveOverride("example", secret, Definition{}, "", "edit"); err == nil {
+		t.Fatal("environment value was stored as an override")
+	}
+	huge := testOverride("example", strings.Repeat("a", MaxStringLength+1))
+	if _, err := store.SaveOverride("example", huge, Definition{}, "", "edit"); err == nil {
+		t.Fatal("oversized display name was stored as an override")
+	}
+	if _, err := os.Stat(filepath.Join(root, "example", "HEAD")); !os.IsNotExist(err) {
+		t.Fatalf("rejected payload still wrote HEAD: %v", err)
+	}
+}
+
+func TestHistoryStoreBackupWriteFailureKeepsCurrent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups-file")
+	if err := os.WriteFile(backups, []byte("not-a-directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.SaveOverride("example", testOverride("example", "Example"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveOverride("example", testOverride("example", "Changed"), Definition{}, first.Revision, "edit"); err == nil {
+		t.Fatal("save succeeded despite unwritable backup root")
+	}
+	current, err := store.Current("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != first.Revision || current.Payload.DisplayName != "Example" {
+		t.Fatalf("current after failed save = %#v", current)
+	}
+}
+
+func TestHistoryStoreLeftoverTempDoesNotHideCurrent(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	store, err := NewHistoryStore(root, filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.SaveOverride("example", testOverride("example", "Example"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := filepath.Join(root, "example", ".provider-atomic-interrupted")
+	if err := os.WriteFile(tmp, []byte("{partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.Current("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != first.Revision {
+		t.Fatalf("current revision = %s, want %s", current.Revision, first.Revision)
+	}
+}
+
+// TestHistoryStoreRejectsMixedProviderRevision pins a gap the digest check
+// alone cannot close: a revision file is internally self-consistent
+// (ContentDigest matches its own Payload), so copying provider A's revision
+// file verbatim into provider B's directory would pass the digest check
+// while returning A's metadata/payload as if it belonged to B. Every reader
+// must also confirm the loaded record's ProviderID/Payload.ID match the
+// provider directory it was read from.
+func TestHistoryStoreRejectsMixedProviderRevision(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aRevision, err := store.SaveOverride("provider-a", testOverride("provider-a", "A"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bRevision, err := store.SaveOverride("provider-b", testOverride("provider-b", "B"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Copy provider-a's self-consistent revision file into provider-b's
+	// revisions directory under a name provider-b would plausibly have.
+	aPath := filepath.Join(root, "provider-a", "revisions", aRevision.Revision+".json")
+	raw, err := os.ReadFile(aPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mixedPath := filepath.Join(root, "provider-b", "revisions", aRevision.Revision+".json")
+	if err := os.WriteFile(mixedPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := store.readRevisionLocked("provider-b", aRevision.Revision); err == nil {
+		t.Fatal("mixed-provider revision was accepted")
+	}
+	// Also exercise it through a real restore call, not just the internal
+	// reader, with a correct expected-revision so the only reason this can
+	// fail is the mixed-provider revision itself.
+	if _, err := store.Restore("provider-b", aRevision.Revision, bRevision.Revision); err == nil {
+		t.Fatal("restore accepted a mixed-provider revision id")
+	}
+}
+
+// TestSaveOverrideKeepsSparsePayloadFollowingBaselineUpdates pins the C5
+// fix: disabling (or otherwise partially overriding) a provider must not
+// freeze the entire resolved definition into the override. Before this fix,
+// the disable handler saved the *whole* currently-effective definition with
+// enabled flipped, so any field the user never touched (launch, models, ...)
+// stopped tracking later embedded/distribution updates forever.
+func TestSaveOverrideKeepsSparsePayloadFollowingBaselineUpdates(t *testing.T) {
+	store, err := NewHistoryStore(filepath.Join(t.TempDir(), "overrides"), filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude-v1"}}
+	disabled := false
+	if _, err := store.SaveOverride("claude", Definition{ID: "claude", Enabled: &disabled}, baseline, "", "delete"); err != nil {
+		t.Fatal(err)
+	}
+	definitions, diagnostics, err := store.LoadOverrides()
+	if err != nil || len(diagnostics) != 0 || len(definitions) != 1 {
+		t.Fatalf("LoadOverrides = %#v, %#v, %v", definitions, diagnostics, err)
+	}
+	override := definitions[0]
+	if override.Launch != nil {
+		t.Fatalf("sparse enabled-only override captured launch too: %#v", override.Launch)
+	}
+	if override.DisplayName != "" {
+		t.Fatalf("sparse enabled-only override captured display_name too: %q", override.DisplayName)
+	}
+	if override.Enabled == nil || *override.Enabled {
+		t.Fatal("override did not carry the enabled:false it was asked to set")
+	}
+
+	// Merging this sparse override against an UPDATED baseline (a later
+	// embedded/distribution definition change) must pick up the update for
+	// every field the override never touched, while the override's own
+	// field (enabled) still applies.
+	updatedBaseline := Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude-v2"}}
+	registry, diags := Build(Layers{Embedded: []Definition{updatedBaseline}, Overrides: []Definition{override}}, DefaultAdapterCatalog())
+	if len(diags) != 0 {
+		t.Fatalf("Build diagnostics = %#v", diags)
+	}
+	effective, ok := registry.Lookup("claude")
+	if !ok {
+		t.Fatal("claude missing from registry")
+	}
+	if effective.Launch == nil || effective.Launch.Executable != "claude-v2" {
+		t.Fatalf("effective launch = %#v, want claude-v2 (base update should have flowed through)", effective.Launch)
+	}
+	if effective.Enabled == nil || *effective.Enabled {
+		t.Fatalf("effective enabled = %#v, want false (override should still apply)", effective.Enabled)
+	}
+}
+
+// TestSaveOverrideAccumulatesAcrossMultiplePartialSaves pins that
+// successive partial saves (e.g. an edit, then later a disable) merge onto
+// each other rather than each wholly replacing the last — losing an
+// earlier field customization when a later, unrelated field gets
+// overridden would itself be a "did not track intent correctly" bug.
+func TestSaveOverrideAccumulatesAcrossMultiplePartialSaves(t *testing.T) {
+	store, err := NewHistoryStore(filepath.Join(t.TempDir(), "overrides"), filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline := Definition{SchemaVersion: 1, ID: "claude", DisplayName: "Claude", Launch: &LaunchDefinition{Executable: "claude"}}
+	first, err := store.SaveOverride("claude", Definition{ID: "claude", DisplayName: "My Claude"}, baseline, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	disabled := false
+	if _, err := store.SaveOverride("claude", Definition{ID: "claude", Enabled: &disabled}, baseline, first.Revision, "delete"); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Payload.DisplayName != "My Claude" {
+		t.Fatalf("disable lost the earlier display_name override: %#v", current.Payload)
+	}
+	if current.Payload.Enabled == nil || *current.Payload.Enabled {
+		t.Fatalf("disable did not persist enabled:false: %#v", current.Payload)
+	}
+	if current.Payload.Launch != nil {
+		t.Fatalf("neither save touched launch, but it ended up set: %#v", current.Payload.Launch)
+	}
+}
+
+func TestHistoryStoreSymlinkProviderDirDoesNotEscapeRoot(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	link := filepath.Join(root, "example")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+	store, err := NewHistoryStore(root, filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveOverride("example", testOverride("example", "Example"), Definition{}, "", "edit"); err == nil {
+		t.Fatal("symlink provider dir was accepted")
+	}
+	entries, err := os.ReadDir(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("override escaped store root into %#v", entries)
 	}
 }
