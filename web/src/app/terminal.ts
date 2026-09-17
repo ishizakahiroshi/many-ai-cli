@@ -2023,7 +2023,7 @@ function renderLiveStatusDom(mode, text) {
     el.hidden = true;
     el.classList.remove('idle', 'waiting', 'done', ...DONE_KIND_CLASSES);
     if (textEl) textEl.textContent = '';
-    if (iconEl) { iconEl.className = 'live-status-state'; iconEl.innerHTML = ''; delete iconEl.dataset.iconHtml; }
+    if (iconEl) { iconEl.className = 'live-status-state'; iconEl.innerHTML = ''; delete iconEl.dataset.iconKind; }
     if (barEl) barEl.hidden = true;
     syncLiveStatusLongproc();
     return;

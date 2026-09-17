@@ -1493,7 +1493,7 @@ header {
 .card-state-pill.awaiting-input { color: var(--accent); }
 .card-state-pill.workflow-active .card-state-icon { animation: state-pulse 1s ease-in-out infinite; }
 @keyframes state-pulse { 50% { transform: scale(1.45); opacity: .55; } }
-@media (prefers-reduced-motion: reduce) { .card-state-pill.running .card-state-icon, .card-state-pill.workflow-active .card-state-icon { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .card-state-pill.workflow-active .card-state-icon { animation: none; } }
 .card-state-pill.running  { color: var(--badge-running-text); }
 /* running は workflow_active と同じ破線リング(ring)の SVG を使うが、拡大縮小(state-pulse)
    ではなく回転(state-spin)で「処理中」を示す。色を判別できなくても動きだけで伝わる。 */
@@ -1503,17 +1503,15 @@ header {
    （#terminal-live-status）・ワークフローのピルと各エージェント行が同じ速さ・同じ向きで
    回る＝同じ状態が場所ごとに違う動きに見えない。色は各所の CSS が持つ（下地が違うため）。
    セッション帯（タブ）だけは意図的に回さない: 箱のセッションぶん並ぶので、全タブが
-   回ると端末より目立つ。形と色は同じなので状態の読み取りはぶれない。 */
+   回ると端末より目立つ。形と色は同じなので状態の読み取りはぶれない。
+   prefers-reduced-motion: reduce でも回転は止めない。Windows の「アニメーション効果」
+   オフで reduce になるが、回転は「動いているか止まったか」を伝える唯一の手がかりなので、
+   止めると実行中と待機中の区別が色だけになる。拡大縮小（state-pulse）は従来どおり止める。 */
 .live-status-state.running .card-state-svg,
 .wf-pill-spinner.wf-running .card-state-svg,
 .wf-agent-icon.wf-state-running .card-state-svg {
   animation: state-spin 1s linear infinite;
   transform-origin: 50% 50%;
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-status-state.running .card-state-svg,
-  .wf-pill-spinner.wf-running .card-state-svg,
-  .wf-agent-icon.wf-state-running .card-state-svg { animation: none; }
 }
 .card-state-pill.awaiting-approval .card-state-icon { animation: none; }
 .card-state-pill.waiting  { color: var(--warn-text); }
