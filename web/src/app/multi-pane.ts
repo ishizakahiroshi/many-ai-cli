@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { inputEl } from '../app.js';
 import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
-import { ensureAltScrollRail, stepNotches } from './alt-scroll-rail-view.js';
+import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { openProjectKey } from './state.js';
 import { projectKeyForSession } from './sidebar-tree.js';
 import {
@@ -450,7 +450,7 @@ export class MultiPaneManager {
         window.markTerminalManualScrollIntent();
       }
       if (canPageAltBuffer(sessionId, t)) {
-        if (!stepNotches(sessionId, 12)) {
+        if (!requestEdge(sessionId, 'top')) {
           scrollAltBufferPage(sessionId, t, -1);
         }
         t.autoScroll = false;
@@ -461,7 +461,7 @@ export class MultiPaneManager {
       return;
     }
     if (canPageAltBuffer(sessionId, t)) {
-      if (!stepNotches(sessionId, -12)) {
+      if (!requestEdge(sessionId, 'bottom')) {
         scrollAltBufferPage(sessionId, t, 1);
       }
       t.autoScroll = true;

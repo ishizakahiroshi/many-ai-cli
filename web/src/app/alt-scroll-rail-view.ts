@@ -12,6 +12,7 @@ import { terminals } from './state.js';
 import { t as ti18n } from '../i18n.js';
 import {
   AltRailState,
+  altRailApplyNotches,
   altRailClampTarget,
   altRailGeometry,
   altRailInitialState,
@@ -38,6 +39,14 @@ const CONFIRM_TIMEOUT_MS = 350;
  * リトライしてもレールだけ先行するバグは起きない。
  */
 const MAX_CONSECUTIVE_UNCONFIRMED = 3;
+/** 端まで移動（↑ up / ↓ down）で送るノッチ数の上限。CLI が止まらない画面を描き続けた場合の蓋。 */
+const MAX_EDGE_NOTCHES = 5000;
+/**
+ * 下端移動でレール位置が 0 に達した後、さらに送ってよいノッチ数。
+ * レール位置は近似なので 0 でも CLI 側にはまだ下があり得る。一方で出力中の CLI は
+ * 新しい行で画面が上へずれ続け「下へ動いた」と確定し続けるため、ここで打ち切る。
+ */
+const EDGE_OVERSHOOT_NOTCHES = 24;
 
 interface PendingNotch {
   direction: number;
@@ -66,6 +75,10 @@ interface RailEntry {
   travelFrom: number;
   /** 連続で画面変化が確認できなかったノッチ数。MAX_CONSECUTIVE_UNCONFIRMED で打ち切る。 */
   unconfirmedCount: number;
+  /** 端まで移動中の方向（-1 = 最上部へ / 1 = 最下部へ）。null なら target による移動。 */
+  edge: number | null;
+  /** 下端移動でレール位置 0 に達した後に送ったノッチ数。 */
+  edgeOvershoot: number;
 }
 
 const rails = new Map<number, RailEntry>();
@@ -148,6 +161,7 @@ function clearPending(entry: RailEntry): void {
 function stopUnconfirmedRequest(entry: RailEntry): void {
   clearPending(entry);
   entry.target = null;
+  entry.edge = null;
   entry.unconfirmedCount = 0;
   stopPump(entry);
 }
@@ -155,25 +169,40 @@ function stopUnconfirmedRequest(entry: RailEntry): void {
 function pump(id: number): void {
   const entry = rails.get(id);
   if (!entry) return;
-  if (entry.target === null) {
-    stopPump(entry);
-    return;
-  }
-  const diff = entry.target - entry.state.notchesUp;
-  if (diff === 0) {
-    if (!entry.dragging) entry.target = null;
-    stopPump(entry);
-    renderRail(id);
-    return;
+  let direction: number;
+  if (entry.edge !== null) {
+    if (entry.travelSent >= MAX_EDGE_NOTCHES
+      || (entry.edge > 0 && entry.state.notchesUp === 0 && entry.edgeOvershoot >= EDGE_OVERSHOOT_NOTCHES)) {
+      stopUnconfirmedRequest(entry);
+      renderRail(id);
+      return;
+    }
+    direction = entry.edge;
+  } else {
+    if (entry.target === null) {
+      stopPump(entry);
+      return;
+    }
+    const diff = entry.target - entry.state.notchesUp;
+    if (diff === 0) {
+      if (!entry.dragging) entry.target = null;
+      stopPump(entry);
+      renderRail(id);
+      return;
+    }
+    // diff > 0 は「もっと上へ」。
+    direction = diff > 0 ? -1 : 1;
   }
   const t = terminals.get(id);
   if (!t) {
-    entry.target = null;
-    stopPump(entry);
+    stopUnconfirmedRequest(entry);
     return;
   }
-  // diff > 0 は「もっと上へ」。位置の計上は PTY 応答後の confirm で行う。
-  const sent = scrollAltBufferPage(id, t, diff > 0 ? -1 : 1);
+  if (entry.edge !== null && entry.edge > 0 && entry.state.notchesUp === 0 && entry.pending === null) {
+    entry.edgeOvershoot++;
+  }
+  // 位置の計上は PTY 応答後の confirm で行う。
+  const sent = scrollAltBufferPage(id, t, direction);
   // 転送できない戦略・メインバッファへ戻った場合は諦める（レールも次の描画で消える）。
   if (!sent) {
     stopUnconfirmedRequest(entry);
@@ -184,6 +213,11 @@ function pump(id: number): void {
 export function requestNotches(id: number, target: number): boolean {
   const entry = rails.get(id);
   if (!entry) return false;
+  // ホイール・ドラッグ等の新しい操作は、端までの移動を打ち切って引き継ぐ。
+  if (entry.edge !== null) {
+    entry.edge = null;
+    entry.target = null;
+  }
   const clamped = altRailClampTarget(entry.state, target, MAX_QUEUED_NOTCHES);
   // 既に目標どおりの位置で、かつ動いている最中でもないなら「何もしなかった」と正直に返す。
   // ドラッグ中に掴んだ位置へ戻す呼び出し（entry.target が既に非 null）は、動きを止める
@@ -223,6 +257,40 @@ export function stepNotches(id: number, deltaNotches: number): boolean {
   if (!entry) return false;
   const currentBase = entry.target ?? entry.state.notchesUp;
   return requestNotches(id, currentBase + deltaNotches);
+}
+
+/**
+ * ↑ up / ↓ down ボタン用。画面が動かなくなる（MAX_CONSECUTIVE_UNCONFIRMED 回続けて
+ * 移動を確認できない）まで 1 ノッチずつ送り続け、CLI の履歴の端まで移動する。
+ * 1 ノッチごとに画面変化を確認する点は通常の移動と同じなので、レールだけ先行しない。
+ */
+export function requestEdge(id: number, edge: 'top' | 'bottom'): boolean {
+  const entry = rails.get(id);
+  if (!entry) return false;
+  const direction = edge === 'top' ? -1 : 1;
+  markTerminalManualScrollIntent();
+  if (entry.edge === direction) return true;
+  entry.travelSeq++;
+  entry.travelSent = 0;
+  entry.travelConfirmed = 0;
+  entry.travelFrom = entry.state.notchesUp;
+  entry.unconfirmedCount = 0;
+  entry.edgeOvershoot = 0;
+  entry.target = null;
+  entry.edge = direction;
+  probe('altscroll.request', () => ({
+    sessionId: id,
+    seq: entry.travelSeq,
+    from: entry.travelFrom,
+    target: -1,
+    want: direction < 0 ? MAX_EDGE_NOTCHES : -entry.travelFrom,
+  }));
+  renderRail(id);
+  if (entry.pumpTimer === null) {
+    entry.pumpTimer = setInterval(() => pump(id), PUMP_INTERVAL_MS);
+    pump(id);
+  }
+  return true;
 }
 
 function sliderTopFromPointer(entry: RailEntry, clientY: number): number {
@@ -306,6 +374,8 @@ export function ensureAltScrollRail(id: number, t: any): void {
     travelConfirmed: 0,
     travelFrom: 0,
     unconfirmedCount: 0,
+    edge: null,
+    edgeOvershoot: 0,
   };
   rails.set(id, entry);
   bindPointer(id, entry);
@@ -349,9 +419,14 @@ export function beginAltScrollNotch(
     }));
     entry.unconfirmedCount++;
     clearPending(entry);
-    // 連続で未確認が上限に達した場合、あるいは target が空の場合は要求を打ち切る。
+    // 連続で未確認が上限に達した場合、あるいは移動要求が空の場合は要求を打ち切る。
     // 1 回の空振りでは残りのノッチ要求（target）を全破棄せず、次ノッチの試行へ繋ぐ。
-    if (entry.unconfirmedCount >= MAX_CONSECUTIVE_UNCONFIRMED || entry.target === null) {
+    if (entry.unconfirmedCount >= MAX_CONSECUTIVE_UNCONFIRMED || (entry.target === null && entry.edge === null)) {
+      // 下端へ向かって画面が動かなくなった＝CLI はライブの画面にいる。近似のレール位置が
+      // 0 より上に残っていても 0 へ戻す（残すと遡り中と判定され続ける）。
+      if (entry.edge !== null && entry.edge > 0 && entry.unconfirmedCount >= MAX_CONSECUTIVE_UNCONFIRMED) {
+        entry.state = altRailApplyNotches(entry.state, 0);
+      }
       stopUnconfirmedRequest(entry);
     }
     renderRail(id);

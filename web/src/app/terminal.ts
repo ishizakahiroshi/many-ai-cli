@@ -28,7 +28,7 @@ import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
 import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
-import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestEdge, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import {
   resolveTerminalHistoryStrategy,
   terminalHistoryCapabilitiesForProvider,
@@ -1439,10 +1439,8 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   if (!t) return;
   markTerminalManualScrollIntent();
   if (canPageAltBuffer(activeSessionId, t)) {
-    // レール位置は近似（alt-scroll-rail.ts 冒頭のコメント参照）なので、requestNotches が
-    // 「動く必要が無い」と正直に false を返しても CLI 側にはまだ余地があるかもしれない。
-    // その場合は 1 回だけ直接送ってから同じ分岐に合流させる（無反応に見せない）。
-    if (!stepNotches(activeSessionId, 12)) {
+    // 画面が動かなくなるまで送り続けて最上部へ行く。レールが無い場合だけ 1 ノッチ直接送る。
+    if (!requestEdge(activeSessionId, 'top')) {
       scrollAltBufferPage(activeSessionId, t, -1);
     }
     t.autoScroll = false;
@@ -1466,7 +1464,7 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   const t = terminals.get(activeSessionId);
   if (!t) return;
   if (canPageAltBuffer(activeSessionId, t)) {
-    if (!stepNotches(activeSessionId, -12)) {
+    if (!requestEdge(activeSessionId, 'bottom')) {
       scrollAltBufferPage(activeSessionId, t, 1);
     }
     t.autoScroll = true;
