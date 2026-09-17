@@ -320,8 +320,10 @@ Release artifacts are published at
   `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene.
 - Remaining `/api/info?token=` fetches in spawn-panel, settings, files-view,
   approval, and mobile-connect now use cookie-primary `apiFetch` as well.
-  Other endpoint fetches still put `?token=` on the URL; Hub launch URLs
-  still use `?token=` (D-11). This is not the last leftover.
+- Provider Registry UI (`provider-store.ts`) and the relay dialog now use
+  cookie-primary `apiFetch` instead of `?token=` (F-WEB-07). Many other
+  endpoint fetches still put `?token=` on the URL, and Hub launch URLs still
+  use `?token=` (D-11). This is not the last leftover.
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped
   `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues
