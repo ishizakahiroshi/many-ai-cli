@@ -34,22 +34,27 @@ const atomicReplaceShadowSuffix = ".atomic-replace-shadow"
 // interrupted write self-heals into "still has the last valid content"
 // instead of "file not found" — the whole point of doing the rename dance
 // (see below) instead of just deleting path outright.
+//
+// path is always built by this package from a store root plus validated IDs
+// or fixed names, and callers in history.go / distribution.go run
+// ensureInsideRoot on it first; shadow only appends a fixed suffix. That is
+// the justification for the #nosec G703 markers below.
 func recoverInterruptedAtomicReplace(path string) {
 	shadow := path + atomicReplaceShadowSuffix
-	if _, err := os.Stat(path); err == nil {
+	if _, err := os.Stat(path); err == nil { // #nosec G703 -- path is a store-root path built by this package (see func comment)
 		// path is healthy; a leftover shadow here is noise from a replace
 		// that completed but never got to clean up, and leaving it around
 		// could accidentally "recover" a stale value for a future replace's
 		// own crash. Clear it now that we know path itself is fine.
-		_ = os.Remove(shadow)
+		_ = os.Remove(shadow) // #nosec G703 -- shadow is path plus a fixed suffix
 		return
 	} else if !os.IsNotExist(err) {
 		return
 	}
-	if _, err := os.Stat(shadow); err != nil {
+	if _, err := os.Stat(shadow); err != nil { // #nosec G703 -- shadow is path plus a fixed suffix
 		return
 	}
-	_ = os.Rename(shadow, path)
+	_ = os.Rename(shadow, path) // #nosec G703 -- both paths stay inside the store root (see func comment)
 }
 
 func writeBytesAtomic(path string, data []byte) error {

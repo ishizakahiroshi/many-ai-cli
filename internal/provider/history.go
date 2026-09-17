@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -698,7 +699,11 @@ func ensureInsideRoot(root, path string) error {
 		return err
 	}
 	info, err := os.Lstat(absPath)
-	if os.IsNotExist(err) {
+	// 途中の要素がディレクトリでない（ファイル）ときも「まだ存在しない」と同じく親へ遡る。
+	// Windows はこれを ERROR_PATH_NOT_FOUND（IsNotExist）で返すが、POSIX は ENOTDIR を返すので、
+	// 揃えないと同じ構成が Windows では通り Linux / macOS では lstat エラーで止まる。
+	// その位置には何も作れないので、root の外へ抜ける経路にはならない。
+	if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 		if filepath.Clean(absPath) == filepath.Clean(absRoot) {
 			return nil
 		}
