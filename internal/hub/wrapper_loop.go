@@ -1011,7 +1011,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// register / reattach にしか無かったため、いったん止まると次の
 				// 出力が来ても誰も読み直さなかった。承認マーカーの供給元にする以上、
 				// 「出力があるのに読んでいない」時間帯を残せない。
-				if isAgentChatProvider(provider) && !ses.agentChatRunning && !ses.UsageProbe {
+				if providerHasStructuredTranscript(provider) && !ses.agentChatRunning && !ses.UsageProbe {
 					resumeAgentChatTail = true
 				}
 				// 終了マーカーが端末に出た＝回答を書き終えた合図。次の poll を前倒しする。

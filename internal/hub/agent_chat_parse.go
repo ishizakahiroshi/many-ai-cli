@@ -289,7 +289,13 @@ type claudeTranscriptLine struct {
 	} `json:"message"`
 }
 
-type claudeContentBlock struct {
+// anthropicContentBlock is one element of an Anthropic-style content array
+// (text / thinking / tool_use / tool_result). Claude Code writes it, and so does
+// Command Code — measured 2026-09-18 over 20 transcripts / 212 records, see
+// docs/local/reference/reference_transcript-sources.md. The two CLIs' envelopes
+// differ (record type names, extra fields), the block level does not, so the
+// block-level parsing below is shared instead of copied per provider.
+type anthropicContentBlock struct {
 	Type      string          `json:"type"`
 	Text      string          `json:"text"`
 	Thinking  string          `json:"thinking"`
@@ -745,7 +751,35 @@ func parseClaudeTranscript(path string, offset int64) ([]agentChatMessage, int64
 	return parseClaudeTranscriptWithState(path, offset, newAgentChatParseState())
 }
 
-func parseClaudeTranscriptWithState(path string, offset int64, state *agentChatParseState) ([]agentChatMessage, int64, error) {
+// agentChatRecordParser parses one JSONL record of a provider's transcript into
+// state. Everything around it — the bounded reads, the budgets, the forward and
+// backward cursors — is provider-neutral and lives in the three
+// parseAgentChat* functions below, so adding a provider means adding its record
+// parser, not another copy of the cursor logic.
+type agentChatRecordParser func(state *agentChatParseState, line []byte) error
+
+// agentChatRecordParserFor returns provider's record parser, or nil when the Hub
+// has no parser for that provider's transcript.
+//
+// This is the dispatch half of provider_feature_source.go's StructuredTranscript
+// column: the decision "is it worth opening this provider's transcript at all"
+// is table-driven, the parsing of a given file format cannot be — the same split
+// internal/subscription/usage_source.go makes with internal/usagelocal.
+// TestAgentChatParsersMatchFeatureSourceTable holds the two in agreement in both
+// directions.
+func agentChatRecordParserFor(provider string) agentChatRecordParser {
+	switch provider {
+	case "claude":
+		return parseClaudeLine
+	case "codex":
+		return parseCodexLine
+	case "command-code":
+		return parseCommandCodeLine
+	}
+	return nil
+}
+
+func parseAgentChatTranscriptWithState(path string, offset int64, state *agentChatParseState, parse agentChatRecordParser) ([]agentChatMessage, int64, error) {
 	if state == nil {
 		state = newAgentChatParseState()
 	}
@@ -756,23 +790,23 @@ func parseClaudeTranscriptWithState(path string, offset int64, state *agentChatP
 		Deadline: time.Now().Add(agentChatReadTimeBudget),
 	}, func(line []byte) error {
 		decodedRecords++
-		return parseClaudeLine(state, line)
+		return parse(state, line)
 	})
 	stats.DecodedRecords = decodedRecords
 	state.lastRead = stats
 	return state.outputMessages(), stats.Offset, err
 }
 
-func parseClaudeTranscriptTailPage(path string, state *agentChatParseState, endOffset int64) ([]agentChatMessage, int64, error) {
+func parseAgentChatTailPage(path string, state *agentChatParseState, endOffset int64, parse agentChatRecordParser) ([]agentChatMessage, int64, error) {
 	now := time.Now()
-	return parseClaudeTranscriptTailPageWithBudget(path, state, endOffset, agentChatReadBudget{
+	return parseAgentChatTailPageWithBudget(path, state, endOffset, agentChatReadBudget{
 		MaxBytes:   agentChatPageBytesMax,
 		MaxRecords: agentChatPageRecordsMax,
 		Deadline:   now.Add(agentChatReadTimeBudget),
-	})
+	}, parse)
 }
 
-func parseClaudeTranscriptTailPageWithBudget(path string, state *agentChatParseState, endOffset int64, budget agentChatReadBudget) ([]agentChatMessage, int64, error) {
+func parseAgentChatTailPageWithBudget(path string, state *agentChatParseState, endOffset int64, budget agentChatReadBudget, parse agentChatRecordParser) ([]agentChatMessage, int64, error) {
 	if state == nil {
 		state = newAgentChatParseState()
 	}
@@ -804,7 +838,7 @@ func parseClaudeTranscriptTailPageWithBudget(path string, state *agentChatParseS
 		for index := len(records) - 1; index >= 0; index-- {
 			state.currentRecordStart = records[index].start
 			state.currentRecordEnd = records[index].end
-			if err := parseClaudeLine(state, records[index].line); err != nil {
+			if err := parse(state, records[index].line); err != nil {
 				state.currentRecordStart = 0
 				state.currentRecordEnd = 0
 				return state.outputMessages(), stats.Offset, err
@@ -837,32 +871,53 @@ func parseClaudeTranscriptTailPageWithBudget(path string, state *agentChatParseS
 	return state.outputMessages(), stats.Offset, nil
 }
 
+func parseClaudeTranscriptWithState(path string, offset int64, state *agentChatParseState) ([]agentChatMessage, int64, error) {
+	return parseAgentChatTranscriptWithState(path, offset, state, parseClaudeLine)
+}
+
+func parseClaudeTranscriptTailPage(path string, state *agentChatParseState, endOffset int64) ([]agentChatMessage, int64, error) {
+	return parseAgentChatTailPage(path, state, endOffset, parseClaudeLine)
+}
+
+func parseClaudeTranscriptTailPageWithBudget(path string, state *agentChatParseState, endOffset int64, budget agentChatReadBudget) ([]agentChatMessage, int64, error) {
+	return parseAgentChatTailPageWithBudget(path, state, endOffset, budget, parseClaudeLine)
+}
+
 func parseClaudeRecord(state *agentChatParseState, record claudeTranscriptLine) {
 	if state == nil || record.Type != "user" && record.Type != "assistant" {
 		return
 	}
-	var blocks []claudeContentBlock
-	if err := json.Unmarshal(record.Message.Content, &blocks); err != nil {
-		var text string
-		if json.Unmarshal(record.Message.Content, &text) == nil && strings.TrimSpace(text) != "" {
-			blocks = []claudeContentBlock{{Type: "text", Text: text}}
-		} else {
-			return
-		}
+	blocks, ok := anthropicContentBlocks(record.Message.Content)
+	if !ok {
+		return
 	}
 	if record.Message.Role == "" {
 		record.Message.Role = record.Type
 	}
 	if record.Message.Role == "user" {
-		parseClaudeUserRecord(state, record, blocks)
+		appendAnthropicUserMessage(state, blocks, record.Timestamp)
 		return
 	}
 	if record.Message.Role == "assistant" {
-		parseClaudeAssistantRecord(state, record, blocks)
+		appendAnthropicAssistantMessage(state, blocks, record.Timestamp, record.IsSidechain)
 	}
 }
 
-func parseClaudeUserRecord(state *agentChatParseState, record claudeTranscriptLine, blocks []claudeContentBlock) {
+// anthropicContentBlocks decodes a message's content field, accepting both the
+// block array and the plain-string shape the same CLIs also emit.
+func anthropicContentBlocks(raw json.RawMessage) ([]anthropicContentBlock, bool) {
+	var blocks []anthropicContentBlock
+	if err := json.Unmarshal(raw, &blocks); err == nil {
+		return blocks, true
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil && strings.TrimSpace(text) != "" {
+		return []anthropicContentBlock{{Type: "text", Text: text}}, true
+	}
+	return nil, false
+}
+
+func appendAnthropicUserMessage(state *agentChatParseState, blocks []anthropicContentBlock, ts string) {
 	var textParts []string
 	for _, block := range blocks {
 		switch block.Type {
@@ -871,22 +926,22 @@ func parseClaudeUserRecord(state *agentChatParseState, record claudeTranscriptLi
 				textParts = append(textParts, block.Text)
 			}
 		case "tool_result":
-			attachClaudeToolResult(state, block)
+			attachAnthropicToolResult(state, block)
 		}
 	}
 	text := strings.TrimSpace(strings.Join(textParts, "\n"))
-	if text == "" || isClaudeSyntheticUserText(text) {
+	if text == "" || isSyntheticAgentUserText(text) {
 		return
 	}
 	state.appendMessage(&agentChatMessage{
 		Role: "user",
 		Kind: "text",
 		Text: maskAgentChatText(text),
-		TS:   record.Timestamp,
+		TS:   ts,
 	}, true)
 }
 
-func parseClaudeAssistantRecord(state *agentChatParseState, record claudeTranscriptLine, blocks []claudeContentBlock) {
+func appendAnthropicAssistantMessage(state *agentChatParseState, blocks []anthropicContentBlock, ts string, isSidechain bool) {
 	var textParts []string
 	var thinking []string
 	var tools []agentChatTool
@@ -910,7 +965,7 @@ func parseClaudeAssistantRecord(state *agentChatParseState, record claudeTranscr
 		}
 	}
 	text := strings.TrimSpace(strings.Join(textParts, "\n"))
-	if record.IsSidechain {
+	if isSidechain {
 		if text != "" {
 			thinking = append(thinking, maskAgentChatText(text))
 		}
@@ -920,7 +975,7 @@ func parseClaudeAssistantRecord(state *agentChatParseState, record claudeTranscr
 		return
 	}
 	kind := "text"
-	if record.IsSidechain {
+	if isSidechain {
 		kind = "sidechain"
 	} else if text == "" && len(tools) > 0 {
 		kind = "tool"
@@ -933,13 +988,13 @@ func parseClaudeAssistantRecord(state *agentChatParseState, record claudeTranscr
 		Text:     maskAgentChatText(text),
 		Thinking: thinking,
 		Tools:    tools,
-		TS:       record.Timestamp,
+		TS:       ts,
 	}
 	state.appendMessage(message, true)
 	registerAgentChatTools(state, message)
 }
 
-func attachClaudeToolResult(state *agentChatParseState, block claudeContentBlock) {
+func attachAnthropicToolResult(state *agentChatParseState, block anthropicContentBlock) {
 	if state == nil {
 		return
 	}
@@ -967,8 +1022,76 @@ func attachClaudeToolResult(state *agentChatParseState, block claudeContentBlock
 	state.removePendingTool(toolID)
 }
 
-func isClaudeSyntheticUserText(text string) bool {
+// isSyntheticAgentUserText drops the injected user turns both CLIs write into
+// their transcripts (slash-command echoes, system reminders). Command Code uses
+// the same Anthropic-style markers; if a future version stops emitting them the
+// check simply never matches.
+func isSyntheticAgentUserText(text string) bool {
 	return strings.Contains(text, "<command-name>") || strings.Contains(text, "<system-reminder>")
+}
+
+// commandCodeTranscriptLine is one record of
+// ~/.commandcode/projects/<slug>/<session id>.jsonl.
+//
+// Measured 2026-09-18 over 20 transcripts / 212 records on this machine
+// (docs/local/reference/reference_transcript-sources.md). Record types seen:
+// "message" (174), "session" (10), "model_change" (5), plus 23 index records
+// that carry no type at all (turnNumber / messageCount / files / prompt). Only
+// "message" holds conversation, and its message object is Anthropic-shaped, so
+// the block level is parsed by the shared anthropic* helpers above rather than
+// by a second copy.
+//
+// The other record types are ignored on purpose: "session" only repeats cwd and
+// a version, "model_change" duplicates what the session already reports through
+// the wrapper, and the index records are a turn table for Command Code's own UI.
+// Nothing here reads the file's usage/cost fields — remaining quota has its own
+// table (internal/subscription/usage_source.go) and Command Code is not in it.
+type commandCodeTranscriptLine struct {
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp"`
+	Message   struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	} `json:"message"`
+}
+
+func parseCommandCodeLine(state *agentChatParseState, line []byte) error {
+	if len(line) > agentChatLineMax {
+		return nil
+	}
+	var record commandCodeTranscriptLine
+	if err := json.Unmarshal(line, &record); err != nil {
+		return nil
+	}
+	parseCommandCodeRecord(state, record)
+	return nil
+}
+
+func parseCommandCodeRecord(state *agentChatParseState, record commandCodeTranscriptLine) {
+	if state == nil || record.Type != "message" {
+		return
+	}
+	blocks, ok := anthropicContentBlocks(record.Message.Content)
+	if !ok {
+		return
+	}
+	switch record.Message.Role {
+	case "user":
+		// tool_result blocks arrive in user records, exactly as with Claude.
+		appendAnthropicUserMessage(state, blocks, record.Timestamp)
+	case "assistant":
+		// Command Code has no sidechain concept in its transcript (no such field
+		// was observed), so subagent output never has to be folded into thinking.
+		appendAnthropicAssistantMessage(state, blocks, record.Timestamp, false)
+	}
+}
+
+func parseCommandCodeTranscriptWithState(path string, offset int64, state *agentChatParseState) ([]agentChatMessage, int64, error) {
+	return parseAgentChatTranscriptWithState(path, offset, state, parseCommandCodeLine)
+}
+
+func parseCommandCodeTranscriptTailPage(path string, state *agentChatParseState, endOffset int64) ([]agentChatMessage, int64, error) {
+	return parseAgentChatTailPage(path, state, endOffset, parseCommandCodeLine)
 }
 
 type codexRolloutLine struct {
@@ -1017,90 +1140,15 @@ func parseCodexLine(state *agentChatParseState, line []byte) error {
 }
 
 func parseCodexRolloutWithState(path string, offset int64, state *agentChatParseState) ([]agentChatMessage, int64, error) {
-	if state == nil {
-		state = newAgentChatParseState()
-	}
-	state.beginBatch()
-	decodedRecords := 0
-	stats, err := readAgentChatRange(path, offset, &state.readState, agentChatReadBudget{
-		MaxBytes: agentChatReadBytesMax, MaxRecords: agentChatReadRecordsMax,
-		Deadline: time.Now().Add(agentChatReadTimeBudget),
-	}, func(line []byte) error {
-		decodedRecords++
-		return parseCodexLine(state, line)
-	})
-	stats.DecodedRecords = decodedRecords
-	state.lastRead = stats
-	return state.outputMessages(), stats.Offset, err
+	return parseAgentChatTranscriptWithState(path, offset, state, parseCodexLine)
 }
 
 func parseCodexRolloutTailPage(path string, state *agentChatParseState, endOffset int64) ([]agentChatMessage, int64, error) {
-	now := time.Now()
-	return parseCodexRolloutTailPageWithBudget(path, state, endOffset, agentChatReadBudget{
-		MaxBytes:   agentChatPageBytesMax,
-		MaxRecords: agentChatPageRecordsMax,
-		Deadline:   now.Add(agentChatReadTimeBudget),
-	})
+	return parseAgentChatTailPage(path, state, endOffset, parseCodexLine)
 }
 
 func parseCodexRolloutTailPageWithBudget(path string, state *agentChatParseState, endOffset int64, budget agentChatReadBudget) ([]agentChatMessage, int64, error) {
-	if state == nil {
-		state = newAgentChatParseState()
-	}
-	state.beginBatch()
-	if budget.Deadline.IsZero() {
-		budget.Deadline = agentChatBudgetNow(budget).Add(agentChatReadTimeBudget)
-	}
-	records, stats, err := readAgentChatTailPageWithBudget(path, agentChatTailRecordLimit(state.maxMessages), endOffset, budget)
-	if err != nil {
-		return nil, stats.Offset, err
-	}
-	nextCursor := stats.Offset
-	if !stats.TailPageReady {
-		stats.HitBudget = true
-		nextCursor = stats.SnapshotEnd
-		stats.Offset = nextCursor
-		state.lastRead = stats
-		return nil, stats.Offset, nil
-	}
-	// Keep the selected page atomic for cursor purposes. A partial decode that
-	// commits its old records cannot be resumed by a backward cursor without
-	// skipping the newer records that were still in the page.
-	if len(records) > 0 && agentChatBudgetExpired(budget) {
-		stats.HitBudget = true
-		nextCursor = stats.SnapshotEnd
-	} else {
-		for index := len(records) - 1; index >= 0; index-- {
-			state.currentRecordStart = records[index].start
-			state.currentRecordEnd = records[index].end
-			if err := parseCodexLine(state, records[index].line); err != nil {
-				state.currentRecordStart = 0
-				state.currentRecordEnd = 0
-				return state.outputMessages(), stats.Offset, err
-			}
-			stats.DecodedRecords++
-			nextCursor = records[index].start
-			if agentChatBudgetExpired(budget) {
-				stats.HitBudget = true
-			}
-		}
-	}
-	state.currentRecordStart = 0
-	state.currentRecordEnd = 0
-	if len(state.messages) > 0 {
-		messageCursor := state.messages[0].sourceStart
-		if !stats.HitBudget {
-			nextCursor = messageCursor
-		} else if nextCursor == 0 || messageCursor < nextCursor {
-			nextCursor = messageCursor
-		}
-	}
-	stats.DecodeCommitted = stats.TailPageReady &&
-		stats.DecodedRecords == len(records) &&
-		(len(records) > 0 || !stats.HitBudget)
-	stats.Offset = nextCursor
-	state.lastRead = stats
-	return state.outputMessages(), stats.Offset, nil
+	return parseAgentChatTailPageWithBudget(path, state, endOffset, budget, parseCodexLine)
 }
 
 func parseCodexRecord(state *agentChatParseState, record codexRolloutLine) {

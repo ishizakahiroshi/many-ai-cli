@@ -149,7 +149,7 @@ func resolveWorkflowTaskID(transcriptPath, wfDir string, budget agentChatReadBud
 		if json.Unmarshal(rec.line, &line) != nil {
 			continue
 		}
-		var blocks []claudeContentBlock
+		var blocks []anthropicContentBlock
 		if json.Unmarshal(line.Message.Content, &blocks) != nil {
 			continue
 		}

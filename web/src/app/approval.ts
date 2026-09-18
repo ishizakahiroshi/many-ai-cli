@@ -8,7 +8,7 @@ import { ws } from './ws-client.js';
 import { approvalContextLines, approvalLinesHaveHint, extractApprovalOptions, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, hasApprovalLikeLabel, isBatchOptions, isHubChoicePrompt, isMultiQuestionPrompt, isMultiSelectOptions, markHubChoiceDefault, matchNativeApprovalTrigger, normalizeVtCursorOps } from './approval-parser.js';
 import { approvalUiAdapter, clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
 import { actionBarNeedsRepaint, actionBarOwnedByOther, releaseActionBarOwnership } from './approval-owner.js';
-import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, isTranscriptBackedProvider, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
+import { chatHistoryCommitOutput, chatPaneAtBottom, getChatTimelineEl, isTranscriptApprovalProvider, pushMessage, scrollChatPaneToBottom } from './chat-history.js';
 import { apiFetch, token } from './util.js';
 import { appConfirm } from './settings.js';
 import { isActionBarCollapsed, setActionBarCollapsed, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY } from './user-prefs.js';
@@ -1747,7 +1747,10 @@ export function cancelApprovalLedgerRestore(id) {
 
 function maybeRestorePendingApprovalFromLedger(id) {
   if (id !== activeSessionId) return;
-  if (!isTranscriptBackedProvider(sessions.get(id)?.provider || '')) return;
+  // 承認の供給元がトランスクリプトの provider だけが対象（claude / codex）。
+  // チャットをトランスクリプトから読む provider（command-code）は承認は端末ミラー
+  // 由来なので、台帳からの復元をここで起こさない。
+  if (!isTranscriptApprovalProvider(sessions.get(id)?.provider || '')) return;
   if (approvalVisibleCache.get(id)) return;
   if (manualHideState.has(id)) return; // ✕ で消したものは「↻ 承認」を押すまで戻さない
   if (isApprovalReplayPending(id)) return;

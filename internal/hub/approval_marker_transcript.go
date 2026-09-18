@@ -58,8 +58,15 @@ const approvalMarkerTranscriptMissLimit = 3
 // 退避で受け入れる代償: 承認が出たまま供給元が入れ替わると、同じ質問が VT 側の
 // candidateKey でもう一度出ることがある。承認が二重に見えるのは、承認が出ないより
 // はるかに軽い。
+//
+// 判定に使うのは「この provider の承認マーカーの供給元はトランスクリプトか」
+// （provider_feature_source.go の ApprovalMarker 列）で、**チャット面が
+// トランスクリプトを読めるか（StructuredTranscript 列）ではない**。
+// 以前は 1 つの provider 一覧で両方を答えていたため、チャットの読み取り対象を
+// 増やした瞬間にその provider の承認供給元まで黙って移る作りだった。
+// 承認の同一性（candidateKey + sourceEpoch の 1 本）が事故で動く経路は残さない。
 func approvalMarkerSourceIsTranscriptLocked(ses *session) bool {
-	return ses != nil && isAgentChatProvider(ses.Provider) && ses.agentChatPath != "" &&
+	return ses != nil && providerApprovalMarkerFromTranscript(ses.Provider) && ses.agentChatPath != "" &&
 		ses.agentChatMissStreak < approvalMarkerTranscriptMissLimit
 }
 
@@ -100,7 +107,7 @@ func approvalMarkerFromTranscriptText(text string) *approvalMarkerBlock {
 // Ink の差分再描画で本文が欠けると未回答の承認まで閉じてしまい、閉じた承認を
 // 再配信する経路が無いので、この供給元では使わない。
 func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath string, messages []agentChatMessage, prime bool, detectedAt time.Time) {
-	if len(messages) == 0 || transcriptPath == "" || !isAgentChatProvider(provider) {
+	if len(messages) == 0 || transcriptPath == "" || !providerApprovalMarkerFromTranscript(provider) {
 		return
 	}
 	if prime {

@@ -1068,7 +1068,7 @@ function renderSentHistoryContent(owner: SentHistoryModalOwner, loading: boolean
 async function refreshSentHistoryFromStore(owner: SentHistoryModalOwner): Promise<void> {
   const sid = owner.sessionId;
   try {
-    // claude / codex は provider 側の transcript が正本なので毎回取り直す。
+    // トランスクリプトを読む provider は CLI 側のファイルが正本なので毎回取り直す。
     // Hub のライブ追従はアイドルで止まるので、force なしだと途中までのローカル
     // 履歴が残っている限り読み直されず、古い件数のままになる。
     const force = isTranscriptBackedSession(sid);

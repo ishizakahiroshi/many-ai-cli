@@ -126,7 +126,25 @@ export function pushMessage(sid, msg) {
   return entry;
 }
 
+// チャット面が /api/agent-chat（CLI 自身の構造化トランスクリプト）を使う provider。
+// Go 側の正本は internal/hub/provider_feature_source.go の StructuredTranscript 列で、
+// この 2 つは同じ一覧でなければならない（片方だけ増えると、チャットが空のまま
+// /api/agent-chat を叩くか、読めるのに session-chat の出力貼り付けを見せる）。
+//
+// **承認の供給元の判定にこの関数を使わないこと。** 以前はこの 1 つの一覧が
+// 「トランスクリプトを読めるか」と「承認をトランスクリプトから受け取るか」の
+// 両方を答えていた。command-code はチャットは読めるが確認画面が TUI にしか
+// 出ないので、承認は端末ミラーのまま。承認側は
+// isTranscriptApprovalProvider を使う。
 export function isTranscriptBackedProvider(provider) {
+  return provider === 'claude' || provider === 'codex' || provider === 'command-code';
+}
+
+// 承認カードの供給元が CLI のトランスクリプトである provider。Go 側の正本は
+// 同じファイルの ApprovalMarker 列（native）で、claude / codex だけ。
+// 台帳からの復元（approval.ts の maybeRestorePendingApprovalFromLedger）は、
+// 端末の再描画では戻せないこの供給元のためにある。
+export function isTranscriptApprovalProvider(provider) {
   return provider === 'claude' || provider === 'codex';
 }
 

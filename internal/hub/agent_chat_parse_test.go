@@ -880,3 +880,163 @@ func TestAgentChatTailDeadlineAfterPartialDecodeKeepsPageContinuousForClaudeAndC
 		})
 	}
 }
+
+// Command Code のトランスクリプト（~/.commandcode/projects/<slug>/<id>.jsonl）を
+// 読む。形は 2026-09-18 の実測（20 ファイル / 212 レコード・
+// docs/local/reference/reference_transcript-sources.md）に合わせた合成 fixture で、
+// 実ファイルの写しではない。
+//
+// 見ているのは 3 点:
+//  1. message レコードだけを拾い、session / model_change / 索引レコード（type
+//     キーを持たない turnNumber 付きの行）を会話として積まないこと
+//  2. content の text / thinking / tool_use が Claude と同じように分かれること
+//  3. tool_result が {type:text} の配列で来ても結果が該当ツールへ付くこと
+func TestParseCommandCodeTranscriptSeparatesContent(t *testing.T) {
+	path := writeAgentChatFixture(t,
+		map[string]any{
+			"type": "session", "id": "s-1", "timestamp": "2026-09-18T00:00:00Z",
+			"cwd": "/repo", "version": 3,
+		},
+		map[string]any{
+			// 索引レコード（type キーが無い）。Command Code 自身のターン表。
+			"id": "turn-1", "turnNumber": 1, "messageCount": 2,
+			"prompt": "テストを直して", "files": []any{}, "createdAt": "2026-09-18T00:00:01Z",
+		},
+		map[string]any{
+			"type": "message", "id": "m-1", "timestamp": "2026-09-18T00:00:01Z",
+			"message": map[string]any{
+				"role":    "user",
+				"content": []any{map[string]any{"type": "text", "text": "テストを直して"}},
+				"meta":    map[string]any{"source": "user", "messageId": "m-1"},
+			},
+		},
+		map[string]any{
+			"type": "message", "id": "m-2", "timestamp": "2026-09-18T00:00:02Z",
+			"model": "meituan/LongCat-2.0:free",
+			"usage": map[string]any{"inputTokens": 10, "outputTokens": 20, "costUsd": 0.0},
+			"message": map[string]any{
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "thinking", "thinking": "AUTH_TOKEN=supersecret を確認する", "signature": "sig"},
+					map[string]any{"type": "text", "text": "直します。"},
+					map[string]any{"type": "tool_use", "id": "tu-1", "name": "read_file", "input": map[string]any{"path": "internal/hub/x.go"}},
+				},
+			},
+		},
+		map[string]any{
+			"type": "message", "id": "m-3", "timestamp": "2026-09-18T00:00:03Z",
+			"message": map[string]any{
+				"role": "user",
+				"content": []any{map[string]any{
+					"type": "tool_result", "tool_use_id": "tu-1",
+					"content": []any{map[string]any{"type": "text", "text": "ok"}},
+				}},
+			},
+		},
+		map[string]any{
+			"type": "model_change", "id": "mc-1", "timestamp": "2026-09-18T00:00:04Z",
+			"model": "meituan/LongCat-2.0:free",
+		},
+	)
+
+	messages, offset, err := parseCommandCodeTranscriptWithState(path, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if offset == 0 {
+		t.Fatal("完全なレコードを読んだのに offset が進んでいない")
+	}
+	if len(messages) != 2 {
+		t.Fatalf("got %d messages, want user + assistant (session / model_change / 索引は積まない)", len(messages))
+	}
+	if messages[0].Role != "user" || messages[0].Text != "テストを直して" {
+		t.Fatalf("unexpected user message: %#v", messages[0])
+	}
+	if messages[0].TS != "2026-09-18T00:00:01Z" {
+		t.Errorf("user TS = %q（レコードの timestamp を使っていない）", messages[0].TS)
+	}
+	assistant := messages[1]
+	if assistant.Text != "直します。" {
+		t.Errorf("assistant text = %q", assistant.Text)
+	}
+	if len(assistant.Thinking) != 1 || strings.Contains(assistant.Thinking[0], "supersecret") {
+		t.Errorf("thinking が保持・マスクされていない: %#v", assistant.Thinking)
+	}
+	if len(assistant.Tools) != 1 || assistant.Tools[0].Name != "read_file" {
+		t.Fatalf("tool_use が取れていない: %#v", assistant.Tools)
+	}
+	if assistant.Tools[0].Result != "ok" {
+		t.Errorf("tool_result（{type:text} の配列）が結び付いていない: %#v", assistant.Tools[0])
+	}
+}
+
+// 承認の確認画面は Command Code の JSONL に入らない（TUI のみ）。チャットを
+// トランスクリプトから読むようにしても、承認の供給元は VT ミラーのままであること。
+// 表側の独立は provider_feature_source_test.go が見ているので、ここでは
+// 「セッションの状態として transcript 固定にならない」ことを確かめる。
+func TestCommandCodeChatDoesNotMoveApprovalSourceToTranscript(t *testing.T) {
+	if !providerHasStructuredTranscript("command-code") {
+		t.Fatal("前提が違う: command-code のチャット読み取りが native になっていない")
+	}
+	ses := &session{Provider: "command-code", agentChatPath: "transcript.jsonl"}
+	if approvalMarkerSourceIsTranscriptLocked(ses) {
+		t.Error("command-code の承認供給元がトランスクリプトへ移った（確認画面は JSONL に入らないので VT ミラーのままであるべき）")
+	}
+}
+
+// 再 attach 時の prime は末尾ページから読む経路を通る（ライブ追従の入口と別）。
+// command-code でもその経路が末尾の会話を返し、tool_result が同じページ内で
+// 該当ツールへ結び付くこと。ここが壊れると「再読み込みするとチャットが空」になる。
+func TestParseCommandCodeTranscriptTailPageKeepsTail(t *testing.T) {
+	lines := make([]any, 0, 60)
+	for i := 0; i < 20; i++ {
+		lines = append(lines, map[string]any{
+			"type": "message", "id": fmt.Sprintf("u-%02d", i), "timestamp": "2026-09-18T00:00:00Z",
+			"message": map[string]any{
+				"role":    "user",
+				"content": []any{map[string]any{"type": "text", "text": fmt.Sprintf("message-%03d", i)}},
+			},
+		})
+	}
+	lines = append(lines,
+		map[string]any{
+			"type": "message", "id": "a-1", "timestamp": "2026-09-18T00:01:00Z",
+			"message": map[string]any{
+				"role": "assistant",
+				"content": []any{
+					map[string]any{"type": "tool_use", "id": "tu-9", "name": "shell_command", "input": map[string]any{"command": "go test ./..."}},
+				},
+			},
+		},
+		map[string]any{
+			"type": "message", "id": "u-r", "timestamp": "2026-09-18T00:01:01Z",
+			"message": map[string]any{
+				"role": "user",
+				"content": []any{map[string]any{
+					"type": "tool_result", "tool_use_id": "tu-9",
+					"content": []any{map[string]any{"type": "text", "text": "ok 12.3s"}},
+				}},
+			},
+		},
+	)
+	path := writeAgentChatFixture(t, lines...)
+
+	state := newAgentChatParseStateWithPage(5, agentChatBatchBytesMax, -1)
+	messages, _, err := parseCommandCodeTranscriptTailPage(path, state, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) == 0 {
+		t.Fatal("末尾ページが 1 件も返していない")
+	}
+	last := messages[len(messages)-1]
+	if last.Role != "assistant" || len(last.Tools) != 1 || last.Tools[0].Name != "shell_command" {
+		t.Fatalf("末尾の assistant/tool_use が取れていない: %#v", messages)
+	}
+	if last.Tools[0].Result != "ok 12.3s" {
+		t.Errorf("同じページ内の tool_result が結び付いていない: %#v", last.Tools[0])
+	}
+	if messages[0].Text == "message-000" {
+		t.Error("末尾ページなのに先頭から読んでいる")
+	}
+}

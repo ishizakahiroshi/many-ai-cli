@@ -33,6 +33,11 @@ Release artifacts are published at
   allow or deny folder trust, file edits, and tool runs from the dashboard
   instead of using the terminal's arrow keys. Commands that do not ask, such as
   git status, still do not get a card.
+- **The Chat tab now shows Command Code conversations**, including what it read,
+  the commands it ran, and their results — the same view Claude Code and Codex
+  sessions already had, read from Command Code's own session file instead of
+  scraped from the terminal. Approval cards keep coming from the terminal, since
+  Command Code's permission screens are never written to that file.
 - **Sent history now shows long messages as six-line previews** with a control
   on each message to show the full text or collapse it again. Short messages
   remain fully visible, and copying always includes the complete message.
