@@ -1363,6 +1363,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/jev/evaluate", s.handleJevEvaluate)
 	mux.HandleFunc("/api/providers", s.handleProviders)
 	mux.HandleFunc("/api/providers/", s.handleProviderRoute)
 	mux.HandleFunc("/api/provider-distributions/", s.handleProviderDistributions)

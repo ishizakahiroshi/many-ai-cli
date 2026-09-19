@@ -1822,5 +1822,21 @@
   "derive_risk_confirm_run": "Start",
   "card_handoff_from_tooltip": "Continues session #{id}",
   "card_handoff_to": "Successor #{id}",
-  "card_handoff_to_tooltip": "Handed off to session #{id}"
+  "card_handoff_to_tooltip": "Handed off to session #{id}",
+  "settings_jev_title": "Jev evaluation (optional)",
+  "settings_jev_desc": "Evaluate text manually. The result is displayed only; it does not change AI selection or approvals.",
+  "settings_jev_key": "Set TYPESAFE_API_KEY in the Hub process environment. The key stays on the Hub.",
+  "settings_jev_opt_in": "Enable manual evaluation in this browser",
+  "settings_jev_text_label": "Text to evaluate",
+  "settings_jev_placeholder": "Enter only text you are willing to send externally",
+  "settings_jev_notice": "Pressing Evaluate sends the text above to TypeSafe and may incur usage charges. Do not enter secrets.",
+  "settings_jev_evaluate": "Evaluate with Jev",
+  "settings_jev_too_long": "Text must be no more than 4096 UTF-8 bytes.",
+  "settings_jev_pending": "Evaluating…",
+  "settings_jev_missing_key": "TYPESAFE_API_KEY is not set for the Hub.",
+  "settings_jev_failed": "Jev evaluation failed.",
+  "settings_jev_task": "Type",
+  "settings_jev_complexity": "Complexity",
+  "settings_jev_strong": "Strong model useful probability",
+  "settings_jev_tokens": "Input tokens"
 }

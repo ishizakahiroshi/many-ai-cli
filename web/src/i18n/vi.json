@@ -1822,5 +1822,21 @@
   "derive_risk_confirm_run": "Khởi động",
   "card_handoff_from_tooltip": "Tiếp nối session #{id}",
   "card_handoff_to": "Kế nhiệm #{id}",
-  "card_handoff_to_tooltip": "Đã bàn giao cho session #{id}"
+  "card_handoff_to_tooltip": "Đã bàn giao cho session #{id}",
+  "settings_jev_title": "Đánh giá Jev (tùy chọn)",
+  "settings_jev_desc": "Đánh giá văn bản theo yêu cầu. Kết quả chỉ hiển thị, không thay đổi lựa chọn AI hoặc phê duyệt.",
+  "settings_jev_key": "Đặt TYPESAFE_API_KEY trong môi trường chạy Hub. Khóa chỉ ở trên Hub.",
+  "settings_jev_opt_in": "Bật đánh giá thủ công trên trình duyệt này",
+  "settings_jev_text_label": "Văn bản cần đánh giá",
+  "settings_jev_placeholder": "Chỉ nhập văn bản bạn đồng ý gửi ra ngoài",
+  "settings_jev_notice": "Nhấn Đánh giá sẽ gửi văn bản trên đến TypeSafe và có thể phát sinh phí. Không nhập thông tin bí mật.",
+  "settings_jev_evaluate": "Đánh giá bằng Jev",
+  "settings_jev_too_long": "Văn bản phải tối đa 4096 byte UTF-8.",
+  "settings_jev_pending": "Đang đánh giá…",
+  "settings_jev_missing_key": "Hub chưa có TYPESAFE_API_KEY.",
+  "settings_jev_failed": "Đánh giá Jev thất bại.",
+  "settings_jev_task": "Loại",
+  "settings_jev_complexity": "Độ phức tạp",
+  "settings_jev_strong": "Xác suất mô hình mạnh hữu ích",
+  "settings_jev_tokens": "Token đầu vào"
 }

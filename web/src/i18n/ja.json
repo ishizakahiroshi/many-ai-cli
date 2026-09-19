@@ -1822,5 +1822,21 @@
   "derive_risk_confirm_run": "起動する",
   "card_handoff_from_tooltip": "セッション #{id} の続き",
   "card_handoff_to": "後継 #{id}",
-  "card_handoff_to_tooltip": "セッション #{id} へ引き継ぎ済み"
+  "card_handoff_to_tooltip": "セッション #{id} へ引き継ぎ済み",
+  "settings_jev_title": "Jev 評価（任意）",
+  "settings_jev_desc": "入力文を手動で評価します。結果は表示だけで、AI の選択や承認には使いません。",
+  "settings_jev_key": "Hub の起動環境に TYPESAFE_API_KEY を設定してください。鍵は Hub 内に留まります。",
+  "settings_jev_opt_in": "このブラウザーで手動評価を有効にする",
+  "settings_jev_text_label": "評価する文章",
+  "settings_jev_placeholder": "外部へ送ってよい文章だけを入力",
+  "settings_jev_notice": "「評価する」を押すと上の文章が TypeSafe に送られ、従量料金が発生する場合があります。秘密情報は入力しないでください。",
+  "settings_jev_evaluate": "Jev で評価する",
+  "settings_jev_too_long": "文章は UTF-8 で 4096 バイト以下にしてください。",
+  "settings_jev_pending": "評価中…",
+  "settings_jev_missing_key": "Hub に TYPESAFE_API_KEY がありません。",
+  "settings_jev_failed": "Jev の評価に失敗しました。",
+  "settings_jev_task": "分類",
+  "settings_jev_complexity": "複雑さ",
+  "settings_jev_strong": "強いモデルが役立つ確率",
+  "settings_jev_tokens": "入力トークン"
 }

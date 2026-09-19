@@ -419,6 +419,19 @@
           </div>
         </div>
       </details>
+      <details class="settings-section" data-section="jev" data-settings-level="basic">
+        <summary class="settings-section-title"><span data-i18n="settings_jev_title">Jev evaluation (optional)</span><span class="settings-section-current" data-section="jev"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_jev_desc">Evaluate text with TypeSafe Jev on request. The result is for display only and does not change AI selection.</div>
+          <div class="settings-note" data-i18n="settings_jev_key">Set TYPESAFE_API_KEY in the Hub process environment. The key stays on the Hub.</div>
+          <label class="settings-row jev-opt-in-row"><input id="jev-opt-in" type="checkbox"><span data-i18n="settings_jev_opt_in">Enable manual Jev evaluation on this browser</span></label>
+          <label class="settings-label" for="jev-text" data-i18n="settings_jev_text_label">Text to evaluate</label>
+          <textarea id="jev-text" class="jev-text" maxlength="4096" rows="4" data-i18n-placeholder="settings_jev_placeholder" placeholder="Enter only the text you want to send"></textarea>
+          <div class="settings-note settings-note-warn" data-i18n="settings_jev_notice">Pressing Evaluate sends the text above to TypeSafe and may incur usage charges. Do not enter secrets.</div>
+          <div class="settings-row-actions"><button id="jev-evaluate" class="settings-inline-btn" type="button" disabled data-i18n="settings_jev_evaluate">Evaluate with Jev</button></div>
+          <div id="jev-result" class="settings-note" role="status" aria-live="polite"></div>
+        </div>
+      </details>
       <details class="settings-section" data-section="remote-auth">
         <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
         <div class="settings-section-body">

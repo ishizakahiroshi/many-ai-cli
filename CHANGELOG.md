@@ -11,6 +11,10 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Optional manual Jev evaluation in Settings.** Enable it in this browser,
+  enter only text you choose to send, and press Evaluate. The Hub uses your
+  `TYPESAFE_API_KEY` environment variable; TypeSafe usage may be billed.
+  Results are displayed only and never alter AI selection or approvals.
 - **You can add an AI CLI from the Hub UI.** Open Settings → AI CLI
   integrations, or pick *Add AI CLI* at the end of the New Session provider
   list. The dialog asks for a display name and executable, then Validate and

@@ -1,6 +1,8 @@
 /* Extracted from styles.css. Imported by /styles.css. */
 
 /* Settings panel */
+.jev-text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 5rem; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.5rem; font: inherit; }
+.settings-row.jev-opt-in-row { justify-content: flex-start; gap: 0.5rem; }
 /* 設定パネル */
 #settings-panel {
   position: fixed;
