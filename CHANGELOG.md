@@ -179,6 +179,12 @@ Release artifacts are published at
   `interactive` / `headless`), or pass `--execution-mode` per launch.
 
 ### Changed
+- **Voice input now runs on the shared `vtype-core` engine.** The speech
+  recognition and Whisper recording code moved out of many-ai-cli into
+  `vtype-core`, the library behind the vtype browser extension, and is bundled
+  with the Hub as before. The voice button, the voice bar, Alt+V, Esc, the
+  voice diagnostics and the Whisper settings are meant to look and work as
+  before. The wake word stays disabled, as it already was.
 - **Clicking a project header in the sidebar now opens that project instead of
   folding it away.** The click puts you in the project's first session, and the
   open project is marked with a tinted header row and a line down its left edge;

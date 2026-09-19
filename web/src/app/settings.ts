@@ -17,6 +17,7 @@ import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.
 import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
 import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
 import { saveProjectView } from './project-view-store.js';
+import { detectSupport } from '../vendor/vtype-core/index.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -1244,10 +1245,7 @@ initSettingsInformationArchitecture();
   let whisperUserModelChoice = null;
 
   function browserRecognitionSupported() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
-      ?? /Chrome\//.test(navigator.userAgent);
-    return !!SpeechRecognition && !!isChromium;
+    return detectSupport().supported;
   }
 
   function descriptionKey(engine) {

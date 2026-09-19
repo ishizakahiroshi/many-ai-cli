@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "46d47eb8a9d1562f42004da55fa155543bd09ece",
+    "commit": "afd460358f89412604c097e6e9f8ee14d24dabf3",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,9 +134,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 952,
-    "analyzed": 719,
-    "unresolved": 32,
+    "discovered": 954,
+    "analyzed": 722,
+    "unresolved": 31,
     "unknown": 1,
     "unclaimed": 200,
     "skipped_by_config": 0
@@ -18483,6 +18483,36 @@
       "unresolved": []
     },
     {
+      "path": "web/scripts/sync-vtype-core.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "vtype-core（音声入力エンジン）を、隣に置いた vtype リポジトリから src/vendor/vtype-core/ へ写す。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app-entry.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -22437,9 +22467,39 @@
       ]
     },
     {
+      "path": "web/src/app/voice-engine.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "音声入力エンジン（vtype-core）の生成。ブラウザ内蔵認識と Whisper の 2 エンジンを 1 か所で作り、"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/voice-whisper.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22460,18 +22520,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/voice/transcribe?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/voice/transcribe?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/voice.ts",
