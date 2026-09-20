@@ -21,6 +21,489 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
 //   GET /api/git-show?session&token&hash
 //   GET /api/git-refs?session&token
 // ============================================================
+// ─────────────────────────────────────────────────────────
+// 共有ヘルパ。下の GitCommitModal / runGitPush は Review タブ
+// （web/src/app/review-view.ts）からも import して使うため、IIFE の外
+// （モジュールスコープ）に置いてある。
+// ─────────────────────────────────────────────────────────
+function _esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function _gt(key, fallback) {
+  if (typeof window.t === 'function') {
+    const v = window.t(key);
+    if (v && v !== key) return v;
+  }
+  return fallback != null ? fallback : key;
+}
+function _toast(title, body) {
+  if (typeof window.showToast === 'function') {
+    const msg = body ? `${title}: ${body}` : title;
+    const one = msg.replace(/\n/g, ' ↵ ');
+    window.showToast(one.length > 120 ? one.slice(0, 120) + '…' : one);
+  }
+}
+
+// コミットメッセージ生成に渡す言語。UI 言語が vi のときは en を使う
+// （生成側の指示文が ja / en の 2 種しかないため）。
+function _commitMessageLanguage() {
+  const l = (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').toLowerCase();
+  if (l.startsWith('en')) return 'en';
+  if (l.startsWith('vi')) return 'en'; // AI commit message: use English when UI is Vietnamese
+  return 'ja';
+}
+
+// ============================================================
+// GitCommitModal (C4) — Commit all モーダルの唯一の実装。
+//
+// Git タブ（GitGraphView）と Review タブ（ReviewView）の両方が、この
+// **同じクラス**を使う。複製すると同じ見た目のボタンが 2 箇所で別の
+// 挙動になる型の事故になるので、モーダルに手を入れるときはここだけ直す。
+//
+// opts:
+//   getSessionId() : 現在のセッション ID（呼び出し側で切り替わるので都度取得）
+//   getToken()     : Hub token（省略時は util.js の token）
+//   getContext()   : { repo, branch, filesChanged, hasChanges }
+//                    ヘッダ表示と open() のガードに使う
+//   onCommitted(data) : commit 成功後に await される（一覧の再読込など）
+// ============================================================
+export class GitCommitModal {
+  [key: string]: any;
+
+  constructor(hostEl, opts) {
+    this.opts = opts || {};
+    this.state = {
+      open: false,
+      reviewed: false,
+      busy: false,
+      generating: false,
+      aiGenerating: false,
+      aiProgressing: false,
+      error: '',
+      subject: '',
+      body: '',
+    };
+    this.els = {};
+    this._aiTimer = null;
+    this._render(hostEl);
+    // 「Ask AI」: Hub が AI 出力から拾ったコミットメッセージを WS 経由で
+    // 受け取り、自分のセッション宛なら待ち受け中のモーダルへ反映する。
+    this._commitMsgHandler = (e) => this._handleCommitMsgEvent(e && e.detail);
+    window.addEventListener('many-commit-msg', this._commitMsgHandler);
+  }
+
+  _sessionId() {
+    return typeof this.opts.getSessionId === 'function'
+      ? this.opts.getSessionId()
+      : this.opts.sessionId;
+  }
+
+  _token() {
+    const t = typeof this.opts.getToken === 'function' ? this.opts.getToken() : this.opts.token;
+    return t || token || '';
+  }
+
+  _context() {
+    const ctx = typeof this.opts.getContext === 'function' ? this.opts.getContext() : null;
+    return ctx || {};
+  }
+
+  _render(hostEl) {
+    const wrap = document.createElement('div');
+    wrap.className = 'git-commit-modal-backdrop aac-wheel-overlay';
+    wrap.hidden = true;
+    wrap.innerHTML = `
+      <div class="git-commit-modal" role="dialog" aria-modal="true">
+        <div class="git-commit-modal-head">
+          <div>
+            <div class="git-commit-modal-title">${_esc(_gt('git_commit_all', 'Commit all'))}</div>
+            <div class="git-commit-modal-sub" data-commit-summary>—</div>
+          </div>
+          <button class="git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
+        </div>
+        <div class="git-commit-warning">${_esc(_gt('git_commit_no_push_warning', 'Only git add -A and git commit are run. Push is not run.'))}</div>
+        <div class="git-commit-generate-note">${_esc(_gt('git_commit_generate_note', 'Generate has many-ai-cli analyze the diff and fill in a draft commit message. This is a lightweight heuristic, so accuracy is limited. Review it before committing.'))}</div>
+        <label class="git-commit-field">
+          <span>${_esc(_gt('git_commit_subject', 'Commit message subject'))}</span>
+          <input type="text" data-commit-subject maxlength="200">
+        </label>
+        <label class="git-commit-field">
+          <span>${_esc(_gt('git_commit_body', 'Optional body'))}</span>
+          <textarea data-commit-body rows="6"></textarea>
+        </label>
+        <div class="git-commit-review" data-commit-review-box hidden>
+          ${_esc(_gt('git_commit_review_ready', 'Review complete. Commit will include all current working tree changes.'))}
+        </div>
+        <div class="git-commit-hint" data-commit-hint hidden></div>
+        <div class="git-commit-error" data-commit-error hidden></div>
+        <div class="git-commit-actions">
+          <button class="git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
+          <button class="git-secondary-btn" data-commit-ai hidden title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
+          <div class="git-commit-action-spacer"></div>
+          <button class="git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
+          <button class="git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>
+          <button class="git-commit-run-btn" data-commit-run disabled>${_esc(_gt('git_commit_commit', 'Commit'))}</button>
+        </div>
+      </div>
+    `;
+    hostEl.appendChild(wrap);
+
+    const q = (sel) => wrap.querySelector(sel);
+    this.els = {
+      modal:     wrap,
+      summary:   q('[data-commit-summary]'),
+      close:     q('[data-commit-close]'),
+      cancel:    q('[data-commit-cancel]'),
+      subject:   q('[data-commit-subject]'),
+      body:      q('[data-commit-body]'),
+      generate:  q('[data-commit-generate]'),
+      ai:        q('[data-commit-ai]'),
+      review:    q('[data-commit-review]'),
+      run:       q('[data-commit-run]'),
+      reviewBox: q('[data-commit-review-box]'),
+      hint:      q('[data-commit-hint]'),
+      error:     q('[data-commit-error]'),
+    };
+
+    this.els.close.addEventListener('click', () => this.close());
+    this.els.cancel.addEventListener('click', () => this.close());
+    wrap.addEventListener('click', (e) => {
+      if (e.target === wrap) this.close();
+    });
+    this.els.subject.addEventListener('input', () => {
+      this.state.subject = this.els.subject.value;
+      this.state.reviewed = false;
+      this._renderState();
+    });
+    this.els.body.addEventListener('input', () => {
+      this.state.body = this.els.body.value;
+      this.state.reviewed = false;
+      this._renderState();
+    });
+    this.els.generate.addEventListener('click', () => this._generate());
+    if (this.els.ai) this.els.ai.addEventListener('click', () => this._askAI());
+    this.els.review.addEventListener('click', () => this._review());
+    this.els.run.addEventListener('click', () => this._commit());
+  }
+
+  open() {
+    const ctx = this._context();
+    if (!ctx.hasChanges) return;
+    this.state = {
+      open: true,
+      reviewed: false,
+      busy: false,
+      generating: false,
+      aiGenerating: false,
+      aiProgressing: false,
+      error: '',
+      subject: '',
+      body: '',
+    };
+    this._renderState();
+    this.els.modal.hidden = false;
+    _toast(
+      _gt('git_commit_all', 'Commit all'),
+      _gt('git_commit_open_toast', 'Commit all will stage all current working tree changes with git add -A, then commit them. Push is not run.')
+    );
+    setTimeout(() => { try { this.els.subject.focus(); } catch (_) {} }, 0);
+  }
+
+  close() {
+    this.state.open = false;
+    this.els.modal.hidden = true;
+  }
+
+  dispose() {
+    try { window.removeEventListener('many-commit-msg', this._commitMsgHandler); } catch (_) {}
+    if (this._aiTimer) { clearTimeout(this._aiTimer); this._aiTimer = null; }
+    try { this.els.modal.remove(); } catch (_) {}
+  }
+
+  _renderState() {
+    const st = this.state;
+    const ctx = this._context();
+    if (this.els.summary) {
+      const repo = ctx.repo || '';
+      const branch = ctx.branch || 'HEAD';
+      this.els.summary.textContent = `${repo} · ${branch} · ${ctx.filesChanged || 0} files`;
+    }
+    if (this.els.subject && this.els.subject.value !== st.subject) {
+      this.els.subject.value = st.subject;
+    }
+    if (this.els.body && this.els.body.value !== st.body) {
+      this.els.body.value = st.body;
+    }
+    const hasSubject = (st.subject || '').trim() !== '';
+    const blocked = st.busy || st.generating || st.aiGenerating;
+    this.els.review.disabled = !hasSubject || blocked;
+    this.els.run.disabled = !hasSubject || !st.reviewed || blocked;
+    this.els.run.title = !hasSubject
+      ? _gt('git_commit_disabled_no_subject', 'Enter a subject first.')
+      : (!st.reviewed ? _gt('git_commit_disabled_needs_review', 'Press Review to enable Commit.') : '');
+    this.els.review.classList.toggle('primary', hasSubject && !st.reviewed && !blocked);
+    this.els.generate.disabled = blocked;
+    if (this.els.ai) {
+      this.els.ai.disabled = blocked;
+      this.els.ai.textContent = st.aiGenerating
+        ? (st.aiProgressing
+            ? _gt('git_commit_ai_progressing', 'AI is responding...')
+            : _gt('git_commit_ai_generating', 'Asking AI...'))
+        : _gt('git_commit_ai_message', 'Ask AI');
+    }
+    this.els.subject.disabled = st.busy;
+    this.els.body.disabled = st.busy;
+    this.els.reviewBox.hidden = !st.reviewed;
+    if (this.els.hint) {
+      const showHint = hasSubject && !st.reviewed && !blocked;
+      this.els.hint.hidden = !showHint;
+      this.els.hint.textContent = showHint
+        ? _gt('git_commit_review_required_hint', 'Press Review to enable Commit.')
+        : '';
+    }
+    if (st.error) {
+      this.els.error.hidden = false;
+      this.els.error.textContent = st.error;
+    } else {
+      this.els.error.hidden = true;
+      this.els.error.textContent = '';
+    }
+    this.els.generate.textContent = st.generating
+      ? _gt('git_commit_generating', 'Generating...')
+      : _gt('git_commit_generate_message', 'Generate');
+    this.els.run.textContent = st.busy
+      ? _gt('git_commit_committing', 'Committing...')
+      : _gt('git_commit_commit', 'Commit');
+  }
+
+  async _generate() {
+    const st = this.state;
+    st.generating = true;
+    st.error = '';
+    this._renderState();
+    const tok = this._token();
+    try {
+      const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(tok)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session: this._sessionId(),
+          token: tok,
+          mode: 'generate',
+          language: _commitMessageLanguage(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+      }
+      st.subject = data.subject || '';
+      st.body = data.body || '';
+      st.reviewed = false;
+    } catch (err) {
+      st.error = err && err.message ? err.message : String(err);
+    } finally {
+      st.generating = false;
+      this._renderState();
+    }
+  }
+
+  // _askAI は接続中の AI セッションへ diff を解析させ、生成された
+  // コミットメッセージを WS（many-commit-msg イベント）経由で受け取る。
+  async _askAI() {
+    const st = this.state;
+    if (st.busy || st.generating || st.aiGenerating) return;
+    st.aiGenerating = true;
+    st.aiProgressing = false;
+    st.error = '';
+    this._renderState();
+    // 応答が来ない場合に備えたフロント側タイムアウト（Hub 側より少し長め）。
+    if (this._aiTimer) clearTimeout(this._aiTimer);
+    this._aiTimer = setTimeout(() => {
+      const s = this.state;
+      if (s.aiGenerating) {
+        s.aiGenerating = false;
+        s.aiProgressing = false;
+        s.error = _gt('git_commit_ai_timeout', 'Timed out waiting for the AI response.');
+        this._renderState();
+      }
+    }, 200000);
+    const tok = this._token();
+    try {
+      const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(tok)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session: this._sessionId(),
+          token: tok,
+          mode: 'ai',
+          language: _commitMessageLanguage(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+      }
+      // pending: 結果は many-commit-msg イベントで届く。ここでは待機継続。
+    } catch (err) {
+      st.aiGenerating = false;
+      st.aiProgressing = false;
+      if (this._aiTimer) { clearTimeout(this._aiTimer); this._aiTimer = null; }
+      st.error = err && err.message ? err.message : String(err);
+      this._renderState();
+    }
+  }
+
+  // _handleCommitMsgEvent は Hub からの commit_msg_suggested / commit_msg_error /
+  // commit_msg_progress を自セッション・待ち受け中のときだけ反映する。
+  _handleCommitMsgEvent(m) {
+    if (!m || String(m.session_id) !== String(this._sessionId())) return;
+    const st = this.state;
+    if (!st.open || !st.aiGenerating) return;
+    if (m.type === 'commit_msg_progress') {
+      st.aiProgressing = true;
+      this._renderState();
+      return;
+    }
+    st.aiGenerating = false;
+    st.aiProgressing = false;
+    if (this._aiTimer) { clearTimeout(this._aiTimer); this._aiTimer = null; }
+    if (m.type === 'commit_msg_error') {
+      st.error = m.reason || _gt('git_commit_ai_failed', 'AI failed to produce a commit message.');
+    } else {
+      st.subject = m.commit_subject || '';
+      st.body = m.commit_body || '';
+      st.reviewed = false;
+      st.error = '';
+    }
+    this._renderState();
+  }
+
+  _review() {
+    const st = this.state;
+    st.subject = this.els.subject.value || '';
+    st.body = this.els.body.value || '';
+    st.error = '';
+    st.reviewed = st.subject.trim() !== '';
+    this._renderState();
+  }
+
+  async _commit() {
+    const st = this.state;
+    if (!st.reviewed || !(st.subject || '').trim()) return;
+    st.busy = true;
+    st.error = '';
+    this._renderState();
+    const tok = this._token();
+    try {
+      const res = await fetch(`/api/git-commit-all?token=${encodeURIComponent(tok)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session: this._sessionId(),
+          token: tok,
+          subject: st.subject,
+          body: st.body,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        const msg = data && data.error === 'commit_identity_missing'
+          ? _gt('git_commit_identity_missing', 'Git user.name / user.email is not configured.')
+          : (data && data.detail ? data.detail : `HTTP ${res.status}`);
+        throw new Error(msg);
+      }
+      this.close();
+      _toast(_gt('git_commit_created', 'Commit created'), `${data.short_hash || ''} ${data.subject || ''}`.trim());
+      if (typeof this.opts.onCommitted === 'function') await this.opts.onCommitted(data);
+    } catch (err) {
+      st.error = err && err.message ? err.message : String(err);
+    } finally {
+      st.busy = false;
+      this._renderState();
+    }
+  }
+}
+
+// ============================================================
+// runGitPush (C4) — push の確認ダイアログ〜実行〜トーストを 1 本にする。
+// Git タブと Review タブで**同じ確認の作法**にするため、押す場所が
+// 増えても新しい確認を作らず必ずこれを呼ぶ。ボタンの busy 表示だけは
+// 見た目が違うので呼び出し側が onStart / onSettled で持つ。
+// 戻り値は「push が実際に走って成功したか」。
+// ============================================================
+export async function runGitPush(opts) {
+  const o = opts || {};
+  const tok = o.token || token || '';
+  const branch = o.branch || 'HEAD';
+  const ahead = Number.isFinite(o.ahead) ? o.ahead : 0;
+  const fallbackMessage = `Push ${ahead} commit(s) from ${branch} to the configured upstream. This publishes commits to the remote. Continue?`;
+  const message = _gt('git_push_confirm_message', fallbackMessage)
+    .replace('{branch}', branch)
+    .replace('{ahead}', String(ahead));
+  const ok = await appConfirm({
+    title: _gt('git_push_confirm_title', 'Push commits'),
+    message,
+    confirmText: _gt('git_push_confirm_run', 'Push'),
+    cancelText: _gt('spawn_cancel', 'Cancel'),
+    kind: 'danger',
+  });
+  if (!ok) return false;
+  if (typeof o.onStart === 'function') o.onStart();
+  try {
+    const res = await fetch(`/api/git-push?token=${encodeURIComponent(tok)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session: o.sessionId, token: tok }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
+      if (data && data.error === 'rejected_non_fast_forward') {
+        _toast(_gt('git_push_rejected', 'Remote has new commits. Pull first.'), detail);
+      } else if (data && data.error === 'no_upstream') {
+        _toast(_gt('git_push_no_upstream', 'No upstream branch is configured.'), detail);
+      } else if (data && data.error === 'auth_failed') {
+        _toast(_gt('git_push_auth_failed', 'Git authentication failed.'), detail);
+      } else {
+        _toast(_gt('git_push_failed', 'Push failed'), detail);
+      }
+      return false;
+    }
+    _toast(_gt('git_push_done', 'Push complete'), '');
+    if (typeof o.onSuccess === 'function') await o.onSuccess(data);
+    return true;
+  } catch (err) {
+    _toast(_gt('git_push_failed', 'Push failed'), err && err.message ? err.message : String(err));
+    return false;
+  } finally {
+    if (typeof o.onSettled === 'function') o.onSettled();
+  }
+}
+
+// ============================================================
+// updatePushButtonLabel (C4) — ahead/upstream から push ボタンのラベル・
+// 活性・強調を決める。Git タブと Review タブで見た目を揃えるため共有する。
+// ============================================================
+export function updatePushButtonLabel(btn, wt) {
+  if (!btn) return;
+  if (btn.dataset.busy === '1') return; // 実行中は '…' を保持
+  const ahead = wt && Number.isFinite(wt.ahead) ? wt.ahead : 0;
+  const hasUpstream = !!(wt && wt.has_upstream);
+  btn.title = _gt('git_view_push', 'Push');
+  if (hasUpstream && ahead > 0) {
+    btn.textContent = `↥ ${ahead}`;
+    btn.disabled = false;
+    btn.classList.add('git-ahead');
+  } else {
+    btn.textContent = '↥ push';
+    btn.disabled = true;
+    btn.classList.remove('git-ahead');
+  }
+}
+
 (function setupGitGraphView() {
   const LANE_W = 16;
   const LANE_X0 = 12;
@@ -29,29 +512,10 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
   const LANE_COLORS = ['lane-1', 'lane-2', 'lane-3', 'lane-4'];
   const PAGE_LIMIT = 100;
 
-  function _esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-    }[c]));
-  }
   function _shortHash(h) { return (h || '').slice(0, 8); }
   function _laneX(idx) { return LANE_X0 + idx * LANE_W; }
   function _laneColor(idx) {
     return LANE_COLORS[((idx % LANE_COLORS.length) + LANE_COLORS.length) % LANE_COLORS.length];
-  }
-  function _gt(key, fallback) {
-    if (typeof window.t === 'function') {
-      const v = window.t(key);
-      if (v && v !== key) return v;
-    }
-    return fallback != null ? fallback : key;
-  }
-  function _toast(title, body) {
-    if (typeof window.showToast === 'function') {
-      const msg = body ? `${title}: ${body}` : title;
-      const one = msg.replace(/\n/g, ' ↵ ');
-      window.showToast(one.length > 120 ? one.slice(0, 120) + '…' : one);
-    }
   }
   function _normalizePathForCompare(path) {
     const normalized = String(path || '').replace(/\\/g, '/');
@@ -380,15 +844,6 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
       this.filterText = '';
       this.loading = false;
       this.workingTree = null;
-      this.commitModalState = {
-        open: false,
-        reviewed: false,
-        busy: false,
-        generating: false,
-        error: '',
-        subject: '',
-        body: '',
-      };
 
       this.els = {};
       this._renderShell();
@@ -406,10 +861,6 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
       document.addEventListener('click', this._docClickHandler);
       document.addEventListener('keydown', this._docKeyHandler);
 
-      // Git タブ「Ask AI」: Hub が AI 出力から拾ったコミットメッセージを WS 経由で
-      // 受け取り、自分のセッション宛なら待ち受け中のモーダルへ反映する。
-      this._commitMsgHandler = (e) => this._handleCommitMsgEvent(e && e.detail);
-      window.addEventListener('many-commit-msg', this._commitMsgHandler);
       this._filesChangedHandler = (e) => {
         const detail = (e && e.detail) || {};
         if (_isPathUnderRoot(this.gitRoot, detail.oldAbs)
@@ -482,43 +933,26 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
           </div>
           <div class="ref-list" data-ref-list></div>
         </div>
-
-        <div class="git-commit-modal-backdrop aac-wheel-overlay" data-commit-modal hidden>
-          <div class="git-commit-modal" role="dialog" aria-modal="true">
-            <div class="git-commit-modal-head">
-              <div>
-                <div class="git-commit-modal-title">${_esc(_gt('git_commit_all', 'Commit all'))}</div>
-                <div class="git-commit-modal-sub" data-commit-summary>—</div>
-              </div>
-              <button class="git-commit-close" data-commit-close title="${_esc(_gt('git_view_detail_close', 'Close'))}">✕</button>
-            </div>
-            <div class="git-commit-warning">${_esc(_gt('git_commit_no_push_warning', 'Only git add -A and git commit are run. Push is not run.'))}</div>
-            <div class="git-commit-generate-note">${_esc(_gt('git_commit_generate_note', 'Generate has many-ai-cli analyze the diff and fill in a draft commit message. This is a lightweight heuristic, so accuracy is limited. Review it before committing.'))}</div>
-            <label class="git-commit-field">
-              <span>${_esc(_gt('git_commit_subject', 'Commit message subject'))}</span>
-              <input type="text" data-commit-subject maxlength="200">
-            </label>
-            <label class="git-commit-field">
-              <span>${_esc(_gt('git_commit_body', 'Optional body'))}</span>
-              <textarea data-commit-body rows="6"></textarea>
-            </label>
-            <div class="git-commit-review" data-commit-review-box hidden>
-              ${_esc(_gt('git_commit_review_ready', 'Review complete. Commit will include all current working tree changes.'))}
-            </div>
-            <div class="git-commit-hint" data-commit-hint hidden></div>
-            <div class="git-commit-error" data-commit-error hidden></div>
-            <div class="git-commit-actions">
-              <button class="git-secondary-btn" data-commit-generate>${_esc(_gt('git_commit_generate_message', 'Generate'))}</button>
-              <button class="git-secondary-btn" data-commit-ai hidden title="${_esc(_gt('git_commit_ai_note', 'Ask the connected AI agent to read the diff and draft a commit message. Review it before committing.'))}">${_esc(_gt('git_commit_ai_message', 'Ask AI'))}</button>
-              <div class="git-commit-action-spacer"></div>
-              <button class="git-secondary-btn" data-commit-cancel>${_esc(_gt('confirm_cancel', 'Cancel'))}</button>
-              <button class="git-secondary-btn" data-commit-review>${_esc(_gt('git_commit_review', 'Review'))}</button>
-              <button class="git-commit-run-btn" data-commit-run disabled>${_esc(_gt('git_commit_commit', 'Commit'))}</button>
-            </div>
-          </div>
-        </div>
       `;
       c.appendChild(root);
+
+      // Commit all モーダルは Review タブと共有の 1 実装（GitCommitModal）。
+      // ここでは DOM の置き場所とコンテキストだけを渡す。
+      this.commitModal = new GitCommitModal(root, {
+        getSessionId: () => this.sessionId,
+        getToken: () => this.token,
+        getContext: () => {
+          const wt = this.workingTree || {};
+          const summary = wt.summary || {};
+          return {
+            repo: wt.repo_name || this.gitRoot || '',
+            branch: wt.branch || this.sessionBranch || 'HEAD',
+            filesChanged: summary.files_changed || 0,
+            hasChanges: !!wt.has_changes,
+          };
+        },
+        onCommitted: () => this.refresh(),
+      });
 
       this.els.root          = root;
       this.els.repo          = root.querySelector('[data-repo]');
@@ -547,26 +981,13 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
       this.els.refDropdown   = root.querySelector('[data-ref-dropdown]');
       this.els.refFilter     = root.querySelector('[data-ref-filter]');
       this.els.refList       = root.querySelector('[data-ref-list]');
-      this.els.commitModal   = root.querySelector('[data-commit-modal]');
-      this.els.commitSummary = root.querySelector('[data-commit-summary]');
-      this.els.commitClose   = root.querySelector('[data-commit-close]');
-      this.els.commitCancel  = root.querySelector('[data-commit-cancel]');
-      this.els.commitSubject = root.querySelector('[data-commit-subject]');
-      this.els.commitBody    = root.querySelector('[data-commit-body]');
-      this.els.commitGenerate = root.querySelector('[data-commit-generate]');
-      this.els.commitAI      = root.querySelector('[data-commit-ai]');
-      this.els.commitReview  = root.querySelector('[data-commit-review]');
-      this.els.commitRun     = root.querySelector('[data-commit-run]');
-      this.els.commitReviewBox = root.querySelector('[data-commit-review-box]');
-      this.els.commitHint    = root.querySelector('[data-commit-hint]');
-      this.els.commitError   = root.querySelector('[data-commit-error]');
 
       this.els.fetchBtn.addEventListener('click', () => this._gitFetch());
       this.els.pullBtn.addEventListener('click', () => this._gitPull());
       this.els.pushBtn.addEventListener('click', () => this._gitPush());
       this.els.refreshBtn.addEventListener('click', () => this.refresh());
       this.els.loadmoreBtn.addEventListener('click', () => this.loadMore());
-      this.els.commitAllBtn.addEventListener('click', () => this._openCommitModal());
+      this.els.commitAllBtn.addEventListener('click', () => this.commitModal.open());
       this.els.filter.addEventListener('input', (e) => {
         this.filterText = e.target.value || '';
         this._renderLogTable();
@@ -583,25 +1004,6 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
         this._renderRefList(e.target.value || '');
       });
       this.els.detailClose.addEventListener('click', () => this._toggleDetailPanel());
-      this.els.commitClose.addEventListener('click', () => this._closeCommitModal());
-      this.els.commitCancel.addEventListener('click', () => this._closeCommitModal());
-      this.els.commitModal.addEventListener('click', (e) => {
-        if (e.target === this.els.commitModal) this._closeCommitModal();
-      });
-      this.els.commitSubject.addEventListener('input', () => {
-        this.commitModalState.subject = this.els.commitSubject.value;
-        this.commitModalState.reviewed = false;
-        this._renderCommitModalState();
-      });
-      this.els.commitBody.addEventListener('input', () => {
-        this.commitModalState.body = this.els.commitBody.value;
-        this.commitModalState.reviewed = false;
-        this._renderCommitModalState();
-      });
-      this.els.commitGenerate.addEventListener('click', () => this._generateCommitMessage());
-      if (this.els.commitAI) this.els.commitAI.addEventListener('click', () => this._askAICommitMessage());
-      this.els.commitReview.addEventListener('click', () => this._reviewCommitMessage());
-      this.els.commitRun.addEventListener('click', () => this._commitAll());
       this.els.detailTabs.forEach(tabBtn => {
         tabBtn.addEventListener('click', () => {
           this.activeTab = tabBtn.dataset.tab;
@@ -693,7 +1095,7 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
     dispose() {
       try { document.removeEventListener('click', this._docClickHandler); } catch (_) {}
       try { document.removeEventListener('keydown', this._docKeyHandler); } catch (_) {}
-      try { window.removeEventListener('many-commit-msg', this._commitMsgHandler); } catch (_) {}
+      try { this.commitModal.dispose(); } catch (_) {}
       try { window.removeEventListener('many-ai-cli:files-changed', this._filesChangedHandler); } catch (_) {}
       try { this.container.innerHTML = ''; } catch (_) {}
     }
@@ -862,211 +1264,6 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
       });
     }
 
-    _openCommitModal() {
-      if (!this.workingTree || !this.workingTree.has_changes) return;
-      this.commitModalState = {
-        open: true,
-        reviewed: false,
-        busy: false,
-        generating: false,
-        aiGenerating: false,
-        aiProgressing: false,
-        error: '',
-        subject: '',
-        body: '',
-      };
-      this._renderCommitModalState();
-      this.els.commitModal.hidden = false;
-      _toast(
-        _gt('git_commit_all', 'Commit all'),
-        _gt('git_commit_open_toast', 'Commit all will stage all current working tree changes with git add -A, then commit them. Push is not run.')
-      );
-      setTimeout(() => { try { this.els.commitSubject.focus(); } catch (_) {} }, 0);
-    }
-
-    _closeCommitModal() {
-      this.commitModalState.open = false;
-      this.els.commitModal.hidden = true;
-    }
-
-    _renderCommitModalState() {
-      const st = this.commitModalState;
-      const wt = this.workingTree || {};
-      const summary = wt.summary || {};
-      if (this.els.commitSummary) {
-        const repo = wt.repo_name || this.gitRoot || '';
-        const branch = wt.branch || this.sessionBranch || 'HEAD';
-        this.els.commitSummary.textContent =
-          `${repo} · ${branch} · ${summary.files_changed || 0} files`;
-      }
-      if (this.els.commitSubject && this.els.commitSubject.value !== st.subject) {
-        this.els.commitSubject.value = st.subject;
-      }
-      if (this.els.commitBody && this.els.commitBody.value !== st.body) {
-        this.els.commitBody.value = st.body;
-      }
-      const hasSubject = (st.subject || '').trim() !== '';
-      const blocked = st.busy || st.generating || st.aiGenerating;
-      this.els.commitReview.disabled = !hasSubject || blocked;
-      this.els.commitRun.disabled = !hasSubject || !st.reviewed || blocked;
-      this.els.commitRun.title = !hasSubject
-        ? _gt('git_commit_disabled_no_subject', 'Enter a subject first.')
-        : (!st.reviewed ? _gt('git_commit_disabled_needs_review', 'Press Review to enable Commit.') : '');
-      this.els.commitReview.classList.toggle('primary', hasSubject && !st.reviewed && !blocked);
-      this.els.commitGenerate.disabled = blocked;
-      if (this.els.commitAI) {
-        this.els.commitAI.disabled = blocked;
-        this.els.commitAI.textContent = st.aiGenerating
-          ? (st.aiProgressing
-              ? _gt('git_commit_ai_progressing', 'AI is responding...')
-              : _gt('git_commit_ai_generating', 'Asking AI...'))
-          : _gt('git_commit_ai_message', 'Ask AI');
-      }
-      this.els.commitSubject.disabled = st.busy;
-      this.els.commitBody.disabled = st.busy;
-      this.els.commitReviewBox.hidden = !st.reviewed;
-      if (this.els.commitHint) {
-        const showHint = hasSubject && !st.reviewed && !blocked;
-        this.els.commitHint.hidden = !showHint;
-        this.els.commitHint.textContent = showHint
-          ? _gt('git_commit_review_required_hint', 'Press Review to enable Commit.')
-          : '';
-      }
-      if (st.error) {
-        this.els.commitError.hidden = false;
-        this.els.commitError.textContent = st.error;
-      } else {
-        this.els.commitError.hidden = true;
-        this.els.commitError.textContent = '';
-      }
-      this.els.commitGenerate.textContent = st.generating
-        ? _gt('git_commit_generating', 'Generating...')
-        : _gt('git_commit_generate_message', 'Generate');
-      this.els.commitRun.textContent = st.busy
-        ? _gt('git_commit_committing', 'Committing...')
-        : _gt('git_commit_commit', 'Commit');
-    }
-
-    async _generateCommitMessage() {
-      const st = this.commitModalState;
-      st.generating = true;
-      st.error = '';
-      this._renderCommitModalState();
-      try {
-        const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(this.token)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session: this.sessionId,
-            token: this.token,
-            mode: 'generate',
-            language: (() => {
-              const l = (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').toLowerCase();
-              if (l.startsWith('en')) return 'en';
-              if (l.startsWith('vi')) return 'en'; // AI commit message: use English when UI is Vietnamese
-              return 'ja';
-            })(),
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.ok === false) {
-          throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
-        }
-        st.subject = data.subject || '';
-        st.body = data.body || '';
-        st.reviewed = false;
-      } catch (err) {
-        st.error = err && err.message ? err.message : String(err);
-      } finally {
-        st.generating = false;
-        this._renderCommitModalState();
-      }
-    }
-
-    // _askAICommitMessage は接続中の AI セッションへ diff を解析させ、生成された
-    // コミットメッセージを WS（many-commit-msg イベント）経由で受け取る。
-    async _askAICommitMessage() {
-      const st = this.commitModalState;
-      if (st.busy || st.generating || st.aiGenerating) return;
-      st.aiGenerating = true;
-      st.aiProgressing = false;
-      st.error = '';
-      this._renderCommitModalState();
-      // 応答が来ない場合に備えたフロント側タイムアウト（Hub 側より少し長め）。
-      if (this._aiCommitTimer) clearTimeout(this._aiCommitTimer);
-      this._aiCommitTimer = setTimeout(() => {
-        const s = this.commitModalState;
-        if (s.aiGenerating) {
-          s.aiGenerating = false;
-          s.aiProgressing = false;
-          s.error = _gt('git_commit_ai_timeout', 'Timed out waiting for the AI response.');
-          this._renderCommitModalState();
-        }
-      }, 200000);
-      try {
-        const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(this.token)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session: this.sessionId,
-            token: this.token,
-            mode: 'ai',
-            language: (() => {
-              const l = (localStorage.getItem(STORAGE_LANG_KEY) || 'ja').toLowerCase();
-              if (l.startsWith('en')) return 'en';
-              if (l.startsWith('vi')) return 'en'; // AI commit message: use English when UI is Vietnamese
-              return 'ja';
-            })(),
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.ok === false) {
-          throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
-        }
-        // pending: 結果は many-commit-msg イベントで届く。ここでは待機継続。
-      } catch (err) {
-        st.aiGenerating = false;
-        st.aiProgressing = false;
-        if (this._aiCommitTimer) { clearTimeout(this._aiCommitTimer); this._aiCommitTimer = null; }
-        st.error = err && err.message ? err.message : String(err);
-        this._renderCommitModalState();
-      }
-    }
-
-    // _handleCommitMsgEvent は Hub からの commit_msg_suggested / commit_msg_error /
-    // commit_msg_progress を自セッション・待ち受け中のときだけ反映する。
-    _handleCommitMsgEvent(m) {
-      if (!m || String(m.session_id) !== String(this.sessionId)) return;
-      const st = this.commitModalState;
-      if (!st.open || !st.aiGenerating) return;
-      if (m.type === 'commit_msg_progress') {
-        st.aiProgressing = true;
-        this._renderCommitModalState();
-        return;
-      }
-      st.aiGenerating = false;
-      st.aiProgressing = false;
-      if (this._aiCommitTimer) { clearTimeout(this._aiCommitTimer); this._aiCommitTimer = null; }
-      if (m.type === 'commit_msg_error') {
-        st.error = m.reason || _gt('git_commit_ai_failed', 'AI failed to produce a commit message.');
-      } else {
-        st.subject = m.commit_subject || '';
-        st.body = m.commit_body || '';
-        st.reviewed = false;
-        st.error = '';
-      }
-      this._renderCommitModalState();
-    }
-
-    _reviewCommitMessage() {
-      const st = this.commitModalState;
-      st.subject = this.els.commitSubject.value || '';
-      st.body = this.els.commitBody.value || '';
-      st.error = '';
-      st.reviewed = st.subject.trim() !== '';
-      this._renderCommitModalState();
-    }
-
     async _gitFetch() {
       const btn = this.els.fetchBtn;
       if (btn.disabled) return;
@@ -1141,51 +1338,23 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
       const btn = this.els.pushBtn;
       if (!btn || btn.disabled) return;
       const wt = this.workingTree || {};
-      const branch = wt.branch || this.sessionBranch || this.viewRef || 'HEAD';
-      const ahead = Number.isFinite(wt.ahead) ? wt.ahead : 0;
-      const fallbackMessage = `Push ${ahead} commit(s) from ${branch} to the configured upstream. This publishes commits to the remote. Continue?`;
-      const message = _gt('git_push_confirm_message', fallbackMessage)
-        .replace('{branch}', branch)
-        .replace('{ahead}', String(ahead));
-      const ok = await appConfirm({
-        title: _gt('git_push_confirm_title', 'Push commits'),
-        message,
-        confirmText: _gt('git_push_confirm_run', 'Push'),
-        cancelText: _gt('spawn_cancel', 'Cancel'),
-        kind: 'danger',
+      // 確認ダイアログ〜実行〜トーストは Review タブと共有（runGitPush）。
+      await runGitPush({
+        sessionId: this.sessionId,
+        token: this.token,
+        branch: wt.branch || this.sessionBranch || this.viewRef || 'HEAD',
+        ahead: wt.ahead,
+        onStart: () => {
+          btn.dataset.busy = '1';
+          btn.disabled = true;
+          btn.textContent = '…';
+        },
+        onSuccess: () => this.refresh(),
+        onSettled: () => {
+          delete btn.dataset.busy;
+          this._updatePushButton();
+        },
       });
-      if (!ok) return;
-      btn.dataset.busy = '1';
-      btn.disabled = true;
-      btn.textContent = '…';
-      try {
-        const res = await fetch(`/api/git-push?token=${encodeURIComponent(this.token)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session: this.sessionId, token: this.token }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.ok === false) {
-          const detail = data && data.detail ? data.detail : `HTTP ${res.status}`;
-          if (data && data.error === 'rejected_non_fast_forward') {
-            _toast(_gt('git_push_rejected', 'Remote has new commits. Pull first.'), detail);
-          } else if (data && data.error === 'no_upstream') {
-            _toast(_gt('git_push_no_upstream', 'No upstream branch is configured.'), detail);
-          } else if (data && data.error === 'auth_failed') {
-            _toast(_gt('git_push_auth_failed', 'Git authentication failed.'), detail);
-          } else {
-            _toast(_gt('git_push_failed', 'Push failed'), detail);
-          }
-          return;
-        }
-        _toast(_gt('git_push_done', 'Push complete'), '');
-        await this.refresh();
-      } catch (err) {
-        _toast(_gt('git_push_failed', 'Push failed'), err && err.message ? err.message : String(err));
-      } finally {
-        delete btn.dataset.busy;
-        this._updatePushButton();
-      }
     }
 
     // _updatePullButton は workingTree の ahead/behind 状態から pull ボタンの
@@ -1210,57 +1379,7 @@ import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
     }
 
     _updatePushButton() {
-      const btn = this.els.pushBtn;
-      if (!btn) return;
-      if (btn.dataset.busy === '1') return;
-      const wt = this.workingTree;
-      const ahead = wt && Number.isFinite(wt.ahead) ? wt.ahead : 0;
-      const hasUpstream = !!(wt && wt.has_upstream);
-      btn.title = _gt('git_view_push', 'Push');
-      if (hasUpstream && ahead > 0) {
-        btn.textContent = `↥ ${ahead}`;
-        btn.disabled = false;
-        btn.classList.add('git-ahead');
-      } else {
-        btn.textContent = '↥ push';
-        btn.disabled = true;
-        btn.classList.remove('git-ahead');
-      }
-    }
-
-    async _commitAll() {
-      const st = this.commitModalState;
-      if (!st.reviewed || !(st.subject || '').trim()) return;
-      st.busy = true;
-      st.error = '';
-      this._renderCommitModalState();
-      try {
-        const res = await fetch(`/api/git-commit-all?token=${encodeURIComponent(this.token)}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session: this.sessionId,
-            token: this.token,
-            subject: st.subject,
-            body: st.body,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.ok === false) {
-          const msg = data && data.error === 'commit_identity_missing'
-            ? _gt('git_commit_identity_missing', 'Git user.name / user.email is not configured.')
-            : (data && data.detail ? data.detail : `HTTP ${res.status}`);
-          throw new Error(msg);
-        }
-        this._closeCommitModal();
-        _toast(_gt('git_commit_created', 'Commit created'), `${data.short_hash || ''} ${data.subject || ''}`.trim());
-        await this.refresh();
-      } catch (err) {
-        st.error = err && err.message ? err.message : String(err);
-      } finally {
-        st.busy = false;
-        this._renderCommitModalState();
-      }
+      updatePushButtonLabel(this.els.pushBtn, this.workingTree);
     }
 
     _showLoading() {

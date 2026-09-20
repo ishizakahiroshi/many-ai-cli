@@ -613,6 +613,9 @@ export function _connectWs() {
     if (m.jsonl_path)      cur.jsonl_path      = m.jsonl_path;
     if (m.model !== undefined) cur.model       = m.model;
     if (m.effort !== undefined) cur.effort      = m.effort;
+    // 起動時の権限モード。register 直後の announce で 1 度だけ届く値なので、
+    // ここで拾わないとカードのチップは再接続（snapshot）まで出ない。
+    if (m.permission_mode !== undefined) cur.permission_mode = m.permission_mode;
     if (m.route !== undefined) cur.route       = m.route;
     if (m.parent_session_id !== undefined) cur.parent_session_id = m.parent_session_id;
     if (m.handoff_from !== undefined) cur.handoff_from = m.handoff_from;

@@ -235,3 +235,47 @@ func TestPrepareOpenCodeConfigWithoutBashDenyIsUnchanged(t *testing.T) {
 		t.Fatalf("permission = %v, want only {\"*\": \"allow\"}", parsed.Permission)
 	}
 }
+
+// C5 (plan_cross-provider-agent-ux-adoption.md): セッションカードへ出る権限モードは
+// **wrapper が実際に付けたフラグの申告**であって、Hub の要求値ではない。
+// permissionArgsForProvider がフラグと申告値を 1 箇所で返すので、この 2 つは
+// 構造的にずれない。ここで固定するのはその不変条件そのもの。
+func TestPermissionArgsForProviderDeclaresOnlyWhatItApplied(t *testing.T) {
+	providers := []string{"claude", "grok", "codex", "copilot", "cursor-agent", "opencode", "command-code", "shell", "made-up-cli"}
+	modes := []string{"", "default", "plan", "acceptEdits", "auto", "dontAsk", "bypassPermissions", config.PermissionModeBounded}
+	for _, provider := range providers {
+		for _, mode := range modes {
+			args, declared := permissionArgsForProvider(provider, mode)
+			if len(args) == 0 && declared != "" {
+				t.Fatalf("%s/%q: フラグを 1 つも付けていないのに %q を申告している", provider, mode, declared)
+			}
+			if len(args) > 0 && declared != mode {
+				t.Fatalf("%s/%q: 申告 %q が実際に付けたモードと違う (args=%q)", provider, mode, declared, args)
+			}
+		}
+	}
+}
+
+// 権限モードを指定しない起動は 1 バイトも変わらず、申告も空のまま
+// （＝カードにチップが出ない。「不明」も出さない）。
+func TestPermissionArgsForProviderAddsAndDeclaresNothingWhenUnset(t *testing.T) {
+	for _, provider := range []string{"claude", "grok", "codex", "copilot", "cursor-agent", "opencode", "command-code", "shell"} {
+		for _, mode := range []string{"", "default"} {
+			args, declared := permissionArgsForProvider(provider, mode)
+			if args != nil || declared != "" {
+				t.Fatalf("%s/%q = (%q, %q), want (nil, \"\")", provider, mode, args, declared)
+			}
+		}
+	}
+}
+
+// codex は権限モードを持たない（段は --sandbox / --ask-for-approval で表す）ので、
+// どのモードを渡しても何も足さず、何も申告しない。
+func TestPermissionArgsForProviderCodexDeclaresNothing(t *testing.T) {
+	for _, mode := range []string{"plan", "auto", "dontAsk", "bypassPermissions", config.PermissionModeBounded} {
+		args, declared := permissionArgsForProvider("codex", mode)
+		if args != nil || declared != "" {
+			t.Fatalf("codex/%q = (%q, %q), want (nil, \"\")", mode, args, declared)
+		}
+	}
+}

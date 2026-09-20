@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "afd460358f89412604c097e6e9f8ee14d24dabf3",
+    "commit": "63cabd0fc55654ba729ac8e446e0259d6e5503f0",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -19764,6 +19764,18 @@
       "unresolved": [
         {
           "code": "dynamic_endpoint",
+          "detail": "part of this address is filled in at run time: /api/git-commit-message?token=*"
+        },
+        {
+          "code": "dynamic_endpoint",
+          "detail": "part of this address is filled in at run time: /api/git-commit-all?token=*"
+        },
+        {
+          "code": "dynamic_endpoint",
+          "detail": "part of this address is filled in at run time: /api/git-push?token=*"
+        },
+        {
+          "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/git-log?*"
         },
         {
@@ -19780,23 +19792,11 @@
         },
         {
           "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-commit-message?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/git-fetch?token=*"
         },
         {
           "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: /api/git-pull?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-push?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-commit-all?token=*"
         }
       ]
     },
@@ -21215,6 +21215,7 @@
         "screen_to_api": {
           "state": "value",
           "value": [
+            "/api/git-status?*",
             "/api/git-turns?*"
           ]
         }
@@ -21223,6 +21224,10 @@
         {
           "code": "dynamic_endpoint",
           "detail": "the address of this request is a run-time value: `${endpoint}?${params.toString()}`"
+        },
+        {
+          "code": "dynamic_endpoint",
+          "detail": "part of this address is filled in at run time: /api/git-status?*"
         },
         {
           "code": "dynamic_endpoint",

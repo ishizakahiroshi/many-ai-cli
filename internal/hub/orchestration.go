@@ -2930,6 +2930,7 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		Label:                ses.Label,
 		Model:                ses.Model,
 		ExecutionMode:        ses.ExecutionMode,
+		PermissionMode:       ses.PermissionMode,
 		Route:                ses.Route,
 		State:                ses.State,
 		OutputIdle:           ses.Activity.OutputIdle,

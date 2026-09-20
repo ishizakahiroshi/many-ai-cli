@@ -62,6 +62,40 @@ function sessionDisplayTitle(s: any): string {
   return String(s?.label || s?.auto_title || '');
 }
 
+// 起動時の権限モードの表示名。値は wrapper が申告した「実際に CLI へ付けた
+// フラグ」で、語彙は各 CLI の --permission-mode 相当（段 attended/bounded/full
+// とは別物）。表に無い値は Hub 側が増えたときにそのまま素通しする（ここで
+// 握りつぶすと、画面だけ古いまま黙って値が消える）。
+const PERMISSION_MODE_LABELS: Record<string, string> = {
+  plan: 'Plan',
+  acceptEdits: 'Accept edits',
+  dontAsk: "Don't ask",
+  auto: 'Auto',
+  bypassPermissions: 'Bypass',
+  bounded: 'Bounded',
+};
+
+function permissionModeLabel(mode: string): string {
+  const known = PERMISSION_MODE_LABELS[mode];
+  return ti18n(`permission_mode_${mode}`, known || mode);
+}
+
+// カードに出す「起動時: <モード>」チップ。**起動時の 1 点の値**であることを
+// 文言で言い切る（ライブ値を観測する経路はどの provider にも無い）。指定なしの
+// セッションは空文字＝チップごと出さない。
+export function permissionModeChipHtml(rawMode: unknown): string {
+  const mode = String(rawMode || '').trim();
+  if (!mode) return '';
+  const label = permissionModeLabel(mode);
+  const text = ti18n('card_permission_mode', `At launch: ${label}`, { mode: label });
+  const tip = ti18n(
+    'card_permission_mode_tooltip',
+    `Permission mode this session was started with: ${label}. It is the value at launch, not a live one — a change made inside the CLI afterwards is not shown here.`,
+    { mode: label },
+  );
+  return `<span class="card-permission-chip" data-tooltip="${escapeHtml(tip)}">${escapeHtml(text)}</span>`;
+}
+
 // 引き継ぎの後継を逆引きする（子 plan:
 // docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
 // 記録は後継側にしか無い（前任は止まっているので後から書けない）ので、生きている
@@ -1217,6 +1251,15 @@ export function renderSessionList() {
       const headlessHtml = s.execution_mode === 'headless'
         ? `<span class="card-headless-chip" data-tooltip="${escapeHtml(ti18n('card_headless_tooltip', 'Headless: the provider runs non-interactively, so this terminal is read-only'))}">${escapeHtml(ti18n('card_headless', 'Headless'))}</span>`
         : '';
+      // 起動時の権限モード。値は wrapper の申告が正本で、権限のフラグを 1 つも
+      // 付けずに起動したセッションは空を送るので、そのときはチップを出さない
+      // （「不明」を出さない・C5, plan_cross-provider-agent-ux-adoption.md）。
+      //
+      // **ライブ値ではない。** セッション中に CLI 側で権限モードを切り替えても
+      // Hub には届かない（claude の statusLine payload にも権限モードは無い。
+      // 実測は docs/local/reference/reference_usage-display.md）。だからチップの
+      // 文言は必ず「起動時」と言い、今の状態だと読めないようにする。
+      const permissionModeHtml = permissionModeChipHtml(s.permission_mode);
       // 引き継ぎのリンク。**画面上の親子は作らない**（後継は対等な新しい親）ので、
       // 表示だけの一方向リンクを両側のカードへ出す
       // （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
@@ -1239,7 +1282,7 @@ export function renderSessionList() {
       const branchLabel = branchStr || ti18n('card_branch_no_git', '(no git)');
       const branchBadge = ` <span class="card-branch" role="button" tabindex="0" data-sid="${s.id}"${branchDisabledAttr} data-tooltip="${escapeHtml(branchTip)}" aria-label="${escapeHtml(branchTip)}">${escapeHtml(branchLabel)}</span>`;
       // 2 行目は状態情報・ctx・補助メタデータ・branch を同じ行へ固定する。
-      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${headlessHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}${branchBadge}</div>`;
+      const metaRow = `<div class="card-meta-row"><span class="card-status-slot">${cardStatusRowHtml(s)}</span><span class="card-ctx-slot">${cardCtxHtml(s)}</span>${noteHtml}${roleHtml}${headlessHtml}${permissionModeHtml}${childToggleHtml}${branchRoleHtml}${boardPendingHtml}${handoffFromHtml}${handoffToHtml}${branchBadge}</div>`;
       // 3 行目は完了サマリー専用。中身が無い間は :empty で消えるので、行そのものは常に置く
       // （updateCardLiveInfo が 1Hz でここだけ差し替えるため、器が無いと出し入れで再描画が要る）。
       const doneRow = `<div class="card-done-row">${cardDoneRowHtml(s)}</div>`;

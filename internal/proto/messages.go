@@ -186,6 +186,23 @@ type Message struct {
 	ExecutionMode    string `json:"execution_mode,omitempty"`
 	PermissionPreset string `json:"permission_preset,omitempty"`
 
+	// PermissionMode: register で wrapper が申告する「この起動で実際に CLI へ
+	// 付けた権限モード」。Model / Effort / ExecutionMode と同じ規律で、**要求値
+	// ではなく起動したプロセスの申告**だけが入る。写像が無くフラグを 1 つも
+	// 足さなかった起動では空のままで、UI は何も出さない（「不明」を出さない）。
+	//
+	// 値は各 CLI の --permission-mode 相当の語彙（"plan" / "acceptEdits" /
+	// "dontAsk" / "auto" / "bypassPermissions" / config.PermissionModeBounded）。
+	// PermissionPreset（attended / bounded / full）とは語彙が違うので相乗りさせ
+	// ない。段は起動「要求」の語彙で、New Session フォームが選べる plan や
+	// acceptEdits は段では表せない。
+	//
+	// **起動時の値であって、セッション中の切り替えは含まない。** claude の
+	// statusLine payload に権限モードは無いので（実測: Claude Code v2.1.278 /
+	// docs/local/reference/reference_usage-display.md）、ライブ値を観測する経路は
+	// どの provider にも存在しない。UI の文言は必ず「起動時」と言う。
+	PermissionMode string `json:"permission_mode,omitempty"`
+
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`

@@ -56,7 +56,7 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 | Cursor Agent CLI | `cursor-agent` | official CLI; sign in first |
 | Grok Build CLI | `grok` | xAI's official terminal coding agent; sign in first (requires a **SuperGrok** or **X Premium+** subscription — base X Premium does not include it) |
 | opencode | `opencode` | community CLI; sign in first. Instead of pattern-scraping approval prompts, the Hub writes `opencode.json` (`permission: ask` for interactive sessions, `permission: allow` for orchestration children) into the session cwd and restores the original file on session end |
-| Command Code | `command-code` | **terminal and spawn supported; approval integration pending fixture validation.** The session runs and the approval-mode select maps onto its own flags, but the approval detector has not been validated against captures of the real prompt yet — answer approvals in the terminal if the action bar does not pick them up. Multiple subscriptions are not supported. The OS aliases `cmd` / `cmdc` are not used as the subcommand, because `cmd` collides with the Windows shell |
+| Command Code | `command-code` | **terminal, spawn, approval cards and the Chat tab are implemented; the end-to-end flow has not been confirmed in a live session yet.** The session runs, the approval-mode select maps onto its own flags, the approval detector's trigger phrases come from a capture of the real permission screens (Command Code 1.53.0), and the Chat tab is read from Command Code's own session file. None of that has been watched working on a running Hub, so answer approvals in the terminal if the action bar does not pick them up. Multiple subscriptions are not supported. The OS aliases `cmd` / `cmdc` are not used as the subcommand, because `cmd` collides with the Windows shell |
 
 **Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
 
@@ -159,7 +159,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 | opencode | `XDG_DATA_HOME` | supported — see the note below |
 | GitHub Copilot CLI | — | **not supported**: the token lives in the OS credential store, so `COPILOT_HOME` moves the config but not the login |
 | Cursor Agent CLI | — | **not supported**: the token lives in `~/.cursor/cli-config.json` and no environment variable relocates it |
-| Command Code | — | **not supported**: no profile directory is wired up, so it has no remaining-quota reading either |
+| Command Code | — | **not supported**: no profile directory is wired up. Remaining quota is not read either, and that is independent of the profile question — its own files record per-message token counts and cost, but no limit, remaining amount, or reset time exists to read (measured 2026-09-20) |
 
 **Using it**
 

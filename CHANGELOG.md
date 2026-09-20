@@ -11,6 +11,17 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **You can commit and push straight from the Review tab.** The header now has
+  the same Commit all and push buttons as the Git tab, and Commit all opens the
+  very same dialog — including Generate and Ask AI — so there is no second set
+  of rules to learn. Push still asks for confirmation separately and is never
+  run by Commit all.
+- **Session cards now show the permission mode a session was started with**,
+  for example `At launch: Plan`. The value is what the wrapper actually passed
+  to the CLI, so a session started without a permission mode shows nothing
+  rather than "unknown". It is the value at launch and not a live one: Claude
+  Code's status line payload carries no permission field, so a change made
+  inside the CLI afterwards is not reflected here.
 - **Optional manual Jev evaluation in Settings.** Enable it in this browser,
   enter only text you choose to send, and press Evaluate. The Hub uses your
   `TYPESAFE_API_KEY` environment variable; TypeSafe usage may be billed.

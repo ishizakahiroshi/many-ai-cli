@@ -168,7 +168,11 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		// ExecutionMode も wrapper の申告が正本。対話セッションは空を送るので、
 		// この項目が存在しなかった頃と 1 バイトも変わらない（子 plan:
 		// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
-		ExecutionMode:   reg.ExecutionMode,
+		ExecutionMode: reg.ExecutionMode,
+		// PermissionMode も同じく wrapper の申告が正本。権限のフラグを 1 つも
+		// 付けずに起動したセッションは空を送るので、この項目が存在しなかった頃と
+		// 1 バイトも変わらない（C5, plan_cross-provider-agent-ux-adoption.md）。
+		PermissionMode:  reg.PermissionMode,
 		Route:           regRoute,
 		Shell:           reg.Shell,
 		ParentSessionID: childMeta.ParentSessionID,

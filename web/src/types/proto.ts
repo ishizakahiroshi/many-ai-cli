@@ -298,6 +298,13 @@ export interface Message {
   execution_mode?: string;
   /** 起動要求に添えられた権限段（attended / bounded / full）。空は指定なし。 */
   permission_preset?: string;
+  /**
+   * wrapper が申告した「起動時に実際に付けた権限モード」（plan / acceptEdits /
+   * dontAsk / auto / bypassPermissions / bounded）。空は「権限のフラグを 1 つも
+   * 付けていない」。**起動時の 1 点の値**で、セッション中の切り替えは含まない。
+   * 段（permission_preset）とは語彙が別。
+   */
+  permission_mode?: string;
   route?: string;
   parent_session_id?: number;
   /** このセッションが続きを引き受けた前任の ID。0 / 未送は通常起動。親子関係ではない。 */
@@ -422,6 +429,13 @@ export interface SessionSnapshot {
   model?: string;
   /** reasoning effort（"high" 等）。UI 3 箇所の統一表示に使う（usage 側の値が優先）。 */
   effort?: string;
+  /** wrapper が申告した実行モード（"headless" のみ。空＝対話）。 */
+  execution_mode?: string;
+  /**
+   * wrapper が申告した「起動時に実際に付けた権限モード」。空は指定なしで、
+   * カードには何も出さない（「不明」を出さない）。ライブ値ではない。
+   */
+  permission_mode?: string;
   route?: string;
   shell?: string;
   parent_session_id?: number;

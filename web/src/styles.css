@@ -1579,6 +1579,7 @@ header {
 .card-role-chip,
 .card-handoff-chip,
 .card-headless-chip,
+.card-permission-chip,
 .card-worktree-chip {
   flex-shrink: 0;
   max-width: 11ch;
@@ -1600,6 +1601,11 @@ header {
    押せる chip ではない（状態の表示だけ）ので cursor は変えない。端末が read-only に
    なる理由がここで分かる。 */
 .card-headless-chip { max-width: 12ch; color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); border: 1px dashed color-mix(in srgb, var(--muted) 40%, transparent); cursor: default; }
+/* C5 (plan_cross-provider-agent-ux-adoption.md): 起動時の権限モード。**起動時の
+   1 点の値**で、ライブ値ではない。押せる chip ではない（表示だけ）ので cursor は
+   変えず、今の状態を表す chip（role / state）と見分けが付くよう headless と同じ
+   破線の枠にする。指定なしの起動では HTML ごと出ない。 */
+.card-permission-chip { max-width: 20ch; color: var(--muted); background: color-mix(in srgb, var(--muted) 14%, transparent); border: 1px dashed color-mix(in srgb, var(--muted) 40%, transparent); cursor: default; }
 .card-handoff-chip { max-width: 14ch; color: var(--muted); background: color-mix(in srgb, var(--line) 45%, transparent); border: 1px solid var(--line); cursor: pointer; }
 .card-handoff-chip:hover { color: var(--accent-text); border-color: var(--accent); }
 .card-handoff-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -1723,6 +1729,7 @@ header {
 .card-role-chip,
 .card-worktree-chip,
 .card-headless-chip,
+.card-permission-chip,
 .card-handoff-chip { min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-status-slot:empty,
 .card-ctx-slot:empty { display: none; }

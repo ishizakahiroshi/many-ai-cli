@@ -130,7 +130,18 @@ type session struct {
 	// 対話（PTY）で、"headless" は非対話 runner で走っているセッション
 	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。
 	// **要求値ではなく実際に起動したプロセスの申告**を持つ（Model / Effort と同じ規律）。
-	ExecutionMode   string `json:"execution_mode,omitempty"`
+	ExecutionMode string `json:"execution_mode,omitempty"`
+	// PermissionMode は wrapper が申告した「起動時に実際に付けた権限モード」
+	// （"plan" / "acceptEdits" / "dontAsk" / "auto" / "bypassPermissions" /
+	// "bounded"）。空は「権限のフラグを 1 つも付けていない」で、UI は何も出さない
+	// （「不明」を出さない）。**要求値ではなく申告値**（Model / Effort /
+	// ExecutionMode と同じ規律）。
+	//
+	// **起動時の 1 点の値で、セッション中の切り替えは追えない。** Hub には
+	// ライブの権限モードを観測する経路が無い（claude の statusLine payload にも
+	// 含まれない。実測は docs/local/reference/reference_usage-display.md）ので、
+	// 推定して埋めることはしない。
+	PermissionMode  string `json:"permission_mode,omitempty"`
 	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
 	Shell           string `json:"shell,omitempty"`
 	ParentSessionID int    `json:"parent_session_id,omitempty"`

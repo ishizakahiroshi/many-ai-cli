@@ -984,6 +984,46 @@ func commandCodePermissionArgs(permissionMode string) []string {
 	}
 }
 
+// permissionArgsForProvider maps one permission mode onto the flags the named
+// provider actually accepts, and reports the mode the wrapper may declare for
+// that launch: the mode string when the mapping produced at least one flag, and
+// "" when it produced none.
+//
+// Both halves live in one function on purpose. The register message's claim —
+// "this session really started in this permission mode" — is then true by
+// construction: there is no way to declare a mode without also putting its
+// flags on the command line, and no way to add flags without declaring them.
+// The same discipline that makes Model / Effort / ExecutionMode the wrapper's
+// declaration rather than the Hub's request.
+//
+// codex is absent because it has no permission mode: its tiers are expressed as
+// --sandbox / --ask-for-approval, so it adds nothing here and declares nothing.
+// A provider with no mapping (grok's unsupported values, cursor-agent's or
+// command-code's bounded marker, a custom provider, shell) also declares
+// nothing, and its card shows nothing rather than a mode it did not start in.
+func permissionArgsForProvider(provider, permissionMode string) (args []string, declared string) {
+	switch provider {
+	case "claude", "grok":
+		// grok CLI は claude 互換の --permission-mode（auto / bypassPermissions 含む）をネイティブサポートする
+		args = nativePermissionModeArgs(permissionMode)
+	case "copilot":
+		// auto → --autopilot。bypassPermissions → --allow-all（--yolo 相当）
+		args = copilotPermissionArgs(permissionMode)
+	case "cursor-agent":
+		// auto → --auto-review（Smart Auto）。bypassPermissions → --force（--yolo 相当）
+		args = cursorAgentPermissionArgs(permissionMode)
+	case "opencode":
+		// --auto: auto-approve permissions that are not explicitly denied
+		args = openCodePermissionArgs(permissionMode)
+	case "command-code":
+		args = commandCodePermissionArgs(permissionMode)
+	}
+	if len(args) == 0 {
+		return nil, ""
+	}
+	return args, permissionMode
+}
+
 // customProviderFor looks up provider in cfg.CustomProviders' effective set
 // (config.EffectiveCustomProviders — built-in-collision and duplicate
 // entries already excluded, matching what internal/hub validated before
@@ -1154,6 +1194,15 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// effect rather than the one that was asked for (同じ規律で Model は
 	// register が正本になっている)。
 	launchEffort := ""
+	// launchPermissionMode is the permission mode this process actually starts
+	// the CLI with — empty unless the provider's mapping really put a flag on
+	// the command line. Same discipline as launchEffort: the register message
+	// carries what took effect, never what was asked for, so a session can
+	// never display a mode its CLI was not started in.
+	//
+	// codex expresses permission with --sandbox / --ask-for-approval instead of
+	// a permission mode, so it declares nothing and its card shows nothing.
+	launchPermissionMode := ""
 	if !loginMode {
 		if modelArgs, skipped := modelArgsForProvider(*model, isCustomProvider, providerDefinition, hasProviderDefinition); skipped != "" {
 			logger.Info("model ignored", "provider", provider, "reason", skipped)
@@ -1176,11 +1225,10 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			extra = append(extra, effortArgs...)
 			launchEffort = *effort
 		}
-		switch provider {
-		case "claude", "grok":
-			// grok CLI は claude 互換の --permission-mode（auto / bypassPermissions 含む）をネイティブサポートする
-			extra = append(extra, nativePermissionModeArgs(*permissionMode)...)
-		case "codex":
+		// codex は権限モードを持たず、--sandbox / --ask-for-approval で表す。
+		// ここに残っているのはその 2 つと --oss だけで、権限モードの写像は
+		// permissionArgsForProvider が 1 箇所で持つ。
+		if provider == "codex" {
 			if *codexOSS {
 				extra = append(extra, "--oss")
 			}
@@ -1190,18 +1238,10 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 			if *askForApproval != "" {
 				extra = append(extra, "--ask-for-approval", *askForApproval)
 			}
-		case "copilot":
-			// auto → --autopilot。bypassPermissions → --allow-all（--yolo 相当）
-			extra = append(extra, copilotPermissionArgs(*permissionMode)...)
-		case "cursor-agent":
-			// auto → --auto-review（Smart Auto）。bypassPermissions → --force（--yolo 相当）
-			extra = append(extra, cursorAgentPermissionArgs(*permissionMode)...)
-		case "opencode":
-			// --auto: auto-approve permissions that are not explicitly denied
-			extra = append(extra, openCodePermissionArgs(*permissionMode)...)
-		case "command-code":
-			extra = append(extra, commandCodePermissionArgs(*permissionMode)...)
 		}
+		permissionArgs, declaredPermissionMode := permissionArgsForProvider(provider, *permissionMode)
+		extra = append(extra, permissionArgs...)
+		launchPermissionMode = declaredPermissionMode
 		// 段 2 の許可 tool も effort と同じく switch の外で 1 度だけ足す。
 		// permission mode の直後に並ぶので、claude なら
 		// `--permission-mode dontAsk --allowedTools <v1> <v2> …` になる。
@@ -1246,7 +1286,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	if *headless {
 		launchExecutionMode = config.ExecutionModeHeadless
 	}
-	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, launchEffort, launchExecutionMode, agentSessionID, termCols, termRows)
+	conn, reg, err := dialAndRegister(cfg, provider, display, cwd, *label, *model, launchEffort, launchExecutionMode, launchPermissionMode, agentSessionID, termCols, termRows)
 	if err != nil {
 		return err
 	}
@@ -1815,7 +1855,7 @@ func classifyExit(waitErr error) (state string, code int, signal string) {
 }
 
 // dialAndRegister opens a WS to the Hub and performs the register handshake.
-func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, effort, executionMode, agentSessionID string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
+func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, effort, executionMode, permissionMode, agentSessionID string, termCols, termRows int) (*websocket.Conn, proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はサーバの wsHandshake 許可リスト（http://127.0.0.1:<port>）に一致させる。
 	// websocket.Dial は内部で url.ParseRequestURI(origin) を呼ぶため空文字は不可（empty url エラー）。
@@ -1836,7 +1876,8 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, e
 	// セッションへ届く（子 plan:
 	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。
 	// ExecutionMode も同じ規律で、--headless を付けて起動したプロセスだけが
-	// "headless" を名乗る（空＝対話）。
+	// "headless" を名乗る（空＝対話）。PermissionMode も同じで、権限のフラグが
+	// 実際に 1 つ以上付いた起動だけが値を名乗る（空＝指定なし・何も足していない）。
 	if err := websocket.JSON.Send(conn, proto.Message{
 		Type:              "register",
 		Role:              "wrapper",
@@ -1848,6 +1889,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, e
 		Model:             model,
 		Effort:            effort,
 		ExecutionMode:     executionMode,
+		PermissionMode:    permissionMode,
 		PID:               os.Getpid(),
 		Shell:             DetectShell(),
 		Token:             cfg.Token,
