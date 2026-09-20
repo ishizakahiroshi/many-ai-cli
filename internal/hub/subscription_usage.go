@@ -77,6 +77,7 @@ type subscriptionUsageValue struct {
 	claude      *claudeSubscriptionUsage
 	codex       *codexSubscriptionUsage
 	grok        *grokSubscriptionUsage
+	observedAt  time.Time
 	retrievedAt time.Time
 	source      string
 }
@@ -124,7 +125,13 @@ func (s *Server) recordSessionSubscriptionUsage(sessionID int, stat *usageStat, 
 	if provider == "" || profileID == "" {
 		return
 	}
-	s.subscriptionUsageStoreForServer().recordSession(provider, profileID, stat, at)
+	observedAt := at
+	if provider == "codex" {
+		// A missing provider timestamp must not become a dated observation
+		// merely because the Hub received the Stop hook now.
+		observedAt = parseUsageObservedAt(stat.UsageObservedAt)
+	}
+	s.subscriptionUsageStoreForServer().recordSessionAt(provider, profileID, stat, observedAt, at)
 }
 
 func newSubscriptionUsageStore() *subscriptionUsageStore {
@@ -136,19 +143,14 @@ func newSubscriptionUsageStore() *subscriptionUsageStore {
 }
 
 func (s *subscriptionUsageStore) putLive(provider, id string, value subscriptionUsageValue, at time.Time) {
-	provider = strings.TrimSpace(provider)
-	id = config.NormalizeSubscriptionID(id)
-	if provider == "" || id == "" {
-		return
-	}
-	value.retrievedAt = at
-	value.source = "live"
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.entries[subscriptionUsageKey{provider: provider, id: id}] = value
+	s.putObservation(provider, id, value, at, at, "live")
 }
 
 func (s *subscriptionUsageStore) putLocal(provider, id string, value subscriptionUsageValue, at time.Time) {
+	s.putObservation(provider, id, value, at, at, "local")
+}
+
+func (s *subscriptionUsageStore) putObservation(provider, id string, value subscriptionUsageValue, observedAt, fallbackAt time.Time, source string) {
 	provider = strings.TrimSpace(provider)
 	id = config.NormalizeSubscriptionID(id)
 	if provider == "" || id == "" {
@@ -157,17 +159,46 @@ func (s *subscriptionUsageStore) putLocal(provider, id string, value subscriptio
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := subscriptionUsageKey{provider: provider, id: id}
-	if current, ok := s.entries[key]; ok && current.source == "live" {
-		// A live relay value is the more direct source and must not be replaced
-		// by an offline reread on every UI refresh.
-		return
+	if current, ok := s.entries[key]; ok {
+		if provider == "codex" {
+			if !usageObservationReplaces(current.observedAt, observedAt) {
+				return
+			}
+		} else if source == "local" && current.source == "live" {
+			// Keep the original precedence for providers without both channels.
+			return
+		}
 	}
-	value.retrievedAt = at
-	value.source = "local"
+	storedAt := observedAt
+	if storedAt.IsZero() {
+		storedAt = fallbackAt
+	}
+	value.retrievedAt = storedAt
+	value.observedAt = observedAt
+	value.source = source
 	s.entries[key] = value
 }
 
+// usageObservationReplaces reports whether incoming should replace current.
+// Recency is the only rule: a dated observation beats an undated one, and a
+// strictly later timestamp wins. Equal timestamps keep the current value so a
+// UI reread of the same observation cannot flap. An undated incoming value
+// never replaces a dated current value (it may only fill an empty slot).
+func usageObservationReplaces(current, incoming time.Time) bool {
+	if incoming.IsZero() {
+		return false
+	}
+	if current.IsZero() {
+		return true
+	}
+	return incoming.After(current)
+}
+
 func (s *subscriptionUsageStore) recordSession(provider, id string, stat *usageStat, at time.Time) {
+	s.recordSessionAt(provider, id, stat, at, at)
+}
+
+func (s *subscriptionUsageStore) recordSessionAt(provider, id string, stat *usageStat, observedAt, fallbackAt time.Time) {
 	if stat == nil || strings.TrimSpace(id) == "" {
 		return
 	}
@@ -225,7 +256,11 @@ func (s *subscriptionUsageStore) recordSession(provider, id string, stat *usageS
 	default:
 		return
 	}
-	s.putLive(provider, id, value, at)
+	if provider == "codex" {
+		s.putObservation(provider, id, value, observedAt, fallbackAt, "live")
+	} else {
+		s.putLive(provider, id, value, fallbackAt)
+	}
 }
 
 func toUsageWindow(pct float64, minutes int, reset int64) *usageWindow {
@@ -292,10 +327,9 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 			if !ok {
 				continue
 			}
-			fetched := at
-			if !local.ObservedAt.IsZero() {
-				fetched = local.ObservedAt
-			}
+			// ObservedAt is the provider record's own time. Hub-now is only a
+			// display fallback when that time is missing; it must not outrank
+			// a dated live observation on every UI poll.
 			// The switch below only decides which of the Hub's own JSON
 			// shapes (codexSubscriptionUsage / grokSubscriptionUsage) to
 			// fill in — it branches on which field ReadProfile populated,
@@ -303,15 +337,15 @@ func (s *subscriptionUsageStore) refreshLocal(cfg *config.Config, configDir stri
 			// participation decision above no longer names providers.
 			switch {
 			case local.Codex != nil:
-				s.putLocal(provider, id, subscriptionUsageValue{codex: codexUsageFromLocal(*local.Codex)}, fetched)
+				s.putObservation(provider, id, subscriptionUsageValue{codex: codexUsageFromLocal(*local.Codex)}, local.ObservedAt, at, "local")
 			case local.Grok != nil:
-				s.putLocal(provider, id, subscriptionUsageValue{grok: &grokSubscriptionUsage{
+				s.putObservation(provider, id, subscriptionUsageValue{grok: &grokSubscriptionUsage{
 					UsedPercent:      clampUsagePercent(local.Grok.UsedPercent),
 					RemainingPercent: 100 - clampUsagePercent(local.Grok.UsedPercent),
 					PeriodStart:      local.Grok.PeriodStart,
 					PeriodEnd:        local.Grok.PeriodEnd,
 					PeriodType:       local.Grok.PeriodType,
-				}}, fetched)
+				}}, local.ObservedAt, at, "local")
 			}
 		}
 	}
