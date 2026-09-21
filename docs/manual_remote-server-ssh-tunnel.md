@@ -1,6 +1,6 @@
 # リモートサーバー SSH トンネル運用手順
 
-> 最終更新: 2026-06-14(日) 21:09:45 — スマホ接続（📱）節を追加（Tailscale serve はウィザード自動化・残る手動手順のみ・Funnel 不使用・生IP 制限）
+> 最終更新: 2026-09-21(月) 11:26:00 — 対応 provider 列挙および wrap コマンド表記を現行化
 
 ## このドキュメントは何か
 
@@ -52,7 +52,7 @@ Hub は `Host` / `Origin` を `127.0.0.1:<Hub のポート>`（または `localh
 ## 前提
 
 - リモートサーバーに SSH ログインできる
-- リモートに `many-ai-cli` と、使う provider CLI（`claude` / `codex` / `copilot` / `cursor-agent`）が入っている
+- リモートに `many-ai-cli` と、使う provider CLI（`claude` / `codex` / `copilot` / `cursor-agent` / `opencode` / `grok` / `command-code`）が入っている
 - リモートの firewall / security group で Hub ポートを外部公開しない（開けるのは SSH のみ）
 - 手元 PC に OpenSSH client がある
 - Hub URL の `?token=...` は誰にも共有しない
@@ -220,7 +220,7 @@ http://127.0.0.1:47777/?token=<token>
 
 ### 5. セッションを起動
 
-Hub UI の spawn から provider を起動するか、リモートの別 SSH shell で `many-ai-cli claude` / `many-ai-cli codex` などを起動する。操作対象の filesystem・Git・ログ・添付保存先は**すべてリモート側**になる（手元 PC のファイルではない）。
+Hub UI の spawn から provider を起動するか、リモートの別 SSH shell で `many-ai-cli wrap claude` / `many-ai-cli wrap codex` などを起動する（または `MANY_AI_CLI_AUTO=1` 下での直接呼び出し）。操作対象の filesystem・Git・ログ・添付保存先は**すべてリモート側**になる（手元 PC のファイルではない）。
 
 ### 6. 終了
 
@@ -297,7 +297,7 @@ ss -ltnp | grep ':47777'
 - **HTTPS 推奨**。生IP（`100.x` 直）経路は採用しない。生IP の `http://100.x` は secure context にならず、Web Push / Service Worker / PWA インストール / マイク音声入力が無効化される。`tailscale serve` の `https://…ts.net` ならフル機能。SSH ローカルフォワードの `http://127.0.0.1:<port>` も secure context でフル機能。
 - **Docker コンテナ内 Hub では `tailscale serve` は使えない**（コンテナ内に `tailscale` CLI が無い）。その場合ウィザードは degrade し、SSH トンネル / launcher 経由のモバイル接続へ誘導する。
 - token 入り QR は**パスワード相当**。写真の流出 = Hub フルアクセスなので共有しない。
-- 詳細設計: [local/plan_mobile-connect-flow-redesign.md](local/plan_mobile-connect-flow-redesign.md)。
+- 詳細設計: `docs/local/archive/v0.3.2/plan_mobile-connect-flow-redesign.md`。
 
 ## 関連
 
@@ -305,5 +305,5 @@ ss -ltnp | grep ':47777'
   - 単一サーバー版（pnpm）: [manual_remote-server-agent-single.md](manual_remote-server-agent-single.md)
   - Docker 版: [manual_remote-server-agent-docker.md](manual_remote-server-agent-docker.md)
 - Docker マルチユーザー運用の詳細: [manual_docker-multiuser.md](manual_docker-multiuser.md)
-- [v0.2.x 設計書: Security / Privacy](v0.2.x-any-ai-cli-design.md#17-security--privacy)
+- [設計書: Security / Privacy](v0.3.x-many-ai-cli-design.md#17-security--privacy)
 - [README.ja.md: セキュリティ](../README.ja.md#セキュリティ)

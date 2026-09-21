@@ -392,7 +392,7 @@ ssh -N -T `
 
 Browser: `http://127.0.0.1:47777/?token=<token-từ-remote>` — **không** thay bằng IP public remote.
 
-Chi tiết full (tmux, firewall, `.cmd` shortcut, pitfall): xem [`README.md`](README.md) mục tương ứng hoặc [manual remote](docs/manual_remote-server-overview.vi.md).
+Chi tiết full (tmux, firewall, `.cmd` shortcut, pitfall): xem [`README.md`](README.md) mục tương ứng hoặc [manual remote](docs/vi/manual_remote-server-overview.vi.md).
 
 ---
 
@@ -445,7 +445,7 @@ Token Hub **không** nằm trong payload ntfy. Topic = shared secret — dùng c
 
 Webhook generic: **+ Add webhook**, URL nhận `POST` JSON `{"title":"...","body":"..."}` (Discord / Slack / relay tùy chỉnh).
 
-Hướng dẫn bảo mật mobile đầy đủ: [docs/manual_mobile-access.vi.md](docs/manual_mobile-access.vi.md).
+Hướng dẫn bảo mật mobile đầy đủ: [docs/vi/manual_mobile-access.vi.md](docs/vi/manual_mobile-access.vi.md).
 
 ---
 
@@ -554,7 +554,7 @@ Mở `http://127.0.0.1:47777/?token=<token>`.
 
 Quy tắc ngắn: không muốn audio rời máy → Whisper; ưu tiên tiện/chính xác → Browser hoặc IME điện thoại.
 
-Chi tiết cài Whisper: [docs/manual_whisper.vi.md](docs/manual_whisper.vi.md).
+Chi tiết cài Whisper: [docs/vi/manual_whisper.vi.md](docs/vi/manual_whisper.vi.md).
 
 ---
 
@@ -637,13 +637,13 @@ Dừng sạch: `⏻` UI hoặc `many-ai-cli stop`.
 - Bind `127.0.0.1` only; token trên URL.  
 - Không telemetry từ many-ai-cli; có thể HTTPS GitHub khi fetch slash-commands / approval-patterns / models.  
 - Session log **opt-in** (`log.session_enabled`) — raw log có thể chứa secret hiện trên terminal.  
-- Remote: SSH/VPN do người dùng; xem [manual mobile](docs/manual_mobile-access.vi.md).  
+- Remote: SSH/VPN do người dùng; xem [manual mobile](docs/vi/manual_mobile-access.vi.md).  
 
 ---
 
 ## Remote / Docker
 
-- Mục lục vai trò A/B/C và chọn quy trình: [docs/manual_remote-server-overview.vi.md](docs/manual_remote-server-overview.vi.md)  
+- Mục lục vai trò A/B/C và chọn quy trình: [docs/vi/manual_remote-server-overview.vi.md](docs/vi/manual_remote-server-overview.vi.md)  
 - Agent server đơn / Docker: file gốc `docs/manual_remote-server-agent-*.md`  
 - SSH tunnel chi tiết: `docs/manual_remote-server-ssh-tunnel.md`  
 
@@ -651,14 +651,14 @@ Dừng sạch: `⏻` UI hoặc `many-ai-cli stop`.
 
 ## Tài liệu tiếng Việt trong repo
 
-Mục lục đầy đủ: **[docs/README.vi.md](docs/README.vi.md)** (tất cả `manual_*.vi.md`).
+Mục lục đầy đủ: **[docs/vi/README.md](docs/vi/README.md)** (tất cả `manual_*.vi.md`).
 
 | File | Nội dung |
 |---|---|
 | [README.vi.md](README.vi.md) | File này |
 | [CLAUDE.vi.md](CLAUDE.vi.md) | Hướng dẫn phát triển (từ CLAUDE.md) |
-| [docs/README.vi.md](docs/README.vi.md) | Mục lục manual VI |
-| `docs/manual_*.vi.md` | Toàn bộ manual vận hành (remote, Docker, Whisper, release, …) |
+| [docs/vi/README.md](docs/vi/README.md) | Mục lục manual VI |
+| `docs/vi/manual_*.vi.md` | Toàn bộ manual vận hành (remote, Docker, Whisper, release, …) |
 | `web/src/i18n/vi.json` | Locale Hub UI (Settings → Language → Tiếng Việt) |
 
 Các phần README English rất dài (launcher full, status bar chi tiết, image transfer edge case, disclaimer đầy đủ) giữ chuẩn tại [`README.md`](README.md). Bản VI ưu tiên **đủ để onboard team**; chi tiết edge-case tra bản English.

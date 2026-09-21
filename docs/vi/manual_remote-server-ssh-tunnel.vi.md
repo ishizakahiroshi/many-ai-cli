@@ -1,11 +1,11 @@
 # Quy trình vận hành SSH tunnel tới remote server
 
-> Bản dịch tiếng Việt của [`manual_remote-server-ssh-tunnel.md`](manual_remote-server-ssh-tunnel.md).  
+> Bản dịch tiếng Việt của [`manual_remote-server-ssh-tunnel.md`](../manual_remote-server-ssh-tunnel.md).  
 > Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-ssh-tunnel.md`](manual_remote-server-ssh-tunnel.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-ssh-tunnel.md`](../manual_remote-server-ssh-tunnel.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -306,13 +306,13 @@ Lưu ý:
 - **Ưu tiên HTTPS**. Không dùng đường IP thô (`100.x`). `http://100.x` không phải secure context → Web Push / Service Worker / cài PWA / mic thoại bị tắt. `https://…ts.net` của `tailscale serve` thì đủ chức năng. SSH local forward `http://127.0.0.1:<port>` cũng là secure context, đủ chức năng.
 - **Hub trong Docker container không dùng được `tailscale serve`** (không có CLI `tailscale` trong container). Wizard degrade và dẫn sang mobile qua SSH tunnel / launcher.
 - QR có token **tương đương mật khẩu**. Ảnh rò rỉ = full access Hub — không chia sẻ.
-- Thiết kế chi tiết: [local/plan_mobile-connect-flow-redesign.md](local/plan_mobile-connect-flow-redesign.md).
+- Thiết kế chi tiết: `docs/local/archive/v0.3.2/plan_mobile-connect-flow-redesign.md`.
 
 ## Liên quan
 
 - Muốn AI agent cấu hình trọn gói (dán vào AI trên PC local, cấu hình qua SSH):
-  - Server đơn (pnpm): [manual_remote-server-agent-single.md](manual_remote-server-agent-single.md)
-  - Docker: [manual_remote-server-agent-docker.md](manual_remote-server-agent-docker.md)
-- Vận hành Docker đa user: [manual_docker-multiuser.md](manual_docker-multiuser.md)
-- [Thiết kế v0.2.x: Security / Privacy](v0.2.x-any-ai-cli-design.md#17-security--privacy)
-- [README.ja.md: Bảo mật](../README.ja.md#セキュリティ)
+  - Server đơn (pnpm): [manual_remote-server-agent-single.md](../manual_remote-server-agent-single.md)
+  - Docker: [manual_remote-server-agent-docker.md](../manual_remote-server-agent-docker.md)
+- Vận hành Docker đa user: [manual_docker-multiuser.md](../manual_docker-multiuser.md)
+- [Thiết kế: Security / Privacy](../v0.3.x-many-ai-cli-design.md#17-security--privacy)
+- [README.ja.md: Bảo mật](../../README.ja.md#セキュリティ)

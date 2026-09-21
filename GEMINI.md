@@ -19,5 +19,5 @@
 ## Gemini 特記
 
 - **本リポジトリでは Gemini CLI を wrap 対象外とした**（2026-05-06 決定 / ToS グレーゾーンのため）。
-- 詳細: [docs/provider_tos_review.md](docs/provider_tos_review.md)
+- 詳細: [docs/local/archive/v0.2.2/reference_provider_tos_review.md](docs/local/archive/v0.2.2/reference_provider_tos_review.md)（見送り台帳 D-01）
 - 本リポジトリ自体は `many-ai-cli`（Claude Code / Codex 向け承認ハブ）の開発リポジトリであり、開発補助に Gemini CLI を使う場合の手引きとして本ファイルを残置している。

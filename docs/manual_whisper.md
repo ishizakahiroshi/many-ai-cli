@@ -45,15 +45,13 @@ be placed into `internal/whisperruntime/files/windows-amd64/` **before the Go
 build** for `go:embed` to pick them up — by running that script on the build
 machine, or by committing the signed DLLs.
 
-> Note: this placement is **not yet automated in the release pipeline**
-> (`release.yml` builds on Linux via GoReleaser and does not run the Windows-only
-> fetch script). Until that is wired up — e.g. a `windows-latest` build leg that
-> runs the script, or committing the DLLs — a released Windows binary embeds the
-> runtime only if the DLLs were present at build time. When they are absent,
-> `whisperruntime.Ensure` is a safe no-op and managed Whisper still relies on a
-> machine-wide VC++ runtime (the original `0xC0000135` exposure).
+> Note: this placement is **automated in the release pipeline**
+> (`.github/workflows/release.yml` runs the fetch script on a `windows-latest` runner
+> and passes the verified runtime DLLs as artifacts to the GoReleaser job).
+> When building locally on Windows, run `.\internal\whisperruntime\fetch_windows_runtime.ps1`
+> once before `make build` to bundle them.
 
-See `docs/local/plan_unified-local-whisper-all-os.md` (C2) for the licensing terms
+See `docs/local/archive/v0.3.2/plan_unified-local-whisper-all-os.md` (C2) for the licensing terms
 (Microsoft "Distributable Code", redistributed app-local).
 
 ## Downloads And Verification

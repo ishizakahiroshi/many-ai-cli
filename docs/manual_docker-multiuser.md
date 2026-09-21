@@ -1,8 +1,8 @@
 # many-ai-cli Docker マルチユーザー運用 manual（admin リモートサーバー）
 
-> 最終更新: 2026-06-04(木) 22:44:40
+> 最終更新: 2026-09-21(月) 11:26:00 — アーカイブリンク修正、コマンド表記の現行化
 
-XServer リモートサーバー（サーバー名 `admin`）上で「ユーザー 1 人 = Docker コンテナ 1 つ」の分離方式で `many-ai-cli` を複数人運用するための手順書。サーバー側の物理パス（`/opt/any-ai-cli/` `/srv/any-ai-cli/`）および compose プロジェクト名・docker volume 名は旧称 `any-ai-cli` のまま運用しているため、本書でも実態に合わせて表記している。設計の経緯・決定ログは [plan_docker-multiuser-isolation.md](plan_docker-multiuser-isolation.md) を参照。
+XServer リモートサーバー（サーバー名 `admin`）上で「ユーザー 1 人 = Docker コンテナ 1 つ」の分離方式で `many-ai-cli` を複数人運用するための手順書。サーバー側の物理パス（`/opt/any-ai-cli/` `/srv/any-ai-cli/`）および compose プロジェクト名・docker volume 名は旧称 `any-ai-cli` のまま運用しているため、本書でも実態に合わせて表記している。設計の経緯・決定ログは `docs/local/archive/v0.3.2/plan_docker-multiuser-isolation.md` を参照。
 
 **接続情報（サーバー IP・秘密鍵パス・token 等）の正本は管理者ローカルの認証情報ファイル（Git 管理外）に置く。本書には実値を書かない。**
 
@@ -192,7 +192,7 @@ ssh -N -L <port>:127.0.0.1:<port> <user>@<server-ip> -i <秘密鍵パス>
 
 通常停止は `docker compose stop aac-<user>` を使う。可能なら先に Hub UI で当該ユーザーのセッションを終了してから停止する。
 
-停止時は Docker から entrypoint へ SIGTERM が届き、entrypoint が `many-ai-cli wrap` / `many-ai-cli claude` / `many-ai-cli codex` / `many-ai-cli copilot` / `many-ai-cli cursor-agent` の wrapper 群へ SIGTERM を送る。wrapper は既存実装で子プロセスの AI CLI へ SIGTERM を転送するため、ファイル書き込みや git 操作が途中の場合でも通常の終了猶予を得られる。
+停止時は Docker から entrypoint へ SIGTERM が届き、entrypoint が `many-ai-cli wrap <provider>`（`claude`, `codex`, `copilot`, `cursor-agent`, `grok` 等）の wrapper 群へ SIGTERM を送る。wrapper は既存実装で子プロセスの AI CLI へ SIGTERM を転送するため、ファイル書き込みや git 操作が途中の場合でも通常の終了猶予を得られる。
 
 猶予は entrypoint 側で wrapper 最大 20 秒、compose 側でコンテナ全体 `stop_grace_period: 40s`。40 秒を超えると Docker が SIGKILL するため、緊急時以外は `docker kill` や `docker compose stop -t 0` を使わない。停止確認は `docker logs aac-<user>` で `sending TERM to wrapper processes` → `wrapper processes exited` → `sending TERM to Hub` → `Hub exited` の順に出ているかを見る。
 

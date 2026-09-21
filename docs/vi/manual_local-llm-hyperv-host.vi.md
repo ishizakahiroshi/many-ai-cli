@@ -1,11 +1,11 @@
 # Dùng local LLM (Ollama / LM Studio) trên host Windows từ guest Hyper-V
 
-> Bản dịch tiếng Việt của [`manual_local-llm-hyperv-host.md`](manual_local-llm-hyperv-host.md).  
+> Bản dịch tiếng Việt của [`manual_local-llm-hyperv-host.md`](../manual_local-llm-hyperv-host.md).  
 > Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_local-llm-hyperv-host.md`](manual_local-llm-hyperv-host.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_local-llm-hyperv-host.md`](../manual_local-llm-hyperv-host.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >

@@ -1,6 +1,6 @@
 # many-ai-cli リリース手順
 
-> 最終更新: 2026-07-11(土) 10:43:23 — Authenticode / notarization の有効化前提、canonical artifact の署名順序、fail-closed 検証を追記
+> 最終更新: 2026-09-21(月) 11:26:00 — v0.3.0 での未解決課題（release notes 自動編集、npm publish backoff）の解決済み反映
 
 この手順は GitHub Actions の `Release` workflow と GoReleaser で GitHub Releases を作成するための恒久運用メモ。
 **特定バージョンの実行チェックリスト**は別途用意する（v0.3.0 は `docs/local/manual_release-v0-3-0_2026-06-13.md`）。本書は版に依らない方式・設計・注意点を扱う。
@@ -28,14 +28,14 @@ v0.1.0 は試験リリース扱いとし、初回正式リリースは v0.1.1 �
 
 - **frontend embed（go build 失敗）**: `web/web.go` の `//go:embed all:dist` は go build 前に `web/dist` が要る。`.goreleaser.yaml` の before hook で必ず frontend を build すること。⚠️ `bun --cwd web run build` は **goreleaser hook 内で no-op になり**（web/dist 空のまま build → `pattern all:dist: no matching files found`）使わない。✅ `sh -c 'cd web && bun install --frozen-lockfile && bun run build'` に修正済み（`before.hooks` は**文字列のみ**・`{cmd, dir}` の map 形式は v2.16 で不可。Release は ubuntu 実行なので `sh -c` 可）。
 - **release.yml の startup_failure**: step の `if: ${{ secrets.X != '' }}` は**不可**（`secrets` は if コンテキストで使えず "Unrecognized named-value: 'secrets'" で workflow 全体が起動失敗）。✅ job 級 `env:` に昇格し `if: ${{ env.X != '' }}` に修正済み。`actionlint` で**タグ前に**検出できる。
-- **リリースノートが読めない**: goreleaser の自動 changelog はコミットメッセージ（Git タブの自動生成「web を更新」「internalの変更を反映」等）の羅列になり、リリースノートとして無価値。✅ `changelog.disable: true` ＋ CHANGELOG.md の該当版節を抽出して `--release-notes` で渡す方針に変更済み。⚠️ **ただし今回 `--release-notes` が効かず GitHub Release の body が空**になり（タグの commit メッセージが代替表示）、`gh release edit v0.3.0 --notes-file <CHANGELOG抽出>` で手当てした。**workflow 側は未解決＝次回までに「goreleaser 後に `gh release edit --notes-file` する step を足す」方式へ**。
+- **リリースノートが読めない**: goreleaser の自動 changelog はコミットメッセージ（Git タブの自動生成「web を更新」「internalの変更を反映」等）の羅列になり、リリースノートとして無価値。✅ `changelog.disable: true` ＋ CHANGELOG.md の該当版節を抽出して `--release-notes` で渡す方針に変更済み。✅ また、`release.yml` に `Ensure release notes (gh release edit --notes-file)` ステップを追加したため、Release body が空にならず自動で CHANGELOG 抜粋が確実に反映される（解決済み）。
 - 関連: goreleaser の `before.hooks` を変えたら `goreleaser release --snapshot --clean` で**実際に before hook が走るか**を確認する（snapshot は Windows だと `sh` 不在で hook が落ちることがあるので、最終的には CI か WSL で確認）。
 
 ### npm 配布の地雷
 
 - **publish パスの誤解釈**: `npm publish "npm/<pkg>"` は npm が **GitHub shorthand（`owner/repo`）と誤解釈**し Git リモートの取得を試みて `Permission denied` で失敗する。✅ 必ず **`npm publish "./npm/<pkg>"`**（先頭 `./`）。
 - **token は publish 権限必須**: read-only token だと publish が **`E429 "Could not publish, as user undefined: rate limited exceeded"`** で失敗する（権限不足を**紛らわしいレート制限文言**で返す。`npm whoami` は通っても publish 権限が無いと publish 不可）。granular token は **Permissions = Read and write / Packages = All packages**、または Classic の **Automation** token。CI secret `NPM_TOKEN` も同要件。granular は最長 90 日で失効するので CI 長期運用は Classic Automation（無期限可）推奨。
-- **本物の E429（レート制限）**: 短時間に publish を連打すると npm がロックする。**連続試行は窓リセットで逆効果**。15〜20 分空けて 1 回ずつ。release.yml の npm publish step には **retry/backoff を入れる**（v0.3.0 時点では未実装＝⚠️宿題）。
+- **本物の E429（レート制限）**: 短時間に publish を連打すると npm がロックする。**連続試行は窓リセットで逆効果**。15〜20 分空けて 1 回ずつ。✅ 現在は `scripts/publish-npm.sh` に **指数バックオフ付きリトライ（E429 backoff）および idempotent skip** が実装済み。
 - **Windows から platform package を publish しない**: Windows の `npm pack` は **unix 実行ビットを付けられない**（tarball 内が `-rw-r--r--` = 0644）。root shim が `spawnSync(binary)` で直接 exec するため、これだと **linux/macOS パッケージが起動失敗（EACCES）**する。**正道は CI(Linux) で publish**。手動復旧する場合は **WSL(ext4) で `chmod 0755` してから `npm pack`/`publish`**（/mnt/c 上だと chmod が効かないことがあるのでネイティブ fs で）。展開だけ Windows・pack/publish は WSL、という分担。
 
 ### その他

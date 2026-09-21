@@ -1,6 +1,6 @@
 # Ollama Cloud 経由で Codex / Claude Code を使う運用手順
 
-> 最終更新: 2026-06-19(金) 07:51:46
+> 最終更新: 2026-09-21(月) 11:26:00 — 別ホスト接続時の allow_private_hosts 設定要件を追記
 
 ## 概要
 
@@ -161,6 +161,7 @@ Hub を Hyper-V ゲスト内で動かし、Ollama と GPU をホスト Windows �
 ```yaml
 ollama:
   base_url: "http://192.168.11.50:11434"
+  allow_private_hosts: true
 ```
 
 Default Switch 側を使う場合の例:
@@ -168,9 +169,10 @@ Default Switch 側を使う場合の例:
 ```yaml
 ollama:
   base_url: "http://172.20.224.1:11434"
+  allow_private_hosts: true
 ```
 
-この値は `/api/models` の `/api/tags` 取得と、spawn 時に注入する `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` の両方に使われる。`base_url` には `/v1` や `/api/tags` を付けない。
+プライベート IP を指定する場合は、SSRF 防御機構を通過させるために `allow_private_hosts: true` の設定が必要。この値は `/api/models` の `/api/tags` 取得と、spawn 時に注入する `ANTHROPIC_BASE_URL` / `OPENAI_BASE_URL` の両方に使われる。`base_url` には `/v1` や `/api/tags` を付けない。
 
 ### Local LLM（pull 済み）を使う
 
@@ -317,8 +319,8 @@ env が残ったままだと Claude Code がローカル Ollama に向かい続�
 
 ## 関連
 
-- 親計画: [plan_ollama-cloud-codex-claude.md](plan_ollama-cloud-codex-claude.md)
-- 実装計画: [plan_spawn-model-picker-ollama.md](plan_spawn-model-picker-ollama.md)
+- 親計画: `docs/local/archive/v0.2.2/plan_ollama-cloud-codex-claude.md`
+- 実装計画: `docs/local/archive/v0.2.2/plan_spawn-model-picker-ollama.md`
 - Provider 汎化計画: `docs/local/archive/v0.1.3/plan_provider-extensibility_20260510.md`
 - Ollama 公式 cloud モデル一覧: `https://ollama.com/search?c=cloud`
 - Ollama 公式統合ドキュメント: `https://docs.ollama.com/integrations/codex` / `https://docs.ollama.com/integrations/claude-code`

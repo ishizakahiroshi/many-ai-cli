@@ -1,11 +1,11 @@
 # Quy trình release many-ai-cli
 
-> Bản dịch tiếng Việt của [`manual_release.md`](manual_release.md).  
+> Bản dịch tiếng Việt của [`manual_release.md`](../manual_release.md).  
 > Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_release.md`](manual_release.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. **Bản gốc đã được cập nhật sau lần dịch này** (bản dịch: 2026-07-18 · bản gốc: 2026-08-11).
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_release.md`](../manual_release.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. **Bản gốc đã được cập nhật sau lần dịch này** (bản dịch: 2026-07-18 · bản gốc: 2026-08-11).
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -339,7 +339,7 @@ Nguồn: `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/res
 >
 > Freshness đã gắn precheck skill `release`: khi `repo == many-ai-cli`, **preflight** `slash-commands-update` chạy — xác nhận có `docs/local/slash-command-freshness_YYYY-MM-DD.md` mới nhất trong hạn, **không còn diff chưa quyết (`decision = pending`)**. Còn pending → không cho tag (block tới khi ghi accepted / deferred: lý do vào release md). `unknown` (không lấy source · opencode, v.v.) mặc định chỉ cảnh báo.
 >
-> Muốn nhận lệnh add/remove gốc trước release: chạy mode `report` của `slash-commands-update` trước (C1–C2 trong [manual_slash_commands_update.md](manual_slash_commands_update.md)), quyết accepted/deferred, `apply` vào `resources/slash-commands/*.md`, rồi mới qua kiểm tra drift dưới. Kết quả freshness ghi bảng «Slash command freshness» trong `## 申し送り` (handover) của release md.
+> Muốn nhận lệnh add/remove gốc trước release: chạy mode `report` của `slash-commands-update` trước (C1–C2 trong [manual_slash_commands_update.md](../manual_slash_commands_update.md)), quyết accepted/deferred, `apply` vào `resources/slash-commands/*.md`, rồi mới qua kiểm tra drift dưới. Kết quả freshness ghi bảng «Slash command freshness» trong `## 申し送り` (handover) của release md.
 
 So diff slash command (PowerShell):
 

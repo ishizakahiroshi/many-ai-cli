@@ -1,11 +1,11 @@
 # Hướng dẫn kết nối điện thoại / remote (📱 Kết nối mobile)
 
-> Bản dịch tiếng Việt của [`manual_mobile-access.md`](manual_mobile-access.md).  
+> Bản dịch tiếng Việt của [`manual_mobile-access.md`](../manual_mobile-access.md).  
 > Cập nhật nguồn: 2026-06-16 — v0.3.1/v0.3.2 đã có wizard Tailscale (📱). Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_mobile-access.md`](manual_mobile-access.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_mobile-access.md`](../manual_mobile-access.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -172,5 +172,5 @@ Ba máy cùng VPN → điện thoại thấy Hub nhà và Hub VPS như «cùng n
 ## Kết nối từ điện thoại / remote
 Hub many-ai-cli vẫn bind 127.0.0.1; thao tác từ điện thoại qua SSH tunnel / VPN.
 Nút 📱 góc phải hiện QR (URL / SSH / VPN).
-Chi tiết: docs/manual_mobile-access.md (bản Việt: docs/manual_mobile-access.vi.md).
+Chi tiết: docs/manual_mobile-access.md (bản Việt: docs/vi/manual_mobile-access.vi.md).
 ```

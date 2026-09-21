@@ -1,11 +1,11 @@
 # Task cấu hình AI agent: remote server (Docker / đa user · cô lập)
 
-> Bản dịch tiếng Việt của [`manual_remote-server-agent-docker.md`](manual_remote-server-agent-docker.md).  
+> Bản dịch tiếng Việt của [`manual_remote-server-agent-docker.md`](../manual_remote-server-agent-docker.md).  
 > Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-agent-docker.md`](manual_remote-server-agent-docker.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-31.)
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-agent-docker.md`](../manual_remote-server-agent-docker.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-31.)
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -30,7 +30,7 @@ Cách dùng:
 2. Dán toàn bộ file vào AI agent và bảo «thực hiện quy trình này».
 3. Agent tự triển khai · khởi động · verify · tạo profile.
 
-Nguồn chuẩn trong repo: `deploy/docker/` (Dockerfile / entrypoint.sh / compose.yaml / users/*.yaml). Chi tiết vận hành đa user: [manual_docker-multiuser.md](manual_docker-multiuser.md) (task này là cấu hình tối thiểu «một user + nối từ local»).
+Nguồn chuẩn trong repo: `deploy/docker/` (Dockerfile / entrypoint.sh / compose.yaml / users/*.yaml). Chi tiết vận hành đa user: [manual_docker-multiuser.md](../manual_docker-multiuser.md) (task này là cấu hình tối thiểu «một user + nối từ local»).
 
 ---
 
@@ -62,7 +62,7 @@ SSH thông · OS · Docker / compose.
 ssh SSH_TARGET 'bash -lc "uname -a; docker version --format \"{{.Server.Version}}\"; docker compose version" && echo OK-PREREQ'
 ```
 
-verify: ra `OK-PREREQ` và version Docker / compose. Không có Docker thì **dừng tại đây**, hướng dẫn cài ([manual_docker-multiuser.md](manual_docker-multiuser.md) mục «Ghi chép chuẩn bị server ban đầu») — task này **không** cài Docker.
+verify: ra `OK-PREREQ` và version Docker / compose. Không có Docker thì **dừng tại đây**, hướng dẫn cài ([manual_docker-multiuser.md](../manual_docker-multiuser.md) mục «Ghi chép chuẩn bị server ban đầu») — task này **không** cài Docker.
 
 ### Triển khai cấu hình compose (C2)
 
@@ -139,7 +139,7 @@ ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ub
 
 verify: lấy được `token: ...`. **Không để token trong log · chat** (mỗi lần kết nối launcher lấy lại bằng `token_command`; giá trị ghi tạm ở đây **không** lưu file).
 
-> **Đường mobile (📱)**: trong container không có CLI `tailscale` → không dùng `tailscale serve`. Điện thoại nối qua **SSH tunnel / launcher** (wizard mobile degrade dẫn sang SSH tunnel). Chi tiết: [local/plan_mobile-connect-flow-redesign.md](local/plan_mobile-connect-flow-redesign.md).  
+> **Đường mobile (📱)**: trong container không có CLI `tailscale` → không dùng `tailscale serve`. Điện thoại nối qua **SSH tunnel / launcher** (wizard mobile degrade dẫn sang SSH tunnel). Chi tiết: `docs/local/archive/v0.3.2/plan_mobile-connect-flow-redesign.md`.  
 > **Khác biệt mô hình token**: launcher mỗi lần lấy lại bằng `token_command` và **không lưu file**. Mobile (📱) **lưu token trên máy** qua QR (xử lý mất token: plan khác `plan_remote-auth-hardening-future.md`). Mobile trên Hub remote vẫn đọc token của chính Hub đó nên không mâu thuẫn với `token_command`.
 
 ### Tạo launcher profile trên local (C6)
@@ -184,7 +184,7 @@ Gộp một lần:
 - Đường dẫn `REMOTE_BASE` đã triển khai và status `aac-USER_TAG` (nếu đang chờ `healthy` thì ghi rõ)
 - Kết quả: listen host chỉ `127.0.0.1:HUB_PORT`
 - Tên launcher profile và đường dẫn file
-- **Việc user làm tiếp bằng tay**: đăng nhập provider CLI (trong `docker exec -it aac-USER_TAG bash`, ủy quyền cá nhân; quy trình: [manual_docker-multiuser.md](manual_docker-multiuser.md) «Đăng nhập AI CLI lần đầu»), cập nhật tag theo dõi nếu cần (`docker compose pull && docker compose up -d`)
+- **Việc user làm tiếp bằng tay**: đăng nhập provider CLI (trong `docker exec -it aac-USER_TAG bash`, ủy quyền cá nhân; quy trình: [manual_docker-multiuser.md](../manual_docker-multiuser.md) «Đăng nhập AI CLI lần đầu»), cập nhật tag theo dõi nếu cần (`docker compose pull && docker compose up -d`)
 
 ## Cấm (bắt buộc)
 
@@ -197,7 +197,7 @@ Gộp một lần:
 
 ## Liên quan
 
-- Lối vào (cài gì, đi quy trình nào): [manual_remote-server-overview.md](manual_remote-server-overview.md)
-- Cơ chế & xử lý sự cố: [manual_remote-server-ssh-tunnel.md](manual_remote-server-ssh-tunnel.md)
-- Nguồn chuẩn vận hành Docker đa user: [manual_docker-multiuser.md](manual_docker-multiuser.md)
-- Task cấu hình server đơn (pnpm): [manual_remote-server-agent-single.md](manual_remote-server-agent-single.md)
+- Lối vào (cài gì, đi quy trình nào): [manual_remote-server-overview.md](../manual_remote-server-overview.md)
+- Cơ chế & xử lý sự cố: [manual_remote-server-ssh-tunnel.md](../manual_remote-server-ssh-tunnel.md)
+- Nguồn chuẩn vận hành Docker đa user: [manual_docker-multiuser.md](../manual_docker-multiuser.md)
+- Task cấu hình server đơn (pnpm): [manual_remote-server-agent-single.md](../manual_remote-server-agent-single.md)

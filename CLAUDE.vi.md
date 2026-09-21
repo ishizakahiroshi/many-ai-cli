@@ -201,7 +201,7 @@ Quy tắc bổ sung riêng dự án:
 
 - Thay đổi cursor của Agent Chat không được coi là xong ở mức parser đơn lẻ; phải theo dõi và kiểm chứng đến bước caller nhận offset và lần poll kế tiếp khởi động lại.
 - Runtime bị gitignore nhưng là đối tượng `go:embed` phải được lấy về, kiểm chứng và đóng thành artifact trong clean release job, đồng thời bắt buộc xác nhận input tồn tại trước khi build. Việc file có sẵn ở máy local không được dùng làm bằng chứng cho release.
-- Quy trình chi tiết, SHA và scope của secret trong release workflow lấy [`.github/workflows/release.yml`](.github/workflows/release.yml) và [plan xử lý kiểm toán](docs/local/archive/plan_security-vulnerability-quality-remediation-2026-08-13.md) làm chuẩn. Không sao chép quy trình vào CLAUDE.md.
+- Quy trình chi tiết, SHA và scope của secret trong release workflow lấy [`.github/workflows/release.yml`](.github/workflows/release.yml) và [plan xử lý kiểm toán](docs/local/archive/v0.8.x/plan_security-vulnerability-quality-remediation-2026-08-13.md) làm chuẩn. Không sao chép quy trình vào CLAUDE.md.
 - Xác nhận tĩnh, test local, lần chạy CI, release artifact và xác nhận trên máy thật là **những bằng chứng khác nhau**, phải báo cáo riêng. Không coi CI / artifact / xác nhận trên máy thật chưa chạy là đã xong.
 
 ## Hướng dẫn chi tiết (theo loại nhiệm vụ)
@@ -226,10 +226,10 @@ Trước khi **tạo/chạy** `plan_*.md` hoặc **tạo/cập nhật** `.md` d�
 | Hạng mục | Đường dẫn |
 |------|------|
 | Thiết kế v0.3.0 (hiện hành · chuẩn) | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
-| Thiết kế v0.2.0 (lịch sử) | [docs/v0.2.x-any-ai-cli-design.md](docs/v0.2.x-any-ai-cli-design.md) |
+| Thiết kế v0.2.0 (lịch sử) | [docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md](docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md) |
 | Thiết kế v1 (lịch sử) | [docs/local/archive/v0.1.3/cli-popup-design-v1.md](docs/local/archive/v0.1.3/cli-popup-design-v1.md) |
 | Bổ sung cho Codex | [AGENTS.md](AGENTS.md) (local: `AGENTS.local.md` nếu có) |
 | Bổ sung cho Gemini | [GEMINI.md](GEMINI.md) (**không** wrap trong many-ai-cli; giữ để dùng Gemini CLI hỗ trợ dev repo này) |
 | Bản hướng dẫn tiếng Việt | [CLAUDE.vi.md](CLAUDE.vi.md) (file này) |
 | README tiếng Việt | [README.vi.md](README.vi.md) |
-| Mục lục manual tiếng Việt | [docs/README.vi.md](docs/README.vi.md) |
+| Mục lục manual tiếng Việt | [docs/vi/README.md](docs/vi/README.md) |

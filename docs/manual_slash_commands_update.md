@@ -1,8 +1,8 @@
 # many-ai-cli スラッシュコマンド一覧の更新手順
 
-> 最終更新: 2026-06-19(金) 08:06:57 — 半自動の `slash-commands-update` スキル連携と freshness レポート運用を追記
+> 最終更新: 2026-09-21(月) 11:26:00 — 対応 provider（opencode, grok, command-code）および取得元を現行仕様へ更新
 
-Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいスラッシュコマンドが追加された際、ダッシュボードのスラッシュコマンドピッカーに反映させるための運用メモ。
+Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / OpenCode / Grok Build CLI / Command Code に新しいスラッシュコマンドが追加された際、ダッシュボードのスラッシュコマンドピッカーに反映させるための運用メモ。
 
 ## 推奨: `slash-commands-update` スキルで半自動化する
 
@@ -22,14 +22,16 @@ Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいス�
 
 ## 仕組み（前提）
 
-## 仕組み（前提）
-
-- 一覧の正本は `resources/slash-commands/claude.md` / `resources/slash-commands/codex.md` / `resources/slash-commands/copilot.md` / `resources/slash-commands/cursor-agent.md`（markdown テーブル）
+- 一覧の正本は `resources/slash-commands/` 配下の markdown テーブル:
+  - `claude.md` / `codex.md` / `copilot.md` / `cursor-agent.md` / `opencode.md` / `grok.md` / `command-code.md`
 - Hub は実行時にこのファイルを **GitHub の raw URL 経由で取得・パース**する。デフォルト取得元は `internal/config/config.go` の以下:
   - `DefaultClaudeSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/claude.md`
   - `DefaultCodexSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md`
   - `DefaultCopilotSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md`
   - `DefaultCursorAgentSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md`
+  - `DefaultOpenCodeSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md`
+  - `DefaultGrokSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/grok.md`
+  - `DefaultCommandCodeSlashCmdSource = https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/command-code.md`
 - **リビルド不要・トークン消費 0** で更新できる（md を更新して `main` に push するだけ）。バイナリには影響しない。
 - 取得結果は provider ごとに **24h キャッシュ**（`slashCmdCacheTTL`）。
 
@@ -41,6 +43,9 @@ Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI に新しいス�
 - **Codex CLI**: 公式ドキュメント [Slash commands in Codex CLI](https://developers.openai.com/codex/cli/slash-commands) を正本とする。
 - **GitHub Copilot CLI**: `copilot help commands` の実機出力を正本とする。公式ドキュメントと差分があれば実機出力を優先する。
 - **Cursor Agent CLI**: 実機 `cursor-agent` の `/help` を正本とする。実機が無ければ公式ドキュメント [Slash commands | Cursor Docs](https://cursor.com/docs/cli/reference/slash-commands) を使い、差分があれば実機出力を優先する。
+- **OpenCode**: 実機 `opencode` のヘルプまたはソース定義を正本とする。
+- **Grok Build CLI**: 実機 `grok` の `/help` またはコマンド一覧出力を正本とする。
+- **Command Code**: 実機 `command-code` の `/help` または設定定義を正本とする。
 - 削除済みコマンドは除外する（例: Claude の `/vim` `/pr-comments` は削除済み）。
 
 #### 公式 docs を「網羅リスト」として扱わない（2026-08-11 の教訓）
@@ -114,7 +119,7 @@ go test ./internal/hub/ -run <一時テスト名> -v
 
 ```powershell
 # develop でコミット
-git add resources/slash-commands/claude.md resources/slash-commands/codex.md resources/slash-commands/copilot.md resources/slash-commands/cursor-agent.md
+git add resources/slash-commands/*.md
 git commit -m "feat: スラッシュコマンド一覧を最新化"
 
 # main へマージして push
@@ -135,6 +140,9 @@ https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/sla
 https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/codex.md
 https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/copilot.md
 https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/cursor-agent.md
+https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/opencode.md
+https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/grok.md
+https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/command-code.md
 ```
 
 ### C6. ダッシュボードで再取得する

@@ -1,11 +1,11 @@
 # Quy trình cập nhật danh sách slash-command many-ai-cli
 
-> Bản dịch tiếng Việt của [`manual_slash_commands_update.md`](manual_slash_commands_update.md).  
+> Bản dịch tiếng Việt của [`manual_slash_commands_update.md`](../manual_slash_commands_update.md).  
 > Cập nhật nguồn: 2026-06-19 — skill bán tự động `slash-commands-update` và báo cáo freshness. Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_slash_commands_update.md`](manual_slash_commands_update.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. **Bản gốc đã được cập nhật sau lần dịch này** (bản dịch: 2026-07-31 · bản gốc: 2026-08-11).
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_slash_commands_update.md`](../manual_slash_commands_update.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. **Bản gốc đã được cập nhật sau lần dịch này** (bản dịch: 2026-07-31 · bản gốc: 2026-08-11).
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -121,4 +121,4 @@ Hub cache 24h — muốn ngay thì force fetch tay:
 - API: `internal/hub/slash_handlers.go` (`handleSlashCommands`: GET=cache / POST=force)
 - URL nguồn: `internal/config/config.go`
 - UI picker: `web/src/app.js` / `web/src/index.html` (`slash-picker-refresh`)
-- Release: [manual_release.md](manual_release.md) (kiểm diff resource phục vụ runtime)
+- Release: [manual_release.md](../manual_release.md) (kiểm diff resource phục vụ runtime)

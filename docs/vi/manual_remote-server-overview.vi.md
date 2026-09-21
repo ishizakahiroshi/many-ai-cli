@@ -1,11 +1,11 @@
 # Lối vào remote / server (cài gì, dùng quy trình nào)
 
-> Bản dịch tiếng Việt của [`manual_remote-server-overview.md`](manual_remote-server-overview.md).  
+> Bản dịch tiếng Việt của [`manual_remote-server-overview.md`](../manual_remote-server-overview.md).  
 > Cập nhật nguồn: 2026-06-14. Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-overview.md`](manual_remote-server-overview.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_remote-server-overview.md`](../manual_remote-server-overview.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -27,8 +27,8 @@ Cùng một máy có thể kiêm **A và B** (vừa chạy AI local vừa nối 
 |---|---|---|---|---|
 | Chỉ chạy AI trên PC (không remote) | `many-ai-cli` (đầy đủ) | A | Có | README «Quick Start» / «Bắt đầu nhanh» |
 | Chạy AI trên PC **và** nối remote | Chỉ `many-ai-cli` (đầy đủ) ※ B đã nhúng | A＋B | Có | README «Quick Start» + các bước remote bên dưới |
-| Chỉ dùng AI remote · qua PC · **agent cấu hình tự động** | `many-ai-cli-launcher` | B | Có (tối thiểu) | [Server đơn (pnpm)](manual_remote-server-agent-single.md) / [Docker](manual_remote-server-agent-docker.md) |
-| Chỉ dùng AI remote · qua PC · **nhập profile thủ công bằng nút UI** | `many-ai-cli-launcher` | B | Có (tối thiểu) | [plan_server-profile-export-import](local/plan_server-profile-export-import.md) (đang lên kế hoạch) |
+| Chỉ dùng AI remote · qua PC · **agent cấu hình tự động** | `many-ai-cli-launcher` | B | Có (tối thiểu) | [Server đơn (pnpm)](../manual_remote-server-agent-single.md) / [Docker](../manual_remote-server-agent-docker.md) |
+| Chỉ dùng AI remote · qua PC · **nhập profile thủ công bằng nút UI** | `many-ai-cli-launcher` | B | Có (tối thiểu) | `docs/local/archive/v0.3.2/plan_server-profile-export-import.md` |
 | Chỉ dùng AI remote · **VPN thẳng từ điện thoại** | Không cài gì (PWA) | C | Không | Hub UI → «📱 Kết nối mobile» |
 
 ※ Người dùng cả hai phía: **chỉ cần một bản full**. Connector B đã nhúng trong `serve` (`/api/servers`) — không bắt buộc cài thêm launcher.  
@@ -40,17 +40,17 @@ Cùng một máy có thể kiêm **A và B** (vừa chạy AI local vừa nối 
 
 Khi agent cấu hình tự động cho “dùng AI trên server”, có **hai** quy trình. Khác nhau **không** nằm ở kỹ thuật tunnel, mà ở **Hub remote đã chạy sẵn hay chưa**:
 
-| | [Server đơn (pnpm)](manual_remote-server-agent-single.md) | [Docker](manual_remote-server-agent-docker.md) |
+| | [Server đơn (pnpm)](../manual_remote-server-agent-single.md) | [Docker](../manual_remote-server-agent-docker.md) |
 |---|---|---|
 | Cài remote | pnpm global install | Pull image GHCR bằng compose |
 | Khởi động Hub | `serve` (mỗi lần, hoặc systemd / tmux / nohup thường trú) | `restart: unless-stopped` thường trú |
 | Chế độ launcher | `serve` (không cần token trước) | `tunnel` (lấy token bằng `token_command`) |
 | Phù hợp | Một user · không cần cô lập mạnh (**cả máy vật lý 1 node**) | Nhiều user cô lập · cập nhật tự động có quy trình |
 
-> **“Thường trú” không độc quyền của Docker.** Một máy Linux vật lý cũng có thể cho `serve` chạy systemd/tmux rồi đặt launcher ở chế độ tunnel (ví dụ `token_command` xem [mục vận hành server đơn](manual_remote-server-agent-single.md)).
+> **“Thường trú” không độc quyền của Docker.** Một máy Linux vật lý cũng có thể cho `serve` chạy systemd/tmux rồi đặt launcher ở chế độ tunnel (ví dụ `token_command` xem [mục vận hành server đơn](../manual_remote-server-agent-single.md)).
 
 ## Liên quan
 
-- Cơ chế & xử lý sự cố: [manual_remote-server-ssh-tunnel.md](manual_remote-server-ssh-tunnel.md)
+- Cơ chế & xử lý sự cố: [manual_remote-server-ssh-tunnel.md](../manual_remote-server-ssh-tunnel.md)
 - Launcher tổng quát (tiếng Anh, gồm cách lấy bản phát hành): README mục «Unified launcher»
-- Nhập profile bằng UI (không agent, đang lên kế hoạch): [local/plan_server-profile-export-import.md](local/plan_server-profile-export-import.md)
+- Nhập profile bằng UI: `docs/local/archive/v0.3.2/plan_server-profile-export-import.md`

@@ -1,11 +1,11 @@
 # Quy trình dùng Codex / Claude Code qua Ollama Cloud
 
-> Bản dịch tiếng Việt của [`manual_ollama-cloud-routing.md`](manual_ollama-cloud-routing.md).  
+> Bản dịch tiếng Việt của [`manual_ollama-cloud-routing.md`](../manual_ollama-cloud-routing.md).  
 > Bản dịch: 2026-07-18.
 
 > **⚠️ Bản dịch này là ảnh chụp tại một thời điểm và không còn được đồng bộ.**
 >
-> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_ollama-cloud-routing.md`](manual_ollama-cloud-routing.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
+> Kể từ 2026-08-15, các file `*.vi.md` trong repo này **không còn được cập nhật theo bản gốc**. Bản gốc [`manual_ollama-cloud-routing.md`](../manual_ollama-cloud-routing.md) là chuẩn duy nhất — vui lòng đối chiếu bản gốc trước khi làm theo nội dung ở đây. (Lần dịch gần nhất: 2026-07-18.)
 >
 > Xin chân thành cảm ơn người đã đóng góp bản dịch. Chúng tôi vẫn hoan nghênh đóng góp dịch thuật; chỉ là không thể hứa giữ đồng bộ, nên bản được merge cũng sẽ là ảnh chụp có ghi ngày.
 >
@@ -326,8 +326,8 @@ Kiểm chứng trên máy thật do user chạy. Lần lượt 6 góc dưới.
 
 ## Liên quan
 
-- Kế hoạch cha: [plan_ollama-cloud-codex-claude.md](plan_ollama-cloud-codex-claude.md)
-- Kế hoạch implement: [plan_spawn-model-picker-ollama.md](plan_spawn-model-picker-ollama.md)
+- Kế hoạch cha: `docs/local/archive/v0.2.2/plan_ollama-cloud-codex-claude.md`
+- Kế hoạch implement: `docs/local/archive/v0.2.2/plan_spawn-model-picker-ollama.md`
 - Kế hoạch provider generalization: `docs/local/archive/v0.1.3/plan_provider-extensibility_20260510.md`
 - Danh sách model cloud Ollama: `https://ollama.com/search?c=cloud`
 - Tài liệu tích hợp chính thức Ollama: `https://docs.ollama.com/integrations/codex` / `https://docs.ollama.com/integrations/claude-code`
