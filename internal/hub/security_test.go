@@ -849,6 +849,118 @@ func TestSanitizeGitErrMsg_URLInStderr(t *testing.T) {
 	}
 }
 
+// --- C1 (bugfix_git-hook-rejection-reason-hidden_2026-09-21): hook の拒否理由を残す ---
+
+// TestSanitizeGitErrMsgKeepsHookRejectionReason は、pre-commit hook が書いた拒否理由が
+// UI へ届くことを固定する。以前はパスらしき文字が 1 つでもあれば出力を丸ごと
+// "git command failed" へ差し替えていたため、hook の出力（ほぼ必ず相対パスを含む）が
+// 100% 消えていた。相対パスは公開リポに載っている情報なので伏せない。
+func TestSanitizeGitErrMsgKeepsHookRejectionReason(t *testing.T) {
+	err := &gitCmdError{
+		Args: "commit -m feat: add thing",
+		Output: "OK: secrets-scan passed\n" +
+			"omitnix: generated document is out of date\n" +
+			"  2 file(s) changed: web/src/app/git-view.ts, web/src/app/review-view.ts\n" +
+			"  regenerate with: omitnix",
+	}
+	got := sanitizeGitErrMsg(err)
+	for _, want := range []string{
+		"omitnix",
+		"out of date",
+		"web/src/app/git-view.ts",
+		"regenerate with",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("hook rejection reason must survive; %q missing from: %q", want, got)
+		}
+	}
+}
+
+// TestSanitizeGitErrMsgSplitsArgsFromOutput は、引数に ": " を含む自由入力
+// （コミットメッセージ）があっても出力側が落ちないことを固定する。
+// 旧実装は最初の ": " で割っていたため、`-m feat: X` の ": " で割れて
+// 出力が丸ごと失われていた。
+func TestSanitizeGitErrMsgSplitsArgsFromOutput(t *testing.T) {
+	err := &gitCmdError{
+		Args:   "commit -m feat: subject with a colon",
+		Output: "pre-commit hook refused the commit",
+	}
+	got := sanitizeGitErrMsg(err)
+	if !strings.Contains(got, "pre-commit hook refused the commit") {
+		t.Fatalf("output must not be dropped when args contain \": \": %q", got)
+	}
+}
+
+// TestSanitizeGitErrMsgRedactsAbsolutePaths は、絶対パスだけが伏字になり
+// 相対パスは残ることを固定する。Unix / Windows / UNC の 3 形式を見る。
+func TestSanitizeGitErrMsgRedactsAbsolutePaths(t *testing.T) {
+	cases := []struct {
+		name   string
+		output string
+		banned []string
+	}{
+		{"unix", "fatal: " + "/" + "home/someone" + "/.many-ai-cli/repo: not a git repo", []string{"/" + "home/someone"}},
+		{"windows", "fatal: " + "C:" + "\\Users\\" + "someone\\repo: not a git repo", []string{"C:" + "\\Users", "someone"}},
+		{"unc", "fatal: \\\\fileserver\\share\\repo: not a git repo", []string{"fileserver"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizeGitErrMsg(&gitCmdError{Args: "status", Output: tc.output})
+			for _, banned := range tc.banned {
+				if strings.Contains(got, banned) {
+					t.Fatalf("absolute path must be redacted, %q still present in: %q", banned, got)
+				}
+			}
+			if !strings.Contains(got, gitErrRedactedPath) {
+				t.Fatalf("expected %q placeholder in: %q", gitErrRedactedPath, got)
+			}
+			if !strings.Contains(got, "not a git repo") {
+				t.Fatalf("explanation must survive redaction: %q", got)
+			}
+		})
+	}
+}
+
+// TestSanitizeGitErrMsgKeepsRelativePaths は、相対パスを伏字にしないことを固定する。
+// ここを伏せると hook の拒否理由が読めなくなる（本 bugfix の芯）。
+func TestSanitizeGitErrMsgKeepsRelativePaths(t *testing.T) {
+	got := sanitizeGitErrMsg(&gitCmdError{
+		Args:   "commit",
+		Output: "web/src/app/git-view.ts is not formatted",
+	})
+	if !strings.Contains(got, "web/src/app/git-view.ts") {
+		t.Fatalf("relative path must survive: %q", got)
+	}
+}
+
+// TestSanitizeGitErrMsgCapsLongOutput は、長い出力が画面を壊さないよう頭で切られ、
+// 切ったときだけ導線が付くことを固定する。
+func TestSanitizeGitErrMsgCapsLongOutput(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		b.WriteString("hook says something long enough to matter\n")
+	}
+	got := sanitizeGitErrMsg(&gitCmdError{Args: "commit", Output: b.String()})
+	if len(got) > gitErrMaxArgsBytes+gitErrMaxOutputBytes+len(gitErrTruncatedNote)+64 {
+		t.Fatalf("capped message is still too long: %d bytes", len(got))
+	}
+	if !strings.Contains(got, gitErrTruncatedNote) {
+		t.Fatalf("truncation note missing from: %q", got)
+	}
+	if strings.Count(got, "\n") > gitErrMaxOutputLines {
+		t.Fatalf("line cap not applied: %d newlines", strings.Count(got, "\n"))
+	}
+}
+
+// TestSanitizeGitErrMsgShortMessageUntouched は、伏せる対象も長さ超過も無いときに
+// 文言をそのまま通すことを固定する（余計な加工をしない）。
+func TestSanitizeGitErrMsgShortMessageUntouched(t *testing.T) {
+	got := sanitizeGitErrMsg(&gitCmdError{Args: "log HEAD", Output: "exit status 128"})
+	if got != "git log HEAD: exit status 128" {
+		t.Fatalf("unexpected rewrite: %q", got)
+	}
+}
+
 type sanitizeGitTestErr struct{ msg string }
 
 func (e *sanitizeGitTestErr) Error() string { return e.msg }

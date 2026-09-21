@@ -24,25 +24,116 @@ func validRevision(s string) bool {
 	return s != "" && !strings.HasPrefix(s, "-") && revPattern.MatchString(s)
 }
 
+// gitCmdError は git の実行失敗を「引数」と「出力」に分けて保持する。
+// Error() は従来どおり "git <args>: <output>" を返すので、classifyGitCommitError の
+// ような文字列判定はそのまま動く。
+//
+// 分けて持つ理由は sanitizeGitErrMsg のため。従来は 1 本の文字列を最初の ": " で
+// 割っていたが、commit のように引数へ自由入力（コミットメッセージ）が入る場合、
+// メッセージ中の ": " で割れて出力側が丸ごと落ちていた。実例として
+// `git commit -m feat: <件名>` は "git commit -m feat" と "<件名>…" に割れ、
+// pre-commit hook が書いた拒否理由が UI から消えていた（2026-09-21 実測・
+// docs/local/bugfix_git-hook-rejection-reason-hidden_2026-09-21.md）。
+type gitCmdError struct {
+	Args   string
+	Output string
+}
+
+func (e *gitCmdError) Error() string {
+	if e.Output == "" {
+		return "git " + e.Args
+	}
+	return "git " + e.Args + ": " + e.Output
+}
+
+// 伏字の置き換え先。スラッシュを含めないこと（「絶対パスが残っていないか」を
+// スラッシュの有無で見る検査があるため）。
+const (
+	gitErrRedactedPath = "<path>"
+	gitErrRedactedURL  = "<url>"
+)
+
+// UI へ返すエラー detail の上限。git の出力（とくに hook の出力）は長い。
+// 全文は呼び出し元が slog へ出すので、画面には頭だけ出して導線を添える。
+const (
+	gitErrMaxArgsBytes   = 120
+	gitErrMaxOutputBytes = 900
+	gitErrMaxOutputLines = 12
+)
+
+const gitErrTruncatedNote = " … (truncated; full output is in the Hub log)"
+
+var (
+	// redactURLPattern: scheme://… をまとめて伏せる。認証情報付きの remote URL
+	// （https://<token>@host/…）を UI へ出さないため。他の伏字より先に当てる。
+	redactURLPattern = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.\-]*://[^\s"'<>|]*`)
+	// 以下は「絶対パス」だけを伏せる。リポジトリ相対パス（web/src/app/foo.ts）は
+	// 公開リポに載っている情報なので伏せない。**ここを伏せると hook の拒否理由が
+	// 消える**（hook が書くのはほぼ相対パスだけ）。伏せたいのは利用者名やマシン構成が
+	// 出る絶対パスのほう。
+	redactUNCPattern     = regexp.MustCompile(`\\\\[^\s"'<>|]+`)
+	redactWinAbsPattern  = regexp.MustCompile(`[A-Za-z]:[\\/][^\s"'<>|]*`)
+	redactUnixAbsPattern = regexp.MustCompile(`(^|[\s"'(\[=:,])/[^\s"'<>|)\]:]*`)
+)
+
+// redactGitPaths は絶対パスとリモート URL だけを伏字へ置き換える。
+// 相対パスと説明文はそのまま残す。
+func redactGitPaths(s string) string {
+	s = redactURLPattern.ReplaceAllString(s, gitErrRedactedURL)
+	s = redactUNCPattern.ReplaceAllString(s, gitErrRedactedPath)
+	s = redactWinAbsPattern.ReplaceAllString(s, gitErrRedactedPath)
+	s = redactUnixAbsPattern.ReplaceAllString(s, "${1}"+gitErrRedactedPath)
+	return s
+}
+
+// capGitErrText は行数とバイト数で頭を切り、切ったときだけ導線を添える。
+func capGitErrText(s string, maxBytes, maxLines int) string {
+	s = strings.TrimSpace(s)
+	truncated := false
+	if maxLines > 0 {
+		if lines := strings.Split(s, "\n"); len(lines) > maxLines {
+			s = strings.Join(lines[:maxLines], "\n")
+			truncated = true
+		}
+	}
+	if maxBytes > 0 && len(s) > maxBytes {
+		s = truncateUTF8Bytes(s, maxBytes)
+		truncated = true
+	}
+	if truncated {
+		return strings.TrimSpace(s) + gitErrTruncatedNote
+	}
+	return s
+}
+
 // sanitizeGitErrMsg は git コマンドエラーから UI に返す文字列を生成する。
-// 生 stderr（絶対パス・リモート URL 等）を UI レスポンスに載せない。
-// 詳細は呼び出し元で slog に記録する。
+//
+// **失敗した理由は残す。** 伏せるのは絶対パスとリモート URL だけで、git や hook が
+// 書いた説明文とリポジトリ相対パスはそのまま通す。以前はパスらしき文字が 1 つでも
+// あれば出力を丸ごと "git command failed" に差し替えていたが、pre-commit hook の
+// 出力はほぼ必ずパスを含むので、**hook に止められた理由が 100% 消えていた**
+// （docs/local/bugfix_git-hook-rejection-reason-hidden_2026-09-21.md）。
+//
+// 全文は呼び出し元が slog へ記録する。ここが返すのは画面に載せる頭だけ。
 func sanitizeGitErrMsg(err error) string {
 	if err == nil {
 		return ""
 	}
-	msg := err.Error()
-	// "git <args>: <stderr>" 形式から引数部分だけ返す（stderr 側を除去）
-	if idx := strings.Index(msg, ": "); idx >= 0 {
-		cmd := msg[:idx]
-		// パス・URL っぽい文字列が含まれる場合は汎用メッセージに差し替え
-		after := msg[idx+2:]
-		if strings.ContainsAny(after, `/\`) || strings.Contains(after, "://") {
-			return cmd + ": git command failed"
+	var cmdErr *gitCmdError
+	if errors.As(err, &cmdErr) {
+		args := capGitErrText(redactGitPaths(cmdErr.Args), gitErrMaxArgsBytes, 1)
+		out := capGitErrText(redactGitPaths(cmdErr.Output), gitErrMaxOutputBytes, gitErrMaxOutputLines)
+		if out == "" {
+			return strings.TrimSpace("git " + args)
 		}
-		return msg
+		return strings.TrimSpace("git "+args) + ": " + out
 	}
-	return "git command failed"
+	// 構造を持たないエラー（sentinel・context のキャンセル等）は文字列のまま伏字にする。
+	msg := capGitErrText(redactGitPaths(err.Error()), gitErrMaxOutputBytes, gitErrMaxOutputLines)
+	if msg == "" {
+		return "git command failed"
+	}
+	return msg
 }
 
 // gitCommandTimeout は /api/git-* で発行する全 git コマンドの上限時間。
@@ -141,8 +232,10 @@ func runGit(ctx context.Context, cwd string, args ...string) ([]byte, error) {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
-			return out, fmt.Errorf("git %s: %s", strings.Join(args, " "),
-				strings.TrimSpace(string(exitErr.Stderr)))
+			return out, &gitCmdError{
+				Args:   strings.Join(args, " "),
+				Output: strings.TrimSpace(string(exitErr.Stderr)),
+			}
 		}
 		return out, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
@@ -166,7 +259,10 @@ func runGitCombinedEnv(ctx context.Context, cwd string, extraEnv []string, args 
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return out, fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(out)))
+		return out, &gitCmdError{
+			Args:   strings.Join(args, " "),
+			Output: strings.TrimSpace(string(out)),
+		}
 	}
 	return out, nil
 }

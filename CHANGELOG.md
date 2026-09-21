@@ -260,6 +260,14 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Git errors now say why the command failed.** When a pre-commit hook refuses
+  a commit, the dialog used to show only `git command failed`, because any
+  output containing a path was dropped wholesale — and hook output almost
+  always contains paths, so the reason was lost every single time. The Hub now
+  redacts just the absolute paths and remote URLs and keeps the rest, so you
+  can read what the hook said and what to do about it. Repository-relative
+  paths stay visible. Long output is cut to twelve lines with a pointer to the
+  Hub log. This applies to every Git action, not only Commit all.
 - **A session running subagents is no longer reported as stalled.** Claude Code
   writes a subagent's output to its own file rather than to the session
   transcript, so a session that spent half an hour on a subagent was working
