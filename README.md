@@ -601,7 +601,7 @@ The launcher does not change the Hub's security model:
 - Passwords and key passphrases are never saved; key-based authentication is required (`-o BatchMode=yes`)
 - The token retrieved by `token_command` is used only for the current session and is not written to `launcher-profiles.yaml`
 
-For the full profile schema and connection flow details, see [docs/v0.3.x-many-ai-cli-design.md — §13](docs/v0.3.x-many-ai-cli-design.md).
+For the full profile schema, see the `Profile` struct in [internal/launcher/profile.go](internal/launcher/profile.go); the connection flow is in [internal/launcher/connect.go](internal/launcher/connect.go).
 
 #### If Windows blocks the launcher: remote-server access without local `.exe`
 

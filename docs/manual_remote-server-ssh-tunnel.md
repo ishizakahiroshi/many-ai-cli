@@ -305,5 +305,4 @@ ss -ltnp | grep ':47777'
   - 単一サーバー版（pnpm）: [manual_remote-server-agent-single.md](manual_remote-server-agent-single.md)
   - Docker 版: [manual_remote-server-agent-docker.md](manual_remote-server-agent-docker.md)
 - Docker マルチユーザー運用の詳細: [manual_docker-multiuser.md](manual_docker-multiuser.md)
-- [設計書: Security / Privacy](v0.3.x-many-ai-cli-design.md#17-security--privacy)
 - [README.ja.md: セキュリティ](../README.ja.md#セキュリティ)

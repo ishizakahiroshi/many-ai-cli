@@ -18,12 +18,12 @@
 
 **many-ai-cli** — công cụ **quản lý tập trung thao tác phê duyệt và theo dõi tiến độ** khi chạy song song nhiều CLI lập trình bằng AI (Claude Code / Codex CLI, …) trên **một bảng điều khiển Web**. Một binary Go duy nhất (Hub daemon + wrapper) + UI trình duyệt (xterm.js / TypeScript).
 
-> **Gemini CLI không thuộc phạm vi wrap** (quyết định 2026-05-06 / ràng buộc điều khoản sử dụng). Chi tiết: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) mục «2. Phạm vi công bố».
+> **Gemini CLI không thuộc phạm vi wrap** (quyết định 2026-05-06 / ràng buộc điều khoản sử dụng). Chi tiết: [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) mục «2. Phạm vi công bố».
 > Ngày 2026-08-13 đã xem xét lại dựa trên «phương thức host nông» của Spotify Xirp nhưng **giữ nguyên chính sách** (hồ sơ tạm hoãn: `docs/local/archive/v0.8/pending_gemini-shallow-host-option.md`). Không lấy việc các hãng khác hỗ trợ Gemini, hay số lượng provider trông kém hơn, làm căn cứ để đề xuất bắt tay làm.
 
 **Trạng thái**: v0.6.0 đã phát hành (v0.1.1 là bản chính thức đầu tiên, v0.1.0 mang tính thử nghiệm; v0.5.2 được gộp vào v0.6.0 nên không có bản v0.5.2). v0.1.2 tái thiết kế chuỗi phiên bản qua ldflags + `/api/info` làm single source of truth; v0.2.0 thêm WSL launcher, Files/Git/Chat/Split/Multi, Commit all, Ollama routing, cấu hình người dùng phía server; v0.3.0 thêm Workbench (lịch sử session SQLite), PWA/Web Push, launcher thống nhất đa nền tảng (SSH mọi OS, WSL chỉ Windows), tài sản deploy remote/Docker, phân phối npm, và đổi tên any-ai-cli → many-ai-cli. **v0.4.0 đã gỡ Workbench và proxy chat tích hợp Hub (`internal/proxy/` · `chat_proxy`)** (hiệu ứng phụ: ngữ cảnh 1M mặc định của Sonnet 5 trở đi hoạt động trở lại qua Hub). Tài liệu thiết kế đã cập nhật theo mã nguồn làm chuẩn.
 
-**Thiết kế (chuẩn)**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)
+**Thiết kế (chuẩn)**: [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
 
 ## Không đề xuất thêm provider mới (quy định 2026-08-13)
 
@@ -93,7 +93,7 @@ Vấn đề thực tế còn lại (việc khởi động và dừng bị tách 
 
 ## Cấu trúc thư mục (thực tế)
 
-Xem thiết kế `docs/v0.3.x-many-ai-cli-design.md`.
+Xem thiết kế `docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md`.
 
 ```
 many-ai-cli/
@@ -147,7 +147,7 @@ many-ai-cli/
 
 **Chỉ `slash-commands` mới có cơ chế kiểm tra độ tươi** (`.claude/skills/slash-commands-update` với 3 chế độ report / apply / preflight; preflight được gọi từ bước kiểm tra tiền đề của release). `models` / `usage-links` / `approval-patterns` thì không có, nên **có lỗi thời cũng không ai nhận ra** (ngày 2026-08-11 phát hiện danh sách model bị thiếu nguyên thế hệ Claude 5 mà vẫn để nguyên).
 
-Chi tiết xem các mục approval pattern / model / slash command trong [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) và [docs/manual_slash_commands_update.md](docs/manual_slash_commands_update.md).
+Chi tiết xem các mục approval pattern / model / slash command trong [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) và [docs/manual_slash_commands_update.md](docs/manual_slash_commands_update.md).
 
 ## Quy tắc khi chèn mã quan sát để điều tra (bắt buộc)
 
@@ -225,7 +225,7 @@ Trước khi **tạo/chạy** `plan_*.md` hoặc **tạo/cập nhật** `.md` d�
 
 | Hạng mục | Đường dẫn |
 |------|------|
-| Thiết kế v0.3.0 (hiện hành · chuẩn) | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
+| Thiết kế v0.3.0 (hiện hành · chuẩn) | [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) |
 | Thiết kế v0.2.0 (lịch sử) | [docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md](docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md) |
 | Thiết kế v1 (lịch sử) | [docs/local/archive/v0.1.3/cli-popup-design-v1.md](docs/local/archive/v0.1.3/cli-popup-design-v1.md) |
 | Bổ sung cho Codex | [AGENTS.md](AGENTS.md) (local: `AGENTS.local.md` nếu có) |

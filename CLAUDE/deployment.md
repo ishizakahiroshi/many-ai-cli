@@ -1,10 +1,10 @@
 # many-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-07-05(日) 10:50:11 — 旧設計書パス・CI/CD 配布の実装済み反映・Vite 記述を修正
+> 最終更新: 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
 
 `many-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
-設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
+v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
 
 ## ビルド前提
 

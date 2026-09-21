@@ -26,7 +26,6 @@
 | [`manual_ollama-cloud-routing.md`](../manual_ollama-cloud-routing.md) | [`manual_ollama-cloud-routing.vi.md`](manual_ollama-cloud-routing.vi.md) | Ollama Cloud routing |
 | [`manual_local-llm-hyperv-host.md`](../manual_local-llm-hyperv-host.md) | [`manual_local-llm-hyperv-host.vi.md`](manual_local-llm-hyperv-host.vi.md) | Local LLM trên Hyper-V host |
 | [`manual_release.md`](../manual_release.md) | [`manual_release.vi.md`](manual_release.vi.md) | Quy trình release |
-| [`v0.3.x-many-ai-cli-design.md`](../v0.3.x-many-ai-cli-design.md) | _(chưa dịch — dài; chuẩn kỹ thuật vẫn là bản gốc)_ | Thiết kế v0.3.x |
 
 ## Nguyên tắc dịch
 

@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-19(水) 19:36 — **本ファイルを索引へ再編した。** 常時ロード分が 5 週間で 129 → 269 行に倍増していたため、日付入りの「制定」節 7 本の本文を正本（コード・検査スクリプト・台帳）へ移し、ここには索引の 1 行ずつだけを残した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
+> 最終更新: 2026-09-21(月) 21:31:33 — v0.3.x 設計書を `docs/local/archive/v0.3.x/` へ退避したので、正本の記述を README とソースコードへ改めた。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
 
 > **このファイルは索引であって本文ではない。** 全 AI セッションで全文がロードされるので、本文を置くと全員のコンテキストを毎回消費する。詳細は各行が指す正本を読む。タスク別の詳細は `CLAUDE/*.md`。
 
@@ -16,7 +16,7 @@
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
-**設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
+**仕様の正本**は README（公開仕様）とソースコード（実装仕様）。v0.3.x の設計書は [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) へ退避した（非公開・履歴）。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
 
 v0.8.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプロキシを撤去、v0.5.0 で `setup` / `doctor` / autoapproval、v0.6.0 で transcript ベースのチャット本文、v0.7.0 で承認同一性の一本化とトレイ常駐、v0.8.0 で引き継ぎ看板・複数サブスクリプション・relay ループ・Command Code provider を追加した。
 
@@ -147,7 +147,7 @@ docs/local/               設計書・plan 等（非公開）
 | 項目 | パス |
 |------|------|
 | **どのファイルが何をして、どのテーブルを読み書きするか**（探す前にここ） | `.omitnix/index.json`。全ファイルの索引とテーブル逆引き。**解析できなかったファイルも名前と理由付きで載る**ので「索引に無い」と「読めなかった」を取り違えない。参照 0 件は「未使用」ではない。**`generated.commit` が HEAD と違えば索引はその commit 時点のもの**なので、古いまま断定せず `omitnix` で作り直すか、古いことを添えて答える |
-| 設計書 v0.3.0（現行・正本） | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
+| 設計書 v0.3.x（履歴） | [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) |
 | 設計書 v0.2.0 / v1（履歴） | [docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md](docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md) / [docs/local/archive/v0.1.3/v0.1.x-any-ai-cli-design.md](docs/local/archive/v0.1.3/v0.1.x-any-ai-cli-design.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引き） |

@@ -1,8 +1,8 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-08-17(月) 09:57:26 — 3 項目追記（`gofmt -l` が CRLF working tree で使えない / 子プロセス env の実測テスト / `config.yaml` の寛容デコード）
+> 最終更新: 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
 
-`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
+`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
 
 ## 言語別コーディング規約
 

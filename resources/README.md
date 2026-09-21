@@ -35,5 +35,4 @@
 
 ## 参照
 
-- 設計書: [`../docs/v0.3.x-many-ai-cli-design.md`](../docs/v0.3.x-many-ai-cli-design.md) の承認パターン / モデル / スラッシュコマンド各節
 - 手順書: [`../docs/manual_slash_commands_update.md`](../docs/manual_slash_commands_update.md)

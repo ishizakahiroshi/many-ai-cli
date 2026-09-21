@@ -351,7 +351,7 @@ many-ai-cli-launcher.exe --ui
 - Không lưu password / passphrase; bắt buộc key auth  
 - Token từ `token_command` chỉ dùng phiên hiện tại, **không** ghi vào `launcher-profiles.yaml`  
 
-Chi tiết schema: [docs/v0.3.x-many-ai-cli-design.md — §13](docs/v0.3.x-many-ai-cli-design.md).
+Chi tiết schema: struct `Profile` trong [internal/launcher/profile.go](internal/launcher/profile.go); luồng kết nối: [internal/launcher/connect.go](internal/launcher/connect.go).
 
 #### Windows chặn launcher: remote không cần `.exe` local
 

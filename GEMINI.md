@@ -1,6 +1,6 @@
 # Gemini Entry Point (many-ai-cli)
 
-> 最終更新: 2026-05-07(木) 19:24:03
+> 最終更新: 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避に合わせて正本の記述を改めた
 
 このリポジトリの運用ガイドは `CLAUDE.md` にある。
 
@@ -11,7 +11,7 @@
   - `./CLAUDE/operations.md` — Git, commit messages, output rules
   - `./CLAUDE/deployment.md` — cross-compile build & distribution
   - `./CLAUDE/windows_setup.md` — Windows dev environment specifics
-- Design (source of truth): `./docs/v0.3.x-many-ai-cli-design.md`
+- Source of truth: `./README.md` (public spec) and the source code (implementation). The v0.3.x design doc is archived (private) at `./docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md`
 - Local/private additions (if present): `./CLAUDE.local.md`
 
 個人グローバルルールは各 AI ツールのグローバル設定に置く。公開リポジトリ内のガイドが衝突したときは `CLAUDE.md` を優先。
