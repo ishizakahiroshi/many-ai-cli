@@ -377,3 +377,56 @@ export async function restoreProviderBackup(
   );
   return providerMutationOutcome(result);
 }
+
+export type ProviderRecoveryCandidate =
+  | { kind: 'user_revision'; revision: string; created_at: string }
+  | { kind: 'base' };
+
+export type ProviderRecoveryResult =
+  | { ok: true; provider_id: string; state: 'ok' | 'recovery_required'; candidates: ProviderRecoveryCandidate[] }
+  | ProviderRequestFailure;
+
+// loadProviderRecovery/recoverProvider back the history dialog's "recovery
+// required" panel: when the provider's on-disk config could not be parsed at
+// Hub startup, the history dialog needs to know so it can offer the last
+// readable user revision (or the distributed base) as a restore target,
+// instead of showing an empty/broken history list.
+export async function loadProviderRecovery(id: string, options?: { signal?: AbortSignal }): Promise<ProviderRecoveryResult> {
+  const result = await providerFetchJSON(
+    `/api/providers/${encodeURIComponent(id)}/recovery`,
+    { headers: { Accept: 'application/json' } },
+    options?.signal,
+  );
+  if (result.outcome === 'aborted') return { ok: false, kind: 'aborted' };
+  if (result.outcome === 'network') return { ok: false, kind: 'network' };
+  if (result.outcome === 'http-error') return providerHTTPFailure(result.status, result.body);
+  const rawCandidates = Array.isArray(result.body?.candidates) ? result.body.candidates : [];
+  const candidates: ProviderRecoveryCandidate[] = rawCandidates.map((candidate: any) =>
+    candidate?.kind === 'user_revision'
+      ? {
+          kind: 'user_revision',
+          revision: typeof candidate.revision === 'string' ? candidate.revision : '',
+          created_at: typeof candidate.created_at === 'string' ? candidate.created_at : '',
+        }
+      : { kind: 'base' },
+  );
+  return {
+    ok: true,
+    provider_id: typeof result.body?.provider_id === 'string' ? result.body.provider_id : id,
+    state: result.body?.state === 'recovery_required' ? 'recovery_required' : 'ok',
+    candidates,
+  };
+}
+
+export async function recoverProvider(id: string, revision: string): Promise<ProviderMutationResult> {
+  const result = await providerFetchJSON(
+    `/api/providers/${encodeURIComponent(id)}/recovery`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ revision }),
+    },
+    undefined,
+  );
+  return providerMutationOutcome(result);
+}

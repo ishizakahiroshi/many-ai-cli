@@ -191,6 +191,10 @@ func (s *Server) handleProviderRoute(w http.ResponseWriter, r *http.Request) {
 		s.handleProviderBackupRestore(w, r, parts[0], parts[2])
 		return
 	}
+	if len(parts) == 2 && parts[1] == "recovery" {
+		s.handleProviderRecovery(w, r, parts[0])
+		return
+	}
 	if path == "" {
 		if !s.guard(w, r, r.Method) {
 			return
@@ -592,4 +596,85 @@ func (s *Server) handleProviderBackupRestore(w http.ResponseWriter, r *http.Requ
 	} else {
 		writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
 	}
+}
+
+// providerRecoveryCandidate is one option handleProviderRecoveryGet offers
+// for repairing a provider whose HEAD cannot be resolved: either the most
+// recently verified user revision (kind "user_revision", when one exists) or
+// the override-free base (kind "base", always present when recovery is
+// required). It intentionally does not distinguish an accepted distribution
+// base from the embedded base — RecoverHead("", "") resolves that the same
+// way Reset does, so the client does not need to know which one it is.
+type providerRecoveryCandidate struct {
+	Kind      string `json:"kind"`
+	Revision  string `json:"revision,omitempty"`
+	CreatedAt string `json:"created_at,omitempty"`
+}
+
+// handleProviderRecovery dispatches GET/POST for
+// /api/providers/{id}/recovery to the same HistoryStore.NeedsRecovery /
+// LastVerifiedRevision / RecoverHead trio C7/C8 added, so a provider whose
+// HEAD cannot be resolved (LoadOverrides silently dropped its override) has
+// a way for the UI and any other client to discover that and repair it.
+func (s *Server) handleProviderRecovery(w http.ResponseWriter, r *http.Request, id string) {
+	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
+		return
+	}
+	if s.historyStore == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "history_store_unavailable", "provider history store is unavailable")
+		return
+	}
+	if r.Method == http.MethodPost {
+		s.handleProviderRecoveryPost(w, r, id)
+		return
+	}
+	s.handleProviderRecoveryGet(w, r, id)
+}
+
+func (s *Server) handleProviderRecoveryGet(w http.ResponseWriter, r *http.Request, id string) {
+	needsRecovery, err := s.historyStore.NeedsRecovery(id)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_provider_id", err.Error())
+		return
+	}
+	state := "ok"
+	// Always a non-nil (possibly empty) slice, never nil, so the "ok" state
+	// serializes as [] instead of null.
+	candidates := []providerRecoveryCandidate{}
+	if needsRecovery {
+		state = "recovery_required"
+		if latest, found, lastErr := s.historyStore.LastVerifiedRevision(id); lastErr == nil && found {
+			candidates = append(candidates, providerRecoveryCandidate{
+				Kind:      "user_revision",
+				Revision:  latest.Revision,
+				CreatedAt: latest.CreatedAt,
+			})
+		}
+		candidates = append(candidates, providerRecoveryCandidate{Kind: "base"})
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, map[string]any{
+		"provider_id": id,
+		"state":       state,
+		"candidates":  candidates,
+	})
+}
+
+func (s *Server) handleProviderRecoveryPost(w http.ResponseWriter, r *http.Request, id string) {
+	var body struct {
+		Revision string `json:"revision"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	recovered, err := s.historyStore.RecoverHead(id, body.Revision)
+	if err != nil {
+		writeJSONError(w, http.StatusUnprocessableEntity, "provider_recovery_failed", err.Error())
+		return
+	}
+	if _, err := s.reloadProviderRegistry(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "revision": recovered.Revision})
 }

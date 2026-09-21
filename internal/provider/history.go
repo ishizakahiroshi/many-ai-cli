@@ -273,6 +273,19 @@ func (s *HistoryStore) saveLocked(providerID string, payload Definition, expecte
 			return RevisionRecord{}, err
 		}
 	}
+	return s.writeRevisionLocked(providerID, payload, parent, reason)
+}
+
+// writeRevisionLocked writes payload as a new immutable revision and moves
+// HEAD to point at it. It is the tail half of saveLocked (everything after
+// the conflict check and pre-write backup), factored out so RecoverHead can
+// reuse the exact same write-and-verify-and-flip-HEAD sequence without going
+// through saveLocked's currentLocked/expectedRevision conflict check — that
+// check requires HEAD to already be readable, which is precisely what does
+// not hold when recovering from a corrupt HEAD. Callers must not change this
+// sequence's behavior (backup is the caller's responsibility, same as
+// before).
+func (s *HistoryStore) writeRevisionLocked(providerID string, payload Definition, parent, reason string) (RevisionRecord, error) {
 	createdAt := time.Now().UTC().Format(time.RFC3339Nano)
 	digest := definitionDigest(payload)
 	revision := revisionID(providerID, parent, digest, createdAt)

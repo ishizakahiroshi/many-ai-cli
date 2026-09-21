@@ -2,6 +2,7 @@ import { t } from '../i18n.js';
 import {
   createRequestGuard,
   cycleDialogFocus,
+  duplicateProviderDraft,
   formatDiagnosticMessages,
   isBuiltinProviderID,
   originLabelKey,
@@ -15,8 +16,10 @@ import {
   loadProviderBackups,
   loadProviderDetail,
   loadProviderHistory,
+  loadProviderRecovery,
   loadProviderRevisionDiff,
   loadProviderSummaries,
+  recoverProvider,
   removeProvider as requestRemoveProvider,
   resetProviderOverride,
   restoreProviderBackup,
@@ -26,6 +29,7 @@ import {
   verifyProviderBackup,
   type ProviderEffectiveDefinition,
   type ProviderMutationResult,
+  type ProviderRecoveryCandidate,
   type ProviderRevisionRecord,
   type ProviderSummary,
 } from './provider-store.js';
@@ -87,9 +91,24 @@ function initProviderManager(): void {
   if (!list || !addButton || !status || !overlay || !form || !title || !idInput || !labelInput || !executableInput || !advancedInput || !validateButton || !saveButton || !cancelButton || !closeButton || !result
     || !historyOverlay || !historyPanel || !historyCloseButton || !historyStatus || !historyResetButton || !historyRevisionsList || !historyBackupsList) return;
 
+  // historyRecovery has no counterpart in index.html: it is created here and
+  // inserted right above the revisions list so it only appears in the DOM
+  // (and only leaves the "state === 'ok'" screen unchanged) when a provider
+  // actually needs recovery.
+  const historyRecovery = document.createElement('div');
+  historyRecovery.className = 'provider-history-recovery';
+  historyRecovery.hidden = true;
+  const historyRevisionsSection = historyRevisionsList.parentElement;
+  if (historyRevisionsSection) {
+    historyRevisionsSection.before(historyRecovery);
+  } else {
+    historyPanel.insertBefore(historyRecovery, historyRevisionsList);
+  }
+
   let editing: ProviderFormState = null;
   let currentRevision = '';
   let idTouched = false;
+  let renderedIds = new Set<string>();
   let previousFocus: HTMLElement | null = null;
   let keyHandler: ((event: KeyboardEvent) => void) | null = null;
   let detailAbort: AbortController | null = null;
@@ -243,6 +262,7 @@ function initProviderManager(): void {
 
   const render = (providers: ProviderSummary[], errorIds: Set<string>, missingIds: Set<string>): void => {
     list.innerHTML = '';
+    renderedIds = new Set(providers.map((p) => p.id));
     if (providers.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'provider-manager-empty';
@@ -279,6 +299,13 @@ function initProviderManager(): void {
       history.setAttribute('aria-label', `${history.textContent}: ${name.textContent}`);
       history.addEventListener('click', () => void showHistory(provider));
       actions.append(history);
+      const duplicate = document.createElement('button');
+      duplicate.className = 'settings-inline-btn';
+      duplicate.type = 'button';
+      duplicate.textContent = tx('settings_ai_providers_duplicate', 'Duplicate');
+      duplicate.setAttribute('aria-label', `${duplicate.textContent}: ${name.textContent}`);
+      duplicate.addEventListener('click', () => void duplicateProvider(provider));
+      actions.append(duplicate);
       if (isBuiltinProviderID(provider.id)) {
         const edit = document.createElement('button');
         edit.className = 'settings-inline-btn';
@@ -373,6 +400,33 @@ function initProviderManager(): void {
       isBuiltin,
       pending: false,
     };
+    setFormBusy(false);
+  };
+
+  // duplicateProvider seeds a fresh "add" form from an existing provider's
+  // definition so a variant can be registered without hand-typing JSON.
+  // showForm(null) leaves `editing` at null, so saving goes through the
+  // normal createProvider path (this never mutates the source provider's
+  // definition or history).
+  const duplicateProvider = async (provider: ProviderSummary): Promise<void> => {
+    showForm(null);
+    const controller = new AbortController();
+    detailAbort = controller;
+    const requestToken = detailGuard.begin();
+    const detail = await loadProviderDetail(provider.id, { signal: controller.signal });
+    if (!detailGuard.isCurrent(requestToken)) return;
+    if (detail.ok === false) {
+      if (detail.kind !== 'aborted') setResult(providerFailureText(detail), 'error');
+      return;
+    }
+    const definition = detail.provider;
+    const draft = duplicateProviderDraft({ id: provider.id, display_name: provider.display_name }, renderedIds);
+    const launch = (definition.launch && typeof definition.launch === 'object') ? definition.launch as Record<string, unknown> : {};
+    idInput.value = draft.id;
+    labelInput.value = `${draft.displayName}${tx('settings_ai_providers_copy_suffix', ' (copy)')}`;
+    executableInput.value = typeof launch.executable === 'string' ? launch.executable : '';
+    advancedInput.value = definitionForAdvancedPreview(definition);
+    idTouched = true;
     setFormBusy(false);
   };
 
@@ -476,6 +530,81 @@ function initProviderManager(): void {
     await loadHistoryContent(providerId, providerName);
   };
 
+  const recoveryCandidateLabel = (candidate: ProviderRecoveryCandidate): string =>
+    candidate.kind === 'user_revision'
+      ? tx(
+          'settings_ai_providers_recovery_user_revision',
+          'Last readable version of your own config ({created_at})',
+          { created_at: candidate.created_at },
+        )
+      : tx('settings_ai_providers_recovery_base', 'State with your changes removed');
+
+  // recoverAction is deliberately not `kind: 'danger'` in its confirm dialog:
+  // unlike restoreAction (which overwrites a normally-working config), this
+  // runs only while the provider is already in the recovery_required state,
+  // and the file it replaces stays safe in quarantine either way.
+  const recoverAction = async (
+    providerId: string,
+    providerName: string,
+    candidate: ProviderRecoveryCandidate,
+  ): Promise<void> => {
+    const confirmed = await appConfirm({
+      title: tx('settings_ai_providers_recovery_apply', 'Restore to this state'),
+      message: recoveryCandidateLabel(candidate),
+      confirmText: tx('settings_ai_providers_recovery_apply', 'Restore to this state'),
+      cancelText: tx('settings_ai_providers_cancel', 'Cancel'),
+    });
+    if (!confirmed) return;
+    const result = await recoverProvider(providerId, candidate.kind === 'user_revision' ? candidate.revision : '');
+    if (result.ok === false) {
+      if (result.kind !== 'aborted') setHistoryStatus(providerFailureText(result), 'error');
+      return;
+    }
+    setHistoryStatus(tx('settings_ai_providers_history_restored', 'Restored.'), 'ok');
+    await load();
+    await loadHistoryContent(providerId, providerName);
+  };
+
+  const renderRecovery = (
+    providerId: string,
+    providerName: string,
+    state: 'ok' | 'recovery_required',
+    candidates: ProviderRecoveryCandidate[],
+  ): void => {
+    historyRecovery.innerHTML = '';
+    if (state !== 'recovery_required') {
+      historyRecovery.hidden = true;
+      return;
+    }
+    historyRecovery.hidden = false;
+    const notice = document.createElement('div');
+    notice.className = 'provider-history-recovery-notice settings-note settings-note-warn';
+    notice.textContent = tx(
+      'settings_ai_providers_recovery_required',
+      "This CLI's config file is broken. The broken file has been preserved. Choose what to restore to.",
+    );
+    historyRecovery.append(notice);
+    for (const candidate of candidates) {
+      const row = document.createElement('div');
+      row.className = 'provider-history-row';
+      const meta = document.createElement('div');
+      meta.className = 'provider-history-row-meta';
+      const label = document.createElement('strong');
+      label.textContent = recoveryCandidateLabel(candidate);
+      meta.append(label);
+      const actions = document.createElement('div');
+      actions.className = 'provider-history-row-actions';
+      const applyButton = document.createElement('button');
+      applyButton.className = 'settings-inline-btn';
+      applyButton.type = 'button';
+      applyButton.textContent = tx('settings_ai_providers_recovery_apply', 'Restore to this state');
+      applyButton.addEventListener('click', () => void recoverAction(providerId, providerName, candidate));
+      actions.append(applyButton);
+      row.append(meta, actions);
+      historyRecovery.append(row);
+    }
+  };
+
   const renderHistoryList = (
     container: HTMLElement,
     records: ProviderRevisionRecord[],
@@ -543,10 +672,11 @@ function initProviderManager(): void {
     const controller = new AbortController();
     historyAbort = controller;
     const requestToken = historyGuard.begin();
-    const [historyResult, backupsResult, detail] = await Promise.all([
+    const [historyResult, backupsResult, detail, recoveryResult] = await Promise.all([
       loadProviderHistory(providerId, { signal: controller.signal }),
       loadProviderBackups(providerId, { signal: controller.signal }),
       loadProviderDetail(providerId, { signal: controller.signal }),
+      loadProviderRecovery(providerId, { signal: controller.signal }),
     ]);
     if (!historyGuard.isCurrent(requestToken)) return;
     const currentRevisionId = detail.ok ? (detail.provider.effective_source?.revision || '') : '';
@@ -560,11 +690,23 @@ function initProviderManager(): void {
     } else {
       renderHistoryList(historyBackupsList, backupsResult.backups, 'backup', providerId, providerName, currentRevisionId);
     }
+    if (recoveryResult.ok === false) {
+      // A failed recovery-status lookup must not be mistaken for "no recovery
+      // needed": leave the panel hidden (its state === 'ok' default) rather
+      // than claim ok, and only surface the error if it wasn't just this
+      // request being superseded/aborted.
+      renderRecovery(providerId, providerName, 'ok', []);
+      if (recoveryResult.kind !== 'aborted') setHistoryStatus(providerFailureText(recoveryResult), 'error');
+    } else {
+      renderRecovery(providerId, providerName, recoveryResult.state, recoveryResult.candidates);
+    }
   };
 
   const showHistory = async (provider: ProviderSummary): Promise<void> => {
     historyAbort?.abort();
     setHistoryStatus('', '');
+    historyRecovery.innerHTML = '';
+    historyRecovery.hidden = true;
     historyRevisionsList.innerHTML = '';
     historyBackupsList.innerHTML = '';
     historyPreviousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;

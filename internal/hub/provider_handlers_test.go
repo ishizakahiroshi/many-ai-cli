@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -530,4 +531,218 @@ func mustJSON(t *testing.T, value any) []byte {
 		t.Fatal(err)
 	}
 	return data
+}
+
+// newProviderRecoveryTestServer is like newProviderAPITestServer, but also
+// returns the HistoryStore's root directory so a test can corrupt a
+// provider's HEAD/revision files directly (HistoryStore.root is unexported,
+// so package hub tests cannot reach it through the store itself).
+func newProviderRecoveryTestServer(t *testing.T) (*Server, string) {
+	t.Helper()
+	s := newTestServer()
+	s.cfg.Token = "test-token"
+	store, err := provider.NewFileStore(filepath.Join(t.TempDir(), "providers.d"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.providerStore = store
+	historyRoot := filepath.Join(t.TempDir(), "history.d")
+	history, err := provider.NewHistoryStore(historyRoot, filepath.Join(t.TempDir(), "backups.d"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.historyStore = history
+	registry, diagnostics, err := buildProviderRegistry(s.cfg)
+	if err != nil || len(diagnostics) != 0 {
+		t.Fatalf("build provider registry: %v, %#v", err, diagnostics)
+	}
+	s.providers = registry
+	return s, historyRoot
+}
+
+func providerRecoveryGetRequest(t *testing.T, s *Server, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/providers/"+id+"/recovery?token=test-token", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:47777")
+	req.Host = "127.0.0.1:47777"
+	resp := httptest.NewRecorder()
+	s.handleProviderRoute(resp, req)
+	return resp
+}
+
+func providerRecoveryPostRequest(t *testing.T, s *Server, id, revision string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := map[string]any{"revision": revision}
+	req := httptest.NewRequest(http.MethodPost, "/api/providers/"+id+"/recovery?token=test-token", bytes.NewReader(mustJSON(t, body)))
+	req.Header.Set("Origin", "http://127.0.0.1:47777")
+	req.Host = "127.0.0.1:47777"
+	resp := httptest.NewRecorder()
+	s.handleProviderRoute(resp, req)
+	return resp
+}
+
+// TestProviderRecoveryAPINoOverrideIsOk pins the C9 GET contract for a
+// provider that has never been overridden: NeedsRecovery has nothing to
+// report (headMissing, not headBroken), so state must be "ok" with an empty
+// (never null) candidates array.
+func TestProviderRecoveryAPINoOverrideIsOk(t *testing.T) {
+	s, _ := newProviderRecoveryTestServer(t)
+
+	resp := providerRecoveryGetRequest(t, s, "claude")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET recovery status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	var body struct {
+		ProviderID string                      `json:"provider_id"`
+		State      string                      `json:"state"`
+		Candidates []providerRecoveryCandidate `json:"candidates"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.ProviderID != "claude" || body.State != "ok" {
+		t.Fatalf("recovery body = %#v, want provider_id=claude state=ok", body)
+	}
+	if len(body.Candidates) != 0 {
+		t.Fatalf("candidates = %#v, want empty", body.Candidates)
+	}
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`"candidates":[]`)) {
+		t.Fatalf("candidates must serialize as [] not null, body=%s", resp.Body.String())
+	}
+}
+
+// TestProviderRecoveryAPIBrokenHeadListsCandidates pins the C9 GET contract
+// once HEAD points at a revision file that cannot be read: state must flip
+// to recovery_required and the candidates must be ordered
+// user_revision (the last one that could still be read back) then base.
+func TestProviderRecoveryAPIBrokenHeadListsCandidates(t *testing.T) {
+	s, historyRoot := newProviderRecoveryTestServer(t)
+	definition, ok := s.providerRegistrySnapshot().Lookup("claude")
+	if !ok {
+		t.Fatal("claude is not registered")
+	}
+	definition.Definition.DisplayName = "Claude first edit"
+	if resp := patchProviderRequest(t, s, "claude", "", definition.Definition); resp.Code != http.StatusOK {
+		t.Fatalf("first edit status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	first, err := s.historyStore.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	definition.Definition.DisplayName = "Claude second edit"
+	if resp := patchProviderRequest(t, s, "claude", first.Revision, definition.Definition); resp.Code != http.StatusOK {
+		t.Fatalf("second edit status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	second, err := s.historyStore.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Corrupt the revision HEAD currently points at (not HEAD itself), same
+	// technique as history_test.go's corruptCurrentRevisionFile.
+	revisionPath := filepath.Join(historyRoot, "claude", "revisions", second.Revision+".json")
+	if err := os.WriteFile(revisionPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := providerRecoveryGetRequest(t, s, "claude")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("GET recovery status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	var body struct {
+		ProviderID string                      `json:"provider_id"`
+		State      string                      `json:"state"`
+		Candidates []providerRecoveryCandidate `json:"candidates"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.State != "recovery_required" {
+		t.Fatalf("state = %q, want recovery_required, body=%s", body.State, resp.Body.String())
+	}
+	if len(body.Candidates) != 2 {
+		t.Fatalf("candidates = %#v, want 2 entries", body.Candidates)
+	}
+	if body.Candidates[0].Kind != "user_revision" || body.Candidates[0].Revision != first.Revision {
+		t.Fatalf("candidates[0] = %#v, want user_revision %q", body.Candidates[0], first.Revision)
+	}
+	if body.Candidates[0].CreatedAt == "" {
+		t.Fatalf("candidates[0].created_at is empty: %#v", body.Candidates[0])
+	}
+	if body.Candidates[1].Kind != "base" || body.Candidates[1].Revision != "" {
+		t.Fatalf("candidates[1] = %#v, want bare base entry", body.Candidates[1])
+	}
+}
+
+// TestProviderRecoveryAPIPostRecoversHead pins the C9 POST contract: posting
+// a candidate revision repairs HEAD through RecoverHead, the registry
+// reloads to the recovered payload, and a follow-up GET reports "ok" again.
+func TestProviderRecoveryAPIPostRecoversHead(t *testing.T) {
+	s, historyRoot := newProviderRecoveryTestServer(t)
+	definition, ok := s.providerRegistrySnapshot().Lookup("claude")
+	if !ok {
+		t.Fatal("claude is not registered")
+	}
+	definition.Definition.DisplayName = "Claude first edit"
+	if resp := patchProviderRequest(t, s, "claude", "", definition.Definition); resp.Code != http.StatusOK {
+		t.Fatalf("first edit status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	first, err := s.historyStore.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	definition.Definition.DisplayName = "Claude second edit"
+	if resp := patchProviderRequest(t, s, "claude", first.Revision, definition.Definition); resp.Code != http.StatusOK {
+		t.Fatalf("second edit status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	second, err := s.historyStore.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisionPath := filepath.Join(historyRoot, "claude", "revisions", second.Revision+".json")
+	if err := os.WriteFile(revisionPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity check: registry reload after the corruption still starts the
+	// provider off the embedded/distribution base, not the broken override.
+	if _, err := s.reloadProviderRegistry(); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := providerRecoveryPostRequest(t, s, "claude", first.Revision)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("POST recovery status = %d, body=%s", resp.Code, resp.Body.String())
+	}
+	var postBody struct {
+		OK       bool   `json:"ok"`
+		Revision string `json:"revision"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &postBody); err != nil {
+		t.Fatal(err)
+	}
+	if !postBody.OK || postBody.Revision == "" || postBody.Revision == second.Revision {
+		t.Fatalf("POST recovery body = %#v, want ok=true with a fresh revision", postBody)
+	}
+
+	getResp := providerRecoveryGetRequest(t, s, "claude")
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("GET recovery after POST status = %d, body=%s", getResp.Code, getResp.Body.String())
+	}
+	var getBody struct {
+		State string `json:"state"`
+	}
+	if err := json.Unmarshal(getResp.Body.Bytes(), &getBody); err != nil {
+		t.Fatal(err)
+	}
+	if getBody.State != "ok" {
+		t.Fatalf("state after recovery = %q, want ok, body=%s", getBody.State, getResp.Body.String())
+	}
+
+	restored, ok := s.providerRegistrySnapshot().Lookup("claude")
+	if !ok || restored.DisplayName != "Claude first edit" {
+		t.Fatalf("claude was not recovered to the chosen revision: %#v", restored)
+	}
 }

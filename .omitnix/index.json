@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7ffd724bd245a82c40496553e33875947d380270",
+    "commit": "fd3f01b8f1efd42267b1abe857019d85dea0107e",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 958,
-    "analyzed": 730,
+    "discovered": 960,
+    "analyzed": 733,
     "unresolved": 31,
     "unknown": 1,
-    "unclaimed": 196,
+    "unclaimed": 195,
     "skipped_by_config": 0
   },
   "files": [
@@ -629,6 +629,35 @@
       "unresolved": []
     },
     {
+      "path": "cmd/many-ai-cli/provider_command_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "deploy/docker/Dockerfile",
       "adapter": null,
       "status": "unclaimed",
@@ -828,14 +857,6 @@
     },
     {
       "path": "docs/manual_whisper.md",
-      "adapter": null,
-      "status": "unclaimed",
-      "fields": {},
-      "unresolved": [],
-      "reason": "no adapter claims '.md'"
-    },
-    {
-      "path": "docs/v0.3.x-many-ai-cli-design.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -7837,6 +7858,35 @@
     },
     {
       "path": "internal/hub/provider_registry_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/provider_rollback_drill_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -24162,6 +24212,36 @@
     },
     {
       "path": "web/tests/handoff-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/provider-duplicate.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

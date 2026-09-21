@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"many-ai-cli/internal/config"
@@ -11,7 +13,7 @@ import (
 
 func runProviderCommand(cfg *config.Config, args []string) error {
 	if len(args) == 0 {
-		return errors.New("provider <backup|reset>")
+		return errors.New("provider <backup|reset|recover>")
 	}
 	dir, err := config.Dir()
 	if err != nil {
@@ -26,6 +28,8 @@ func runProviderCommand(cfg *config.Config, args []string) error {
 		return runProviderBackupCommand(history, args[1:])
 	case "reset":
 		return runProviderResetCommand(history, args[1:])
+	case "recover":
+		return runProviderRecoverCommand(history, args[1:], os.Stdout)
 	default:
 		return fmt.Errorf("unknown provider command: %s", args[0])
 	}
@@ -104,5 +108,33 @@ func runProviderResetCommand(history *provider.HistoryStore, args []string) erro
 		return err
 	}
 	fmt.Printf("reset\t%s\n", revision.Revision)
+	return nil
+}
+
+func runProviderRecoverCommand(history *provider.HistoryStore, args []string, out io.Writer) error {
+	if len(args) < 1 {
+		return errors.New("provider recover <provider-id> [revision|--list]")
+	}
+	id := args[0]
+	if len(args) >= 2 && args[1] == "--list" {
+		record, found, err := history.LastVerifiedRevision(id)
+		if err != nil {
+			return err
+		}
+		if found {
+			fmt.Fprintf(out, "candidate\tuser_revision\t%s\t%s\n", record.Revision, record.CreatedAt)
+		}
+		fmt.Fprintln(out, "candidate\tbase")
+		return nil
+	}
+	revision := ""
+	if len(args) >= 2 {
+		revision = args[1]
+	}
+	recovered, err := history.RecoverHead(id, revision)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "recovered\t%s\n", recovered.Revision)
 	return nil
 }

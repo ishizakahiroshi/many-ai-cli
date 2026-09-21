@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHistoryStoreCreatesImmutableRevisionsAndBackups(t *testing.T) {
@@ -464,6 +465,235 @@ func TestHistoryStoreSymlinkProviderDirDoesNotEscapeRoot(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("override escaped store root into %#v", entries)
+	}
+}
+
+func TestHistoryStoreLastVerifiedRevision(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, found, err := store.LastVerifiedRevision("claude"); err != nil || found {
+		t.Fatalf("LastVerifiedRevision with no revisions = found %v, err %v", found, err)
+	}
+
+	first, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	second, err := store.SaveOverride("claude", testOverride("claude", "Changed"), Definition{}, first.Revision, "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Revision == second.Revision {
+		t.Fatal("successive revisions reused the same id")
+	}
+
+	latest, found, err := store.LastVerifiedRevision("claude")
+	if err != nil || !found {
+		t.Fatalf("LastVerifiedRevision after two saves = found %v, err %v", found, err)
+	}
+	if latest.Revision != second.Revision {
+		t.Fatalf("LastVerifiedRevision = %q, want newest revision %q", latest.Revision, second.Revision)
+	}
+
+	secondPath := filepath.Join(root, "claude", "revisions", second.Revision+".json")
+	if err := os.WriteFile(secondPath, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fallback, found, err := store.LastVerifiedRevision("claude")
+	if err != nil || !found {
+		t.Fatalf("LastVerifiedRevision with newest corrupt = found %v, err %v", found, err)
+	}
+	if fallback.Revision != first.Revision {
+		t.Fatalf("LastVerifiedRevision fell back to %q, want older revision %q", fallback.Revision, first.Revision)
+	}
+}
+
+// corruptCurrentRevisionFile overwrites the on-disk revision file that HEAD
+// currently points to with content that fails readRevision's schema check
+// (not a missing-file error), so callers see a genuine "HEAD is broken" case
+// rather than the "no override exists yet" case os.IsNotExist reports.
+func corruptCurrentRevisionFile(t *testing.T, root, providerID, revision string) {
+	t.Helper()
+	path := filepath.Join(root, providerID, "revisions", revision+".json")
+	if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHistoryStoreRecoverHeadToChosenRevision(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(time.Millisecond)
+	second, err := store.SaveOverride("claude", testOverride("claude", "Changed"), Definition{}, first.Revision, "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptCurrentRevisionFile(t, root, "claude", second.Revision)
+
+	recovered, err := store.RecoverHead("claude", first.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Payload.DisplayName != "Claude" {
+		t.Fatalf("recovered payload = %#v", recovered.Payload)
+	}
+	current, err := store.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != recovered.Revision {
+		t.Fatalf("Current after recovery = %q, want %q", current.Revision, recovered.Revision)
+	}
+}
+
+func TestHistoryStoreRecoverHeadToBaseWithEmptyRevision(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptCurrentRevisionFile(t, root, "claude", saved.Revision)
+
+	recovered, err := store.RecoverHead("claude", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.Payload.DisplayName != "" {
+		t.Fatalf("recovered payload should be override-free, got %#v", recovered.Payload)
+	}
+	current, err := store.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != recovered.Revision {
+		t.Fatalf("Current after recovery = %q, want %q", current.Revision, recovered.Revision)
+	}
+}
+
+func TestHistoryStoreRecoverHeadRejectsHealthyHead(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RecoverHead("claude", ""); err == nil {
+		t.Fatal("RecoverHead accepted a healthy HEAD")
+	}
+	current, err := store.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != saved.Revision {
+		t.Fatalf("Current changed after rejected RecoverHead: %q, want %q", current.Revision, saved.Revision)
+	}
+}
+
+func TestHistoryStoreRecoverHeadQuarantinesCorruptHead(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corruptCurrentRevisionFile(t, root, "claude", saved.Revision)
+
+	if _, err := store.RecoverHead("claude", ""); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(backups, "quarantine"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("quarantine entries = %#v, %v", entries, err)
+	}
+}
+
+func TestHistoryStoreNeedsRecovery(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if needs, err := store.NeedsRecovery("claude"); err != nil || needs {
+		t.Fatalf("NeedsRecovery with no HEAD = %v, %v, want false, nil", needs, err)
+	}
+
+	saved, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if needs, err := store.NeedsRecovery("claude"); err != nil || needs {
+		t.Fatalf("NeedsRecovery with healthy HEAD = %v, %v, want false, nil", needs, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "claude", "HEAD"), []byte("missing-revision\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if needs, err := store.NeedsRecovery("claude"); err != nil || !needs {
+		t.Fatalf("NeedsRecovery with HEAD pointing to missing revision = %v, %v, want true, nil", needs, err)
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "claude", "HEAD"), []byte(saved.Revision), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	corruptCurrentRevisionFile(t, root, "claude", saved.Revision)
+	if needs, err := store.NeedsRecovery("claude"); err != nil || !needs {
+		t.Fatalf("NeedsRecovery with corrupt revision = %v, %v, want true, nil", needs, err)
+	}
+}
+
+func TestHistoryStoreRecoverHeadFromMissingRevision(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "overrides")
+	backups := filepath.Join(t.TempDir(), "backups")
+	store, err := NewHistoryStore(root, backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.SaveOverride("claude", testOverride("claude", "Claude"), Definition{}, "", "edit"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "claude", "HEAD"), []byte("missing-revision\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	recovered, err := store.RecoverHead("claude", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.Current("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Revision != recovered.Revision {
+		t.Fatalf("Current after recovery = %q, want %q", current.Revision, recovered.Revision)
 	}
 }
 

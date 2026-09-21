@@ -48,6 +48,23 @@ export function suggestProviderId(displayName: string): string {
   return `${candidate}-2`.slice(0, 64);
 }
 
+// duplicateProviderDraft picks the id for a "Duplicate" action: `<id>-copy`,
+// then `-copy-2`, `-copy-3`, ... until it finds one not already in
+// `existingIds`. The caller appends the i18n copy suffix to the display name
+// itself; this only returns the plain "<display name or id>" text.
+export function duplicateProviderDraft(
+  source: { id: string; display_name?: string },
+  existingIds: Set<string>,
+): { id: string; displayName: string } {
+  let candidate = `${source.id}-copy`;
+  let suffix = 2;
+  while (existingIds.has(candidate)) {
+    candidate = `${source.id}-copy-${suffix}`;
+    suffix += 1;
+  }
+  return { id: candidate, displayName: source.display_name || source.id };
+}
+
 export function originLabelKey(origin: ProviderOrigin): string {
   switch (origin) {
     case 'embedded':
