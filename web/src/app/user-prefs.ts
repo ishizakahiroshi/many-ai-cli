@@ -2,6 +2,7 @@
 import { showToast, token } from './util.js';
 import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
 import { sanitizeProjectViews } from './project-view-memory.js';
+import { sanitizeCustomThemes } from './theme-tokens.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -78,6 +79,7 @@ export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode'
 // 空文字＝未設定（既定の青系にフォールバック）。hex 文字列で保持。サーバ同期。
 export const STORAGE_LIVE_STATUS_BG_KEY       = 'ai_cli_hub_live_status_bg';
 export const STORAGE_LIVE_STATUS_FG_KEY       = 'ai_cli_hub_live_status_fg';
+export const STORAGE_CUSTOM_THEMES_KEY        = 'ai_cli_hub_custom_themes';
 // 承認 action-bar の折りたたみ（コンパクト）表示。device-local（端末ごとに保持）。
 // 大きな承認パネルで前後のターミナル本文が見切れる問題への対処として、
 // 質問本文・選択肢を 1 行省略表示にして高さを最小化する。既定は展開（false）。
@@ -260,6 +262,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'display.lang':              [STORAGE_LANG_KEY,                  String],
   'display.live_status_bg':    [STORAGE_LIVE_STATUS_BG_KEY,        String],
   'display.live_status_fg':    [STORAGE_LIVE_STATUS_FG_KEY,        String],
+  'display.custom_themes':     [STORAGE_CUSTOM_THEMES_KEY,         JSON.stringify],
 };
 // Voice engine selection is intentionally absent from server-synced user prefs.
 // It must stay device-local so PC can use browser recognition while iPhone uses Whisper.
@@ -359,6 +362,9 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
     const value = sanitizeProjectViews(parsed);
     if (value === null) return { ok: false };
     return { ok: true, value };
+  }
+  if (path === 'display.custom_themes') {
+    return { ok: true, value: sanitizeCustomThemes(parsed) };
   }
   if (path === 'spawn.defaults') {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false };

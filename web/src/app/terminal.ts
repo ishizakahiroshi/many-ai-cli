@@ -2,6 +2,7 @@
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
+import { currentXtermTheme } from './theme-tokens.js';
 import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
 import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
 import { resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup } from './path-links.js';
@@ -165,6 +166,13 @@ function isModalOverlayOpen() {
 // 固定 px を持たない。
 export const TERMINAL_LINE_HEIGHT = 1.35;
 
+export function refreshTerminalThemes(): void {
+  const theme = currentXtermTheme();
+  terminals.forEach((entry) => {
+    entry.term.options.theme = theme;
+  });
+}
+
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
@@ -187,12 +195,7 @@ export function ensureTerminal(id) {
     // 色を theme から取り、未指定なら「前景色の不透明度 20%」が既定になる（暗背景ではほぼ見えない）。
     // 5.x 世代まで terminal.css が .xterm-viewport::-webkit-scrollbar で描いていた紫を theme 側で再現する。
     // 常時表示（Auto のフェードアウト抑止）は terminal.css の .scrollbar.invisible 上書きが担当。
-    theme: {
-      background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3',
-      scrollbarSliderBackground: '#4f5bd5',
-      scrollbarSliderHoverBackground: '#6b74ff',
-      scrollbarSliderActiveBackground: '#8b92ff',
-    },
+    theme: currentXtermTheme(),
     disableStdin: true,
     allowProposedApi: true,
   });

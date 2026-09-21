@@ -6,7 +6,25 @@ import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
-import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
+import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
+import {
+  BUILTIN_XTERM_THEME,
+  MAX_CUSTOM_THEMES,
+  applySurfaceTokens,
+  clearSurfaceTokens,
+  contrastNameJa,
+  deriveCustomTheme,
+  hueBarCss,
+  hueName,
+  hueNameJa,
+  newCustomThemeId,
+  resolveThemeId,
+  setActiveXtermTheme,
+  xtermThemeFromTokens,
+  type CustomTheme,
+  type ThemeMode,
+} from './theme-tokens.js';
+import { defaultKnobs, findCustomTheme, loadCustomThemes, saveCustomThemes } from './custom-themes.js';
 import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
@@ -894,13 +912,228 @@ export function filterFirstMessage(text) {
   return trimmed.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export function applyTheme(theme) {
-  // 'blue' は廃止済み。既存設定が 'blue' の場合は既定テーマにフォールバック
-  const t = (theme === 'dark' || theme === 'light') ? theme : 'light';
-  document.documentElement.setAttribute('data-theme', t);
-  const sel = document.getElementById('theme-select');
-  if (sel) sel.value = t;
-  try { localStorage.setItem(STORAGE_THEME_KEY, t); } catch (_) {}
+let _themeAdding = false;
+
+function langIsJa(): boolean {
+  return (localStorage.getItem(STORAGE_LANG_KEY) || 'ja') === 'ja';
+}
+
+function hueLabelText(h: number, mode: ThemeMode): string {
+  return langIsJa() ? hueNameJa(h, mode) : hueName(h, mode);
+}
+
+function contrastLabelText(c: number): string {
+  return langIsJa() ? contrastNameJa(c) : String(c);
+}
+
+function paintHueBar(id: string, mode: ThemeMode): void {
+  const el = document.getElementById(id);
+  if (el) el.style.background = hueBarCss(mode);
+}
+
+function setKnobLabels(kind: 'custom' | 'new', mode: ThemeMode, hue: number, contrast: number): void {
+  const hueLab = document.getElementById(kind + '-theme-hue-label');
+  const conLab = document.getElementById(kind + '-theme-contrast-label');
+  if (hueLab) hueLab.textContent = hueLabelText(hue, mode);
+  if (conLab) conLab.textContent = contrastLabelText(contrast);
+  paintHueBar(kind + '-theme-hue-bar', mode);
+}
+
+function rebuildThemeSelect(selected: string): void {
+  const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+  if (!sel) return;
+  const customs = loadCustomThemes();
+  const id = resolveThemeId(selected, customs);
+  sel.innerHTML = '<option value="light">Light</option><option value="dark">Dark</option>';
+  for (const c of customs) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  }
+  sel.value = id;
+}
+
+function readNewThemeKnobs(): { mode: ThemeMode; hue: number; contrast: number } {
+  const baseEl = document.getElementById('new-theme-base') as HTMLSelectElement | null;
+  const hueEl = document.getElementById('new-theme-hue') as HTMLInputElement | null;
+  const conEl = document.getElementById('new-theme-contrast') as HTMLInputElement | null;
+  const mode: ThemeMode = baseEl?.value === 'light' ? 'light' : 'dark';
+  return { mode, hue: Number(hueEl?.value || defaultKnobs(mode).hue), contrast: Number(conEl?.value || defaultKnobs(mode).contrast) };
+}
+
+function previewNewTheme(): void {
+  const knobs = readNewThemeKnobs();
+  const tokens = deriveCustomTheme(knobs.mode, knobs.hue, knobs.contrast);
+  applySurfaceTokens(tokens);
+  setActiveXtermTheme(xtermThemeFromTokens(tokens));
+  document.documentElement.setAttribute('data-theme', knobs.mode);
+  setKnobLabels('new', knobs.mode, knobs.hue, knobs.contrast);
+  try { refreshTerminalThemes(); } catch (_) {}
+}
+
+function syncThemeEditor(): void {
+  const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+  const editor = document.getElementById('custom-theme-editor');
+  const addForm = document.getElementById('custom-theme-add');
+  const addBtn = document.getElementById('theme-add-btn') as HTMLButtonElement | null;
+  const hint = document.getElementById('theme-hint');
+  if (!sel || !editor || !addForm) return;
+  if (_themeAdding) {
+    editor.hidden = true;
+    addForm.hidden = false;
+    if (addBtn) addBtn.hidden = true;
+    sel.disabled = true;
+    if (hint) hint.textContent = t('settings_theme_hint_add');
+    const knobs = readNewThemeKnobs();
+    setKnobLabels('new', knobs.mode, knobs.hue, knobs.contrast);
+    return;
+  }
+  sel.disabled = false;
+  if (addBtn) addBtn.hidden = false;
+  addForm.hidden = true;
+  const custom = findCustomTheme(sel.value);
+  if (custom) {
+    editor.hidden = false;
+    const nameEl = document.getElementById('custom-theme-name') as HTMLInputElement | null;
+    const hueEl = document.getElementById('custom-theme-hue') as HTMLInputElement | null;
+    const conEl = document.getElementById('custom-theme-contrast') as HTMLInputElement | null;
+    if (nameEl) nameEl.value = custom.name;
+    if (hueEl) hueEl.value = String(custom.hue);
+    if (conEl) conEl.value = String(custom.contrast);
+    setKnobLabels('custom', custom.mode, custom.hue, custom.contrast);
+    if (hint) hint.textContent = t('settings_theme_hint_custom');
+  } else {
+    editor.hidden = true;
+    if (hint) hint.textContent = t('settings_theme_hint');
+  }
+}
+
+export function applyTheme(theme, opts?: { rebuild?: boolean }) {
+  const customs = loadCustomThemes();
+  const id = resolveThemeId(String(theme || ''), customs);
+  const custom = findCustomTheme(id, customs);
+  if (custom) {
+    const tokens = deriveCustomTheme(custom.mode, custom.hue, custom.contrast);
+    applySurfaceTokens(tokens);
+    setActiveXtermTheme(xtermThemeFromTokens(tokens));
+    document.documentElement.setAttribute('data-theme', custom.mode);
+  } else {
+    clearSurfaceTokens();
+    setActiveXtermTheme(BUILTIN_XTERM_THEME);
+    document.documentElement.setAttribute('data-theme', id === 'dark' ? 'dark' : 'light');
+  }
+  if (opts?.rebuild !== false) rebuildThemeSelect(id);
+  const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+  if (sel) sel.value = id;
+  try { localStorage.setItem(STORAGE_THEME_KEY, id); } catch (_) {}
+  try { refreshTerminalThemes(); } catch (_) {}
+  if (!_themeAdding) syncThemeEditor();
+}
+
+function patchCustomTheme(id: string, patch: Partial<CustomTheme>): void {
+  const list = loadCustomThemes();
+  const idx = list.findIndex((c) => c.id === id);
+  if (idx < 0) return;
+  list[idx] = { ...list[idx], ...patch };
+  saveCustomThemes(list);
+}
+
+function bindCustomThemeControls(): void {
+  const addBtn = document.getElementById('theme-add-btn');
+  const cancelBtn = document.getElementById('theme-cancel-btn');
+  const saveBtn = document.getElementById('theme-save-btn');
+  const deleteBtn = document.getElementById('theme-delete-btn');
+  const nameEl = document.getElementById('custom-theme-name') as HTMLInputElement | null;
+  const hueEl = document.getElementById('custom-theme-hue') as HTMLInputElement | null;
+  const conEl = document.getElementById('custom-theme-contrast') as HTMLInputElement | null;
+  const newNameEl = document.getElementById('new-theme-name') as HTMLInputElement | null;
+  const newBaseEl = document.getElementById('new-theme-base') as HTMLSelectElement | null;
+  const newHueEl = document.getElementById('new-theme-hue') as HTMLInputElement | null;
+  const newConEl = document.getElementById('new-theme-contrast') as HTMLInputElement | null;
+
+  addBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const current = findCustomTheme(sel?.value || '');
+    const mode: ThemeMode = current?.mode || (sel?.value === 'light' ? 'light' : 'dark');
+    const knobs = defaultKnobs(mode);
+    if (newBaseEl) newBaseEl.value = mode;
+    if (newHueEl) newHueEl.value = String(knobs.hue);
+    if (newConEl) newConEl.value = String(knobs.contrast);
+    if (newNameEl) newNameEl.value = '';
+    _themeAdding = true;
+    syncThemeEditor();
+    previewNewTheme();
+    newNameEl?.focus();
+  });
+  cancelBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _themeAdding = false;
+    applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
+  });
+  saveBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const name = (newNameEl?.value || '').trim();
+    if (!name) { newNameEl?.focus(); return; }
+    if (loadCustomThemes().length >= MAX_CUSTOM_THEMES) return;
+    const knobs = readNewThemeKnobs();
+    const created: CustomTheme = {
+      id: newCustomThemeId(),
+      name: name.slice(0, 16),
+      mode: knobs.mode,
+      hue: knobs.hue,
+      contrast: knobs.contrast,
+    };
+    const list = loadCustomThemes();
+    list.push(created);
+    saveCustomThemes(list);
+    _themeAdding = false;
+    applyTheme(created.id);
+    setUserPref('display.theme', created.id);
+  });
+  deleteBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const id = sel?.value || '';
+    saveCustomThemes(loadCustomThemes().filter((c) => c.id !== id));
+    applyTheme('dark');
+    setUserPref('display.theme', 'dark');
+  });
+  nameEl?.addEventListener('change', () => {
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const id = sel?.value || '';
+    const name = (nameEl.value || '').trim();
+    const cur = findCustomTheme(id);
+    if (!cur) return;
+    if (!name) { nameEl.value = cur.name; return; }
+    patchCustomTheme(id, { name: name.slice(0, 16) });
+    rebuildThemeSelect(id);
+  });
+  const onCustomKnob = () => {
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const id = sel?.value || '';
+    const cur = findCustomTheme(id);
+    if (!cur) return;
+    patchCustomTheme(id, {
+      hue: Number(hueEl?.value || cur.hue),
+      contrast: Number(conEl?.value || cur.contrast),
+    });
+    applyTheme(id, { rebuild: false });
+  };
+  hueEl?.addEventListener('input', onCustomKnob);
+  conEl?.addEventListener('input', onCustomKnob);
+  newBaseEl?.addEventListener('change', () => {
+    const knobs = defaultKnobs(newBaseEl.value === 'light' ? 'light' : 'dark');
+    if (newHueEl) newHueEl.value = String(knobs.hue);
+    if (newConEl) newConEl.value = String(knobs.contrast);
+    previewNewTheme();
+  });
+  newHueEl?.addEventListener('input', previewNewTheme);
+  newConEl?.addEventListener('input', previewNewTheme);
+  document.addEventListener('user-prefs-mirrored', () => {
+    applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
+  });
 }
 
 export function applyFontSize(size) {
@@ -1011,6 +1244,7 @@ function syncSettingsPanelButton(): void {
   });
 
   themeEl.addEventListener('change',    () => { applyTheme(themeEl.value); setUserPref('display.theme', themeEl.value); });
+  bindCustomThemeControls();
   fontsizeEl.addEventListener('change', () => { applyFontSize(fontsizeEl.value); setUserPref('display.font_size', fontsizeEl.value); });
   langEl.addEventListener('change',     async () => {
     // setLang は即 location.reload() するため、debounce を待たず同期 PUT で確実に永続化する。
@@ -3294,7 +3528,8 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
     const langLabel = lang === 'ja' ? '日本語' : lang === 'vi' ? 'Tiếng Việt' : 'English';
     const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
-    const themeLabel = theme === 'dark' ? 'Dark' : 'Light';
+    const custom = findCustomTheme(theme);
+    const themeLabel = custom ? custom.name : (theme === 'dark' ? 'Dark' : 'Light');
     const fs = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
     const fsLabel = fs === 'large' ? 'Large' : fs === 'small' ? 'Small' : 'Medium';
     const lk = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY) || '';

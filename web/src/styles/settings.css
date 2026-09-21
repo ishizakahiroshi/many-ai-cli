@@ -172,6 +172,16 @@
 .settings-row--stacked {
   align-items: stretch;
 }
+.settings-row--theme-knob {
+  flex-direction: column;
+  align-items: stretch;
+}
+.theme-slider { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; }
+.theme-slider input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+.theme-slider-meta { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); }
+.theme-hue-bar { height: 8px; border-radius: var(--radius-pill); border: 1px solid var(--line); }
+.theme-knob-value { color: var(--muted); font-size: 0.75rem; font-weight: 400; margin-left: 6px; }
+.settings-inline-btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
 .settings-label { font-size: 0.85rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .settings-row-actions {
   display: flex;

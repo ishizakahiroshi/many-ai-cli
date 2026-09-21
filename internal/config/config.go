@@ -673,6 +673,117 @@ type UserPrefsDisplay struct {
 	// ライブステータス帯（「実行中」バー）のユーザー配色（hex 文字列）。空＝既定。
 	LiveStatusBg string `yaml:"live_status_bg,omitempty" json:"live_status_bg,omitempty"`
 	LiveStatusFg string `yaml:"live_status_fg,omitempty" json:"live_status_fg,omitempty"`
+	// CustomThemes は利用者が足した名前付きテーマ（色味＋濃淡）。Light/Dark は含まない。
+	CustomThemes []UserPrefsCustomTheme `yaml:"custom_themes,omitempty" json:"custom_themes,omitempty"`
+}
+
+// UserPrefsCustomTheme は Light/Dark を土台にした利用者テーマ 1 件。
+// Hue は 0–359、Contrast は 0–100。ID は "u-" で始まる。
+type UserPrefsCustomTheme struct {
+	ID       string `yaml:"id" json:"id"`
+	Name     string `yaml:"name" json:"name"`
+	Mode     string `yaml:"mode" json:"mode"`
+	Hue      int    `yaml:"hue" json:"hue"`
+	Contrast int    `yaml:"contrast" json:"contrast"`
+}
+
+const (
+	maxCustomThemes     = 20
+	maxCustomThemeName  = 16
+	maxCustomThemeIDLen = 32
+)
+
+func validCustomThemeID(id string) bool {
+	if !strings.HasPrefix(id, "u-") || len(id) < 4 || len(id) > maxCustomThemeIDLen {
+		return false
+	}
+	for _, r := range id[2:] {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func clampInt(n, min, max int) int {
+	if n < min {
+		return min
+	}
+	if n > max {
+		return max
+	}
+	return n
+}
+
+func sanitizeOneCustomTheme(t UserPrefsCustomTheme) UserPrefsCustomTheme {
+	id := strings.TrimSpace(t.ID)
+	if !validCustomThemeID(id) {
+		return UserPrefsCustomTheme{}
+	}
+	name := strings.ToValidUTF8(strings.TrimSpace(t.Name), "")
+	name = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, name)
+	runes := []rune(name)
+	if len(runes) == 0 {
+		return UserPrefsCustomTheme{}
+	}
+	if len(runes) > maxCustomThemeName {
+		name = string(runes[:maxCustomThemeName])
+	}
+	mode := t.Mode
+	if mode != "light" && mode != "dark" {
+		mode = "dark"
+	}
+	return UserPrefsCustomTheme{
+		ID:       id,
+		Name:     name,
+		Mode:     mode,
+		Hue:      clampInt(t.Hue, 0, 359),
+		Contrast: clampInt(t.Contrast, 0, 100),
+	}
+}
+
+// SanitizeCustomThemes は不正なエントリを落とし、件数を上限に切る。
+func SanitizeCustomThemes(in []UserPrefsCustomTheme) []UserPrefsCustomTheme {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]UserPrefsCustomTheme, 0, len(in))
+	for _, raw := range in {
+		t := sanitizeOneCustomTheme(raw)
+		if t.ID == "" {
+			continue
+		}
+		if _, ok := seen[t.ID]; ok {
+			continue
+		}
+		seen[t.ID] = struct{}{}
+		out = append(out, t)
+		if len(out) >= maxCustomThemes {
+			break
+		}
+	}
+	return out
+}
+
+// SanitizeDisplayTheme は Light/Dark か、存在するカスタム ID だけを残す。
+func SanitizeDisplayTheme(theme string, customs []UserPrefsCustomTheme) string {
+	theme = strings.TrimSpace(theme)
+	if theme == "" || theme == "light" || theme == "dark" {
+		return theme
+	}
+	for _, c := range customs {
+		if c.ID == theme {
+			return theme
+		}
+	}
+	return "light"
 }
 
 type VoiceWhisperConfig struct {
@@ -834,6 +945,7 @@ func (p UserPrefs) Clone() UserPrefs {
 	c.CwdFavorites = cloneStringSlice(p.CwdFavorites)
 	c.ProjectViews = cloneProjectViews(p.ProjectViews)
 	c.Templates = append([]UserPrefsTemplate(nil), p.Templates...)
+	c.Display.CustomThemes = append([]UserPrefsCustomTheme(nil), p.Display.CustomThemes...)
 	for i := range c.Templates {
 		c.Templates[i].Providers = cloneStringSlice(p.Templates[i].Providers)
 		c.Templates[i].Tags = cloneStringSlice(p.Templates[i].Tags)

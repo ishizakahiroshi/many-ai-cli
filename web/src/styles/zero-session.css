@@ -13,4 +13,13 @@
 .zero-session-footer { display: flex; justify-content: center; gap: 10px; margin-top: 24px; color: var(--muted-2); font-size: .85rem; }
 .zero-session-footer button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .zero-session-footer button:hover { color: var(--text); text-decoration: underline; }
+.zero-session-cli-heading { margin: 0 0 10px; color: var(--text); font-size: .9rem; font-weight: 600; }
+.zero-session-cli-list { display: grid; gap: 8px; margin: 0 auto 12px; padding: 0; max-width: 420px; list-style: none; text-align: left; }
+.zero-session-cli-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; }
+.zero-session-cli-label { color: var(--text); font-size: .9rem; }
+.zero-session-cli-copy { border: 0; background: transparent; color: var(--accent); font-family: inherit; font-size: .86rem; cursor: pointer; }
+.zero-session-cli-copy:hover { text-decoration: underline; }
+.zero-session-cli-hint { margin: 0 auto 8px; max-width: 520px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+.zero-session-missing-still { margin: 12px auto 0; max-width: 520px; color: var(--warn, #d4a017); font-size: .86rem; line-height: 1.55; }
+.zero-session-recheck { font-weight: 600; color: var(--text) !important; }
 @media (max-width: 720px) { #zero-session-empty-state { padding: 20px 16px; align-items: start; } .zero-session-card { margin-top: 22px; } }

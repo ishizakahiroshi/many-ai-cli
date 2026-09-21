@@ -892,3 +892,47 @@ func TestChildFullBypassEnabledDefaultTrue(t *testing.T) {
 		t.Fatal("explicit true should enable full bypass")
 	}
 }
+
+func TestSanitizeCustomThemesDropsInvalidAndCaps(t *testing.T) {
+	in := []UserPrefsCustomTheme{
+		{ID: "dark", Name: "nope", Mode: "dark", Hue: 1, Contrast: 1},
+		{ID: "u-ok", Name: "濃い", Mode: "weird", Hue: 400, Contrast: -3},
+		{ID: "u-ok", Name: "dup", Mode: "dark", Hue: 10, Contrast: 10},
+		{ID: "u-empty", Name: "   ", Mode: "dark", Hue: 1, Contrast: 1},
+	}
+	out := SanitizeCustomThemes(in)
+	if len(out) != 1 {
+		t.Fatalf("len = %d, want 1: %#v", len(out), out)
+	}
+	if out[0].ID != "u-ok" || out[0].Name != "濃い" || out[0].Mode != "dark" {
+		t.Fatalf("entry = %#v", out[0])
+	}
+	if out[0].Hue != 359 || out[0].Contrast != 0 {
+		t.Fatalf("clamped hue/contrast = %d/%d", out[0].Hue, out[0].Contrast)
+	}
+	if SanitizeDisplayTheme("u-missing", out) != "light" {
+		t.Fatal("missing custom id should fall back to light")
+	}
+	if SanitizeDisplayTheme("u-ok", out) != "u-ok" {
+		t.Fatal("known custom id should stay")
+	}
+	if SanitizeDisplayTheme("", out) != "" {
+		t.Fatal("empty theme should stay empty")
+	}
+}
+
+func TestUserPrefsCloneDeepCopiesCustomThemes(t *testing.T) {
+	var prefs UserPrefs
+	prefs.Display.CustomThemes = []UserPrefsCustomTheme{
+		{ID: "u-ok", Name: "濃い", Mode: "dark", Hue: 220, Contrast: 80},
+	}
+	clone := prefs.Clone()
+	clone.Display.CustomThemes[0].Name = "changed"
+	clone.Display.CustomThemes = append(clone.Display.CustomThemes, UserPrefsCustomTheme{ID: "u-two", Name: "暖色", Mode: "dark"})
+	if prefs.Display.CustomThemes[0].Name != "濃い" {
+		t.Fatalf("name was aliased: %q", prefs.Display.CustomThemes[0].Name)
+	}
+	if len(prefs.Display.CustomThemes) != 1 {
+		t.Fatalf("len was aliased: %d", len(prefs.Display.CustomThemes))
+	}
+}

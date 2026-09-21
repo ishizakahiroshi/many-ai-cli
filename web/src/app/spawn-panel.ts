@@ -7,6 +7,7 @@ import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
 import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
+import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
@@ -52,6 +53,8 @@ export function resetSpawnProviderOrder(): void {
   const spawnProviderTriggerIcon = document.getElementById('spawn-provider-trigger-icon');
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnProviderNoteHelp = document.getElementById('spawn-provider-note-help');
+  const spawnCliMissingNote = document.getElementById('spawn-cli-missing-note');
+  let commandMissingProviderIds = new Set<string>();
   const spawnRememberApprovalSettings = document.getElementById('spawn-remember-approval-settings') as HTMLInputElement | null;
   const spawnRememberApprovalLabel = document.getElementById('spawn-remember-approval-label');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
@@ -673,11 +676,16 @@ export function resetSpawnProviderOrder(): void {
     spawnProviderList.innerHTML = options.map((opt, index) => {
       const selected = opt.value === selectedValue;
       const active = spawnProviderOpen && index === spawnProviderActiveIndex;
+      const missing = commandMissingProviderIds.has(opt.value) && isAiLaunchProvider(opt.value);
+      const missingBadge = missing
+        ? `<span class="spawn-provider-option-missing">${escapeHtml(t('spawn_cli_missing_badge'))}</span>`
+        : '';
       return (
-        `<li id="${opt.id}" class="spawn-provider-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}" ` +
+        `<li id="${opt.id}" class="spawn-provider-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${missing ? ' is-missing' : ''}" ` +
         `role="option" aria-selected="${selected ? 'true' : 'false'}" data-value="${escapeHtml(opt.value)}" draggable="true" tabindex="-1">` +
         `<span class="spawn-provider-option-icon" aria-hidden="true">${providerIconHtml(opt.value, 14)}</span>` +
         `<span class="spawn-provider-option-label">${escapeHtml(opt.label)}</span>` +
+        missingBadge +
         `<span class="spawn-provider-option-check" aria-hidden="true">${selected ? '✓' : ''}</span>` +
         `</li>`
       );
@@ -828,12 +836,17 @@ export function resetSpawnProviderOrder(): void {
         const addOption = select.querySelector(`option[value="${addProviderOptionValue}"]`);
         if (addOption) addOption.textContent = addProviderOptionLabel();
       }
+      if (providerResponse) {
+        commandMissingProviderIds = commandMissingIds(providerResponse.diagnostics);
+      }
       if (changed) {
         updateSpawnProviderIcon();
         syncSpawnProviderFields(spawnProviderEl.value);
       } else {
         updateSpawnProviderIcon();
       }
+      updateCliMissingNote();
+      updateSpawnLaunchButton();
     } catch (_) { /* オフライン等: 追加されないだけで既存の選択肢はそのまま動く */ }
   }
   void injectCustomProviderOptions();
@@ -1171,6 +1184,8 @@ export function resetSpawnProviderOrder(): void {
     // サブスクリプションの記憶を、切り替えた先の provider のぶんへ差し替える。
     restoreProviderMemory(p);
     updateDetachedPreview();
+    updateCliMissingNote();
+    updateSpawnLaunchButton();
   });
   updateSpawnProviderIcon();
   document.addEventListener('i18n-ready', () => {
@@ -1988,21 +2003,39 @@ export function resetSpawnProviderOrder(): void {
     if (!v) {
       spawnCwdInput.classList.remove('is-missing');
       spawnCwdInput.removeAttribute('title');
-      spawnLaunchBtn.disabled = true;
-      spawnLaunchBtn.removeAttribute('title');
-      return;
-    }
-    if (isPathMissing(v)) {
+    } else if (isPathMissing(v)) {
       spawnCwdInput.classList.add('is-missing');
       spawnCwdInput.title = t('spawn_cwd_missing', { path: v });
-      spawnLaunchBtn.disabled = true;
-      spawnLaunchBtn.title = t('spawn_cwd_missing_btn');
     } else {
       spawnCwdInput.classList.remove('is-missing');
       spawnCwdInput.removeAttribute('title');
-      spawnLaunchBtn.disabled = false;
-      spawnLaunchBtn.removeAttribute('title');
     }
+    updateSpawnLaunchButton();
+  }
+
+  function updateCliMissingNote() {
+    if (!spawnCliMissingNote) return;
+    const providerId = spawnProviderEl.value;
+    const missing = commandMissingProviderIds.has(providerId) && isAiLaunchProvider(providerId);
+    spawnCliMissingNote.hidden = !missing;
+    spawnCliMissingNote.textContent = missing
+      ? t('spawn_cli_missing_note', { command: providerId })
+      : '';
+  }
+
+  function updateSpawnLaunchButton() {
+    if (!spawnLaunchBtn) return;
+    const cwd = spawnCwdInput.value.trim();
+    const block = spawnLaunchBlockReason({
+      cwd,
+      cwdMissing: isPathMissing(cwd),
+      providerId: spawnProviderEl.value,
+      commandMissing: commandMissingProviderIds.has(spawnProviderEl.value),
+    });
+    spawnLaunchBtn.disabled = block !== null;
+    if (block === 'cwd-missing') spawnLaunchBtn.title = t('spawn_cwd_missing_btn');
+    else if (block === 'cli-missing') spawnLaunchBtn.title = t('spawn_cli_missing_btn');
+    else spawnLaunchBtn.removeAttribute('title');
   }
 
   async function refreshCwdInputStatus() {
@@ -2695,6 +2728,16 @@ export function resetSpawnProviderOrder(): void {
   async function spawnSession() {
     const provider = document.getElementById('spawn-provider').value;
     const cwd = spawnCwdInput.value.trim();
+    const blocked = spawnLaunchBlockReason({
+      cwd,
+      cwdMissing: isPathMissing(cwd),
+      providerId: provider,
+      commandMissing: commandMissingProviderIds.has(provider),
+    });
+    if (blocked) {
+      updateSpawnLaunchButton();
+      return;
+    }
     spawnLaunchBtn.disabled = true;
     try {
       const model = spawnModelInput.value.trim();
@@ -2703,7 +2746,7 @@ export function resetSpawnProviderOrder(): void {
         setSpawnModelValue('');
         clearModelSelectionState();
         showToast(t('spawn_model_provider_mismatch'));
-        spawnLaunchBtn.disabled = false;
+        updateSpawnLaunchButton();
         return;
       }
       const route = resolveRoute(provider, model);
@@ -2718,7 +2761,7 @@ export function resetSpawnProviderOrder(): void {
             if (encData.is_windows && encData.is_powershell && !encData.is_utf8) {
               const choice = await appConfirmOllamaEncoding();
               if (choice === null) {
-                spawnLaunchBtn.disabled = false;
+                updateSpawnLaunchButton();
                 return;
               }
               utf8Session = (choice === 'utf8');
@@ -2773,7 +2816,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
         }
@@ -2794,7 +2837,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
         }
@@ -2818,7 +2861,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
         }
@@ -2838,7 +2881,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
           bodyObj.risk_confirmed = true;
@@ -2967,7 +3010,7 @@ export function resetSpawnProviderOrder(): void {
     } catch (e) {
       alert(t('spawn_failed') + e.message);
     } finally {
-      spawnLaunchBtn.disabled = false;
+      updateSpawnLaunchButton();
     }
   }
 })();

@@ -2306,6 +2306,7 @@ inputEl.addEventListener('blur', (e) => {
   };
 
   window.__settingsResetAll = async () => {
+    setUserPref('display.custom_themes', []);
     applyTheme('light');
     applyFontSize('medium');
     applyLang('ja');

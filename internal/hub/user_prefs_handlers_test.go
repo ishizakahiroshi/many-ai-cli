@@ -207,6 +207,37 @@ func TestUserPrefsPutRoundTripsProjectViews(t *testing.T) {
 
 // Clone が map を共有すると、/api/info 等が持ち出したスナップショットの書き換えが
 // 動いているサーバー設定へ波及する。
+func TestUserPrefsPutRoundTripsCustomThemes(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	s := newTestServer()
+	s.cfg.Token = "tok"
+
+	body := []byte(`{"display":{"theme":"u-ok","custom_themes":[{"id":"u-ok","name":"濃い","mode":"dark","hue":220,"contrast":80},{"id":"dark","name":"bad"}]}}`)
+	w := httptest.NewRecorder()
+	s.handleUserPrefsPut(w, prefsAuthReq(http.MethodPut, "/api/user-prefs?token=tok", body, "application/json"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d body=%s, want 200", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	s.handleUserPrefsGet(w, prefsAuthReq(http.MethodGet, "/api/user-prefs?token=tok", nil, ""))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET status = %d body=%s, want 200", w.Code, w.Body.String())
+	}
+	var got config.UserPrefs
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("GET body is not UserPrefs JSON: %v (%s)", err, w.Body.String())
+	}
+	if got.Display.Theme != "u-ok" {
+		t.Fatalf("Theme = %q, want u-ok", got.Display.Theme)
+	}
+	if len(got.Display.CustomThemes) != 1 || got.Display.CustomThemes[0].Name != "濃い" {
+		t.Fatalf("CustomThemes = %#v", got.Display.CustomThemes)
+	}
+}
+
 func TestUserPrefsCloneDoesNotShareProjectViews(t *testing.T) {
 	var prefs config.UserPrefs
 	prefs.ProjectViews = map[string]config.UserPrefsProjectView{

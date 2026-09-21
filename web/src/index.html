@@ -218,10 +218,72 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_theme">Theme</span>
-            <select id="theme-select" class="settings-select">
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <span class="settings-row-actions">
+              <select id="theme-select" class="settings-select">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+              <button type="button" id="theme-add-btn" class="settings-inline-btn" data-i18n="settings_theme_add">追加</button>
+            </span>
+          </div>
+          <div class="settings-note" id="theme-hint" data-i18n="settings_theme_hint">Light と Dark は出荷の色です。自分のテーマを足すと色味と濃淡を動かせます。</div>
+          <div id="custom-theme-editor" hidden>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_name">名前</span>
+              <input type="text" id="custom-theme-name" class="settings-input-text" maxlength="16" autocomplete="off">
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_hue">色味</span> <span id="custom-theme-hue-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="custom-theme-hue" min="0" max="359" value="220" aria-label="hue">
+                <div id="custom-theme-hue-bar" class="theme-hue-bar"></div>
+              </div>
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_contrast">濃淡</span> <span id="custom-theme-contrast-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="custom-theme-contrast" min="0" max="100" value="50" aria-label="contrast">
+                <div class="theme-slider-meta"><span data-i18n="settings_theme_contrast_weak">弱い</span><span data-i18n="settings_theme_contrast_strong">強い</span></div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_this">このテーマ</span>
+              <button type="button" id="theme-delete-btn" class="settings-inline-btn settings-inline-btn-danger" data-i18n="settings_theme_delete">削除</button>
+            </div>
+          </div>
+          <div id="custom-theme-add" hidden>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_name">名前</span>
+              <input type="text" id="new-theme-name" class="settings-input-text" maxlength="16" autocomplete="off" data-i18n-placeholder="settings_theme_name_placeholder" placeholder="例: 濃い">
+            </div>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_base">土台</span>
+              <select id="new-theme-base" class="settings-select">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_hue">色味</span> <span id="new-theme-hue-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="new-theme-hue" min="0" max="359" value="220">
+                <div id="new-theme-hue-bar" class="theme-hue-bar"></div>
+              </div>
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_contrast">濃淡</span> <span id="new-theme-contrast-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="new-theme-contrast" min="0" max="100" value="50">
+                <div class="theme-slider-meta"><span data-i18n="settings_theme_contrast_weak">弱い</span><span data-i18n="settings_theme_contrast_strong">強い</span></div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label"></span>
+              <span class="settings-row-actions">
+                <button type="button" id="theme-save-btn" class="settings-inline-btn" data-i18n="settings_theme_save">この名前で追加</button>
+                <button type="button" id="theme-cancel-btn" class="settings-inline-btn" data-i18n="settings_theme_cancel">やめる</button>
+              </span>
+            </div>
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_fontsize">Font size</span>
@@ -1250,6 +1312,7 @@
                     aria-controls="spawn-claude-note" aria-expanded="false"
                     aria-label="What does this provider option do?">?</button>
           </div>
+          <p id="spawn-cli-missing-note" class="settings-note spawn-cli-missing-note" hidden></p>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
               <input type="text" id="spawn-cwd" class="spawn-input" data-i18n-placeholder="spawn_cwd_placeholder" autocomplete="off">

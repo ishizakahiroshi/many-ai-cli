@@ -132,6 +132,8 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 	}
 	prefs.Avatar = sanitizeAvatarPref(prefs.Avatar)
 	prefs.NotifySound = sanitizeNotifySoundPref(prefs.NotifySound)
+	prefs.Display.CustomThemes = config.SanitizeCustomThemes(prefs.Display.CustomThemes)
+	prefs.Display.Theme = config.SanitizeDisplayTheme(prefs.Display.Theme, prefs.Display.CustomThemes)
 	s.cfgMu.Lock()
 	s.cfg.UserPrefs = prefs
 	s.cfgMu.Unlock()

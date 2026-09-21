@@ -251,6 +251,18 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   font-size: 0.82rem;
   color: var(--text);
 }
+.spawn-provider-option.is-missing {
+  grid-template-columns: 18px minmax(0, 1fr) auto 14px;
+}
+.spawn-provider-option-missing {
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.spawn-cli-missing-note {
+  margin: 0 0 var(--space-2);
+  color: var(--warn, #d4a017);
+}
 .spawn-provider-option:hover,
 .spawn-provider-option.is-active {
   background: var(--line);
@@ -480,6 +492,9 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
     gap: var(--space-1);
     padding-left: 6px;
     padding-right: 5px;
+  }
+  .spawn-provider-option.is-missing {
+    grid-template-columns: 17px minmax(0, 1fr) auto 12px;
   }
 }
 
