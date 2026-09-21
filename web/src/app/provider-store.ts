@@ -1,16 +1,20 @@
 import { apiFetch } from './util.js';
 
-export type ProviderCapabilities = {
-  launch: boolean;
-  models: boolean;
-  effort: boolean;
-  headless: boolean;
-  approval: boolean;
-  transcript: boolean;
-  usage: boolean;
-  subscription: boolean;
-  permissions: boolean;
-};
+export {
+  BUILTIN_PROVIDER_CAPABILITIES,
+  DEFAULT_PROVIDER_CAPABILITIES,
+  cacheProviderCapabilities,
+  clearProviderCapabilitiesCache,
+  hasProviderCapability,
+  providerCapabilitiesFor,
+  setProviderCapability,
+  type ProviderCapabilities,
+} from './provider-capabilities.js';
+import {
+  cacheProviderCapabilities,
+  setProviderCapability,
+  type ProviderCapabilities,
+} from './provider-capabilities.js';
 
 export type ProviderSummary = {
   id: string;
@@ -124,6 +128,7 @@ export async function loadProviderSummaries(options?: { includeDisabled?: boolea
     if (!response.ok) return null;
     const body = await response.json();
     if (!body || !Array.isArray(body.providers)) return null;
+    cacheProviderCapabilities(body.providers);
     const includeDisabled = options?.includeDisabled === true;
     return {
       revision: typeof body.revision === 'string' ? body.revision : '',
@@ -172,10 +177,14 @@ export async function loadProviderDetail(id: string, options?: { signal?: AbortS
   if (!body || typeof body.provider !== 'object' || body.provider === null) {
     return { ok: false, kind: 'network' };
   }
+  const eff = body.provider as ProviderEffectiveDefinition;
+  if (eff.capabilities_summary) {
+    setProviderCapability(id, eff.capabilities_summary);
+  }
   return {
     ok: true,
     revision: typeof body.revision === 'string' ? body.revision : '',
-    provider: body.provider as ProviderEffectiveDefinition,
+    provider: eff,
     diagnostics: Array.isArray(body.diagnostics) ? body.diagnostics : [],
   };
 }

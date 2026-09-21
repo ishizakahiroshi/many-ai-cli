@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/provider"
 )
 
 const (
@@ -143,6 +144,11 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
+	if adapter, ok := provider.LookupHistoryAdapter("history:" + snap.Provider + "-v1"); ok {
+		if !adapter.Parser().CanParse() {
+			return "", false
+		}
+	}
 	switch snap.Provider {
 	case "claude":
 		root := strings.TrimSpace(snap.ClaudeDir)

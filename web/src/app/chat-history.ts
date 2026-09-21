@@ -8,6 +8,7 @@ import { TERMINAL_SCROLLBACK_LINES, markTerminalManualScrollIntent, sendResize, 
 import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
 import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, updateRenderedChatMessage } from './transcript-message.js';
+import { hasProviderCapability } from './provider-store.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -130,6 +131,7 @@ export function pushMessage(sid, msg) {
 // Go 側の正本は internal/hub/provider_feature_source.go の StructuredTranscript 列で、
 // この 2 つは同じ一覧でなければならない（片方だけ増えると、チャットが空のまま
 // /api/agent-chat を叩くか、読めるのに session-chat の出力貼り付けを見せる）。
+// Provider Registry の capabilities.transcript を真の供給元として参照する。
 //
 // **承認の供給元の判定にこの関数を使わないこと。** 以前はこの 1 つの一覧が
 // 「トランスクリプトを読めるか」と「承認をトランスクリプトから受け取るか」の
@@ -137,7 +139,7 @@ export function pushMessage(sid, msg) {
 // 出ないので、承認は端末ミラーのまま。承認側は
 // isTranscriptApprovalProvider を使う。
 export function isTranscriptBackedProvider(provider) {
-  return provider === 'claude' || provider === 'codex' || provider === 'command-code';
+  return hasProviderCapability(provider, 'transcript');
 }
 
 // 承認カードの供給元が CLI のトランスクリプトである provider。Go 側の正本は
@@ -145,7 +147,7 @@ export function isTranscriptBackedProvider(provider) {
 // 台帳からの復元（approval.ts の maybeRestorePendingApprovalFromLedger）は、
 // 端末の再描画では戻せないこの供給元のためにある。
 export function isTranscriptApprovalProvider(provider) {
-  return provider === 'claude' || provider === 'codex';
+  return hasProviderCapability(provider, 'approval') && hasProviderCapability(provider, 'transcript') && provider !== 'command-code';
 }
 
 export function isTranscriptBackedSession(sid) {

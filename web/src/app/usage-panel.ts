@@ -12,6 +12,7 @@ import {
   windowMinutes,
   type UsageWindowInput,
 } from './usage-limit.js';
+import { hasProviderCapability } from './provider-store.js';
 
 interface UsageWindow {
   used_percent?: number;
@@ -302,11 +303,15 @@ function grokBody(provider: string, profile: UsageProfile): string {
 }
 
 function profileBody(provider: string, profile: UsageProfile): string {
+  if (!hasProviderCapability(provider, 'usage')) return '';
   switch (provider) {
     case 'claude': return claudeBody(provider, profile);
     case 'codex': return codexBody(provider, profile);
     case 'grok': return grokBody(provider, profile);
-    default: return '';
+    default: {
+      const body = authNotice(provider, profile);
+      return body + `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
+    }
   }
 }
 
@@ -324,6 +329,8 @@ function renderSkeleton(): void {
   if (!panelRoot) return;
   panelRoot.querySelectorAll('.usage-profile-list').forEach((el) => el.remove());
   for (const anchor of Array.from(panelRoot.querySelectorAll<HTMLElement>('[data-usage-provider]'))) {
+    const prov = anchor.dataset.usageProvider || '';
+    if (!hasProviderCapability(prov, 'usage')) continue;
     const list = document.createElement('div');
     list.className = 'usage-profile-list usage-profile-list--loading';
     list.setAttribute('role', 'status');

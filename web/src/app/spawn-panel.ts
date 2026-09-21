@@ -6,7 +6,7 @@ import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
-import { loadProviderSummaries } from './provider-store.js';
+import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
 import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
@@ -1065,7 +1065,8 @@ export function resetSpawnProviderOrder(): void {
   });
 
   function providerHasPermissionSelect(p: string): boolean {
-    return p === 'claude' || p === 'grok' || p === 'copilot' || p === 'cursor-agent' || p === 'command-code';
+    if (!hasProviderCapability(p, 'permissions')) return false;
+    return p !== 'codex' && p !== 'opencode';
   }
 
   function permissionAutoLabel(p: string): string {

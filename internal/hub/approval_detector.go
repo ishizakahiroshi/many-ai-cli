@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"many-ai-cli/internal/approval"
 	"many-ai-cli/internal/proto"
+	providerpkg "many-ai-cli/internal/provider"
 )
 
 const approvalSourceGoVT = "go_vt"
@@ -142,12 +142,13 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	} else if provider == "opencode" && approvalOptionsHaveSendText(opts) {
 		kind = "native_opencode_shortcut"
 	}
+	adapter, _ := providerpkg.LookupApprovalAdapter("approval:" + provider + "-v1")
 	approval := &nativeApproval{
 		Kind:     kind,
 		Question: question,
 		Context:  context,
 		Options:  opts,
-		Summary:  approval.Summarize(question, context),
+		Summary:  adapter.Summarizer().Summarize(question, context),
 	}
 	approval.Sig = nativeApprovalSig(provider, approval)
 	return approval
