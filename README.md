@@ -149,7 +149,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 
 **Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page — Cursor Agent CLI in particular has no local file or command that reports remaining quota (checked on the Free tier), so it cannot be detected. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting.
 
-**How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<id>` and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, plan label, and enabled flag.
+**How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<id>` and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, plan label, enabled flag and the hand-written options described below (`profile_dir`, `settings_sync`, `profile_owned_keys`, `default_wins_keys`).
 
 | Provider | Variable used | Status |
 |---|---|---|
@@ -172,12 +172,28 @@ This is **not an API key router**. It does not pool metered API keys to make req
 
 **Your everyday configuration is carried in for you.** When `many-ai-cli` prepares a profile it copies the parts you would otherwise lose from your default directory — for Claude that is `CLAUDE.md`, `settings.json` (including your approval allowlist and hooks), `skills` and `commands`; for Codex and Grok, `AGENTS.md`, `config.toml` (including the approval policy and trusted folders) and `prompts`.
 
-- **Nothing that already exists in a profile is ever overwritten.** A value you changed inside a profile stays; only what is missing gets added.
+- **Your settings files are kept in step with your default ones** — Claude's `settings.json`, and Codex's and Grok's `config.toml`. Each time a profile is prepared for a session, the policy you maintain in one place — hooks, permissions, `env` and feature switches such as `enableArtifact`, `skillOverrides`, `enabledPlugins` for Claude; the approval policy, sandbox mode, MCP servers and feature flags for Codex and Grok — is taken from your default file: a key you add or change there reaches the profile at its next launch, and a hook you delete stops running there too. What each CLI writes for itself stays the profile's: for Claude `theme`, `effortLevel`, `autoMode`, `modelSettings`, `tui` and the other `/config` toggles; for Codex `projects`, `tui`, `notice`, `windows`, `model`, `model_reasoning_effort` and `hooks`; for Grok `cli` and `ui`. A key that exists only in the profile is left alone, and nothing is written when the two already agree. To turn a plugin on or off for every profile, do it in your default directory; a `claude plugin disable` run inside a profile is undone at its next launch, and `many-ai-cli doctor` shows the disagreement until then.
+- **A profile's `config.toml` loses its comments whenever the sync changes something.** The file is parsed and written back rather than patched line by line, so the profile's copy comes out with its keys in sorted order and its comments gone. A pass that changes nothing writes nothing, so a profile that already agrees with your default keeps both. Your own `~/.codex/config.toml` and `~/.grok/config.toml` are only ever read — their comments and ordering are never touched.
+- **A profile can opt out of that sync, or change which keys it owns.** Three settings in `~/.many-ai-cli/config.yaml` decide this per profile, and they are hand-written only: the Hub UI never sets them, and renaming a profile or switching it off from Settings leaves them exactly as you wrote them. `settings_sync: false` puts one profile back on the old rule — its `settings.json` is carried in once if it has none, and never touched again. `profile_owned_keys` adds keys that profile keeps for itself (`enabledPlugins` is the usual one, when the plugin set is meant to differ per profile), and `default_wins_keys` hands a key back to your default file (`theme`, when every profile should look the same). Write nothing and the standard rules above apply. `many-ai-cli doctor` adds one line for a profile that uses any of them, naming the keys and never their values.
+
+  ```yaml
+  subscriptions:
+    claude:
+      - id: work
+        name: Work
+        profile_owned_keys: [enabledPlugins]
+        default_wins_keys: [theme]
+      - id: personal
+        name: Personal
+        settings_sync: false
+  ```
+
+- **Everything else that is copied keeps the old rule** — the two `.claude.json` keys, Grok's `trusted_folders.toml`: nothing that already exists in a profile is ever overwritten. A value you changed inside a profile stays; only what is missing gets added.
 - **Directories are linked** (a junction on Windows), so a skill you add later reaches every profile at once. Files are copied, because the CLI rewrites them and a link would push a profile's edits back into your default directory.
 - **Rule files are the one exception**: if your default `CLAUDE.md` (or `AGENTS.md` for Codex/Grok) is itself a symlink, a profile gets a symlink to the same resolved target instead of a copy, so editing the original reaches every profile with no re-seed. If the link cannot be made (Windows without Developer Mode), it falls back to a copy and `many-ai-cli doctor` says so. Replace the link with a regular file if you want that profile's rules to diverge from the default — it is never overwritten.
 - **Credentials are never carried.** `.credentials.json` and `auth.json` are excluded. Claude's `.claude.json` mixes account identity with preferences, so two named keys are copied rather than the file. <!-- secrets-scan: allow .credentials.json -->
 - Writes land only under `~/.many-ai-cli/subscriptions/`; your `~/.claude`, `~/.codex` and `~/.grok` are read and never written, and `many-ai-cli uninstall` removes everything this creates.
-- Later changes to your default directory are not followed automatically. `many-ai-cli doctor` reports what your default has that a profile does not.
+- Apart from those settings files, later changes to your default directory are not followed automatically. `many-ai-cli doctor` reports what your default has that a profile does not, and for the synced settings files it names the keys that differ from your default — never their values.
 
 **Browser integration follows the directory too.** Claude in Chrome keeps its enabled state inside the configuration directory. That "enabled by default" preference is one of the things carried into a new profile, but actually reaching the browser is a separate matter. The native-messaging registration it writes is a single per-user slot shared by every Chrome profile and by Edge, so whichever configuration directory enabled it last is the one the browser talks to, and enabling from another profile moves the slot rather than adding one. The browser extension also has to be signed in to the same Claude account as the session. In practice one configuration directory owns the browser at a time; two accounts cannot drive it in parallel. `many-ai-cli` sets the environment variable and nothing else — it neither writes nor reads any of this state.
 

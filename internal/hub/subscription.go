@@ -138,7 +138,12 @@ func (s *Server) subscriptionLaunch(provider, profileID string) ([]string, *subs
 	// vendor CLI は指定されたディレクトリが無いと自分で作る場合と落ちる場合がある。
 	// 起動前に本人のみアクセス可の権限で用意し、利用者の既定設定から不足分
 	// （共通ルール・スキル・承認設定など）を持ち込む。
-	seeded, err := subscription.EnsureProfileDir(provider, resolved.ProfileDir)
+	//
+	// 同期の設定（settings_sync / profile_owned_keys / default_wins_keys）は config.yaml
+	// にしか無いので、profile を引き直して seed 層へ渡す。Resolve が既に存在を確かめて
+	// いるので通常は必ず見つかり、見つからないときのゼロ値は「標準の規則」そのもの。
+	profile, _ := cfg.Subscriptions.Find(provider, resolved.ID)
+	seeded, err := subscription.EnsureProfileDirFor(provider, resolved.ProfileDir, profile)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -148,6 +153,12 @@ func (s *Server) subscriptionLaunch(provider, profileID string) ([]string, *subs
 		s.logger.Info("subscription profile seeded",
 			"provider", provider, "id", resolved.ID,
 			"applied", seeded.Applied, "failed", seeded.Failed, "degraded", seeded.Degraded)
+	}
+	if len(seeded.Synced) > 0 {
+		// 既定設定に合わせた鍵の名前だけを出す。値は出さない（hooks / env /
+		// permissions には利用者のローカルパスや業務上の固有名が入る）。
+		s.logger.Info("subscription profile settings synced",
+			"provider", provider, "id", resolved.ID, "keys", seeded.Synced)
 	}
 	env := append([]string(nil), resolved.Env...)
 	// wrapper がこの値を register で申告し、Hub が「実際に何で起動したか」を記録する。

@@ -148,7 +148,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 **残量**はその掛け算の内訳であって、単独の機能ではありません。Usage メニューにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。とくに Cursor Agent CLI は残量を返すローカルファイルもコマンドも無く（Free tier で確認済み）、検知できません。数字はメニューを開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。
 
-**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<id>` を作り、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・プラン名・有効フラグだけです。
+**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<id>` を作り、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・プラン名・有効フラグと、後述の手書き専用の項目（`profile_dir` / `settings_sync` / `profile_owned_keys` / `default_wins_keys`）だけです。
 
 | プロバイダー | 使う環境変数 | 対応 |
 |---|---|---|
@@ -171,12 +171,28 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 **普段の設定は自動で持ち込みます**: 分かれると困るものは、`many-ai-cli` が profile を用意するときに既定のディレクトリから運び入れます。Claude なら `CLAUDE.md` / `settings.json`（承認設定・hooks を含む）/ `skills` / `commands`、Codex と Grok なら `AGENTS.md` / `config.toml`（承認ポリシー・信頼済みフォルダを含む）/ `prompts` などです。
 
-- **既にあるものは絶対に上書きしません。** profile 側で変えた値はそのまま残り、足りないものだけが足されます
+- **設定ファイルは既定側と同期します**（Claude の `settings.json` と、Codex / Grok の `config.toml`）。セッションのために profile を用意するたびに、利用者が 1 か所で管理するポリシーの鍵を既定側の値で揃えます（Claude なら hooks・permissions・`env`・`enableArtifact` などの機能スイッチ・`skillOverrides`・`enabledPlugins`、Codex / Grok なら承認ポリシー・サンドボックス・MCP サーバー・機能フラグ）。既定側に足した鍵や変えた値は次の起動で profile に届き、既定側から消した hook は profile でも動かなくなります。各 CLI が自分で書く鍵は profile のものとして残します（Claude は `theme` / `effortLevel` / `autoMode` / `modelSettings` / `tui` と `/config` の切替、Codex は `projects` / `tui` / `notice` / `windows` / `model` / `model_reasoning_effort` / `hooks`、Grok は `cli` / `ui`）。profile にしか無い鍵にも触らず、両者が同じなら書き込みません。plugin の有効・無効を全 profile で揃えたいときは既定側で切り替えてください。profile の中で `claude plugin disable` しても次の起動で既定の値に戻り、それまでは `many-ai-cli doctor` が食い違いとして知らせます
+- **profile 側の `config.toml` は、同期で何か変わるとコメントが消えます。** 行単位で書き足すのではなく、読み込んで書き戻す方式なので、profile 側のコピーは鍵がソート順になりコメントが落ちます。変わるものが無ければ書き込まないので、既定側と一致している profile はコメントも並び順もそのままです。利用者の `~/.codex/config.toml` / `~/.grok/config.toml` は読むだけで、書き換えません
+- **同期を profile ごとに切ったり、鍵の割り当てを変えたりできます。** `~/.many-ai-cli/config.yaml` の 3 項目で決めます。いずれも**手書き専用**で、Hub の画面からは設定しません。設定画面で profile の名前を変えても、有効・無効を切り替えても、書いた内容はそのまま残ります。`settings_sync: false` にすると、その profile だけ従来どおりの扱い（`settings.json` が無ければ 1 回だけ運び入れ、あれば触らない）に戻ります。`profile_owned_keys` はその profile が自分で持つ鍵を足すもので（実例は `enabledPlugins`。plugin の組み合わせを profile ごとに変えたいとき）、`default_wins_keys` は逆に既定側へ揃える鍵を指定します（実例は `theme`。全 profile で見た目を揃えたいとき）。何も書かなければ上記の標準の規則どおりです。この 3 項目を使っている profile には `many-ai-cli doctor` が 1 行足します（鍵の名前だけで、値は出しません）
+
+  ```yaml
+  subscriptions:
+    claude:
+      - id: work
+        name: 仕事用
+        profile_owned_keys: [enabledPlugins]
+        default_wins_keys: [theme]
+      - id: personal
+        name: 個人用
+        settings_sync: false
+  ```
+
+- **それ以外の運び入れは従来どおりです**（`.claude.json` の 2 キー、Grok の `trusted_folders.toml`）: 既にあるものは絶対に上書きしません。profile 側で変えた値はそのまま残り、足りないものだけが足されます
 - **フォルダはリンク**（Windows では junction）で繋ぐので、あとからスキルを 1 つ足せば全 profile に届きます。ファイルはコピーです（CLI 自身が書き換えるため、リンクにすると profile の編集が既定側へ逆流します）
 - **ただし rule ファイルだけは例外です**: 既定側の `CLAUDE.md`（Codex / Grok は `AGENTS.md`）自体が symlink のときは、profile 側もコピーではなく同じ実体へのリンクにします。既定側を編集すれば再 seed なしで全 profile に届きます。リンクを張れない環境（Windows で開発者モード未設定など）ではコピーへ自動でフォールバックし、`many-ai-cli doctor` が知らせます。profile ごとに rule を変えたい場合はリンクを消して実ファイルに置き換えれば、そのまま上書きされずに残ります
 - **認証ファイルは運びません。** `.credentials.json` や `auth.json` は対象外です。Claude の `.claude.json` はアカウント識別と好みが同居しているため、ファイルごとではなく名指しした 2 キー（ブラウザ操作の既定）だけを移します <!-- secrets-scan: allow .credentials.json -->
 - 書き込み先は `~/.many-ai-cli/subscriptions/` の中だけで、あなたの `~/.claude` / `~/.codex` / `~/.grok` は読むだけです。`many-ai-cli uninstall` で全部消えます
-- あとから既定側を変えた分は自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教えます
+- 上記の設定ファイル以外は、あとから既定側を変えた分を自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教え、同期する設定ファイルについては既定と食い違う鍵の名前を教えます（値は出しません）
 
 **ブラウザ連携も設定ディレクトリに付いてきます**: Claude in Chrome は有効化の状態を設定ディレクトリの中に持ちます。この「既定で有効にするか」の設定は上記の持ち込みの対象なので新しい profile にも引き継がれますが、実際にブラウザと繋がるかは別の話です。有効化のときに書かれる native messaging host の登録は Windows ユーザー単位で 1 枠しかなく、Chrome の全ブラウザプロファイルと Edge がそれを共有します。そのため最後に有効化した設定ディレクトリだけがブラウザと繋がり、別の profile で有効化すると枠が増えるのではなく移動します。加えて、ブラウザ拡張がセッションと同じ Claude アカウントでログインしている必要があります。結果として、ブラウザを持てる設定ディレクトリは同時に 1 つだけで、2 アカウントの並行利用はできません。`many-ai-cli` は環境変数を設定するだけで、これらの状態を読み書きしません。
 

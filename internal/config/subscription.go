@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,11 +46,48 @@ type SubscriptionProfile struct {
 	// ProfileDir は既定位置（~/.many-ai-cli/subscriptions/<provider>/<id>）以外へ
 	// 実体を置きたいときだけ手で書く上書き。API からは設定できない。
 	ProfileDir string `yaml:"profile_dir,omitempty" json:"profile_dir,omitempty"`
+
+	// 以下 3 項目は起動時同期（settings.json を既定設定と揃える動作）の profile ごとの
+	// 上書き。**ProfileDir と同じく手書き専用で、Hub UI / API からは設定しない。**
+	// 標準は「既定が正典・CLI が書く鍵は profile のもの」で、それで足りない利用者
+	// （profile ごとに plugin の組み合わせを変える、profile の設定をわざと既定から
+	// 離している）のための逃げ道として config.yaml にだけ口を開ける。API 側は
+	// 名前・有効フラグ・plan を書き換えるときもこの 3 項目に触れないので、画面から
+	// の操作で手書きの取り決めが消えることはない。
+
+	// SettingsSync は起動時同期を行うかどうか。nil（未設定）と true は同期する。
+	// false にすると、その profile の同期対象ファイルは「無ければコピー・あれば
+	// 触らない」という従来どおりの持ち込みに戻る。
+	//
+	// ポインタなのは Enabled と同じ理由（明示的な false を omitempty で落とさない）。
+	SettingsSync *bool `yaml:"settings_sync,omitempty" json:"settings_sync,omitempty"`
+	// ProfileOwnedKeys は、この profile が自分で持つ設定鍵を adapter の一覧へ足す。
+	// 足した鍵は既定側の値で上書きされず、doctor も食い違いとして数えない。
+	// plugin の組み合わせを profile ごとに変えたい場合の `enabledPlugins` が実例。
+	ProfileOwnedKeys []string `yaml:"profile_owned_keys,omitempty" json:"profile_owned_keys,omitempty"`
+	// DefaultWinsKeys は逆に、adapter が profile の持ち物として扱っている鍵を既定側が
+	// 勝つ側へ戻す。全 profile で `theme` を既定に揃えたい場合が実例。同じ鍵を両方へ
+	// 書いたときは DefaultWinsKeys が勝つ（「既定に揃える」と明示した側を優先する）。
+	DefaultWinsKeys []string `yaml:"default_wins_keys,omitempty" json:"default_wins_keys,omitempty"`
 }
 
 // IsEnabled は Enabled が nil（未設定）または true のとき true を返す。
 func (p SubscriptionProfile) IsEnabled() bool {
 	return p.Enabled == nil || *p.Enabled
+}
+
+// IsSettingsSyncEnabled は SettingsSync が nil（未設定）または true のとき true を返す。
+func (p SubscriptionProfile) IsSettingsSyncEnabled() bool {
+	return p.SettingsSync == nil || *p.SettingsSync
+}
+
+// HasSyncOverrides は同期の既定から外れる設定が 1 つでも書かれているかを返す。
+//
+// `many-ai-cli doctor` はこれが true の profile にだけ 1 行足す。既定のままの利用者に
+// とって、この機能は存在しないのと同じでなければならない（使っていない機能で診断出力
+// が伸びると、本当に見るべき行が埋もれる）。
+func (p SubscriptionProfile) HasSyncOverrides() bool {
+	return p.SettingsSync != nil || len(p.ProfileOwnedKeys) > 0 || len(p.DefaultWinsKeys) > 0
 }
 
 // SubscriptionProfiles は provider 名 → profile 一覧。map なので、未知の provider
@@ -76,7 +114,17 @@ func (s *SubscriptionProfiles) UnmarshalYAML(value *yaml.Node) error {
 	for provider, node := range raw {
 		var list []SubscriptionProfile
 		if err := node.Decode(&list); err != nil {
-			continue
+			// yaml.v3 は項目単位の型違いを *yaml.TypeError にまとめて返し、解釈でき
+			// た項目はそのまま out へ入れる（要素ごと解釈できなかったものは列から
+			// 落ちる）。1 項目の型違いで profile を丸ごと捨てると、`profile_owned_keys`
+			// を書き間違えただけでその profile が一覧から消え、spawn 画面で選べなく
+			// なる＝別のアカウントで起動することになる。型違いだけは許容して、解釈
+			// できた項目を残す。それ以外のエラー（列そのものが map や scalar）は
+			// 従来どおり provider ごと捨てる。
+			var typeErr *yaml.TypeError
+			if !errors.As(err, &typeErr) {
+				continue
+			}
 		}
 		kept := make([]SubscriptionProfile, 0, len(list))
 		for _, p := range list {
@@ -112,6 +160,12 @@ func (s SubscriptionProfiles) Clone() SubscriptionProfiles {
 				v := *list[i].Enabled
 				copied[i].Enabled = &v
 			}
+			if list[i].SettingsSync != nil {
+				v := *list[i].SettingsSync
+				copied[i].SettingsSync = &v
+			}
+			copied[i].ProfileOwnedKeys = slices.Clone(list[i].ProfileOwnedKeys)
+			copied[i].DefaultWinsKeys = slices.Clone(list[i].DefaultWinsKeys)
 		}
 		out[provider] = copied
 	}

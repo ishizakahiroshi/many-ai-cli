@@ -6,6 +6,7 @@ require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/creack/pty v1.1.24
+	github.com/pelletier/go-toml/v2 v2.4.3
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0

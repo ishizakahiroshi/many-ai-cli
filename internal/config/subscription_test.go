@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -220,6 +221,90 @@ func TestSubscriptionWarningsSurfaceBrokenEntries(t *testing.T) {
 	cfg.applyDefaults()
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate() = %v; broken subscription entries must not stop the Hub", err)
+	}
+}
+
+// 同期の 3 項目（settings_sync / profile_owned_keys / default_wins_keys）は
+// config.yaml に手で書く前提なので、(a) 書いたとおりに読めること (b) 1 項目を
+// 書き間違えても profile が消えないこと、の両方が要る。profile が消えると spawn の
+// 選択肢から落ち、利用者はその契約のつもりで別のアカウントのセッションを立てる。
+func TestSubscriptionProfileSyncOverrides(t *testing.T) {
+	var cfg Config
+	body := "subscriptions:\n" +
+		"  claude:\n" +
+		"    - id: work\n" +
+		"      settings_sync: false\n" +
+		"      profile_owned_keys: [enabledPlugins, theme]\n" +
+		"      default_wins_keys: [effortLevel]\n"
+	if err := yaml.Unmarshal([]byte(body), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(cfg.Subscriptions["claude"]) != 1 {
+		t.Fatalf("profiles = %#v, want 1", cfg.Subscriptions["claude"])
+	}
+	got := cfg.Subscriptions["claude"][0]
+	if got.IsSettingsSyncEnabled() {
+		t.Error("settings_sync: false did not reach the profile")
+	}
+	if !got.HasSyncOverrides() {
+		t.Error("a profile that wrote all three settings must report them as overrides")
+	}
+	if !slices.Equal(got.ProfileOwnedKeys, []string{"enabledPlugins", "theme"}) {
+		t.Errorf("profile_owned_keys = %v", got.ProfileOwnedKeys)
+	}
+	if !slices.Equal(got.DefaultWinsKeys, []string{"effortLevel"}) {
+		t.Errorf("default_wins_keys = %v", got.DefaultWinsKeys)
+	}
+
+	// 何も書いていない profile は標準の規則のまま（この機能が見えてはいけない）。
+	plain := SubscriptionProfile{ID: "plain"}
+	if !plain.IsSettingsSyncEnabled() || plain.HasSyncOverrides() {
+		t.Error("a profile that wrote nothing must keep the standard rules")
+	}
+
+	// Clone は Enabled と同じく実体を複製する。live config と共有したままだと、
+	// snapshot 側の書き換えが動いているサーバーへ漏れる。
+	clone := cfg.Subscriptions.Clone()
+	*clone["claude"][0].SettingsSync = true
+	clone["claude"][0].ProfileOwnedKeys[0] = "changed"
+	clone["claude"][0].DefaultWinsKeys[0] = "changed"
+	if cfg.Subscriptions["claude"][0].IsSettingsSyncEnabled() {
+		t.Error("Clone shared the settings_sync pointer")
+	}
+	if cfg.Subscriptions["claude"][0].ProfileOwnedKeys[0] != "enabledPlugins" {
+		t.Error("Clone shared the profile_owned_keys slice")
+	}
+	if cfg.Subscriptions["claude"][0].DefaultWinsKeys[0] != "effortLevel" {
+		t.Error("Clone shared the default_wins_keys slice")
+	}
+
+	// 型違いは、その項目だけ捨てて profile 自体は残す。
+	var broken Config
+	brokenBody := "token: keepme\n" +
+		"subscriptions:\n" +
+		"  claude:\n" +
+		"    - id: work\n" +
+		"      name: Work\n" +
+		"      profile_owned_keys: 1\n" +
+		"      default_wins_keys: [theme]\n"
+	if err := yaml.Unmarshal([]byte(brokenBody), &broken); err != nil {
+		t.Fatalf("a type mismatch in one key must not fail the whole config: %v", err)
+	}
+	if broken.Token != "keepme" {
+		t.Fatalf("token = %q, want keepme", broken.Token)
+	}
+	if len(broken.Subscriptions["claude"]) != 1 {
+		t.Fatalf("one mistyped key dropped the profile: %#v", broken.Subscriptions)
+	}
+	kept := broken.Subscriptions["claude"][0]
+	if kept.ID != "work" || kept.Name != "Work" {
+		t.Errorf("the profile lost its identity: %#v", kept)
+	}
+	if len(kept.ProfileOwnedKeys) != 0 {
+		t.Errorf("profile_owned_keys = %v, want nothing kept from a scalar", kept.ProfileOwnedKeys)
+	}
+	if !slices.Equal(kept.DefaultWinsKeys, []string{"theme"}) {
+		t.Errorf("default_wins_keys = %v; the keys around the broken one must survive", kept.DefaultWinsKeys)
 	}
 }
 

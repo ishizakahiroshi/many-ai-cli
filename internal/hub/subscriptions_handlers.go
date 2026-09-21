@@ -125,7 +125,11 @@ func (s *Server) handleSubscriptionAdd(w http.ResponseWriter, r *http.Request) {
 
 	// ディレクトリ作成とファイル書き込みはロックの外で行う（cfgMu を I/O で
 	// 握らないという既存方針）。失敗したら登録を巻き戻す。
-	seeded, err := subscription.EnsureProfileDir(provider, profileDir)
+	//
+	// profile をそのまま渡すのは、同期の設定（settings_sync / profile_owned_keys /
+	// default_wins_keys）を解釈する経路を seed 側の 1 本に揃えるため。画面から足した
+	// ばかりの profile はどれも未設定なので、ここでの結果は標準の規則と同じになる。
+	seeded, err := subscription.EnsureProfileDirFor(provider, profileDir, profile)
 	if err != nil {
 		s.removeSubscriptionEntry(provider, id)
 		writeJSONError(w, http.StatusInternalServerError, "profile_dir_error", errorDetail("create profile dir", err))
@@ -135,6 +139,11 @@ func (s *Server) handleSubscriptionAdd(w http.ResponseWriter, r *http.Request) {
 		s.logger.Info("subscription profile seeded",
 			"provider", provider, "id", id,
 			"applied", seeded.Applied, "failed", seeded.Failed, "degraded", seeded.Degraded)
+	}
+	if len(seeded.Synced) > 0 {
+		// 鍵名だけ。値は出さない（hooks / env / permissions の中身はログに載せない）。
+		s.logger.Info("subscription profile settings synced",
+			"provider", provider, "id", id, "keys", seeded.Synced)
 	}
 	if err := s.persistConfig(); err != nil {
 		s.removeSubscriptionEntry(provider, id)

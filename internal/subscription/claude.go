@@ -107,6 +107,30 @@ var claudeCarriedStateKeys = []string{
 	"hasCompletedClaudeInChromeOnboarding",
 }
 
+// claudeProfileStateKeys are the settings.json keys a profile owns, i.e. the
+// ones Claude Code writes for itself and the sync must not take back from the
+// user's default configuration. Everything else in the file — hooks,
+// permissions, env, the feature switches — is policy the user keeps in one
+// place, and the default is its source of truth.
+//
+// 初期値。modelSettings / tui / autoMode は CLI が書くことを観測済み、残りは
+// /config の項目名からの推定。
+var claudeProfileStateKeys = []string{
+	"autoMode",
+	"modelSettings",
+	"tui",
+	"theme",
+	"effortLevel",
+	"skipDangerousModePermissionPrompt",
+	"skipAutoPermissionPrompt",
+	"skipWorkflowUsageWarning",
+	"agentPushNotifEnabled",
+	"voice",
+	"voiceEnabled",
+	"autoUpdatesChannel",
+	"switchModelsOnFlag",
+}
+
 // SeedEntries lists what a Claude Code profile inherits from the user's own
 // configuration. Everything not named here — credentials, session history,
 // per-project state, caches — stays separate, which is the point of profiles.
@@ -119,7 +143,9 @@ func (claudeAdapter) SeedEntries() []SeedEntry {
 		{Source: filepath.Join(dir, "CLAUDE.md"), Dest: "CLAUDE.md",
 			Kind: SeedMirrorFile, Label: "共通ルール（CLAUDE.md）"},
 		{Source: filepath.Join(dir, "settings.json"), Dest: "settings.json",
-			Kind: SeedCopyFile, Label: "ユーザー設定（settings.json・承認設定 / hooks を含む）"},
+			Kind:      SeedSyncFile,
+			StateKeys: claudeProfileStateKeys,
+			Label:     "ユーザー設定（settings.json・起動時に既定と同期）"},
 		{Source: filepath.Join(dir, "commands"), Dest: "commands",
 			Kind: SeedLinkDir, Label: "スラッシュコマンド（commands/）"},
 		{Source: filepath.Join(dir, "skills"), Dest: "skills",

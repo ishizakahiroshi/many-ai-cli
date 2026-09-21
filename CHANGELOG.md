@@ -258,6 +258,53 @@ Release artifacts are published at
   corrected before you start it. Pressing Start is still the approval by itself
   — no extra confirmation step was added.
 
+- **A subscription profile's `settings.json` is now kept in step with your
+  default settings at launch instead of being copied once.** Hooks,
+  permissions and the feature switches are the ones you maintain in your own
+  `~/.claude/settings.json`, so a switch you add there now reaches the profiles
+  you created months ago; until now the copy was taken when the profile was
+  first prepared and never looked at again, and nothing on screen said the two
+  had drifted apart. What the CLI writes for itself stays with the profile —
+  the theme, the effort level, the chosen model and the auto mode body are read
+  from the profile and left alone — and a key only the profile has is kept.
+  Nothing is written when the two already agree.
+
+- **`many-ai-cli doctor` now says when a subscription profile's settings
+  disagree with your default ones**, naming the settings involved: the ones your
+  default configuration has and the profile does not, and the ones both have
+  with different values. Only the names — never a value or a file path — so the
+  report stays safe to paste anywhere. What the CLI writes for itself, such as
+  the theme or the chosen model, is not reported, and the row clears itself the
+  next time you start a session with that profile, which is when the two are
+  brought back into step.
+
+- **A subscription profile can now opt out of that sync, or change which
+  settings it owns.** Three keys in `config.yaml` decide it per profile:
+  `settings_sync: false` puts one profile back on the old rule — carried in once
+  if it has nothing, never touched again — while `profile_owned_keys` adds
+  settings the profile keeps for itself (`enabledPlugins`, when the plugin set is
+  meant to differ per profile) and `default_wins_keys` hands one back to your
+  default file (`theme`, when every profile should look the same). They are
+  hand-written only: the Hub UI never sets them, and renaming a profile or
+  turning it off from Settings leaves them as you wrote them. A profile that
+  writes none of them behaves exactly as before, and `many-ai-cli doctor` says
+  in one line which settings a profile that uses them has taken over — names
+  only, never values.
+
+- **Codex's and Grok's `config.toml` are now kept in step with your default
+  ones too**, under the same rules as Claude's `settings.json`: the approval
+  policy, the sandbox mode, the MCP servers and the feature flags come from
+  your own file at every launch, while what each CLI writes for itself stays
+  with the profile — `projects`, `tui`, `notice`, `windows`, `model`,
+  `model_reasoning_effort` and `hooks` for Codex, `cli` and `ui` for Grok.
+  Grok's `trusted_folders.toml` is still carried in once and never touched
+  again. One thing to know before you upgrade: a profile's `config.toml` is
+  parsed and written back rather than patched, so the first pass that changes
+  something drops that copy's comments and sorts its keys. Your own
+  `~/.codex/config.toml` and `~/.grok/config.toml` are only ever read. This
+  adds one dependency, `github.com/pelletier/go-toml/v2` (MIT), recorded in
+  `THIRD_PARTY_NOTICES.md`.
+
 ### Fixed
 
 - **Git errors now say why the command failed.** When a pre-commit hook refuses
