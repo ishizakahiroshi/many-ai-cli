@@ -27,8 +27,10 @@ const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
 // セッション単位の一時ファイルとして渡す。version 21 で DONE 要約に「次:」「未検証:」の
 // 任意 1 行を足した（docs/local/plan_session-handoff-board_c3_intent-layer.md C1。看板の
 // intent 層 kind=intent の材料。internal/hub/done_summary.go の extractIntentFromDoneText
-// が拾う）。
-const rulesVersion = "21"
+// が拾う）。version 22 で前置きの代替表現を「箇条書き（`- `）」から「短い段落か 1 行 1 項目の
+// 地の文」へ改めた（利用者のグローバル規約「many-ai-cli 配下では行頭の `- ` を使わない」と
+// 矛盾していたため。ダッシュボードは Markdown を描画しないので記号がそのまま画面に出る）。
+const rulesVersion = "22"
 
 // ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
 // 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
@@ -145,7 +147,7 @@ var rulesFileContent = strings.Join([]string{
 	"**前置きでも罫線・表組みを使わないこと。**",
 	"具体的には Markdown テーブル（`|` 区切りや `---|---` 区切り行）・水平線（`---` / `===` / 罫線文字）を出力しない。",
 	"理由: Web ダッシュボードの xterm.js では端末幅でハードラップされた後にスクレイプされるため、テーブルや罫線は行・列の対応が崩れて読めなくなる（過去に発生）。",
-	"代わりに箇条書き（`- `）か短い段落で書くこと。どうしても項目の対応関係を示したい場合は「項目: 値」を 1 行 1 件で並べる。",
+	"代わりに短い段落か、1 行 1 項目の地の文で書くこと（行頭の `- ` や `・` も付けない。ダッシュボードでは Markdown が描画されず記号がそのまま画面に出る）。項目の対応関係を示したい場合は「項目: 値」を 1 行 1 件で並べる。",
 	"",
 	"## many-ai-cli Done Summary Format",
 	"",
