@@ -3,17 +3,25 @@ type: architecture-component
 title: Multiple Subscriptions Per Provider
 description: How many-ai-cli isolates several logins for one provider CLI purely through per-profile config-directory environment variables, never touching credentials itself, plus how remaining-quota usage figures are read.
 tags: [subscriptions, credentials, usage-relay, environment-variable, seed]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
+  - id: openwiki-source-2cb9bd598df77afe2b3ea92c
+    resource: repo://internal/doctor/subscriptions.go
   - id: openwiki-source-1886c841f204522a4918c6bd
     resource: repo://internal/subscription/adapter.go
+  - id: openwiki-source-7c7a84ff4b04a95328f7fcaf
+    resource: repo://internal/subscription/claude.go
+  - id: openwiki-source-c861326e412ade6e53a3f566
+    resource: repo://internal/subscription/codex.go
+  - id: openwiki-source-080bff77739560626a95c9d2
+    resource: repo://internal/subscription/grok.go
   - id: openwiki-source-adffd48498d7f55f078c06af
     resource: repo://internal/subscription/seed.go
   - id: openwiki-source-967dc3cc3b95466f6539c1df
     resource: repo://internal/usagerelay/usagerelay.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## One fact, one mechanism
@@ -35,11 +43,11 @@ generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
 
 A fresh profile directory starts empty except for what `internal/subscription/seed.go` explicitly carries in — and that carrying-in exists at all only because of a measured incident (2026-08-23): pointing a vendor CLI at a fresh directory separates the login, which is the goal, but it also silently separates *everything else* that happens to live in that same directory (the user's `CLAUDE.md`/`AGENTS.md`, skills, slash commands, approval allowlist/policy, trusted folders) — with nothing reporting this, a freshly profiled session simply behaved as if the user had never configured the CLI at all, invisible from both sides, and it cost an afternoon of investigation before the cause was traced. Three rules bound seeding so it never turns into "many-ai-cli edits your CLI config":
 
-- **Additive only** — an entry is carried in only when the profile does not already have it; nothing that already exists in a profile is ever overwritten, renamed, merged, or deleted, so a value the user changed inside a profile always wins.
+- **Additive only, with one named exception** — an entry is carried in only when the profile does not already have it; nothing a profile holds is renamed or deleted, and a value the user changed inside a profile wins. The exception is the vendor settings file (`SeedSyncFile`, below): its *policy* keys are re-read from the default on every pass, while the keys the vendor CLI writes itself stay the profile's and a key only the profile has is never touched.
 - **Inside our own tree only** — every write lands under `~/.many-ai-cli/subscriptions/`; the user's real `~/.claude`, `~/.codex`, `~/.grok` are read and never written, so `many-ai-cli uninstall` still removes everything a profile created.
 - **Named entries only** — each provider's adapter lists exactly which entries to carry by name; there is no "copy the whole directory" mode, which would drag a credential file across right along with everything else and defeat the separation the whole mechanism exists to provide.
 
-Three distinct `SeedKind`s implement this, chosen per entry based on how the vendor CLI treats that specific file: **`SeedCopyFile`** copies a file whose content the vendor CLI itself rewrites (`settings.json`, `config.toml`) — a symlink there would push the profile's own edits back into the user's default configuration, which seeding must not do. **`SeedLinkDir`** links a whole directory (symlink, or a junction on Windows where a plain symlink needs a privilege) for content the user maintains in exactly one place and expects every profile to see immediately — skills, slash commands, prompts — so adding a skill later reaches every profile without a re-seed. Rule files (`CLAUDE.md`/`AGENTS.md`) get a special-cased exception to the copy-vs-link split: the vendor CLI does not rewrite them, so if the user's own default copy is *itself* already a symlink, a profile mirrors that as a symlink to the same resolved target rather than taking a static snapshot — editing the original then reaches every profile with no re-seed needed, while a plain (non-symlinked) default file is still copied normally.
+Several `SeedKind`s implement this, chosen per entry based on how the vendor CLI treats that specific file. **`SeedCopyFile`** copies a file once, as-is, for files the vendor CLI rewrites (e.g. Grok's `trusted_folders.toml`) — a symlink there would push the profile's own edits back into the user's default configuration, which seeding must not do. **`SeedSyncFile`** is used for Claude's `settings.json` and Codex's/Grok's `config.toml`: rather than a one-time copy (which meant a switch the user later added to the default never reached a profile, with nothing on screen to say so), every pass takes the policy keys — hooks, permissions, feature switches — from the default, while the `StateKeys` the vendor CLI writes itself (chosen model, theme, and similar) stay the profile's; `many-ai-cli doctor` reports a profile whose file has drifted from the default. **`SeedJSONKeys`** writes only named top-level keys of Claude's `.claude.json`, which mixes account identity with a few real preferences. **`SeedLinkDir`** links a whole directory (symlink, or a junction on Windows where a plain symlink needs a privilege) for content the user maintains in exactly one place and expects every profile to see immediately — skills, slash commands, prompts — so adding a skill later reaches every profile without a re-seed. Rule files (`CLAUDE.md`/`AGENTS.md`) get a special-cased exception to the copy-vs-link split: the vendor CLI does not rewrite them, so if the user's own default copy is *itself* already a symlink, a profile mirrors that as a symlink to the same resolved target rather than taking a static snapshot — editing the original then reaches every profile with no re-seed needed, while a plain (non-symlinked) default file is still copied normally.
 
 ## Remaining quota: three separate local data paths, not a query API
 

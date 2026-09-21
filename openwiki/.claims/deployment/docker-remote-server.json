@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:f82315b382cfd9747564d7ae3b467980c72e3c53980b0c7e3416654e4bb2a98d",
+  "pageVersion": "sha256:fe68c2665d4f05800ef809c020bf1723642b28781c504357385db4f1e56f3c3b",
   "claims": [
     {
       "id": "claim_967154b86bec41ff8002c2df9bda973a",
@@ -17,8 +17,8 @@
       "statement": "The Dockerfile's web-build stage uses bun only to install dependencies (bun install --frozen-lockfile) while running the actual build script through node/bun run build, deliberately keeping bun out of the script-execution path to minimize attack surface.",
       "evidence": [
         {
-          "resource": "repo://deploy/docker/Dockerfile#L24-L32",
-          "version": "repo-lines-v1:sha256:5397e050dc1f7180bd5706d4ed0d7de30c39b004129b340fc2e04fb087151ed3:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZjODliMjUwNWZlYmMzODgxMDU0MTRlZDQ5YmY3NjM3M2FmMGY5YmRjZDk0YTNiN2M5MDg1NzI4ODBhM2VhNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ5YjMzYmNiNjI3NTE3ZWEyZWQ5NDViNjE4OTZlYmNiNTI0OGIzYjQwZDY2NzVhNTZkY2QwN2Q5Nzg5MzA2ZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTI3ODdjNjBmOTQ5MDI1MTI1MDg4ODg0OWFiZTlkMDg2N2E0YjU0MjRjOWEwYTFjNWI2YWJjNDY1MjMwZTIyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjYzMDcyODE5MjYzZDcwZTI0ZDc2OGI0MWU4NWQ2ZTU0N2JiNjUwNjlmOTI4MDJmY2MxOWUyNTNiZmYzMTFhNyJ9"
+          "resource": "repo://deploy/docker/Dockerfile#L25-L32",
+          "version": "repo-lines-v1:sha256:a3bbbd5aa11e491f09d45cf32de0180e2ca89e737e905be262d500e8e0fb0815:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2Q0ZDQ3OGNmMDVmZjNlN2M4NmYyNzg1YzJmNDRmODc3MmM4MGJmM2RmYTg5ZTNmZTY1MDExYjM5M2NiYTMzNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGJkOTNkOWM5NGZjMWJjY2Y2YjUxMTdkYWQ3YzU0OWVjOThhYTFjNjRiZTA2Zjg4MmVmOWVlYzAyZTc3MjE0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTE5ZWEzMzNjYWE3MzMyMTNjYTNjNGY4YmExYjBmOTEwYmE0Nzg2YmVkYjc2MGYyZjYwMWI3OWM5MDIzOWY2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWE0OTg5YWE1NmQzMGU1OTA3ZGVhNGFkNTU4OTkzYmRkYWIxYjUyMDgzMzI1Y2VhNzgwYWQyNjJiOWRhZjcxNCJ9"
         }
       ]
     },
@@ -27,8 +27,8 @@
       "statement": "The provider-cli-build stage installs the Claude Code, Codex, and Copilot CLIs at pinned exact versions via `npm ci --omit=dev` against a tracked package-lock.json, rather than tracking latest.",
       "evidence": [
         {
-          "resource": "repo://deploy/docker/Dockerfile#L34-L41",
-          "version": "repo-lines-v1:sha256:caa26c22f2bc74bf7731bda29de4f8b6486a804cdc97de4d330a3e1137bb77d7:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFkYmEwYTA3NDgxYzg4NThiZjI4OGMzYmU1MzIwYzc1OGJjZWJhNTI4N2EzY2NkODQ4MWYwYWNmYjE5MjkyYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzkzY2MyYTQyMDVmY2FjYzYzNjkyMWIxOTdkOTg1YWUyYzRjMjczZjkzZDZhODk4MjY5YzdlNDNjNDU0MTA0NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjRmNzVkMjY1MGYyY2M2MzgwNTNiMWUxMTU2NzM1ZjE2OTYyN2ZmYWMwMTY2NWFjNjYxMWRkMGZiNWNiY2M0ZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGVkY2RjMDViMGRlNjM4ZDg5OGY5M2ZiZDVkMDI3YjYzZWI4ZmJlZmIzMjZmYzg4Njc2ZjQ3N2EyMTA3MDUzYSJ9"
+          "resource": "repo://deploy/docker/Dockerfile#L35-L41",
+          "version": "repo-lines-v1:sha256:7fe831c01941e7c21393f28de831c2504800c2e50b040062652f43360d6a3dc9:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmZiOWNhYWRjNzE5ZWZhYjBiZDUxZGExYmIzYTE5MzVkOTRkOWMzYjJmYTM1MWJmNmFmM2JhYzIxZWQzYTVhMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjVkNTg2NjM0MDQ0MmM4ZmNiMzVjYTA4YzcwZmI3NDExOTA3YzI5YjgyZTU2NDM2ZDZhNWQxN2NhMWE2M2I1NiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWI1YjFjYTkzNWJiYjIyNmJlYTM4YjY2YjdmZmVjZDExN2ZjMjJkYjQxYjQ4YTIyNzk5YWM1NTFjOGY1MDBhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWE0ZWQ0NTA1NzhlZTFmMWRjZDY0MjJiZWYzYmEwMTE5N2Y0OTA3MDg0OWFiMDFiMTk1Yjc1ODIzY2FkM2I1ZSJ9"
         }
       ]
     },
@@ -37,8 +37,8 @@
       "statement": "The whisper-build stage compiles whisper-server from a whisper.cpp commit that is checked out and then verified against a hardcoded expected commit SHA, with GGML_OPENMP=OFF (relying on whisper.cpp's own thread pool instead of libgomp), BUILD_SHARED_LIBS=OFF, and GGML_NATIVE=OFF, because upstream whisper.cpp does not publish a Linux server binary release.",
       "evidence": [
         {
-          "resource": "repo://deploy/docker/Dockerfile#L52-L77",
-          "version": "repo-lines-v1:sha256:9d01ba5003738ab2992dad77a01ee1e4e13a6f1e397cc058ec49eb610a3a80f6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0N2NiZTU3Nzg5MTI4NTBjMThkNGQ3MjBiNTYxZTRiNTBjZGVlNTRlZDUwZGQ2ZjI4NTIyOWNmZTA2YjA2NDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3NTYyZTFmYjhkZjk5YTY3NjMyODYwZmYwMTg1ZDFkZWIwN2I4YjIzNzQzZTQ1OTBiZDQ3M2E4YmQyODAyYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjNTYzMWQ5NjYxOGJhN2UzNmViYTJkOTBlMDM1ZmFiNTE2MTA2MTIzNjU4ZmUzNjllODQxZDUyNzU3YTkzMWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNhNmI1MTMwMzU3MjFjNDE5MTY0ODQ5ZThmMTYxMTExZTAyNTI2ZTY0ZDM1OTkwOTA1YTg2MWMyNDYzNDZmMTkifQ"
+          "resource": "repo://deploy/docker/Dockerfile#L53-L77",
+          "version": "repo-lines-v1:sha256:f0ba3e6173f2caf5b238975728b3c9b8522e321a621bcb17b89c43b2411fd8ad:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhNTM0YWE2OTM0NWVmODlmM2IxNGE1MGZlYjU4YzQxYzcwNDM2YmI1M2U4MmVjNGYyYWVlNzFkNDcwMDljOWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3NTYyZTFmYjhkZjk5YTY3NjMyODYwZmYwMTg1ZDFkZWIwN2I4YjIzNzQzZTQ1OTBiZDQ3M2E4YmQyODAyYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY3N2RkZjAzZjlhZWNhOWZjNDYxNThlMWY5MzlkMjRlYWFmZWYxMjdiOWFkMTA3NTQ2ZjhjN2Y0Zjc3Y2YwYmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUwMDE3ZGNlZDIyOTYyZmI0NmMwODBmMDhjNWRkM2E0NDEyNTk2ZGJmYzQ2YmYxZGM5Y2I5ZDQwMWI3ZWQxZGEifQ"
         }
       ]
     },
@@ -47,8 +47,8 @@
       "statement": "The final runtime stage fetches cursor-agent by downloading the installer's pinned versioned package URL directly and verifying its SHA256 against a hardcoded expected hash before extracting it, rather than running the official installer, because the official installer always resolves to the latest version with no version pin.",
       "evidence": [
         {
-          "resource": "repo://deploy/docker/Dockerfile#L100-L124",
-          "version": "repo-lines-v1:sha256:b839cd64a1c52dd4bbe9a111f8f33b186225531fb0112f0f30e69ef353690117:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU3ZGIzM2Y3MGUzN2JlMmE3MjBkMDVjNTc4NGJkZDRjZDkxOTg1YTAzZmFhNmExY2Y5NGRmNjU2NWY1MWM1NDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MzVmNWYxMWIzNWM0NjdlYWE2MDE1M2U5NGM2NDhkOTBjZmU4MmExMWRkYWY5YThmYzE0ZGMwNjVmMWExNDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU2MjA3YjE5OGQwNGM4MzQ1MTI1MWIzYzE5ZTIyNzJjNzliZjFhNmUxZTBjZGNjNDk3MTIxOGRhNjVlZmQwYmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhMjZiMjQ2Yzk3ZDUxYTVlMzljZWM2Y2ViYTdlYWFlZTQxMDQyZTQzZGViN2ZjNWE1OTk5MzQyNzQ1YzRlMzkifQ"
+          "resource": "repo://deploy/docker/Dockerfile#L101-L124",
+          "version": "repo-lines-v1:sha256:1a6ede3dcae0747d500e48438a72d95ea08ff0457f3614b5aa26fdd5cc533395:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxNmZhODljOTc1OWM0ZGI4OGNmNzg0YTIxYzQ3Y2MyZmExYWExZTA0OTQ0NWJkMWRlOWRlMDRlNDFhMzE4ZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2MzVmNWYxMWIzNWM0NjdlYWE2MDE1M2U5NGM2NDhkOTBjZmU4MmExMWRkYWY5YThmYzE0ZGMwNjVmMWExNDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYjk4MDJiYzcxMjQ0NjZhNTE1MDE5OTE4Zjc3ODM0OWRmYTYxZTliZTY2ZGQyZmQ1M2M5YzhjYmU4MzE5ZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhMjZiMjQ2Yzk3ZDUxYTVlMzljZWM2Y2ViYTdlYWFlZTQxMDQyZTQzZGViN2ZjNWE1OTk5MzQyNzQ1YzRlMzkifQ"
         }
       ]
     },
@@ -115,6 +115,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

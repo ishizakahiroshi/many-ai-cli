@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:5bf48c8e1a3c7ae82bae17679a004ab0f957bbe97760060dab75f135240690cd",
+  "pageVersion": "sha256:72631bd6ae2849329b3255b085e5160c8c336db05d8ada8943f5c922750497f4",
   "claims": [
     {
       "id": "claim_461293fdfdf64017b3262cde965a5dfd",
@@ -17,8 +17,8 @@
       "statement": "web/src/app-entry.ts is the generated ESM entry point that imports every top-level module in a fixed load order for side effects, followed by explicit init*() calls for features that must run after the DOM is ready.",
       "evidence": [
         {
-          "resource": "repo://web/src/app-entry.ts#L1-L47",
-          "version": "repo-lines-v1:sha256:110c392d87551052c1dfe217ba4184b6e59771709232889e96f0e33d20ce96dd:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmMDYwOGVkMTAzNmU1OWM5NmFiODlhMTJlMTVlNzBkZjNiZDJhYjE4MGVhYjhiNDQ5YTliYTI4NjZmMzAxZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyNjU1NGFjZWU0YzQzZDNmODdlNTg3MWYyZTMzMjI2NmUzMGU2OWJjNWM3OWJiNjI2NjcyMTRjMDVjMTI4MjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxNzgwMmY3ZmMzMjFkYjExZmVlYmFhZDA5ZDNiOGE3MDIxYTBmYTIxYTk4NjAwNTgxNGJlZDA1YmRlMzQ1MDcifQ"
+          "resource": "repo://web/src/app-entry.ts#L1-L87",
+          "version": "repo-lines-v1:sha256:c7ce5452d52eee5d41c6b1eb4af32096e0c7dbc7ac80ade566627e19b4a6447f:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmMDYwOGVkMTAzNmU1OWM5NmFiODlhMTJlMTVlNzBkZjNiZDJhYjE4MGVhYjhiNDQ5YTliYTI4NjZmMzAxZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwNGY1N2RjMzdjN2M3MjE3OGVhNzFkZWNhMTllYmMyY2IwNzhlNGJjNDQ2NTU1NDY1MDMzOTE2YzgwMDMyMzEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
@@ -41,8 +41,8 @@
       "statement": "state.ts is explicitly commented as extracted from app.js to run in classic-script global scope with no module wrapper, and holds cross-cutting TypeScript interfaces (TerminalEntry, ApprovalOptionLike, SequentialChoicePrompt) plus shared Map-based session/terminal registries that other modules read and mutate directly, rather than a single reactive store.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/state.ts#L1-L60",
-          "version": "repo-lines-v1:sha256:06fbc2e7d81d92e58a20956d7aef4bd7ed44bcd8b7b46e2b01256b776de91968:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhOGM5ZDgwNDdlMzExMjFhOTFkZTJiNWFmNmQ3OGI4MjAzMGE0MGFhZmZlMjhiMjI1YzUzMDQyM2QzMWQ1ODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5MGE1NDY4NzRiMzlkNGE2NTI0NTI1OWNlYWU2ZTcyODNjOTQ5YzMyMWE1N2YzNmQyZmIyMzc0ODhhMGEyNWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE5ZTc1NzRmMTM4NThlZTdlMWEyNTkzMmIzYjgxYjIzZmNmYWY3MmYyZWNjMmRhNGFlODZhZTA3OWUyNGU2YTIifQ"
+          "resource": "repo://web/src/app/state.ts#L9-L64",
+          "version": "repo-lines-v1:sha256:c3888d9b352a576fcbb83210d71d9e41badd9ff48f14b83e90fece37a6cf16a0:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0MmUxYWI2MjFjOTA3NzAwMGExMmU4MDBmYTcyYWUxNmIwMjczOWQ1Y2E5ZjI4N2UzOGQ2OWQyYWQ2MTBiZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjYmE5NTQyMDY2YTRhNThkMWU4NDFlNGU0MDgxYWEzN2ZmNjU2ZTY5MmQ2NjdiMDM0Nzk0OTBlOTA2ZWFjYzQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhhNWIxOWJlYWZjOTI5YWI0MTU3OGMyNmQ4Y2UyMmY2YjQzN2RjNTYxY2MyM2JiODcyMGIxOWM3MjFhNDJhY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdkZmU1ZDViZTE1MWZkYzc2ZjY0ZGU3NzgxZjljZjRjMDU4MDU1YmE3YTY5ZTNlN2FlMGIxYmJlNGYwMTRlMDEifQ"
         }
       ]
     },
@@ -61,14 +61,14 @@
       "statement": "app.ts installs a plain identity fallback for window.t (returning the key unchanged) before i18n.js has finished loading its dictionary, so translated text does not break visibly during the brief async dictionary fetch.",
       "evidence": [
         {
-          "resource": "repo://web/src/app.ts#L28-L31",
-          "version": "repo-lines-v1:sha256:f809a4655c9f287cf8c1653cf80552e88021d04d29bacc44ca68d05f947c2599:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjJiNmUwNGIwMTU4NDI5ZjBhZjA0NmJiZWJhMDZhZjYyNzY5NDYxOGI0NWU2ZmJiYWZlYWVkZmJlOWUwYmVhNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjNjZDRiZWQwNjc5OWNhOGY4NmIzYTZhMzMxOTdjMTVmODZiMDM5MzU3MjIzMGIyZDdjMjhhYTE3MmE1OTBlMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGIwYzlkOWQ0MDE5M2ZjNTQxZTQ4ZDE2M2E3YjQyMTg0YWRkY2ZkMWI0NTdkZDFiYzhmZDg5ZjQ3YmE5NmMxNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGI5ZDliN2JhNWQ2YjkwYzlkZTgzMzM4NWVkNTNlNDllNTc2NDQyNWJiYmJlNWZlNjljYjA0NjUwZDA1YjZjZCJ9"
+          "resource": "repo://web/src/app.ts#L39-L40",
+          "version": "repo-lines-v1:sha256:3cbf4092e13c8d65bf7d59ec899a2ffb0804538cb79712189d570396ed871877:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWFmNjcxZDZkNDVhMWVhNDhjNmQzMzg5OTM2MzM2ZDY3NGM2NzI4MzFiMTk4M2FjZWFiNGZhZTc5YzZiNTBlMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWMzMGVmNGEyNDk5OTljMzU5NTM3ZDZmMTI0YTAxOTQ5MzFmMDNmNjVjOTNmNmRmNWQyMDZmZjVlYmFhM2ZiMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzMwYTI3ZWJmMGE3NzFkYWZhNzUyZTBiOTE0ZTgxZmMzNTdlMjFiNjkzNGY0ZmZhYzdmMmJiNmU1OThjYTAzMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWVhNTJkMjcyMzBiODljYTFiNzMyODY2YWZiZTEzN2E5OGU2NTEwMDA0OWE1NmIzMjkzZGVmOGQ1ZmU3ZGRhMCJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

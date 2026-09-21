@@ -1,74 +1,138 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:b8bf24d006f37b61df63717f3b1df7f8d86258875928e90fdc13bdb46c308856",
+  "pageVersion": "sha256:6808551838360b184072f3e4e49f133bc1c0d510edda5db03dbd7e0e32031733",
   "claims": [
     {
       "id": "claim_ae1812a9a53242b78529352063ab69cd",
       "statement": "The voice engine setting (off/browser/whisper) is stored per-device in localStorage and deliberately excluded from server-side user-preference sync, so a PC can use browser recognition while an iPhone on the same account simultaneously uses whisper.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L648-L649",
-          "version": "repo-lines-v1:sha256:59cefcb9fad5ec951c1f837f61e92c0c1adab1c5205fc3731e3f7f8f9dddad57:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjRkN2QzY2IzOTVlZmYwZTczYmQ5NjJjMGQ2MWJjY2EzNmI1YjNkMGU2NDM4OWYxNGFlYjdiY2RmY2E4YjI5OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2UxMDNiNjAzNGVmODM2ODVjYTVkMDE0MWI3YzA5NjA0OGU0ZjIwMmU1ZTc1MzA3YmY3ZDczM2EwZTdlYWQyOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGNmMTE0NGIzOTE4NDQ0MjMwNjg1OGRhNmQ4OThlMGU0MzMxNTUzOWFmMGMyODRlNGI2MzhkYzViMWUzZGNkYyJ9"
+          "resource": "repo://web/src/app/user-prefs.ts#L150-L172",
+          "version": "repo-lines-v1:sha256:846be721ba49d537bbb60a78a9cbadb70337f7c19980f3e3994660b974465e72:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwZjUwMDc2NzZkZWQ2Zjg2OWE2ZjY4YTZmYTgxZWQ3MTQxMGU2ZDI3MjlkZjliZmFhNDc3NWQ3MDIxMTE4OGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMTA4YTI0MzM3YTE1OTExYTA3ZGRkNGMxMzA0YWIxODE2Y2IyN2MzMzlmNmVmNGJhOWU4ZTAxYjE5YmRiZGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQxYjFkOWZhNTMyNTRkYTg1ZTg3MzViODQ3NjEyZjg3MWNhZTdhMmUwNTQ1NmIyMjMyZmYzNjgwMzNlOGMxMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI2ZTNlNjZhODQwYTVlZDhiMjliNjRiZDMzOWYwY2E1MjIyNTQwNGQzNzZmNGVhODNhNGIwNjFkMmM1ZWI2MWMifQ"
+        },
+        {
+          "resource": "repo://web/src/app/user-prefs.ts#L267-L268",
+          "version": "repo-lines-v1:sha256:754d3f90aa24cc10b617a43d219072dcbff6ce70a549f7badbf20c7de4b1701b:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzlkMjRjNDAxYzhmZTY4MTYxMDcyZmQ2ZWZiZjlmOTFlMmE4MDc0NzM5Y2I2MWZhNWM5NTE1Mzg5ODQxMzliZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWFkOWUwYzQ0YjRlZjhkMjU3N2FkMjE0NDU4ZGRkNTA3ZDgzMWY0NjMyZTQ2MTBlOGIzMWU4ODkzMzFlMjg0NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmFmZGNlMzg0MGM2MzdlNDI1YzdlMWM2M2IzYjMwZTQ1NzJjZjc4ZWVhZWYyMTk2NzBkZmQ3MmYwYThjYTQ5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmMzZTVkNzliYTcyODZiMGQ3MzAxMWRhZDU2NjJmODQ4MjFjOTY2YmFhZWQxZTVhYTk1NDhkOGQ1MTdlYWFiZSJ9"
         }
       ]
     },
     {
       "id": "claim_95d04be13aa2436e88bb081229d5f85f",
-      "statement": "Because iOS Safari's WebKit-forced WebSpeech implementation is not usable quality, the mobile voice path separates capture from inference: an iPhone captures 16kHz PCM via AudioWorklet, WAV-encodes it client-side, and posts it to /api/voice/transcribe, which the Hub relays to a Whisper server running on a PC or remote server, without replacing the desktop browser's own built-in recognition.",
+      "statement": "On the Whisper path the browser never runs inference: the vendored vtype-core library records 16 kHz audio, WAV-encodes it client-side, and posts it to /api/voice/transcribe, which the Hub relays to a Whisper server, while both the browser-recognition and Whisper engines are created in one place (voice-engine.ts) and voice.ts/voice-whisper.ts keep only the UI.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L649-L649",
-          "version": "repo-lines-v1:sha256:7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ2MmM2OTE2MjUzN2RmYTVjNzdiZTM4YTA4YmQ3NTU0MjcwNjlmOWFjNzcyN2ZhOWY4MDM5MWY5NjlhMzdkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGNmMTE0NGIzOTE4NDQ0MjMwNjg1OGRhNmQ4OThlMGU0MzMxNTUzOWFmMGMyODRlNGI2MzhkYzViMWUzZGNkYyJ9"
+          "resource": "repo://web/src/app/voice-engine.ts#L1-L35",
+          "version": "repo-lines-v1:sha256:aa80e8583bb23831d6b5cc9e9e1f15fee0424504f555e030d3a776dca9706f54:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1NTZhYjU2N2IzZDFmZmE4NWRhYTM3MmU2OTE5MjBiYzE1MzE3YzhjYzRhMTY5MzgzZjIyN2IyYzM2YzQ4NzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://web/src/app/voice-whisper.ts#L12-L14",
+          "version": "repo-lines-v1:sha256:f88469a0d018151e54ba8ea11e41d223e77a841b169db4018eeca4159d0f50e0:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDlhMjA0MjY2MDYwYjkxYzUzODJjNDBjMWY5NjcyNTY1MWM2NWRmMGY0ZWViNjRmNjAzNjhkYzQ2ZDAwM2YxNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjAzMWE4Zjc4OTYxOWU1M2U5MDRhZjNjYmI4OTkxMzJmMTEyOGU4MDU3ZmNkYzk3ZDVkMGUzNTEwNTdkMDdmMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjVmOWU4NDk0ZTVkMjIxMmIxMmZmNzUzYjk1ZTExZGQ2ZTcxOGEyMTAxYzM5NWI0NTY0ZjFmY2JjZTViNmYxOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGExODNmZjhjY2E0ZmJkNTMyZGUyYmQ0YzlhYWEzMWRhYzI5NGEzZTgwODNmNDZjNmJkNWYxYzYzMzZiMzM0YyJ9"
+        },
+        {
+          "resource": "repo://web/src/vendor/vtype-core/whisper.js#L1-L19",
+          "version": "repo-lines-v1:sha256:779d3bac32c3a5e5a66ea12f4964eab18ea3f50f2baa71751a26f0adc6f7e12e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3OGQ5MTFjYzFiOTExY2RmZmQ4MTk1MWRlZmEzMmY4NDVkNDRiMDM3NWNhZDA5ODVmMDFkMjE4NzI5NTZjMDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImExYzc3MmI0NTk3NDcyMmUzMGNlZmI5MmNkOWU3NmU0MTcyZDc0YTVlMTRlZjI4N2VlNmVkOTY3NDBmMjY3ZTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc4NzY5NDJjODcxOTkyNzdmNzhiYTMxYjdkNzk3YWNiMDI3MWU3MDUxZmJkMTJmZjg1ZTQwOTI0ZmJlNDdiYTcifQ"
         }
       ]
     },
     {
       "id": "claim_ec4e545881f54b5c8e6572207e60d961",
-      "statement": "Recording deliberately avoids MediaRecorder in favor of WebAudio/AudioWorklet uniformly across browsers specifically to avoid iOS's AAC-only recording output and the server-side ffmpeg dependency that format would otherwise require; the mobile-relay logic was added as a new voice-whisper.ts module rather than modifying the existing voice.ts, to keep the working browser-recognition path untouched.",
+      "statement": "Recording deliberately uses getUserMedia + AudioContext (an AudioWorklet served as a same-origin static file because a blob-URL worklet is blocked by the Hub's script-src 'self' CSP, ScriptProcessor only as fallback) instead of MediaRecorder, because MediaRecorder produces AAC on iOS and would require ffmpeg on the server.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L649-L649",
-          "version": "repo-lines-v1:sha256:7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ2MmM2OTE2MjUzN2RmYTVjNzdiZTM4YTA4YmQ3NTU0MjcwNjlmOWFjNzcyN2ZhOWY4MDM5MWY5NjlhMzdkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGNmMTE0NGIzOTE4NDQ0MjMwNjg1OGRhNmQ4OThlMGU0MzMxNTUzOWFmMGMyODRlNGI2MzhkYzViMWUzZGNkYyJ9"
+          "resource": "repo://web/src/app/voice-engine.ts#L16-L18",
+          "version": "repo-lines-v1:sha256:0e553b0d2e194b9002337e76152e7f955ce0428e87bf9fa6b88cb2e4878b9bc8:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTBlN2NhMWM1OTcwMjUyMjJlZTJmZGQ5ZWFmMWE0MjI3YzI4N2MwMzM4OThlMmI1YmFjMWVmNDA4OTVhZTQyMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDg2Yjk5YmFiMDA5Y2Q0ZTJjOTU5ZDljOGVkOWRhNTA3YjI3MDNlY2JmYTI4ZmYzZjI1MGI3ZDQ0OTJjNDY0YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGQ2MTI5ZTZiMmFjMGJmOTFjN2ViNjhjZTNlM2FmY2E0YmY1MmJiOWFkYjdmZjVhZDFlMGEwNWQ4YWIyNmM0ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmIzMGJlYThjNGI5N2IwZWY0NDM3MDZiMDdhYThlNDQ3MDk5ZGRmOTRmMjVhM2NkZDAzMmViNjc1MTNiNzNhNSJ9"
+        },
+        {
+          "resource": "repo://web/src/vendor/vtype-core/whisper.js#L7-L12",
+          "version": "repo-lines-v1:sha256:ea2272ef45fbbb6b361877ea9b05b509860d5ce5c01b40f11f4234e74537e833:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGE0NDE2MjRmN2I4YTA4Y2I1ZDMxMGNmMTI5MTAyNmI0YzJlYmM1NjkwOGVkZjFlMmIyNzAzYzBiN2MzYjY2MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY4ODMzYjYwY2ZiNDk0MWYzMzU2YjNiNDFiN2ZkMGZmZGUyZGQwYjE0MDNlZWMwZTExYzUxYzRhZWE5NjYyNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzkzN2EzYjRkOTI1NjU4NDZjMzRlYzY4MTRiOWFmODFjYTY4MWMzZThiNjIyMmIzZWM0OGJkZGYxODcxYTE0ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDI2OWNiZTQ2YmZjMWIzODMwNDUyNTlkZGJmMWZmNGFmMTFlNmVjYjcxODZiMzM2YWVjOWUxMjc3NWFkZmM1NiJ9"
         }
       ]
     },
     {
       "id": "claim_39f0bd98386a48c78e49eb1bc23b2a50",
-      "statement": "The Whisper path's automatic-send-on-trailing-phrase trigger defaults to off and activates only on explicit opt-in with an exact-match requirement; two client-side filters run before a recording is sent (a near-silent-volume pre-check via AnalyserNode, and a fixed hallucination-phrase filter that discards a known filler phrase only on a full exact match of the entire result, not a partial match), and every discard is surfaced as a toast explaining why rather than being silent.",
+      "statement": "A Whisper transcript is auto-sent only when the auto-submit option is explicitly enabled and the text ends with the configured trigger phrase; before upload, vtype-core discards a recording that is too short or whose peak RMS or voiced time stays below fixed minimums as no_speech, an empty transcript is discarded as empty_result, and every discard is surfaced as a toast explaining why.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L652-L657",
-          "version": "repo-lines-v1:sha256:ce87bc90027f4e4bbae5e571dab16b899916be7450b43e257ed5c7c7bacfa939:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjVlOTc0MDE1NTQzMjZlNjQzYzkwNGI5YmQ1MTU1MmYwYmJhZDlkOWU4MzM0MzEwYTEwMDhmZDRhY2FkYmUyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTlhNzllMzQ2MWMxZDNjMzBiZDE1ZWYxYzY0ZTNjNDc2MjU5ZGIyNmQ1Y2MwNzMxMmMxOTM0ZDM5OGQxY2MwZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2RhZmZlMmZlMjE5NDM3YTExMjNkZGI4MzliMWU3OGE3NTIxMDk5MGIzOGMzMGM0NDkwMDQ2MmY4YmM1ZmFjYyJ9"
+          "resource": "repo://web/src/app/voice-whisper.ts#L173-L188",
+          "version": "repo-lines-v1:sha256:b332cf95a87f0ca22a7089657fc14109328b312a5eabf6675b17da97e2a9d421:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBiMzYxNGNiNmRiY2YyOGM2NjZkOTQ5MWY4MTEyMDhkMmRkMWE5ZGU0NmFmNDliNjExODQ4ZjZhNGZlZjAyYmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1OTBkNjVlNGUwODViOWZiNjBjOGZmYTNkM2JjMDA3ZGFkOWI2YWMwYTUyNmQzOTc0OWVhNzc1YjcwZTQyMjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM5ZGI1MjhmYzlhYWE0YTg5Y2E2MWY2OTAxNjZjMWI5NmRhYmU5ZWVmMWM1MTYwYTMwZTkzMmM5NjRlMzkwNjIifQ"
+        },
+        {
+          "resource": "repo://web/src/app/voice-whisper.ts#L62-L76",
+          "version": "repo-lines-v1:sha256:ba634daf8acb34f38668d78340f394b6d89809a89b3b81a51adbcf699116a0ca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxMzEzNTJhZjIxOTQ0ZTk3OTc4YmQ3YTRkZWQ0NThlYzhjNmI1NDkwMTk4ODQyNzVmODliYmE0ZjM0MjkwMTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiNDQyMjYxNDQ3OWU5OGNmZGM2ZTdkZjA4NzgyYzllNmU0NTc0NjZlYTg0N2QxOWM0NGJhNjA4ODFmY2NhYTgifQ"
+        },
+        {
+          "resource": "repo://web/src/vendor/vtype-core/whisper.js#L20-L32",
+          "version": "repo-lines-v1:sha256:6d2dc03892af52fdea13c0af70c8471ff586885369b753861ed1c28d27ea57ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU1YTBmODI1NGExMmY2N2U3ZDE5OTVhZTkxZTYyMmE5MTk3NjY4ZTBkYjYxMDIyYzFiZTY2ZWYxZjExOGZjYjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk2N2QwYzVhMTM2ZDUwMWYyZjBiMTllNGM4ZTdmOTA5NzViZDc4NGUxNDdjNDJlNjA1NTY1MzA5ZDEwZTM5ZmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlOWYwMWUwOTlkY2E2ZjE4ZmI5ZTY2ZWY0MTVlZWVlZTk5NGMwNGY4ZTM4NDQ1NWIyOGJhZTA3MDk4ZjBiNGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyOGQxMWJmY2EyNGU5OTgwMzZlMWM2MWI4YjhjMjk3MmNmY2I0N2M5ZTNiMjU3ZTc4M2I5ZmI2N2U3YTQzNjUifQ"
+        },
+        {
+          "resource": "repo://web/src/vendor/vtype-core/whisper.js#L485-L550",
+          "version": "repo-lines-v1:sha256:d0764bbe87e646f27e70aead27c023a27e15b56f9e530e5ab2e70f1eed9cd6b2:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhYWRlMDA5ZjAwMDM0MGViN2U3ZjEwY2RkNWRhMzE3MTMwNDZiMWNkYzVmMzhkODc2NWI5NDA2YmFhZGE4M2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkOTllN2M0OTcxM2MzMzc2Njc3MTI5MWRiY2NjMzc2NGM0OTk1N2U5N2U0NjgyN2U3ODIxMzliM2FiZjk5NDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImExZjdlNTU5MjViYTE1ZTljOTRlMTljNjgxOTVkOTAxNTMwYzBkYTgyNzljMzE0YzcyM2EzNzg1MDhlMGQzZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcyZjJmMGI4OTkyNTA3N2I2YTcwYWRkZmEyYmY4ZTc5OGQ5ZmZlMWYzMDljNWYwZDMzNDRiNTcxYzBmNWE0N2MifQ"
         }
       ]
     },
     {
       "id": "claim_ca867938fe514be4bca835469d50d160",
-      "statement": "A server_url pointed at an OpenAI-compatible external API is allowed but treated as an explicit opt-in requiring a UI disclosure that audio leaves the machine; the default configuration only permits a local (127.0.0.1/localhost) server URL.",
+      "statement": "The Hub relays audio to the Whisper server only through newLoopbackHTTPClient, which enforces the loopback boundary on the initial request and on every redirect, so voice.whisper.server_url must point at a server on the same machine and audio is never relayed off the host.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L657-L657",
-          "version": "repo-lines-v1:sha256:7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzVhYzI1YmEyZTkyZDE0ZmIyZTNlNTQ0OGJjMDE1MmEyMWE5YjI5OGVlMGQxN2NiNWFhMTQxYTc5M2FkZGQzNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2RhZmZlMmZlMjE5NDM3YTExMjNkZGI4MzliMWU3OGE3NTIxMDk5MGIzOGMzMGM0NDkwMDQ2MmY4YmM1ZmFjYyJ9"
+          "resource": "repo://internal/hub/http_helpers.go#L66-L86",
+          "version": "repo-lines-v1:sha256:4cee644d34089d96b7f8fe86e23b2bba7e160ca7c2d82434b20913a73bafcf68:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyNjM4ODM5Y2E5YmU5MDg0YWUxMzk3NTE2YTk3MmE5OWZlYzI4NzE1NzBjOGM4YWQ3NmJjOGYwY2RiY2ZlNjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzMTdiODE1MTkzYzRlYzE2NmYwOGFiYmFmZDZlMmFmYTc0ZWMwMmFlYzYwYTI0ZTM1NDkyZGU5ZGFmNjEwN2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlZGQxYTk4OTg4MWRhZTBkZmY1NTM4ZTExZjVhMTZlYmZmZDQwYTk5ZTFiYmMxMmUzYThmYTU3YjhkMmE2NjEifQ"
+        },
+        {
+          "resource": "repo://internal/hub/voice_transcribe.go#L106-L122",
+          "version": "repo-lines-v1:sha256:3fd654dfeb0e14cc8f69153a03c74d94aabba7142434ec7d1c07da88e997fdca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdhODg3N2Q4ZmU5OTM5NjdlYzZmMDY4NDA4YzZlMDUzNjc0YjJkNGM5ODMyZmIyZGU1ZmQ2NTNiZDAxMTIzNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyMTM0MTVmZGI0ZDIyYzA1MjI1YjU2NzZhYmUxN2E3OWRmYzNhN2MxZDUwOTI2NWY4ODlkYzA5M2RlMTlkMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjODVkNmIyYTIxMGM3MTc2MGVhZGJiNTBlNjA0ZjVlZjY1YzAzOThhODRjNmJhYzc4ZDMwOTI4ZjY4ZjBiZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkZDUyYTQ1ZTczZDgyODQ1ZGFmNjYxOGRhNDRmYmEwMDE2NWMwZDNiMGE2OWY1OWUwZTEyZmFkNWZmOWI2ODUifQ"
         }
       ]
     },
     {
       "id": "claim_564f91efdd5242a9b56c441462ccce66",
-      "statement": "On first use of the whisper engine (or at Hub startup if already configured) the Hub spawns whisper-server as a child process on an auto-selected free port; it is guaranteed killed on Hub exit or many-ai-cli stop via a Windows Job Object with KILL_ON_JOB_CLOSE, Setpgid plus explicit kill on Linux/macOS, and tini-as-PID1 (init: true) in Docker, and an orphaned whisper-server left from a prior run is detected and reclaimed on Hub restart.",
+      "statement": "With voice.whisper.managed set, the first transcription request starts whisper-server as a child process bound to 127.0.0.1 on the configured port if free or otherwise a newly picked free port, with thread count set to the host CPU count and start-up serialized against concurrent requests; the child is tied to the Hub's lifetime via a Windows Job Object with KILL_ON_JOB_CLOSE, a Setpgid process group killed as a group on Linux/macOS, and tini as PID 1 in Docker as a backstop.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L658-L659",
-          "version": "repo-lines-v1:sha256:776f476a79f6ec5b421ec149e5b6cbddf71b2aebe80dd91e2ec74c9c419b9747:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYWNkODMyMmJjZGQ3ZDk5ZWY3YjhkYThmZTFkNGNhNTNkMDE0MDRlMTQ0ZTQ3ZmVjMTMzN2JiMjhkNWFkNzE3YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjNhZDBkNDFhZTFlMTQwMmI1OGJhNmQ4YWU2MzQ0M2IyNWE4MmVmY2MxOTE2ZmNkY2M0MzExNDk1NjhiNzMyNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDNlMzFhMjE3ODU1ZjhhN2RmYTIzYWM3OGZlOThkZjdjYjQyNGE1Zjk3ZTUwNDc1MjVlNTEzNGM4ZGNmNWM3MiJ9"
+          "resource": "repo://internal/hub/voice_transcribe.go#L40-L53",
+          "version": "repo-lines-v1:sha256:0784f83dcb6095208948a15bc367f2764f1a1ed3dc73bf90f4823d62ae4af569:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYyZDk1NGQ1ZTJkMjE3MjZjM2YyODNmMjcwMmI0YzBhNzJkNDc4ZGUyMTc1MTI2OTM5NmJhY2Y5OTJlNzg5YzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhZDM5MzEwOTMxZWIwMzU5ZmYwNjg1YTk3YzM5NTczYjBmMTZlZTE2N2IyNjdmYmJiYzczZDRhZjU5ZmQ3ZDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg5MGU3YjFjNDA2MmYwZjgyZDgzMjBmMDgwMDFmNWFjN2U1Y2E4MjJiODRiYjU2MTFmNmI1OWE4OTBmM2VjM2YifQ"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_job_other.go#L10-L33",
+          "version": "repo-lines-v1:sha256:eebecf0b59e22facf301f311617a45996cb23585e197c0374d6c917a525543ff:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjN2VhY2JiZmUyNmUzZTc5NzhiMjg2NWE2MTA0NDczYWEyOTFlOTRhYjI5ZDQ1YjMyY2VhZWYyNjBkMGE0ZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4MmRiMzQyZGQzZTNiOWFmNDE0MDQxYWViZDI4MzFmMTA3NWI0NjhkODBmZjFkMGFmNWJhNGE5YTBiMzJlYjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwM2Y5N2ZhN2ZlOWYyN2YzYWQyNTAzZDEwNmY3OTBhY2FhZjc5Y2IyYzMyMjc3ODgxN2Y3NTY3N2FiMWQxYjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVlOTUyNzRkYzBmYjNlM2M5YzY0YThmOWI5NGI1MThmMGU2ZGM3ZTE5MDJjMjU2Y2NkNGJhNWYzYWE2YTI0Y2UifQ"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_job_windows.go#L20-L30",
+          "version": "repo-lines-v1:sha256:b6b2d4285b933288c1a59c7cfa4a4d72b8cdb0b4e3ff27126b6b886174380e3e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjNjJmOTRhYThkNWViOWEzMjVkOTM0YmM2NWI4YmRkZDE0NGNlZGUxNzkwNzVkMTBhMWZjYzU2MzE1MjhlMjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU5YTlmZmU4Mjc0MzNjYmFmNTA4YWM3ODNhODVmZmUzMWVhYTQwNmFkNTk2ZTM1NWUzNmMwN2Q2MTY2NDc5MTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyOTNiZmIyMzllM2JiZGY0YjcwNzA1MjdhZGI0NWMzYzRjN2MyM2YwMDBiYmRjYWEyYTBjMWU2ODJlMzk0YjkifQ"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_manage.go#L1084-L1091",
+          "version": "repo-lines-v1:sha256:f174381d4e46b6f6d01f88e734e00227ee6636ffd9a7001847755e0a9b8bbf56:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2RiMzcxZDM2OGY2YzAxOTM1OWI4OGZmNTQxMjRmNTk4YTFmOGMyMDI0Y2E4YWJkOWEwN2Q2NmNjN2ViMDk5YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzQ5MzdjNGU3MTA5MzExNjNmYmQ1NGE4NTJkZjdjMGIyMDUxMzVhNjZiYTM4NTZmYjNiMDgxNzExNmFiODRlNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTE2OTBkMjFlZGI4NzQwOTI2YjM1Nzg3MWNiZDFjOTY1ZDQ4NmZlZmRlNmM5MWE5Y2ZhNWM0YjE4YmM5YmM2OSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_manage.go#L551-L610",
+          "version": "repo-lines-v1:sha256:d85bd6bdbe4d6ac4882ef0126f6ed7e0e12f6377049f64d9f9bf77198868a2f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVlYzUwOTk4Y2QzZTlmOTE1ZDVmMWZhZTRhMzZlOWQwY2FjOWViYjdjMDNkMDY2NmM2ZTY0OWRmMmExMTIzZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZjZDQwYzEyYzdlNDg2OGRmNzNjMmFkYzAwMmYyMTQ3MmY0N2UyNjEyYmIzNjA1ZTU3NTFhOTU1YWUwMmQyNTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0Njc5ZThmZWMzZWZhN2Y3ZTIzYzAxNjI4MmM5ZTA3NzM3MzliNGYwMjRiNGY1MTUyZmM0YjM1ZGM3ZjVhMTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY4MTc2ZjFjODI0N2E3YjA2YTU1NTZiNTZlNzY1MTYwYjFjMDgxMDk1NTNmZDFiMjU4MzBiYWM5MGUzM2Q0ZjMifQ"
         }
       ]
     },
     {
       "id": "claim_90d112404b534a08a73328fbc5efba63",
-      "statement": "Managed Whisper install ships for Windows x64 only in its initial version, with macOS/Linux steered to a manually configured external server URL; everything it installs lands under ~/.many-ai-cli/whisper/{bin,models,tmp}/, downloads are preceded by a free-disk-space check and verified against a SHA256 checksum before extraction, a failed/partial download is deleted so a retry starts clean, and uninstall is a plain os.RemoveAll of that directory tree leaving no trace elsewhere such as System32.",
+      "statement": "Downloadable managed Whisper install is defined only for windows/amd64 in the whisperBinaries table (Linux/macOS pending self-built release assets, and the Docker image instead bakes whisper-server in via MANY_AI_CLI_WHISPER_SERVER); everything it installs lands under ~/.many-ai-cli/whisper/{bin,models,tmp}/, downloads are HTTPS-only and SHA256-verified before being renamed into place with a failed download's temp file deleted, a model download is preceded by a free-disk-space check, and uninstall is a plain os.RemoveAll of that directory tree.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L662-L665",
-          "version": "repo-lines-v1:sha256:76b0c5f3c1bb355c719333fb96458e82753e5d29173383868f298460d312c0f9:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzgwMzczOTRiMzBiZDc1YTJkZWQxYTdmMzhlNTRiOGY2MTU3YjU3MmQwODA2ODliYTc1MWI0MzhkM2I3NjhhOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjNmNDAwYTA4ZDJhMTdjNDNkNDE4MGY2Mzk2NTdmMDc1ZjcyYmUyOTA1ZGE0NGIwNGFiNzZiOTFjYWFmYmU3MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjg5YTYwNmM2N2MyOTc5NDQzMDAzZDkxMDMwYTkwOTUyNzg4ZTdkMTBlYTRhMDUwZmE2ZTlkZTlkZWM5YmRiOCJ9"
+          "resource": "repo://internal/hub/whisper_manage.go#L297-L310",
+          "version": "repo-lines-v1:sha256:67f9e20e68e4cb48f3c6a7eec65e89a9c406228da334255cda6ba22e7f066cbe:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkMjU3OWY2YjViZDNjOGU0OTE4MmM0OWQ1MDM3Y2RjNjQ5ZmIzNzQzMWFlYjM2YmI0NWVjZDMzYzgzZmM3NTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE4Y2VkNDYxMGVjMGMwMjdiMzMwOGJkMzU2NTFkZmI1M2JlNTcxNGE4MmZmZWMxYjgxYmJmOThiODAwMjEwNTAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwZTM1ODJmYmFjNmU0OWRlODVhZGQ1OGEwNWE0Yzk3NDc5OThhZjY3NTkyNWQzYmM5ODRmOTk5Y2RkNTczODEifQ"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_manage.go#L440-L470",
+          "version": "repo-lines-v1:sha256:eb6108dfd6fe29f8c0b96bc7ad0d6acfe814f04bc43a3ed0e27b55e6d854332d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4ZWZkNDgzZjE2YTc1OTM1MDJhMWU2YTZhOTg1YzVkYWQ0ZDg2NjZjMzRkMzZlMDFmNzVjZmI4NmRkMzAwYWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ5ODAzNDQ0YmJlMTFjY2E1NmYzZjNkMWU2OTI0YzEyMTVhZDBjOTk2N2U1MjRhZjFiZTVlZmJjN2M3YmI0MGIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJmM2Q4NzM5NDM5NzY0YzA3Y2M5MjI2MjdmMTk5NWRhMGE1ZGIyYTQ2NDE5ZGE1YTkwMzVkYTJhZTExNmVjOGYifQ"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_manage.go#L484-L484",
+          "version": "repo-lines-v1:sha256:3b63f7fa6f87cdbfe55bae0e00721aca34fdafc237095885d191fee0d9272924:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2I2M2Y3ZmE2Zjg3Y2RiZmU1NWJhZTBlMDA3MjFhY2EzNGZkYWZjMjM3MDk1ODg1ZDE5MWZlZTBkOTI3MjkyNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiM2I2M2Y3ZmE2Zjg3Y2RiZmU1NWJhZTBlMDA3MjFhY2EzNGZkYWZjMjM3MDk1ODg1ZDE5MWZlZTBkOTI3MjkyNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjUxZDMwZGU2MWY4N2EwNTk0ZDVkZDNhY2Q2NGYyODFlNjE1MmZjZjUwMjg1M2MyMWIwZDk5OWVkMzgzMWJkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzdjYmJmOWNmY2Q2NDkxZmZiN2Q5ZjFiZmYwMWUxMzI5MDg5NTlhNmNmMzk2YjZjYmI1MDkzYTkxNjhiOTRlNSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_manage.go#L80-L123",
+          "version": "repo-lines-v1:sha256:8d315195a9f602c345adba33fc3cb3d269bb09fc8babf91430679752c7f5caab:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1OTkwMThiNDU3YmQxZGYyZDIwOTM1ODdlMzMwYzk3ODA2ZjEzMGNhMTBlYmJjODlhOTY5NWJmYzhkOWZhZjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwMzRjOWYyOTk5MTM4MzU4YzM3MWIwZGNlMTE2N2I3ZTA0NTgwZTIwZGM0MjY4YzgwZjg3MDg3NmQzMzRmN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZmNDgzZjg3NGNkNTFmZTUyYjlhNDVlYmM1YmRjZTBlM2YwZDJlZWIxMzJjNzRmMDA2ZjI2ODE4NDYzNzRhNzEifQ"
+        },
+        {
+          "resource": "repo://internal/hub/whisper_manage.go#L885-L970",
+          "version": "repo-lines-v1:sha256:5bd123a66c7c5ac8a0d94e5fe113cff5b8fa4ba58d88f3bd1b6f195c28da2a07:eyJzZWxlY3RlZExpbmVDb3VudCI6ODYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YTkwMDA0MDg0Yzk5YzAzNWI3N2U2M2RhZjIyNjI5ZjE5MDNhZGFjMGU5N2U0MDM2ZDRlYmU3MDcwNjMxYjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1ZmE2ZmRjMGYxZTVjM2UwZWQyOWUxMjQyYTg2MjRlNmUzMGNiN2E3MWIxNGVlNTk4NTVjZmViODFjYjRhMjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgwNjA4ZWFjZDU1MDMxNjg2MTMyOTM0MmIxMGEwMmYzYmExOTM3YzY0NWJkNWViM2ZmMWQ5ZTAwNDBkMTY2NmYifQ"
         }
       ]
     },
@@ -95,10 +159,28 @@
           "version": "repo-lines-v1:sha256:182eb28d1d8fc42ac8a0c0e0c7fef6ee03ea58e53f86882f619512afda022424:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwMWJlZDkyNTgxOTg1M2YyMzEyMWRhODY0NmI1YjA0MTdjMGFjZDM2YjAwM2ZkNDFjNThlYjg4YmFhM2E2YjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3NjJkNzdhYjg1NGJmMTliYzQxYWI5NGZhOTE3MTY1N2E5M2IyNGM0YWI1NGVkMTVlODMwMTA1MTI4NDVjYTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3NTliNzVlOTExYTY1NzdlNWU1ODlmYWZmZDA1MmI3ZTRiMDYzZDlkMmRlYmU3NDM0MDVkNzJjMTUwZGI0ZTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjliN2RiY2E5NjhhYmI1YTg4MmE1YjU0NGJjOWU3ZDRiNjczY2U4Zjg1MjI5YzJjNWY4MDhjNDU3YTM4OWZjMzAifQ"
         }
       ]
+    },
+    {
+      "id": "claim_203440112a7f4cceb239095e8f82df6e",
+      "statement": "The Whisper hallucination filter runs in the Hub: handleVoiceTranscribe rejects a transcript that, after normalization (lower-casing, whitespace and trailing punctuation removed), exactly equals one of voice.whisper.hallucination_phrases, which defaults to a fixed list of phrases Whisper emits on silence; a partial match is never discarded and an explicit empty list disables the filter.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L1566-L1567",
+          "version": "repo-lines-v1:sha256:ade2825be501efb15ace9af5a9154cad4ff46bd263dafdbc1fefb78211cceff4:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2FmMTU1ODFiY2IwNzJjMWJhZDYyMzdjOGIxZmU1NjVjYmI1MmFmZjY5MzdjMmZjMDgxMTdiMGM5ODIzN2I5YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjhmNzM4Njg0YjY1ZTIwZjEwNGMwNGU5OGEyZDA5ZTYxZTFmYjM2MmNhMDJjYzNiYTdiOTJhZDNlMDBiMTZmMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTdkYjM5MzdkMTBhMDcyY2JjYWZlNjEyMWVjNGQxMjM1YmFlOGVkYWQyNWQzY2I2YzRlNWFjNTYyOTU1YWE0NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2I5NWVkYmZlODZlOTc4YzM3OWU5N2JlNGZmMzEyNjhkMTU1M2UwZjE2NTVjOTM0ZDFhNmFkZjMyZTNiNTBkMSJ9"
+        },
+        {
+          "resource": "repo://internal/config/config.go#L797-L815",
+          "version": "repo-lines-v1:sha256:22334eb7b84f65b1947ca78175adf3e0e5b5b0426804dfdf7400ec3c64fef402:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzNDY4OTMzYzgyNDYwNWIzNzRmMjdjZjIyY2IyZmYyNmQ3M2ZkOTAyMzczMjIyMWRkYzM0ZTJiYjM5ZDJiYjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA1YTViMzllMjFhODhhYjEzMGFiMmY3ZTUzYWI2NjdjNmYwMWVlOGI5ZjBiMDFiYzczNWRiNWFmNjg3ZWI4MDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNlMDZiNThkZmZkYzhmMTI3Yjk2NTFlNzZmODI5YjVjNTQ1NTUwNTBjODYyNzhhMjIzMDQxY2U1YmJiYTJhNTgifQ"
+        },
+        {
+          "resource": "repo://internal/hub/voice_transcribe.go#L73-L104",
+          "version": "repo-lines-v1:sha256:488654c0856c54fe6a5c2284d49dc48588160e3f244271fc3698572ce8ece460:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3Yzg4OGU5YzBkYzlmMDc1Nzg0NjJiZWUxZjJiZWVhYTk1ODEzYmIzYWVmYTZjOTcxYTg0MWEzNTk5MGMwODIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImViZGEwZmVlNzA0ZWViN2FkMzU1MDIxOGQ5OWVlZTlkZWY1YTdhYjE3YTMwYWFjYmMzMDIzZjE1ODgyM2FmNzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0NDhmODU5NDIzY2Q3YzY4ZjFmODVhYzMwMWZhOWM4MzViNjk5OWEzMTVmY2RkOTRkZTQ4MDE4MGZhMzY3ZjEifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

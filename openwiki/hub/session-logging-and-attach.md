@@ -3,9 +3,6 @@ type: architecture-component
 title: Session Logging, Transcripts, and Attach
 description: The Hub's structured log file, the opt-in raw PTY session log with secret masking, clean transcript generation, the SQLite session-history store, and the file/image attachment store used by paste-and-drop.
 tags: [logging, transcript, sessionstore, sqlite, attach, secrets, mask-secrets]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-8970ecf6bbb35d8f0bd12797
     resource: repo://internal/attach/store.go
@@ -17,7 +14,10 @@ sources:
     resource: repo://internal/sessionlog/transcript.go
   - id: openwiki-source-a1d29c10dd77b25f0094e895
     resource: repo://internal/sessionstore/store.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## `internal/log`: the Hub's own structured log

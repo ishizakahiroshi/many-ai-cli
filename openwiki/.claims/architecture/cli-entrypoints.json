@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:a96d4480c749536f47a29060d99141b3e776529d2ef0d741d482f8aa3fa31048",
+  "pageVersion": "sha256:435536640600c42f3099db2643f6391a753fcad2ff5bc94e83a106650a5a5cd2",
   "claims": [
     {
       "id": "claim_1b28b4815b29471f8d285cbcf994b416",
       "statement": "main() delegates every subcommand to a single run(args) function that switches on args[0] with no subcommand framework; running with zero arguments checks whether a Hub is already running and either opens a browser tab against it or starts a new Hub with auto-open enabled.",
       "evidence": [
         {
-          "resource": "repo://cmd/many-ai-cli/main.go#L173-L237",
-          "version": "repo-lines-v1:sha256:3fc89b1eea393dce9129f9942ccb68bd26ae80234df942db5640ec99f1a8c0ba:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyOTQ2NTBhZjgxNGIwNmExYTAxN2E4MzhjN2FiMzkwZWQzNThlOGQzMGVlNjAwZTUyOTk0ZDVhNjU3ZGI2OGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlYjVhZDY1NmQwNmE1M2I2NWEwYzViNDRiOTA5OTBlMjI1ZWE1NzY1OWJkZmI4MmI5ZTFhYjdkMzc3ZjE0YjIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIwNWU0MmYzODY3NzljY2E1NTQxMTI5YTk0ZWUyYjNjNzY4Mzk0YzhlNDBkMWMxMzhlNTg1NjdjMmRlZjQ3MDAifQ"
+          "resource": "repo://cmd/many-ai-cli/main.go#L173-L236",
+          "version": "repo-lines-v1:sha256:7d79841f38e268548297da3036ade8d8ad9d20caadb006ebfceaf6c6024c9786:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUxNWE0ODM2MzBjMmIyZjNlN2YwMDk4YWNjYjk2YTVjOTk0YzRlMzkyMjM5YzMwMDYwYjk2ZjhmOTA0MjYxYTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlMWMyYzBhMDg0MzgxNThiZTMwNmQ2OWNkZDBjZDNjYTg2ZDZmOTA3MmEzMjg3ZmU2NTE5M2E1YmM4OGI5MTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjczNDA0MzgwMzczOWQ2NzE5YzRiNDE3MmUwODk3ZGMwN2ExMGYxODM2ODI5YmI3NTk2MTk3NDMyZTIxNDAxMzcifQ"
         }
       ]
     },
@@ -17,8 +17,8 @@
       "statement": "A top-level deferred recover() in main() catches any panic escaping run() (including the blocking serve path), logs it with a stack trace via the file logger, and exits, so a crash leaves a diagnostic trail in hub.log instead of vanishing silently.",
       "evidence": [
         {
-          "resource": "repo://cmd/many-ai-cli/main.go#L75-L111",
-          "version": "repo-lines-v1:sha256:52431b29cff076060c9e2ebf38dda87c577b4c733cda541f38bb0dbfc07d6b88:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzZDM2NjZiMzgwNWQ1YmU1NDFkYWU1ZDk2ZTFhOTRjNjkzODM0OWViNTQxMGRjM2M0M2RiZjkyZjNjMTZkZjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJiMmRlNzc2YzYxMjk0NzQ2YjU3OTM2OWVhOWNlOWU2ZmNhZTIyOTljNzgyOTlmN2UyZGIyOWQ0YzU0Y2VhNDAifQ"
+          "resource": "repo://cmd/many-ai-cli/main.go#L75-L110",
+          "version": "repo-lines-v1:sha256:b2a53a30569c09fb81a9805245df8b282f90876ac1221f959fe0e2dee7a5fc18:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMxNWQ2NGY5NzFiMjRmNzAxZDM0Yzc3ZjEyNWFkOTNkNzBiN2I0MGEwMmMwMjM2YjA0NTM5M2UyNGJmNmI1ZmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmYWMxOGEzYjU0OTg2OTA0YzI3NzhhNDBjZjVkZWM0ZmViYzU2MmNlNWRhOThlNTY3MmMxZWM2NzY5YWI2MTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYyOTY0MDc5YzNjNWM4MTUyMGVmMzNhMmI5ZDJlMTVhMWI4NGQ3MjgwZGI4NTkwZGNkNjU3NDdlM2UwMTJhNDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0MmEyYWE1YjljM2JiNDI5YTU3MGFkMzkxOWUwOTljZDMxYTJkYjI5NDAwZWMwYjA4MTAwNzBhYmI0ZDAzYmUifQ"
         }
       ]
     },
@@ -27,8 +27,8 @@
       "statement": "displayVersion() is the single source every surface uses for the reported version: it prefers the ldflags-injected build version and falls back to `git describe --tags --abbrev=0` run against the repository root located by walking up from the executable/working directory for a go.mod declaring `module many-ai-cli`.",
       "evidence": [
         {
-          "resource": "repo://cmd/many-ai-cli/main.go#L113-L171",
-          "version": "repo-lines-v1:sha256:632965b043e62021157651546df1874435f3d3964f35e9fede476b249a2eae71:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ5NTg1YjI2NGU4YzI2Y2I5MzMxMTU3MTVhYjk5Yjk2OWQxMzI2ODhhZGY1MmMyYTA3NWRhNGI0NzRmMjk2M2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImYzYjE3MTNjZGI3ZGU3ZWE4NTQ5OWU5ZGY2YWNiZWI2ZTc2YjAyMjhkZmRjZjdhMzMwZjJjNmViNmIzYTJkZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdhMTZlMmQ4NTZhYzdmNzIzYWQ3MmJkZGZmYWRkODM2NTdiMjkzOGYwMTQ1OWJmNDEyNTlmNjdhYTUxYWIwYWMifQ"
+          "resource": "repo://cmd/many-ai-cli/main.go#L113-L170",
+          "version": "repo-lines-v1:sha256:17772adabef6ea42c75dc55d8bcbd9e1e5b5a0e7c08857ed4103761351d822c6:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhODc2ODUyOGRlYzdkM2UyNDE5NmJiM2E0Y2FmYTdjMWIyMjdjMGFjYjNmMjlmYTUwM2RiNTI5NGJjZDI4NTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhZTcxN2NiZmJjNWNlY2RlMGQyM2M5MmY0YzU1NWE0MjZjYWJhMmQ1OTg1YWU4MTI4MjJlMjNiOTQyNzkyMjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2MjdlMjM3ZDhhM2Q3ODIzZTgwNDZjYzZmNjJkMTBhNjZkYzA0NjZiZTU0YWZjZWEyNjIyZGZiY2U3MWFhMjYifQ"
         }
       ]
     },
@@ -37,12 +37,12 @@
       "statement": "The usage-relay and orchestrate subcommands are intentionally omitted from the printed usage() help text because they are invocation targets for provider hooks (Claude statusLine / Codex Stop) and for an AI session's own tool calls, not commands a human is expected to type.",
       "evidence": [
         {
-          "resource": "repo://cmd/many-ai-cli/main.go#L372-L386",
-          "version": "repo-lines-v1:sha256:69358565e16c5556ce83168099de2fcacfbc92d9da9ae426a5d19ec39e6b73e2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRjY2Y5NGU3MjE5MmMwMjY0ZDFjZGQ0YzQ0ZmY1ODViZjExMDEyYmMzMDA0OWQ4YjJkZTZlY2I3MjA3MTQ1YTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjN2UzYjU5NTQwY2E3ZDgxODViMWI4ODk4YzNkY2E3Y2ZjMDE3MzA4ZmIzNzA5NWRiMDM0OWQ5NjAyM2JmY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0NmUxOTljYjBlMjk0NmFlZTk4MjllZGJkOWExYmY4ZjdhYWMzZGQ2ZWY3ZjRjN2E0MzMyYWY2MzVjZmYxMTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMzMjhiMTI3Yzk4MzliMDc4M2FlMjIzMGRmMmEyYzQyMDk0YThjYjBmMTZjYWIzZWYyNDZkY2Q1ZTA1MTI3NjkifQ"
+          "resource": "repo://cmd/many-ai-cli/main.go#L374-L387",
+          "version": "repo-lines-v1:sha256:8f14227cb0ac39f20ffebea5f7a51a09de49d92be84f5a5b8968e5ab92a8145e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI2YWE0NGZkNDI1YTFkNTk1ZThlNDA4YTVjOGJhM2JhZDZlNDY5ODI1OTE0Nzk5NGI2N2Q2OTkwMTk4NGRiMmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU3NGQ0MjM2NTRhMzU3MTdiNzc3NTBhOWI5YzkyOTBmZTRhY2M1YmU2MjQxZDFlNmFkZmQ2MTQ1OTgyZGZiNjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlZjc1NmExMTgyMzJiM2U4MmEwZmVhOTI1YWVjNzJiMzFhZjg4MmI3M2Q3MDZhM2IzZDk4OGY4YTEzNGNjNDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijk3OGQ1NWM2YmQ0NjNhZTdhYWEzNjNlZTg1OTQxYzRiODY4YTNmNWZkYmNkY2I3OTY4N2RiN2Y4ZmM2ZDE3YTYifQ"
         },
         {
-          "resource": "repo://cmd/many-ai-cli/main.go#L400-L403",
-          "version": "repo-lines-v1:sha256:ac8b86d876e7faf1175cce9d18570086e921ab8a199ae334a026f4e229eef6a1:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOWY3ZmFmOTI2NjQ0MDM5Y2YxMDM5OWNiMTE0YmMwZWNlM2NmYjY4MTMyNDljOTJkYzMyNjQ0ZTg0ZjdiOTQ5ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmE0MDEzOWM4NDAyMjRhMGE0OWNjNDBhNGMzNjNmNjliNmQwMDQyMjhjOWQ5YTBiNDg5MzIwOWI3ZjRjNDI2NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+          "resource": "repo://cmd/many-ai-cli/main.go#L402-L405",
+          "version": "repo-lines-v1:sha256:7d1a6482057c4168b5437e76dd581510918c4f75f087a7104c89160a5750d209:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTUwOGQ0YjNhODExODY3MWNiNTA1ZDg4ZWVhNTY5OWUyYmJhNTM1NmQzMWI3Nzg5ODg4MTg1OThjZmYxZWFmYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjI5NjQwNzljM2M1YzgxNTIwZWYzM2EyYjlkMmUxNWExYjg0ZDcyODBkYjg1OTBkY2Q2NTc0N2UzZTAxMmE0MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
         }
       ]
     },
@@ -51,8 +51,8 @@
       "statement": "An unrecognized subcommand is dispatched through wrapper.Run exactly like a built-in provider id when it matches a configured custom_providers: id (cfg.IsCustomProviderID), so a custom provider gets the same direct-invocation experience as a built-in one.",
       "evidence": [
         {
-          "resource": "repo://cmd/many-ai-cli/main.go#L388-L396",
-          "version": "repo-lines-v1:sha256:45d83bcb501c9c1146081ff494ac7fc6c0ccc9e12e52c4f82c4bf8c267213b9d:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYmY2YTI0ZDU2MmE0YTMyZTlhMGY3NDNkZjgzOTg5ZjZhZmU3NTZkYzEyNTc2NzE4Y2ZjYTM4NDQzMDI5YmY2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTMwY2JhYTU3NDU2NzA0MjExN2MzYzY2ZWNmNTAyOWU2ZmMzOGNmOGJjZDlmNTVlODBlYTRmNDc4ZDE3N2NiMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmYyZDhhZmM3MTUzM2UzMDA1YmVmZDM1YzI4ZGFiMTRjZDAxNzRjZWRjNWZjYzIzOWJjZWMyY2M0ODViNWMzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmE0MDEzOWM4NDAyMjRhMGE0OWNjNDBhNGMzNjNmNjliNmQwMDQyMjhjOWQ5YTBiNDg5MzIwOWI3ZjRjNDI2NyJ9"
+          "resource": "repo://cmd/many-ai-cli/main.go#L390-L398",
+          "version": "repo-lines-v1:sha256:3a47d9165bc04fc7004bb33679d0d08c950f4f1f9581a8e7b66a112b869d29db:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTBkNzMyMjk1YWI0MzlkYWEwOTViOTE4M2NjNzRlNmI0ZjVkNmI4ZGRkNmMzNTQwMzBhMzExMmU3MmIzMmIxNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmQyODMyNzhjYmM0ZTlhNjlhZjFlYjQ2MTQyZWM4ODU0OTc4NTkyNWY1NzRmMDU5NjkzZjY1YzA4YmU5YzY2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDU2YjVjZDU1MGRjYTQ0N2QwNDhkNjU4ZDkyNTVlNTVjMzE2OGVhMWQ4YWZmZGI4OGYxNTZhZTY3ZWJjZjFlZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjI5NjQwNzljM2M1YzgxNTIwZWYzM2EyYjlkMmUxNWExYjg0ZDcyODBkYjg1OTBkY2Q2NTc0N2UzZTAxMmE0MCJ9"
         }
       ]
     },
@@ -61,8 +61,8 @@
       "statement": "doctor.Run performs bounded, local-only diagnostic checks and never writes configuration or logs; four of its checks (residue, command-code, subscriptions, custom providers) are appended only when relevant so the report does not grow long for unused features.",
       "evidence": [
         {
-          "resource": "repo://internal/doctor/doctor.go#L50-L71",
-          "version": "repo-lines-v1:sha256:9f09f9928cbeec097718d7ebed390701c6f354ba48da704ab2fdc9b21cce83a9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVmOTQ5YTdmMjZmNzBjODBhMmZhOGFiOTJmZTljYmY5ODU1YWQ5NDViYzEzNDk4YmZmZTFlNWIxMjVkYWE4YWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdiNjViMWQ2M2NiNjAyZTc1MDUxYjFkMWEyNjI1N2M4NWI4Y2FiYmJhYzFiMmY3NTIxMDUyNWY0OTgwZjIwY2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRhZGFkMDE0OWY5OGEzZjAzOTBmOGRjZjE1NDFjODA0MDUxMmRjNThkZTkzZDc1ZjgwNmM4ODVlZWY3M2JkZGYifQ"
+          "resource": "repo://internal/doctor/doctor.go#L51-L72",
+          "version": "repo-lines-v1:sha256:091a788dc1d9876cf1cb8298a97f1ef537a6a594fa0a4907ed1ee36b62b6306e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExYjZjNGEzMWVkOTU5YjU5NTJlZjM0MzBhZmY0N2Y0NzA4YTdiZTFhM2EwZThhZGZiMTkwOTE2MGViZTAyNTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5NDc2OTAxOTNkMWQ0Y2E4OGNlYWI0NTIwYjg2M2Q5OTY1YTlhNmY1M2U3MTdjNjdkNDAyZGU4ZTcyNTIzNGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImIzYjQ2NmQ2ZGE1YTNiYjQ2YzgyYzMwMzQ1MWM2OGQwN2MzZGM5MmMyNWVmYmY0ZWY3YzI3YjE2MjNjMGQzNWMifQ"
         }
       ]
     },
@@ -71,8 +71,8 @@
       "statement": "internal/doctor/residue.go enforces the design rule that a feature rewriting a user's file for a session's duration and restoring it on exit must reclaim a leftover on the NEXT start, because a hard kill skips both a defer and a graceful-shutdown restore path.",
       "evidence": [
         {
-          "resource": "repo://internal/doctor/residue.go#L1-L24",
-          "version": "repo-lines-v1:sha256:8616cf6a830adfdcc3ac8900bdb9da5a7596f41761aa4a96b26922dc87379999:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5ZTU5ZjcxMmZhMjNkNjZkMjQxYmZhZjBkNDM0ZGIwOGQxMWU5M2ZlYmEyOWY3MzBlY2VkYTk1ZTEwMzBmOTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0OGQ5MmEzNmY0MTk0ZTQxZWVhYmYwNTRhYjhlNTkzNmYwZmQwYTdmZmU2YmFkMWE3NjlkMGVlZDA0NWNhYTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE0MmQzNDhiOGJkNDhiNmEwOTA4MzFmNjVmOTI3MWU1MWMwODM3MjQ2MzMxNTJiOTI5YmRiZDFkZTExMDMxYmYifQ"
+          "resource": "repo://internal/doctor/residue.go#L1-L25",
+          "version": "repo-lines-v1:sha256:20d274d38212c1f4624e657254ad39ca70c824d48ce6d314bdb94218db1e78dd:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxODkyMzllZTFjMDliZjI5YzgxMjQyZGYxZTg5OTQwNGRlYWY4MmM3ZWM0NDkxMzg1N2ZjMjEzOTczNWYzMjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5Njc5YTNhYzMyNDk2MDRhM2M4NTU5YzdkNDU2ZWZmM2UwMmZlYmZhMTllZTA2ODA3OWM1MDhiYWQ5NjI4MzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU3MzZkNDRhNDk4MmRiZTkyOTQxM2ZlMmY4MmU3M2Y3YjU3YWU5YWI5NDY5Y2U0MGI0NjgxYzVlYjE0ZTg1ZjEifQ"
         }
       ]
     },
@@ -106,13 +106,17 @@
       "evidence": [
         {
           "resource": "repo://internal/uninstall/uninstall.go#L11-L46",
-          "version": "repo-lines-v1:sha256:0323a5e728951637e64be409593b32f35092f3c9dcc99ae3411428834c910712:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVjMzFmZWU2NjRmNDdiNDQ0ZmMyMWM0ZDlhMWE0M2NiYzdjOWVjODE2OWYwN2EwMjNmNDRmY2FlMzc3OWFiYTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRkNWRlNjczOTBjZTMyYmZmZWYwZGU5NjRjMWM3MjAwOTk1ZDY4Y2EzZWVjYWRlYjNkZDA5Yjg3MmE1NGViNzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4YmU4NmM3YWVkMmYxOGFiNDgzZWRjZWZiMzc5YTU5ODE0YWIwNTFmNWNjYjAwOGEzZTYyYjQ0ZTA0N2Q5YWQifQ"
+          "version": "repo-lines-v1:sha256:a36739edb43cc54f02886e6f24b88e566a6b56d336fb1e02accab10578890ba9:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ2ZDg0ZDMzMjMxOWYzYzMwYjlkMTU4NGMxNDJiMWUyM2MzM2IzOTM5ZjkyMGJkY2UxYjc2NTFkNWU2NWNlMzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3YWY3YjZjNmMzODQxZTE4Y2RjMmUxMWE3MTQ3OWM1NzRkZjgxOWRkZjVkM2JlZGQzMTk1NThkYzk5YTUwY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc5ZWZmYzQ1NDlhNDhlNTIwZTJmYjQ5NWMzYWRhZDY3NGE5YzY1MGRlZGM1NjFhMTAwNmVhZDE3NmNiNGVjMzIifQ"
+        },
+        {
+          "resource": "repo://internal/uninstall/uninstall.go#L48-L65",
+          "version": "repo-lines-v1:sha256:4892b2acfd6acadc26aa04f4c42ff561c8a461a72e8d75109e8be2a31b2a3673:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjczOTk4ZGJiOGRjYjljZDFkY2IwMmVlYWI5NmNlOTVhZGQwYTc1YmUwNjQ4OTkyZmQwNzE5N2NhOTI5MTZlODkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM0OTM3YzRlNzEwOTMxMTYzZmJkNTRhODUyZGY3YzBiMjA1MTM1YTY2YmEzODU2ZmIzYjA4MTcxMTZhYjg0ZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwNjhkM2UyYzliZDljZmFlOGM3N2YwMzQ1OGRlY2JjZTI3NWJkNjc0NDFhNTg5OWEzZWQ3ZTQ5NmFiMzQyZjEifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:e6ce2413ae2cb566d85ce3ca7e92c461032fe15eb3e077bbc30199798c0f260f",
+  "pageVersion": "sha256:c403c543d79a8399beefdd8b576fb6ab15cd1cd82f2d4f3b2e59558608944020",
   "claims": [
     {
       "id": "claim_e45a60a3d172438680f4efe3e7cc7b34",
@@ -44,11 +44,23 @@
     },
     {
       "id": "claim_2f78d8dedcd2489488b3577922aa9a17",
-      "statement": "cfg.RemotePINHash is bcrypt-hashed and off by default; when set, a successful PIN login issues a signed expiring cookie (HMAC-SHA256 over AuthCookieSecret) rather than treating the PIN as a per-request bearer credential, and that cookie is invalidated wholesale by the same AuthCookieSecret rotation that revoke-all performs on the token.",
+      "statement": "cfg.RemotePINHash is bcrypt-hashed and off by default; when set, a successful PIN login issues a signed expiring cookie (HMAC-SHA256 over AuthCookieSecret, payload expiry.nonce.deviceHash) rather than treating the PIN as a per-request bearer credential, the cookie is honored only when its nonce is in the server-side session registry and its device hash matches the requesting device, and it is invalidated wholesale by the same AuthCookieSecret rotation that revoke-all performs on the token.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L628-L636",
-          "version": "repo-lines-v1:sha256:247d6e3cc1ce18c17b0dfa3453412542741d40f369a4f626dafec2542fd684de:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzdhMDhmZWU4ODZmZWM1ZTEwN2Q4NDU1Yzc5ZTU0NmZlMWJiNDdiYzE1NzRlMzE2ZDljMmEzMTRmNjUzZTJlMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDc3Yjg0MTFhMjMxYTRmMTU0OWIwMGJhOTg1NWYxNmU1YzM0MDRiOGQ2ZTVkYzg5ZDgzOGE1N2E0OWU0ZGNjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2JiZDM0MTllNGY1YTQyNzE4NmYzZjQ3NmM3NzNkNWYzZmQ2ZjkzOTg2MjQwYjQ3NTlhZGNmYWZmNWFlYThiMCJ9"
+          "resource": "repo://internal/hub/auth_handlers.go#L64-L80",
+          "version": "repo-lines-v1:sha256:316ae5c94c10d72da1f7b5a278d10383a81e954593c08be1b4556f7e2e8c3e5c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1MDhkNjcwYmVhNWRkNGI0NDc2MjYxNzgyZGVmYjA3YmUxMmY1ZDc5YjA1MTNkNzMzOWI2NDZlNTIyYmEwNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiZTEwNTkyN2RjYzBkYzc5Y2FjODA5YWVmNmQ5NzU1ZTgyZmY2Y2RjNzg4ZGQ5ZDgzYTE4NmYzNjA3YmIzYjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyZjViNTYxMTJiNjYwY2FkNTg5NzVjZmI1MTc0YTE1MzdlYWM4Y2UxYWU1MTJjY2Y3MjExOGQwOGFkNDliYzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQzZWM5ZTVmNmMxNzc5YjRkNjY1NWRlM2E1OGIzNGY2ZTBjZjZjZDQ1YTdlYzNlNDI3N2MxNjQyNmRmNDhmZmIifQ"
+        },
+        {
+          "resource": "repo://internal/hub/pin_auth.go#L29-L48",
+          "version": "repo-lines-v1:sha256:c6d83da380e2ce12f53da1cacf7efc48a7247c77ebd25fbecc9b94463f4f5904:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3ZDI2ZGFkOGNmOGJlYjQ4OGYyN2Y1ODg2MTY5ODQ1ZmI1MWU5OTFlODVhZWJhMmJiODllY2E2NmVlMDY5M2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliMzllMDIyZTBkODU0MTIwMDAzZDc5MGMyOGI3NTk2MmVkZDMwMzc1NmQ1MTMzM2RmNzQ1Y2ZiODZlYTExY2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQwMjQ5NzYxODY5M2YzNDY0MjM4MDdkOTQzMGQzYjdiYTkzMjcxOWY2NTU5NmZhMDBmNzVjZGExOWEwZGYyYjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNlY2M3NWNmZWMyMjhiODkwOTNlZTdlZDc0NmQ4ZGVmZmVhMjRhMjcxMGQwNTM0ZDljOTEzMThhYjE1Yzk0YmYifQ"
+        },
+        {
+          "resource": "repo://internal/hub/pin_auth.go#L290-L325",
+          "version": "repo-lines-v1:sha256:04cead367c3f8afe60abc8a998d80493e1b52a5a302d999c842d5e0ca5707df7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcyZTM2ZTk3MTdhMmZlNGZlY2E1ODk4NWYyOWUxY2UyMzgzMTQ5ZmM3MmEwMDBmODQzMjVkNzhjMjcyNWRlYjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVmMWFmN2MwZDRjOGViYjZiNmQ3ODBlNTc5MGRkNDI4YzI1OWExZmZjMWFmMzFjOWU4YTIyMDE1ZDE5ZTY0ZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmMTUwMmRhMmM0ZmU5ZjZkMzJiNWNmYzE3YTMxNjc1NGUxN2RjODVjYjBjMzI5MjRmYzliMTM1MDgzNTJhNzEifQ"
+        },
+        {
+          "resource": "repo://internal/hub/pin_auth.go#L66-L130",
+          "version": "repo-lines-v1:sha256:b74b43abc2f6cb69c3efaf9f15aabadf39ffd680f751f8deea52823008cbffda:eyJzZWxlY3RlZExpbmVDb3VudCI6NjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5YTBlODFkYjM0MDY4OGQyYzNjZTRmNmFmYjUzZDE2YTNjZTE3NmRjMWQ5MTQ5MjBjMjRhMzViODMzNDhjNzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlYWZiY2VjZTZjNGZjMjgxNTk2ZDU0NWVmOGI4NzlmMzA1YWJmMDlhMDI4MDNlOGY1ZjA5ZGMyYmE2N2MzYTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmNmYxYTkwY2YzMzlkMzJhMDI5MTQ5NGNkMGQyZDBlY2Y2YWY5Y2I0OGIxYTgwODUyN2QyMzM2M2JmMWQyMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI0ODg4MDE0NGNkNGI5NzRmMDA5YjdjYzNhMzZlNTNhZDViYzkyMTI5M2EyNjc1YTVlNDYyNWI4N2E0MjM5NjEifQ"
         }
       ]
     },
@@ -57,8 +69,16 @@
       "statement": "Failed PIN login attempts are rate-limited per IP with exponential backoff (5 failures triggers a 1-minute lockout, escalating to 5 minutes then 30 minutes) plus an overall cap against distributed brute-force attempts, both surfaced as HTTP 429; GET /api/auth/status and POST /api/auth/login go through guardBase (skipping the PIN gate itself), while POST /api/auth/set-pin requires the full PIN-gated guard, meaning a remote caller can only change the PIN once already PIN-authenticated; PIN values, tokens, auth cookies, and failed-PIN input are never written to the structured log.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L628-L636",
-          "version": "repo-lines-v1:sha256:247d6e3cc1ce18c17b0dfa3453412542741d40f369a4f626dafec2542fd684de:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzdhMDhmZWU4ODZmZWM1ZTEwN2Q4NDU1Yzc5ZTU0NmZlMWJiNDdiYzE1NzRlMzE2ZDljMmEzMTRmNjUzZTJlMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2ViNzAyNTc1OTNkYTA2ZjY4MmEzZGRkYTU0YTlkMjYwZDRmYzUxNGY2NDUyMzdmNWNhNzRiMDhmOGRhNjFhNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDc3Yjg0MTFhMjMxYTRmMTU0OWIwMGJhOTg1NWYxNmU1YzM0MDRiOGQ2ZTVkYzg5ZDgzOGE1N2E0OWU0ZGNjMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2JiZDM0MTllNGY1YTQyNzE4NmYzZjQ3NmM3NzNkNWYzZmQ2ZjkzOTg2MjQwYjQ3NTlhZGNmYWZmNWFlYThiMCJ9"
+          "resource": "repo://internal/hub/pin_auth.go#L395-L480",
+          "version": "repo-lines-v1:sha256:0b75db97c511afb5bc6632e6a420fc2ef2415e18ef846c5e8ff4c54b01ef5003:eyJzZWxlY3RlZExpbmVDb3VudCI6ODYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhNjljN2E2OTlkNTVjMzg1YzA5ZDQ4M2ZjM2FlZTdmODM0OWQ4YTRlY2ExY2VlY2M0M2E2NThkNDcwOTQzYzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgyNzAwYWE1ZDBiNmYwY2RjMzQxZGE2MDU1YTI0ZmUyYzQxZWQ0Yjg5Y2Q3MTI2ODIwNjk4NjU0N2MyMDkzZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4YWFiM2I5ZDFjNDc1Zjk4NjdlN2RjYTRlYzk5ZmM0ZjcyMjlmNDdlMWNmN2FhZTk0MWYyZGM1YjNjMDI0NjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNmNTY3MzZlZmMxMzY1Mzg1YzU2NzkyYmE0ZTgyMGI2NzAxY2JkYzhkNmJhZGYzMjllZjAwZTk4Mjk4YzNiNzcifQ"
+        },
+        {
+          "resource": "repo://internal/hub/pin_auth.go#L41-L51",
+          "version": "repo-lines-v1:sha256:05bdb3c915b95bff5a34055c35199750ad20a08d4f612fe6b91e66f1e3eb46d0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhYjhhYTFjM2EwOGEyYTE4MDQ0NzYyYjE1ZTA3Y2M0ZDVjNGM1NjQ5ZDliNmZhOTU0NGQzYjFjZjU5OGQ2NzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzYTBkMmRjZDNiYzc1NTA3NTQ5NWQ5NTMzMTRhNDBkOTVmMmJjNjlmNmE0ZWY0ZmY5Mzk0NzdiNDNjMTM4YmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiYjQxZjIxNTBjODUwMjk2MWVkZDE3Y2YyZDY5NmUxMzFlNjdiYzliOWMwMTJjZTg4YzViN2IxMmRhOWEzYTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBjZDRkZjE3MzllZTM3NzUzNmRiMzVkZmE2YzNlYzBlNzgzYjlkYjA4OWU3NGQzODJkYWQ5MWZhMDM3ODg4OWYifQ"
+        },
+        {
+          "resource": "repo://internal/hub/pin_auth.go#L505-L519",
+          "version": "repo-lines-v1:sha256:e09547a37a34b5329dee209ee97432ea61a87be71bdb5f60be9dcf8e9762e691:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2YzdiMTU3MmE4NDI3MDAxNjczYTAyNWI4NDNjNDgxYjc5MWU5YzAzM2U4NGEyYjAzZjdjYWI4ODUzMTUxNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM2N2FiYTAzNjg3YTdhNDZkMmNjYjRiOTNhNjEwMGE4NDI5ODkxNTgwMWRkN2ZiZmExMWU2NTAwYWIxYjBhMTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA1ZjcxMTFjNzQ1MzhlYzFhMTNiYWFjNmI3M2EwMDUxMjA0ZTQ3NjA4ZTdkMjEwMTNiMmNmZjU5MDJhYzE3ZTgifQ"
         }
       ]
     },
@@ -67,34 +87,62 @@
       "statement": "The Tailscale-based mobile connect path never changes the Hub's bind address from 127.0.0.1; tailscale serve proxies from the tailnet into that same loopback port, Tailscale Funnel (public internet exposure) is deliberately never used and the setup flow steers the user to leave it unchecked, and enabling serve idempotently adds the tailnet's own DNS name to hub.allowed_hosts so the Host/Origin guard and WebSocket handshake accept it.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L615-L627",
-          "version": "repo-lines-v1:sha256:99c097c6b3fd6c9fed31c1ec00dff44737b37322212c39b112e180878f408625:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1MTBhM2VmMzg4MTJiNjdkNTUxNDU5YmNhMzM3ZjMyNDgxZDEyMjM1ZDExM2E5ZTAyMmYxNWM1ZmI5MzE1MTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlYjcwMjU3NTkzZGEwNmY2ODJhM2RkZGE1NGE5ZDI2MGQ0ZmM1MTRmNjQ1MjM3ZjVjYTc0YjA4ZjhkYTYxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc5OWU2NWJhN2U1MWI5M2E1NjM2OGZjN2Q0YjM3NjE3YzlmNzk5NGEyOWYzNjVjNzI1M2QwMDg1NGIxMmQwODIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMwZDYzNzk4NjBmYmEzYjc0MTNiNmNlMDZmZjUwYWMwZDZmODdhMTk2ODliNjk0M2U5MDgyOTZkMWUxNjIyNmIifQ"
+          "resource": "repo://internal/hub/tailscale_handlers.go#L70-L105",
+          "version": "repo-lines-v1:sha256:d592a20d934db726f7eae3649a5ef2853f227b82fb2330868043d5d4bfee6860:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJiYjdhN2RjOGFkYTZhOTQ0NzQ5MDEwOTcxOWVhMTk5ZWRkNjg5NzFjN2ZjOWU3NTY5YjM2NDliMWFjNGZhOWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE2Y2NlMGM2ZWQ5YzczZmYzOGY2YjQxMzFiNjliYzgzMTM3ZWNhYjQyNzQxNmZkYmZmZDUxYWZlNWI0NzE2MDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyODhjZGJiNTUxNjVhMWMzMzJlOTRjNWZkYWE3MmZjMTIzMTgwZDBkMzExODU2NDgzZTk3ZTk1MTY2YWNkYjIifQ"
+        },
+        {
+          "resource": "repo://internal/hub/tailscale_handlers.go#L9-L12",
+          "version": "repo-lines-v1:sha256:4b478eef6cacc187143c973b1bfc5827f829d9e04e83eb05e19950dd337c74cc:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzE3OWQxZTVmNGFhNmQ4NmE1YjFlZDY1ODFhMmVhNGJjMWU1ZWM0YjYwYjIxN2E4MGVkMTJmY2RiMmU1MDk0YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQwN2I3YmZhMjdmNzk2ODhiNmY2ODUwYjA5YzkzMzI1MjU1YzY3Njg1N2E0NWRiYWVlOTJjNTFhMGUwM2VlOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2FlYWJjOWM5YTdkOWQ3ZGZjZmFiNDIyZTE1NGE0OGMyYWYzMTA5ZTVhMDVlMDFjNDczMzNhZjQ5MTU0MWUzNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTQyY2I2NzVjZWMwMDc2OWNiN2JkYWFiYTBlNDM4NjQ0NDM2NDVkYTdjZmUwN2NhMWIwNzRmMmNlYmQ3YTQ5NyJ9"
+        },
+        {
+          "resource": "repo://internal/hub/tailscale_probe.go#L241-L262",
+          "version": "repo-lines-v1:sha256:9c39c38f773d8f9d108055743166088c07689404791d4328bb06add85eeb5a43:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3OGI1Mzc1ZThmYzU0OTBhNzRmMjAzYWEyZDU1MWM1NGYxMTE3OGM2MWZlZTgyYzVjMGFlNTJjYWUwN2UxNDEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhYzdkNDZlMmJlNjAwOTFiZDJmNzI3ZjAzMjRkYjNiMzZlM2E2MDZiMDAxOTdkOTZkN2Y5MGJmMTY2NmFkMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI4MTU1NjkyMzJkMTgyYWM0MWU0YTY0MWJhOTUwODIxNTEyYjM5NjJiNDE4Y2JiYjE1YTE0ODk1YmEzZDEwMmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0ZGNmNDM0Y2VlNmViMGM1YzI2YTJjOGUzMTM5NDQ0MTYxMWU0YzljM2U2YTMyNmVjNjExNzZhZDhhZWU4ZTEifQ"
+        },
+        {
+          "resource": "repo://web/src/app/mobile-connect.ts#L728-L729",
+          "version": "repo-lines-v1:sha256:2cf491f9af18bee40d0daf6a6254ec0a80ac06e451c8599a819844184d8fe9a6:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTYzM2EyODU1Njk3NGVkOTNlMDMwMTM0MmYzN2JlM2E1MzFkNGJjM2VmOTE2MjRlNGY2MWExZDVhY2M2Y2M5MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDY3N2U0NjljNWRjMTI0OWE5MWY4OWMyZGI5YWM1NzJkYTdmMjBlYTAzMThlMDlhYTQ0NDhiOTZlNDU0ZTQxYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWZmOWU5NzRiOGM0MzQ4NThmOTdiOThmZTg4ZTA0NGQwZGM4ZDYxNWEzYjFlMzI0Y2Q4ZGQyYmM3ODg5OGI0YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjlmY2Q0ZWQ5ODgxN2Y0YTdhNGEzYjliMTZhMzMzMmRhMzEwZTdhYjM1MTUyNjEwYzUyZGFlZGE1MzU5MzU0NiJ9"
         }
       ]
     },
     {
       "id": "claim_791b856214d0471e8c2483bee06bef0b",
-      "statement": "HTTPS tailscale serve is preferred over a bare tailnet IP because a plain-HTTP 127.0.0.1-bound origin loses secure-context status in the browser, disabling the service worker, Web Push, PWA installation, and microphone access; an SSH local-forward to http://127.0.0.1:<port> is kept as the one remaining plain-HTTP path that still qualifies as a secure context.",
+      "statement": "HTTPS tailscale serve is preferred over a bare tailnet IP because a plain-HTTP origin on a raw IP loses secure-context status in the browser, disabling the service worker, Web Push, PWA installation, and microphone access; an SSH local-forward to http://127.0.0.1:<port> is kept as the one remaining plain-HTTP path that still qualifies as a secure context.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L619-L620",
-          "version": "repo-lines-v1:sha256:5d08aef25a971d964f36f8ee9869b38f0c9c416ada0271785b8b3c173d8fa907:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzZhNDc0Njc1Y2Q5ZDY3ZmU5YTRmYWJmMDhjZDZlNjRmZGYzNGYxMmJkNWI0NjdkOWM5OWU4ZDUyYmVkYWQxYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmE3NTdkYzRhMGFhYTRhYzhhMTc4ZTRlZjVkZWU2YzA2OWY3N2U3NTJjNzY3NjA5Y2FhMDFkNmQzNjkyZTE0YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjAzODJjZWU5ZTMwYmE0MDljYTNiMzYyZWQ5MjYyYWU2NzVlNDQ3NjM3MTViYmJlMTY5NzhlZjAyNTMyMWI4MSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjgwNDAyNzhmMmRlNjk4MTRhNjc3YWZkZWZjNGUzYzkwZjkyOTM2MTYxMmEzYTlhMjMxMDZkOWFkYWMyMmQ0YiJ9"
+          "resource": "repo://docs/manual_mobile-access.md#L75-L86",
+          "version": "repo-lines-v1:sha256:bde2f5657f0c6d4f78d748ab0ade9fe2d003ad21c181b1fa1b37b79ce3ffda21:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzZDFhZWZmNWI2MjIzMzE1MTljNjI3MzI3ZjgyMzEyOGM5YThjYjM5YTYxMzZiNWU4Zjk5OGRmN2RiN2QyZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc5OTVlYzc3YmE3MTE0NzRlMzcwYjFjMWMzYjkyMGEwNzAxMDBkMTQ0MGU0ZGUyNzRiNWVhYzkyNWUwYjg5ZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY4MGZjYzRkNzIyODJjM2QyMDY1ZjYxNWMxZWUwNmJjMzA5NDc1MDRmZWU0NzJlOTYwNTdjYmJhODU3ZWYwMWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdjOGFkNDVhOGEyZGNjMjk4ZTVmMGFlYjU2NGY0NjJkNzc2ZmFjOWFhN2MxMzVjNjFlMTY0MzljMjk1MTc4OTUifQ"
+        },
+        {
+          "resource": "repo://web/src/app/mobile-connect.ts#L486-L486",
+          "version": "repo-lines-v1:sha256:55df42544b7332b1a204e6a436c46c7a5ca9058efd0d83c3bbc07bb59699a719:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTVkZjQyNTQ0YjczMzJiMWEyMDRlNmE0MzZjNDZjN2E1Y2E5MDU4ZWZkMGQ4M2MzYmJjMDdiYjU5Njk5YTcxOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTVkZjQyNTQ0YjczMzJiMWEyMDRlNmE0MzZjNDZjN2E1Y2E5MDU4ZWZkMGQ4M2MzYmJjMDdiYjU5Njk5YTcxOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMWU4NWY1NjMxYTNiYTIwOTJkYTBkYzgwMTUyZTFjMjdlZDUxZmI1MTU5YzQ1MzRiZGE4ZTBiYjJkNjUzZWQyNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjY5NDFkMTAxM2Y2OWM0YzNmMmI3OTBhMGU0YmRiYTFhOTJmMTVmODNmYmVhMjcwZmZiNWExODU2ODRiYzc3OSJ9"
         }
       ]
     },
     {
       "id": "claim_de3112bb5ee14be5a1a60302811168e5",
-      "statement": "A first connection from a device not previously seen (identified by a truncated SHA-256 hash of IP+User-Agent, not the raw values) triggers a new-device notification through the existing push/ntfy/webhook channels regardless of the user's configured notify.events filter, checked on handleIndex, on a WebSocket UI attach, and on a successful PIN login; a previously-seen device is not re-notified on every reconnect, bounded by a 24-hour TTL and a soft cap of 256 tracked devices.",
+      "statement": "A first logically-remote connection from a device not previously seen (identified by a truncated SHA-256 of the remote IP, or the Tailscale-User-Login identity behind tailscale serve, plus a coarse browser/OS bucket of the User-Agent, never the raw values) triggers a new-device notification through the existing push/ntfy/webhook channels regardless of the user's configured notify.events filter, checked on the index page, on a WebSocket UI attach, and on a successful PIN login; a previously-seen device is not re-notified on every reconnect, bounded by a 24-hour TTL and a soft cap of 256 tracked devices.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L633-L633",
-          "version": "repo-lines-v1:sha256:e82fa83365f1876d2c85f013b4b05eae356727b1408625c141b839601929b082:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyZmE4MzM2NWYxODc2ZDJjODVmMDEzYjRiMDVlYWUzNTY3MjdiMTQwODYyNWMxNDFiODM5NjAxOTI5YjA4MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgyZmE4MzM2NWYxODc2ZDJjODVmMDEzYjRiMDVlYWUzNTY3MjdiMTQwODYyNWMxNDFiODM5NjAxOTI5YjA4MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTc2ZDdjMmY2YTFlZjk0YjlmNGU4YWYwZmVlMDMzYzk5NDc4ZjRmODYyZDZmZGNjZDhhZjJlNGI5NTJiNDU5ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjMxZDQ0Njc0YzgwMmMwYmY1M2EwM2YwZjY2NzdkYjdjY2Q2ODQyYmI3ZjJiMWE5YzJiMDhhZDVhYTIwYTdjOCJ9"
+          "resource": "repo://internal/hub/pin_auth.go#L500-L500",
+          "version": "repo-lines-v1:sha256:4accc8ee239d34c164007d458881139610b95b77649549f786a13bc4f19374d2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGFjY2M4ZWUyMzlkMzRjMTY0MDA3ZDQ1ODg4MTEzOTYxMGI5NWI3NzY0OTU0OWY3ODZhMTNiYzRmMTkzNzRkMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGFjY2M4ZWUyMzlkMzRjMTY0MDA3ZDQ1ODg4MTEzOTYxMGI5NWI3NzY0OTU0OWY3ODZhMTNiYzRmMTkzNzRkMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzg4ZDlmZTA2NDM1MTI2YmYxM2U4MDdlMjIwZDY2MzlhZWFkZmVkNzkzMmM1NTAxNGE2MWVjNzc5YjdlNDgxNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTJmNWI1NjExMmI2NjBjYWQ1ODk3NWNmYjUxNzRhMTUzN2VhYzhjZTFhZTUxMmNjZjcyMTE4ZDA4YWQ0OWJjOCJ9"
+        },
+        {
+          "resource": "repo://internal/hub/pin_auth.go#L586-L700",
+          "version": "repo-lines-v1:sha256:6f6debeedd4df157b58364e9afea65f9e3cf778d72963c73ae2b6993f7e1d8ab:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI3ZGRiMDNlOGZlMTc2YjQ3YTRkMzhhMGE0NWViYWY4NGM3NGU1MjBhZjllMjFhMWJhYTU2MDkwNDBhZmM3ODdlIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiI4MGFkMGQ5NDU4M2QwMDRhYWI0OWJjMTNjZjdjYWNhZjhlOWJlOTk2YmVlMDMwMzUyMmY1MTk5YjY2ZmRmNzNlIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5MGU0MzRhOGFjOTVmZmNkMzg1OGJiYTA2NDc2YWViMTAzYzM5ODU4OGM3YTg0NWJmYTMyYjQ4ZjgxZDhkZGI4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkMDA2MTA1ZGRmOTI4YjZmOWFhMTBjZmJjNzg4ODU1MDUyMGUwMzU3MDBkYzBjOGQ5OWFlZWM5ZWI2NzFlYzc1In0"
+        },
+        {
+          "resource": "repo://internal/hub/server.go#L1805-L1805",
+          "version": "repo-lines-v1:sha256:2295065841dcaba49e0dff51cb6ce9d4eae1f258492f544a0afd156488cd6023:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjI5NTA2NTg0MWRjYWJhNDllMGRmZjUxY2I2Y2U5ZDRlYWUxZjI1ODQ5MmY1NDRhMGFmZDE1NjQ4OGNkNjAyMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjI5NTA2NTg0MWRjYWJhNDllMGRmZjUxY2I2Y2U5ZDRlYWUxZjI1ODQ5MmY1NDRhMGFmZDE1NjQ4OGNkNjAyMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDU2NGI5NTUwZmQyYjMxYzc0NDVlOGU3YmE5MTI1YTE3ZTA0MjcxZjI1NjcxZjgzMmRkZGYxZjlmZDQxNjE2YiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmY4NjdkZTVlNzcwODc1YTQ4ZTJiNmI1ODYyMTRkMTE1NDFlOTEwNDY5MGU2MjRjZGUxZGU4MmViYmYyMzA2MSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/server.go#L1991-L1991",
+          "version": "repo-lines-v1:sha256:f2750518dd303c36be6849407f3ad2f60fefddae05cde49308bba707015c5fbf:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjI3NTA1MThkZDMwM2MzNmJlNjg0OTQwN2YzYWQyZjYwZmVmZGRhZTA1Y2RlNDkzMDhiYmE3MDcwMTVjNWZiZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjI3NTA1MThkZDMwM2MzNmJlNjg0OTQwN2YzYWQyZjYwZmVmZGRhZTA1Y2RlNDkzMDhiYmE3MDcwMTVjNWZiZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2IzN2QwYTdmYjVhYzc5NjZjMjlhZDQ3YjFhYjcwNjk3OGFjNGNkOGQ0ODIwYjkzZDQyOTI1ZDI4ODE0ZWJkMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzFjMzAzOWYxMjQ1ZTcxN2RhNTkyOGU3Nzk1ZjgzZTQ2NjRjYTljNmY2ZGE3ZjFmZDc4ZjgzYjNkYzYwNzQyYiJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

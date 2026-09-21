@@ -3,15 +3,15 @@ type: extension-mechanism
 title: Custom Providers
 description: How a power user registers an arbitrary AI CLI as a spawn option via custom_providers in config.yaml, the shell-free command-line parsing rules, and what built-in behavior a custom provider does and does not inherit.
 tags: [custom-providers, extensibility, config, spawn, approval-detection]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-95add79c933891b0a33f428e
     resource: repo://internal/config/custom_provider_command.go
   - id: openwiki-source-be0f5ef7e317c7f0a92cd953
     resource: repo://internal/config/custom_provider.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Registration is hand-editing `config.yaml`, nothing else

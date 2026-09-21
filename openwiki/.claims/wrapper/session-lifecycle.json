@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:e8bd3b77b0b3fd4e7e3c2a757f2120ea0180a0f694547000c334f105820458a1",
+  "pageVersion": "sha256:afa266886d7bf95d087cbea816a64a4cca0ca0ba94b08f19504b4529a9e1214c",
   "claims": [
     {
       "id": "claim_63875e14be604960b86d1c0b7cbbf9bc",
       "statement": "internal/wrapper uses github.com/creack/pty on non-Windows (pty_unix.go's ptyProcess) and github.com/aymanbagabas/go-pty's ConPTY-backed conPtyProcess on Windows (pty_windows.go), selected via build tags, because Windows has no native POSIX PTY and ConPTY is the OS's own equivalent pseudoconsole primitive.",
       "evidence": [
         {
-          "resource": "repo://internal/wrapper/pty_unix.go#L1-L15",
-          "version": "repo-lines-v1:sha256:5fe790d9b3ca2189fa8722face8914a1a2ec87c55583b401c5a4f82273959d3d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2M2M3N2M5YzAxMWZjMTI1MjY3YzNiNWFlNTU1MjQ1M2JmYmVlMmQzYzQwMzU1ZDkyZWRkODA4MzMxMjQyMzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRkNDBmNzEwOWIzZjM1MzQxYjE1NTZiNDkwOGM1N2MxMjRiODM4YTNhMzhmY2MzZjNiMDEzNjEyOWFkNTk3MzAifQ"
+          "resource": "repo://internal/wrapper/pty_unix.go#L1-L23",
+          "version": "repo-lines-v1:sha256:74cd00e15c861bb206dbe11c5394eb0733c57408d13811f0752dca571f316004:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4MTM0NWNmZjI3YmQxNTBhMzBjMTRhZjE5YzVkNmMwZTVmYTQ5MDVjMjc1ODM1NTJkZTI4NTdiZWU1ZDQwMDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwMDZkZmI0Y2EzZGY4YWY1NmE4NTIyMmVlMTJiNjJhNWY3ZmUwODNhNDRmYWI0MTg5ZDgwNTNkZjFhNzJiOTEifQ"
         },
         {
-          "resource": "repo://internal/wrapper/pty_windows.go#L1-L15",
-          "version": "repo-lines-v1:sha256:5f2f5607804aa2c12ad442472274e0ea4028b0402bc77153345c7cdf471444a1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkYmNjYmY1YWRmYzk4NGZlYmIyYWYwOTY0OGQzM2JkYmEyZjYyYWRhNGNkMzU0M2ZlZjljYmY1MzgzNWQ4OGUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhZmJhMDUyN2MzOTUzYzRiNmUwZTViNTczOWJhODM2MTJmODA1M2JjZGM5NDY2NzMwMTkzY2QxZDU5MGI0MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlZmEzM2RkYmYxMzNiYmQ4Yzk0NDcyZjI5OTYzM2RiYmY3OGE1NjI2NmIyZGI1NWZlMmE5Y2JkYTg3NzBhYjIifQ"
+          "resource": "repo://internal/wrapper/pty_windows.go#L1-L20",
+          "version": "repo-lines-v1:sha256:dc14cfb5b9cf3a220b6be1a2d7deacd6aafd844d9598b0d58b027380a78679c0:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwNDQ1YmFlNTQ0YmRjY2M3NjgyZTAxNDQ4ODkzN2RmOTA3ZDAxYmE2MTZlMWIzMWJiOWQ3YjY4MGFkZDUzZmEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhMzBkNTZiODM0MGY1ZTNhMzFmM2U4ZWQxNWI2MTk4NmY1NWZkMTg0ZjU0OWMxMTE5YjRlZGI5NDBmYzA3NDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkODljNjY4YzQ4MTJhNWE0ODRhMGJiYzdmNjE1YTJlZjBhY2QxZjgzZTE3YzJlZGE5MGJjMzI3MDU3YmQ2YjIifQ"
         }
       ]
     },
@@ -21,8 +21,8 @@
       "statement": "ptyProcess.Close on Unix is idempotent and layered: the first call asks the child to exit and closes the PTY master, escalating to SIGKILL only if Wait does not complete within a grace period, and subsequent calls are no-ops.",
       "evidence": [
         {
-          "resource": "repo://internal/wrapper/pty_unix.go#L28-L31",
-          "version": "repo-lines-v1:sha256:e80b00e089d58c8cf29a40c06b95d5a907e6ae46fe464b33db85786e433b4334:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGMzZGViZmFlNWY3MjU1YTA0ZjM5MmMxMzU2ZTcyYWQwZWRhZjdiODdlNWU1NDkyMGExZDAwZjM4OWFmZGRmYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzhmZmI2MmFiMjFiMTA5YzQ1NTBmNDVhODUzY2UyODkwN2I5MmVjNTYyMTc3NjJkYTU3ZGU2NWYwNDQ4Y2Y0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDZhODNlNzcyY2ZhYjhiY2Q2N2EzYmYzMTNjYzBiOTdmMmE0NjA0NzYzZGYzNmFhNTM4NmFkZTVlOTg4NGRkNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmE4NDU3MTk0N2RhOTQ3NmQ1Mjk4NDNkMjhlZDJmNjQ3YjVhMTc5ZTdmMjc1OWJlYzZiZjVkZDc1MGUzY2ZmNSJ9"
+          "resource": "repo://internal/wrapper/pty_unix.go#L28-L55",
+          "version": "repo-lines-v1:sha256:77efd5f0607851fa4e6aa8e2bbe978867bea329ff6c4020db6b3f6683250e322:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyNTYyN2EzY2JjZTRiNjQ1Yzg1MmNiNzc5N2E2ZjMzNTZlZTVlNDY1NDQ2YjMwMDYyOGZhMDg2Y2NlODU0NzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE3ZjFiY2M0MTJkM2M0ZmU3MmI0M2Y1NjcwMDY0MWM2ZjI5NjY4ZmU3MWNmODBjMTQ1YWExNmJmNWIxODZlMDUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQzZmY5NGY4MGM2ZjhiNTBkMDZhNDExZGIwMGM2NjUzMmM5OGZiOTI5NjdiYTUxZDY4YjY1OGM5MjJkZmIzOTIifQ"
         }
       ]
     },
@@ -93,6 +93,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

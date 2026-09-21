@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:6d3ddced3b3ba6c088ef0c111d84d6edb6cbe828b3d7b24acace7eece8870397",
+  "pageVersion": "sha256:24509f8b226a3d5023dc70ae07c34acaae1e2cbf4918ed80f0d741d4969e0da1",
   "claims": [
     {
       "id": "claim_a12d2b62df2247308830e8d78296bbba",
@@ -31,12 +31,12 @@
       "statement": "The default board_notify_mode for ordinary (non-relay) orchestration progress notifications is soft-notify (badge-only), set both in defaultConfig() and as EffectiveBoardNotifyMode's fallback when no value is configured.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1193-L1193",
-          "version": "repo-lines-v1:sha256:ef45435cbf4cab3c068eae1a716190ca3fd3e731776075303401641e16739217:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWY0NTQzNWNiZjRjYWIzYzA2OGVhZTFhNzE2MTkwY2EzZmQzZTczMTc3NjA3NTMwMzQwMTY0MWUxNjczOTIxNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWY0NTQzNWNiZjRjYWIzYzA2OGVhZTFhNzE2MTkwY2EzZmQzZTczMTc3NjA3NTMwMzQwMTY0MWUxNjczOTIxNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTVjODg3ZGE1ZGU3YjQzMjY5OWRmZmEyYzJkNDY1OGE2YjcxMTQyMTA4MmIwOWQwNTBmZDE0NTkxYmE4OTlmMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTIwMDAwMTI2NTNhYjhlNmYzYmIwMzQ3NDM1YWZjYTc2NDFlMzU2MzU4YTVlMGY1YmE1Mjk4NjAzMDQ0MzJmNiJ9"
+          "resource": "repo://internal/config/config.go#L1044-L1049",
+          "version": "repo-lines-v1:sha256:6c9738538625718aa8c8f16ed479abb9405a2ae18b79972174d5e8e5b4a9810e:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTNlYzgxODJjMWM4ZmI0MWQwMzcwYTJiM2JmNzM1MGMwYjZjMWQwYzQ3NWU3NDg0NzM2NTNmMjFmYWQ3ZTEyNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDJiMjZjYjk2OWI4ODVmNWUzMTM5MTNkMzQ5MjY0NmI1NzUzZGZkMzY2MGJiMTBjMTI0MTZlOTgwMWQwMzk2NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWZmYTI0MGJhZDY1MjQ3ODhkMjMyMTRiNzI3YTBmZDQ4MDhlMWQyNzQ4M2Y3MzQ5ODgzZmZmNTA3ZWMyNDExMSJ9"
         },
         {
-          "resource": "repo://internal/config/config.go#L843-L847",
-          "version": "repo-lines-v1:sha256:3707e4a6b7f6fcbebcdf9fda03c1d1c22e731c0958069742893c7efbfad54501:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGIwYTljZmExMTJmMWJkNDZiODQxODVjZjViM2FkMjFhZmYyZjZjYWY4MWEwZjMyMWI3ZTllNWE2MmQxMzJiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzQxNmE3YjE5ZjY0MzcwMjFjZjlmNDFjMzE5ODg2MzEyNTJiMzI5ZmUwNTM3NGY1MzMwN2IwNzgzMmYwYThhOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzZiZDNlNTFkNWE2NjE4ZmQ4YmI4OGMxODYwNTk4NTE2MGNkN2Y2MTRlNDY2YzNhNDQ0MDRjYjQxMTY1MGI4MCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzdjMDY0OTk5NGRjZWY2MmIyMDhiYWI0MjE5Y2ViZDAxN2I5YTNkNzE1ZGZmYWIyNDJiMDA5NmMxZmU5OWRmOSJ9"
+          "resource": "repo://internal/config/config.go#L1419-L1419",
+          "version": "repo-lines-v1:sha256:cc87422e6e9c6b60635db624a465ae8f5e752630fb45815d124367794f48dbd9:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2M4NzQyMmU2ZTljNmI2MDYzNWRiNjI0YTQ2NWFlOGY1ZTc1MjYzMGZiNDU4MTVkMTI0MzY3Nzk0ZjQ4ZGJkOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2M4NzQyMmU2ZTljNmI2MDYzNWRiNjI0YTQ2NWFlOGY1ZTc1MjYzMGZiNDU4MTVkMTI0MzY3Nzk0ZjQ4ZGJkOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYThhOTgzYWVkZmY5Y2I2NDFlNzExMDQzNDU2MDcwMzUxMmQwOWU0OWYxZmU3Y2UxMmExNzVlM2Q5ZWI3YjkxMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2RkN2IyZjBmZTE1ZjRiMzI0NzBiZDM1ZDU4M2NkM2JiZWJlMDRiMjg4YzVhNjEyYTU4YWUyNDBhZmMyNmE2YyJ9"
         }
       ]
     },
@@ -55,8 +55,8 @@
       "statement": "relay.go's header comment states the relay's goal is to drive plan -> implementation -> adversarial review -> fix -> next C without an AI conductor deciding any step; the Hub advances the state machine from exactly two signals: the count of ## DONE <role> lines in a child's progress file (a count, not mere presence, so one child can complete several Cs in sequence) and the reviewer's verdict: line, with every side-effecting action routed through an injectable relayDeps interface so the state machine can be unit tested without a real process.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/relay.go#L1-L13",
-          "version": "repo-lines-v1:sha256:515ed9ae4896dcd4750801f2764ff75ea9282d84c5b5cdca73ad13f4f67c050a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZGZlYjZlMmYxM2NmMDFiNzEzNjk3NDE2OWVmZWVmMzI3N2E4MTE3ZDhlMzgxMmM0MTE3MTRhMTBlYmFhZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1OWE5ZTJiYTk5MTg3OWU0MTcxNTU5MTE0Zjg4ZmZjYjNlYjRiYzQxYzhkZWYxOWY4Mzg2Zjg1OWVhMDIyODQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjNjNmNiODU5NjhhMDNkYThhM2JmMmZlZDlmNmFlZmU3ZmE2YzhlOTQ1YjY5NTk4MTI4ZjZlZWQyNWQ1ODljMzUifQ"
+          "resource": "repo://internal/hub/relay.go#L3-L13",
+          "version": "repo-lines-v1:sha256:bc41d8f92a132ff4db0c1bc5886232f13f800b49a371fcd1e9d7ff0ebff2535e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNiNDQ3Zjk1MzI0MjFlNGRmZTI5NTNkOWYyOTkzODUzZDAyYTgzM2QxOGNjZjg5ZWExZjY0YTdkMDBmY2MyMGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1NTc2MzZjZTEwYjg5N2RhNWYyYmQyMjE2YWI1NTYwOTE4NGM3ZDgxNWQ3OGE2YmU1NGIwM2RlNzg1NjcxYmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzOTQxMTgyYWRjZWJjNTM4NWE2YTUyNzNmODNmZTAyMTMyZmI3ODg3ZDhkOWI3MWJkNzI5YTBlNjkzZTAyYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI4NDRkNTVkZjk1MjQ2OGQ0NjIxY2JhOTdiNzcwNTRmMzAxYzBiOGJhNGExN2YyOGVjYTNlZjg1NjY3M2M4ODEifQ"
         }
       ]
     },
@@ -65,18 +65,18 @@
       "statement": "The relay state machine defines exactly five states in source: implementing, reviewing, fixing, completed, and stopped.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/relay.go#L56-L60",
-          "version": "repo-lines-v1:sha256:7d6056f0c7fc1d28b17820554495a5292079151f8986508cb169abd07dda2a3f:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODVmMTRkMjYxODRhYzQ4MjViMGZkYzI2ZTg2NzdiMTAzMThmZjQ5ZjBkZWM2MTkwNzVhNDdmYWRkOWVlYTdkOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTIzNDFhZDViOTgyYjg5MDg4ZWM0MTM1ODYzZWEwMDE4Y2I3MDlmNmJiMTIwYTk4ZTI1NDdlOGMyY2RjNjFhNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjQ3NjY3ZTdhMGUwY2YxOTg0YjA1NWU5ODlmYmEyN2M3NmIwMTIzNzc5OWVlZjdhMzIyZTk3NTljMzY2NmQwMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjM1YjcyZjJhYmEyM2YwZGEzZDY1NTI3ZTA0YjJhNWY5OTNhNDUzOTE1MTNiMWU5ZDMxZWE1YjczM2Q3ODM4ZSJ9"
+          "resource": "repo://internal/hub/relay.go#L57-L61",
+          "version": "repo-lines-v1:sha256:e8c840fd9eb277a91ea38d1e3629e58ab3544892298fc30f389b499c2e87c001:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjRiZTU2MmI2MDZkMTAyZTUyNjJmYTBlMDg2ZWNiZjc3YWYxZmI3MGM1Y2IxOWQ3NjBlOWQ2OWYyYmY2MzIzMSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWE4ODg0NjdiYTgxOWM3ODZkYzE1YmNlYTUyMjFhNWYxYjIzMWQyOTNmNzEzYjcyNGMxOGUzN2ZhOWNkNWZjMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzgxNDZmOGUzYWU2OWY3YTg5YTAwYTVmYzI3MDJhNzYwMzMyNzkyMWZkZjRmNjBlZjNkZTgxZjMyNmM3MWMyNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzZiNGFkMjY3NjhlNzhlMGE2NGY1N2QzYzViNTAzOWJiY2I0MmEyM2QwNTU5YTM5Yjk0ZjA2ZTM0NTFlMDJkNSJ9"
         }
       ]
     },
     {
       "id": "claim_80da0a0292354baebbf837dc315f44f8",
-      "statement": "Relay escalation to the optional implementation-strong role is one C at a time and is triggered only by the review result or the plan's own [strong] annotation combined with the cheap implementer's own escalate=true report, never by the Hub judging difficulty itself; the next C after an escalated one always reverts to the cheap implementation role. Every message the Hub injects into a relay child or sends to the parent is prefixed with [relay <short id> <plan basename>] so multiple concurrent relays are never confused with each other.",
+      "statement": "Relay escalation to the optional implementation-strong role is one C at a time and is triggered only by the review result (the C failing review escalateAfter times in a row) or by the plan's own [strong] annotation combined with the cheap implementer's escalate=true report, never by the Hub judging difficulty itself; the next C after an escalated one always reverts to the cheap implementation role. Every message the Hub injects into a relay child or sends to the parent is prefixed with [relay <short id> <plan basename>] so multiple concurrent relays are never confused with each other.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/relay.go#L14-L24",
-          "version": "repo-lines-v1:sha256:e2d27fdaf75fc05c00fe3f452ae51b0130314aba8b3487d655c996d271d43ce6:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMWVhZDkzNmEyMjgxZDUzZGNjMDY0YjdlMmEyYWIwZDUzYjkyZWYzZWY3YjM0YjY2ODY3MzAwNzg5NWM4NjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3OTZmMjZlODRmOWJiZGI2MjdjNjBjNjZlMGRiMTgxNTUyM2NmNGY1MjQ4ZTc3YTRhYzJkYzk2Yjc5YzNlZjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ0NGM2YWY2NjM0MGNjMjJjYjZkNThiOGNkZjYzYWMwNTE4NzA0NTBkZTlkYzQzMjU1ZDI0MzJhZDdlNDFiNTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJkMmE4NmQ3OGRjNWQ0NTAwNWUyZGI4YmI1MTI3NjhlY2ZiYTQ3ZWZkMmQyNjVjZDIwOTUxYTQ3ZjhiZmM0NTUifQ"
+          "resource": "repo://internal/hub/relay.go#L15-L26",
+          "version": "repo-lines-v1:sha256:14935f9f8002c52b49431658a18a1e1f7e8fdd2144ec39e6f267807df06dac24:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM3ZDdiNWZiYTYxODk0MWRiM2Y5NTY4MGIyYWY2ZDc4OGFhNzM5ZjcyMWQ2YjUyNTZiZGI1YTczNjczYzk4M2UiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwNWZhNzVjYTc3ZjhlMTgzZjc3NjIxYmMwNWIwYmFhOTNhM2U4NzAxMmM0YzVjMGE1YTIzYzEyODY2OGIxNTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjFjYTZmNWQxOTdlNjIxNjg3NmY1NDE2OTVkNDY0ODRkZTkxNzYxMzZkOTUyYTU2ZjE1MTczNzE5Mzk4ODhlYzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkMTkzMDlmMzE5NWVmNGFmMGViMWRmY2QxMDI2ZThkZDIxMzIzOTUyNGM0Y2YxM2YwYzMzODEwZWNmYzk5YWUifQ"
         }
       ]
     },
@@ -95,8 +95,8 @@
       "statement": "relay_worktree.go's header comment states that in worktree mode a relay's implementation and review children share one worktree (<parent cwd>/<worktree_dir_root>/<orchestration id>/relay on branch many-ai-cli/relay/<orchestration id>, forked from the parent's HEAD at start), the user's own checkout is never touched, the implementer commits each C to the relay branch for the user to merge later, and the worktree is never removed automatically — cleanup happens via a user dashboard action or a doctor residue finding, both routed through cleanupRelayWorktree.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/relay_worktree.go#L1-L14",
-          "version": "repo-lines-v1:sha256:52b1bad420003338b88c98f38021cd60480a7cbdf00f46b440c4165e65dbdb52:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZGZlYjZlMmYxM2NmMDFiNzEzNjk3NDE2OWVmZWVmMzI3N2E4MTE3ZDhlMzgxMmM0MTE3MTRhMTBlYmFhZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyZjk5OWQxODg3NGU1YTE2MzUzOTdhOGNlZGVlYzUzMGEyMWNkNTlhOTQzZjg4NzA0MWE2Y2E1ZTM5OWYyMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyYzk0ZDZlYzk0NjYxYzY2NjU2OWZiZjMyYzExN2JkMWVlMDY1NTE0YmY1MjdiZjRjNzlmZTljNjdiNjhkZjYifQ"
+          "resource": "repo://internal/hub/relay_worktree.go#L3-L14",
+          "version": "repo-lines-v1:sha256:d0b014d2dc559835ac645819dab6ce203ed18239fa3cb0ae4a7657c313372927:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0YmIxNGU2OGNiNzk0NzMwOTI4ZjM2MGRhNWJmMjcwOWZiMzg4MmY3OTgyMTQ0MjIwODU2ZmNhZTg4MGExNmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0ZjNhODlhZDFjZWRmMDMyZGU2ZWZiNGVkMWY5Y2JiYzI1ZTEwYjY2ZDc5NTUxMjhhM2QzMzkyZjA0YTQ0OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQzOTQxMTgyYWRjZWJjNTM4NWE2YTUyNzNmODNmZTAyMTMyZmI3ODg3ZDhkOWI3MWJkNzI5YTBlNjkzZTAyYjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwZmYyYjUyYzUzMzU5ZTUyMjc5NWQ5NWI0Njg4NjRkMDFlMzAzN2FkMjU2YzRhMWQyMTMxOThkODQ0NWM0ODUifQ"
         }
       ]
     },
@@ -105,28 +105,28 @@
       "statement": "orchestration.max_children_per_parent defaults to 4 when unset or non-positive, enforced in applyDefaults-equivalent logic in internal/config/config.go.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1334-L1335",
-          "version": "repo-lines-v1:sha256:705aaa19e7e52214b5304e5cfda650522dfef63d14fdbbca54e650b213040556:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzMzODA0NzQ2NzhiNDMzOGY1MTE5ODJhMDRkNmExNTRlZjYxZDQxMDVkZGIzMmJlMDExMWFlMmQ0OGI3ZjBkMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDBiZGY3MDkwYjEzM2U0YzNkMjRiZjBmYWZjODkwOWJhZmFhMjZlNDlhOGI5NzBhNThiNmMzZjE1NDZmZjkyOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTVlNWRlYTFjM2UzZTFkMzBiY2I0YjcyZjA3MTUwMjQ0MWNiNzUwZjQ1ZDY2YjQwNTQ5NGY5MWJkMGI0MDQwYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmI0OTJkODkxZTgxM2QwMzNkMTVmMjE2NmFhZThhNWVlNDEzNWEwZmZjNzA0ZjgwNjAzZTQ3NzgxMmUyMmFhYyJ9"
+          "resource": "repo://internal/config/config.go#L1572-L1574",
+          "version": "repo-lines-v1:sha256:f468496bec058d7353a5042acb937a855d1e2f39d2b8d8b0c9b138eef6727954:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOGUxODg3ZDgwZjMwODc0ZDZjZjhiNGQ2MjMxYWM0ODMxMDhkZWNiZGE1NjFlMGYwMzM4YjZlMjJiYzY2NTRhYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjdjZGE4MmRhNjA2MjM4ZTA1ZTYyMzk5NTY5YzVlZTAzOTkzNDE5NjQ4YWU1ZDQzYTJiZjhjZDYzNDdmODI2MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTYxZWUzNGFkMjgxNjQwNWRlOWY0MjU0NTgzZjE2MGQ0NzYxZWM5MWQzY2RkMjA1OTkzOTMyN2FlZTE0MWZhMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzBmNjUxODk4Zjc1YzA5YTJkMTliODMxYTllNWIyNWFiZTk0MTVlZDhiYjIwY2M0NTgwMjQ2MmY5YmZmYTFmYyJ9"
         }
       ]
     },
     {
       "id": "claim_41541f6d99fc448abd524deb22e5386c",
-      "statement": "internal/handoff's package doc states that what is allowed into a Record is decided by the Go type itself rather than by scanning free text for secrets afterward: the struct exposes fields only for a commit hash/subject, changed file paths (never contents or diffs), session metadata, and exactly one free-text field, with sessionlog.MaskSecrets applied only to that one free-text field; widening the Record type is treated as a deliberate design decision, and a test-enforced allowlist in handoff_test.go fails on purpose if a new field is added without also being added there.",
+      "statement": "internal/handoff's package doc states that what is allowed into a Record is decided by the Go type itself rather than by scanning free text for secrets afterward: the struct exposes fields only for a commit hash/subject, changed file paths (never contents or diffs), session metadata, the paths (never contents) of the provider transcript and a handoff note, and exactly one free-text field, with sessionlog.MaskSecrets applied only to that one free-text field; widening the Record type is treated as a deliberate design decision, and a test-enforced allowlist in handoff_test.go fails on purpose if a new field is added without also being added there.",
       "evidence": [
         {
-          "resource": "repo://internal/handoff/handoff.go#L1-L20",
-          "version": "repo-lines-v1:sha256:9eabd9200af3e55e8b2bb83d4c2adc789accc31ffbd624333c0c483cfdf45f47:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkODQ5MGQyODE4YjQ0MDU5ZjM2Y2U4OTVkMDBjMzU5ZWZjYjcyZTZiNzQ0NTBjNWI1YjQ5MGI4NzA3NGNkMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEwMWVhZDkzNmEyMjgxZDUzZGNjMDY0YjdlMmEyYWIwZDUzYjkyZWYzZWY3YjM0YjY2ODY3MzAwNzg5NWM4NjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhmNzk0NzI4OTRjMzQyNjEwYzE5NTAwZGQ5ODk2ZWQ2N2JjZjQxMDBiMjJhNTY2ZmYxYWZiY2NmYzY5ODI5MzYifQ"
+          "resource": "repo://internal/handoff/handoff.go#L1-L25",
+          "version": "repo-lines-v1:sha256:09ffdd6d086ec5e12d3458acbcbf4fbc4dd4d1f17d077d06589a782636ce1531:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmYjFkZmMyMWUwMTQyYzYxNmRhNzU5NmIyNjExNDgwNDE0YjE2YTEzNTlmMWNjM2JiZWUxNzIzY2YxMjIxYzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1OWM4ZjNhMTJkN2M5ZGVkNDE1NTc4NGEwM2M3ZjMzMWE5ODBmNDU1OTNjMGI5MTQ4MzllNjNlYWNhYzMzM2MiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzMTcyNGFiMTUyM2ZlNGQxOGM0N2U0YThiYzUzM2QyZWRkZGM2NWE3M2E0ZWZhNzBmOWQ0MDA1YzUyODU0ZGEifQ"
         },
         {
-          "resource": "repo://internal/handoff/handoff.go#L63-L83",
-          "version": "repo-lines-v1:sha256:28c5a30b61f77ba7ed8f8789758129f5e0521b32eb4fa88af2248e2b0e91e034:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg4OWYwMzA0ZTUxODY3NTJhNGZiYzFkMGU1N2JiNzkyZmZkZDNkNDE2ZWFmODBiZDlmYTI0MDAyYTMyNzFiNGYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4YWQ3ZTYzMzQ0NjU2Y2M5ZjExNmM5NWRhODc4NDM0ZGE5ZjZkYzk5NGZlZDcyNWRmNWFmNGY3MWJlY2E0ODMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwNzAxMTJlOTBiMTU5OTllODliNzRmOThmMWNjMDkxMmUzZGY2OTk2NDdjZmNkZGNhMWI4NWYyNjIwYjJiZjQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEzZWUyMzJjYzNlNmI0NDFhNWU0MjlkNTY1Nzc1OTAzYThhNmViNTNjMTgxODJjMTI3MWM5MDhjODYzMjU5YmMifQ"
+          "resource": "repo://internal/handoff/handoff.go#L65-L90",
+          "version": "repo-lines-v1:sha256:f6313338642e7141c74b5c2d86dd04b8cf8df3c2a9d28ff11316793af80584db:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MWZkZDQ5Mzg5ODQwYzgyN2RmMWFjMGY2NTA2MWEzMWRkNzYzZTliMzEzZjY1ZjMwNmY1MmY4OTRjNjgyM2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmZWJjM2Y2NjJhNWIwNGE4YTBlMmZjOTEyMGE3YTNiOTI0YWU2ODdkMDI0MzQ3MjBlMDMwMTg5NjIzMGYyZmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhZGY3NjBiZGJhZThhNDgxMWEyMTczYjI3ZDFkNjllYmM1NDdkNzBkZjAxZTIyNTQ3OTg1YTdmYTU5MmRiOGMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYyMjBhY2U5MDA3MTczMTU1M2EzNTQyOGQ1ZDFlZmU3YzBkNzU4Zjk0M2M2MGFlZmVjZjRkN2UzYjU2NTdhZjAifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

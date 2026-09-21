@@ -1,18 +1,34 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:b67fb2ab77cc505002c74044796b4b9b6180ccd5250722bc6cb2602bede4e526",
+  "pageVersion": "sha256:700379e11563550496ddec6a3016a562bec0fff3be49027d6d3fa3e2c8e6f0f9",
   "claims": [
     {
       "id": "claim_64cdd6e2744d4ab7ba67de585f2daf7d",
-      "statement": "All Hub-owned per-user state lives under ~/.many-ai-cli/, including config.yaml, the hub-runtime.json ledger, logs/, launcher-profiles.yaml, push_store.json (VAPID keys and Web Push subscriptions kept separate from config.yaml), workbench/*.json, per-profile subscription config directories, and orchestration board/relay files.",
+      "statement": "All Hub-owned per-user state lives under ~/.many-ai-cli/, including config.yaml, the hub-runtime.json ledger, launcher-profiles.yaml, push_store.json (VAPID keys and Web Push subscriptions kept separate from config.yaml), per-profile subscription config directories, and orchestration board/relay files.",
       "evidence": [
         {
-          "resource": "repo://docs/v0.3.x-many-ai-cli-design.md#L772-L780",
-          "version": "repo-lines-v1:sha256:18b345497554523d66f7a5707830be8ca98cec3d20d23176c774979f5b78d3b6:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTAyNjJhODllMTkxZDRhMzZhNWY5ZDFiODU0NmYwYmViMmVjNjExYWFjMzFkN2IyNzgwZjU0Y2RlZDAxYzZmMCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODlmMWJiZTc3MTczYTQyYzM1ZjA5ZDIzMjU0NjA1ZWUyYTllNjRlODhhNWE2YmY2ZTBjZmM0Y2Y3ODMwMzdjOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTI5MTlmYzU0NjZlYmY5NWI1ODVjMTAxNGNjZTg3NjRlZjZiYjkwYjAzYzc3YjdlYzBlYjU3MjE4NWQxZjgyMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWZjZDdiODcyZmEzMDQ3NDRlZWIwMTg2NjBkYTMyN2ZkMWIzZTRjOGJkNTA0NjVjMGUwOGMzMjAxOTBhYmMzZSJ9"
+          "resource": "repo://internal/config/config.go#L61-L68",
+          "version": "repo-lines-v1:sha256:f3a349fc07a41d2611ceb8d36a0899cca28acf31c0ba0d4aea85f74b554920cf:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmJkYWRmNDFlMGEzZDE4OGNkYjI3ZGQ5ZDZhYWNjNmMwOGUxM2VkNmUzNmM1OTAzMjJkMTA3MDU4MzQ4YjI4NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjQyZjgzYmY3NGEyNzgzY2Y3NWQ4MWQzNjkyOTZiMTM5YjliYTYxNzUyNThmZjNkNWU1N2ZkM2E0ZjU0MjYxMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjE3ZDczMzU4NDRlYTZlZGI2YmQxMjM4Zjk3ZmM1NzM1ZmI5NzYxMDFjYzUzN2U3YWRiODhlOWJjZWFiMjc0MyJ9"
         },
         {
-          "resource": "repo://internal/config/config.go#L62-L71",
-          "version": "repo-lines-v1:sha256:5d110b5ae3faf7689adc33f81b187050643e54226c0c70e924f50a5d9f926863:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY0ZGYxZDg4ZDFiZjc3ODkxYzE1ZGUwYjdmMGRlZTAxZjIxYWMyYTk5MDU0ZjBlZDlkMjZjYTJmNDNhMmJkNjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhMjI5ZGNiYTZiZWY3NzBhZDdhMzFmOGY3YTVjYjg2NTA2ZjdhYzRmN2IxZDBkZGYwMzQ0YzNiYjA3ZTE5YTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2OGMzYzVkZDQ4ODg4YjE5OWQ1ZmMyNWU1YTMxZTAyNzQ1ZDM3NzYxNGMwZDY3NTM4MzM0MzJjNmQzY2Q2YmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFmNDk1OGVjZDU0OTdjY2FmYWRjNzNlMGEyZGFkNjViMjhhMWMwMGEzZWUzZGIzZWE4YjEwNDJmNThkNTg1NTUifQ"
+          "resource": "repo://internal/config/subscription.go#L16-L16",
+          "version": "repo-lines-v1:sha256:5326df89120bc76b9bf359be46e513fc91c2a2a30b6c0776369fe44fd99c1be8:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTMyNmRmODkxMjBiYzc2YjliZjM1OWJlNDZlNTEzZmM5MWMyYTJhMzBiNmMwNzc2MzY5ZmU0NGZkOTljMWJlOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTMyNmRmODkxMjBiYzc2YjliZjM1OWJlNDZlNTEzZmM5MWMyYTJhMzBiNmMwNzc2MzY5ZmU0NGZkOTljMWJlOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTUwNWRmNWQ5NTg5ZDE0OTRjZmNjY2I1YjdkMzcwMmNlZDU0NjFhYjk1Yjg1MTUxNzllODQ4Zjc5MDlhNjc5NCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODM2YWNjMGM5NDY4NmMxNzM0OTNhNjVhMTNiZTA2OWJmY2Q0MGJhZDE1M2ViOTEyNGU5MzRjMDMzZGE3ZDYzOCJ9"
+        },
+        {
+          "resource": "repo://internal/hub/orchestration.go#L1747-L1747",
+          "version": "repo-lines-v1:sha256:e808e02c483d8c646ef0fa590a41d41c96501e14337ccacd1bd3102990f6a106:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgwOGUwMmM0ODNkOGM2NDZlZjBmYTU5MGE0MWQ0MWM5NjUwMWUxNDMzN2NjYWNkMWJkMzEwMjk5MGY2YTEwNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTgwOGUwMmM0ODNkOGM2NDZlZjBmYTU5MGE0MWQ0MWM5NjUwMWUxNDMzN2NjYWNkMWJkMzEwMjk5MGY2YTEwNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTA2NTkwZDYzNjVkMTQ3YjBjZDZiY2Y0MDAyZDQ2OGY3MTQyNzhlOTczMDkwOGUwMTE2MzJhMTk5ZTZiMTQ1MyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzI1N2NhOGY2MmZmOTkwNWM5NTNjOTA4N2Y2NDZjYmRhN2Q5N2ExYzZkYzcyZWJmNmNhMWNiNmRkZjBhNjc4ZCJ9"
+        },
+        {
+          "resource": "repo://internal/hub/push.go#L29-L29",
+          "version": "repo-lines-v1:sha256:740182b1f500bf3b4bde3ac48fe8b321f3719cbdf0a8ea6cce368a0184ccf3eb:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQwMTgyYjFmNTAwYmYzYjRiZGUzYWM0OGZlOGIzMjFmMzcxOWNiZGYwYThlYTZjY2UzNjhhMDE4NGNjZjNlYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzQwMTgyYjFmNTAwYmYzYjRiZGUzYWM0OGZlOGIzMjFmMzcxOWNiZGYwYThlYTZjY2UzNjhhMDE4NGNjZjNlYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjcwOTU2YTdjNDczY2M3NmJmZDNlYzRjY2M5NzRlNjI3YWYzMDg0NGY3YTI0ZDkxMDQ1ZmViNDM2NTcxODEzOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODhlODRmMTZkM2VmNDhmZGM4NDg1NTAwN2EyYmRhY2ZkY2YwMmE5ZGNjMTYyZjBhY2FiMDk2Nzk2Mjc0NWI0ZSJ9"
+        },
+        {
+          "resource": "repo://internal/hubruntime/runtime.go#L18-L21",
+          "version": "repo-lines-v1:sha256:793ba88afac0abc57a278084e84e4938f8634835be5be4894bdd0b3e8b2f6293:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjdkMjZkYWQ4Y2Y4YmViNDg4ZjI3ZjU4ODYxNjk4NDVmYjUxZTk5MWU4NWFlYmEyYmI4OWVjYTY2ZWUwNjkzYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjE2OWI4MzQ0ZWU3OTUzZWNmODM1YTMwOWYyZWQwMmJiOWZlZDNiZjgzZWYxMDRiODZkNWYzYWZiYjFiYmM2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjRmMjM5YTVmZjAxMTc5ZDhjZjI1MjhkMjAyOGM4N2QzNjZjZGZmNjE3MjhkZTZmYTRmMjdlYzQ4NDM4ZTRmMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjBlMzA5NDQ4YjIzMzBiYmY2MTk2OTBhNGI5NmYxMGM4MTMwNmJmMWVkZWQ5ZDc1ZWY2MjZlMGU4ZWY0YmJiMCJ9"
+        },
+        {
+          "resource": "repo://internal/launcher/profile.go#L19-L19",
+          "version": "repo-lines-v1:sha256:5d8b851f92858b96e27fd7fe8015aec1659784c0a6d4bc7817be0e4fbfcf2dc2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWQ4Yjg1MWY5Mjg1OGI5NmUyN2ZkN2ZlODAxNWFlYzE2NTk3ODRjMGE2ZDRiYzc4MTdiZTBlNGZiZmNmMmRjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWQ4Yjg1MWY5Mjg1OGI5NmUyN2ZkN2ZlODAxNWFlYzE2NTk3ODRjMGE2ZDRiYzc4MTdiZTBlNGZiZmNmMmRjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjcwOTU2YTdjNDczY2M3NmJmZDNlYzRjY2M5NzRlNjI3YWYzMDg0NGY3YTI0ZDkxMDQ1ZmViNDM2NTcxODEzOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOGI0ZGViMzA0ZTNlYWEyMzAzNzFmNDRjNDBkMDg5MmIwNmQ3MjMzZTBkNzA3MzE0M2I2YmYyNWM4YjYyYzNjNiJ9"
         }
       ]
     },
@@ -21,8 +37,8 @@
       "statement": "migrateLegacyDir performs a one-time os.Rename (not a copy) of a legacy ~/.any-ai-cli directory to ~/.many-ai-cli only when the new directory does not yet exist; it silently no-ops on any stat/rename failure and startup continues regardless.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1128-L1149",
-          "version": "repo-lines-v1:sha256:8ec76c441b89cbb78bc7ab3d60657a433a42c8c6c2423b78505ee26c1d78a546:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgxYTk0YTAxMTc0Njc0MjExYThiMjA5ZTQzOWJiZTgyODViZDE0MDMyNTliZDY4OTVlNDUwNzkzYjIwM2I2YmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU0Njc5ZThmZWMzZWZhN2Y3ZTIzYzAxNjI4MmM5ZTA3NzM3MzliNGYwMjRiNGY1MTUyZmM0YjM1ZGM3ZjVhMTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc0NDZlM2NmYTE1YTY5ODhmYWFmOTJmYWQ5NTkzZTQ1NDc5MDdiZjUzNDI1MGVkNTEyZDA0YjdiYzViYzEzZDYifQ"
+          "resource": "repo://internal/config/config.go#L1354-L1375",
+          "version": "repo-lines-v1:sha256:0b4eb558298c1b62d850dd9dffaee7668aa93cfb3b9a852c958db5043a4a5ec8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM1MmZiODJiMWJkMGU2OThlMjQxMDBjMTM0ZWQ5M2U0ZjRlYzEzOTEzNzZkNzg1NGZhNjNkNDJlNTIwZmI0Y2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU5M2VkMmE0NDEwZTc1ZDFjYjQyM2IwYzBjODEyMzg0ZDA4OWI5MTU1MWI0ODEyZmVmZThhMjM1YWU3ZTQ2NjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMzMWY5MTMxMjM0N2E1MGQ1OGIzMTQ1NTliNzc0MmU0NjJhNWJkZjBjN2ZiMmIzZDUzNTkxZDQzZmI2NGMzYzgifQ"
         }
       ]
     },
@@ -31,8 +47,8 @@
       "statement": "LoadOrCreate distinguishes an unparseable existing config.yaml (backed up to config.yaml.bak and replaced with regenerated defaults) from a missing one (defaults written fresh) from any other read error (returned as a hard error rather than silently discarding an existing configuration).",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1048-L1085",
-          "version": "repo-lines-v1:sha256:aaa4695c9b6ca7fd4a55bf9816bab5d55f0f58cd7ee739326e7918bafdbbe72d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3MTU1ZjFlNzFlODY2N2JhM2RjOGZmZDZhZjllOGMyOGE4MzAxMjllODIwNDExOTllZTA5MzliZjA4OTAwYjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE3OTc2NWMyMWI4MDVlNWZkNzAyNDA2NGFiZGRhNWY1MWYyYTZlZWFkMmVlMzViOGUzZWE4YWMyNDM5Yzg0ZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiYzQ5NjcwZTRlM2U1ODY5ZGNkYmNjYjQ1NGRiYzY1NmYwYjkyODk1ODJiMzYxM2QxZDE2YjY1MzJjZjIwNDcifQ"
+          "resource": "repo://internal/config/config.go#L1274-L1311",
+          "version": "repo-lines-v1:sha256:de490ba743bfc3aafa71e260e477d6d5f26afac42dfba9b6525fc4b9de465a18:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkNTBiMDRmNmFhMzcwYzRkOWEzYTUwM2IxYmJlYWEwZjk1ZDc4NTczOTQwNTAxMjZlMWQ1MTRiOTZjZGM5ODAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI5YjViNmM0YmUyYTg2OTY4NWExNzVkMGI4YzQ5OTVhYmQyNzY4MTQ1YTFhOTc4YTdjMjViZGI3Y2RkYmRkMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1OThlY2I4MmM2NmYzZTkyNzQyYzM5ZGU0M2E4OWIyOWNjZDBlMGNhMTQ5MTQ0YWZkYmQ2NGViZDM4ZjM0ZTAifQ"
         }
       ]
     },
@@ -41,8 +57,8 @@
       "statement": "If cfg.Token is empty after load, LoadOrCreate fills it via ensureToken and persists the result to disk immediately, because generating a new token only in memory on every launch would invalidate the Hub URL and already-open wrapper session auth on each restart.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1086-L1099",
-          "version": "repo-lines-v1:sha256:50e7a4fac72157decaa1d68b626bb7a36df783e4eba5fc3ddfc633147124cbe3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjZjgxMjBkZjFmMTE2MzQ2OGJmMWFhOTk5ODk5ZWVhNTgwNDFmNTZjMmU0ZWJjZTU0NzZkM2M0NWFiMGNhZDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVjNjY5NjM4N2FkY2MwZmFjOTQ4MTkxYjM5NTQ2ZjE2YWQzYzZmZjk4MDhhZTk5NzdlMzk5Zjc0MTY2MjNhMWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI4ZmI1MjMyYzQxMDU1NGM5YzBmMGY4Y2Y5OTZjMjM4MjNiMmYwYzNmMTVkYThlZTIwNzYwNjJjMDQwYzU0ODIifQ"
+          "resource": "repo://internal/config/config.go#L1312-L1325",
+          "version": "repo-lines-v1:sha256:f47aea3bea1145569fd91aea448076ffed1fd22dccb367010572a7c629b81612:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiN2M4NWQ1MTM4MDlhM2NiMmNlMGYxMTcxOGZlNjc1N2VjYjc1MGE3NjM0YWFlMjBmOWYxMzE3MGY0ZGVhNGMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyNWU2ODkwYzQ0Njc2MjIwOTU4MWNhNTg5ZjBhNGQ2ODgwZmE3YjJhZDllNDAwZGJmNWE3MmRkYjRjMTE3NDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiZmNlMTQ1YTUzODUzMGVmMzMyODFjNjhkMWU1YzVhMjU1NDI0MmE3ZGRhZmZmYzhmYTU4ODYwNmFlZjQ4YjYifQ"
         }
       ]
     },
@@ -51,8 +67,8 @@
       "statement": "Every config.yaml write (initial default, corrupt-config backup, token backfill, and Save) goes through writeConfigAtomic, which writes a temp file in the same directory, fsyncs it, chmods it 0o600, and os.Rename's it over the target path so a crash mid-write can never leave a partially-written config.yaml.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1217-L1246",
-          "version": "repo-lines-v1:sha256:0f3e5060ce6dd0a686f2c0262e2d00733804d54b1a9eee15a4c4de60d66d4377:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4Njc4MjRmZjYzNjA1MTU5NmQ1MTRjMTg0Yjg2ZDFmMzg3ZmM0ZTczYzMyYWVjNTQ0N2RkNDgwNDlmZmYwMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcxZTY5NDAwYmRiODIyODYzYjcwYTAwMmQwN2U5YjA5NzE1MmM1NTYxZTU3NmM1OTIzODE2ZDU3ZDY3NGM4NTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUzNDExMjFiZmZlZWY4NzU2M2Q4Mjk0MDhlMGYyYTM2OTI5Y2Q5NTM5MzQyMDcwYzI4MmExODdiOGNmYWUxZTgifQ"
+          "resource": "repo://internal/config/config.go#L1443-L1472",
+          "version": "repo-lines-v1:sha256:dc9fbfd28e460fb3c89f1eb1c52aeb52717abf3c6d62b51eb4a00b0da9646bd2:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIwOTNjZTBhYWMzNTMzYzQ2MDU4NmQwODU0NDFmMDUzZTA3NmJhNWU1ZjI2NTZjZjYzMmJjYzFhMDY3M2U1ZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU2NGM3ZWM4NjdhMTE1YWFjZjE4YTc2YTI5YjFjYTE2MzNmNTQxNjIzYjNkMDc1YzRkNWU1YzMxNzQxNDdlYTEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkxNTg3N2M0N2VkZmFhNjI5YWU4ZjcwZDZiYWY3MGViM2U5MDc5ZmU2MjM3ZWQ1Mjc3Yjg1MjhkNjgzMzEyMDUifQ"
         }
       ]
     },
@@ -61,8 +77,8 @@
       "statement": "Because os.Chmod(0o600) does not narrow the NTFS DACL on Windows, writeConfigAtomic additionally calls securefile.RestrictFile on the renamed path to explicitly restrict its ACL, since config.yaml holds the auth token, AuthCookieSecret, and RemotePINHash; a failure to restrict is logged/ignored rather than failing the write.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1246-L1254",
-          "version": "repo-lines-v1:sha256:a73aee3d5a18e961ea32626c7cf4cfc1f32fae4b67701447dc73a0c904a2570f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTNkMTRhYjBhYTUxZjEzMGYxZTc2ZTIwYmEyMGU0ZDczN2RiMDYyNmU1NjZmOGI1MGE4YjBjOTQwYTE2OTc5MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWFlYjkxNjQxNjVmMmM2MTk1ZGE3YWM1NDNiZDM2ODIzN2U0NDM3MjJlZWE5ZDI3N2M0MzU3NjYzYzU0ZmI0OSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjE5MjVhZTkyNTJmMTk5YjYyMzJjNjBlM2UyZTJlNjM2MzUyYjA4ZThlODcxYzA0ZjgwYTQzZGIyYjVlOWI1OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjEwZGRlMGExODUzNzZhOWVlM2ZkYTFmYWE2OWRiNWEwNDU5MDU4YmEzYmQxZTJkY2VhYzQ0MjlkMDQxYzMwMSJ9"
+          "resource": "repo://internal/config/config.go#L1473-L1481",
+          "version": "repo-lines-v1:sha256:408d7d6dc6792824fe1c35f858ff2eddc0cf079b7c731269fc12f33f8f7126e8:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGZhYTVjODM1YzIzNzA5ZjQ1NDZkNTQ5MzFlMzlmZWRlMTYzNmI4OWEzMzlhOTFmZTI5Mzk1OTUzNjBkYTBiZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWUwYzNhNWRhZjc2MTEyOGI2MzA0NTQzYjcxMDAwZDUxMjVmMTU4ZDUyZGVkYjBiNzA1MjdjOTIyODg2NzUzNyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTY0OTBiNGEwYzA5MWVlMzY4MDlmYWI0M2M1MTlkYjgzYjRiOTY4YWRhMjg4OGM0YmY2NmZiYjUxYWM3ZjNlZSJ9"
         }
       ]
     },
@@ -71,8 +87,8 @@
       "statement": "Save(cfg) reapplies cfg.applyDefaults() and cfg.Validate() before writing, so a runtime config save can never persist a configuration that would fail validation on the next LoadOrCreate.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1197-L1215",
-          "version": "repo-lines-v1:sha256:614ecdbcaa5921c02776b9aae0d21a43246aeede91f977fbffbd37a9cdbd1b55:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ZTdhODdhYzgxNGNiODQzYjM0ZGJmNDAyZjQzYmYxMGMzZTY2ZGRlNzEwN2M1ZjUxNWU0OTQ4NzNkZDlmZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUyMDAwMDEyNjUzYWI4ZTZmM2JiMDM0NzQzNWFmY2E3NjQxZTM1NjM1OGE1ZTBmNWJhNTI5ODYwMzA0NDMyZjYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMyNTExZTFiYTExMjIyYWZhYjk4OWU5M2U2YjA0NjEyZjQ4ZDlkOGQxZDkzNmJjZTRkZDVlNDlmMDNhNTI4MTAifQ"
+          "resource": "repo://internal/config/config.go#L1423-L1441",
+          "version": "repo-lines-v1:sha256:81f7cf3085a6da198356165daa4182e183cb5c57d59c3e8e229c479d90e79ae0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI1Zjc2MmQwNmRmNzg2YWJlYmQ1NzM2YWQzYjkwY2JjNDQzNjVhZWZkZDgzYmZhNDQzMGI4NzdkM2QwNTkzM2QiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkZDdiMmYwZmUxNWY0YjMyNDcwYmQzNWQ1ODNjZDNiYmViZTA0YjI4OGM1YTYxMmE1OGFlMjQwYWZjMjZhNmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRkYTAxMmY2NGFiNGU2NWM3NjBlMzQ1NDU4MTJiY2I1MGQwMDdiNDA5NWNhYjVkNTZkYzNhOWRiZDY1YTNkMzgifQ"
         }
       ]
     },
@@ -81,8 +97,8 @@
       "statement": "custom_providers: is a field on the same Config struct as every other setting and is loaded/saved/validated through the identical LoadOrCreate/Save/Validate path; there is no separate file or dedicated writer for custom provider registration.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L948-L984",
-          "version": "repo-lines-v1:sha256:0104a8349de96c8044368f92034fb11d76489c7f7f028f33d086b6462cd37b45:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhMjg3MWI2NzQ4ODI4YzU5NjVmYzlhODc4YzM5OTVhZmIyYjdmMTk4OTdlZmVkZWU5MjRlYzY4Nzg2OTIzMTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmYTdjYTY1ZmY4ODRkZjc0NzBmYjgzYjFiZDYzYTY3YWE5NGM1MjU5NTUyMjRlYTE1ZmJiNTAwM2Y2OGQ5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhNDAxMzljODQwMjI0YTBhNDljYzQwYTRjMzYzZjY5YjZkMDA0MjI4YzlkOWEwYjQ4OTMyMDliN2Y0YzQyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MDc4NGYyNmQ3M2I2ZDZkMTgzYTEyMzFmYjU3OGJhZTE3NDJmNzAyNTY5Y2EwNjg3NjMzNzFlMGRkZjg4NDkifQ"
+          "resource": "repo://internal/config/config.go#L1248-L1258",
+          "version": "repo-lines-v1:sha256:2097c3676f1322307575ed0abbb908cb1c08f9124914b1608cd12d5f676f9e0a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2MGJlMjRhNDZkMjFlNjliZDg4OTJiODc4M2EwMjRiZTEzOThiZWJiYzAxYTg1NzlkMTY1ZjRkYjRkMGUwNGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1M2Q0YTZlNGQ0NjM4MGYxYzUyOTIyNWUwM2I1MmJjMmMwYjg5MjQ0ZWQ5YjJhY2FiOWMxOTY1MTVlMzg0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3NmY3OTdmODg1ODVjYTU3OTU4MTk5NmJlYWFmMjBlNTVhMTI4ZDNiMmQxMWYzYTQ2YmM5YTYzNDhiYmQyM2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjljNjA3ZjliNDY5MjNjN2QwMTdiMjQ4MzQ2NWJiYTY4NWNkYzhkZDc4OGE0MGI5ZWI1ZjBiMzIzZmE0MmZhYTQifQ"
         }
       ]
     },
@@ -91,14 +107,28 @@
       "statement": "Config.Clone() performs a deep copy that individually copies map and slice fields so the clone can be passed to Save without holding the caller's config mutex, avoiding a concurrent-map-iteration panic during yaml.Marshal if the live config is mutated concurrently.",
       "evidence": [
         {
-          "resource": "repo://internal/config/config.go#L1257-L1261",
-          "version": "repo-lines-v1:sha256:0864e5d4da5f70529408800ef52deb95341fa1c6321f2bba4b2554fc0fba5d15:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzY1MzQ0YjFlNjg4NWM2MjBmMDBmMjkwNTYwOTdlMWE5YTA3ZGYwOTkzZjhhNDdlMDA4YzAzOTcwZWYwMDdlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjIwOWJiMzViZDRiNzdmOTBmZDg4YjYzMzg4ZGFkMWJkNGJjNjczNWRjYmUyOTQzNjYwMDQyNDFkMWJiYjU5NSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzQ5MzdjNGU3MTA5MzExNjNmYmQ1NGE4NTJkZjdjMGIyMDUxMzVhNjZiYTM4NTZmYjNiMDgxNzExNmFiODRlNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTQwZjg0ZGUwNDZiOGIzMjM5MjI5ZDc0NGY0ZDE1MmI2N2ZlY2I5ZjExNzJlNzJjMDU2MTUyNzZkMWI4YTg0OSJ9"
+          "resource": "repo://internal/config/config.go#L1483-L1500",
+          "version": "repo-lines-v1:sha256:09934fc0a23a22cbdda4e64a8d85777099b29e4cb110297500c2fb0debffb57a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI0Y2NkOGI5OTMzYmQ2MmFmZDEwNjljM2Y3MDRhZGY5MTI3ODE5ZThjNzMyNDE4OGEwYWYyOWIzNTk5NTljNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZiMTEwN2VhZTY5MTE2MmJiNzg2NWU0YzAwOTI0NWY2NTcwMGFhMDc5M2EwMGJiM2JkOTM1YjM3ODk4NDNkMjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2MzFiNmUyY2EwN2Q4YmFmMGViNDRlNzQ5ZGJmNDkwYjM5MmUzYTUzNGVmNjEwMjI3NzExNDZjZGY5YWYxYTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwNzk0OWQ1NWRlMzE5M2VhZjE5Yjk3NjcxYzI3ODdlOGFiZWMzYjVjYTkzZjJiMWE3YjVlZDlhODc0ZTMyNDUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_96cc2d08124247b0b170a15a3a9cd409",
+      "statement": "user_prefs.display.custom_themes is sanitized server-side on PUT /api/user-prefs: SanitizeCustomThemes drops entries with invalid or duplicate u- ids or empty names, clamps hue to 0-359 and contrast to 0-100, and caps the list at 20, then SanitizeDisplayTheme falls the active theme back to light when it names a custom id that no longer exists.",
+      "evidence": [
+        {
+          "resource": "repo://internal/config/config.go#L677-L791",
+          "version": "repo-lines-v1:sha256:92bd141505c7627311175a92673f2a3da5242c2810a53dd2bafe1f27235e2b1b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5M2RlNTQ4YmI0MDgxZDE3MTRiZTg3ODk1YzdlYTRlMzI0MGU4MDRlM2U5NDg0NDliOTY0ZDExOTMxNjFhNDAwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJkODNjMjFkYmVlZDI2ZTc0ZmM2NzgxMzg3MDNhYjQyOGZlMDA1YmYyMmNjMDUzZTU2MGMwM2RkZmE0ZWJiZDI4IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI4OTM5MTcyZjk0NTRjMjkwNTU4Mzg3MDI5NWRkMzZhZDIwNzBlNjUxY2FlNDZkMWUyMDI4NjZhMjAyNTgxN2IxIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI2ZjJhZTMwMmUxMWFhMzY2ZmQ2ZWJkNGY1Y2M4YjEyNDFhYTZkNDNkM2M3MjAyZGYyZTA2OGY5OTQ5MWNjMjhmIn0"
+        },
+        {
+          "resource": "repo://internal/hub/user_prefs_handlers.go#L135-L136",
+          "version": "repo-lines-v1:sha256:542f6d130c6636b62a92e876b8676a21f87708cfe9a9080fe5355092dcff6fdb:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzcyNTQ1OWU3NGQ4YjQxNThiOTliODE1NmZjNDFjZmFlMjlhNTdlMDU4MGEwYmEyZmQ3YjkzZTE5MmViMTk1NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZWMxNzI1ZmZhNjZlMjI4YTY0NGEzMWYyMGFhOGE0NGY1ZTZmZGI1ZGRhODU1MzU2NGU5NmQwYjVjMzgwMWQyZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNzAzYTcxMzk1YzY5YjljNDFlNDVkNjcyZGE0OWRiZmZmNTE2NGYyMTI4OGM0MjhhMDBmZmFiZTY2MzljMzAwMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2YzYWM3MDliNjYyZjZlMTQ5MmYzZTc5ZGZlMDAzZTM4YzE5YjhkMmNjNjM3ZmYzN2JiYzM0ZWQ0ZTdmNzA2MiJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

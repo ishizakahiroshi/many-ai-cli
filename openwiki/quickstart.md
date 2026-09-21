@@ -3,20 +3,20 @@ type: index
 title: Quickstart
 description: What many-ai-cli is and a task-routing map to the rest of this wiki, organized by what you're trying to do.
 tags: [quickstart, index, routing]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-7bd911fdd3026b7b031a01e3
     resource: repo://go.mod
   - id: openwiki-source-be0f5ef7e317c7f0a92cd953
     resource: repo://internal/config/custom_provider.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## What this is
 
-`many-ai-cli` (Go module `many-ai-cli`) is a single Go binary that wraps six AI coding CLIs (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode) in a PTY, watches them for approval prompts / completion / errors, and exposes a browser-based Hub UI (TypeScript + xterm.js) for approving, monitoring, and lightly orchestrating multiple sessions at once — locally, or over an SSH-tunneled/Docker-hosted remote connection. Start with [System Architecture Overview](/openwiki/architecture/overview.md) if you are new to the codebase; it explains the three-process model (wrapped session, Hub daemon, browser UI) everything else assumes.
+`many-ai-cli` (Go module `many-ai-cli`) is a single Go binary that wraps seven built-in AI coding CLIs (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code — the last with approval detection still unverified) plus any user-registered `custom_providers:` entry in a PTY, watches them for approval prompts / completion / errors, and exposes a browser-based Hub UI (TypeScript + xterm.js) for approving, monitoring, and lightly orchestrating multiple sessions at once — locally, or over an SSH-tunneled/Docker-hosted remote connection. Start with [System Architecture Overview](/openwiki/architecture/overview.md) if you are new to the codebase; it explains the three-process model (wrapped session, Hub daemon, browser UI) everything else assumes.
 
 ## Route by task
 

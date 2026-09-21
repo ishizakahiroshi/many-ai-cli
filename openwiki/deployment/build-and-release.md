@@ -3,9 +3,6 @@ type: deployment-process
 title: Build, Packaging, and Release Pipeline
 description: How many-ai-cli is built locally with make, how git tags are the single source of version truth, and how the tag-driven GitHub Actions workflow publishes to GitHub Releases, winget, Homebrew, and npm.
 tags: [release, build, makefile, npm, goreleaser, versioning, packaging, ci]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-4d1d392666be6dfdd7a91a2e
     resource: repo://.github/workflows/release.yml
@@ -17,7 +14,10 @@ sources:
     resource: repo://scripts/check-version-sources.mjs
   - id: openwiki-source-8c1f3d4518966c8688bc06e1
     resource: repo://scripts/sync-npm-version.mjs
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Local build: `make`

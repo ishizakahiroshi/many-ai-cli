@@ -3,9 +3,6 @@ type: deployment-process
 title: Docker and Remote Server Deployment
 description: The per-user GHCR container model for running many-ai-cli on a remote server — Dockerfile stages, the loopback-only socat relay, entrypoint lifecycle, and opt-in cron-based image updates.
 tags: [docker, deployment, remote-server, ghcr, compose, socat, multiuser]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-2f5eaf4fb32ea423253b9b78
     resource: repo://deploy/docker/aac-update.sh
@@ -15,7 +12,10 @@ sources:
     resource: repo://deploy/docker/Dockerfile
   - id: openwiki-source-7a4578cffddbeaf1b095b3fc
     resource: repo://deploy/docker/entrypoint.sh
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## One container per user

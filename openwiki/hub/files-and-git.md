@@ -3,9 +3,6 @@ type: architecture-component
 title: Files and Git Tabs
 description: The Hub's file-browsing/editing HTTP endpoints — their read-scope trust model, atomic no-clobber renames, and secure on-disk permissions — plus the Git tab's argv-only git invocation.
 tags: [files, git, atomic-write, securefile, toctou, commit, hub-api]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-5d455ef6d1025eb932eccd15
     resource: repo://internal/hub/atomic_rename.go
@@ -17,14 +14,17 @@ sources:
     resource: repo://internal/hub/files_scope.go
   - id: openwiki-source-4e980d4ab6b7e2b131d0bce6
     resource: repo://internal/hub/git_commit.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Files API: read scope depends on how the caller connects, writes never do
 
 `filesScopeRestricted` (`files_scope.go`) is the one function deciding whether a *read* request is confined to an allowed root (cwd / git root / attachments / orchestration directories, plus a chat-mention fallback) or can read anywhere. Its own comment lays out the reasoning: `many-ai-cli` is a single-user tool running on the Hub host, and a browser connecting over direct loopback is treated as equivalent to the OS user themself — that user can already open any file with Explorer, and the wrapped AI CLI processes run with the same OS permissions and can already read anything, so confining only the Hub's own reads to cwd/git-root would not be a real security boundary for a direct-loopback caller (reinforced by the fact that `POST /api/spawn` already accepts `provider="shell"`, and `spawnCwdTooBroad` only rejects a drive root or the home directory itself — a token holder already has an equivalent, broader path available). A **logically remote** caller — Tailscale `serve`, a `trusted_networks` peer, a phone — is different: the operator there is not necessarily the OS user, so those reads stay confined to the allowed roots, exactly the same direct-loopback/logically-remote split `POST /api/list-subdirs` (`misc_handlers.go`'s `listSubdirsAllowedRemote`) already uses.
 
-**Writes are never governed by this function.** `files-save`/`files-create`/mkdir/move/rename/delete stay confined to cwd/git-root regardless of connection kind, because the practical risk there is different: accidentally corrupting something outside the user's own repository, not a confidentiality boundary. Even within the allowed-roots read path, `secretReadDeniedExtensions` (`.pem`, `.key`) and `secretReadDeniedBasenames` are blocked outright.
+**Writes are never governed by this function.** `files-save`/`files-create`/mkdir/move/rename/delete stay confined to cwd/git-root regardless of connection kind, because the practical risk there is different: accidentally corrupting something outside the user's own repository, not a confidentiality boundary. On the read side, a path under cwd / git root / attachments / orchestration is always allowed; only once a request falls outside those roots does `resolveAllowedFilePath` apply the secret denylist (`isSecretReadDenied`: `secretReadDeniedExtensions` such as `.pem`/`.key`, `secretReadDeniedBasenames` such as the session-history SQLite files, `.npmrc`, `.netrc`, `.git-credentials`, `authorized_keys`, plus parent-directory pairs), returning `403` before the loopback-vs-remote decision is even made. The Files list view applies the same check before previewing a text file.
 
 `/api/files-content` additionally enforces a fixed allowlist of previewable text extensions (`previewableTextExtensions`) and a 1 MiB size cap (`filesContentMaxSize`); its response's `ReadOnly` flag distinguishes a normal in-scope read from one permitted only because the path was mentioned in chat and fell back to read-only access outside the allowed roots.
 

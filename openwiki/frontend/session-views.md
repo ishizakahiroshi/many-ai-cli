@@ -3,9 +3,6 @@ type: architecture-component
 title: "Session Views: Multi-Pane, Detached Grid, and Mobile"
 description: The alternate ways the Hub UI renders live sessions beyond one-terminal-at-a-time — the multi-pane grid, pop-out detached windows, the sidebar's single-tree placement rule, and the mobile-specific lite/home views.
 tags: [frontend, multi-pane, detached-grid, sidebar-tree, mobile, chat-history]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-a2fe66d68c72192cb107a241
     resource: repo://web/src/app/chat-history.ts
@@ -19,7 +16,10 @@ sources:
     resource: repo://web/src/app/multi-pane.ts
   - id: openwiki-source-a1ebf1e25581aa987010bcb4
     resource: repo://web/src/app/sidebar-tree.ts
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Sidebar placement: one tree, one rule

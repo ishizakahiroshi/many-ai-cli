@@ -3,9 +3,6 @@ type: testing-convention
 title: Audit Tests and Static Quality Gates
 description: The internal/hub audit_*_test.go convention for regression-locking past security fixes, the instrumentation.json ledger that keeps investigative observability code from shipping, and the scripts/check-*.mjs static gates bundled into CI.
 tags: [testing, audit-tests, instrumentation, ci, gosec, static-analysis, claude-md]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-7f1128611d8d832ea8e26c38
     resource: repo://.github/workflows/validate.yml
@@ -17,7 +14,10 @@ sources:
     resource: repo://scripts/check-claude-md.mjs
   - id: openwiki-source-5008d049bc98e05abafa8245
     resource: repo://scripts/check-instrumentation.mjs
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## `audit_*_test.go`: one file per fixed incident, not per feature
