@@ -59,8 +59,9 @@ const CRUNCH_LINK_RE = /(?:[…\.]{1,3}\s*\+\d+\s*lines?\s*)?\(ctrl\+o to expand
 // 長時間セッションで過去ターンが押し出される苦情を受けて 10000 行へ拡大。
 // それ以前の出力は過去ログビューア（history-viewer.ts）で生ログから遡る。
 export const TERMINAL_SCROLLBACK_LINES = 10000;
-// 非アクティブセッションの未描画 PTY chunk は末尾だけ保持し、
-// 長時間放置後のセッション切替で UI スレッドを詰まらせない。
+// 非アクティブセッションの未描画 PTY chunk をこの量まで溜め、超えたら非表示のまま
+// xterm へ書き込む。長時間放置後のセッション切替で一括 write が肥大化して UI を
+// 詰まらせないための上限で、超過分を捨てる上限ではない（捨てると差分描画の TUI が壊れる）。
 export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
 export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
 // resize（SIGWINCH）直後は TUI（Codex 等）がトランスクリプト全体を再描画する。
@@ -784,10 +785,11 @@ export function queuePendingTerminalChunk(id, bytes) {
     }
     return;
   }
-  while (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES && t.pendingChunks.length > 1) {
-    t.pendingTotalBytes -= t.pendingChunks[0].length;
-    t.pendingChunks.shift();
-  }
+  // 上限を超えても先頭を捨てず、非表示のまま xterm へ書き込んで溜まり分を空にする。
+  // Grok のように「変わったセルだけ」を書き直す TUI は、途中のバイトが欠けると
+  // 一度も書き直されないセルが空白のまま残り、切替後も直らない
+  // （docs/local/bugfix_grok-inactive-terminal-garbled_2026-09-22.md）。
+  if (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES) flushPending(id);
 }
 
 // resize（SIGWINCH）送信・受信直後の出力バーストを一括描画するバッチを開始する。

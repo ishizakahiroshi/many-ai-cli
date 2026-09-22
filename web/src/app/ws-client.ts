@@ -330,7 +330,8 @@ export function _connectWs() {
       // 非アクティブセッションは everAttached に関わらず pendingChunks に溜める。
       // 承認検出は scanBuffer ではなく pendingTextTail ベースで行うため、
       // xterm のライブ書き込みを非アクティブ中は止めてよい。
-      // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする。
+      // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする
+      // （溜まり分が上限を超えたら切替を待たず非表示のまま書き込む）。
       queuePendingTerminalChunk(id, xtermBytes);
     }
     trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk, {
