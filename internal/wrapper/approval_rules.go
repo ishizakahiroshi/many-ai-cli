@@ -30,7 +30,7 @@ const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
 // が拾う）。version 22 で前置きの代替表現を「箇条書き（`- `）」から「短い段落か 1 行 1 項目の
 // 地の文」へ改めた（利用者のグローバル規約「many-ai-cli 配下では行頭の `- ` を使わない」と
 // 矛盾していたため。ダッシュボードは Markdown を描画しないので記号がそのまま画面に出る）。
-const rulesVersion = "22"
+const rulesVersion = "23"
 
 // ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
 // 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
@@ -48,15 +48,15 @@ var rulesFileContent = strings.Join([]string{
 	"",
 	"確認方法（**OS と使用するツールに応じて構文を選ぶ**）：",
 	"",
-	"- macOS / Linux: `Bash` ツールで `echo \"$MANY_AI_CLI\"`",
-	"- Windows (PowerShell ネイティブ): `PowerShell` ツールで `$env:MANY_AI_CLI`",
-	"- Windows (Git Bash / WSL / Cygwin): `Bash` ツールで `echo \"$MANY_AI_CLI\"`",
+	"- macOS / Linux: `Bash` ツールで `case \"${MANY_AI_CLI-}\" in 1) printf 'match\\n';; '') printf 'unset\\n';; *) printf 'no-match\\n';; esac`",
+	"- Windows (PowerShell ネイティブ): `PowerShell` ツールで `$value = [Environment]::GetEnvironmentVariable('MANY_AI_CLI'); if ($value -eq '1') { 'match' } elseif ([string]::IsNullOrEmpty($value)) { 'unset' } else { 'no-match' }`",
+	"- Windows (Git Bash / WSL / Cygwin): `Bash` ツールで `case \"${MANY_AI_CLI-}\" in 1) printf 'match\\n';; '') printf 'unset\\n';; *) printf 'no-match\\n';; esac`",
 	"",
-	"⚠️ **取り違え注意**：",
-	"- `Bash` ツールに `$env:MANY_AI_CLI` を渡すと `:MANY_AI_CLI: command not found`（exit 127）で失敗する。bash では `$env` が空に展開され、残った `:MANY_AI_CLI` がコマンドとして実行されるため。",
-	"- `PowerShell` ツールに `echo $MANY_AI_CLI` を渡すと、`$MANY_AI_CLI` は PowerShell では未定義の変数として空文字に展開され、値が取得できない。",
+	"⚠️ **生値出力禁止・取り違え注意**：",
+	"- 上記コマンドは値そのものではなく `match` / `unset` / `no-match` だけを出力する。この形を保ち、環境変数の生値を表示しない。",
+	"- `env` / `printenv` / `set` / `Get-ChildItem Env:` のような環境変数の全件列挙をしない。",
 	"- macOS / Linux には PowerShell が標準で入っていないので `PowerShell` ツールは選ばない。",
-	"- 失敗したらツールを切り替えて再試行すること（落としてセッションを止めない）。",
+	"- シェルを取り違えて失敗したら、正しいツールへ切り替え、判定結果だけを再取得すること（落としてセッションを止めない）。",
 	"",
 	"`MANY_AI_CLI=1` の場合のみ、以下の [MANY-AI-CLI] マーカーを使用してください。",
 	"未設定・空の場合はマーカーなしでプレーンテキストで出力してください。",
