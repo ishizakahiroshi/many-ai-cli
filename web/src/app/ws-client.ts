@@ -1,20 +1,24 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
-import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, approvalVisibleCache, autoDismissTimers, beginApprovalReplay, chatHistory, deriveProjectKeyFromCwd, finishApprovalReplay, isApprovalReplayPending, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, multiQuestionLatchAt, multiQuestionVisibleCache, noteApprovalSourceEpoch, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
+import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
 import { applyRemotePtyResize, ensureTerminal, forgetSentPtySize, isLiveOutputBatching, markCompactActivity, queuePendingTerminalChunk, scheduleLiveStatusExtract, syncLiveStatusDomForActive, writePTYChunk } from './terminal.js';
-import { checkApprovalOnStartup } from './settings.js';
-import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { cancelApprovalHintConfirm, handleGoApprovalCleared, handleGoApprovalDetected, handleHubApprovalMarker, hideActionBar, isAIProvider, scheduleApprovalCheck, scheduleApprovalLedgerRestore, trackApprovalHintFromChunk } from './approval.js';
+import { checkApprovalOnStartup, isSessionCurrentlyViewed, playNotificationSound, showDesktopTurnEndNotification } from './settings.js';
+import { forgetTurnEndNotify, observeTurnEndCandidate, shouldNotifyTurnEnd, turnEndRunningStartedAt } from './turn-end-notify-store.js';
+import { clearAllTurnEndBellMutes, isTurnEndBellOff, isTurnEndNotifyEnabled } from './user-prefs.js';
+import { clearApprovalMarkerSuppressed, noteApprovalMarkerSuppressed } from './approval-ui.js';
+import { hideActionBar, isAIProvider, renderApprovalAfterSnapshot } from './approval.js';
+import { applyApprovalSnapshot, applyApprovalState, resetApprovalStore, setApprovalFoldScope } from './approval-store.js';
 import { notifyDeferredEnterOutput } from './deferred-enter.js';
 import { notifyResidueSweepOutput } from './residue-sweep.js';
 import { chatHistoryAppendOutput, chatHistoryCommitOutputOrSeed, isTranscriptBackedProvider, pushAgentChatMessage } from './chat-history.js';
 import { clearChatPayloadForSession, handleChatTurnMessage, initChatPayloadUI } from './chat-payload.js';
 import { handleUsageStatMessage, removeUsageCacheEntry, resetUsageCache } from './token-statusbar.js';
 import { checkHandoffNotifyFromUsageStat, handleHandoffNoteMessage } from './handoff.js';
-import { receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
+import { receiveSubagentTree, receiveWorkflowProgress, removeWorkflowSnapshot } from './workflow-modal.js';
+import { removeSubagentTree, setSubagentTree } from './workflow-store.js';
 import { dropDoneSummary, setDoneSummary } from './done-summary.js';
 import { clearAllSpawnConfirmationsForHubRestart, closeSpawnConfirmation, noteSpawnConfirmationRequested, openNextSpawnConfirmationFor } from './spawn-confirm.js';
 
@@ -98,6 +102,7 @@ function purgeLocalStateForHubRestart() {
       removeLocalSession(id);
       removeWorkflowSnapshot(id);
       dropDoneSummary(id);
+      forgetTurnEndNotify(id);
     } catch (_) {}
   });
   resetUsageCache();
@@ -105,6 +110,9 @@ function purgeLocalStateForHubRestart() {
   // Hub 再起動で保留していた spawn 確認も消えている。ローカルの保留ストアと、
   // 開いたままのダイアログがあれば理由付きで閉じる。
   clearAllSpawnConfirmationsForHubRestart();
+  // 子 plan (plan_ux-notify-palette-review_c1_notify.md): 作業終了通知のベル
+  // （セッションごとの OFF 一覧）も旧 ID を前提にしているため丸ごと消す。
+  clearAllTurnEndBellMutes();
 }
 
 export function syncElapsedTimer() {
@@ -230,6 +238,8 @@ export function _connectWs() {
     const area = document.getElementById('terminal-area');
     if (area) area.innerHTML = '';
     hideActionBar(undefined);
+    // 切断中の記録は当てにならない。再接続すると Hub がまとめ（approval_snapshot）を送り直す。
+    resetApprovalStore();
     renderSessionList();
     if (_wsIntentionalClose) return;
     // 指数バックオフで自動再接続
@@ -273,11 +283,6 @@ export function _connectWs() {
       resetAllLocalSessionHistory();
     }
     _sendRegister();
-    // 再接続直後に承認可視ヒントを即時再主張する（Hub 側リースの取りこぼし修復。
-    // リロード後はキャッシュが空なので no-op）。
-    if (window.approvalUiAdapter?.reassertApprovalHints) {
-      window.approvalUiAdapter.reassertApprovalHints();
-    }
   };
   _ws.onmessage = (ev) => {
     // 任意のメッセージ受信（ping 含む）で死活タイマを更新する。
@@ -295,7 +300,6 @@ export function _connectWs() {
 
   if (m.type === 'pty_data') {
     const id = m.session_id;
-    if (m.replay) beginApprovalReplay(id, m.replay_epoch);
     ensureTerminal(id);
     const t = terminals.get(id);
     // ensureTerminal が内部例外で terminals へ登録できなかった場合 t は undefined になり、
@@ -328,18 +332,14 @@ export function _connectWs() {
       });
     } else {
       // 非アクティブセッションは everAttached に関わらず pendingChunks に溜める。
-      // 承認検出は scanBuffer ではなく pendingTextTail ベースで行うため、
+      // 承認は端末の文字から作らない（Hub の記録から描く）ので、
       // xterm のライブ書き込みを非アクティブ中は止めてよい。
       // セッション切替時に attachTerminal → flushPending で一括 xterm 書き込みする
       // （溜まり分が上限を超えたら切替を待たず非表示のまま書き込む）。
       queuePendingTerminalChunk(id, xtermBytes);
     }
-    trackApprovalHintFromChunk(id, xtermBytes, approvalTextChunk, {
-      replay: !!m.replay,
-      replayEpoch: m.replay_epoch,
-    });
+    // 承認は端末の文字から作らない（Hub の記録を approval-store.ts で受けて描く）。
     markCompactActivity(id, approvalTextChunk);
-    if (isLiveRendered && !m.replay && !isApprovalReplayPending(id)) scheduleApprovalCheck(id);
     // Codex 等 provider 別のピル内テキストを本文から抽出（Claude は既存ブロック抽出経路）。
     if (isActive) scheduleLiveStatusExtract(id);
     // chat_turn / chat_turns_snapshot は早期 return しないが、ここで早期処理する
@@ -370,12 +370,7 @@ export function _connectWs() {
   if (m.type === 'reattach_replay_done') {
     const id = Number(m.session_id || 0);
     if (!id) return;
-    if (finishApprovalReplay(id, m.replay_epoch, m.approval_source_epoch, m.approval_consumed ? String(m.approval_candidate_key || '') : '', String(m.approval_candidate_shape || '')) && id === activeSessionId) {
-      scheduleApprovalCheck(id);
-      // 再接続の replay は保留中の承認を運ばない（pty_data と reattach_replay_done だけ）。
-      // claude / codex はローカル走査で立て直せないので、台帳から出し直す。
-      scheduleApprovalLedgerRestore(id);
-    }
+    // 保留中の承認は replay では運ばず、Hub の記録（approval_state）として届く。
     return;
   }
 
@@ -403,7 +398,6 @@ export function _connectWs() {
     // 確定ユーザー入力が provider へ送達された（input_gate.go のライブ限定 broadcast）。
     // review-view.ts が前ターンの完了カードを自動消去する。ptyBuf リプレイの
     // ターン境界マーカーや State("running") と違い、リロード・再描画で誤発火しない。
-    noteApprovalSourceEpoch(m.session_id, m.approval_source_epoch);
     try { window.dispatchEvent(new CustomEvent('many-user-turn-started', { detail: { session_id: m.session_id, approval_source_epoch: m.approval_source_epoch } })); } catch (_) {}
     return;
   }
@@ -442,23 +436,23 @@ export function _connectWs() {
     return;
   }
 
-  if (m.type === 'approval_detected') {
-    handleGoApprovalDetected(m);
-    return;
-  }
-
-  if (m.type === 'approval_marker') {
-    handleHubApprovalMarker(m);
-    return;
-  }
-
   if (m.type === 'approval_marker_suppressed') {
     noteApprovalMarkerSuppressed(m.session_id, m.reason);
     return;
   }
 
-  if (m.type === 'approval_cleared') {
-    handleGoApprovalCleared(m);
+  // Hub が持つ保留中の承認の記録（internal/hub/approval_record.go）。接続したときのまとめと、
+  // 開く・閉じるの差分を画面側のストア（approval-store.ts）へ写す。描画はストアの購読者
+  // （approval.ts の onApprovalStoreChanged）が行う。まとめは記録が変わらなくても、
+  // 再接続で片付けたパネルを描き直すためにアクティブなセッションを描く。
+  if (m.type === 'approval_snapshot') {
+    applyApprovalSnapshot(Array.isArray(m.approval_snapshot) ? m.approval_snapshot : []);
+    renderApprovalAfterSnapshot();
+    return;
+  }
+
+  if (m.type === 'approval_state') {
+    applyApprovalState(Number(m.session_id || 0), m.approval_state);
     return;
   }
 
@@ -515,6 +509,20 @@ export function _connectWs() {
     return;
   }
 
+  // サブエージェントの木（子 plan: plan_subagent-tree-popup_c5_web-popup.md
+  // 内部 C1 が保持・C2 がチップ・ポップアップへの描画）。保持した直後に
+  // receiveSubagentTree で即時再描画する（800ms の poll を待たせない。
+  // receiveWorkflowProgress と同じ扱い）。空の木は setSubagentTree 側で
+  // 保持分のクリアとして扱う。
+  if (m.type === 'subagent_tree') {
+    if (Number.isFinite(m.session_id)) {
+      if (m.subagent_tree) setSubagentTree(m.session_id, m.subagent_tree);
+      else removeSubagentTree(m.session_id);
+      receiveSubagentTree(m.session_id);
+    }
+    return;
+  }
+
   // 端末は今見ているセッションの今の画面しか映さないため、**見ていないセッション**の
   // 完了を知る経路はここだけになる。Hub は通知設定と無関係に broadcast してくるので、
   // 外部通知を切っている利用者でもライブ帯とカードには出る。
@@ -541,6 +549,9 @@ export function _connectWs() {
       purgeLocalStateForHubRestart();
     }
     if (inst) _hubInstance = inst;
+    // 承認の畳み状態は Hub の起動ごとに分ける（セッション番号が振り直されるため）。
+    // Hub はこの snapshot の後に approval_snapshot を送るので、まとめの適用より先に渡る。
+    if (inst) setApprovalFoldScope(inst);
     (arr || []).forEach(s => {
       if (s.state === 'completed') {
         requestSessionDismiss(s.id);
@@ -554,7 +565,6 @@ export function _connectWs() {
 			s.awaiting_approval = s.activity.awaiting_approval;
 		}
       s.project = deriveProjectKeyFromCwd(s.cwd);
-      noteApprovalSourceEpoch(s.id, s.approval_source_epoch);
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
@@ -577,7 +587,6 @@ export function _connectWs() {
     }
     const isNew = !sessions.has(m.session_id);
     const cur: any = sessions.get(m.session_id) || { id: m.session_id };
-    noteApprovalSourceEpoch(m.session_id, m.approval_source_epoch);
     const beforeLayout = sessionLayoutSnapshot(cur);
     if (m.provider)        cur.provider        = m.provider;
     if (m.display_name)    cur.display_name    = m.display_name;
@@ -594,7 +603,28 @@ export function _connectWs() {
 	  cur.auto_title = m.session_meta.auto_title;
 	}
     if (m.shell)           cur.shell           = m.shell;
-    if (m.state)           cur.state           = m.state;
+    if (m.state) {
+      // 子 plan (plan_ux-notify-palette-review_c1_notify.md): running → standby
+      // （作業終了）を検知して通知する。isNew（新規登録）のセッションは直前の状態を
+      // 実測できないため観測に渡さない — cur.state への代入自体はこの下で行うので、
+      // 次回以降の session_update からは正しく遷移を追える。
+      if (!isNew) {
+        const isCandidate = observeTurnEndCandidate(m.session_id, cur.state, m.state, Date.now());
+        if (isCandidate) {
+          const decision = shouldNotifyTurnEnd(
+            isCandidate,
+            isTurnEndBellOff(m.session_id),
+            isSessionCurrentlyViewed(m.session_id),
+            isTurnEndNotifyEnabled(),
+          );
+          if (decision) {
+            playNotificationSound();
+            showDesktopTurnEndNotification(m.session_id, turnEndRunningStartedAt(m.session_id));
+          }
+        }
+      }
+      cur.state = m.state;
+    }
 		if (m.activity) {
 			cur.output_idle = m.activity.output_idle;
 			cur.workflow_active = m.activity.workflow_active;
@@ -690,13 +720,8 @@ export function _connectWs() {
       if (m.reason) s.end_reason = m.reason;
     }
     if (m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
-    cancelApprovalHintConfirm(m.session_id);
-    approvalVisibleCache.delete(m.session_id);
-    if (multiQuestionVisibleCache.delete(m.session_id) && m.session_id === activeSessionId) {
-      setMultiQuestionBannerVisible(false);
-    }
+    // 保留中の承認は Hub がセッション終了で閉じ、approval_state で届く（approval-store.ts）。
     clearApprovalMarkerSuppressed(m.session_id);
-    multiQuestionLatchAt.delete(m.session_id);
     removeApprovalAutoSwitchTarget(m.session_id);
     maybeAutoSwitchToNextApproval();
     const deadStates = ['error', 'disconnected'];

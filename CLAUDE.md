@@ -70,7 +70,7 @@ docs/local/               設計書・plan 等（非公開）
 | ルール | 正本（本文はここ） | 機械検査 |
 |---|---|---|
 | 承認の同一性は 1 本（`candidateKey` + `sourceEpoch`）だけ。誤表示を踏んでも抑止を足さない | `internal/hub/approval_identity.go` / `web/src/app/approval-answered.ts` | `TestApprovalSuppressionStateIsSingleSource` |
-| 承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_marker_transcript.go` | `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
+| 承認の表示は Hub が持つ保留中の記録を描くだけ。画面は端末の文字から承認を作らず、「保留中」も記録からだけ出す。承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_record.go` の冒頭 / `internal/hub/approval_marker_transcript.go` | `scripts/check-approval-display-source.mjs`（Validate CI） / `internal/hub/approval_display_guard_test.go` / `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
 | 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
 | auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
 | 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 / `scripts/check-approval-rules-residue.mjs`（commit 混入） |
@@ -84,7 +84,7 @@ docs/local/               設計書・plan 等（非公開）
 | relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `internal/hub/relay.go` / `internal/hub/relay_worktree.go` | `TestRelay_*`（`internal/hub/`） |
 | サイドバーの配置は 1 本の木から導く（兄弟順と折りたたみ以外でノードが器を越えない） | `web/src/app/sidebar-tree.ts` | `sidebar-tree-fixtures.ts` |
 | 観測コードはリリース成果物に入れない（build tag オプトイン＋成果物検査） | `web/src/debug/probe.ts` / `docs/local/archive/v0.8.x/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs` / `scripts/check-artifact-clean.mjs` |
-| 引き継ぎ看板は入れてよいものだけを型で受け、それ以外は入れる口を作らない（伏字化は最後の網） | `internal/handoff/handoff.go` の冒頭コメント | `internal/handoff/handoff_test.go` の allowlist フィールド固定テスト |
+| 引き継ぎ看板とサブエージェントの木は、入れてよいものだけを型で受け、それ以外は入れる口を作らない（看板の伏字化は最後の網。木は名前とツールの対象の要約だけで、プロンプト・結果・返答を持たない） | `internal/handoff/handoff.go` の冒頭コメント / `internal/proto/messages.go` の `SubagentNode` | `internal/handoff/handoff_test.go` の allowlist フィールド固定テスト / `TestSubagentNodeFieldsAreTheAllowlist` |
 | 残量ソースは provider 直書きの switch/slice ではなく 1 本の表で持つ。問い合わせて取る経路は作らない（`ReadUsage` を Adapter に足さない） | `internal/subscription/usage_source.go` | `internal/subscription/usage_source_test.go` |
 
 **新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。

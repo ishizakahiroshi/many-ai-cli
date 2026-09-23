@@ -15,7 +15,8 @@
     "transcript": "history:codex-v1",
     "usage": "usage:codex-v1",
     "subscription": "subscription:codex-v1",
-    "permissions": "permissions:generic-v1"
+    "permissions": "permissions:generic-v1",
+    "subagents": "subagent:codex-v1"
   },
   "update": {
     "args": ["update"],

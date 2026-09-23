@@ -1,7 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, token } from './util.js';
-import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
+import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
@@ -21,17 +21,31 @@ import {
   isModelCompatibleWithProvider,
   loadSpawnModelGroups,
 } from './spawn-model-groups.js';
+import { PROVIDER_ORDER_CHANGED_EVENT, clearProviderOrder, saveProviderOrder, sortByProviderOrder } from './provider-order.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
-let resetSpawnProviderOrderImpl: (() => void) | null = null;
-
-/** 新規セッションの provider 並び順を index.html の既定順へ戻す。 */
+/**
+ * 新規セッションの provider 並び順を index.html の既定順へ戻す。初回画面の導入状況一覧も
+ * 同じ順番を使うので、PROVIDER_ORDER_CHANGED_EVENT で両方が描き直る。
+ */
 export function resetSpawnProviderOrder(): void {
-  try { localStorage.removeItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY); } catch (_) { /* noop */ }
-  resetSpawnProviderOrderImpl?.();
+  clearProviderOrder();
+}
+
+// C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレットの「新しいセッション」
+// コマンド用。IIFE 内で定義される実体を、開いた後にここへ差し込む。
+let _openSpawnPanelIfClosedImpl: (() => void) | null = null;
+
+/**
+ * 新規セッションパネルを開く。既に開いていれば何もしない。
+ * `#new-session-btn` の click は開いている時にトグルで閉じてしまうため、パレットの
+ * コマンドからはこちらを使う。
+ */
+export function openSpawnPanelIfClosed(): void {
+  _openSpawnPanelIfClosedImpl?.();
 }
 
 // ---- 新規セッション spawn panel ----
@@ -600,28 +614,12 @@ export function resetSpawnProviderOrder(): void {
     });
   }
 
-  function loadSpawnProviderOrder(): string[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((value): value is string => typeof value === 'string');
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function saveSpawnProviderOrder(values: string[]): void {
-    try { localStorage.setItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY, JSON.stringify(values)); } catch (_) { /* private mode 等は無視 */ }
-  }
-
   function persistCurrentSpawnProviderOrder(): void {
     if (!spawnProviderList) return;
     const values = Array.from(spawnProviderList.querySelectorAll<HTMLElement>('.spawn-provider-option'))
       .map((item) => item.dataset.value)
       .filter((value): value is string => !!value);
-    saveSpawnProviderOrder(values);
+    saveProviderOrder(values);
   }
 
   function clearSpawnProviderDropMarks(): void {
@@ -635,20 +633,8 @@ export function resetSpawnProviderOrder(): void {
       const label = (opt.textContent || opt.label || opt.value).trim() || opt.value;
       return { value: opt.value, label };
     });
-    const known = new Map(defaults.map((option) => [option.value, option]));
-    const ordered = [];
-    const seen = new Set<string>();
-    for (const value of loadSpawnProviderOrder()) {
-      const option = known.get(value);
-      if (option && !seen.has(value)) {
-        ordered.push(option);
-        seen.add(value);
-      }
-    }
-    for (const option of defaults) {
-      if (!seen.has(option.value)) ordered.push(option);
-    }
-    return ordered.map((option, index) => ({ ...option, id: `spawn-provider-option-${index}` }));
+    return sortByProviderOrder(defaults, (option) => option.value)
+      .map((option, index) => ({ ...option, id: `spawn-provider-option-${index}` }));
   }
 
   function getSelectedSpawnProviderIndex() {
@@ -706,10 +692,11 @@ export function resetSpawnProviderOrder(): void {
     renderSpawnProviderOptions();
   }
 
-  resetSpawnProviderOrderImpl = () => {
+  // 並び順は初回画面の導入状況一覧からも変わる（と「既定に戻す」）。どちらでも描き直す。
+  document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, () => {
     spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
     updateSpawnProviderIcon();
-  };
+  });
 
   // custom_providers:（config.yaml の玄人設定。Hub UI に追加・編集の導線は無い）を
   // spawn の選択肢へ混ぜる。/api/info が返した一覧をネイティブ <select> の <option>
@@ -2092,6 +2079,14 @@ export function resetSpawnProviderOrder(): void {
       clearOllamaModelDefault();
     }
   }
+
+  // C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレット用の「開いていれば
+  // 何もしない」実体。openSpawnPanelForMode はトグルで閉じてしまうため、ここでは
+  // hidden を見てから開くときだけ呼ぶ。
+  _openSpawnPanelIfClosedImpl = () => {
+    if (!newSessionPanel.hidden) return;
+    void openSpawnPanelForMode(false);
+  };
 
   newSessionBtn.addEventListener('click', () => { openSpawnPanelForMode(false); });
   // C1: plan_orchestration-spawn-ui-exposure.md — 通常の起動フォームを共用しつつ、

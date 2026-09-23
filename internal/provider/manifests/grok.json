@@ -18,7 +18,8 @@
     "approval": "approval:grok-v1",
     "usage": "usage:grok-v1",
     "subscription": "subscription:grok-v1",
-    "permissions": "permissions:generic-v1"
+    "permissions": "permissions:generic-v1",
+    "subagents": "subagent:grok-v1"
   },
   "update": {
     "args": ["update"],

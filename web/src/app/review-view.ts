@@ -132,7 +132,7 @@ import { probe } from '../debug/probe.js';
 
       this.els = {};
       this._renderShell();
-      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
     }
 
     _renderShell() {
@@ -215,13 +215,13 @@ import { probe } from '../debug/probe.js';
       this.els.scope.addEventListener('change', (e: any) => {
         this.scope = e.target.value || 'worktree';
         this.selectedPath = null;
-        this.load().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+        this.load().catch((err: any) => this._showError(this._errorMessage(err)));
       });
       this.els.modeBtns.forEach((b: any) => {
         b.addEventListener('click', () => this._setViewMode(b.dataset.mode));
       });
       root.querySelector('[data-refresh]').addEventListener('click', () => {
-        this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+        this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
       });
       root.querySelector('[data-close]')?.addEventListener('click', () => {
         try { this.opts.onClose(); } catch (err) { console.warn('[ReviewView] onClose failed:', err); }
@@ -255,7 +255,10 @@ import { probe } from '../debug/probe.js';
             const res = await fetch(`${endpoint}?${params.toString()}`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok || data.ok === false) {
-              throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+              const err: any = new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+              // error コードを保持しておき、not_git_repo だけ専用文言に差し替える（_errorMessage）。
+              err.code = data && data.error;
+              throw err;
             }
             return data;
           },
@@ -347,13 +350,13 @@ import { probe } from '../debug/probe.js';
       if (String(this.sessionId) === String(newSid)) return;
       this.sessionId = newSid;
       this.scope = 'worktree';
-      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
     }
 
     setScope(turnNo: any) {
       const turn = Number(turnNo || 0);
       this.scope = turn > 0 ? `turn:${turn}` : 'worktree';
-      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
     }
 
     dispose() {
@@ -381,6 +384,15 @@ import { probe } from '../debug/probe.js';
       this.els.diffPane.innerHTML = `<div class="review-message error">${_esc(msg)}</div>`;
       if (this.els.tree) this.els.tree.innerHTML = '';
       if (this.els.stat) this.els.stat.textContent = '—';
+    }
+
+    // not_git_repo は Hub 側の生の git エラー文言（sanitizeGitErrMsg）をそのまま出さず、
+    // 「このフォルダは git 管理下にない」旨の案内に差し替える。それ以外はメッセージをそのまま使う。
+    _errorMessage(err: any): string {
+      if (err && err.code === 'not_git_repo') {
+        return _gt('review_not_git_repo', 'This folder is not tracked by git, so no diff can be shown.');
+      }
+      return err && err.message ? err.message : String(err);
     }
 
     async _loadTurns() {

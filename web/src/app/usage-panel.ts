@@ -13,6 +13,7 @@ import {
   type UsageWindowInput,
 } from './usage-limit.js';
 import { hasProviderCapability } from './provider-store.js';
+import { PROVIDER_ORDER_CHANGED_EVENT, sortByProviderOrder } from './provider-order.js';
 
 interface UsageWindow {
   used_percent?: number;
@@ -576,9 +577,41 @@ function bindUnavailableInfo(): void {
   });
 }
 
+// applyProviderOrderToPanel は各カラムの中だけで行を provider の並び順（provider-order.ts・
+// 「新しいセッション」の一覧と共有）に揃える。カラムをまたいでは動かさない（左=契約の残量 /
+// 右=取得不可は意味の区分）。並び順に無いもの（Ollama 等）は元の順のまま後ろに付く。
+// 契約の残量の行は renderProfiles / renderSkeleton が直後に .usage-profile-list を挿すので、
+// それも一緒に動かす。ローカル実行（LM Studio）は見出しの後ろにあり対象外。
+function applyProviderOrderToPanel(): void {
+  if (!panelRoot) return;
+  for (const col of Array.from(panelRoot.querySelectorAll<HTMLElement>('.usage-dropdown-col'))) {
+    const units: { id: string; nodes: HTMLElement[] }[] = [];
+    for (const anchor of Array.from(col.querySelectorAll<HTMLElement>(':scope > [data-usage-provider]'))) {
+      const nodes = [anchor];
+      const next = anchor.nextElementSibling;
+      if (next instanceof HTMLElement && next.classList.contains('usage-profile-list')) nodes.push(next);
+      units.push({ id: anchor.dataset.usageProvider || '', nodes });
+    }
+    for (const row of Array.from(col.querySelectorAll<HTMLElement>(':scope > .usage-dropdown-unavailable-row'))) {
+      const link = row.querySelector<HTMLElement>('a[id^="usage-link-"]');
+      units.push({ id: (link?.id || '').replace(/^usage-link-/, ''), nodes: [row] });
+    }
+    if (units.length < 2) continue;
+    // 並べ替える行は各カラムで連続しているので、先頭の位置へ新しい順で詰め直す。
+    const marker = document.createComment('usage-order');
+    col.insertBefore(marker, units[0].nodes[0]);
+    for (const unit of sortByProviderOrder(units, (u) => u.id)) {
+      for (const node of unit.nodes) col.insertBefore(node, marker);
+    }
+    marker.remove();
+  }
+}
+
 export function initUsagePanel(dropdown: HTMLElement): void {
   if (panelRoot === dropdown) return;
   panelRoot = dropdown;
+  applyProviderOrderToPanel();
+  document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, applyProviderOrderToPanel);
   bindUnavailableInfo();
   document.addEventListener('pointerdown', (event) => {
     if (!panelRoot || panelRoot.contains(event.target as Node)) return;

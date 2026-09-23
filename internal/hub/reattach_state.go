@@ -104,6 +104,15 @@ type reattachPreservedState struct {
 	doneMsgBuf            string
 	initialModelScanBytes int
 	initialModelScanDone  bool
+
+	// subagentBroadcastSignature is deliberately NOT part of this struct (子
+	// plan C3 「再接続時の送り直し」): leaving it out means the replacement
+	// session starts a fresh dedupe epoch, exactly like
+	// workflowBroadcastSignature/workflowLastBroadcastAt below.
+	subagentTurnStartedAt time.Time
+	subagentReaderState   any
+	subagentTree          *proto.SubagentTree
+	subagentRunningCount  int
 }
 
 func snapshotReattachStateLocked(ses *session) reattachPreservedState {
@@ -203,6 +212,11 @@ func snapshotReattachStateLocked(ses *session) reattachPreservedState {
 		doneMsgBuf:            ses.doneMsgBuf.String(),
 		initialModelScanBytes: ses.initialModelScanBytes,
 		initialModelScanDone:  ses.initialModelScanDone,
+
+		subagentTurnStartedAt: ses.subagentTurnStartedAt,
+		subagentReaderState:   ses.subagentReaderState,
+		subagentTree:          cloneSubagentTree(ses.subagentTree),
+		subagentRunningCount:  ses.subagentRunningCount,
 	}
 }
 
@@ -228,6 +242,11 @@ func stopReattachAsyncStateLocked(ses *session) {
 		ses.taskDetailTimer = nil
 	}
 	ses.taskDetailGeneration++
+	if ses.subagentTimer != nil {
+		ses.subagentTimer.Stop()
+		ses.subagentTimer = nil
+	}
+	ses.subagentGeneration++
 }
 
 func applyReattachPreservedStateLocked(dst *session, state reattachPreservedState) {
@@ -341,13 +360,33 @@ func applyReattachPreservedStateLocked(dst *session, state reattachPreservedStat
 	dst.doneMsgBuf.WriteString(state.doneMsgBuf)
 	dst.initialModelScanBytes = state.initialModelScanBytes
 	dst.initialModelScanDone = state.initialModelScanDone
+
+	dst.subagentTurnStartedAt = state.subagentTurnStartedAt
+	dst.subagentReaderState = state.subagentReaderState
+	dst.subagentTree = cloneSubagentTree(state.subagentTree)
+	dst.subagentRunningCount = state.subagentRunningCount
+	// dst.subagentBroadcastSignature is left at its zero value ("") on
+	// purpose, mirroring workflowBroadcastSignature/workflowLastBroadcastAt
+	// above: a fresh delivery epoch means any connected UI receives the
+	// preserved tree again once the poll chain resumes (子 plan C3
+	// 「再接続時の送り直し」; restartSubagentTreePollLocked in
+	// subagent_tree.go resumes that chain).
 }
 
 // restartReattachAsyncStateLocked restarts only the timer chains whose logical
 // state says they were active. Parser pointers and old generation numbers are
 // not reused.
 func (s *Server) restartReattachAsyncStateLocked(id int, ses *session, now time.Time) {
-	if ses == nil || ses.Provider != "claude" {
+	if ses == nil {
+		return
+	}
+	// Unlike the three Claude-only chains below, the subagent-tree poll is not
+	// gated on ses.Provider == "claude": eligibility (config / the provider
+	// definition's adapters.subagents key / a resolvable parent path) is
+	// re-checked reactively on the chain's own first tick, exactly as it is
+	// for a brand-new session's first poll (子 plan C3 「再接続時の送り直し」).
+	s.restartSubagentTreePollLocked(id, ses, now)
+	if ses.Provider != "claude" {
 		return
 	}
 	if ses.workflowVTProgress != nil && !ses.workflowVTProgress.Settled {

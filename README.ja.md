@@ -62,7 +62,7 @@ Terminal pane #1              Terminal pane #2
 
 Gemini CLI は意図的に対象外です。
 
-導入状況一覧（初回画面、および 設定 → AI CLI 連携）では、各 CLI のバージョンを確認し、その場で更新できます。実行するのはボタンを押したときだけで、Hub 起動時や定期実行では走りません。更新は各 provider の「バージョンと更新」設定に書かれたコマンドを実行し、実行前に確認ダイアログで実際のコマンドを見せます。実行中セッションがある CLI は、セッションが終わるまで更新できません。同梱の 7 本は既定の更新コマンドつきですが、Cursor Agent CLI と Command Code だけは既定で更新 OFF です（更新時に再ログインを求められることがあるため）。更新コマンドの変更や、追加した AI での更新の有効化は、設定 → AI CLI 連携 → 編集 → 「バージョンと更新」で行います。この機能が見えるのは Hub 自身が起動した、または `PATH` 上で見つけた CLI だけです。自分でターミナルを開いて動かしている CLI は対象外です。
+導入状況一覧（初回画面、および 設定 → AI CLI 連携）では、各 CLI のバージョンを確認し、その場で更新できます。実行するのはボタンを押したときだけで、Hub 起動時や定期実行では走りません。更新は各 provider の「バージョンと更新」設定に書かれたコマンドを実行し、実行前に確認ダイアログで実際のコマンドを見せます。実行中セッションがある CLI は、セッションが終わるまで更新できません。同梱の 7 本は既定の更新コマンドつきで、更新は既定で ON です（Cursor Agent CLI と Command Code は更新時に再ログインを求められることがあります）。更新コマンドの変更や、追加した AI での更新の有効化は、設定 → AI CLI 連携 → 編集 → 「バージョンと更新」で行います。この機能が見えるのは Hub 自身が起動した、または `PATH` 上で見つけた CLI だけです。自分でターミナルを開いて動かしている CLI は対象外です。
 
 ---
 
@@ -83,6 +83,7 @@ Gemini CLI は意図的に対象外です。
 - **生ログの参照ショートカット**: セッションの生ログ画面から、フルパスをコピーしたり、保存フォルダを OS のファイルマネージャで開いたりできる
 - **音声入力**: ブラウザ内蔵認識またはローカル Whisper でプロンプトを入力（Windows x64 では Whisper 管理インストール対応）
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
+- **作業終了通知**: デスクトップ通知と通知音は、承認待ちだけでなくセッションが作業を終えて入力待ちに戻ったときにも鳴る。セッションカードのベルで個別にミュートでき、Settings で全体を OFF にもできる
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）。新規セッションパネルの「最初に渡す指示（任意）」欄に文面を入れておくと、起動直後の CLI へそのまま届く
@@ -951,12 +952,14 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
   - 上部バー: アクティブセッションのプロバイダ・cwd、`↑最上部へ`（PTY バッファの先頭にスクロール）
   - 中央: xterm.js でリアルタイム描画される PTY 出力
   - 下部: 入力欄（複数行可）、添付・送信・スラッシュコマンドピッカー（`/clear`, `/model`, `/`）、auto mode 切替ヒント `shift+tab`
-- **タブ**: Terminal / チャット / 分割 / マルチ / Files / Git を同じメイン領域で切り替え。Files / Git は遅延ロードされ、Hub 再起動後の復元にも対応
+- **タブ**: Terminal / チャット / 分割 / マルチ / Files / Git / Review を同じメイン領域で切り替え。Files / Git / Review は遅延ロードされ、Hub 再起動後の復元にも対応
 - **チャット / 分割**: ライブ PTY ストリームからユーザー入力、AI 出力、承認、添付を会話形式に整形。分割表示ではターミナルと履歴を並べて確認可能
 - **マルチタブ**: 複数セッションをグリッドで表示し、フォーカス中ペインへ入力・リサイズ・承認 UI を連動
 - **承認アクションバー**: 承認待ちが発生すると入力欄の上に表示。単一質問はボタン、複数質問は縦積みの選択肢と「Submit all」でまとめて送信
+- **アクションバーを畳む**: `✕` でアクションバーを入力欄のすぐ上の 1 行の帯に畳み、帯を押すと開く。畳んでいる間はキー入力が端末へ送られ、承認は保留のまま
 - **Files タブ**: 左にファイルツリー、右に Markdown / コードプレビュー。パスコピー、OS で開く、移動、リネームなどをコンテキストメニューから実行可能
 - **Git タブ**: 読み取り専用の commit 履歴、ref 切替、commit 詳細、変更ファイル、diff プレビュー、コピー操作を提供。`Commit all` は Review 後にローカル commit のみ実行し、push はしない
+- **Review タブ**: 作業ツリーまたは AI の 1 ターン単位で per-file diff を表示し、Git タブと同じ `Commit all` / push を提供。Files タブの + メニューやチャットのターンの「Review」リンクからも開け、どの入口からでも同じタブが開く。セッションの cwd が git リポジトリでない場合は diff の代わりに案内文を表示する
 - **ターミナル直接入力との同期**: ターミナル側で `y` / `n` 等を直接タイプして承認を解決した場合、アクションバーは自動で消えます
 - **ファイル / 画像添付**: ペースト・D&D で添付エリアに置くと、送信時にローカルファイル化して PTY に inject されます
 - **ステータスバー（最下部）**: アクティブセッションのトークン・コスト・コンテキスト使用率などを 1 行で常時表示します。詳細は下記「ステータスバー（最下部）」を参照（設定パネルで表示 ON/OFF を切替可能）
@@ -1015,6 +1018,9 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `Ctrl+C` | PTY に SIGINT を送信（テキスト選択中はコピー） |
 | `Ctrl+D` | PTY に EOF を送信 |
 | `Ctrl+O` | Claude Code の折りたたみ内容を展開 |
+| `Ctrl+K` | コマンドパレットを開く（コマンド実行・セッション横断検索） |
+| `Alt+1..9` | 対応する番号のセッションへ切り替え |
+| `?` | キーボードショートカット一覧を開く |
 
 ---
 
@@ -1307,11 +1313,25 @@ Claude Code はこの設定に一度も触れていない場合、**端末幅が
 
 ### Claude Workflow journal のメタ情報
 
-Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript は読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。この journal 機能自体は subagent の transcript を読みません（transcript を読むサブエージェントの木は後述の別機能です）。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
 
 メインセッションの transcript から Workflow の taskId が解決できた場合、Hub は Claude Code の Workflow タスク出力ファイル（`%TEMP%/claude/<munge(cwd)>/<セッションUUID>/tasks/<taskId>.output` 等）も、そのワークフローが動いている間ポーリングします（`workflow.task_detail_enabled: true` が既定）。読み取るのは `workflowProgress` フィールドのみで、各エージェントのラベル・状態・直近のツール操作・要約プレビューを Workflow モーダルに表示します。script の戻り値本文（`result`）や `log()` 出力（`logs`）はどの構造体にもデコードされず、読みません。この詳細情報はダッシュボードのモーダルにのみ表示され、ログ出力・永続化・外部送信は行いません。無効化する場合は `workflow.task_detail_enabled: false` にしてください。無効時、または taskId が解決できない場合は、従来どおり集計バー/件数表示にフォールバックします。
 
 Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_completion_notify.enabled: true`）。payload に含むのはセッション名と `N/M agents` のような集計件数だけで、journal の result 本文や agent ID は含みません。
+
+### サブエージェントの木
+
+上記の Workflow journal とは別に、Hub は Workflow ポップアップの中に、subagent（Agent ツール / `spawn_agent` / `subagents`）の活動を「親の指示 → 子 → 孫」の木として表示できます。有効化されているセッションが対象で（`workflow.subagent_tree_enabled: true` が既定）、現時点で対応しているのは Claude Code・Codex・Grok です。
+
+Claude セッションでは、Hub はそのセッションの `subagents/` ディレクトリ配下にある子自身の `agent-<id>.meta.json` と `agent-<id>.jsonl` を読みます（親の PTY 出力は読みません）。ここから子の短い名前・種別・親/祖父の ID・深さを得て、各子の transcript は先頭と末尾だけを上限付きで読み、直近のツール呼び出しを取ります（ファイル全体は読みません）。完了したかどうかは、子の transcript の最後の行から推測するのではなく、親 transcript 自身が持つ tool-result と task-notification の記録から決めます。Workflow ツールの子（`agentType: "workflow-subagent"`）はここでは除外し、既存の Workflow journal 表示の側に残します。
+
+Codex セッションでは、生成された子は `CODEX_HOME/sessions/YYYY/MM/DD/` 配下に自分専用の rollout ファイルを持ちます。Hub はその日のディレクトリにある各 rollout の先頭行だけを読み（ファイル全体は読みません）、子のニックネーム/役割・親の thread id・深さを得ます。親と各子自身の rollout は、Claude の読み取りと同じ上限付きで先頭・末尾だけを読み、完了判定（`SubAgentActivity` の `item_completed` 記録）と直近のツール呼び出しを取ります。一度スキャンした過去日のディレクトリは以後スキャンし直さず、当日のディレクトリだけを変化があったときに再スキャンします。
+
+Grok セッションでは、生成された子は親自身のセッションファイルと同じ場所に `subagents/<id>/` ディレクトリを持ちますが、そこに入るのは（子が終わったときの）`meta.json` と `output.json` だけで、`events.jsonl` はそこには存在しません。Hub は親自身の `updates.jsonl`（上限付き、ファイル全体は読みません）から `subagent_spawned` / `subagent_finished` の出入りを取り、`subagent_spawned` を見た時点から `subagent_finished` または `subagents/<id>/meta.json` で確定するまでの間、その子を走行中として扱います（この間、その poll で新しい情報が無くても走行中のまま保ちます）。直近のツール呼び出しを出す場合は、`subagents/<id>/` 配下のファイルではなく、そのイベント自身が持つ `child_session_id` が指す**兄弟の**セッションディレクトリの `events.jsonl` から取ります。Grok の subagent は公式に 1 段までしか入れ子にならないため、ここに出る子はすべてセッション直下の子です。この読み取りを有効にしても、チャット欄自身の transcript の読み元は変わりません。
+
+読まない・送らないものは、プロンプト本文・ツールの結果・子自身の返答です。唯一の例外は「今何をしているか」の短い要約で、Claude ではツール呼び出しの入力のうち許可した鍵（`command` / `pattern` / `path` / `file_path`）の値だけを、Codex では `exec` ツール呼び出しのシェルコマンド文字列を使います。Grok では要約は出しません — Grok 自身のツール活動の記録にはツール名しか無く、要約できる引数・対象の項目がありません。どちらも 100 文字に切り詰め、それ以外の入力の鍵やツール呼び出しの形（Codex のエージェント間通信用 `send_message` / `wait` 等）はデコードする前に捨てるため要約には出ません。Workflow journal と同じく、このデータはそのセッションのダッシュボードのポップアップにのみ表示され（そのセッション自身の WebSocket 経由）、ログ出力・永続化・外部送信は一切行いません。無効化する場合は `workflow.subagent_tree_enabled: false` にしてください。
+
+自分で追加した provider の定義でも、`adapters.subagents` に `subagent:claude-v1` のような実装済みの鍵を書けば、同じ読み取りを使えます。ただし、その CLI が実際に subagent の記録を同じ形・同じ置き場所で書いている場合に限ります。鍵は読み取り方を選ぶだけで、別の記録形式へ変換するものではありません。
 
 ### ローカル instruction file への書き込み
 

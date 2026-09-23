@@ -64,7 +64,7 @@ Gemini CLI is intentionally out of scope.
 
 Want to run a CLI `many-ai-cli` does not wrap out of the box — including one it deliberately excludes here? You can register it yourself; see [Custom providers](#custom-providers-power-users) below.
 
-The install-status list (first-run screen, and Settings → AI CLI integrations) can check each CLI's version and update it from the Hub — on demand only, never on startup or on a schedule. Update runs the command from that provider's own "Version and update" settings, showing you the exact command in a confirmation dialog first; a CLI with a running session cannot be updated until the session ends. The bundled 7 providers ship with a default update command, except Cursor Agent CLI and Command Code, which default to update *off* because updating can ask you to log in again. Change any provider's update command, or turn it on for a CLI you added yourself, in Settings → AI CLI integrations → edit → *Version and update*. This only ever sees a CLI the Hub itself launched or found on `PATH` — a copy running in a terminal window you opened yourself is invisible to it.
+The install-status list (first-run screen, and Settings → AI CLI integrations) can check each CLI's version and update it from the Hub — on demand only, never on startup or on a schedule. Update runs the command from that provider's own "Version and update" settings, showing you the exact command in a confirmation dialog first; a CLI with a running session cannot be updated until the session ends. The bundled 7 providers ship with a default update command and update turned on (updating Cursor Agent CLI or Command Code can occasionally ask you to log in again). Change any provider's update command, or turn it on for a CLI you added yourself, in Settings → AI CLI integrations → edit → *Version and update*. This only ever sees a CLI the Hub itself launched or found on `PATH` — a copy running in a terminal window you opened yourself is invisible to it.
 
 ---
 
@@ -85,6 +85,7 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 - **Raw-log shortcuts** — from a session's raw transcript, copy its full path or open the containing folder in the system file manager
 - **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
+- **Finished-run notifications** — desktop notification and sound also fire when a session finishes a run and goes back to idle, not only for approvals; mute it per session with the bell on its card, or turn it off entirely in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`), optionally with an initial instruction typed into the new-session panel so the CLI starts with a task already in hand
@@ -1000,12 +1001,14 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
   - Bottom: multi-line input box, attach / send buttons, slash-command picker (`/clear`, `/model`, `/`), and the auto-mode toggle hint `shift+tab`.
-- **Tabs**: Terminal, Chat, Split, Multi, Files, and Git tabs share the main area. Files and Git tabs are loaded lazily and can be restored after restart.
+- **Tabs**: Terminal, Chat, Split, Multi, Files, Git, and Review tabs share the main area. Files, Git, and Review tabs are loaded lazily and can be restored after restart.
 - **Chat / Split**: chat view extracts user turns, AI output, approvals, and attachments from the live PTY stream. Split view keeps chat history beside the terminal.
 - **Multi tab**: shows several sessions in a grid and routes focus, input, resize, and approval UI to the active pane.
 - **Approval action bar**: appears above the input when an approval is pending. Single prompts use buttons; multi-question prompts render stacked choices with "Submit all".
+- **Fold the action bar**: `✕` folds the action bar into a one-line strip just above the input; click the strip to open it again. While it is folded, your keys go to the terminal, and the approval stays pending.
 - **Files tab**: left tree + right preview for project files. Markdown/code can be previewed, paths can be copied, and file move/rename actions are available from the context menu.
 - **Git tab**: read-only commit log, ref selector, commit detail, changed files, diff preview, copy actions, and a guarded Commit all modal for local commits.
+- **Review tab**: per-file diff of the working tree or a single AI turn, with the same Commit all / push actions as the Git tab. Also reachable from the Files tab's + menu and from a chat turn's "Review" link — all three open the same tab. Shows a plain message instead of a diff when the session's folder is not a git repository.
 - **Sync with terminal input**: if you resolve the prompt by typing `y` / `n` directly in the terminal, the action bar disappears automatically.
 - **File and image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
 - **Status bar (bottom)**: a single always-on line showing the active session's tokens, cost, context usage, and more. See [Status bar (bottom)](#status-bar-bottom) below (toggle visibility from the settings panel).
@@ -1063,6 +1066,9 @@ A single always-on line at the bottom of the screen shows the status of one acti
 | `Ctrl+C` | Send SIGINT to PTY (or copy selected text) |
 | `Ctrl+D` | Send EOF to PTY |
 | `Ctrl+O` | Expand Claude Code folded content |
+| `Ctrl+K` | Open the command palette (run commands, cross-session search) |
+| `Alt+1..9` | Switch to the matching numbered session |
+| `?` | Open the keyboard shortcut list |
 
 ---
 
@@ -1356,11 +1362,25 @@ To close it, send `/diff` in that session (the same command brings it back). Mak
 
 ### Claude workflow journal metadata
 
-For Claude sessions, the Hub polls local `journal.jsonl` files under `~/.claude/projects/` while a workflow is detected (`workflow.journal_enabled: true` by default). It decodes only the event `type` and `agentId` needed for aggregate started/completed counts. The `result` body is not retained, logged, forwarded, or persisted, and the Hub does not read subagent transcript files. Journal-derived state stays in memory and remains local. Set `workflow.journal_enabled: false` to disable this reader and use terminal-display detection only.
+For Claude sessions, the Hub polls local `journal.jsonl` files under `~/.claude/projects/` while a workflow is detected (`workflow.journal_enabled: true` by default). It decodes only the event `type` and `agentId` needed for aggregate started/completed counts. The `result` body is not retained, logged, forwarded, or persisted, and this journal reader does not read subagent transcript files (the subagent tree, described below, is a separate feature that does). Journal-derived state stays in memory and remains local. Set `workflow.journal_enabled: false` to disable this reader and use terminal-display detection only.
 
 When a `Workflow` task ID can be resolved from the main session transcript, the Hub also polls the Claude Code Workflow task output file (`%TEMP%/claude/<munged-cwd>/<session-uuid>/tasks/<taskId>.output` on Windows; the OS temp directory on other platforms) while the workflow is active (`workflow.task_detail_enabled: true` by default). It decodes only the `workflowProgress` field to show each agent's label, state, most recent tool action, and a short result preview in the workflow modal. The script's return value (`result`) and `log()` output (`logs`) are never decoded into any struct and are not read. This detail is shown only in the dashboard modal — it is not logged, persisted, or sent externally. Set `workflow.task_detail_enabled: false` to disable this reader; when disabled, or when the task ID cannot be resolved, the modal falls back to the aggregate bar/count display.
 
 Workflow-completion Web Push is a separate opt-in (`user_prefs.workflow_completion_notify.enabled: true`). Its payload contains only the session name and aggregate count such as `N/M agents`; it does not contain journal result text or agent IDs.
+
+### Subagent tree
+
+Separately from the Workflow journal above, the Hub can also show a "parent instruction → child → grandchild" tree of subagent (Agent-tool / `spawn_agent` / `subagents`) activity in the Workflow popup, for sessions where this is enabled (`workflow.subagent_tree_enabled: true` by default). Today this covers Claude Code, Codex, and Grok.
+
+For a Claude session, the Hub reads the child's own `agent-<id>.meta.json` and `agent-<id>.jsonl` files under the session's `subagents/` directory (never the parent's PTY output) to learn each child's short name, type, parent/grandparent id, and depth, and reads only the head and tail of each child transcript (bounded, not the whole file) to find its most recent tool call. Completion is decided from the parent transcript's own tool-result and task-notification records, not by guessing from the child's last line. Workflow-tool children (`agentType: "workflow-subagent"`) are excluded here — they stay in the existing Workflow journal display above.
+
+For a Codex session, a spawned child writes its own separate rollout file under `CODEX_HOME/sessions/YYYY/MM/DD/`. The Hub reads only the first line of each rollout in that day's directory (never the whole file) to learn a child's nickname/role, its parent's thread id, and its depth, and separately reads a bounded head/tail of the parent's and each child's own rollout — never more than the same budget the Claude reader uses — to resolve completion (`SubAgentActivity` `item_completed` records) and the child's most recent tool call. Only past day directories that have never been scanned before are skipped on later polls; today's directory is re-scanned when it changes.
+
+For a Grok session, a spawned child gets its own `subagents/<id>/` directory next to the parent's own session files, but that directory only ever holds `meta.json` (once the child finishes) and `output.json` — never an `events.jsonl`. The Hub reads the parent's own `updates.jsonl` (bounded, never the whole file) for `subagent_spawned`/`subagent_finished` lifecycle events; a child is "running" from the moment its `subagent_spawned` event is seen until a `subagent_finished` event or `subagents/<id>/meta.json` resolves it, and it stays running across polls even when nothing new appears in that window. The child's own most recent tool call, if shown at all, comes from `events.jsonl` in the *sibling* session directory the event's own `child_session_id` names — not from a file under `subagents/<id>/`. Grok subagents nest one level deep only, so every node here is a direct child of the session. Enabling this reader does not change where the chat tab's own transcript comes from.
+
+What is never read or sent: prompt text, tool results, and the child's own reply. The one exception is a short "what is it doing" summary: for Claude, built only from an allow-listed subset of a tool call's own input (`command` / `pattern` / `path` / `file_path`); for Codex, the shell command string of an `exec` tool call; for Grok, nothing — its own tool-activity events carry a tool name only, with no argument or target field to summarize. Either is truncated to 100 characters, and any other input key or tool call shape (e.g. Codex's inter-agent `send_message`/`wait` calls) is discarded before it is even decoded, so it never reaches a summary. As with the Workflow journal, this data is shown only in the dashboard popup for that session (over the session's own WebSocket) and is never logged, persisted, or sent anywhere else. Set `workflow.subagent_tree_enabled: false` to disable this reader entirely.
+
+If you add a custom provider definition, you can opt it into this same reader by setting its `adapters.subagents` to an already-implemented key such as `subagent:claude-v1` — but only when that CLI actually writes its subagent records in the same shape and location Claude Code does; the key selects a reader, it does not translate a different record format.
 
 ### Local instruction file writes
 

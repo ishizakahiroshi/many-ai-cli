@@ -7,6 +7,13 @@ import {
   type CliInstallStatus,
 } from './cli-availability.js';
 import { fetchInstallLinkDefaults, missingCliRowsHtml, mountCliMaintenance, type CliMaintenanceHandle } from './cli-maintenance.js';
+import {
+  PROVIDER_ORDER_CHANGED_EVENT,
+  loadProviderOrder,
+  mergeProviderSubsetOrder,
+  saveProviderOrder,
+  sortByProviderOrder,
+} from './provider-order.js';
 import { loadProviderSummaries } from './provider-store.js';
 import { providerIconHtml } from './session-list.js';
 import { escapeHtml, showToast } from './util.js';
@@ -19,6 +26,9 @@ let paintGeneration = 0;
 // 新しいものを作る（root ごと innerHTML を書き換えるため、古いハンドルは残しても
 // DOM は既に無い — が setInterval は残るので明示的に destroy する）。
 let maintenanceHandle: CliMaintenanceHandle | null = null;
+// 導入状況一覧の並び順は「新しいセッション」の provider 一覧と共有する（provider-order.ts）。
+// 並べ替えを保存し直すときに全体の順へ書き戻すため、最後に描いた一覧を覚えておく。
+let shownStatuses: CliInstallStatus[] = [];
 
 /**
  * Procedure for sharing one skills shelf and one canonical rule file across CLIs.
@@ -42,10 +52,17 @@ function renderInstallStatusList(statuses: CliInstallStatus[]): string {
   return `<div class="zero-session-cli-maintenance-slot" data-zero-cli-maintenance></div>${missingCliRowsHtml(statuses.filter((s) => !s.installed))}`;
 }
 
-function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
+function saveInstalledOrder(installedIds: string[]): void {
+  const known = shownStatuses.map((s) => s.id);
+  saveProviderOrder(mergeProviderSubsetOrder(loadProviderOrder(), known, installedIds));
+}
+
+function renderUsageGuide(unsorted: CliInstallStatus[] | null): void {
   if (!root) return;
   maintenanceHandle?.destroy();
   maintenanceHandle = null;
+  const statuses = unsorted ? sortByProviderOrder(unsorted, (s) => s.id) : null;
+  shownStatuses = statuses || [];
   root.className = 'zero-session';
   // 広い画面では手順（左）と導入状況（右）を並べ、狭い画面では手順を 1 行に畳んで
   // リンク・畳みボタンの下に導入状況を出す（どちらもスクロールせずに更新一覧が見えるようにするため）。
@@ -72,7 +89,19 @@ function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
     </section>`;
   bindUsageGuideButtons();
   const slot = statuses ? root.querySelector<HTMLElement>('[data-zero-cli-maintenance]') : null;
-  if (slot) maintenanceHandle = mountCliMaintenance(slot, statuses!.filter((s) => s.installed));
+  if (slot) {
+    maintenanceHandle = mountCliMaintenance(slot, statuses!.filter((s) => s.installed), { onReorder: saveInstalledOrder });
+  }
+}
+
+// 並び順が変わったら（ここで並べ替えた・「新しいセッション」で並べ替えた・設定で既定に戻した）
+// 行を描き直す。バージョン確認や更新ジョブの状態は mountCliMaintenance が持ったまま残す。
+function applyProviderOrder(): void {
+  if (!root?.isConnected || !shownStatuses.length) return;
+  shownStatuses = sortByProviderOrder(shownStatuses, (s) => s.id);
+  maintenanceHandle?.reorder(shownStatuses.filter((s) => s.installed));
+  const missingList = root.querySelector('.zero-session-install-list');
+  if (missingList) missingList.outerHTML = missingCliRowsHtml(shownStatuses.filter((s) => !s.installed));
 }
 
 function bindUsageGuideButtons(): void {
@@ -93,7 +122,8 @@ function renderMissingGuide(entries: CliInstallStatus[]): void {
   if (!root) return;
   maintenanceHandle?.destroy();
   maintenanceHandle = null;
-  const items = entries.map((entry) => {
+  shownStatuses = [];
+  const items = sortByProviderOrder(entries, (entry) => entry.id).map((entry) => {
     const link = entry.installUrl
       ? `<a class="zero-session-cli-install-link" href="${escapeHtml(entry.installUrl)}" target="_blank" rel="noopener">${t('zero_session_install_link_label')}</a>`
       : '';
@@ -203,4 +233,5 @@ if (typeof document !== 'undefined') {
   document.addEventListener('i18n-ready', () => {
     if (root?.isConnected) void paintEmptyState();
   });
+  document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, applyProviderOrder);
 }

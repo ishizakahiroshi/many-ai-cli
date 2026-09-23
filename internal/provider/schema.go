@@ -103,6 +103,12 @@ type AdapterRefs struct {
 	Usage        string `json:"usage,omitempty"`
 	Subscription string `json:"subscription,omitempty"`
 	Permissions  string `json:"permissions,omitempty"`
+	// Subagents selects which registered subagent:* reader (see
+	// subagent_adapter.go) builds this provider's subagent tree
+	// (docs/local/plan_subagent-tree-popup.md 方針 2). A provider whose own
+	// subagent records live in the same place and format as an existing
+	// reader can just point here — it does not need a reader of its own.
+	Subagents string `json:"subagents,omitempty"`
 }
 
 type Layers struct {
@@ -141,6 +147,12 @@ func DefaultAdapterCatalog() AdapterCatalog {
 		"usage:claude-v1", "usage:codex-v1", "usage:opencode-v1", "usage:grok-v1",
 		"subscription:claude-v1", "subscription:codex-v1", "subscription:opencode-v1", "subscription:grok-v1",
 		"launch:generic-v1", "permissions:generic-v1",
+		// subagent: readers are additive per provider. Each key here must be
+		// registered in subagent_adapter.go
+		// (TestAllCatalogSubagentAdaptersAreRegistered) and have a matching
+		// reader in internal/hub/subagent_tree.go's key → reader table (親 C3/C4
+		// の完了条件).
+		"subagent:claude-v1", "subagent:codex-v1", "subagent:grok-v1",
 	)
 }
 
@@ -162,6 +174,7 @@ type CapabilitySummary struct {
 	Usage        bool `json:"usage"`
 	Subscription bool `json:"subscription"`
 	Permissions  bool `json:"permissions"`
+	Subagents    bool `json:"subagents"`
 }
 
 type EffectiveDefinition struct {

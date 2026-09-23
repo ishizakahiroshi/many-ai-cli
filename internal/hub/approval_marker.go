@@ -8,7 +8,6 @@ import (
 
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
-	"many-ai-cli/internal/sessionstore"
 )
 
 // approvalMarkerSuppressNotifyInterval は破損ブロック抑止の告知を UI へ送る最小間隔。
@@ -168,7 +167,7 @@ func (s *Server) maybeBroadcastApprovalMarkerFrom(id int, marker *approvalMarker
 	// 構造が壊れたブロックは配信しない。
 	// VT ミラーの乖離で選択肢行が欠けたまま両端マーカーだけ揃うことがあり、そのまま送ると
 	// Web に「選択肢が 3 から始まる承認パネル」が出る（bugfix_codex-approval-marker-vt-wrap-corruption_2026-07-31.md）。
-	// ここで approvalMarkerSig を書き換えないのが要点 — 書き換えると後続の正常なブロックが
+	// ここで保留中の記録（pendingApproval）を書き換えないのが要点 — 書き換えると後続の正常なブロックが
 	// dedupe で潰れて承認が二度と出なくなる。
 	if reason := classifyApprovalMarkerBlock(marker.Block); reason != "" {
 		s.sessionsMu.Lock()
@@ -220,55 +219,7 @@ func (s *Server) maybeBroadcastApprovalMarkerFrom(id int, marker *approvalMarker
 		return false
 	}
 
-	s.sessionsMu.Lock()
-	ses := s.sessions[id]
-	if ses == nil {
-		s.sessionsMu.Unlock()
-		return false
-	}
-	provider := ses.Provider
-	candidateIdentity := approvalMarkerCandidateIdentity(provider, marker.Block)
-	candidateKey := candidateIdentity.key
-	sourceEpoch, answered := approvalCandidateEpochLocked(ses, candidateKey)
-	if answered || (ses.approvalMarkerCandidateKey == candidateKey &&
-		ses.approvalMarkerSourceEpoch == sourceEpoch) {
-		s.sessionsMu.Unlock()
-		return false
-	}
-	ses.approvalMarkerSig = marker.Sig
-	ses.approvalMarkerCandidateKey = candidateKey
-	ses.approvalMarkerCandidateShape = candidateIdentity.shape
-	ses.approvalMarkerSourceEpoch = sourceEpoch
-	s.sessionsMu.Unlock()
-
-	// 台帳へ記録するのは配信するものだけ。構造が壊れて抑止したブロックは上で return
-	// しているので、ここへは来ない（壊れた選択肢を後から復元させないため）。
-	// 選択肢は解かずブロック原文を持つ（解釈器はブラウザ側の 1 本に保つ）。
-	if s.sessionStore != nil {
-		s.sessionStore.StoreApprovalDetected(sessionstore.ApprovalDetected{
-			LiveSessionID: id,
-			Sig:           marker.Sig,
-			Source:        source,
-			Kind:          "marker",
-			Provider:      provider,
-			Block:         marker.Block,
-			CandidateKey:  candidateKey,
-			SourceEpoch:   sourceEpoch,
-			DetectedAt:    detectedAt,
-		})
-	}
-
-	s.broadcast(proto.Message{
-		Type:                   "approval_marker",
-		SessionID:              id,
-		Provider:               provider,
-		ApprovalSig:            marker.Sig,
-		ApprovalCandidateKey:   candidateKey,
-		ApprovalCandidateShape: candidateIdentity.shape,
-		ApprovalSourceEpoch:    sourceEpoch,
-		ApprovalSource:         source,
-		Block:                  marker.Block,
-		DetectedAt:             detectedAt.Format(time.RFC3339),
-	})
-	return true
+	// 構造が壊れて抑止したブロックは上で return しているので、ここから先は記録を開く。
+	// 開き方・台帳・通知は文章の質問と共通（approval_text_question.go の openTextQuestion）。
+	return s.openTextQuestion(id, &textQuestion{Kind: approvalKindMarker, Block: marker.Block, Sig: marker.Sig}, detectedAt, source)
 }

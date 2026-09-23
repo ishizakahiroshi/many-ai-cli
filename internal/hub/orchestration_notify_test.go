@@ -190,7 +190,7 @@ func TestOrchestrationEventBlockersAndProviderScope(t *testing.T) {
 	}{
 		{name: "awaiting user", session: &session{Provider: "claude", Activity: SessionActivity{OutputIdle: true, AwaitingUser: true}}, blocked: true},
 		{name: "awaiting approval", session: &session{Provider: "claude", Activity: SessionActivity{OutputIdle: true, AwaitingApproval: true}}, blocked: true},
-		{name: "approval visible", session: &session{Provider: "claude", Activity: idle, approvalVisible: true}, blocked: true},
+		{name: "approval record open", session: &session{Provider: "claude", Activity: idle, pendingApproval: testNativeRecord("sig-open", "", 0)}, blocked: true},
 		{name: "initial injection", session: &session{Provider: "claude", Activity: idle, initialInjectPending: true}, blocked: true},
 		{name: "workflow active", session: &session{Provider: "claude", Activity: SessionActivity{WorkflowActive: true}}, blocked: true},
 		{name: "codex modal", session: codexSession("Update available! Press enter to continue"), blocked: true},

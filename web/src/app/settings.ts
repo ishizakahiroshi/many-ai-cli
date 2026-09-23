@@ -1,8 +1,9 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
+import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
@@ -25,7 +26,6 @@ import {
   type ThemeMode,
 } from './theme-tokens.js';
 import { defaultKnobs, findCustomTheme, loadCustomThemes, saveCustomThemes } from './custom-themes.js';
-import { providerApprovalTriggers } from './approval.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
@@ -204,6 +204,28 @@ async function buildSegmentToggles(): Promise<void> {
   }
 }
 
+// ---- 作業終了（running → standby）通知トグル ----
+// user_prefs へは同期しない device-local 設定なので、done-summary-notify-toggle と
+// 違って read-modify-write の PUT は不要（localStorage への setTurnEndNotifyEnabled
+// だけで完結する）。子 plan: plan_ux-notify-palette-review_c1_notify.md 内部 C2。
+
+export function updateTurnEndNotifyToggle(enabled: boolean): void {
+  const toggle = document.getElementById('turn-end-notify-enabled') as HTMLInputElement | null;
+  if (toggle) toggle.checked = enabled;
+}
+
+let _turnEndNotifyToggleAttached = false;
+export function attachTurnEndNotifyToggle(): void {
+  if (_turnEndNotifyToggleAttached) return;
+  const toggle = document.getElementById('turn-end-notify-enabled') as HTMLInputElement | null;
+  if (!toggle) return;
+  _turnEndNotifyToggleAttached = true;
+  toggle.checked = isTurnEndNotifyEnabled();
+  toggle.addEventListener('change', () => {
+    setTurnEndNotifyEnabled(toggle.checked);
+  });
+}
+
 // ---- タスク完了サマリー通知トグル ----
 
 export function updateDoneSummaryNotifyToggle(enabled: boolean): void {
@@ -334,11 +356,7 @@ export function showDesktopApprovalNotification(sessionId) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const sess = sessions.get(sessionId);
   if (!sess) return;
-  const isCurrentVisible =
-    document.visibilityState === 'visible' &&
-    sessionId === activeSessionId &&
-    !document.hidden;
-  if (isCurrentVisible) return;
+  if (isSessionCurrentlyViewed(sessionId)) return;
   const provider = providerDisplayName(sess.provider) || sess.provider || '';
   const title = sess.label ? `${provider} #${sessionId} [${sess.label}]` : `${provider} #${sessionId}`;
   const bodySource = sess.last_message || sess.first_message || sess.cwd || '';
@@ -347,6 +365,58 @@ export function showDesktopApprovalNotification(sessionId) {
     const n = new Notification(title, {
       body,
       tag: `many-ai-cli-approval-${sessionId}`,
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      requireInteraction: false,
+    });
+    n.onclick = () => {
+      window.focus();
+      activateSession(sessionId);
+      n.close();
+    };
+  } catch (_) {}
+}
+
+// 表示中タブで今まさに見ているセッションかどうか。showDesktopApprovalNotification が
+// 内々に使っていた判定を切り出し、作業終了通知（shouldNotifyTurnEnd の入力）とも
+// 共有する。
+export function isSessionCurrentlyViewed(sessionId: number): boolean {
+  return document.visibilityState === 'visible' && sessionId === activeSessionId && !document.hidden;
+}
+
+// 完了サマリー本文の先頭 1 文だけを取り出す。日本語の句点、英語のピリオド/感嘆符/
+// 疑問符のいずれかで区切る。区切りが見つからなければ全文を返す（呼び出し側で長さを
+// 絞る）。
+function firstSentenceOf(text: string): string {
+  const trimmed = String(text || '').trim();
+  const m = trimmed.match(/^[^。.!?！？]*[。.!?！？]/);
+  return (m ? m[0] : trimmed).trim();
+}
+
+// ---- 作業終了（running → standby）通知 ----
+// 子 plan: docs/local/plan_ux-notify-palette-review_c1_notify.md 内部 C2。
+// showDesktopApprovalNotification と同じ形。tag だけ別にして、承認通知とは別枠で
+// 通知が積み上がる/置き換わるようにする。
+export function showDesktopTurnEndNotification(sessionId: number, runningStartedAt?: number): void {
+  if (!desktopNotificationsEnabled()) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const sess = sessions.get(sessionId);
+  if (!sess) return;
+  if (isSessionCurrentlyViewed(sessionId)) return;
+  const provider = providerDisplayName(sess.provider) || sess.provider || '';
+  const title = sess.label ? `${provider} #${sessionId} [${sess.label}]` : `${provider} #${sessionId}`;
+  // 完了サマリーは会話だけのターンでは届かないことがあり、届くときも状態の変化より
+  // 遅れることがある（未確認）。今回の running 開始より新しいサマリーだけを使う。
+  const summary = getDoneSummary(sessionId);
+  const summaryIsFresh = !!summary && runningStartedAt !== undefined && Date.parse(summary.at || '') >= runningStartedAt;
+  const summaryText = summaryIsFresh ? firstSentenceOf(summary.text) : '';
+  const bodySource = summaryText || sess.last_message || '';
+  const prefix = t('turn_end_notification_prefix');
+  const body = (bodySource ? `${prefix} ${bodySource}` : prefix).replace(/\s+/g, ' ').trim().slice(0, 160);
+  try {
+    const n = new Notification(title, {
+      body,
+      tag: `many-ai-cli-turn-end-${sessionId}`,
       icon: '/icon.svg',
       badge: '/icon.svg',
       requireInteraction: false,
@@ -1323,6 +1393,39 @@ function syncSettingsPanelButton(): void {
 // =============================================================================
 const SETTINGS_IA_LEVEL_KEY = 'many-ai-cli.settings-level';
 
+// C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレットの「設定を開く」
+// コマンド用。initSettingsInformationArchitecture() の中で定義される節オープン処理
+// （openDeepLink と共有）を、ここへ差し込んでおく。
+let _openSettingsSectionImpl: ((sectionId?: string) => void) | null = null;
+
+/**
+ * 指定した設定セクション（data-section の値。例: "notify-sound" / "approval-hub"）を
+ * 開く。まず `#settings-btn` の click を模して開く（パネルが既に開いているときは
+ * 模さない — #settings-btn 自身の click ハンドラは hidden === true を見て開閉を
+ * トグルするため、開いている状態で click するとむしろ閉じてしまう）。これにより
+ * app.ts 側の `#settings-btn` click ハンドラが行う設定読み込み（通知音・承認設定等）
+ * を通してから節を開ける。節を開く処理そのものは openDeepLink と共有する。
+ */
+export function openSettingsSection(sectionId: string): void {
+  const panel = document.getElementById('settings-panel') as HTMLElement | null;
+  const btn = document.getElementById('settings-btn') as HTMLElement | null;
+  if (panel && panel.hidden && btn) {
+    btn.click();
+  } else {
+    setSettingsPanelOpen(true);
+  }
+  if (_openSettingsSectionImpl) {
+    _openSettingsSectionImpl(sectionId);
+    return;
+  }
+  // フォールバック: IA 未初期化（DOM 不足）でも <details> だけは開く。
+  const section = document.querySelector<HTMLDetailsElement>(`.settings-section[data-section="${CSS.escape(sectionId)}"]`);
+  if (section) {
+    section.open = true;
+    requestAnimationFrame(() => section.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
+}
+
 function initSettingsInformationArchitecture(): void {
   const panel = document.getElementById('settings-panel');
   const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
@@ -1370,11 +1473,9 @@ function initSettingsInformationArchitecture(): void {
   search.addEventListener('input', apply);
   document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(apply));
 
-  const openDeepLink = () => {
-    const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
-    if (!match) return;
+  // C3: #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を開く本体。
+  const openSection = (sectionId?: string) => {
     setSettingsPanelOpen(true);
-    const sectionId = match[1];
     if (!sectionId) { apply(); return; }
     const section = sections.find((item) => item.dataset.section === sectionId);
     if (!section) return;
@@ -1387,8 +1488,14 @@ function initSettingsInformationArchitecture(): void {
       (section.querySelector('input, select, button') as HTMLElement | null)?.focus();
     });
   };
+  const openDeepLink = () => {
+    const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
+    if (!match) return;
+    openSection(match[1]);
+  };
   window.addEventListener('hashchange', openDeepLink);
   requestAnimationFrame(() => { apply(); openDeepLink(); });
+  _openSettingsSectionImpl = openSection;
 }
 
 // データ削除は確認ダイアログを通過しても、操作名の入力が一致するまで実行しない。
@@ -2376,22 +2483,6 @@ window.approvalPatternsUI = (function () {
     } catch (e) {
       console.warn('approval profiles load failed', e);
     }
-    try {
-      const res = await fetch(`/api/approval-patterns?token=${token}`);
-      if (res.ok) {
-        const data = await res.json();
-        const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
-        providerApprovalTriggers.claude = norm(data.claude);
-        providerApprovalTriggers.codex  = norm(data.codex);
-        providerApprovalTriggers.copilot = norm(data.copilot);
-        providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
-        providerApprovalTriggers.grok = norm(data.grok);
-        providerApprovalTriggers['command-code'] = norm(data['command-code']);
-        providerApprovalTriggers.common = norm(data.common);
-      }
-    } catch (e) {
-      console.warn('approval patterns load failed', e);
-    }
   }
 
   async function fetchProfileList(provider, profile) {
@@ -2464,10 +2555,6 @@ window.approvalPatternsUI = (function () {
         body: JSON.stringify(cache[provider].custom),
       });
       if (!res.ok) throw new Error('http ' + res.status);
-      if (activeProfiles[provider] === 'custom') {
-        const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-        providerApprovalTriggers[provider] = norm(cache[provider].custom);
-      }
       showToast(t('settings_approval_patterns_saved'));
     } catch (e) {
       console.warn('approval patterns save failed', e);
@@ -2514,9 +2601,6 @@ window.approvalPatternsUI = (function () {
       });
       if (!res.ok) throw new Error('http ' + res.status);
       activeProfiles[provider] = profile;
-      const list = (cache[provider] && cache[provider][profile]) || [];
-      const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-      providerApprovalTriggers[provider] = norm(list);
       render();
     } catch (e) {
       console.warn('approval profile switch failed', e);
@@ -2559,12 +2643,6 @@ window.approvalPatternsUI = (function () {
     async onOfficialUpdated(providers) {
       if (!Array.isArray(providers) || providers.length === 0) return;
       await Promise.all(providers.map(p => cache[p] ? loadProvider(p) : Promise.resolve()));
-      for (const p of providers) {
-        if (activeProfiles[p] === 'official') {
-          const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-          providerApprovalTriggers[p] = norm(cache[p].official);
-        }
-      }
       render();
     },
   };
@@ -2616,8 +2694,8 @@ export async function loadSlashCmdSources() {
 
 // ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
 // セッション毎の表示モード (D13: in-memory, リロードで初期化)
-export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
-// Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
+export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git' | 'review'
+// Files/Git/Review の遅延ロード状態 (sid -> Set<'files'|'git'|'review'>)
 export const sessionLazyLoaded = new Map();
 
 // タブ名の正本は project-view-memory.ts の VALID_TAB_NAME_LIST（DOM を持たないので
@@ -2702,10 +2780,11 @@ export function maybeFireLockedModeToast(sid, requestedMode) {
   showToast(tfn('toast_locked_mode_switched', { mode: modeLabel }));
 }
 
-// Files/Git のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
+// Files/Git/Review のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
 export function refreshLazyTabClasses(sid) {
-  const filesBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
-  const gitBtn   = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
+  const filesBtn  = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
+  const gitBtn    = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
+  const reviewBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="review"]');
   if (filesBtn) {
     const loaded = isTabLazyLoaded(sid, 'files');
     filesBtn.classList.toggle('lazy', !loaded);
@@ -2715,6 +2794,11 @@ export function refreshLazyTabClasses(sid) {
     const loaded = isTabLazyLoaded(sid, 'git');
     gitBtn.classList.toggle('lazy', !loaded);
     gitBtn.classList.toggle('loaded', loaded);
+  }
+  if (reviewBtn) {
+    const loaded = isTabLazyLoaded(sid, 'review');
+    reviewBtn.classList.toggle('lazy', !loaded);
+    reviewBtn.classList.toggle('loaded', loaded);
   }
 }
 
@@ -2873,7 +2957,7 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history');
     area.classList.add('mode-approval');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'approval');
@@ -2900,7 +2984,7 @@ export function setActiveTab(sid, name) {
     if (mgr?.picker) mgr.picker.hide();
     if (prevMultiOpen && mgr) mgr.teardown();
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
     area.classList.add('mode-orchestration');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(button => button.classList.toggle('active', (button as HTMLElement).dataset.tab === name));
     window.renderOrchestrationDashboard?.();
@@ -2946,7 +3030,7 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
 
   // terminal / chat / split / files / git / history は帯を出すタブ。
@@ -2957,9 +3041,9 @@ export function setActiveTab(sid, name) {
     b.classList.toggle('active', b.dataset.tab === name);
   });
 
-  // D10: Files/Git は初回クリックで FilesTabManager に開かせる
+  // D10: Files/Git/Review は初回クリックで FilesTabManager に開かせる
   // FilesTabManager.setActive が再帰的に setActiveTab を呼ぶため再帰防止フラグで守る
-  if ((name === 'files' || name === 'git') && !_setActiveTabRecursion) {
+  if ((name === 'files' || name === 'git' || name === 'review') && !_setActiveTabRecursion) {
     _setActiveTabRecursion = true;
     try { handleLazyTabOpen(targetSid, name); }
     finally { _setActiveTabRecursion = false; }
@@ -2992,9 +3076,9 @@ export function setActiveTab(sid, name) {
   }
 }
 
-// D10: Files/Git タブを初回クリックで開く (および既ロード時の再アクティブ化)
-// openFilesTab / openGitTab は idempotent (既存タブがあれば再利用) なので、
-// セッション切替で .active が外れた files/git pane の再表示にも兼用する。
+// D10: Files/Git/Review タブを初回クリックで開く (および既ロード時の再アクティブ化)
+// openFilesTab / openGitTab / openReviewTab は idempotent (既存タブがあれば再利用) なので、
+// セッション切替で .active が外れた files/git/review pane の再表示にも兼用する。
 export function handleLazyTabOpen(sid, name) {
   const sess = sessions.get(sid);
   if (!sess) return;
@@ -3009,6 +3093,9 @@ export function handleLazyTabOpen(sid, name) {
       FilesTabManager.openFilesTab(sid, pk, gr, gr);
     } else if (name === 'git') {
       FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+    } else if (name === 'review') {
+      // cwd はあるが git でない場合も開く: ReviewView 側が not_git_repo エラーを表示する。
+      FilesTabManager.openReviewTab(sid, gr);
     }
     markTabLazyLoaded(sid, name);
     refreshLazyTabClasses(sid);

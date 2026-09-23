@@ -1,75 +1,29 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { actionBarShownAt, activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalSuppressedCache, approvalSuppressedDismissedCache, approvalVisibleCache, enqueueApprovalAutoSwitch, isStaleHistoryRepaint, lastActionBarRender, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, multiSelectSelections, removeApprovalAutoSwitchTarget, set_actionBarFocusIdx, set_batchFocusIdx, set_multiSelectFocusIdx } from './state.js';
-import { playNotificationSound, showDesktopApprovalNotification } from './settings.js';
-import { ws } from './ws-client.js';
-import { reshowActionBar, showActionBar } from './approval.js';
-import { inheritMarkerBlockSig } from './approval-parser.js';
+import { actionBarShownAt, activeSessionId, approvalSuppressedCache, approvalSuppressedDismissedCache, isStaleHistoryRepaint } from './state.js';
+import { displayedApprovalIdentity, foldApprovalPanel, requestApprovalResync, showActionBar } from './approval.js';
 import { isTerminalShowingHistory, suppressPtyResizeForInputLayout, syncPtySizeToViewportAfterLayout } from './terminal.js';
 import { probe } from '../debug/probe.js';
 
-// UI/cache adapter for approval detection. Parser code must not depend on this.
+// 承認パネルの DOM 側の手続き（描く・片付ける・告知バナー）。承認の有無は Hub の記録が決める
+// （approval-store.ts）。Parser code must not depend on this.
 (function (root) {
   'use strict';
-
-  function notifyApprovalQueue() {
-    try {
-      root.dispatchEvent(new CustomEvent('approval-queue-updated'));
-    } catch (_) {}
-  }
-
-  function sendSessionHint(id, visible) {
-    ws.send(JSON.stringify({ type: 'session_hint', session_id: id, approval_visible: !!visible }));
-  }
-
-  function setApprovalVisible(id, visible, options: any = {}) {
-    const next = !!visible;
-    const wasVisible = !!approvalVisibleCache.get(id);
-    if (wasVisible === next && !options.forceNotify) return wasVisible;
-    approvalVisibleCache.set(id, next);
-    if (next) {
-      if (options.autoSwitch !== false) enqueueApprovalAutoSwitch(id);
-      if (options.sound) playNotificationSound();
-      showDesktopApprovalNotification(id);
-    } else {
-      removeApprovalAutoSwitchTarget(id);
-    }
-    sendSessionHint(id, next);
-    notifyApprovalQueue();
-    return wasVisible;
-  }
-
-  function cacheApprovalOptions(id, options) {
-    inheritMarkerBlockSig(options, approvalRawOptionsCache.get(id));
-    approvalRawOptionsCache.set(id, options);
-    const source = Array.isArray(options) && options[0] && options[0]._approvalSource;
-    const hasMarkerIdentity = !!(Array.isArray(options) && options[0] && options[0]._blockSig);
-    // 同一マーカーを fallback parser が再抽出した cache 更新では hub_marker provenance を
-    // 保持する。これを消すと回答時の恒久抑止と Hub push の重複防止が同時に外れる。
-    if (source !== 'go_vt' && !hasMarkerIdentity) approvalSourceCache.delete(id);
-    notifyApprovalQueue();
-  }
-
-  function clearApprovalOptions(id) {
-    approvalRawOptionsCache.delete(id);
-    approvalSourceCache.delete(id);
-    notifyApprovalQueue();
-  }
 
   // そのセッションの承認パネルが実際に画面へ出ているか。
   // 抑止告知バナーの目的は「承認待ちなのに画面へ何も出ない」状態の説明なので、
   // パネルが出ているセッションで告知すると文言と画面が矛盾する。
-  // hideActionBar は approvalVisibleCache を false にし approvalRawOptionsCache も
-  // 落とすため、この 2 つの AND が「今この瞬間パネルが出ている」の代理指標になる。
+  // #action-bar は全セッション共有の 1 個で、描画時に描画元のセッション番号を焼く
+  // （approval-owner.ts）。表示中で、焼かれた番号がそのセッションなら出ている。
   function approvalPanelVisibleFor(id) {
-    if (id == null || !approvalVisibleCache.get(id)) return false;
-    const opts = approvalRawOptionsCache.get(id);
-    return Array.isArray(opts) && opts.length > 0;
+    if (id == null) return false;
+    const bar = document.getElementById('action-bar');
+    return !!(bar && bar.classList.contains('visible') && bar.children.length > 0 &&
+      bar.dataset.approvalSessionId === String(id));
   }
 
   function showOptions(bar, id, options, forceStickToBottom = false) {
-    cacheApprovalOptions(id, options);
-    const identity = approvalCandidateIdentity(id, options, approvalSourceCache.get(id)?.source === 'go_vt' ? 'native' : 'marker');
+    const identity = displayedApprovalIdentity(id, options);
     const sameVisibleCandidate = !!(bar && bar.classList.contains('visible') &&
       bar.children.length > 0 && bar.dataset.approvalSessionId === String(id) &&
       bar.dataset.approvalCandidateKey === identity.candidateKey &&
@@ -86,51 +40,20 @@ import { probe } from '../debug/probe.js';
     // 落とすので、遡っている最中に届いた未回答の承認は今までどおり出る。ページ計上は
     // CLI 内部のスクロール量ではなく送った鍵数の近似で、ライブへ戻ったことを取りこぼす
     // ことがあるため、遡り中の候補を一律に落とすと新しい承認を握り潰す（F-12 の再発）。
-    // 判定式は approval-answered.ts の isStaleHistoryRepaint に集約した。受け口
-    //（handleGoApprovalDetected / handleHubApprovalMarker）が状態を触る前にも同じ
-    // 判定を通すため、同じ意味の条件を 2 種類持たない。
+    // 判定式は approval-answered.ts の isStaleHistoryRepaint に集約した。
     const staleHistoryRepaint = isStaleHistoryRepaint(id, identity.shape, isTerminalShowingHistory(id));
     probe('approval.data', () => ({ sessionId: id, identity, options, skipped: sameVisibleCandidate || staleHistoryRepaint }));
     if (sameVisibleCandidate || staleHistoryRepaint) {
       return;
     }
-    // showActionBar は手動 dismiss 中などに何も描かず return する。描画が最後まで
+    // showActionBar は帯に畳んだ記録などで何も描かず return する。描画が最後まで
     // 通った時だけ 3 箇所の描画完了地点が actionBarShownAt を更新するので、
     // その変化を「実際にパネルが出た」証拠として使う。
     const shownBefore = actionBarShownAt.get(id);
     showActionBar(bar, id, options, forceStickToBottom);
-    // パネルが出た＝Hub 経路が壊れていてもクライアント再構成で拾えたということなので、
-    // 残っている抑止告知は取り下げる。ここで cache ごと消さないと、回答してパネルが
-    // 閉じた後のセッション切替で古い告知が復活する。
+    // パネルが出た＝記録を読めたので、残っている抑止告知は取り下げる。ここで cache ごと
+    // 消さないと、回答してパネルが閉じた後のセッション切替で古い告知が復活する。
     if (actionBarShownAt.get(id) !== shownBefore) clearApprovalMarkerSuppressed(id);
-  }
-
-  function clearActionBarDom() {
-    const bar = document.getElementById('action-bar');
-    const wasVisible = !!(bar && bar.classList.contains('visible'));
-    const clearId = activeSessionId;
-    const clearOptions = clearId != null ? approvalRawOptionsCache.get(clearId) : null;
-    const clearIdentity = clearId != null && Array.isArray(clearOptions) && clearOptions.length > 0
-      ? approvalCandidateIdentity(clearId, clearOptions, approvalSourceCache.get(clearId)?.source === 'go_vt' ? 'native' : 'marker')
-      : null;
-    if (bar) {
-      bar.classList.remove('visible', 'batch', 'multi-select', 'single-tabs');
-      bar.innerHTML = '';
-      delete bar.dataset.approvalSessionId;
-      delete bar.dataset.approvalCandidateKey;
-      delete bar.dataset.approvalSourceEpoch;
-    }
-    lastActionBarRender.sessionId = null;
-    lastActionBarRender.sig = null;
-    if (wasVisible && clearId != null) {
-      suppressPtyResizeForInputLayout(350);
-      syncPtySizeToViewportAfterLayout(clearId, true, 400, 'settle-after-clear', clearIdentity);
-    }
-    set_actionBarFocusIdx(-1);
-    set_batchFocusIdx(-1);
-    set_multiSelectFocusIdx(-1);
-    if (activeSessionId != null) { actionBarShownAt.delete(activeSessionId); multiSelectSelections.delete(activeSessionId); }
-    notifyApprovalQueue();
   }
 
   function setMultiQuestionBannerVisible(visible) {
@@ -146,16 +69,14 @@ import { probe } from '../debug/probe.js';
       closeBtn.className = 'multi-question-banner-close';
       closeBtn.textContent = '✕';
       closeBtn.title = t('multi_question_banner_close_tooltip') || 'Dismiss';
+      closeBtn.setAttribute('aria-label', closeBtn.title);
       closeBtn.addEventListener('click', () => {
+        // パネルの ✕ と同じく、告知の記録を 1 行の帯に畳む（帯を押すと告知が戻る）。
+        // 承認があるかどうかは Hub の記録が決める（「保留中」は残る）。畳み状態は記録ごとに
+        // approval-store.ts が持ち、記録が変われば捨てる。
         const id = activeSessionId;
-        if (!id) { banner.hidden = true; return; }
-        multiQuestionDismissedCache.set(id, true);
-        multiQuestionVisibleCache.delete(id);
-        multiQuestionLatchAt.delete(id);
-        banner.hidden = true;
-        if (approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) {
-          setApprovalVisible(id, false);
-        }
+        if (id !== null) foldApprovalPanel(id);
+        else banner.hidden = true;
       });
       banner.appendChild(msg);
       banner.appendChild(closeBtn);
@@ -211,9 +132,8 @@ import { probe } from '../debug/probe.js';
     retryBtn.textContent = t('approval_suppressed_banner_retry');
     retryBtn.title = t('approval_suppressed_banner_retry_tooltip');
     retryBtn.addEventListener('click', () => {
-      // ブラウザ側 xterm バッファを読み直す（Hub の VT ミラーとは独立した再構成なので、
-      // Hub 側だけが壊れていた場合はここで拾い直せる）。
-      reshowActionBar(id);
+      // Hub へ問い直す。Hub が端末ミラーから候補を評価し直し、今の記録をこの画面へ送り直す。
+      requestApprovalResync(id);
     });
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
@@ -235,9 +155,7 @@ import { probe } from '../debug/probe.js';
   // 新しい抑止イベント。✕ で閉じた状態は解除する（別事象なので出し直す）。
   function noteApprovalMarkerSuppressed(id, reason) {
     if (id == null) return;
-    // 既にパネルが出ているなら Hub 経路の破損は実害が無い（クライアントが自分の
-    // xterm バッファから同じ承認を再構成できていて、その再構成も
-    // isCorruptHubMarkerOptions を通過している）。cache に積まず捨てる。
+    // 既にパネルが出ているなら、描けている承認とは別の破損なので実害が無い。cache に積まず捨てる。
     // 積んでしまうと、回答してパネルが閉じた後のセッション切替で復活する。
     if (approvalPanelVisibleFor(id)) return;
     approvalSuppressedCache.set(id, String(reason || 'client_corrupt'));
@@ -253,32 +171,12 @@ import { probe } from '../debug/probe.js';
     if (had && id === activeSessionId) renderApprovalSuppressedBannerFor(id);
   }
 
-  // 承認可視ヒントの定期再主張: Hub 側の approvalVisible はリース制
-  // （server.go の approvalVisibleLease = 15s）のため、可視中はリースの 1/3 間隔で
-  // true を再送して維持する。false ヒントがどの経路で失われても（リロード desync・
-  // 複数クライアント・H9 復元固着等）再主張が止まれば Hub 側がリース切れで自動回復する。
-  const APPROVAL_HINT_REASSERT_MS = 5000; // approvalVisibleLease(15s) の 1/3
-
-  function reassertApprovalHints() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    approvalVisibleCache.forEach((visible, id) => {
-      if (visible) sendSessionHint(id, true);
-    });
-  }
-  setInterval(reassertApprovalHints, APPROVAL_HINT_REASSERT_MS);
-
   const api = {
-    sendSessionHint,
-    setApprovalVisible,
-    cacheApprovalOptions,
-    clearApprovalOptions,
     showOptions,
-    clearActionBarDom,
     setMultiQuestionBannerVisible,
     renderApprovalSuppressedBannerFor,
     noteApprovalMarkerSuppressed,
     clearApprovalMarkerSuppressed,
-    reassertApprovalHints,
   };
 
   root.approvalUiAdapter = api;

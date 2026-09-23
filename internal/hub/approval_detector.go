@@ -78,10 +78,34 @@ var (
 	claudeFeedbackActionRe = regexp.MustCompile(`(?i)(\d{1,2})\s+to\s+(review|send|dismiss)\b`)
 )
 
+// approvalKindAskUserQuestion は Claude の AskUserQuestion（端末で ↑↓/Enter で答える選択 UI）
+// の告知。選択肢を持たない（Web ボタン化しない。下の detectNativeApprovalWith の理由）。
+// 記録を開き、画面は告知のバナーで描く（web/src/app/approval-store.ts の notice）。
+const approvalKindAskUserQuestion = "ask_user_question"
+
+// detectNativeApproval は利用者の承認パターン（approval_trigger_phrases.go）を使わない版。
+// 本番の検出は Server.detectScreenApproval を通す。
 func detectNativeApproval(provider string, lines []string) *nativeApproval {
+	return detectNativeApprovalWith(provider, lines, nil)
+}
+
+// detectScreenApproval は画面に出ている承認（CLI 自身の承認画面と AskUserQuestion の告知）を
+// 検出する。本番の検出はすべてここを通す。回答の送信前の照合（approval_action.go /
+// approval_batch.go）も同じ手がかり語で検出し直さないと、ここで拾えた承認に答えられない。
+func (s *Server) detectScreenApproval(provider string, lines []string) *nativeApproval {
+	return detectNativeApprovalWith(provider, lines, s.approvalTriggerPhrasesFor(provider))
+}
+
+func detectNativeApprovalWith(provider string, lines []string, phrases []string) *nativeApproval {
 	recent := compactRecentLines(lines, approvalRecentLines)
 	if len(recent) == 0 {
 		return nil
+	}
+	// 複数質問の AskUserQuestion（タブ行 ← ☐ … → / Review your answers）は、画面の選択肢より先に
+	// 判定する（approval.ts の trackApprovalHintFromChunk と同じ順）。Review ページの
+	// 「Submit answers / Cancel」を普通の承認として出すと、Web のボタンから答えてしまう。
+	if isMultiQuestionPrompt(recent) {
+		return newAskUserQuestionNotice(provider, "")
 	}
 	opts, start, end := extractNativeApprovalOptions(provider, recent)
 	if len(opts) == 0 {
@@ -121,15 +145,18 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 			return nil
 		}
 	}
-	if !nativeApprovalLooksValid(provider, hintLines, opts) {
-		return nil
-	}
 	// AI が自発的に出す Claude AskUserQuestion ピッカー（末尾に "Type something" /
 	// "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は webify しない。
 	// 再描画される VT をスクレイプして Web ボタン化すると選択肢番号がズレて誤選択を
 	// 招くため（approval-rules.md version 10 で AI を [MANY-AI-CLI] マーカーへ誘導済み）。
-	// 万一 AI が出しても Web バーは出さず、ユーザーは端末で直接 ↑↓/Enter 操作する。
+	// ユーザーは端末で直接 ↑↓/Enter 操作する。ただし答えが要ることは知らせる必要があるので、
+	// 選択肢を持たない告知として返す（以前は捨てていて、画面を開いていないと気づけなかった）。
+	// 承認語の判定（nativeApprovalLooksValid）より先に見る。質問の選択肢は承認語を含むとは
+	// 限らず、そこで落ちると告知まで届かない。
 	if looksLikeNativeAskUserQuestion(opts) {
+		return newAskUserQuestionNotice(provider, question)
+	}
+	if !nativeApprovalLooksValidWith(provider, hintLines, opts, phrases) {
 		return nil
 	}
 	kind := "native"
@@ -152,6 +179,47 @@ func detectNativeApproval(provider string, lines []string) *nativeApproval {
 	}
 	approval.Sig = nativeApprovalSig(provider, approval)
 	return approval
+}
+
+// newAskUserQuestionNotice は AskUserQuestion の告知を作る。
+//
+// 同一性は provider・種別・質問文だけで決め、画面の本文（Context）も選択肢も入れない。
+// 答えるあいだ ↑↓ でカーソルが動き、複数質問ではタブの ☐/✔ が変わるので、本文を入れると
+// 操作のたびに別の候補になって告知と通知が出直す。複数質問の告知は質問文を持たない
+// （どのタブを見ていても同じ 1 件にする）。
+func newAskUserQuestionNotice(provider, question string) *nativeApproval {
+	notice := &nativeApproval{
+		Kind:     approvalKindAskUserQuestion,
+		Question: strings.TrimSpace(question),
+	}
+	notice.Sig = nativeApprovalSig(provider, notice)
+	return notice
+}
+
+var (
+	multiQuestionReviewRe  = regexp.MustCompile(`(?i)Review your answers`)
+	multiQuestionSubmitRe  = regexp.MustCompile(`(?i)Ready to submit your answers`)
+	multiQuestionTabBoxRe  = regexp.MustCompile(`[◻□☐✓☑]`)
+	multiQuestionSubmitTab = regexp.MustCompile(`\bSubmit\b`)
+)
+
+// isMultiQuestionPrompt は複数質問の AskUserQuestion の画面かを返す。
+// 移し元: web/src/app/approval-parser.ts の isMultiQuestionPrompt（同じ判定。テストの入力と期待値は
+// approval_text_question_test.go に写してある）。
+func isMultiQuestionPrompt(lines []string) bool {
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		if multiQuestionReviewRe.MatchString(line) || multiQuestionSubmitRe.MatchString(line) {
+			return true
+		}
+		if strings.Contains(line, "←") && strings.Contains(line, "→") &&
+			(multiQuestionTabBoxRe.MatchString(line) || multiQuestionSubmitTab.MatchString(line)) {
+			return true
+		}
+	}
+	return false
 }
 
 func compactRecentLines(lines []string, limit int) []string {
@@ -703,6 +771,12 @@ func nativeApprovalQuestion(contextLines []string, optionStart int) string {
 }
 
 func nativeApprovalLooksValid(provider string, contextLines []string, opts []proto.ApprovalOption) bool {
+	return nativeApprovalLooksValidWith(provider, contextLines, opts, nil)
+}
+
+// nativeApprovalLooksValidWith は承認画面らしさを判定する。phrases は利用者の承認パターン
+// （approval_trigger_phrases.go）。
+func nativeApprovalLooksValidWith(provider string, contextLines []string, opts []proto.ApprovalOption, phrases []string) bool {
 	// Note: context は小文字化しているが nativeApprovalJaTokens は日本語（大文字化不要）なので
 	// 元の文字列でも検索する必要がある。rawContext を別途用意する。
 	rawContext := strings.Join(contextLines, "\n")
@@ -725,6 +799,17 @@ func nativeApprovalLooksValid(provider string, contextLines []string, opts []pro
 	if !hasHint {
 		for _, tok := range nativeApprovalJaTokens {
 			if strings.Contains(rawContext, tok) {
+				hasHint = true
+				break
+			}
+		}
+	}
+	// ブラウザの推測検出（approval.ts の approvalNear）が手がかりにしている語も見る。
+	// 以前はブラウザだけがこれで拾え、Hub は見逃していた（親 plan の D1「推測での拾い上げ」）。
+	// 利用者が設定画面で足した承認パターンと「N. User specifies」もここに入る。
+	if !hasHint {
+		for _, line := range contextLines {
+			if lineMatchesApprovalTrigger(provider, line, phrases) || userSpecifiesRe.MatchString(line) {
 				hasHint = true
 				break
 			}

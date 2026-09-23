@@ -2,8 +2,8 @@
 // possible surface. It deliberately reuses sendChoice and P-09's guard.
 
 import { approvalQuestionContext, pendingSessionIds, sessionTitle } from './approval-queue-tab.js';
-import { bindHighRiskApproval, sendChoice } from './approval.js';
-import { approvalRawOptionsCache, sessions } from './state.js';
+import { bindHighRiskApproval, pendingApprovalOptions, sendChoice } from './approval.js';
+import { sessions } from './state.js';
 import { escapeHtml } from './util.js';
 
 const ROUTE = '/mobile/approvals';
@@ -29,7 +29,7 @@ function fullHubUrl(): string {
 }
 
 function selectOptions(id: number): { approve: any | null; reject: any | null } {
-  const options = approvalRawOptionsCache.get(id);
+  const options = pendingApprovalOptions(id);
   if (!Array.isArray(options) || !(options as any[]).length || (options as any[]).some((option: any) => Array.isArray(option?.options))) {
     return { approve: null, reject: null };
   }
@@ -75,7 +75,7 @@ function renderApprovalOnly(): void {
   const list = document.createElement('main');
   list.className = 'mao-list';
   for (const id of ids) {
-    const options = approvalRawOptionsCache.get(id);
+    const options = pendingApprovalOptions(id);
     const card = document.createElement('section');
     card.className = 'mao-card';
     const summary = Array.isArray(options) ? (options as any)._summary : null;

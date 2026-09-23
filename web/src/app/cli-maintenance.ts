@@ -155,13 +155,22 @@ export type CliMaintenanceHandle = {
   // 呼び出し側が渡す最新の「導入済み」一覧で作り直す。バージョン確認・更新可否は
   // 内部で引き直す。
   refresh: (installed: CliInstallStatus[]) => Promise<void>;
+  // reorder は同じ行を別の順で描き直すだけ（バージョン確認等は引き直さない）。
+  reorder: (installed: CliInstallStatus[]) => void;
   destroy: () => void;
+};
+
+export type CliMaintenanceOptions = {
+  // onReorder を渡すと行をドラッグで並べ替えられる（初回画面。並び順は「新しいセッション」の
+  // provider 一覧と共有する）。受け取るのは並べ替え後の導入済み id の列。更新ジョブの実行中は
+  // 並べ替えない（行が描き直され続けるため）。
+  onReorder?: (ids: string[]) => void;
 };
 
 // mountCliMaintenance は container の中身を「導入済み」行の一覧にする。provider
 // 一覧そのもの（未導入行を含む）は呼び出し側が持ち、installed（導入済みのものだけ）を
 // 渡す。バージョン確認・更新可否・更新ジョブの取得と実行はここが持つ。
-export function mountCliMaintenance(container: HTMLElement, installed: CliInstallStatus[]): CliMaintenanceHandle {
+export function mountCliMaintenance(container: HTMLElement, installed: CliInstallStatus[], options: CliMaintenanceOptions = {}): CliMaintenanceHandle {
   const rows = new Map<string, RowRuntime>();
   let statuses: CliInstallStatus[] = installed;
   let checkedAt: string | undefined;
@@ -192,6 +201,19 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
 
   function txm(msg: I18nMessage): string {
     return tx(msg.key, msg.fallback, msg.vars || {});
+  }
+
+  function canReorder(): boolean {
+    return !!options.onReorder && !activeJob && statuses.length > 1;
+  }
+
+  function rowDragClass(): string {
+    return canReorder() ? ' is-reorderable' : '';
+  }
+
+  function rowDragAttrs(): string {
+    if (!canReorder()) return '';
+    return ` draggable="true" title="${escapeHtml(tx('cli_maintenance_reorder_hint', 'ドラッグで並べ替え（新しいセッションの一覧と同じ順番になります）'))}"`;
   }
 
   function displayNameFor(id: string): string {
@@ -233,6 +255,12 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     await loadVersionsAndEligibility();
   }
 
+  // reorder は並び順だけが変わったとき（別の画面で並べ替えた等）に使う。取得はし直さない。
+  function reorder(nextInstalled: CliInstallStatus[]): void {
+    statuses = nextInstalled;
+    render();
+  }
+
   // --- 描画 ----------------------------------------------------------------
 
   function progressVars(): { done: number; total: number } {
@@ -264,7 +292,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     const detailText = cell.detail ? txm(cell.detail) : '';
     const detailHtml = detailText ? `<span class="cli-maint-version-sub" title="${escapeHtml(detailText)}">${escapeHtml(detailText)}</span>` : '';
     const btnState = cliUpdateRowState(r.eligibility || null, false);
-    return `<div class="cli-maint-row" data-provider="${escapeHtml(status.id)}">
+    return `<div class="cli-maint-row${rowDragClass()}" data-provider="${escapeHtml(status.id)}"${rowDragAttrs()}>
       <span class="cli-maint-chk" aria-hidden="true">✓</span>
       ${icon}
       <span class="cli-maint-name">${name}</span>
@@ -303,7 +331,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     const detailRow = failureDetail
       ? `<div class="cli-maint-failure-row" data-provider="${escapeHtml(status.id)}">${escapeHtml(txm(failureDetail))}</div>`
       : '';
-    return `<div class="cli-maint-row" data-provider="${escapeHtml(status.id)}">
+    return `<div class="cli-maint-row${rowDragClass()}" data-provider="${escapeHtml(status.id)}"${rowDragAttrs()}>
       <span class="cli-maint-chk" aria-hidden="true">${inFlight ? '…' : '✓'}</span>
       ${providerIconHtml(status.id, 18)}
       <span class="cli-maint-name">${escapeHtml(status.displayName)}</span>
@@ -605,11 +633,76 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     else if (action === 'retry-failed') void retryFailed();
   });
 
+  // 並べ替え（options.onReorder があるときだけ行が draggable になる）。書き方は spawn-panel.ts の
+  // provider 一覧のドラッグに揃えた: 縦並びなので行の上下半分で挿入位置を決める。
+  let dragSrc: HTMLElement | null = null;
+
+  function reorderRows(): HTMLElement[] {
+    return Array.from(container.querySelectorAll<HTMLElement>('.cli-maint-row.is-reorderable'));
+  }
+
+  function clearDropMarks(): void {
+    reorderRows().forEach((row) => row.classList.remove('drop-before', 'drop-after'));
+  }
+
+  container.addEventListener('dragstart', (e: DragEvent) => {
+    const row = (e.target as Element | null)?.closest<HTMLElement>('.cli-maint-row.is-reorderable');
+    if (!row || !canReorder()) return;
+    dragSrc = row;
+    row.classList.add('dragging');
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      // Firefox はデータを載せないと dragstart 自体が成立しない。
+      try { e.dataTransfer.setData('text/plain', row.dataset.provider || ''); } catch (_) { /* noop */ }
+    }
+  });
+
+  container.addEventListener('dragend', () => {
+    dragSrc?.classList.remove('dragging');
+    dragSrc = null;
+    clearDropMarks();
+  });
+
+  container.addEventListener('dragover', (e: DragEvent) => {
+    if (!dragSrc) return;
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+    const row = (e.target as Element | null)?.closest<HTMLElement>('.cli-maint-row.is-reorderable');
+    clearDropMarks();
+    if (!row || row === dragSrc) return;
+    const rect = row.getBoundingClientRect();
+    row.classList.add(e.clientY >= rect.top + rect.height / 2 ? 'drop-after' : 'drop-before');
+  });
+
+  container.addEventListener('drop', (e: DragEvent) => {
+    if (!dragSrc) return;
+    e.preventDefault();
+    const source = dragSrc;
+    const row = (e.target as Element | null)?.closest<HTMLElement>('.cli-maint-row.is-reorderable');
+    clearDropMarks();
+    const ids = reorderRows().map((r) => r.dataset.provider || '').filter((id) => id && id !== source.dataset.provider);
+    if (row && row !== source) {
+      const rect = row.getBoundingClientRect();
+      const after = e.clientY >= rect.top + rect.height / 2;
+      const at = ids.indexOf(row.dataset.provider || '');
+      ids.splice(after ? at + 1 : at, 0, source.dataset.provider || '');
+    } else if (!row) {
+      ids.push(source.dataset.provider || '');
+    } else {
+      return;
+    }
+    const byId = new Map(statuses.map((s) => [s.id, s]));
+    statuses = ids.map((id) => byId.get(id)).filter((s): s is CliInstallStatus => !!s);
+    render();
+    options.onReorder?.(statuses.map((s) => s.id));
+  });
+
   render();
   void loadVersionsAndEligibility();
 
   return {
     refresh,
+    reorder,
     destroy: () => {
       destroyed = true;
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }

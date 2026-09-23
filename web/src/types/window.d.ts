@@ -81,7 +81,6 @@ interface Window {
 
     approvalParser?: any;
     approvalUiAdapter?: any;
-    matchProviderApprovalTrigger?: (provider: string, line: string) => boolean;
     approvalPatternsUI?: any;
 
     chatHistoryAPI?: any;

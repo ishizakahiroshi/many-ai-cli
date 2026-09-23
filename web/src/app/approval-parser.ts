@@ -1,29 +1,14 @@
-// Pure approval parsers. Keep classic-script compatibility; no module wrapper.
+// Hub の保留中の記録のブロックを選択肢にする純粋なパーサ。Keep classic-script compatibility; no module wrapper.
+//
+// 入力は Hub が送ってくる記録のブロック（承認マーカーの原文・順次質問の Block）と、承認タブの
+// 履歴の行だけ。端末の文字から承認を作る処理（推測での拾い上げ・マーカー無しの Yes/No・
+// 旧形式の選択・複数質問の判定）は Hub（internal/hub/approval_text_question.go /
+// approval_detector.go）にだけあり、ここには置かない（scripts/check-approval-display-source.mjs）。
 (function (root) {
   'use strict';
 
-  const reviewAnswersRe = /Review your answers/i;
-  const readyToSubmitAnswersRe = /Ready to submit your answers/i;
-  const tabBoxMarkerRe = /[◻□☐✓☑]/; // ◻ □ ☐ ✓ ☑
   const sequentialQuestionHeaderRe = /^\s*([A-Z]{1,3}\d{1,3}|Q\d{1,3}|問\d{1,3})\s*[:：]\s*(.+?)\s*$/i;
-  const userSpecifiesRe = /user specifies|その他指定/i;
-  const hubChoiceQuestionRe = /どれで進めますか|どれで進める|どちらで進め|どの選択肢|選択してください|how would you like to proceed|which option/i;
-  const recommendedChoiceRe = /\(recommended\)|（recommended）|推奨/i;
-  const approvalLabelRe = /\b(yes|no|allow|deny|proceed|abort|don[''']t ask|cancel|once|always|permission|confirm|details)\b/i;
   const yesNoApprovalMarkerRe = /[（(]\s*[YＹ]\s*[:：]\s*1\s*[\/／]\s*[NＮ]\s*[:：]\s*0\s*[）)]/ig;
-
-  function isMultiQuestionPrompt(lines) {
-    for (const line of lines || []) {
-      if (!line) continue;
-      if (reviewAnswersRe.test(line)) return true;
-      if (readyToSubmitAnswersRe.test(line)) return true;
-      if (line.indexOf('←') !== -1 && line.indexOf('→') !== -1 &&
-          (tabBoxMarkerRe.test(line) || /\bSubmit\b/.test(line))) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   function extractSequentialChoicePrompts(lines) {
     const prompts = [];
@@ -86,40 +71,6 @@
       value[0] && value[0]._multiSelect === true;
   }
 
-  function approvalSig(options) {
-    if (isBatchOptions(options)) {
-      return JSON.stringify(options.map(s => ({
-        n: s.num,
-        t: String(s.title || '').replace(/\s+/g, ' ').slice(0, 80),
-        o: (s.options || []).map(o => `${o.num}:${String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80)}`),
-      })));
-    }
-    return JSON.stringify((options || []).map(o => {
-      const lbl = String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-      const ctx = o && o._ctx ? `|${o._ctx}` : '';
-      return `${o.num}:${lbl}${ctx}`;
-    }));
-  }
-
-  // Hub marker 由来の options が、同じ質問を拾った fallback parser の options で
-  // cache 更新されると _blockSig が失われる。approval-ui の marker 由来判定が
-  // no-op となり、Ink/SIGWINCH の再描画で同じマーカーが復活するため、選択肢 sig と
-  // 質問 identity の両方が同じ cache 更新に限って marker identity を引き継ぐ。
-  // Yes/No 等の選択肢が同じでも質問文が違う別質問には決して継承しない。
-  function inheritMarkerBlockSig(options, previousOptions) {
-    if (!Array.isArray(options) || options.length === 0) return options;
-    if (!Array.isArray(previousOptions) || previousOptions.length === 0) return options;
-    if (options[0]?._blockSig) return options;
-    const blockSig = previousOptions[0]?._blockSig;
-    if (!blockSig || approvalSig(options) !== approvalSig(previousOptions)) return options;
-    const questionKey = approvalQuestionKey(options);
-    if (!questionKey || questionKey !== approvalQuestionKey(previousOptions)) return options;
-    for (const option of options) {
-      if (option && typeof option === 'object') option._blockSig = blockSig;
-    }
-    return options;
-  }
-
   function approvalCtxHash(s) {
     const text = String(s || '').replace(/\s+/g, ' ').trim();
     let h = 5381;
@@ -127,29 +78,6 @@
       h = (((h << 5) + h) + text.charCodeAt(i)) | 0;
     }
     return (h >>> 0).toString(36);
-  }
-
-  // 手動 dismiss 抑止用の質問アイデンティティ（state.approvalQuestionKey と同契約）。
-  // option ラベル揺れに強く、_question / バッチ title を優先する。
-  function approvalQuestionKey(options) {
-    if (!options || !Array.isArray(options) || options.length === 0) return '';
-    const arr = options as any;
-    const arrQ = arr._question;
-    if (arrQ && String(arrQ).trim()) {
-      return 'q:' + approvalCtxHash(String(arrQ).replace(/\s+/g, ' ').trim().slice(0, 200));
-    }
-    const first = arr[0];
-    if (first && first._multiSelect && first._question && String(first._question).trim()) {
-      return 'q:' + approvalCtxHash(String(first._question).replace(/\s+/g, ' ').trim().slice(0, 200));
-    }
-    if (isBatchOptions(options)) {
-      const titles = options
-        .map(s => String((s && s.title) || '').replace(/\s+/g, ' ').trim())
-        .filter(Boolean)
-        .join('\n');
-      if (titles) return 'b:' + approvalCtxHash(titles.slice(0, 400));
-    }
-    return 'o:' + approvalSig(options);
   }
 
   // 差分再描画の残骸でマーカー文字列がラベルに混入したパース結果は出さない。
@@ -262,14 +190,6 @@
     return /^question\s*\d*\s*[?？]$/i.test(yesNoQuestionText(text));
   }
 
-  function looksLikeYesNoQuestion(text) {
-    const s = String(text || '');
-    if (!hasYesNoApprovalMarker(s)) return false;
-    if (isPlaceholderYesNoQuestion(s)) return false;
-    const before = yesNoQuestionText(s);
-    return /[?？]\s*$/.test(before.trim()) || /[?？]/.test(before.slice(-120));
-  }
-
   function yesNoCtxFromText(text) {
     return yesNoQuestionText(text).slice(-200);
   }
@@ -289,20 +209,7 @@
     // 選択肢が増え、長い日本語ラベルが端末幅で折り返されてブロックが何十行になっても、
     // 開きマーカーが窓から外れて末尾の質問だけ拾う事故を構造的に防ぐ。マーカーは明示
     // デリミタ済みで scrollback 誤検出の懸念がないため source 全体を走査してよい。
-    // 取りこぼしの実質的な上限は呼び出し側が保持する pendingTextTail の文字数
-    // （APPROVAL_PENDING_TEXT_TAIL_LIMIT）のみ＝制約をそこ一点に集約する。
-    // ブロック全文ハッシュを各選択肢へ _blockSig として付与する。
-    // approval-ui が「Hub のマーカー由来の候補か」を見分けるために使う。
-    // 質問文＋全選択肢を含むため、ラベルが同一でも別質問なら別ハッシュになり誤抑制しない。
-    // approvalCtxHash は空白を正規化するので、端末幅による折り返し差は吸収される。
-    const withBlockSig = (parsed, innerArr) => {
-      if (parsed && Array.isArray(parsed)) {
-        const sig = approvalCtxHash((innerArr || []).join('\n'));
-        for (const el of parsed) { if (el && typeof el === 'object') el._blockSig = sig; }
-      }
-      return parsed;
-    };
-
+    // 入力は Hub の記録のブロック（または台帳の行）で、ブロック全体が渡ってくる。
     const recentText = source.join('\n');
     const blockRe = /\[MANY-AI-CLI\]([\s\S]*?)\[\/MANY-AI-CLI\]/g;
     let match;
@@ -312,7 +219,7 @@
     }
     if (lastBlock !== null) {
       const inner = lastBlock.split('\n').map(l => l.trim()).filter(Boolean);
-      const parsed = withBlockSig(parseHubBlock(inner), inner);
+      const parsed = parseHubBlock(inner);
       return isCorruptHubMarkerOptions(parsed) ? null : parsed;
     }
 
@@ -324,7 +231,7 @@
       const line = source[i];
       if (/\[MANY-AI-CLI\]/.test(line) && /\[\/MANY-AI-CLI\]/.test(line)) {
         const inner = line.replace(/^[\s\S]*?\[MANY-AI-CLI\]/, '').replace(/\[\/MANY-AI-CLI\][\s\S]*$/, '').trim();
-        const parsed = withBlockSig(parseHubBlock([inner]), [inner]);
+        const parsed = parseHubBlock([inner]);
         return isCorruptHubMarkerOptions(parsed) ? null : parsed;
       }
       if (/\[\/MANY-AI-CLI\]/.test(line) && closeIdx === -1) { closeIdx = i; continue; }
@@ -333,33 +240,8 @@
 
     if (openIdx === -1 || closeIdx === -1) return null;
     const inner = source.slice(openIdx + 1, closeIdx).map(l => l.trim()).filter(Boolean);
-    const parsed = withBlockSig(parseHubBlock(inner), inner);
+    const parsed = parseHubBlock(inner);
     return isCorruptHubMarkerOptions(parsed) ? null : parsed;
-  }
-
-  function extractPlainYesNoApproval(lines) {
-    const source = Array.isArray(lines) ? lines : [];
-    const searchStart = Math.max(0, source.length - 20);
-    const recentLines = source.slice(searchStart).map(line => String(line || '').trim()).filter(Boolean);
-    for (let i = source.length - 1; i >= searchStart; i--) {
-      const line = String(source[i] || '').trim();
-      if (!line) continue;
-      if (/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(line)) continue;
-      if (looksLikeYesNoQuestion(line)) {
-        const yn = yesNoApprovalOptions(yesNoCtxFromText(line));
-        const q = yesNoQuestionText(line);
-        if (q) (yn as any)._question = q;
-        return yn;
-      }
-    }
-    const recentText = recentLines.join('\n');
-    if (!/\[MANY-AI-CLI\]|\[\/MANY-AI-CLI\]/.test(recentText) && looksLikeYesNoQuestion(recentText)) {
-      const yn = yesNoApprovalOptions(yesNoCtxFromText(recentText));
-      const q = yesNoQuestionText(recentText);
-      if (q) (yn as any)._question = q;
-      return yn;
-    }
-    return null;
   }
 
   // Ink 等の TUI 再描画では、画面幅を超える長い選択肢が折り返される際に
@@ -429,7 +311,7 @@
   }
 
   // Ink のカーソル位置制御描画では選択肢間の改行も失われ、
-  // 「1. … 2. … 3. …」が1行へ連結されることがある（pendingTextTail の split で1要素化）。
+  // 「1. … 2. … 3. …」が1行へ連結されることがある（行の split で1要素化）。
   // この状態だと行頭正規表現が先頭の「1.」しか拾えず、残り全部が1個目のラベルへ飲み込まれて
   // 承認ボタンが1つに潰れる（=「ボタンが全部一緒になる」症状）。
   // 行内に「<番号>.」が 1→2→3 と単調増加で連続する場合のみ、各番号の直前で分割する。
@@ -540,8 +422,7 @@
       .replace(/\x1b\[[0-9]*X/g, ' ');
   }
 
-  // 連結された承認行を元の行構造へ復元する共通処理。
-  // marker 経路（parseHubBlock）/ フォールバック経路（extractApprovalOptions）双方で使う。
+  // 連結された承認行を元の行構造へ復元する（parseHubBlock の前処理）。
   // 先に「N. User specifies」アンカーで切り、その後で行内連番を分割する
   //（N. を先に切らないと最後の選択肢ラベルへ「N. User specifies」が混入するため）。
   function ungluedApprovalLines(lines) {
@@ -722,223 +603,12 @@
     return null;
   }
 
-  function shortcutSendText(label) {
-    const m = String(label || '').match(/\((y|p|n|!|#|\?|esc|escape)\)\s*$/i);
-    if (!m) return null;
-    const key = m[1].toLowerCase();
-    if (key === 'esc' || key === 'escape') return '\x1b';
-    return key;
-  }
-
-  function buildApprovalOption(numText, labelText, isCurrent) {
-    const label = String(labelText || '').trim()
-      .replace(/\s{2,}.*$/, '')
-      .replace(/\s*\d+\.\s*[A-Za-z].*$/, '')
-      .trim();
-    const opt: any = { num: parseInt(numText, 10), label, isCurrent: !!isCurrent };
-    const sendText = shortcutSendText(label);
-    if (sendText) opt._sendText = sendText;
-    return opt;
-  }
-
-  function approvalContextLines(lines, cluster, margin = 10) {
-    if (!cluster) return lines;
-    return lines.slice(Math.max(0, cluster.start - margin), Math.min(lines.length, cluster.end + margin + 1));
-  }
-
-  function matchNativeApprovalTrigger(line) {
-    if (!line) return false;
-    const lower = String(line).toLowerCase();
-    return lower.includes('requires approval') ||
-      lower.includes('would you like to run the following command') ||
-      lower.includes('would you like to run') ||
-      lower.includes('do you want to proceed?') ||
-      lower.includes('this command requires approval') ||
-      lower.includes('permission required') ||
-      lower.includes('permissions required') ||
-      lower.includes('requires permission') ||
-      lower.includes('requires confirmation') ||
-      lower.includes('prompts for user confirmation') ||
-      lower.includes('allow all similar') ||
-      lower.includes('deny all similar') ||
-      (lower.includes('press enter to confirm') && !lower.includes('esc to go back')) ||
-      lower.includes('enter to select') ||
-      lower.includes('enter select') ||
-      lower.includes('↑/↓ to navigate') ||
-      lower.includes('do you trust the files in this folder') ||
-      lower.includes('tool permission') ||
-      lower.includes('command code needs to run') ||
-      lower.includes('do you want to make this edit') ||
-      lower.includes('esc to cancel') ||
-      lower.includes('tab:next option') ||
-      lower.includes('always-approve mode') ||
-      lower.includes('type to add feedback') ||
-      lower.includes('ctrl+o:always-approve');
-  }
-
-  function extractApprovalOptions(rawTail) {
-    // Ink 連結で1行へ潰れた選択肢を元の行構造へ復元してから走査する。
-    // cluster の index は展開後の tail を基準にするため、呼び出し側へ展開後の lines も返す
-    //（呼び出し側が approvalContextLines で同じ配列を使えるようにし、index ずれを防ぐ）。
-    const tail = ungluedApprovalLines(rawTail);
-    const options = [];
-    let clusterStart = -1;
-    let clusterEnd = -1;
-    let seenOption = false;
-    let blankGap = 0;
-    let pendingContinuation = [];
-    const maxBlankGap = 4;
-    const consumeContinuations = (label) => {
-      if (pendingContinuation.length === 0) return label;
-      const suffix = pendingContinuation.slice().reverse().join(' ');
-      pendingContinuation = [];
-      return `${label} ${suffix}`.replace(/\s+/g, ' ').trim();
-    };
-    for (let i = (tail || []).length - 1; i >= 0; i--) {
-      const line = tail[i];
-      const cm = String(line || '').match(/^\s*[>❯›❱]\s*(\d{1,2})\.\s*(.+?)\s*$/);
-      if (cm) {
-        options.unshift(buildApprovalOption(cm[1], consumeContinuations(cm[2]), true));
-        if (clusterEnd === -1) clusterEnd = i;
-        clusterStart = i;
-        seenOption = true;
-        blankGap = 0;
-        continue;
-      }
-      const om = String(line || '').match(/^\s*(\d{1,2})\.\s*(.+?)\s*$/);
-      if (om) {
-        options.unshift(buildApprovalOption(om[1], consumeContinuations(om[2]), false));
-        if (clusterEnd === -1) clusterEnd = i;
-        clusterStart = i;
-        seenOption = true;
-        blankGap = 0;
-        continue;
-      }
-      // Grok Build ツール許可カード: `1 (•) Yes, proceed`（ピリオド無し・ラジオ印が選択状態）。
-      const gm = String(line || '').replace(/^[│┃]+|[│┃]+$/g, '').trim().match(/^\s*(\d{1,2})\s+\(([•●○*\-])\)\s+(.+?)\s*$/);
-      if (gm) {
-        options.unshift(buildApprovalOption(gm[1], consumeContinuations(gm[3]), gm[2] !== '○'));
-        if (clusterEnd === -1) clusterEnd = i;
-        clusterStart = i;
-        seenOption = true;
-        blankGap = 0;
-        continue;
-      }
-      if (!seenOption) continue;
-      if (!String(line || '').trim()) {
-        blankGap++;
-        if (blankGap > maxBlankGap) break;
-        pendingContinuation = [];
-        continue;
-      }
-      // 空行を挟まずに選択肢の直上(画面では直下)へ続く非選択肢行は、xterm の
-      // ハードラップで分割された折り返し継続行とみなし、直近(上方)の選択肢ラベルへ結合する。
-      // 旧実装はインデント付き行(/^\s+\S/)のみ継続扱いにしていたが、xterm の折り返しは
-      // 行頭に空白を入れないため、最長になりがちな option 1(Recommended 本文)が折り返されると
-      // ここで break して option 1 ごと欠落していた(「確認メッセージの 1 が途切れる」頻発症状)。
-      // 空行(blankGap>0)で区切られた履歴は従来どおり break するため scrollback の誤検出は増えない。
-      if (blankGap === 0) {
-        pendingContinuation.push(line.trim());
-        continue;
-      }
-      break;
-    }
-    if (options.length === 0) return { options: [], cluster: null, lines: tail };
-    const nums = options.map(opt => opt.num);
-    const numMin = Math.min(...nums);
-    const numMax = Math.max(...nums);
-    if (numMax > 20 || numMax - numMin > 15 || options.length > 12) {
-      return { options: [], cluster: null, lines: tail };
-    }
-    const seen = new Set();
-    const uniqueOptions = options.filter(opt => {
-      const key = `${opt.num}:${opt.label}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    if (uniqueOptions.length < 2) return { options: [], cluster: null, lines: tail };
-    // Claude のネイティブ AskUserQuestion ピッカー（末尾に "Type something" /
-    // "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は Web ボタン化しない。
-    // 再描画される VT をスクレイプすると選択肢番号が Web ボタンとズレて誤選択を招くため。
-    // AI には approval-rules.md(version 10) で [MANY-AI-CLI] マーカーへ誘導済み。
-    // 万一 AI が出しても Web バーは出さず、端末で直接 ↑↓/Enter 操作する。
-    if (uniqueOptions.some(o => /^\s*(type something|chat about)/i.test(o.label || ''))) {
-      return { options: [], cluster: null, lines: tail };
-    }
-    return {
-      options: uniqueOptions,
-      cluster: { start: clusterStart, end: clusterEnd },
-      lines: tail,
-    };
-  }
-
-  function approvalLineHasHint(provider, line, providerTriggerMatcher) {
-    const matchProvider = typeof providerTriggerMatcher === 'function'
-      ? providerTriggerMatcher
-      : (typeof root.matchProviderApprovalTrigger === 'function' ? root.matchProviderApprovalTrigger : null);
-    return userSpecifiesRe.test(line) ||
-      recommendedChoiceRe.test(line) ||
-      (matchProvider ? matchProvider(provider, line) : false) ||
-      matchNativeApprovalTrigger(line);
-  }
-
-  function approvalLinesHaveHint(provider, lines, providerTriggerMatcher) {
-    return (lines || []).some(line => approvalLineHasHint(provider, line, providerTriggerMatcher));
-  }
-
-  function isHubChoicePrompt(contextLines, options) {
-    if (!options.length) return false;
-    // Hub の正規経路は [MANY-AI-CLI] マーカーで先に処理される。ここは旧形式の
-    // 非マーカー質問だけを救済するため、自由入力行を必須にする。単なる手順文に
-    // 「どちらで進めますか」と「（推奨）」が共存しても、承認ポップアップへ
-    // 誤変換してはならない（2026-07-20 実測）。
-    //
-    // 選択肢に入った `推奨` は設計上の推奨を説明しているだけの場合があるため、
-    // これを旧形式の選択マーカーとしては使わない。旧形式でも質問は選択肢より前に
-    // 出るため、順序も確認して本文末尾の Q1 を誤って結び付けない。
-    const lines = contextLines || [];
-    const firstOption = lines.findIndex(line => /^\s*(?:[>❯›❱]\s*)?\d{1,2}\.\s*\S/.test(String(line || '')));
-    const hasPromptBeforeOptions = lines.some((line, index) =>
-      (firstOption === -1 || index < firstOption) && hubChoiceQuestionRe.test(String(line || '')),
-    );
-    const hasUserSpecifies = lines.some(line => userSpecifiesRe.test(String(line || ''))) ||
-      options.some(opt => userSpecifiesRe.test(String(opt?.label || '')));
-    return hasPromptBeforeOptions && hasUserSpecifies;
-  }
-
-  function markHubChoiceDefault(options, contextLines) {
-    if (options.some(o => o.isCurrent) || !isHubChoicePrompt(contextLines, options)) return;
-    const recommended = options.find(o => recommendedChoiceRe.test(o.label)) || options.find(o => o.num === 1) || options[0];
-    if (recommended) recommended.isCurrent = true;
-  }
-
-  function hasApprovalLikeLabel(options) {
-    return (options || []).some((opt) => approvalLabelRe.test(opt.label));
-  }
-
   const api = {
-    lineHasHint: approvalLineHasHint,
-    linesHaveHint: approvalLinesHaveHint,
-    approvalLineHasHint,
-    approvalLinesHaveHint,
     extractHubMarkerApproval,
-    extractPlainYesNoApproval,
     extractSequentialChoicePrompts,
-    extractApprovalOptions,
-    approvalContextLines,
-    approvalSig,
-    inheritMarkerBlockSig,
-    approvalQuestionKey,
     sequentialChoiceSig,
     isBatchOptions,
     isMultiSelectOptions,
-    isMultiQuestionPrompt,
-    isHubChoicePrompt,
-    markHubChoiceDefault,
-    matchNativeApprovalTrigger,
-    hasApprovalLikeLabel,
-    userSpecifiesRe,
     ungluedApprovalLines,
     normalizeVtCursorOps,
   };
@@ -953,5 +623,5 @@
 const __esmRoot = (typeof window !== 'undefined') ? window : globalThis;
 export const approvalParser = __esmRoot.approvalParser;
 export const {
-  lineHasHint, linesHaveHint, approvalLineHasHint, approvalLinesHaveHint, extractHubMarkerApproval, extractPlainYesNoApproval, extractSequentialChoicePrompts, extractApprovalOptions, approvalContextLines, isBatchOptions, isMultiSelectOptions, isMultiQuestionPrompt, isHubChoicePrompt, markHubChoiceDefault, matchNativeApprovalTrigger, hasApprovalLikeLabel, userSpecifiesRe, ungluedApprovalLines, normalizeVtCursorOps, approvalQuestionKey, approvalSig, inheritMarkerBlockSig,
+  extractHubMarkerApproval, extractSequentialChoicePrompts, sequentialChoiceSig, isBatchOptions, isMultiSelectOptions, ungluedApprovalLines, normalizeVtCursorOps,
 } = __esmRoot.approvalParser;

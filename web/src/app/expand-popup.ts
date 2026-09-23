@@ -4,7 +4,6 @@ import { copyCleanText } from './util.js';
 import { appendLinkedText } from './path-links.js';
 import { sendText } from '../app.js';
 import { scanBuffer } from './terminal.js';
-import { scheduleApprovalCheck } from './approval.js';
 import { sessions } from './state.js';
 import { ws } from './ws-client.js';
 
@@ -174,8 +173,6 @@ export function handleCrunchLinkClick(sessionId, clientX, clientY) {
     // ローディング表示中にユーザーが閉じていたら結果は表示しない
     if (!popupEl || popupEl.hidden) return;
     renderExpandPopup(sessionId, expanded, clientX, clientY, false);
-    // ポップアップ表示中に承認プロンプトが来ていた場合を検出するため再評価
-    scheduleApprovalCheck(sessionId);
   }, 800);
   expandCaptureTimers.set(sessionId, timer);
 }

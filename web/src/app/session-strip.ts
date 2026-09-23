@@ -64,7 +64,7 @@ const SETTLE_DELAY_MS = 400;
 // セッション一覧を出すタブ。multi は同じ段へ範囲トグル（C3）を出すので、この集合には
 // 入れない（段そのものは出す）。approval / orchestration はセッション非依存の集約ビュー
 // なので段ごと隠す。
-const STRIP_VISIBLE_TABS = new Set(['terminal', 'chat', 'split', 'files', 'git', 'history']);
+const STRIP_VISIBLE_TABS = new Set(['terminal', 'chat', 'split', 'files', 'git', 'review', 'history']);
 
 // 範囲トグルを出すタブ。段は STRIP_VISIBLE_TABS と共有する（高さを揃えるため）。
 const SCOPE_TAB = 'multi';

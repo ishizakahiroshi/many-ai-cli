@@ -97,6 +97,7 @@ func (s *Server) approvalPatternsRemoteSync(ctx context.Context) {
 		if err := RefreshActiveMirrors(profiles); err != nil {
 			s.logger.Warn("refresh active mirrors failed", "err", err)
 		}
+		s.reloadApprovalTriggerPhrases()
 	}
 	s.broadcast(proto.Message{Type: "approval_patterns_updated", Providers: changed})
 }

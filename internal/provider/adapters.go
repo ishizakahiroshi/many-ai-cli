@@ -11,6 +11,10 @@ const (
 	AdapterUsage        AdapterKind = "usage"
 	AdapterSubscription AdapterKind = "subscription"
 	AdapterPermissions  AdapterKind = "permissions"
+	// AdapterSubagents readers key is "subagent:<provider>-v1" (singular,
+	// unlike the "subagents" AdapterRefs/CapabilitySummary field name) — see
+	// subagent_adapter.go.
+	AdapterSubagents AdapterKind = "subagent"
 )
 
 type AdapterDescriptor struct {

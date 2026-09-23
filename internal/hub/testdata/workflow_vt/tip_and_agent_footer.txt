@@ -1,0 +1,8 @@
+earlier scrollback line, unrelated to workflows
+  ⎿  Tip: Dynamic workflows let Claude coordinate several agents at once — ask Claude to use a workflow directly.
+
+────────────────────────────────────────
+❯
+⏵⏵ bypass permissions on
+● main
+◯ general-purpose  Searching …  9m 02s · ↓ 42.5k tokens

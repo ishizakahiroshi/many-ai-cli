@@ -448,8 +448,8 @@ func openCodeApprovalScreen(target, status string) []string {
 }
 
 // 承認の同一性（Sig）は「何を許可しようとしているか」で決まり、画面のどこかが
-// 書き換わっただけでは変わってはならない。Sig が動くと Hub が approval_detected を
-// 再配信し、Web の action-bar が毎フレーム作り直されて点滅・クリック取りこぼしになる。
+// 書き換わっただけでは変わってはならない。Sig が動くと Hub が記録を開き直して再配信し、
+// Web の action-bar が毎フレーム作り直されて点滅・クリック取りこぼしになる。
 func TestDetectNativeApprovalOpenCodeSigIgnoresUnrelatedRepaint(t *testing.T) {
 	a := detectNativeApproval("opencode", openCodeApprovalScreen("Read CLAUDE.md", "⠋ Thinking… (12s · 1.2k tokens)"))
 	b := detectNativeApproval("opencode", openCodeApprovalScreen("Read CLAUDE.md", "⠙ Thinking… (13s · 1.4k tokens)"))
@@ -710,8 +710,10 @@ func TestDetectNativeApprovalSuppressesCodexModelSelector(t *testing.T) {
 func TestDetectNativeApprovalSuppressesAskUserQuestion(t *testing.T) {
 	// Claude の AskUserQuestion ピッカー（末尾に "Type something" / "Chat about this"
 	// の自由入力肢を持つ arrow 駆動 UI）は webify しない。再描画される VT のスクレイプで
-	// 選択肢番号が Web ボタンとズレ誤選択を招くため、キーヒントが揃っていても nil を返し
-	// ターミナル直操作へフォールバックする（approval-rules.md version 10 でマーカー誘導済み）。
+	// 選択肢番号が Web ボタンとズレ誤選択を招くため、選択肢を持たない告知として返し、
+	// 回答はターミナル直操作に任せる（approval-rules.md version 10 でマーカー誘導済み）。
+	// 以前は nil を返していたが、それでは画面を開いていないと答えが要ることに気づけない
+	// （親 plan の D1。2026-09-23 に Hub へ移すと決めた）。
 	lines := []string{
 		"スキーマ差分の適用範囲は?",
 		"❯ 1. 全差分を全環境へ適用",
@@ -722,8 +724,15 @@ func TestDetectNativeApprovalSuppressesAskUserQuestion(t *testing.T) {
 		"  6. Chat about this",
 		"Enter to select · ↑↓ to navigate · Esc to cancel",
 	}
-	if got := detectNativeApproval("claude", lines); got != nil {
-		t.Fatalf("detectNativeApproval = %+v, want nil (AskUserQuestion should be suppressed)", got)
+	got := detectNativeApproval("claude", lines)
+	if got == nil || got.Kind != approvalKindAskUserQuestion {
+		t.Fatalf("detectNativeApproval = %+v, want the AskUserQuestion notice", got)
+	}
+	if len(got.Options) != 0 || got.Context != "" {
+		t.Fatalf("notice = %+v, want no options and no context (Web ボタン化しない)", got)
+	}
+	if got.Question != "スキーマ差分の適用範囲は?" {
+		t.Fatalf("notice question = %q", got.Question)
 	}
 }
 

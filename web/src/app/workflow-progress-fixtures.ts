@@ -128,6 +128,62 @@ test('parseWorkflowProgress: 非 Workflow バッファは detected:false（誤�
   assert.equal(r.running, false);
 });
 
+test('parseWorkflowProgress: Tip 文 + 入力欄下のエージェント一覧は誤検出しない（合成データ・実際の行頭記号）', () => {
+  // Workflow を使っていないセッションでも、案内文 Tip の "workflow" の語と、
+  // 入力欄の下に常時出るエージェント一覧（● main / ◯ …）が組み合わさると
+  // 誤検出していた（plan_subagent-tree-popup.md C1）。実ログでは Tip 行の行頭記号は
+  // `⎿`（U+23BF）+ U+00A0（実測 866/978 件がこの形）で、行頭記号の除去がこれを
+  // 含んでいないと `^tip:` 除外が一致しない（敵対レビュー指摘 R8）。
+  const lines = [
+    'earlier scrollback line, unrelated to workflows',
+    '  ⎿  Tip: Dynamic workflows let Claude coordinate several agents at once — ask Claude to use a workflow directly.',
+    '',
+    '────────────────────────────────────────',
+    '❯ ',
+    '⏵⏵ bypass permissions on',
+    '● main',
+    '◯ general-purpose  Searching …  9m 02s · ↓ 42.5k tokens',
+  ];
+  const r = parseWorkflowProgress(lines);
+  assert.equal(r.detected, false);
+  assert.equal(r.running, false);
+});
+
+test('parseWorkflowProgress: 区切り線が無くても Tip 除外だけで誤検出しない（R8）', () => {
+  // 区切り線（罫線・❯ プロンプト）を一切含めず、Tip 行の除外（TREE_PREFIX_RE の
+  // `⎿`+U+00A0 対応）だけで誤検出が防げていることを守る。区切り線頼みだと、
+  // 区切りが無い/届いていないフレームでは再発する（敵対レビュー指摘 R8）。
+  const lines = [
+    'earlier scrollback line, unrelated content',
+    '  ⎿  Tip: Dynamic workflows let Claude coordinate several agents at once — ask Claude to use a workflow directly.',
+    '',
+    '⏵⏵ bypass permissions on',
+    '● main',
+    '◯ general-purpose  Searching …  9m 02s · ↓ 42.5k tokens',
+  ];
+  const r = parseWorkflowProgress(lines);
+  assert.equal(r.detected, false);
+  assert.equal(r.running, false);
+});
+
+test('parseWorkflowProgress: Workflow ブロック内の枠線は入力欄の区切りと誤認せず打ち切らない（R9）', () => {
+  // 区切り線の条件は「行全体が横線文字（─━═）と空白だけ」に狭めてある。
+  // `╭─── Review ───╮` のように角（╭╮）や文字（Review）を含む行は区切りにしない。
+  const lines = [
+    'unrelated terminal output',
+    '⚙ workflow with-border',
+    '╭─── Review ───╮',
+    '  ✓ review:bugs',
+    '  ⠋ review:perf',
+    '╰───────────────╯',
+  ];
+  const r = parseWorkflowProgress(lines);
+  assert.equal(r.detected, true);
+  assert.equal(r.totalCount, 2);
+  assert.equal(r.doneCount, 1);
+  assert.equal(r.runningCount, 1);
+});
+
 test('parseWorkflowProgress: 空・null は detected:false', () => {
   assert.equal(parseWorkflowProgress([]).detected, false);
   assert.equal(parseWorkflowProgress(undefined as unknown as string[]).detected, false);

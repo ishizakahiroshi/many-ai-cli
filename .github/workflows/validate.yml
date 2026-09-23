@@ -99,6 +99,12 @@ jobs:
       - name: Check wheel overlay registration
         run: node scripts/check-wheel-overlays.mjs
 
+      # 承認の表示は Hub の保留中の記録を描くだけ。以前の画面は端末の文字から承認を作り、
+      # 文字照合で閉じ、タイマーと台帳で取り直していて、経路ごとの早期 return が
+      # 「切り替えても描かれない」行き止まりを作った。撤去した関数と state を名前ごと戻させない。
+      - name: Check approval display source
+        run: node scripts/check-approval-display-source.mjs
+
       # CLAUDE.md は全 AI セッションで全文がロードされる唯一のファイル。
       # ルールが破られるたびに本文をここへコピーするのが最短の対処に見えるため、
       # 放っておくと一方向に太る（v0.5.0 の 129 行が 5 週間で 269 行になった）。

@@ -3,7 +3,8 @@ import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { currentXtermTheme } from './theme-tokens.js';
-import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
+import { activeSessionId, sessions, terminals } from './state.js';
+import { isApprovalPending } from './approval-store.js';
 import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
 import { resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup } from './path-links.js';
 import {
@@ -17,7 +18,7 @@ import {
   type PathWrapRow,
 } from './path-detect.js';
 import { ws } from './ws-client.js';
-import { isSelectMenuActive, isShellProvider, scheduleApprovalCheck } from './approval.js';
+import { isShellProvider } from './approval.js';
 import { probe } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
@@ -128,10 +129,6 @@ function sendSelectionDirect(text, opts: any = {}) {
   if (!cleaned) return;
   const sessionId = opts.sessionId ?? activeSessionId;
   if (sessionId == null) return;
-  if (isSelectMenuActive(sessionId)) {
-    showToast(ti18n('toast_select_menu_active'), opts.anchor);
-    return;
-  }
   if (isShellProvider(sessions.get(sessionId)?.provider) && !window.confirm(ti18n('term_ctx_send_confirm_shell'))) return;
   sendQuickCommand(sessionId, cleaned);
   showToast(ti18n('term_ctx_sent'), opts.anchor);
@@ -422,7 +419,6 @@ export function ensureTerminal(id) {
     pendingFlushWatchdog: null,
     layoutGeneration: 0,
     pendingFlushCallbacks: [],
-    pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
     inMarkerBlock: false,
@@ -837,7 +833,6 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
   t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
-    scheduleApprovalCheck(id);
     runPendingFlushCallbacks(t);
     return;
   }
@@ -865,7 +860,6 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
-    scheduleApprovalCheck(id);
     runPendingFlushCallbacks(latest);
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
@@ -1374,7 +1368,7 @@ export function resumeTerminalBottomFollow(id, opts: any = {}) {
 
 export function revealApprovalPromptForSession(id) {
   if (id === null || id === undefined) return;
-  if (!approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) return;
+  if (!isApprovalPending(id)) return;
   const startedAt = Date.now();
   scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt });
   refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt });
@@ -1433,9 +1427,8 @@ export function updateScrollLockBtn(_locked?: boolean) {
   const hasSession = activeSessionId !== null && terminals.has(activeSessionId);
   if (topBtn) topBtn.hidden = !hasSession;
   if (bottomBtn) bottomBtn.hidden = !hasSession;
-  // 承認ポップアップ 再表示/消す ボタンもセッション表示中は常時表示する。
-  const recallBar = document.getElementById('approval-recall-bar');
-  if (recallBar) recallBar.hidden = !hasSession;
+  // 端末右下の「✕ 承認」（#approval-recall-bar）は、承認パネルが開いている間だけ出す。
+  // 出し入れは approval.ts の syncApprovalRecallBar が持つ。
 }
 
 document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
@@ -2241,10 +2234,6 @@ export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIden
       return;
     }
     probeSendOutcome(sessionId, cols, rows, reason, 'sent');
-    const approvalOptions = approvalRawOptionsCache.get(sessionId);
-    const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
-      ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
-      : null);
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     lastSentPtySize.set(sessionId, size);
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。

@@ -20,7 +20,8 @@
     "transcript": "history:claude-v1",
     "usage": "usage:claude-v1",
     "subscription": "subscription:claude-v1",
-    "permissions": "permissions:generic-v1"
+    "permissions": "permissions:generic-v1",
+    "subagents": "subagent:claude-v1"
   },
   "update": {
     "args": ["update"],

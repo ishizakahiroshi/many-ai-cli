@@ -294,30 +294,18 @@ export const FilesTabManager = (function () {
       filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => {
         el.classList.toggle('active', el.dataset.tabId === tabId);
       });
-      // C2: 外部から openFilesTab / openGitTab が呼ばれた場合は統合タブバーも追随
+      // C2: 外部から openFilesTab / openGitTab / openReviewTab が呼ばれた場合は統合タブバーも追随。
+      // review は独立した統合タブ (mode-review) を持つので files への読み替えは不要
+      // （C2 子 plan: docs/local/plan_ux-notify-palette-review_c2_review-tab.md）。
       if (targetTab) {
         const kind = targetTab.kind || targetTab.type;
         if (kind === 'files' || kind === 'git' || kind === 'review') {
           if (typeof window !== 'undefined' && typeof window.setActiveTab === 'function') {
             const sid = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
             if (sid !== null && sid !== undefined) {
-              const unifiedKind = kind === 'review' ? 'files' : kind;
-              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, unifiedKind);
+              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, kind);
               if (typeof refreshLazyTabClasses === 'function') refreshLazyTabClasses(sid);
-              window.setActiveTab(sid, unifiedKind);
-              // Review は統合バー上では Files pane を借りる。setActiveTab('files')
-              // の初回 lazy open が Files 子タブを activate するため、戻った後に
-              // Review 子タブをもう一度権威状態へ戻す。
-              if (kind === 'review') {
-                activeTabId = tabId;
-                tabList.querySelectorAll('.main-tab').forEach(el => {
-                  el.classList.toggle('active', el.dataset.tabId === tabId);
-                });
-                filesContents.classList.add('visible');
-                filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => {
-                  el.classList.toggle('active', el.dataset.tabId === tabId);
-                });
-              }
+              window.setActiveTab(sid, kind);
             }
           }
         }

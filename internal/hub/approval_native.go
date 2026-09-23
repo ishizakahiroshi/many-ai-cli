@@ -4,7 +4,7 @@ package hub
 //
 // C4 (plan_audit_score_s_promotion_2026-07-05.md): server.go 3144 行を関心事別に
 // 割るリファクタの第一弾。以下の 9 関数は「Go 側 VT ミラーで検出した provider
-// 承認プロンプト」の状態機械 (nativeApprovalSig / ClearMisses / DoneSummary
+// 承認プロンプト」の状態機械 (保留中の記録の開閉 / ClearMisses / DoneSummary
 // マーカー処理・PTY replay バッファ) を扱う一塊で、他の関心事から明確に分離
 // できる。挙動は移動前と完全に同一・全て package-private・呼び出し元は変更なし。
 //
@@ -34,7 +34,7 @@ func (s *Server) resetNativeApprovalClearMisses(id int) {
 
 func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval) {
 	now := time.Now()
-	var msg *proto.Message
+	var closures []*approvalRecordClosure
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil {
@@ -46,34 +46,15 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		return
 	}
 	if approval == nil {
-		if ses.nativeApprovalSig != "" {
+		// 消失の判定はネイティブの記録だけが対象。マーカーの記録は画面の検出では閉じない。
+		if ses.pendingApproval.isNative() {
 			ses.nativeApprovalClearMisses++
 			if ses.nativeApprovalClearMisses >= nativeApprovalClearMissLimit {
-				sig := ses.nativeApprovalSig
-				candidateKey := ses.nativeApprovalCandidateKey
-				candidateShape := ses.nativeApprovalCandidateShape
-				sourceEpoch := ses.nativeApprovalSourceEpoch
-				ses.nativeApprovalSig = ""
-				ses.nativeApprovalCandidateKey = ""
-				ses.nativeApprovalCandidateShape = ""
-				ses.nativeApprovalSourceEpoch = 0
-				ses.nativeApprovalClearMisses = 0
-				msg = &proto.Message{
-					Type:                   "approval_cleared",
-					SessionID:              id,
-					Provider:               ses.Provider,
-					ApprovalSig:            sig,
-					ApprovalCandidateKey:   candidateKey,
-					ApprovalCandidateShape: candidateShape,
-					ApprovalSourceEpoch:    sourceEpoch,
-					ApprovalSource:         approvalSourceGoVT,
-				}
+				closures = append(closures, closeApprovalRecordLocked(ses, id, approvalCloseVanished, now))
 			}
 		}
 		s.sessionsMu.Unlock()
-		if msg != nil {
-			s.broadcast(*msg)
-		}
+		s.finishApprovalRecordClosures(closures...)
 		return
 	}
 	candidateKey := approvalCandidateKeyWithContext(ses.Provider, approval.Kind, approval.Question, approval.Context, approval.Options)
@@ -86,55 +67,62 @@ func (s *Server) handleNativeApprovalDetection(id int, approval *nativeApproval)
 		return
 	}
 	ses.nativeApprovalClearMisses = 0
-	sameLegacySig := ses.nativeApprovalCandidateKey == "" && ses.nativeApprovalSig == approval.Sig
-	sameCandidate := ses.nativeApprovalCandidateKey == candidateKey && ses.nativeApprovalSourceEpoch == sourceEpoch
-	if !sameLegacySig && !sameCandidate {
-		ses.nativeApprovalSig = approval.Sig
-		ses.nativeApprovalCandidateKey = candidateKey
-		ses.nativeApprovalCandidateShape = candidateShape
-		ses.nativeApprovalSourceEpoch = sourceEpoch
-		msg = &proto.Message{
-			Type:                   "approval_detected",
-			SessionID:              id,
-			Provider:               ses.Provider,
-			ApprovalSig:            approval.Sig,
-			ApprovalCandidateKey:   candidateKey,
-			ApprovalCandidateShape: candidateShape,
-			ApprovalSourceEpoch:    sourceEpoch,
-			ApprovalKind:           approval.Kind,
-			ApprovalSource:         approvalSourceGoVT,
-			ApprovalQuestion:       approval.Question,
-			ApprovalContext:        approval.Context,
-			ApprovalOptions:        approval.Options,
-			ApprovalSummary:        &approval.Summary,
-			DetectedAt:             now.Format(time.RFC3339),
+	provider := ses.Provider
+	var opened proto.Message
+	var openedActivity *proto.Message
+	var openedRecord *approvalRecord
+	if !ses.pendingApproval.isCandidate(candidateKey, sourceEpoch) {
+		superseded := closeApprovalRecordLocked(ses, id, approvalCloseSuperseded, now)
+		superseded.dropActivity()
+		closures = append(closures, superseded)
+		openedRecord = &approvalRecord{
+			CandidateKey:   candidateKey,
+			CandidateShape: candidateShape,
+			SourceEpoch:    sourceEpoch,
+			Sig:            approval.Sig,
+			Origin:         approvalRecordOriginNative,
+			Source:         approvalSourceGoVT,
+			Kind:           approval.Kind,
+			Question:       approval.Question,
+			Context:        approval.Context,
+			Options:        append([]proto.ApprovalOption(nil), approval.Options...),
+			Summary:        approval.Summary,
+			DetectedAt:     now,
 		}
+		opened, openedActivity = openApprovalRecordLocked(ses, id, openedRecord)
 	}
 	s.sessionsMu.Unlock()
-	if msg != nil {
-		if msg.Type == "approval_detected" && s.maybeAutoApprove(id, approval) {
+	// 古い記録の resolved は新しい記録の INSERT より先に書く（approval_record.go 冒頭）。
+	s.finishApprovalRecordClosures(closures...)
+	if openedRecord != nil {
+		// 自動承認した記録は開いたことを画面へ知らせない。閉じる approval_state だけが届き、
+		// 画面は知らない記録の「閉じる」として版番号を進めるだけになる。
+		// 選択肢の無い記録（AskUserQuestion の告知）は自動承認の対象にしない。
+		if openedRecord.hasOptions() && s.maybeAutoApprove(id, approval) {
 			return
 		}
-		if s.sessionStore != nil && msg.Type == "approval_detected" {
+		if s.sessionStore != nil {
 			s.sessionStore.StoreApprovalDetected(sessionstore.ApprovalDetected{
 				LiveSessionID: id,
 				Sig:           approval.Sig,
 				Source:        approvalSourceGoVT,
 				Kind:          approval.Kind,
-				Provider:      msg.Provider,
+				Provider:      provider,
 				Question:      approval.Question,
 				Context:       approval.Context,
-				CandidateKey:  msg.ApprovalCandidateKey,
-				SourceEpoch:   msg.ApprovalSourceEpoch,
+				CandidateKey:  candidateKey,
+				SourceEpoch:   sourceEpoch,
 				Options:       approval.Options,
 				DetectedAt:    now,
 			})
 		}
-		s.broadcast(*msg)
-		if msg.Type == "approval_detected" {
-			s.notifyApprovalPush(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
-			s.notifyApprovalOutbound(id, approval.Sig, msg.Provider, approval.Question, approval.Context)
+		s.broadcast(opened)
+		if openedActivity != nil {
+			s.broadcast(*openedActivity)
 		}
+		// 承認の通知は記録が開いたときの 1 回だけ（文章の質問も同じ。approval_text_question.go）。
+		s.notifyApprovalPush(id, approval.Sig, provider, approval.Question, approval.Context)
+		s.notifyApprovalOutbound(id, approval.Sig, provider, approval.Question, approval.Context)
 	}
 }
 
@@ -210,7 +198,7 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 		return
 	}
 	now := time.Now()
-	var clearMsg *proto.Message
+	var closure *approvalRecordClosure
 	s.sessionsMu.Lock()
 	ses := s.sessions[m.SessionID]
 	if ses == nil {
@@ -218,14 +206,12 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 		return
 	}
 	currentEpoch := ensureApprovalSourceEpochLocked(ses)
+	record := ses.pendingApproval
 	candidateKey := m.ApprovalCandidateKey
 	if candidateKey == "" {
-		switch {
-		case m.ApprovalSig != "" && ses.nativeApprovalSig == m.ApprovalSig:
-			candidateKey = ses.nativeApprovalCandidateKey
-		case m.ApprovalSig != "" && ses.approvalMarkerSig == m.ApprovalSig:
-			candidateKey = ses.approvalMarkerCandidateKey
-		default:
+		if m.ApprovalSig != "" && record != nil && record.Sig == m.ApprovalSig {
+			candidateKey = record.CandidateKey
+		} else {
 			candidateKey = m.ApprovalSig // legacy clients only supplied approval_sig
 		}
 	}
@@ -235,9 +221,7 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 		// one-frame handoff only when the candidate is still the active one (or
 		// Hub never had an active candidate, as with browser-only fallback).
 		previousEpoch := m.ApprovalSourceEpoch+1 == currentEpoch
-		activeSameCandidate := candidateKey != "" &&
-			((candidateKey == ses.nativeApprovalCandidateKey && ses.nativeApprovalSourceEpoch == m.ApprovalSourceEpoch) ||
-				(candidateKey == ses.approvalMarkerCandidateKey && ses.approvalMarkerSourceEpoch == m.ApprovalSourceEpoch))
+		activeSameCandidate := record.isCandidate(candidateKey, m.ApprovalSourceEpoch)
 		if !previousEpoch || (approvalCandidateActiveLocked(ses) && !activeSameCandidate) {
 			// A delayed answer from an older prompt generation must not consume a
 			// newly displayed prompt with the same question.
@@ -251,72 +235,27 @@ func (s *Server) markNativeApprovalConsumed(m proto.Message) {
 	} else {
 		sourceEpoch = markApprovalConsumedAtEpochLocked(ses, candidateKey, m.ApprovalSig, sourceEpoch)
 	}
-	if ses.nativeApprovalSig == m.ApprovalSig ||
-		(candidateKey != "" && ses.nativeApprovalCandidateKey == candidateKey && ses.nativeApprovalSourceEpoch == sourceEpoch) {
-		ses.nativeApprovalSig = ""
-		ses.nativeApprovalCandidateKey = ""
-		ses.nativeApprovalCandidateShape = ""
-		ses.nativeApprovalSourceEpoch = 0
-		ses.nativeApprovalClearMisses = 0
-		clearMsg = &proto.Message{
-			Type:                   "approval_cleared",
-			SessionID:              m.SessionID,
-			Provider:               ses.Provider,
-			ApprovalSig:            m.ApprovalSig,
-			ApprovalCandidateKey:   candidateKey,
-			ApprovalCandidateShape: ses.approvalConsumedCandidateShape,
-			ApprovalSourceEpoch:    sourceEpoch,
-			ApprovalSource:         approvalSourceGoVT,
-		}
-	}
-	ledgerSig := m.ApprovalSig
-	if candidateKey != "" && ses.approvalMarkerCandidateKey == candidateKey && ses.approvalMarkerSourceEpoch == sourceEpoch {
-		// 台帳の行は Hub がブロック本文から取った sig で引く。ブラウザが送ってくる
-		// approval_sig は選択肢から計算した別の値なので、それで UPDATE しても
-		// 1 行も当たらず、回答済みの承認が台帳に pending のまま残っていた
-		// （bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
-		if ses.approvalMarkerSig != "" {
-			ledgerSig = ses.approvalMarkerSig
-		}
-		cleared := clearApprovalMarkerCandidateLocked(ses, m.SessionID, m.ApprovalSource)
-		if clearMsg == nil {
-			clearMsg = &cleared
-		}
+	// 画面は記録の sig と同一性（candidate_key + source_epoch）をそのまま返す。ネイティブは
+	// sig の一致でも引き当てる（approval_sig だけを送る古い画面のため。上の candidateKey の補完）。
+	// マーカーは同一性だけで引き当てる（古い画面はマーカーの approval_sig に選択肢から計算した
+	// 別の値を載せていた）。
+	nativeMatched := record.isNative() && (record.Sig == m.ApprovalSig || record.isCandidate(candidateKey, sourceEpoch))
+	markerMatched := record.isMarker() && record.isCandidate(candidateKey, sourceEpoch)
+	if nativeMatched || markerMatched {
+		// 台帳の行は記録の Sig（Hub がブロック本文・選択肢から取った値）で引く
+		// （finishApprovalRecordClosures。bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
+		closure = closeApprovalRecordLocked(ses, m.SessionID, approvalCloseAnswered, now)
 	}
 	s.sessionsMu.Unlock()
-	if s.sessionStore != nil && ledgerSig != "" {
-		s.sessionStore.StoreApprovalConsumed(m.SessionID, ledgerSig, m.SentText, now)
+	if closure != nil {
+		closure.answer = m.SentText
+		s.finishApprovalRecordClosures(closure)
+		return
 	}
-	if clearMsg != nil {
-		s.broadcast(*clearMsg)
+	// 記録と一致しない回答（記録が既に閉じている）でも、台帳に同じ sig の行があれば resolved にする。
+	if s.sessionStore != nil && m.ApprovalSig != "" {
+		s.sessionStore.StoreApprovalConsumed(m.SessionID, m.ApprovalSig, m.SentText, now)
 	}
-}
-
-// clearApprovalMarkerCandidateLocked は保留中のマーカー承認を session から下ろし、
-// ブラウザへ流す approval_cleared を組み立てる。ネイティブ承認の approval_cleared と
-// 同じ型で、ApprovalKind が "marker" のときだけマーカー候補の取り下げを意味する。
-// 呼び出し側は sessionsMu を持ち、返り値の broadcast は解放後に行う。
-//
-// これまでマーカー候補の取り下げはブラウザに知らせていなかった。回答した UI は
-// 自分で閉じるが、同じ Hub を見ている別の UI や、トランスクリプト側で答えが
-// 観測された（端末へ直接入力した）場合は、閉じる合図が無いと承認パネルが残る。
-func clearApprovalMarkerCandidateLocked(ses *session, id int, source string) proto.Message {
-	cleared := proto.Message{
-		Type:                   "approval_cleared",
-		SessionID:              id,
-		Provider:               ses.Provider,
-		ApprovalSig:            ses.approvalMarkerSig,
-		ApprovalKind:           "marker",
-		ApprovalCandidateKey:   ses.approvalMarkerCandidateKey,
-		ApprovalCandidateShape: ses.approvalMarkerCandidateShape,
-		ApprovalSourceEpoch:    ses.approvalMarkerSourceEpoch,
-		ApprovalSource:         source,
-	}
-	ses.approvalMarkerCandidateKey = ""
-	ses.approvalMarkerCandidateShape = ""
-	ses.approvalMarkerSourceEpoch = 0
-	ses.approvalMarkerSig = ""
-	return cleared
 }
 
 // evaluateReplayApproval performs the single approval evaluation allowed at
@@ -337,14 +276,22 @@ func (s *Server) evaluateReplayApproval(id int) {
 	// メッセージを見て、未回答の質問ならそこから配信し直す
 	// （approval_marker_transcript.go の scanTranscriptApprovalMarkers）。
 	var marker *approvalMarkerBlock
+	var question *textQuestion
+	screen := ses.vt.TailLines(vtTailLinesForApproval)
 	if !approvalMarkerSourceIsTranscriptLocked(ses) {
 		marker = extractApprovalMarkerBlockFromVT(ses.vt)
+		// 文章の質問は出力が落ち着いているときだけ見る。まだ動いているなら、落ち着いた時点で
+		// openTextQuestionsOnOutputIdle が見る（approval_text_question.go の「出力が落ち着いてから開く」節）。
+		if marker == nil && ses.Activity.OutputIdle {
+			question = detectTextQuestion(screen)
+		}
 	}
-	approval := detectNativeApproval(provider, ses.vt.TailLines(vtTailLinesForApproval))
+	approval := s.detectScreenApproval(provider, screen)
 	s.sessionsMu.Unlock()
 	if marker != nil {
 		s.maybeBroadcastApprovalMarker(id, marker, now)
 	}
+	s.openTextQuestion(id, question, now, approvalSourceGoVT)
 	s.handleNativeApprovalDetection(id, approval)
 }
 

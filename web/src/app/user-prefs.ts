@@ -25,8 +25,7 @@ export const STORAGE_SIDEBAR_PIN_MIGRATED_KEY = 'ai_cli_hub_sidebar_pin_migrated
 export const STORAGE_PROJECT_VIEWS_KEY       = 'ai_cli_hub_project_views';
 export const STORAGE_OPEN_PROJECT_KEY        = 'ai_cli_hub_open_project';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
-// 新規セッションの provider 並び順（端末・ブラウザ単位。サーバ同期しない）。
-export const STORAGE_SPAWN_PROVIDER_ORDER_KEY = 'ai_cli_hub_spawn_provider_order';
+// provider の並び順（端末・ブラウザ単位。サーバ同期しない）は provider-order.ts が持つ。
 export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
 export const STORAGE_CWD_FAVORITES_KEY     = 'ai_cli_hub_cwd_favorites';
 export const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';
@@ -89,6 +88,40 @@ export function isActionBarCollapsed(): boolean {
 }
 export function setActionBarCollapsed(value: boolean): void {
   try { localStorage.setItem(STORAGE_ACTION_BAR_COLLAPSED_KEY, value ? '1' : '0'); } catch (_) {}
+}
+// 作業が終わって running → standby（入力待ち）に戻ったときも、音・OS 通知で知らせるか
+// （既定 ON）。device-local（端末ごと）。承認待ちの通知設定（desktop_notifications /
+// notify_sound）とは別に持ち、Hub 同期の対応表（_USER_PREFS_PATH_TO_LS）には載せない
+// （子 plan: plan_ux-notify-palette-review_c1_notify.md の判断ログ）。
+export const STORAGE_TURN_END_NOTIFY_ENABLED_KEY = 'ai_cli_hub_turn_end_notify_enabled';
+export function isTurnEndNotifyEnabled(): boolean {
+  try { return localStorage.getItem(STORAGE_TURN_END_NOTIFY_ENABLED_KEY) !== '0'; } catch (_) { return true; }
+}
+export function setTurnEndNotifyEnabled(value: boolean): void {
+  try { localStorage.setItem(STORAGE_TURN_END_NOTIFY_ENABLED_KEY, value ? '1' : '0'); } catch (_) {}
+}
+// セッションごとの「作業終了通知」ベル。OFF にしたセッション ID の一覧を 1 キーに
+// 持つ。Hub 再起動でセッション ID が振り直されるため、purgeLocalStateForHubRestart()
+// から全消去する（ws-client.ts）。Hub へは同期しない（同上の判断ログ）。
+export const STORAGE_TURN_END_MUTED_SESSIONS_KEY = 'ai_cli_hub_turn_end_muted_sessions';
+function readTurnEndMutedSessions(): number[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((v) => Number.isInteger(v)) : [];
+  } catch (_) {
+    return [];
+  }
+}
+export function isTurnEndBellOff(id: number): boolean {
+  return readTurnEndMutedSessions().includes(id);
+}
+export function setTurnEndBellOff(id: number, off: boolean): void {
+  const list = readTurnEndMutedSessions().filter((v) => v !== id);
+  if (off) list.push(id);
+  try { localStorage.setItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY, JSON.stringify(list)); } catch (_) {}
+}
+export function clearAllTurnEndBellMutes(): void {
+  try { localStorage.removeItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY); } catch (_) {}
 }
 // 両エンジン共通の「終了検知の待ち時間（秒）」既定値。
 // Whisper では無音がこの秒数続くと自動確定する（旧 Whisper 固定値 1.8秒に近い 2秒を採用）。

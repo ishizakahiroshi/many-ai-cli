@@ -2396,14 +2396,14 @@ func uniqueChildSessionForRole(b *orchestrationBoard, role string) int {
 // judgment (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md)
 // from already-read values, taking no locks itself. Callers that already hold
 // orchestration.mu (checkOrchestrationChildTimers) can call this directly
-// with a pre-fetched approvalVisible; childStartupFailed below is the
+// with a pre-fetched awaitingApproval; childStartupFailed below is the
 // standalone, locking entry point for everyone else (tests included).
 //
 // True only when BOTH hold: the initial prompt's delivery was confirmed and
 // the child has never written its progress file (child.FileMod.IsZero()),
 // AND the session has been standby (no PTY output) for at least
 // cfg.ChildStartupGraceSeconds while not waiting on an approval prompt.
-func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, now time.Time, cfg config.OrchestrationConfig) bool {
+func childStartupFailedLocked(child *orchestrationChild, awaitingApproval bool, now time.Time, cfg config.OrchestrationConfig) bool {
 	if !cfg.ChildStartupFailEnabled() {
 		return false
 	}
@@ -2416,7 +2416,7 @@ func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, n
 		// 一度でも進捗ファイルを書いた子は働いている。timeout の担当。
 		return false
 	}
-	if approvalVisible {
+	if awaitingApproval {
 		// 承認待ちの間は grace のカウントを進めない。
 		return false
 	}
@@ -2439,7 +2439,7 @@ func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, n
 func (s *Server) childStartupFailed(sessionID int, now time.Time, cfg config.OrchestrationConfig) bool {
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
-	approvalVisible := ses != nil && ses.approvalVisible
+	awaitingApproval := ses != nil && ses.pendingApproval != nil
 	s.sessionsMu.Unlock()
 
 	s.orchestration.mu.Lock()
@@ -2452,7 +2452,7 @@ func (s *Server) childStartupFailed(sessionID int, now time.Time, cfg config.Orc
 		if board.StartupFailed[sessionID] {
 			return false
 		}
-		return childStartupFailedLocked(child, approvalVisible, now, cfg)
+		return childStartupFailedLocked(child, awaitingApproval, now, cfg)
 	}
 	return false
 }
@@ -2479,15 +2479,15 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
 	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
 	// だけの判定は実測で偽陽性を連発した（plan_orchestration-conductor-improvements.md C1）。
-	// approvalVisible も同じ理由で事前取得する（承認待ちを起動失敗の grace に含めないため。
+	// 保留中の承認の有無も同じ理由で事前取得する（承認待ちを起動失敗の grace に含めないため。
 	// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md D2）。
 	// sessionsMu → orchestration.mu の順に短く取り、入れ子にしない。
 	lastOutputs := map[int]time.Time{}
-	approvalVisible := map[int]bool{}
+	awaitingApproval := map[int]bool{}
 	s.sessionsMu.Lock()
 	for id, ses := range s.sessions {
 		lastOutputs[id] = ses.lastOutputAt
-		approvalVisible[id] = ses.approvalVisible
+		awaitingApproval[id] = ses.pendingApproval != nil
 	}
 	s.sessionsMu.Unlock()
 	s.orchestration.mu.Lock()
@@ -2498,7 +2498,7 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 			if child.Done || b.Done[id] || b.TimedOut[id] || b.StartupFailed[id] {
 				continue
 			}
-			if childStartupFailedLocked(child, approvalVisible[id], now, cfg) {
+			if childStartupFailedLocked(child, awaitingApproval[id], now, cfg) {
 				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "startup_failed"})
 				continue
 			}
@@ -3442,12 +3442,12 @@ func (s *Server) confirmInitialPromptSubmitted(sessionID int, marker string, not
 	}
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
-	approvalVisible := ses != nil && ses.approvalVisible
+	awaitingApproval := ses != nil && ses.pendingApproval != nil
 	s.sessionsMu.Unlock()
 	if ses == nil {
 		return true
 	}
-	if approvalVisible {
+	if awaitingApproval {
 		s.logger.Warn("initial prompt still in composer but an approval prompt is visible; not resending Enter",
 			"session_id", sessionID)
 		return true

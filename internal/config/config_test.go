@@ -122,6 +122,28 @@ func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
 	}
 }
 
+func TestSubagentTreeEnabledDefaultsOnAndCanBeDisabled(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if !cfg.Workflow.SubagentTreeEnabled {
+		t.Fatal("defaultConfig().Workflow.SubagentTreeEnabled = false, want true")
+	}
+	// An existing config file that predates this feature (no
+	// subagent_tree_enabled key, only some other workflow key) must still
+	// default to true after merging onto the pre-populated struct.
+	if err := yaml.Unmarshal([]byte("workflow:\n  journal_enabled: false\n"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Workflow.SubagentTreeEnabled {
+		t.Fatal("loading an existing config without subagent_tree_enabled must keep the default true")
+	}
+	if err := yaml.Unmarshal([]byte("workflow:\n  subagent_tree_enabled: false\n"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Workflow.SubagentTreeEnabled {
+		t.Fatal("explicit workflow.subagent_tree_enabled=false was ignored")
+	}
+}
+
 func TestBoardNotifyModeDefaultsAndValidation(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if cfg.Orchestration.BoardNotifyMode != BoardNotifySoft {

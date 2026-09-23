@@ -262,7 +262,7 @@ func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nati
 	}
 
 	s.sessionsMu.Lock()
-	if s.sessions[req.sessionID] != ses || ses.vt == nil || ses.nativeApprovalSig != req.approvalSig {
+	if s.sessions[req.sessionID] != ses || ses.vt == nil || !ses.pendingApproval.isNative() || ses.pendingApproval.Sig != req.approvalSig {
 		s.sessionsMu.Unlock()
 		return nativeApprovalActionResult{}, errOneTapNoApproval
 	}
@@ -270,7 +270,7 @@ func (s *Server) sendNativeApprovalAction(req nativeApprovalActionRequest) (nati
 		s.sessionsMu.Unlock()
 		return nativeApprovalActionResult{}, errApprovalActionBusy
 	}
-	approval := detectNativeApproval(ses.Provider, ses.vt.Lines())
+	approval := s.detectScreenApproval(ses.Provider, ses.vt.Lines())
 	if approval == nil || approval.Sig != req.approvalSig {
 		s.sessionsMu.Unlock()
 		return nativeApprovalActionResult{}, errOneTapNoApproval
@@ -386,9 +386,17 @@ func (s *Server) nativeApprovalActionStillCurrent(sessionID int, expectedSession
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 	ses := s.sessions[sessionID]
-	return ses != nil && ses == expectedSession && ses.nativeApprovalSig == approvalSig &&
-		(ses.nativeApprovalCandidateKey == "" || ses.nativeApprovalCandidateKey == candidateKey) &&
-		(ses.nativeApprovalSourceEpoch == 0 || ses.nativeApprovalSourceEpoch == sourceEpoch) && s.wrappers[sessionID] == expectedWrapper
+	return ses != nil && ses == expectedSession && nativeRecordMatchesActionLocked(ses, approvalSig, candidateKey, sourceEpoch) &&
+		s.wrappers[sessionID] == expectedWrapper
+}
+
+// nativeRecordMatchesActionLocked は、one-tap・自動承認・一括承認が送ろうとしている回答が、
+// いま開いているネイティブの記録に対するものかを返す。記録の候補が変わっていたら送らない。
+func nativeRecordMatchesActionLocked(ses *session, approvalSig, candidateKey string, sourceEpoch uint64) bool {
+	record := ses.pendingApproval
+	return record.isNative() && record.Sig == approvalSig &&
+		(record.CandidateKey == "" || record.CandidateKey == candidateKey) &&
+		(record.SourceEpoch == 0 || record.SourceEpoch == sourceEpoch)
 }
 
 // commitNativeApprovalAction changes native approval state only after the
@@ -411,34 +419,20 @@ func (s *Server) commitNativeApprovalAction(result nativeApprovalActionResult) b
 
 	s.sessionsMu.Lock()
 	if s.sessions[result.sessionID] != ses || !nativeApprovalActionReservationMatchesLocked(ses, result) ||
-		ses.nativeApprovalSig != result.approvalSig ||
-		(ses.nativeApprovalCandidateKey != "" && ses.nativeApprovalCandidateKey != result.candidateKey) ||
-		(ses.nativeApprovalSourceEpoch != 0 && ses.nativeApprovalSourceEpoch != result.sourceEpoch) || s.wrappers[result.sessionID] != result.wrapper {
+		!nativeRecordMatchesActionLocked(ses, result.approvalSig, result.candidateKey, result.sourceEpoch) ||
+		s.wrappers[result.sessionID] != result.wrapper {
 		if s.sessions[result.sessionID] == ses && nativeApprovalActionReservationMatchesLocked(ses, result) {
 			clearNativeApprovalActionReservationLocked(ses)
 		}
 		s.sessionsMu.Unlock()
 		return false
 	}
-	sourceEpoch := markApprovalConsumedLocked(ses, result.candidateKey, result.approvalSig)
-	provider := ses.Provider
-	ses.nativeApprovalSig = ""
-	ses.nativeApprovalCandidateKey = ""
-	ses.nativeApprovalCandidateShape = ""
-	ses.nativeApprovalSourceEpoch = 0
-	ses.nativeApprovalClearMisses = 0
+	markApprovalConsumedLocked(ses, result.candidateKey, result.approvalSig)
+	closure := closeApprovalRecordLocked(ses, result.sessionID, approvalCloseAnswered, now)
+	closure.answer = result.input
 	clearNativeApprovalActionReservationLocked(ses)
-	clearMsg := proto.Message{
-		Type: "approval_cleared", SessionID: result.sessionID, Provider: provider,
-		ApprovalSig: result.approvalSig, ApprovalCandidateKey: result.candidateKey,
-		ApprovalCandidateShape: ses.approvalConsumedCandidateShape,
-		ApprovalSourceEpoch:    sourceEpoch, ApprovalSource: approvalSourceGoVT,
-	}
 	s.sessionsMu.Unlock()
-	if s.sessionStore != nil {
-		s.sessionStore.StoreApprovalConsumed(result.sessionID, result.approvalSig, result.input, now)
-	}
-	s.broadcast(clearMsg)
+	s.finishApprovalRecordClosures(closure)
 	return true
 }
 

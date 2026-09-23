@@ -35,7 +35,9 @@ func installBatchApproval(t *testing.T, s *Server, id int, provider, cwd, comman
 	if vtApproval == nil {
 		t.Fatalf("detectNativeApproval from VT returned nil for %q", command)
 	}
-	ses.nativeApprovalSig = vtApproval.Sig
+	ses.pendingApproval = testNativeRecord(vtApproval.Sig, "", 0)
+	// 一括承認は選択肢のある記録だけを対象にする（AskUserQuestion の告知を除くため）。
+	ses.pendingApproval.Options = append([]proto.ApprovalOption(nil), vtApproval.Options...)
 	s.sessionsMu.Lock()
 	s.wrappers[id] = &wrapperConn{sendFunc: func(any) error { return nil }}
 	s.sessionsMu.Unlock()
@@ -73,7 +75,7 @@ func TestApprovalBatchRejectsOversizedBodyBeforeSideEffects(t *testing.T) {
 	if w.Code == http.StatusOK || w.Code < 400 {
 		t.Fatalf("oversized body status = %d, want non-2xx: %s", w.Code, w.Body.String())
 	}
-	if s.sessions[30].nativeApprovalSig == "" {
+	if nativeRecordSig(s.sessions[30]) == "" {
 		t.Fatal("oversized body cleared the pending approval")
 	}
 	policy, err := autoapproval.Load()
@@ -159,11 +161,11 @@ func TestApprovalBatchDenySession(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("deny_session status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-	if s.sessions[10].nativeApprovalSig != "" {
-		t.Fatalf("target approval sig = %q, want cleared", s.sessions[10].nativeApprovalSig)
+	if got := nativeRecordSig(s.sessions[10]); got != "" {
+		t.Fatalf("target approval sig = %q, want cleared", got)
 	}
-	if s.sessions[11].nativeApprovalSig != other.Sig {
-		t.Fatalf("other approval sig = %q, want %q", s.sessions[11].nativeApprovalSig, other.Sig)
+	if got := nativeRecordSig(s.sessions[11]); got != other.Sig {
+		t.Fatalf("other approval sig = %q, want %q", got, other.Sig)
 	}
 	_ = target
 }
@@ -183,11 +185,11 @@ func TestApprovalBatchApproveSkipsMidHigh(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-	if s.sessions[20].nativeApprovalSig != "" {
-		t.Fatalf("low approval sig = %q, want cleared", s.sessions[20].nativeApprovalSig)
+	if got := nativeRecordSig(s.sessions[20]); got != "" {
+		t.Fatalf("low approval sig = %q, want cleared", got)
 	}
-	if s.sessions[21].nativeApprovalSig == "" || s.sessions[22].nativeApprovalSig != high.Sig {
-		t.Fatalf("mid/high approvals changed: mid=%q high=%q", s.sessions[21].nativeApprovalSig, s.sessions[22].nativeApprovalSig)
+	if nativeRecordSig(s.sessions[21]) == "" || nativeRecordSig(s.sessions[22]) != high.Sig {
+		t.Fatalf("mid/high approvals changed: mid=%q high=%q", nativeRecordSig(s.sessions[21]), nativeRecordSig(s.sessions[22]))
 	}
 	if low.Summary.Risk != proto.ApprovalRiskLow {
 		t.Fatalf("low fixture risk = %q", low.Summary.Risk)
@@ -209,7 +211,7 @@ func TestApprovalBatchApproveSkipsWriteRedirectAndBranchMutation(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("write redirect approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-	if s.sessions[23].nativeApprovalSig == "" {
+	if nativeRecordSig(s.sessions[23]) == "" {
 		t.Fatal("write redirect approval was cleared by batch approve")
 	}
 
@@ -224,7 +226,7 @@ func TestApprovalBatchApproveSkipsWriteRedirectAndBranchMutation(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("branch mutation approve status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
 	}
-	if s.sessions[24].nativeApprovalSig == "" {
+	if nativeRecordSig(s.sessions[24]) == "" {
 		t.Fatal("branch mutation approval was cleared by batch approve")
 	}
 }

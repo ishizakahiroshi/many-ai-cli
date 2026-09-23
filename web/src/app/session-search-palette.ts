@@ -1,11 +1,30 @@
 // P-11: Ctrl+K で開くセッション横断検索パレット。
 // 既存 /api/session-search を UI の主導線に引き上げ、検索条件・履歴は端末ローカルに
 // 保存する。検索本文そのものは Hub 外へ送らない。
+//
+// C3（plan_ux-notify-palette-review_c3_palette.md）: Ctrl+K をコマンドパレットとしても
+// 使えるようにした。結果の上に「次の承認待ちへ」等のコマンド区画を描き、↑↓ + Enter で
+// コマンド・検索結果のどちらも選べる。コマンドの定義・絞り込み・選択位置の計算は
+// command-palette-store.ts（DOM なし）に切り出している。
+import { t } from '../i18n.js';
 import { token, showToast } from './util.js';
-import { sessions } from './state.js';
+import { activeSessionId, orderSessions, sessions } from './state.js';
 import { activateSession } from './session-list.js';
 import { scrollTerminalToSearchMatch } from './terminal.js';
 import { openHistoryViewer } from './history-viewer.js';
+import { pendingSessionIds } from './approval-queue-tab.js';
+import { openSpawnPanelIfClosed } from './spawn-panel.js';
+import { openSettingsSection, setActiveTab } from './settings.js';
+import { openShortcutHelp } from './shortcut-help.js';
+import {
+  type CommandPaletteCommandId,
+  type CommandPaletteContext,
+  filterCommandPaletteItems,
+  listCommandPaletteCommands,
+  nextCommandPaletteSelectionIndex,
+  pickNextPendingApprovalId,
+  pickNextStandbySessionId,
+} from './command-palette-store.js';
 
 const HISTORY_KEY = 'many-ai-cli.session-search.history';
 const PINNED_KEY = 'many-ai-cli.session-search.pinned';
@@ -26,8 +45,17 @@ type SearchResult = {
   recent?: boolean;
 };
 
+interface RenderableCommand {
+  id: CommandPaletteCommandId;
+  label: string;
+  keywords: readonly string[];
+  enabled: boolean;
+  disabledReasonKey: string | null;
+}
+
 let root: HTMLElement | null = null;
 let input: HTMLInputElement | null = null;
+let commandsEl: HTMLElement | null = null;
 let resultsEl: HTMLElement | null = null;
 let contextEl: HTMLElement | null = null;
 let providerEl: HTMLSelectElement | null = null;
@@ -38,6 +66,8 @@ let debounceTimer: number | null = null;
 let requestID = 0;
 let page = 0;
 let rawResults: SearchResult[] = [];
+let currentCommandItems: RenderableCommand[] = [];
+let selectedIndex = 0;
 
 function readQueries(key: string): string[] {
   try {
@@ -115,8 +145,8 @@ function refreshFilterOptions() {
     const label = String(session.label || session.auto_title || '');
     if (label) labels.add(label);
   });
-  providerEl.replaceChildren(new Option('すべての provider', ''), ...Array.from(providers).sort().map((value) => new Option(value, value)));
-  labelEl.replaceChildren(new Option('すべてのラベル', ''), ...Array.from(labels).sort().map((value) => new Option(value, value)));
+  providerEl.replaceChildren(new Option(t('session_search_provider_all'), ''), ...Array.from(providers).sort().map((value) => new Option(value, value)));
+  labelEl.replaceChildren(new Option(t('session_search_label_all'), ''), ...Array.from(labels).sort().map((value) => new Option(value, value)));
   providerEl.value = providers.has(selectedProvider) ? selectedProvider : '';
   labelEl.value = labels.has(selectedLabel) ? selectedLabel : '';
 }
@@ -145,8 +175,168 @@ function setStatus(message: string) {
   if (statusEl) statusEl.textContent = message;
 }
 
+// ── コマンドパレット: コンテキストの組み立て・絞り込み・選択位置 ───────────
+
+function buildContext(): CommandPaletteContext {
+  const active = activeSessionId !== null ? sessions.get(activeSessionId) : undefined;
+  const hasWorkdir = !!(active && (active.git_root || active.cwd));
+  return {
+    pendingApprovalIds: pendingSessionIds(),
+    standbySessionIds: orderSessions().filter((s: any) => (s.state || 'standby') === 'standby').map((s: any) => s.id),
+    activeSessionId,
+    activeSessionHasWorkdir: hasWorkdir,
+  };
+}
+
+function buildCommandItems(query: string): RenderableCommand[] {
+  const ctx = buildContext();
+  const items: RenderableCommand[] = listCommandPaletteCommands(ctx).map(({ def, enabled, disabledReasonKey }) => ({
+    id: def.id,
+    label: t(def.labelKey),
+    keywords: def.keywords,
+    enabled,
+    disabledReasonKey,
+  }));
+  return filterCommandPaletteItems(items, query);
+}
+
+// コマンド・検索結果の両方を横断した「今選ばれている要素」の一覧。DOM を直接見るので
+// commandsEl / resultsEl のどちらを再描画した後でも呼び直すだけで整合する。
+function selectableEls(): HTMLElement[] {
+  const cmds = commandsEl ? Array.from(commandsEl.querySelectorAll<HTMLElement>('.command-palette-command')) : [];
+  const results = resultsEl ? Array.from(resultsEl.querySelectorAll<HTMLElement>('.session-search-result')) : [];
+  return [...cmds, ...results];
+}
+
+function updateSelectionClasses() {
+  const els = selectableEls();
+  if (els.length === 0) { selectedIndex = 0; return; }
+  selectedIndex = ((selectedIndex % els.length) + els.length) % els.length;
+  els.forEach((el, idx) => {
+    const isSelected = idx === selectedIndex;
+    el.classList.toggle('is-selected', isSelected);
+    el.setAttribute('aria-selected', String(isSelected));
+    if (isSelected) el.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+function moveSelection(direction: 1 | -1) {
+  const count = selectableEls().length;
+  if (count === 0) return;
+  selectedIndex = nextCommandPaletteSelectionIndex(count, selectedIndex, direction);
+  updateSelectionClasses();
+}
+
+function activateSessionAndShowTerminal(id: number) {
+  activateSession(id);
+  const termTab = document.querySelector('#unified-tab-bar .view-tab[data-tab="terminal"]') as HTMLButtonElement | null;
+  termTab?.click();
+}
+
+function runCommand(item: RenderableCommand) {
+  if (!item.enabled) return;
+  const ctx = buildContext();
+  const orderedIds = orderSessions().map((s: any) => s.id);
+  switch (item.id) {
+    case 'next-pending-approval': {
+      const nextId = pickNextPendingApprovalId(orderedIds, ctx.pendingApprovalIds, ctx.activeSessionId);
+      if (nextId == null) return;
+      closePalette();
+      activateSessionAndShowTerminal(nextId);
+      return;
+    }
+    case 'next-standby': {
+      const nextId = pickNextStandbySessionId(orderedIds, ctx.standbySessionIds, ctx.activeSessionId);
+      if (nextId == null) return;
+      closePalette();
+      activateSessionAndShowTerminal(nextId);
+      return;
+    }
+    case 'new-session':
+      closePalette();
+      openSpawnPanelIfClosed();
+      return;
+    case 'open-review':
+      if (ctx.activeSessionId == null) return;
+      closePalette();
+      setActiveTab(ctx.activeSessionId, 'review');
+      return;
+    case 'open-files':
+      if (ctx.activeSessionId == null) return;
+      closePalette();
+      setActiveTab(ctx.activeSessionId, 'files');
+      return;
+    case 'open-git':
+      if (ctx.activeSessionId == null) return;
+      closePalette();
+      setActiveTab(ctx.activeSessionId, 'git');
+      return;
+    case 'open-settings-notify':
+      closePalette();
+      openSettingsSection('notify-sound');
+      return;
+    case 'open-settings-approval':
+      closePalette();
+      openSettingsSection('approval-hub');
+      return;
+    case 'show-shortcuts':
+      closePalette();
+      openShortcutHelp();
+      return;
+  }
+}
+
+function renderCommands() {
+  if (!commandsEl) return;
+  currentCommandItems = buildCommandItems(String(input?.value || ''));
+  commandsEl.replaceChildren();
+  commandsEl.hidden = currentCommandItems.length === 0;
+  for (const item of currentCommandItems) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'command-palette-command';
+    btn.setAttribute('role', 'option');
+    btn.setAttribute('aria-selected', 'false');
+    if (!item.enabled) btn.classList.add('command-palette-command--disabled');
+    const label = document.createElement('span');
+    label.className = 'command-palette-command-label';
+    label.textContent = item.label;
+    btn.appendChild(label);
+    if (!item.enabled && item.disabledReasonKey) {
+      const reason = document.createElement('span');
+      reason.className = 'command-palette-command-reason';
+      reason.textContent = t(item.disabledReasonKey);
+      btn.appendChild(reason);
+    }
+    btn.addEventListener('mouseenter', () => {
+      const idx = selectableEls().indexOf(btn);
+      if (idx !== -1) { selectedIndex = idx; updateSelectionClasses(); }
+    });
+    btn.addEventListener('click', () => runCommand(item));
+    commandsEl.appendChild(btn);
+  }
+  updateSelectionClasses();
+}
+
+/** ↑↓ + Enter で選ばれている項目を実行する。実行できたら true。 */
+function runSelected(): boolean {
+  const els = selectableEls();
+  if (els.length === 0) return false;
+  selectedIndex = ((selectedIndex % els.length) + els.length) % els.length;
+  if (selectedIndex < currentCommandItems.length) {
+    runCommand(currentCommandItems[selectedIndex]);
+    return true;
+  }
+  const shown = filteredResults().slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const result = shown[selectedIndex - currentCommandItems.length];
+  if (!result) return false;
+  openResult(result);
+  return true;
+}
+
 function renderResults() {
   if (!resultsEl) return;
+  selectedIndex = 0;
   const results = filteredResults();
   const pageCount = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
   page = Math.min(page, pageCount - 1);
@@ -154,24 +344,31 @@ function renderResults() {
   if (results.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'session-search-empty';
-    empty.textContent = rawResults.length ? '現在のフィルタ条件では一致しません' : '一致するセッションはありません';
+    empty.textContent = rawResults.length ? t('session_search_empty_filtered') : t('session_search_empty_none');
     resultsEl.appendChild(empty);
+    updateSelectionClasses();
     return;
   }
   for (const result of results.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
     const item = document.createElement('button');
     item.type = 'button';
     item.className = 'session-search-result';
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', 'false');
     const meta = document.createElement('span');
     meta.className = 'session-search-result-meta';
     meta.textContent = `${result.provider || 'ai'} · ${sessionTitle(result)}${result.branch ? ` · ${result.branch}` : ''}${result.state ? ` · ${result.state}` : ''}`;
     const body = document.createElement('span');
     body.className = 'session-search-result-body';
-    body.textContent = result.recent ? (result.text || '最近のセッション') : (result.snippet || result.text || '本文なし');
+    body.textContent = result.recent ? (result.text || t('session_search_recent_session')) : (result.snippet || result.text || t('session_search_no_body'));
     const time = document.createElement('span');
     time.className = 'session-search-result-time';
     time.textContent = formatTime(result.ts || result.started_at);
     item.append(meta, body, time);
+    item.addEventListener('mouseenter', () => {
+      const idx = selectableEls().indexOf(item);
+      if (idx !== -1) { selectedIndex = idx; updateSelectionClasses(); }
+    });
     item.addEventListener('click', () => openResult(result));
     resultsEl.appendChild(item);
   }
@@ -180,19 +377,20 @@ function renderResults() {
     pager.className = 'session-search-pager';
     const previous = document.createElement('button');
     previous.type = 'button';
-    previous.textContent = '← 前';
+    previous.textContent = t('session_search_prev_page');
     previous.disabled = page === 0;
     previous.onclick = () => { page--; renderResults(); };
     const label = document.createElement('span');
-    label.textContent = `${page + 1} / ${pageCount}（最大 ${RESULT_LIMIT} 件）`;
+    label.textContent = t('session_search_page_indicator', { page: page + 1, pageCount, limit: RESULT_LIMIT });
     const next = document.createElement('button');
     next.type = 'button';
-    next.textContent = '次 →';
+    next.textContent = t('session_search_next_page');
     next.disabled = page >= pageCount - 1;
     next.onclick = () => { page++; renderResults(); };
     pager.append(previous, label, next);
     resultsEl.appendChild(pager);
   }
+  updateSelectionClasses();
 }
 
 function showContext(result: SearchResult, note: string) {
@@ -202,7 +400,7 @@ function showContext(result: SearchResult, note: string) {
   const title = document.createElement('strong');
   title.textContent = `${result.provider || 'ai'} · ${sessionTitle(result)}`;
   const text = document.createElement('pre');
-  text.textContent = result.snippet || result.text || '保存された本文はありません';
+  text.textContent = result.snippet || result.text || t('session_search_no_saved_body');
   const hint = document.createElement('div');
   hint.className = 'session-search-context-hint';
   hint.textContent = note;
@@ -212,19 +410,19 @@ function showContext(result: SearchResult, note: string) {
 function openResult(result: SearchResult) {
   const sid = Number(result.session_id || 0);
   if (!sid || !sessions.has(sid)) {
-    showContext(result, 'このセッションは現在 Hub に接続されていません。検索時点の文脈をここに表示しています。');
+    showContext(result, t('session_search_result_disconnected_hint'));
     return;
   }
   activateSession(sid);
   const query = String(input?.value || '').trim();
   requestAnimationFrame(() => {
     if (query && scrollTerminalToSearchMatch(sid, query)) {
-      showToast('端末内の一致行へ移動しました');
+      showToast(t('session_search_scrolled_toast'));
       closePalette();
       return;
     }
     openHistoryViewer(sid, { offset: -1 });
-    showContext(result, '現在の scrollback 外のため、末尾付近の過去ログを開きました。');
+    showContext(result, t('session_search_scrollback_hint'));
   });
 }
 
@@ -234,13 +432,14 @@ async function search() {
   contextEl && (contextEl.hidden = true);
   if (query.length < 3) {
     rawResults = makeRecentResults();
-    setStatus(query ? '3 文字以上で横断検索します。最近のセッションを表示中です。' : '最近のセッション。3 文字以上で横断検索します。');
+    setStatus(query ? t('session_search_status_too_short') : t('session_search_status_idle'));
+    renderCommands();
     renderResults();
     renderSuggestions();
     return;
   }
   const currentRequest = ++requestID;
-  setStatus('検索中…');
+  setStatus(t('session_search_status_searching'));
   try {
     const params = new URLSearchParams({ token, q: query, limit: String(RESULT_LIMIT) });
     const response = await fetch(`/api/session-search?${params.toString()}`);
@@ -249,13 +448,15 @@ async function search() {
     if (currentRequest !== requestID) return;
     rawResults = Array.isArray(data.results) ? data.results : [];
     saveRecentQuery(query);
-    setStatus(`${rawResults.length} 件（最大 ${RESULT_LIMIT} 件）`);
+    setStatus(t('session_search_status_results_count', { count: rawResults.length, limit: RESULT_LIMIT }));
+    renderCommands();
     renderResults();
     renderSuggestions();
   } catch (error) {
     if (currentRequest !== requestID) return;
     rawResults = [];
-    setStatus('検索に失敗しました');
+    setStatus(t('session_search_status_failed'));
+    renderCommands();
     renderResults();
     console.warn('[session-search-palette] search failed', error);
   }
@@ -266,8 +467,8 @@ function renderSuggestions() {
   if (!host) return;
   host.replaceChildren();
   const groups: Array<[string, string[]]> = [
-    ['ピン留め', readQueries(PINNED_KEY)],
-    ['最近の検索', readQueries(HISTORY_KEY)],
+    [t('session_search_pinned_group'), readQueries(PINNED_KEY)],
+    [t('session_search_recent_group'), readQueries(HISTORY_KEY)],
   ];
   for (const [title, queries] of groups) {
     if (!queries.length) continue;
@@ -295,6 +496,7 @@ function renderSuggestions() {
 function closePalette() {
   if (!root) return;
   root.hidden = true;
+  selectedIndex = 0;
   if (debounceTimer) window.clearTimeout(debounceTimer);
 }
 
@@ -306,7 +508,7 @@ function ensurePalette(): HTMLElement | null {
   overlay.hidden = true;
   overlay.setAttribute('role', 'dialog');
   overlay.setAttribute('aria-modal', 'true');
-  overlay.setAttribute('aria-label', 'セッション横断検索');
+  overlay.setAttribute('aria-label', t('session_search_aria_label'));
   overlay.addEventListener('mousedown', (event) => { if (event.target === overlay) closePalette(); });
 
   const dialog = document.createElement('section');
@@ -315,21 +517,27 @@ function ensurePalette(): HTMLElement | null {
   header.className = 'session-search-header';
   input = document.createElement('input');
   input.type = 'search';
-  input.placeholder = 'セッション横断検索（3文字以上）';
+  input.placeholder = t('session_search_placeholder');
   input.autocomplete = 'off';
   input.addEventListener('input', () => {
     if (debounceTimer) window.clearTimeout(debounceTimer);
     debounceTimer = window.setTimeout(search, DEBOUNCE_MS);
   });
   input.addEventListener('keydown', (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveSelection(event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
     if (event.key !== 'Enter' || !input) return;
     event.preventDefault();
+    if (runSelected()) return;
     search();
   });
   const pin = document.createElement('button');
   pin.type = 'button';
   pin.className = 'session-search-pin';
-  pin.title = '現在の検索語をピン留め';
+  pin.title = t('session_search_pin_title');
   pin.textContent = '☆';
   pin.onclick = () => {
     const query = String(input?.value || '').trim();
@@ -349,12 +557,19 @@ function ensurePalette(): HTMLElement | null {
   providerEl = document.createElement('select');
   labelEl = document.createElement('select');
   periodEl = document.createElement('select');
-  periodEl.append(new Option('すべての期間', '0'), new Option('24 時間', '1'), new Option('7 日', '7'), new Option('30 日', '30'));
+  periodEl.append(
+    new Option(t('session_search_period_all'), '0'),
+    new Option(t('session_search_period_24h'), '1'),
+    new Option(t('session_search_period_7d'), '7'),
+    new Option(t('session_search_period_30d'), '30'),
+  );
   for (const filter of [providerEl, labelEl, periodEl]) filter.addEventListener('change', () => { page = 0; renderResults(); });
   filters.append(providerEl, labelEl, periodEl);
 
   const suggestions = document.createElement('div');
   suggestions.className = 'session-search-suggestions';
+  commandsEl = document.createElement('div');
+  commandsEl.className = 'command-palette-commands';
   statusEl = document.createElement('div');
   statusEl.className = 'session-search-status';
   resultsEl = document.createElement('div');
@@ -362,7 +577,7 @@ function ensurePalette(): HTMLElement | null {
   contextEl = document.createElement('aside');
   contextEl.className = 'session-search-context';
   contextEl.hidden = true;
-  dialog.append(header, filters, suggestions, statusEl, resultsEl, contextEl);
+  dialog.append(header, filters, suggestions, commandsEl, statusEl, resultsEl, contextEl);
   overlay.appendChild(dialog);
   document.body.appendChild(overlay);
   root = overlay;
@@ -376,8 +591,10 @@ export function openSessionSearchPalette() {
   refreshFilterOptions();
   rawResults = makeRecentResults();
   page = 0;
-  setStatus('最近のセッション。3 文字以上で横断検索します。');
+  selectedIndex = 0;
+  setStatus(t('session_search_status_idle'));
   renderSuggestions();
+  renderCommands();
   renderResults();
   requestAnimationFrame(() => input?.focus());
 }

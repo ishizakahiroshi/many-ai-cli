@@ -65,24 +65,18 @@ func (s *Server) handleInput(m proto.Message) {
 	var injectMarker bool
 	var userTurnEpoch uint64
 	var autoTitleMeta *sessionstore.SessionCardMeta
-	// チャット本文はブラケットペースト包み（... \x1b[201~）+ 確定 \r 別送で届くため、
-	// 末尾 \r だけでなくペースト終端もユーザーターンの確定として扱う。従来の
-	// 「末尾 \r のみ」判定では、ペースト送信のセッション概要（FirstMessage 等）と
+	// 確定したユーザーターンの判定は confirmedTurnText（approval_record.go）の 1 本。
+	// 従来の「末尾 \r のみ」判定では、ペースト送信のセッション概要（FirstMessage 等）と
 	// ターン境界マーカーが一切更新されなかった（複数行送信の既存ギャップ。単一行も
 	// ペースト経路に統一した 2026-07-11 以降は全チャット送信が該当するため必須）。
-	// メタデータ用テキストはペーストマーカーを剥がして評価する。後続の確定 \r は
-	// 剥がした後に空文字となり、二重更新・二重マーカーにはならない。
-	if ses != nil && (strings.HasSuffix(m.Text, "\r") || strings.HasSuffix(m.Text, bracketedPasteEnd)) {
-		text := strings.TrimRight(m.Text, "\r\n")
-		text = strings.ReplaceAll(text, bracketedPasteStart, "")
-		text = strings.ReplaceAll(text, bracketedPasteEnd, "")
+	if text, confirmed := confirmedTurnText(m.Text); ses != nil && confirmed {
 		if text == "/clear" {
 			// /clear でセッション概要をリセット（次の入力が新しい概要になる）
 			ses.FirstMessage = ""
 			ses.LastMessage = ""
 			msg := proto.Message{Type: "session_update", SessionID: m.SessionID, Provider: ses.Provider, Display: ses.Display, CWD: ses.CWD, Branch: ses.Branch, Label: ses.Label, Model: ses.Model, Route: ses.Route, State: ses.State, LastOutputAt: ses.LastOutputAt}
 			firstMsgBroadcast = &msg
-		} else if text != "" {
+		} else {
 			// A confirmed live user turn is the explicit prompt boundary. This is
 			// deliberately not inferred from replay or a VT reflow. The Enter that
 			// answers the currently visible approval arrives before the UI's
@@ -115,6 +109,17 @@ func (s *Server) handleInput(m proto.Message) {
 			marker := []byte(chatHistoryUserTurnMarker)
 			ses.ptyBuf = appendPTYReplay(ses.ptyBuf, marker)
 			userTurnEpoch = ensureApprovalSourceEpochLocked(ses)
+			// 子 plan C3 (plan_subagent-tree-popup_c2_hub-core-claude.md):
+			// サブエージェントの木の「今のまとまり」の区切り（親 plan 方針4）。
+			subagentTurnStartAdvanceLocked(ses, time.Now())
+			// 初回の確定ユーザー入力で、このセッションのポーリング連鎖を起こす
+			// （サブエージェントは最初のターンより前には存在しえないので、
+			// ここより前に始める必要はない）。以降のターンでは subagentTimer が
+			// 既に自己連鎖しているので何もしない。reattach 後の再開は
+			// restartSubagentTreePollLocked（reattach_state.go）が別途行う。
+			if ses.subagentTimer == nil {
+				s.scheduleSubagentTreePollLocked(m.SessionID, ses, 0)
+			}
 			injectMarker = true
 		}
 	}
@@ -408,6 +413,12 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 		// セッションが既に終了している場合は入力を捨てる（黙って失わない挙動は
 		// 存在するセッションへの入力に限る）。
 		return false
+	}
+	// 確定したユーザーターンは、保留中のマーカーの記録を閉じる。ブラウザからの入力
+	// （handleInput）も、オーケストレーション・引き継ぎ・AI コミットが Hub から送る入力も
+	// ここを通る。保留キューへ回る入力も、利用者が送った時点で質問への答えになっている。
+	if text, confirmed := confirmedTurnText(combined); confirmed {
+		s.closeMarkerRecordOnSubmittedTurn(sessionID, text, time.Now())
 	}
 
 	// per-session 入力直列化ロック: hasPending チェック〜trySendInput 完了まで保持。

@@ -2,12 +2,12 @@
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, batchFreeText, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, batchFreeText, approvalAutoSwitchQueue, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, forgetAllAnsweredApprovals, forgetAnsweredApprovals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
@@ -16,7 +16,9 @@ import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js
 import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, cancelApprovalLedgerRestore, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { clearSequentialChoiceState, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isShellProvider, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { isAskUserQuestionPending, noteApprovalAnsweredByTyping } from './app/approval.js';
+import { forgetApprovalSession } from './app/approval-store.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -463,14 +465,6 @@ export async function doSend(sessionId) {
     showToast(t('toast_model_blocked_on_ollama'));
     return;
   }
-  // 選択メニュー（claude /model 等・承認ではないカーソル駆動 TUI）表示中は、
-  // チャット入力欄からの素通し注入（末尾 \r）を保留する。注入すると \r が
-  // 現在カーソル選択中の項目を誤確定してしまうため。入力テキストは消さず、
-  // ユーザーは下の action-bar ボタンか端末ペインで選択を解決する。
-  if (isSelectMenuActive(sessionId)) {
-    showToast(t('toast_select_menu_active'));
-    return;
-  }
   // 非接続時は長文ペーストを添付へ移したり、入力 state を変更したりする前に止める。
   // 再接続後に同じ入力をそのまま再送できるよう、送信前の state を保つ。
   if (!isWebSocketSendReady()) {
@@ -531,23 +525,9 @@ export async function doSend(sessionId) {
     if (!sendSubmittedText(sessionId, textToSend)) return false;
     clearInput();
     hideSlashMenu();
-    // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
-    multiQuestionDismissedCache.delete(sessionId);
-    multiQuestionLatchAt.delete(sessionId);
-    // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
-    // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
-    const prevOpts = approvalRawOptionsCache.get(sessionId);
-    if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
-    if (typeof maybeSendDirectApprovalConsumed === 'function') {
-      maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
-    }
-    hideActionBar(sessionId);
-    // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
-    approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-    setTimeout(() => {
-      detectApproval(sessionId);
-      maybeAutoSwitchToNextApproval();
-    }, 2050);
+    // 承認パネルを使わずに入力欄から答えた場合も、描いていた記録は回答済みにしてパネルを閉じる
+    // （Hub の記録が閉じるまで同じ承認を描き直さない）。
+    noteApprovalAnsweredByTyping(sessionId, rawText, textToSend);
     // chatHistory: ユーザー送信は AI ターンの境界。
     // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
     chatHistoryCommitOutput(sessionId);
@@ -986,7 +966,7 @@ inputEl.addEventListener('keydown', (e) => {
   // 複数質問検出中・入力欄が空・修飾なしのスペースに限り PTY へ転送する。
   if (e.key === ' ' && inputEl.value === '' && !e.isComposing &&
       !e.ctrlKey && !e.metaKey && !e.altKey &&
-      multiQuestionVisibleCache.get(activeSessionId)) {
+      isAskUserQuestionPending(activeSessionId)) {
     sendText(activeSessionId, ' ');
     e.preventDefault(); return;
   }
@@ -1489,19 +1469,10 @@ export function sendQuickCommand(sessionId, cmd) {
 }
 
 function doSendQuickCommand(sessionId, cmd) {
-  // doSend / sendChoice と同様に承認 UI 状態を Hub と同期する。
-  // /clear 等で画面がリセットされた後も approvalVisibleCache=true が残ると、
-  // セッションカードの "Pending" バッジが消えなくなる。
-  const prevOpts = approvalRawOptionsCache.get(sessionId);
-  // 本文送信が失敗した場合は承認 UI と消費済み state を保持する。
+  // 本文送信が失敗した場合は承認 UI と回答済みの印を変えない。
   if (!sendSubmittedBody(sessionId, cmd)) return false;
-  if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
-  hideActionBar(sessionId);
-  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-  setTimeout(() => {
-    detectApproval(sessionId);
-    maybeAutoSwitchToNextApproval();
-  }, 2050);
+  // doSend と同じく、描いていた記録は回答済みにしてパネルを閉じる。
+  noteApprovalAnsweredByTyping(sessionId, cmd, cmd);
   // 残骸への連結対策の \x15 前置は廃止（doSend と同じく residue-sweep.ts の事後掃除へ移行）。
   // 本文の送り方（ペースト包み・確定 \r 分離）も doSend と同じ共通経路に従う。
   focusInputForTerminalKeys();
@@ -1615,7 +1586,6 @@ export function resetTerminalHistoryForSession(id) {
   if (!t) return;
   t.pendingChunks = [];
   t.pendingTotalBytes = 0;
-  t.pendingTextTail = '';
   t.markerFilterCarry = new Uint8Array(0);
   t.screenClearSeqCarry = new Uint8Array(0);
   t.autoScroll = true;
@@ -1629,21 +1599,10 @@ export function resetAllLocalSessionHistory() {
     s.last_message = '';
   });
   terminals.forEach((_t, id) => resetTerminalHistoryForSession(id));
-  approvalVisibleCache.clear();
-  multiQuestionVisibleCache.clear();
-  multiQuestionDismissedCache.clear();
-  multiQuestionLatchAt.clear();
   sequentialChoiceCache.clear();
-  approvalRawOptionsCache.clear();
-  approvalSourceCache.clear();
-  approvalSourceEpochCache.clear();
-  approvalReplayState.clear();
-  answeredApprovalCandidates.clear();
-  answeredApprovalShapeKeys.clear();
-  replayAnsweredApprovalTokens.clear();
-  approvalSwitchCandidates.clear();
+  // sessions は再接続の onclose で既に空なので、セッションごとではなく全部を捨てる。
+  forgetAllAnsweredApprovals();
   batchSelections.clear();
-  approvalSuppressUntil.clear();
   approvalAutoSwitchQueue.length = 0;
   resetAllChatHistory();
   hideActionBar(undefined);
@@ -1662,23 +1621,9 @@ export function resetLocalSessionHistory(id) {
     s.last_message = '';
   }
   resetTerminalHistoryForSession(id);
-  approvalVisibleCache.delete(id);
-  if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
-    setMultiQuestionBannerVisible(false);
-  }
-  multiQuestionDismissedCache.delete(id);
-  multiQuestionLatchAt.delete(id);
   clearSequentialChoiceState(id);
-  approvalRawOptionsCache.delete(id);
-  approvalSourceCache.delete(id);
-  approvalSourceEpochCache.delete(id);
-  approvalReplayState.delete(id);
-  answeredApprovalCandidates.delete(id);
-  answeredApprovalShapeKeys.delete(id);
-  replayAnsweredApprovalTokens.delete(id);
-  approvalSwitchCandidates.delete(id);
+  forgetAnsweredApprovals(id);
   batchSelections.delete(id);
-  approvalSuppressUntil.delete(id);
   removeApprovalAutoSwitchTarget(id);
   resetChatHistoryForSession(id);
   if (id === activeSessionId) {
@@ -1697,9 +1642,6 @@ export function clearSessionTimerEntry(timerMap, id) {
 }
 
 export function cleanupRemovedSessionState(id) {
-  try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
-  try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
-  try { cancelApprovalLedgerRestore(id); } catch (_) {}
   try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}
@@ -1744,25 +1686,12 @@ export function removeLocalSession(id) {
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
   try { disposeAltScrollRail(id); } catch (_) {}
-  approvalVisibleCache.delete(id);
-  if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
-    setMultiQuestionBannerVisible(false);
-  }
-  multiQuestionDismissedCache.delete(id);
-  multiQuestionLatchAt.delete(id);
   removeApprovalAutoSwitchTarget(id);
-  approvalRawOptionsCache.delete(id);
-  approvalSourceCache.delete(id);
-  approvalSourceEpochCache.delete(id);
-  approvalReplayState.delete(id);
-  answeredApprovalCandidates.delete(id);
-  answeredApprovalShapeKeys.delete(id);
-  replayAnsweredApprovalTokens.delete(id);
+  forgetApprovalSession(id);
+  forgetAnsweredApprovals(id);
   batchSelections.delete(id);
   batchFreeText.delete(id);
   clearSequentialChoiceState(id);
-  cancelApprovalHintConfirm(id);
-  approvalSuppressUntil.delete(id);
   cleanupSessionInputState(id);
   onChatHistorySessionRemoved(id);
   if (activeSessionId === id) {
@@ -2497,6 +2426,7 @@ inputEl.addEventListener('blur', (e) => {
       loadUsageLinkSettings();
       attachTokenStatusbarToggle();
       attachDoneSummaryNotifyToggle();
+      attachTurnEndNotifyToggle();
       void loadDeferredEnterConfig();
     }
   });

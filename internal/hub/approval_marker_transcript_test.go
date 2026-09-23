@@ -91,11 +91,11 @@ func TestTranscriptSuppliesMarkerWhenScreenDroppedIt(t *testing.T) {
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
 
-	if ses.approvalMarkerCandidateKey == "" {
+	if markerRecordKey(ses) == "" {
 		t.Fatal("承認候補が立っていない（トランスクリプト経路で配信されていない）")
 	}
-	if ses.approvalMarkerSig != marker.Sig {
-		t.Fatalf("approvalMarkerSig = %q, want %q", ses.approvalMarkerSig, marker.Sig)
+	if markerRecordSig(ses) != marker.Sig {
+		t.Fatalf("approvalMarkerSig = %q, want %q", markerRecordSig(ses), marker.Sig)
 	}
 }
 
@@ -114,13 +114,13 @@ func TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource(t *testing.T) {
 
 	s, ses := newSession("transcript.jsonl")
 	s.evaluateReplayApproval(1)
-	if ses.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(ses) != "" {
 		t.Fatal("トランスクリプトが供給元なのに VT からマーカーを立てている")
 	}
 
 	s, ses = newSession("")
 	s.evaluateReplayApproval(1)
-	if ses.approvalMarkerCandidateKey == "" {
+	if markerRecordKey(ses) == "" {
 		t.Fatal("トランスクリプトが未解決のセッションでは VT が供給元でなければならない")
 	}
 }
@@ -163,14 +163,14 @@ func TestTranscriptPrimeOnlyRestoresTheLastMessage(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "claude")
 	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", older, true, time.Now())
-	if ses.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(ses) != "" {
 		t.Fatal("prime が過去ターンの質問を承認として立て直した")
 	}
 
 	pending := append(append([]agentChatMessage(nil), older...),
 		agentChatMessage{Role: "assistant", Kind: "text", Text: transcriptAssistantText()})
 	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", pending, true, time.Now())
-	if ses.approvalMarkerCandidateKey == "" {
+	if markerRecordKey(ses) == "" {
 		t.Fatal("prime が「まだ止まっている質問」を復元していない")
 	}
 }
@@ -183,7 +183,7 @@ func TestTranscriptScanIgnoresNonTranscriptSessions(t *testing.T) {
 	s.scanTranscriptApprovalMarkers(1, "grok", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
-	if ses.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(ses) != "" {
 		t.Fatal("grok セッションへトランスクリプト経路から配信した")
 	}
 
@@ -192,7 +192,7 @@ func TestTranscriptScanIgnoresNonTranscriptSessions(t *testing.T) {
 	s.scanTranscriptApprovalMarkers(2, "claude", "", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
-	if claude.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(claude) != "" {
 		t.Fatal("パス未解決の poll から配信した")
 	}
 }
@@ -324,7 +324,7 @@ func TestPollRestoresPendingApprovalOnFirstPathResolution(t *testing.T) {
 
 	pollTranscriptOnce(s, 1)
 
-	if ses.approvalMarkerCandidateKey == "" {
+	if markerRecordKey(ses) == "" {
 		t.Fatal("初回 poll で承認候補が立っていない（パス解決と同じ poll のバッチが捨てられている）")
 	}
 	if ses.agentChatPath != path {
@@ -359,12 +359,11 @@ func TestTranscriptSourceFallsBackToVTWhenUnreadable(t *testing.T) {
 	}
 
 	// 退避後は VT 経路が再び承認を立てられること。
-	ses.approvalMarkerCandidateKey = ""
-	ses.approvalMarkerSourceEpoch = 0
+	ses.pendingApproval = nil
 	ses.vt = newVTBuffer(60, 20)
 	ses.vt.Write([]byte(strings.ReplaceAll(strings.Join(transcriptMarkerBody, "\n"), "\n", "\r\n")))
 	s.evaluateReplayApproval(1)
-	if ses.approvalMarkerCandidateKey == "" {
+	if markerRecordKey(ses) == "" {
 		t.Fatal("退避後も VT から承認を立てられていない")
 	}
 
@@ -419,18 +418,8 @@ func newApprovalLedger(t *testing.T, s *Server, liveID int, provider string) *se
 	return store
 }
 
-func findApprovalCleared(messages []proto.Message) *proto.Message {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Type == "approval_cleared" {
-			m := messages[i]
-			return &m
-		}
-	}
-	return nil
-}
-
 // トランスクリプトに次の user メッセージが現れたら、保留中のマーカー承認は回答済みになる。
-// 端末へ直接答えた場合にはこれが唯一の閉じる合図で、ブラウザへ approval_cleared を流し、
+// 端末へ直接答えた場合にはこれが唯一の閉じる合図で、ブラウザへ閉じる approval_state を流し、
 // 台帳の行も resolved にする（bugfix_approval-panel-lost-after-transcript-marker_2026-09-08.md）。
 func TestTranscriptUserMessageClosesPendingMarker(t *testing.T) {
 	s := newTestServer()
@@ -441,7 +430,7 @@ func TestTranscriptUserMessageClosesPendingMarker(t *testing.T) {
 	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
-	key, epoch, sig := ses.approvalMarkerCandidateKey, ses.approvalMarkerSourceEpoch, ses.approvalMarkerSig
+	key, epoch, sig := markerRecordKey(ses), markerRecordEpoch(ses), markerRecordSig(ses)
 	if key == "" || sig == "" {
 		t.Fatal("前提が違う: 承認候補が立っていない")
 	}
@@ -453,20 +442,19 @@ func TestTranscriptUserMessageClosesPendingMarker(t *testing.T) {
 		{Role: "user", Kind: "text", Text: "1"},
 	}, false, time.Now())
 
-	if ses.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(ses) != "" {
 		t.Fatal("user メッセージの後も承認候補が残っている")
 	}
 	if ses.approvalConsumedCandidateKey != key || ses.approvalConsumedEpoch != epoch {
 		t.Fatalf("回答済み = (%q, %d), want (%q, %d)", ses.approvalConsumedCandidateKey, ses.approvalConsumedEpoch, key, epoch)
 	}
-	cleared := findApprovalCleared(sent())
-	if cleared == nil {
-		t.Fatal("approval_cleared が配信されていない（ブラウザのパネルが残る）")
+	closes := approvalStateCloses(sent(), 1)
+	if len(closes) != 1 {
+		t.Fatalf("閉じる approval_state = %d 件, want 1（ブラウザのパネルが残る）", len(closes))
 	}
-	if cleared.ApprovalKind != "marker" || cleared.ApprovalCandidateKey != key ||
-		cleared.ApprovalSourceEpoch != epoch || cleared.ApprovalSig != sig ||
-		cleared.ApprovalSource != approvalSourceTranscript {
-		t.Fatalf("approval_cleared の中身が違う: %+v", *cleared)
+	if closes[0].Origin != approvalRecordOriginMarker || closes[0].CandidateKey != key ||
+		closes[0].SourceEpoch != epoch || closes[0].Sig != sig || closes[0].Reason != approvalCloseAnsweredTerminal {
+		t.Fatalf("閉じる approval_state の中身が違う: %+v", closes[0])
 	}
 	if pending, err := store.ApprovalsByLiveSession(1, 10, true); err != nil || len(pending) != 0 {
 		t.Fatalf("回答後も台帳に pending 行が %d 件 (err=%v)", len(pending), err)
@@ -498,15 +486,15 @@ func TestTranscriptBatchAnswerThenNewQuestionKeepsNewQuestion(t *testing.T) {
 	}, false, time.Now())
 
 	secondMarker := approvalMarkerFromTranscriptText(second)
-	if ses.approvalMarkerCandidateKey == "" || ses.approvalMarkerSig != secondMarker.Sig {
-		t.Fatalf("最後の質問が立っていない: sig=%q want %q", ses.approvalMarkerSig, secondMarker.Sig)
+	if markerRecordKey(ses) == "" || markerRecordSig(ses) != secondMarker.Sig {
+		t.Fatalf("最後の質問が立っていない: sig=%q want %q", markerRecordSig(ses), secondMarker.Sig)
 	}
 	firstKey := approvalMarkerCandidateIdentity("claude", approvalMarkerFromTranscriptText(first).Block).key
 	if ses.approvalConsumedCandidateKey != firstKey {
 		t.Fatalf("答えられた質問 A が回答済みになっていない: %q want %q", ses.approvalConsumedCandidateKey, firstKey)
 	}
-	if ses.approvalMarkerSourceEpoch <= ses.approvalConsumedEpoch {
-		t.Fatalf("質問 B の世代 %d が回答済みの世代 %d を超えていない", ses.approvalMarkerSourceEpoch, ses.approvalConsumedEpoch)
+	if markerRecordEpoch(ses) <= ses.approvalConsumedEpoch {
+		t.Fatalf("質問 B の世代 %d が回答済みの世代 %d を超えていない", markerRecordEpoch(ses), ses.approvalConsumedEpoch)
 	}
 }
 
@@ -520,14 +508,14 @@ func TestTranscriptPrimeWithTrailingUserMessageClosesMarker(t *testing.T) {
 	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
-	if ses.approvalMarkerCandidateKey == "" {
+	if markerRecordKey(ses) == "" {
 		t.Fatal("前提が違う: 承認候補が立っていない")
 	}
 	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 		{Role: "user", Kind: "text", Text: "1"},
 	}, true, time.Now())
-	if ses.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(ses) != "" {
 		t.Fatal("prime の最後が user なのに候補が残っている")
 	}
 	before := len(sent())
@@ -541,8 +529,8 @@ func TestTranscriptPrimeWithTrailingUserMessageClosesMarker(t *testing.T) {
 }
 
 // ブラウザからの approval_consumed でも、台帳は Hub がブロック本文から取った sig で引く。
-// ブラウザの approval_sig は選択肢から計算した別の値で、台帳の行と一致しない。
-// あわせて別 UI 向けに approval_cleared を流す。
+// 古い画面の approval_sig は選択肢から計算した別の値で、台帳の行と一致しない。
+// あわせて全部の画面へ閉じる approval_state を流す。
 func TestMarkerConsumedFromBrowserResolvesLedgerByHubSig(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 1, "claude")
@@ -552,7 +540,7 @@ func TestMarkerConsumedFromBrowserResolvesLedgerByHubSig(t *testing.T) {
 	s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
 		{Role: "assistant", Kind: "text", Text: transcriptAssistantText()},
 	}, false, time.Now())
-	key, epoch := ses.approvalMarkerCandidateKey, ses.approvalMarkerSourceEpoch
+	key, epoch := markerRecordKey(ses), markerRecordEpoch(ses)
 	if key == "" {
 		t.Fatal("前提が違う: 承認候補が立っていない")
 	}
@@ -563,7 +551,7 @@ func TestMarkerConsumedFromBrowserResolvesLedgerByHubSig(t *testing.T) {
 		ApprovalSource: "hub_marker", SentText: "2",
 	})
 
-	if ses.approvalMarkerCandidateKey != "" {
+	if markerRecordKey(ses) != "" {
 		t.Fatal("回答後も承認候補が残っている")
 	}
 	if pending, err := store.ApprovalsByLiveSession(1, 10, true); err != nil || len(pending) != 0 {
@@ -573,8 +561,9 @@ func TestMarkerConsumedFromBrowserResolvesLedgerByHubSig(t *testing.T) {
 	if len(rows) != 1 || rows[0].State != "resolved" || rows[0].SelectedText != "2" {
 		t.Fatalf("台帳の行が違う: %+v", rows)
 	}
-	cleared := findApprovalCleared(sent())
-	if cleared == nil || cleared.ApprovalKind != "marker" || cleared.ApprovalCandidateKey != key || cleared.ApprovalSource != "hub_marker" {
-		t.Fatalf("approval_cleared(marker) が配信されていない: %+v", cleared)
+	closes := approvalStateCloses(sent(), 1)
+	if len(closes) != 1 || closes[0].Origin != approvalRecordOriginMarker || closes[0].CandidateKey != key ||
+		closes[0].Reason != approvalCloseAnswered {
+		t.Fatalf("閉じる approval_state = %+v, want マーカーの記録を answered で 1 件", closes)
 	}
 }

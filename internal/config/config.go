@@ -1215,6 +1215,11 @@ type Config struct {
 		// (taskId resolution + tasks output polling). True by default, same
 		// inheritance behavior as JournalEnabled.
 		TaskDetailEnabled bool `yaml:"task_detail_enabled" json:"task_detail_enabled"`
+		// SubagentTreeEnabled gates the subagent tree feature
+		// (docs/local/plan_subagent-tree-popup.md): reading Claude/Codex/Grok
+		// subagent records and polling/broadcasting subagent_tree. True by
+		// default, same inheritance behavior as JournalEnabled.
+		SubagentTreeEnabled bool `yaml:"subagent_tree_enabled" json:"subagent_tree_enabled"`
 	} `yaml:"workflow,omitempty" json:"workflow,omitempty"`
 	Approval        ApprovalConfig  `yaml:"approval,omitempty"`
 	SlashCmdSources SlashCmdSources `yaml:"slash_cmd_sources,omitempty" json:"slash_cmd_sources,omitempty"`
@@ -1413,6 +1418,7 @@ func defaultConfig(home string) *Config {
 	cfg.UserPrefs.UsageProbeModel = DefaultUsageProbeModel
 	cfg.Workflow.JournalEnabled = true
 	cfg.Workflow.TaskDetailEnabled = true
+	cfg.Workflow.SubagentTreeEnabled = true
 	cfg.Voice.Whisper.Language = "ja"
 	cfg.Voice.Whisper.TimeoutSeconds = 60
 	cfg.SlashCmdSources = DefaultSlashCmdSources()

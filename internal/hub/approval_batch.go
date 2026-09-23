@@ -36,11 +36,12 @@ func (s *Server) pendingNativeApprovals() []pendingNativeApproval {
 	defer s.sessionsMu.Unlock()
 	items := make([]pendingNativeApproval, 0)
 	for id, ses := range s.sessions {
-		if ses == nil || ses.nativeApprovalSig == "" || ses.vt == nil {
+		// 選択肢の無い記録（AskUserQuestion の告知）は一括承認の対象にしない。
+		if ses == nil || !ses.pendingApproval.isNative() || !ses.pendingApproval.hasOptions() || ses.vt == nil {
 			continue
 		}
-		approval := detectNativeApproval(ses.Provider, ses.vt.Lines())
-		if approval == nil || approval.Sig != ses.nativeApprovalSig {
+		approval := s.detectScreenApproval(ses.Provider, ses.vt.Lines())
+		if approval == nil || approval.Sig != ses.pendingApproval.Sig {
 			continue
 		}
 		items = append(items, pendingNativeApproval{

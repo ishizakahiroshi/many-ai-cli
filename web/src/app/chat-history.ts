@@ -136,18 +136,10 @@ export function pushMessage(sid, msg) {
 // **承認の供給元の判定にこの関数を使わないこと。** 以前はこの 1 つの一覧が
 // 「トランスクリプトを読めるか」と「承認をトランスクリプトから受け取るか」の
 // 両方を答えていた。command-code はチャットは読めるが確認画面が TUI にしか
-// 出ないので、承認は端末ミラーのまま。承認側は
-// isTranscriptApprovalProvider を使う。
+// 出ないので、承認は端末ミラーのまま。承認の供給元は Hub が決める
+// （internal/hub/approval_marker_transcript.go）。画面は Hub の記録を描くだけで供給元を見ない。
 export function isTranscriptBackedProvider(provider) {
   return hasProviderCapability(provider, 'transcript');
-}
-
-// 承認カードの供給元が CLI のトランスクリプトである provider。Go 側の正本は
-// 同じファイルの ApprovalMarker 列（native）で、claude / codex だけ。
-// 台帳からの復元（approval.ts の maybeRestorePendingApprovalFromLedger）は、
-// 端末の再描画では戻せないこの供給元のためにある。
-export function isTranscriptApprovalProvider(provider) {
-  return hasProviderCapability(provider, 'approval') && hasProviderCapability(provider, 'transcript') && provider !== 'command-code';
 }
 
 export function isTranscriptBackedSession(sid) {
@@ -466,31 +458,6 @@ if (typeof window !== 'undefined') {
     get() { return activeSessionId; },
   });
 }
-
-// ─── C4: approvalUiAdapter.setApprovalVisible をラップしてマルチペインバッジを同期 ───
-// approval-ui.js は app.js より後にロードされるため、window.load 後にラップする。
-// これにより setApprovalVisible(id, true/false) が呼ばれるたびにバッジが更新される。
-window.addEventListener('load', function () {
-  const adapter = window.approvalUiAdapter;
-  if (!adapter || typeof adapter.setApprovalVisible !== 'function' || adapter._c4wrapped) return;
-  const orig = adapter.setApprovalVisible;
-  adapter.setApprovalVisible = function (id, visible, options) {
-    const result = orig.call(this, id, visible, options);
-    // マルチペインのバッジを更新（'waiting' または 'running'/'idle' に切り替え）
-    const mgr = window.multiPaneManager;
-    if (mgr && typeof mgr.updateSlotBadge === 'function') {
-      if (visible) {
-        mgr.updateSlotBadge(id, 'waiting');
-      } else {
-        const s = sessions.get(id);
-        const badgeStatus = (s && s.state === 'running') ? 'running' : 'standby';
-        mgr.updateSlotBadge(id, badgeStatus);
-      }
-    }
-    return result;
-  };
-  adapter._c4wrapped = true;
-});
 
 // ─── C2: バッファクリア機能 ──────────────────────────────────
 // マルチモード時の scrollback 上限（localStorage で変更可能）

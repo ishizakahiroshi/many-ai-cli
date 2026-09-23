@@ -241,15 +241,6 @@
   overflow-wrap: anywhere;
   line-height: 1.45;
 }
-/* 承認ではない選択メニュー（claude /model 等）のラベル。警告色ではなくアクセント色で、
-   承認プロンプト（警告色・大文字）と視覚的に区別する。 */
-.action-bar-label.select-menu-label {
-  letter-spacing: 0;
-  text-transform: none;
-  overflow-wrap: anywhere;
-  line-height: 1.45;
-  color: var(--accent);
-}
 
 #multi-question-banner {
   display: flex;
@@ -296,6 +287,58 @@
   flex-shrink: 0;
 }
 #approval-suppressed-banner[hidden] { display: none; }
+/* approval-fold-band: ✕ で畳んだ承認の 1 行の帯（approval.ts の syncFoldedBand）。
+   バナーと同じくフローに置き、入力欄も端末の最終行も覆わない。帯全体が 1 つのボタンで、
+   押す（フォーカスして Enter）とパネルが開く。 */
+#approval-fold-band {
+  display: flex;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--warn) 5%, var(--bg-elev));
+  border-top: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+}
+#approval-fold-band[hidden] { display: none; }
+.approval-fold-band-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+.approval-fold-band-btn:hover,
+.approval-fold-band-btn:focus-visible {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.approval-fold-band-label {
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--warn-text);
+  white-space: nowrap;
+}
+.approval-fold-band-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-2);
+}
+.approval-fold-band-hint {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--accent);
+  white-space: nowrap;
+}
 .multi-question-banner-text {
   flex: 1 1 auto;
   white-space: pre-wrap;
@@ -810,6 +853,51 @@ body.close-left .action-collapse-btn { right: auto; left: calc(12px + var(--cont
   text-overflow: ellipsis;
   max-width: 360px;
 }
+/* 質問タブの形（単問・一括承認・複数質問。approval.ts の showSingleSectionBar /
+   showBatchActionBar）と、その前後の要素も 1 行に詰める。以前は上の .action-section 系
+   （今は描かれない旧形式）とボタンだけが対象で、一括承認では ⊟ を押しても高さが変わらず、
+   単問も質問本文が全文のまま残っていた（pending_action-bar-collapsed-css-batch-mode.md）。
+   選択肢は 1 つずつ 1 行に省略し、並びの折り返しは残す（全部を 1 行に並べると、はみ出した
+   選択肢が見えなくなる）。 */
+#action-bar.collapsed .action-preamble { margin-bottom: 4px; }
+#action-bar.collapsed .action-preamble-head { padding: 2px 8px; }
+#action-bar.collapsed .action-preamble-body,
+#action-bar.collapsed .action-preamble.expanded .action-preamble-body {
+  max-height: none;
+  padding: 2px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#action-bar.collapsed .approval-summary-card { padding: 3px 8px; }
+#action-bar.collapsed .action-qtabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin-bottom: 2px;
+  scrollbar-width: thin;
+}
+#action-bar.collapsed .action-qtab { padding: 3px 8px; }
+#action-bar.collapsed .action-qpane { padding: 4px 8px; }
+#action-bar.collapsed .action-qhead {
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#action-bar.collapsed .action-qopts { margin-bottom: 4px; }
+#action-bar.collapsed .action-qdetail-row { margin-top: 4px; }
+#action-bar.collapsed .action-qdetail-actions { flex-direction: row; align-items: center; }
+#action-bar.collapsed .action-qdetail {
+  min-height: 0;
+  padding: 3px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#action-bar.collapsed .action-qdetail .detail-lab,
+#action-bar.collapsed .action-qdetail .detail-body { display: inline; margin: 0 6px 0 0; }
+/* 自由入力欄は 1 行に詰めた行の中に置くと右で切れるので、ラベルの下の行へ出す。 */
+#action-bar.collapsed .action-qdetail .action-qfreein { display: block; margin-top: 2px; }
 
 /* Approval opt-in toast */
 /* ---- Hub 承認ボタン オプトイントースト ---- */
@@ -921,6 +1009,7 @@ body.close-left .action-collapse-btn { right: auto; left: calc(12px + var(--cont
     font-size: 0.84rem;
   }
   .action-qopts-full .action-btn { width: auto; }
+  .approval-fold-band-btn { min-height: 44px; }
   .action-btn.current,
   .action-btn.session-allow,
   .action-btn:first-of-type {
@@ -959,4 +1048,18 @@ body.close-left .action-collapse-btn { right: auto; left: calc(12px + var(--cont
   /* 狭幅では横並びだとメッセージ欄が潰れるため、メッセージ→ボタンの縦積みに戻す */
   .action-qdetail-row { flex-direction: column-reverse; }
   .action-qdetail-btns { flex-direction: column; }
+}
+
+/* ⊟ の狭い幅向けの上書き。上の @media (max-width: 720px), (pointer: coarse) の
+   `#action-bar.collapsed .action-btn { max-width: 100% }` は、一括承認の選択肢（.action-qopt。
+   ボタンは width: 100%）にも当たり、詰めたのに選択肢が 1 つずつ 1 行を占めて高くなる。
+   通常時と同じ上限へ戻す（同じ詳細度なので、この後置きで勝つ）。
+   ラベルはモバイルでは display: flex で、flex の中の文字には省略記号が付かないので、
+   詰めたときだけ block にして 1 行で省略する。 */
+@media (max-width: 720px), (pointer: coarse) {
+  #action-bar.collapsed .action-qopt { max-width: 160px; }
+  #action-bar.collapsed .action-bar-label { display: block; line-height: 44px; }
+}
+@media (max-width: 480px) {
+  #action-bar.collapsed .action-qopt { max-width: 96px; }
 }

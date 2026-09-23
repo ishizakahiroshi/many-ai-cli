@@ -44,7 +44,14 @@ type Message struct {
 	// Activity carries all four flags atomically, including false transitions.
 	Activity         *SessionActivity  `json:"activity,omitempty"`
 	WorkflowProgress *WorkflowProgress `json:"workflow_progress,omitempty"`
-	ExitCode         int               `json:"exit_code,omitempty"`
+	// SubagentTree is the "parent instruction → child → grandchild" tree of
+	// currently-visible subagent activity (Claude Agent tool / Codex
+	// spawn_agent / Grok subagents), sent as its own message
+	// (Type: "subagent_tree") to a single session's own WS only
+	// (docs/local/plan_subagent-tree-popup.md 方針 3・6). It never authorizes
+	// anything and is independent of WorkflowProgress's Done/Total/Settled.
+	SubagentTree *SubagentTree `json:"subagent_tree,omitempty"`
+	ExitCode     int           `json:"exit_code,omitempty"`
 	// Signal carries the POSIX signal name (e.g. "killed", "terminated") when
 	// session_end's process was terminated by a signal rather than exiting
 	// normally with a non-zero code. Unix-only; always empty on Windows.
@@ -112,40 +119,51 @@ type Message struct {
 	// （docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md）。
 	TokenStatusbar bool `json:"token_statusbar"`
 
-	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
-	ApprovalVisible bool `json:"approval_visible,omitempty"`
-
-	// approval_detected / approval_cleared / approval_consumed:
-	// Go 側 VT バッファから検出した native approval prompt の通知と、
-	// UI 側で回答済みになった prompt の再検出抑止に使う。
+	// approval_consumed（UI → Hub）: 画面から回答した記録の sig と同一性。Hub は記録を閉じる。
+	// approval_resync（UI → Hub）: SessionID だけを持つ問い直し。Hub は端末ミラーから候補を
+	// 評価し直し、そのセッションの今の記録を問い直した画面にだけ approval_state で送る。
+	// 承認そのもの（開く・閉じる）は下の ApprovalState / ApprovalSnapshot で届く。
 	//
 	// approval_marker_suppressed:
 	// 構造が壊れた [MANY-AI-CLI] ブロックを配信せず捨てたことの告知。
 	// Reason に classifyApprovalMarkerBlock の分類（marker_leak / option_start /
-	// duplicate_option / box_rule）が入る。Block は壊れているため送らない。
-	ApprovalSig      string           `json:"approval_sig,omitempty"`
-	ApprovalKind     string           `json:"approval_kind,omitempty"`
-	ApprovalSource   string           `json:"approval_source,omitempty"`
-	ApprovalQuestion string           `json:"approval_question,omitempty"`
-	ApprovalContext  string           `json:"approval_context,omitempty"`
-	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
-	ApprovalSummary  *ApprovalSummary `json:"approval_summary,omitempty"`
+	// duplicate_option / box_rule）が入る。壊れたブロック本文は送らない。
+	ApprovalSig     string           `json:"approval_sig,omitempty"`
+	ApprovalSource  string           `json:"approval_source,omitempty"`
+	ApprovalSummary *ApprovalSummary `json:"approval_summary,omitempty"`
 	// ApprovalCandidateKey is a stable, presentation-independent identity for
 	// one approval candidate. It deliberately excludes mutable context such as
 	// status lines, borders, and option labels that can change during TUI reflow.
 	ApprovalCandidateKey string `json:"approval_candidate_key,omitempty"`
-	// ApprovalCandidateShape is sent only when replay needs to restore the
-	// browser's answered-candidate suppression after a UI reconnect. It is the
-	// normalized, label-free shape behind ApprovalCandidateKey.
+	// ApprovalCandidateShape is the normalized, label-free shape behind
+	// ApprovalCandidateKey. On reattach_replay_done it, ApprovalConsumed and
+	// ApprovalConsumedEpoch still describe the answered candidate, but the
+	// current UI does not read them there: since the approval-display
+	// single-source change (2026-09-23) the Hub keeps answered-candidate
+	// suppression and the UI draws only ApprovalState / ApprovalSnapshot.
+	// They remain for tabs still running older JS until reload; do not build
+	// new UI behaviour on them.
 	ApprovalCandidateShape string `json:"approval_candidate_shape,omitempty"`
 	ApprovalConsumed       bool   `json:"approval_consumed,omitempty"`
 	ApprovalConsumedEpoch  uint64 `json:"approval_consumed_epoch,omitempty"`
 	// DoneSummary is emitted when an AI task reaches a terminal-looking state.
 	// It is display-only and never authorizes an action.
 	DoneSummary *DoneSummary `json:"done_summary,omitempty"`
-	Block       string       `json:"block,omitempty"` // approval_marker: VT tail から抽出した [MANY-AI-CLI] ブロック全文
 	SentText    string       `json:"sent_text,omitempty"`
 	DetectedAt  string       `json:"detected_at,omitempty"`
+
+	// ApprovalState carries one open or close of a session's pending approval
+	// record (Type: "approval_state"). The Hub holds at most one record per
+	// session (internal/hub/approval_record.go is the rule's source of truth);
+	// the UI draws that record and nothing else. ApprovalState.Version only
+	// orders changes within one session; it is not approval identity
+	// (candidateKey + sourceEpoch remains the only one).
+	ApprovalState *ApprovalState `json:"approval_state,omitempty"`
+	// ApprovalSnapshot carries every live session's pending approval record in
+	// one frame (Type: "approval_snapshot"). It is sent only to a UI that has
+	// just connected; sessions without a record appear with Record == nil so the
+	// UI can replace its whole store and keep nothing from a previous connection.
+	ApprovalSnapshot []ApprovalSessionState `json:"approval_snapshot,omitempty"`
 
 	// LastOutputAt: PTY 出力が最後に届いた時刻（ISO 8601 / RFC 3339）。
 	// session_update で standby/waiting 遷移時に付与し、UI カードに「最終応答時刻」として表示する。
@@ -492,6 +510,52 @@ type WfAgentDetail struct {
 	ResultPreview   string `json:"result_preview,omitempty"`    // truncated
 }
 
+// SubagentTree is the Hub-authoritative "parent instruction → child →
+// grandchild" tree for one session's currently-visible subagent activity
+// (docs/local/plan_subagent-tree-popup.md). Provider names the
+// adapters.subagents reader key that produced Nodes (親 plan 方針 2), which is
+// not necessarily the session's own Provider id. Omitted counts nodes dropped
+// by the per-poll node cap (oldest completed dropped first, 子 plan
+// plan_subagent-tree-popup_c2_hub-core-claude.md 内部 C2); UpdatedAt is when
+// this snapshot was built (epoch ms). Like WorkflowProgress, this is
+// read-only display data and never authorizes an action.
+type SubagentTree struct {
+	Provider  string         `json:"provider,omitempty"`
+	Nodes     []SubagentNode `json:"nodes,omitempty"`
+	Omitted   int            `json:"omitted,omitempty"`
+	UpdatedAt int64          `json:"updated_at,omitempty"` // epoch ms
+}
+
+// SubagentNode is one child (or grandchild) in a SubagentTree. Like
+// WfAgentDetail, every field here is a display-only summary:
+// LastToolSummary may only hold a truncated value taken from an allow-listed
+// input key (command / pattern / path / file_path — see 親 plan 方針 3),
+// never the prompt text, the tool's result, or the child's reply. Do not add
+// a field that could hold prompt text, result text, or a reply body;
+// TestSubagentNodeFieldsAreTheAllowlist (messages_test.go) enforces this
+// allowlist the same way internal/handoff/handoff_test.go does for Record.
+type SubagentNode struct {
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id,omitempty"` // 空 = 最上位（親の直接の子）
+	Depth    int    `json:"depth"`               // 1 = 最上位の子, 2 = 孫, ...
+	// Label is the short name the parent gave the child (Claude: meta の
+	// description, Codex: agent_nickname / agent_role). Never the prompt itself.
+	Label     string `json:"label,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// State is one of: running | done | failed | unknown.
+	State          string `json:"state"`
+	StartedAt      int64  `json:"started_at,omitempty"`       // epoch ms
+	LastActivityAt int64  `json:"last_activity_at,omitempty"` // epoch ms
+	FinishedAt     int64  `json:"finished_at,omitempty"`      // epoch ms
+	// ToolCalls is left unset (not 0) when the reader could not count every
+	// call for this child yet (e.g. only the tail budget was read on the
+	// first poll) — 0 would misleadingly claim "no tool calls yet".
+	ToolCalls       int    `json:"tool_calls,omitempty"`
+	LastToolName    string `json:"last_tool_name,omitempty"`
+	LastToolSummary string `json:"last_tool_summary,omitempty"` // truncated allow-listed value only
+}
+
 // SessionMeta is user-editable, server-persisted identification metadata for a
 // live session. AutoTitle is derived from the first user input and is displayed
 // only when Label is empty.
@@ -600,6 +664,59 @@ type ApprovalOption struct {
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	SendText      string `json:"send_text,omitempty"`
 	PreserveOrder bool   `json:"preserve_order,omitempty"`
+}
+
+// ApprovalRecord is a session's pending approval as the Hub holds it.
+// Origin is native | marker and Source is go_vt | transcript. Marker records
+// carry only the raw Block (the browser keeps the single marker parser);
+// native records carry the Go-parsed Question / Context / Options / Summary.
+// Sig is a reference for matching the ledger row and the browser's answer; it
+// is not identity.
+type ApprovalRecord struct {
+	CandidateKey   string           `json:"candidate_key"`
+	CandidateShape string           `json:"candidate_shape,omitempty"`
+	SourceEpoch    uint64           `json:"source_epoch"`
+	Sig            string           `json:"sig,omitempty"`
+	Origin         string           `json:"origin"`
+	Source         string           `json:"source,omitempty"`
+	Kind           string           `json:"kind,omitempty"`
+	Block          string           `json:"block,omitempty"`
+	Question       string           `json:"question,omitempty"`
+	Context        string           `json:"context,omitempty"`
+	Options        []ApprovalOption `json:"options,omitempty"`
+	Summary        *ApprovalSummary `json:"summary,omitempty"`
+	DetectedAt     string           `json:"detected_at,omitempty"`
+}
+
+// ApprovalRecordClose identifies a record that closed and why. Reason is one
+// of answered | answered_terminal | superseded | vanished | session_end |
+// history_reset.
+type ApprovalRecordClose struct {
+	CandidateKey string `json:"candidate_key"`
+	SourceEpoch  uint64 `json:"source_epoch"`
+	Sig          string `json:"sig,omitempty"`
+	Origin       string `json:"origin,omitempty"`
+	Reason       string `json:"reason"`
+}
+
+// ApprovalState is one change to one session's record: exactly one of Open or
+// Close is set. Version increases by one for every open and every close of that
+// session, so a UI can drop a frame older than the state it already has (frames
+// are broadcast after the Hub releases its lock and can arrive out of order).
+// The one exception is the reply to approval_resync, sent only to the asking UI:
+// it carries the current Version and Open, and both are empty when the session
+// has no record ("no record at this version"). It does not bump Version.
+type ApprovalState struct {
+	Version uint64               `json:"version"`
+	Open    *ApprovalRecord      `json:"open,omitempty"`
+	Close   *ApprovalRecordClose `json:"close,omitempty"`
+}
+
+// ApprovalSessionState is one session's entry in an approval_snapshot.
+type ApprovalSessionState struct {
+	SessionID int             `json:"session_id"`
+	Version   uint64          `json:"version"`
+	Record    *ApprovalRecord `json:"record,omitempty"`
 }
 
 // ChildApproval is one provider's effective approval configuration for an

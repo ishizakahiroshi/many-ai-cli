@@ -1,9 +1,9 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { escapeHtml, ti18n, token } from './util.js';
-import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, multiQuestionVisibleCache, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
+import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
 import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectBoxKeyAfterSessionCardSelection, projectKeyForSession } from './sidebar-tree.js';
-import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, setUserPref } from './user-prefs.js';
+import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, isTurnEndBellOff, setTurnEndBellOff, setUserPref } from './user-prefs.js';
 import { dismissSession, inputEl, requestSessionHistoryReset, restoreInputStateFor, saveInputStateFor, updateInputAffordance } from '../app.js';
 import { renderZeroSessionEmptyState } from './zero-session-empty-state.js';
 import { attachTerminal, claimPtyResizeOwnership, ensureTerminal, refitAndStickTerminalToBottomAfterLayoutSettles, refitAndStickTerminalToBottomSoon, revealApprovalPromptForSession, scrollTerminalToBottomSoon, syncLiveStatusLongproc, syncPtySizeToViewportAfterLayout, updateScrollLockBtn } from './terminal.js';
@@ -11,8 +11,8 @@ import { applyActiveSessionViewMode, filterFirstMessage, openCardCtxMenu, render
 import { pickRestoreSession } from './project-view-memory.js';
 import { readOpenProjectKey, readProjectView, runWithProjectViewRestore, saveOpenProjectKey, saveProjectView } from './project-view-store.js';
 import { syncElapsedTimer } from './ws-client.js';
-import { renderApprovalSuppressedBannerFor, setMultiQuestionBannerVisible } from './approval-ui.js';
-import { detectApproval, isAIOrCustomProvider, releaseActionBarIfOwnedByOther, scheduleApprovalLedgerRestore, setActionBarFocus } from './approval.js';
+import { renderApprovalSuppressedBannerFor } from './approval-ui.js';
+import { isAIOrCustomProvider, releaseActionBarIfOwnedByOther, renderApprovalFromStore, setActionBarFocus } from './approval.js';
 import { getSessionAgentInfo, getSessionCtxPct, onActiveSessionChanged } from './token-statusbar.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, doneSummaryLine, getDoneSummary } from './done-summary.js';
@@ -154,7 +154,7 @@ export let _multiPaneFocusSyncing = false;
 /**
  * C4: マルチペインのフォーカス切替用の軽量版 activateSession。
  * シングルビュー固有の処理（ensureTerminal / attachTerminal / FilesTabManager 等）は
- * 行わず、activeSessionId の更新と承認 UI 検出・サイドバー更新のみ実施する。
+ * 行わず、activeSessionId の更新と承認パネルの描き直し・サイドバー更新のみ実施する。
  * multi-pane.js の focusSlot() から呼ばれる。
  */
 export function activateSessionForMultiPane(id) {
@@ -178,14 +178,13 @@ export function activateSessionForMultiPane(id) {
     });
   }
   // 承認 UI をフォーカスセッション向きに更新
-  setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   renderApprovalSuppressedBannerFor(id);
   // フォーカスセッションの実行中状態を入力欄／送信ボタンへ反映
   updateInputAffordance();
-  // 直前のフォーカスセッションのパネルが残っていたら、detectApproval より先に捨てる。
-  // detectApproval は早期 return のどれでも bar を掃除しないため。
+  // 直前のフォーカスセッションのパネルが残っていたら先に捨て、ストアの記録からその場で描く
+  // （Hub の記録を写したストアは、見ていないセッションの承認も持っている）。
   releaseActionBarIfOwnedByOther(id);
-  detectApproval(id);
+  renderApprovalFromStore(id);
   revealApprovalPromptForSession(id);
   // サイドバーのアクティブカードを更新
   updateSessionListActiveCard(id);
@@ -253,12 +252,12 @@ export function activateSession(id) {
   updateScrollLockBtn();
   // 切替先セッションの実行中状態に合わせて入力欄プレースホルダ／送信ボタンを更新
   updateInputAffordance();
-  setMultiQuestionBannerVisible(!!multiQuestionVisibleCache.get(id));
   renderApprovalSuppressedBannerFor(id);
-  // 切替元のパネルが残っていたら、detectApproval より先に捨てる。
-  // detectApproval は早期 return のどれでも bar を掃除しないため。
+  // 切替元のパネルが残っていたら先に捨て、ストアの記録からその場で描く。タイマーも台帳の
+  // 取り直しも待たない（別のセッションを見ている間に届いた承認が、切り替えても描かれない
+  // 行き止まりがあった。bugfix_approval-panel-blank-on-switch_2026-09-23.md）。
   releaseActionBarIfOwnedByOther(id);
-  detectApproval(id);
+  renderApprovalFromStore(id);
   updateSessionListActiveCard(id);
   updateShellBadge(id);
   updateQuickCmdButtons(id);
@@ -286,10 +285,6 @@ export function activateSession(id) {
   scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   requestAnimationFrame(() => {
     if (activeSessionId !== id) return;
-    detectApproval(id);
-    // claude / codex で、上の detectApproval が何も出せなかったときの最後の砦。
-    // Hub 配信を一度取りこぼした保留承認を台帳から出し直す（「↻ 承認」と同じ経路）。
-    scheduleApprovalLedgerRestore(id);
     refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   });
   refitAndStickTerminalToBottomAfterLayoutSettles(id, {
@@ -1418,6 +1413,29 @@ export function renderSessionList() {
           void openDeriveDialog(s.id);
         };
         actions.appendChild(deriveBtn);
+      }
+
+      // 作業終了通知のベル（セッションごとの ON/OFF）。localStorage のみで持ち、Hub
+      // 再起動時に ws-client.ts の purgeLocalStateForHubRestart() から一括で消す
+      // （子 plan: plan_ux-notify-palette-review_c1_notify.md 内部 C2）。
+      if (isAIOrCustomProvider(String(s.provider || ''))) {
+        const bellBtn = document.createElement('button');
+        bellBtn.className = 'session-turn-end-bell-btn';
+        const applyBellState = (muted: boolean) => {
+          bellBtn.textContent = muted ? '🔕' : '🔔';
+          bellBtn.classList.toggle('muted', muted);
+          const title = muted ? t('turn_end_bell_off_tooltip') : t('turn_end_bell_on_tooltip');
+          bellBtn.title = title;
+          bellBtn.setAttribute('aria-label', title);
+        };
+        applyBellState(isTurnEndBellOff(s.id));
+        bellBtn.onclick = (e) => {
+          e.stopPropagation();
+          const next = !isTurnEndBellOff(s.id);
+          setTurnEndBellOff(s.id, next);
+          applyBellState(next);
+        };
+        actions.appendChild(bellBtn);
       }
 
       const xBtn = document.createElement('button');

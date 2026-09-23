@@ -553,18 +553,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevApprovalConsumedCandidateKey string
 	var prevApprovalConsumedCandidateShape string
 	var prevApprovalConsumedEpoch uint64
-	var prevNativeApprovalSig string
-	var prevNativeApprovalCandidateKey string
-	var prevNativeApprovalCandidateShape string
-	var prevNativeApprovalSourceEpoch uint64
+	var prevPendingApproval *approvalRecord
+	var prevApprovalStateVersion uint64
 	var prevNativeApprovalTailSig string
 	var prevNativeApprovalClearMisses int
 	var prevNativeApprovalConsumed string
 	var prevNativeApprovalConsumedAt time.Time
-	var prevApprovalMarkerSig string
-	var prevApprovalMarkerCandidateKey string
-	var prevApprovalMarkerCandidateShape string
-	var prevApprovalMarkerSourceEpoch uint64
 	var prevApprovalMarkerSuppressedSig string
 	var prevApprovalMarkerSuppressedAt time.Time
 	var prevReattachState reattachPreservedState
@@ -583,18 +577,16 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevApprovalConsumedCandidateKey = cur.approvalConsumedCandidateKey
 		prevApprovalConsumedCandidateShape = cur.approvalConsumedCandidateShape
 		prevApprovalConsumedEpoch = cur.approvalConsumedEpoch
-		prevNativeApprovalSig = cur.nativeApprovalSig
-		prevNativeApprovalCandidateKey = cur.nativeApprovalCandidateKey
-		prevNativeApprovalCandidateShape = cur.nativeApprovalCandidateShape
-		prevNativeApprovalSourceEpoch = cur.nativeApprovalSourceEpoch
+		// 記録は開いた後に書き換えない値なので、ポインタをそのまま渡してよい
+		// （approval_record.go 冒頭）。
+		prevPendingApproval = cur.pendingApproval
+		// 版番号は巻き戻さない。画面は手元より古い版を捨てるので、0 から数え直すと
+		// reattach 後の開閉がすべて捨てられる。
+		prevApprovalStateVersion = cur.approvalStateVersion
 		prevNativeApprovalTailSig = cur.nativeApprovalTailSig
 		prevNativeApprovalClearMisses = cur.nativeApprovalClearMisses
 		prevNativeApprovalConsumed = cur.nativeApprovalConsumed
 		prevNativeApprovalConsumedAt = cur.nativeApprovalConsumedAt
-		prevApprovalMarkerSig = cur.approvalMarkerSig
-		prevApprovalMarkerCandidateKey = cur.approvalMarkerCandidateKey
-		prevApprovalMarkerCandidateShape = cur.approvalMarkerCandidateShape
-		prevApprovalMarkerSourceEpoch = cur.approvalMarkerSourceEpoch
 		prevApprovalMarkerSuppressedSig = cur.approvalMarkerSuppressedSig
 		prevApprovalMarkerSuppressedAt = cur.approvalMarkerSuppressedAt
 		stopReattachAsyncStateLocked(cur)
@@ -719,18 +711,12 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		approvalConsumedCandidateKey:   prevApprovalConsumedCandidateKey,
 		approvalConsumedCandidateShape: prevApprovalConsumedCandidateShape,
 		approvalConsumedEpoch:          prevApprovalConsumedEpoch,
-		nativeApprovalSig:              prevNativeApprovalSig,
-		nativeApprovalCandidateKey:     prevNativeApprovalCandidateKey,
-		nativeApprovalCandidateShape:   prevNativeApprovalCandidateShape,
-		nativeApprovalSourceEpoch:      prevNativeApprovalSourceEpoch,
+		pendingApproval:                prevPendingApproval,
+		approvalStateVersion:           prevApprovalStateVersion,
 		nativeApprovalTailSig:          prevNativeApprovalTailSig,
 		nativeApprovalClearMisses:      prevNativeApprovalClearMisses,
 		nativeApprovalConsumed:         prevNativeApprovalConsumed,
 		nativeApprovalConsumedAt:       prevNativeApprovalConsumedAt,
-		approvalMarkerSig:              prevApprovalMarkerSig,
-		approvalMarkerCandidateKey:     prevApprovalMarkerCandidateKey,
-		approvalMarkerCandidateShape:   prevApprovalMarkerCandidateShape,
-		approvalMarkerSourceEpoch:      prevApprovalMarkerSourceEpoch,
 		approvalMarkerSuppressedSig:    prevApprovalMarkerSuppressedSig,
 		approvalMarkerSuppressedAt:     prevApprovalMarkerSuppressedAt,
 		lastCols:                       req.Cols,
@@ -946,9 +932,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			scanNativeApproval := false
 			hadNativeApprovalSig := false
 			resumeAgentChatTail := false
-			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
+				chunkHasApprovalTrigger := s.chunkMayShowScreenApproval(ses.Provider, m.Data)
 				ses.ptyBuf = appendPTYReplay(ses.ptyBuf, m.Data)
 				ses.ptyBytesSeen += int64(len(m.Data))
 				if ses.vt == nil {
@@ -980,9 +966,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 				shouldCheckApproval := sessionApprovalDetectionEligible(ses) &&
 					now.After(ses.vtResizeDebounceUntil) &&
-					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
+					(chunkHasApprovalTrigger || ses.pendingApproval.isNative() || ses.nativeApprovalScanQueued)
 				if shouldCheckApproval {
-					hadNativeApprovalSig = ses.nativeApprovalSig != ""
+					hadNativeApprovalSig = ses.pendingApproval.isNative()
 					vtLines = ses.vt.TailLines(vtTailLinesForApproval)
 					tailSig := nativeApprovalTailSignature(vtLines)
 					if tailSig != ses.nativeApprovalTailSig {
@@ -1009,6 +995,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					// 開始マーカーが画面外へ流れた場合の再構成（approval_marker.go）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
 					marker = extractApprovalMarkerBlockFromVT(ses.vt)
+					// マーカー無しの文章の質問（approval_text_question.go）はチャンクごとには探さない。
+					// 作業の途中の箇条書きを質問と取り違えるので、出力が落ち着いた時点で 1 回だけ見る
+					// （approval_text_question.go の「出力が落ち着いてから開く」節）。
 				}
 				// 出力が動いている間はトランスクリプトの tail を止めない。
 				// pollAgentChat は最後の出力から 1 分で自分を止めるが、再開する口が
@@ -1044,7 +1033,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				s.recordCrossSessionMessage(id, crossSessionMessage, now)
 			}
 			if scanNativeApproval {
-				approval := detectNativeApproval(provider, vtLines)
+				approval := s.detectScreenApproval(provider, vtLines)
 				if approval == nil && hadNativeApprovalSig && shouldSuppressNativeApprovalClearMiss(provider, vtLines) {
 					s.resetNativeApprovalClearMisses(id)
 				} else {
@@ -1186,7 +1175,11 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		s.logger.Warn("pending_input_dropped", "session_id", id, "count", n, "cause", "wrapper_disconnect")
 		delete(s.pendingInput, id)
 	}
+	// wrapper が居なくなったセッションの承認には答えられない。保留中の記録を閉じる。
+	// 再接続すれば、replay の再評価とトランスクリプトの prime が作り直す。
+	approvalClosure := closeApprovalRecordLocked(s.sessions[id], id, approvalCloseSessionEnd, time.Now())
 	s.sessionsMu.Unlock()
+	s.finishApprovalRecordClosures(approvalClosure)
 	if requeuedCount > 0 {
 		s.logger.Info("requeued in-flight pty_input",
 			"session_id", id,

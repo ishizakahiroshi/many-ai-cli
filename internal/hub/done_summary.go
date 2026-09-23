@@ -185,7 +185,7 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 	now := time.Now()
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || !isFallbackDoneSummaryProvider(ses.Provider) || ses.approvalVisible {
+	if ses == nil || !isFallbackDoneSummaryProvider(ses.Provider) || ses.pendingApproval != nil {
 		s.sessionsMu.Unlock()
 		return
 	}
@@ -210,7 +210,7 @@ func (s *Server) maybeCreateFallbackDoneSummary(id int) {
 		// A real marker may have arrived while the Git capture was running. The
 		// marker handler owns the same timestamp, so only suppress a fallback
 		// that was superseded after this fallback candidate was scheduled.
-		if current == nil || !isFallbackDoneSummaryProvider(current.Provider) || current.approvalVisible || current.doneSummaryMarkerSeen || current.lastDoneNotifyAt.After(now) {
+		if current == nil || !isFallbackDoneSummaryProvider(current.Provider) || current.pendingApproval != nil || current.doneSummaryMarkerSeen || current.lastDoneNotifyAt.After(now) {
 			s.sessionsMu.Unlock()
 			return
 		}

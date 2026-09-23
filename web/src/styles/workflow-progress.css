@@ -274,6 +274,86 @@
 .wf-completed-row { color: var(--green-text); }
 .wf-completed-other { color: var(--muted); }
 
+/* ── サブエージェントの木（子 plan: plan_subagent-tree-popup_c5_web-popup.md）。
+   記号・行の見た目は上の .wf-agent-* をそのまま使い回す（新しい記号や丸を作らない）。
+   ここで足すのは、Workflow の節と併記するときの区切り、字下げ、完了行を薄くする
+   見た目、補足（種別・モデル）と「最後の動き」の色だけ。 */
+.wf-subagent-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+/* Workflow 未検出（単独表示）のときは、モーダル本文の最初の要素になるので
+   区切り線と上の余白は要らない。 */
+.wf-subagent-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.wf-subagent-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.wf-subagent-heading-sub { font-weight: 400; letter-spacing: 0; }
+/* 種別・モデルの補足。既定はラベルのすぐ右へ static に置く（完了行・ツールの行が無い
+   走行中の行）。走行中でツールの行がある子は、C11 でこの要素ごとツールの行
+   （.wf-subagent-tool、下）の右端へ移す。560px のモーダルで名前が切れるのを防ぐため
+   （完成イメージ S-02 の `.tool .sub`）。max-width はどちらの位置でも効く（ツールの行でも、
+   長いモデル名がツール名を押しつぶさないようにするため）。 */
+.wf-subagent-detail {
+  flex: 0 0 auto;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-2);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.68rem;
+}
+/* 「最後の動き N 秒前」だけアクセント色にして、進んでいることに気づきやすくする
+   （Q3: 色でしきい値は作らない。動いているかどうかの合図だけ）。 */
+.wf-subagent-age { color: var(--accent-text); }
+/* 完了行は薄く残す（Q2）。失敗行は赤い ✕ と「失敗」の文字を読ませたいので、
+   完了行ほどは薄くしない。 */
+.wf-subagent-row-done { opacity: 0.62; }
+.wf-subagent-row-failed { opacity: 0.8; }
+.wf-subagent-omitted {
+  padding: 4px 8px;
+  color: var(--muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.7rem;
+}
+/* 走行中の子の「今のツール」の行（完成イメージ S-02 の `.tool`）。既存の
+   .wf-agent-last-tool と padding・色・フォントはそろえつつ、C11 で種別・モデル
+   （.wf-subagent-detail）を右端に置けるよう flex にする（.wf-agent-last-tool 自体は
+   Workflow 側の詳細セクションでも使う共有クラスなので、そちらの display は変えない）。 */
+.wf-subagent-tool {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 1px 8px 3px calc(8px + 13px + var(--space-2));
+  color: var(--muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.7rem;
+}
+.wf-subagent-tool-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* この行の中では、ラベル行のときの static 配置ではなく右詰めにする。 */
+.wf-subagent-tool .wf-subagent-detail {
+  margin-left: auto;
+}
+
 /* セッションカードの小型進捗。2 行目の状態スロットへ載せる。 */
 .card-workflow-progress {
   display: inline-flex;

@@ -8,7 +8,7 @@
 //
 // ここが守っているのは 2 つ。どちらも「保存値をそのまま信じない」ための網。
 //
-//  1. **タブ名は必ず既知の 9 種へ丸める。** 保存経路が 1 本だけとは限らない
+//  1. **タブ名は必ず既知の 10 種へ丸める。** 保存経路が 1 本だけとは限らない
 //     （config.yaml を手で書ける・古い版が別の名前を書いている）。知らない名前を
 //     setActiveTab へ渡すと何も起きず、画面は前のタブのまま「復元できたのに違う」
 //     という読み方のできない状態になる。
@@ -18,7 +18,7 @@
 
 /** タブ名の正本。settings.ts の VALID_TAB_NAMES はこの配列から作る（2 か所に持たない）。 */
 export const VALID_TAB_NAME_LIST = [
-  'terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval', 'history', 'orchestration',
+  'terminal', 'chat', 'split', 'files', 'git', 'review', 'multi', 'approval', 'history', 'orchestration',
 ] as const;
 
 export type TabName = (typeof VALID_TAB_NAME_LIST)[number];

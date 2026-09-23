@@ -96,7 +96,7 @@ test('returning to the original session repaints it after the release', () => {
 });
 
 // ケース 4 の一部: 所有者が同じなら、解放も再描画も起こさない。
-// ✕ で消した後の再表示抑止（manualHideState）は showActionBar 側の責務なので、
+// 帯に畳んだ記録を描かない判断は approval-store.ts の畳み状態の責務なので、
 // ここで所有者判定が余計に描き直しを要求しないことだけを固定する。
 test('the owner session is left alone so existing suppression is not overridden', () => {
   const bar = new FakeActionBar().paintFor(6, 'same-question', 3);

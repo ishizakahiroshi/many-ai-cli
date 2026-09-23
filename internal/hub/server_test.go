@@ -242,7 +242,7 @@ func TestResizeOwnershipTwoUIsDoNotBounceWrapperSize(t *testing.T) {
 }
 
 // TestHandleNativeApprovalDetection_NewApproval は新しい承認が検出されたとき
-// nativeApprovalSig がセットされることを確認する。
+// ネイティブの記録が開くことを確認する。
 func TestHandleNativeApprovalDetection_NewApproval(t *testing.T) {
 	s := newTestServer()
 	registerTestSession(s, 1, "claude")
@@ -255,68 +255,76 @@ func TestHandleNativeApprovalDetection_NewApproval(t *testing.T) {
 	s.handleNativeApprovalDetection(1, approval)
 
 	s.sessionsMu.Lock()
-	got := s.sessions[1].nativeApprovalSig
+	got := nativeRecordSig(s.sessions[1])
 	s.sessionsMu.Unlock()
 	if got != "sig-abc" {
-		t.Fatalf("nativeApprovalSig = %q, want %q", got, "sig-abc")
+		t.Fatalf("native record sig = %q, want %q", got, "sig-abc")
 	}
 }
 
-// TestHandleNativeApprovalDetection_SameSigNoRepeat は同一 sig の重複送信で
-// nativeApprovalSig が変わらないことを確認する。
+// TestHandleNativeApprovalDetection_SameSigNoRepeat は同じ候補の再検出で
+// 記録が変わらず、開く approval_state を配信し直さないことを確認する。
 func TestHandleNativeApprovalDetection_SameSigNoRepeat(t *testing.T) {
 	s := newTestServer()
-	ses := registerTestSession(s, 2, "claude")
-	ses.nativeApprovalSig = "sig-dup"
+	registerTestSession(s, 2, "claude")
 
-	// 同じ sig で再度呼ぶ → broadcast されない（sig 変わらず）
 	approval := &nativeApproval{Sig: "sig-dup", Kind: "native"}
 	s.handleNativeApprovalDetection(2, approval)
+	s.sessionsMu.Lock()
+	first := s.sessions[2].pendingApproval
+	s.sessionsMu.Unlock()
+
+	// 同じ候補で再度呼ぶ → broadcast されない（記録も変わらない）
+	sent := captureUIBroadcasts(s)
+	s.handleNativeApprovalDetection(2, &nativeApproval{Sig: "sig-dup", Kind: "native"})
 
 	s.sessionsMu.Lock()
-	got := s.sessions[2].nativeApprovalSig
+	got := s.sessions[2].pendingApproval
 	s.sessionsMu.Unlock()
-	if got != "sig-dup" {
-		t.Fatalf("nativeApprovalSig = %q, want %q", got, "sig-dup")
+	if got != first || nativeRecordSig(s.sessions[2]) != "sig-dup" {
+		t.Fatalf("native record changed on re-detection: %+v -> %+v", first, got)
+	}
+	if opens := approvalStateOpens(sent(), 2); len(opens) != 0 {
+		t.Fatalf("same candidate was broadcast again: %+v", opens)
 	}
 }
 
 // TestHandleNativeApprovalDetection_ClearOnNil は承認が nil の状態が連続したとき
-// sig がクリアされることを確認する。
+// 記録が閉じることを確認する。
 func TestHandleNativeApprovalDetection_ClearOnNil(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 3, "claude")
-	ses.nativeApprovalSig = "sig-to-clear"
+	ses.pendingApproval = testNativeRecord("sig-to-clear", "", 0)
 
 	for i := 0; i < nativeApprovalClearMissLimit; i++ {
 		s.handleNativeApprovalDetection(3, nil)
 	}
 
 	s.sessionsMu.Lock()
-	got := s.sessions[3].nativeApprovalSig
+	got := s.sessions[3].pendingApproval
 	s.sessionsMu.Unlock()
-	if got != "" {
-		t.Fatalf("nativeApprovalSig = %q after clear, want empty", got)
+	if got != nil {
+		t.Fatalf("pending record = %+v after clear, want nil", *got)
 	}
 }
 
 // TestHandleNativeApprovalDetection_TransientNilKeepsSig は Codex TUI の一時的な
-// 再描画抜けで approval_cleared が即時発火しないことを確認する。
+// 再描画抜けで記録が即時に閉じないことを確認する。
 func TestHandleNativeApprovalDetection_TransientNilKeepsSig(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 8, "codex")
-	ses.nativeApprovalSig = "sig-stable"
+	ses.pendingApproval = testNativeRecord("sig-stable", "", 0)
 
 	for i := 0; i < nativeApprovalClearMissLimit-1; i++ {
 		s.handleNativeApprovalDetection(8, nil)
 	}
 
 	s.sessionsMu.Lock()
-	got := s.sessions[8].nativeApprovalSig
+	got := nativeRecordSig(s.sessions[8])
 	misses := s.sessions[8].nativeApprovalClearMisses
 	s.sessionsMu.Unlock()
 	if got != "sig-stable" {
-		t.Fatalf("nativeApprovalSig = %q before clear threshold, want %q", got, "sig-stable")
+		t.Fatalf("native record sig = %q before clear threshold, want %q", got, "sig-stable")
 	}
 	if misses != nativeApprovalClearMissLimit-1 {
 		t.Fatalf("nativeApprovalClearMisses = %d, want %d", misses, nativeApprovalClearMissLimit-1)
@@ -328,7 +336,7 @@ func TestHandleNativeApprovalDetection_TransientNilKeepsSig(t *testing.T) {
 func TestHandleNativeApprovalDetection_DetectionResetsClearMisses(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 9, "codex")
-	ses.nativeApprovalSig = "sig-stable"
+	ses.pendingApproval = testNativeRecord("sig-stable", "", 0)
 
 	s.handleNativeApprovalDetection(9, nil)
 	s.handleNativeApprovalDetection(9, &nativeApproval{Sig: "sig-stable", Kind: "native"})
@@ -446,11 +454,11 @@ func TestHandleNativeApprovalDetection_ConsumedTTL(t *testing.T) {
 	s.handleNativeApprovalDetection(4, approval)
 
 	s.sessionsMu.Lock()
-	got := s.sessions[4].nativeApprovalSig
+	got := nativeRecordSig(s.sessions[4])
 	s.sessionsMu.Unlock()
-	// TTL 内なので sig がセットされていないこと
+	// TTL 内なので記録が開いていないこと
 	if got != "" {
-		t.Fatalf("nativeApprovalSig = %q, want empty (TTL suppression)", got)
+		t.Fatalf("native record sig = %q, want empty (TTL suppression)", got)
 	}
 }
 
@@ -465,19 +473,19 @@ func TestHandleNativeApprovalDetection_ResizeDebounceSkip(t *testing.T) {
 	s.handleNativeApprovalDetection(5, approval)
 
 	s.sessionsMu.Lock()
-	got := s.sessions[5].nativeApprovalSig
+	got := nativeRecordSig(s.sessions[5])
 	s.sessionsMu.Unlock()
 	if got != "" {
-		t.Fatalf("nativeApprovalSig = %q, want empty (debounce skip)", got)
+		t.Fatalf("native record sig = %q, want empty (debounce skip)", got)
 	}
 }
 
 // TestMarkNativeApprovalConsumed は consumed マークが正しくセットされ、
-// approval_cleared broadcast 条件（sig 一致）が満たされることを確認する。
+// 記録を閉じる条件（sig 一致）が満たされることを確認する。
 func TestMarkNativeApprovalConsumed(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 6, "claude")
-	ses.nativeApprovalSig = "sig-to-consume"
+	ses.pendingApproval = testNativeRecord("sig-to-consume", "", 0)
 
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:   6,
@@ -486,23 +494,23 @@ func TestMarkNativeApprovalConsumed(t *testing.T) {
 
 	s.sessionsMu.Lock()
 	consumed := s.sessions[6].nativeApprovalConsumed
-	sig := s.sessions[6].nativeApprovalSig
+	sig := nativeRecordSig(s.sessions[6])
 	s.sessionsMu.Unlock()
 	if consumed != "sig-to-consume" {
 		t.Fatalf("nativeApprovalConsumed = %q, want %q", consumed, "sig-to-consume")
 	}
-	// sig がクリアされていること
+	// 記録が閉じていること
 	if sig != "" {
-		t.Fatalf("nativeApprovalSig = %q, want empty after consume", sig)
+		t.Fatalf("native record sig = %q, want empty after consume", sig)
 	}
 }
 
 // TestMarkNativeApprovalConsumed_SigMismatch は sig 不一致の場合に
-// nativeApprovalSig がクリアされないことを確認する。
+// ネイティブの記録が閉じないことを確認する。
 func TestMarkNativeApprovalConsumed_SigMismatch(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 7, "claude")
-	ses.nativeApprovalSig = "sig-A"
+	ses.pendingApproval = testNativeRecord("sig-A", "", 0)
 
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:   7,
@@ -510,20 +518,19 @@ func TestMarkNativeApprovalConsumed_SigMismatch(t *testing.T) {
 	})
 
 	s.sessionsMu.Lock()
-	sig := s.sessions[7].nativeApprovalSig
+	sig := nativeRecordSig(s.sessions[7])
 	s.sessionsMu.Unlock()
 	if sig != "sig-A" {
-		t.Fatalf("nativeApprovalSig = %q, want %q (mismatch should not clear)", sig, "sig-A")
+		t.Fatalf("native record sig = %q, want %q (mismatch should not clear)", sig, "sig-A")
 	}
 }
 
 // TestEvaluateIdle_RunningToWaiting は running セッションが idleAfter 経過後に
-// approvalVisible=true なら waiting に遷移することを確認する。
+// 保留中の承認の記録があれば waiting に遷移することを確認する。
 func TestEvaluateIdle_RunningToWaiting(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 10, "claude")
-	ses.approvalVisible = true
-	ses.approvalVisibleAt = time.Now() // リース内
+	ses.pendingApproval = testNativeRecord("sig-waiting", "", 0)
 	ses.lastOutputAt = time.Now().Add(-(idleAfter + time.Millisecond))
 
 	s.evaluateIdle()
@@ -537,11 +544,10 @@ func TestEvaluateIdle_RunningToWaiting(t *testing.T) {
 }
 
 // TestEvaluateIdle_RunningToStandby は running セッションが idleAfter 経過後に
-// approvalVisible=false なら standby に遷移することを確認する。
+// 保留中の承認の記録が無ければ standby に遷移することを確認する。
 func TestEvaluateIdle_RunningToStandby(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 11, "claude")
-	ses.approvalVisible = false
 	ses.lastOutputAt = time.Now().Add(-(idleAfter + time.Millisecond))
 
 	s.evaluateIdle()
@@ -554,13 +560,12 @@ func TestEvaluateIdle_RunningToStandby(t *testing.T) {
 	}
 }
 
-// TestEvaluateIdle_WaitingToStandby は waiting セッションで approvalVisible=false になると
-// standby に遷移することを確認する（session_hint フリップ追従）。
+// TestEvaluateIdle_WaitingToStandby は waiting セッションで保留中の承認の記録が
+// 閉じていれば standby に遷移することを確認する。
 func TestEvaluateIdle_WaitingToStandby(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 12, "claude")
 	ses.State = "waiting"
-	ses.approvalVisible = false // UI が approval を非表示にした
 
 	s.evaluateIdle()
 
@@ -572,71 +577,26 @@ func TestEvaluateIdle_WaitingToStandby(t *testing.T) {
 	}
 }
 
-// TestEvaluateIdle_ApprovalLeaseExpired はリース切れ（approvalVisibleAt が
-// approvalVisibleLease より古い）の waiting セッションが approvalVisible を
-// 自動クリアして standby に落ちることを確認する（保留中バッジ固着の自動回復）。
-func TestEvaluateIdle_ApprovalLeaseExpired(t *testing.T) {
-	s := newTestServer()
-	ses := registerTestSession(s, 14, "claude")
-	ses.State = "waiting"
-	ses.approvalVisible = true
-	ses.approvalVisibleAt = time.Now().Add(-(approvalVisibleLease + time.Millisecond))
-
-	s.evaluateIdle()
-
-	s.sessionsMu.Lock()
-	state := s.sessions[14].State
-	visible := s.sessions[14].approvalVisible
-	s.sessionsMu.Unlock()
-	if visible {
-		t.Fatalf("approvalVisible = true, want false (lease expired)")
-	}
-	if state != "standby" {
-		t.Fatalf("state = %q, want %q", state, "standby")
-	}
-}
-
-// TestEvaluateIdle_ApprovalLeaseRenewed はリース内（UI が再主張している）なら
-// waiting が維持されることを確認する。
-func TestEvaluateIdle_ApprovalLeaseRenewed(t *testing.T) {
-	s := newTestServer()
-	ses := registerTestSession(s, 15, "claude")
-	ses.State = "waiting"
-	ses.approvalVisible = true
-	ses.approvalVisibleAt = time.Now() // 直近に再主張あり
-
-	s.evaluateIdle()
-
-	s.sessionsMu.Lock()
-	state := s.sessions[15].State
-	s.sessionsMu.Unlock()
-	if state != "waiting" {
-		t.Fatalf("state = %q, want %q", state, "waiting")
-	}
-}
-
-// TestEvaluateIdle_ApprovalLeaseKeptByNativeSig は go_vt detector が native prompt を
-// 見ている間（nativeApprovalSig != ""）はリース切れでも approvalVisible が
-// クリアされないことを確認する（UI 非接続時の native 承認待ち維持）。
-func TestEvaluateIdle_ApprovalLeaseKeptByNativeSig(t *testing.T) {
+// TestEvaluateIdle_RecordKeepsWaitingWithoutUI は、画面を 1 つも開いていなくても
+// 記録が開いている間は waiting が続くことを確認する。以前の 15 秒のリース
+// （画面の再申告が止まると保留中を下ろす）より長く出力が止まっていても下ろさない。
+func TestEvaluateIdle_RecordKeepsWaitingWithoutUI(t *testing.T) {
 	s := newTestServer()
 	ses := registerTestSession(s, 16, "claude")
 	ses.State = "waiting"
-	ses.approvalVisible = true
-	ses.approvalVisibleAt = time.Now().Add(-(approvalVisibleLease + time.Millisecond))
-	ses.nativeApprovalSig = "native-sig"
+	ses.pendingApproval = testNativeRecord("native-sig", "", 0)
+	ses.lastOutputAt = time.Now().Add(-time.Minute)
 
-	s.evaluateIdle()
+	for i := 0; i < 3; i++ {
+		s.evaluateIdle()
+	}
 
 	s.sessionsMu.Lock()
 	state := s.sessions[16].State
-	visible := s.sessions[16].approvalVisible
+	activity := s.sessions[16].Activity
 	s.sessionsMu.Unlock()
-	if !visible {
-		t.Fatalf("approvalVisible = false, want true (native sig keeps lease)")
-	}
-	if state != "waiting" {
-		t.Fatalf("state = %q, want %q", state, "waiting")
+	if state != "waiting" || !activity.AwaitingApproval || !activity.AwaitingUser {
+		t.Fatalf("state = %q activity = %+v, want waiting with the approval flags", state, activity)
 	}
 }
 

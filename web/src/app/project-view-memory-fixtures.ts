@@ -28,8 +28,8 @@ import {
 const BOX_A = '/src/box-alpha';
 const BOX_B = '/src/box-bravo';
 
-test('タブ名は既知の 9 種だけを通す', () => {
-  assert.equal(VALID_TAB_NAME_LIST.length, 9);
+test('タブ名は既知の 10 種だけを通す', () => {
+  assert.equal(VALID_TAB_NAME_LIST.length, 10);
   for (const name of VALID_TAB_NAME_LIST) assert.ok(isValidTabName(name));
   for (const bogus of ['', 'Terminal', 'workbench', 'chat ', null, undefined, 3, {}]) {
     assert.equal(isValidTabName(bogus), false);

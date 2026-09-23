@@ -425,7 +425,9 @@ export function beginAltScrollNotch(
       // 下端へ向かって画面が動かなくなった＝CLI はライブの画面にいる。近似のレール位置が
       // 0 より上に残っていても 0 へ戻す（残すと遡り中と判定され続ける）。
       if (entry.edge !== null && entry.edge > 0 && entry.unconfirmedCount >= MAX_CONSECUTIVE_UNCONFIRMED) {
+        const wasUp = entry.state.notchesUp > 0;
         entry.state = altRailApplyNotches(entry.state, 0);
+        if (wasUp) announceBackToLive(id);
       }
       stopUnconfirmedRequest(entry);
     }
@@ -487,9 +489,19 @@ export function confirmAltScrollNotch(id: number, after: TerminalScreenSnapshot)
     dir: direction,
   }));
   clearPending(entry);
+  const wasUp = entry.state.notchesUp > 0;
   entry.state = altRailStep(entry.state, direction);
   renderRail(id);
+  if (wasUp && entry.state.notchesUp === 0) announceBackToLive(id);
   return true;
+}
+
+// 遡っていた位置が最新（0）へ戻ったことを知らせる。承認のパネルは遡り中に回答済みと同じ形の
+// 記録を描かないので、戻ったときに描き直す（approval.ts が 'alt-scroll-live' を受ける）。
+function announceBackToLive(id: number): void {
+  try {
+    window.dispatchEvent(new CustomEvent('alt-scroll-live', { detail: { sessionId: id } }));
+  } catch (_) {}
 }
 
 /** PTY flush のたびに可視行を走査せず、pending 中だけ snapshot を作るための軽量判定。 */

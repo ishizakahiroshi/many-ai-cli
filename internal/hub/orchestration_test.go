@@ -1314,7 +1314,7 @@ func Test_childStartupFailed_falseWithinGrace(t *testing.T) {
 	}
 }
 
-func Test_childStartupFailed_falseWhileApprovalVisible(t *testing.T) {
+func Test_childStartupFailed_falseWhileApprovalPending(t *testing.T) {
 	s := newTestServer()
 	_, child, boardID, _ := setupStartupFailureBoard(t, s)
 
@@ -1323,7 +1323,7 @@ func Test_childStartupFailed_falseWhileApprovalVisible(t *testing.T) {
 	c.PromptDeliveredAt = time.Now().Add(-5 * time.Minute)
 	c.StandbySince = time.Now().Add(-2 * time.Minute)
 	s.orchestration.mu.Unlock()
-	child.approvalVisible = true
+	child.pendingApproval = testNativeRecord("sig-child", "", 0)
 
 	cfg := config.OrchestrationConfig{ChildStartupGraceSeconds: 60}
 	if s.childStartupFailed(child.ID, time.Now(), cfg) {

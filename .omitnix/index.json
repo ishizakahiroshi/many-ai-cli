@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "3cb233d202f646a417c004b88a3d57ad02d711d5",
+    "commit": "97a10ded08eadf9037b917b6d8f5cbfdd1d380f2",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 982,
-    "analyzed": 753,
-    "unresolved": 32,
+    "discovered": 1015,
+    "analyzed": 784,
+    "unresolved": 31,
     "unknown": 1,
-    "unclaimed": 196,
+    "unclaimed": 199,
     "skipped_by_config": 0
   },
   "files": [
@@ -2840,6 +2840,35 @@
       "unresolved": []
     },
     {
+      "path": "internal/hub/approval_display_guard_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/hub/approval_handler.go",
       "adapter": "go",
       "status": "analyzed",
@@ -3362,6 +3391,64 @@
       "unresolved": []
     },
     {
+      "path": "internal/hub/approval_record.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/approval_record_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/hub/approval_replay_fixture_test.go",
       "adapter": "go",
       "status": "analyzed",
@@ -3421,6 +3508,93 @@
     },
     {
       "path": "internal/hub/approval_rules_state_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/approval_text_question.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/approval_text_question_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/approval_trigger_phrases.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -9916,6 +10090,267 @@
       "unresolved": []
     },
     {
+      "path": "internal/hub/subagent_review_fixes_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_source_claude.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_source_claude_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_source_codex.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_source_codex_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_source_grok.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_source_grok_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_tree.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/subagent_tree_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/hub/submit_enter_test.go",
       "adapter": "go",
       "status": "analyzed",
@@ -10425,6 +10860,14 @@
       "reason": "no adapter claims '.json'"
     },
     {
+      "path": "internal/hub/testdata/workflow_vt/boxed_workflow.txt",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.txt'"
+    },
+    {
       "path": "internal/hub/testdata/workflow_vt/broken_resize.txt",
       "adapter": null,
       "status": "unclaimed",
@@ -10442,6 +10885,22 @@
     },
     {
       "path": "internal/hub/testdata/workflow_vt/summary_running.txt",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.txt'"
+    },
+    {
+      "path": "internal/hub/testdata/workflow_vt/tip_and_agent_footer.txt",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.txt'"
+    },
+    {
+      "path": "internal/hub/testdata/workflow_vt/tip_no_boundary.txt",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -12818,6 +13277,35 @@
       "unresolved": []
     },
     {
+      "path": "internal/proto/messages_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/provider/adapters.go",
       "adapter": "go",
       "status": "analyzed",
@@ -13637,6 +14125,64 @@
     },
     {
       "path": "internal/provider/store_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/provider/subagent_adapter.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/provider/subagent_adapter_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -18189,6 +18735,36 @@
       "reason": "no adapter claims '.json'"
     },
     {
+      "path": "scripts/check-approval-display-source.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "画面が端末の文字から承認を作る経路を戻させない。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "scripts/check-approval-rules-residue.mjs",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -19527,8 +20103,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "none_observed",
-          "value": null
+          "state": "value",
+          "value": "画面のパーサは Hub の記録のブロックを選択肢にするだけ（approval-parser.ts の冒頭）。"
         },
         "authentication": {
           "state": "not_configured"
@@ -19558,7 +20134,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Pure approval parsers. Keep classic-script compatibility; no module wrapper."
+          "value": "Hub の保留中の記録のブロックを選択肢にする純粋なパーサ。Keep classic-script compatibility; no module wrapper."
         },
         "authentication": {
           "state": "not_configured"
@@ -19588,6 +20164,66 @@
       "fields": {},
       "unresolved": [],
       "reason": "tree-sitter reported a syntax error, so the file was not analyzed. Anything read from a partial parse would be a guess."
+    },
+    {
+      "path": "web/src/app/approval-store-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/approval-store.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "保留中の承認の、画面側の写し。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "web/src/app/approval-ui.ts",
@@ -19622,7 +20258,7 @@
     {
       "path": "web/src/app/approval.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -19643,23 +20279,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/approval-history?session_id=*&state=pending&limit=1&token=*",
-            "approval-patterns/*.json?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: approval-patterns/*.json?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval-history?session_id=*&state=pending&limit=1&token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/attachments.ts",
@@ -19930,6 +20554,36 @@
           "detail": "part of this address is filled in at run time: /api/install-link-defaults?token=*"
         }
       ]
+    },
+    {
+      "path": "web/src/app/command-palette-store.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "command-palette-store.ts — Ctrl+K パレットに乗せる「コマンド」の定義・絞り込み・"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "web/src/app/cr-erase-filter-fixtures.ts",
@@ -21799,6 +22453,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/provider-order.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "provider-order.ts — provider の並び順（端末・ブラウザ単位の localStorage）の単一ソース。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/provider-store.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -22287,7 +22971,6 @@
             "/api/approval-patterns/*?token=*",
             "/api/approval-patterns/copy-official?token=*",
             "/api/approval-patterns/profile?token=*",
-            "/api/approval-patterns?token=*",
             "/api/approval/dismiss?token=*",
             "/api/approval/enable?token=*",
             "/api/approval/status?token=*",
@@ -22350,10 +23033,6 @@
         },
         {
           "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval-patterns?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
           "detail": "part of this address is filled in at run time: approval-patterns/*.*.json?token=*"
         },
         {
@@ -22389,6 +23068,36 @@
           "detail": "part of this address is filled in at run time: /api/pick-file?filter=exe&token=*"
         }
       ]
+    },
+    {
+      "path": "web/src/app/shortcut-help.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "shortcut-help.ts — `?` キーで開くキーボードショートカット一覧のオーバーレイ。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "web/src/app/sidebar-tree-fixtures.ts",
@@ -22709,6 +23418,36 @@
         "summary": {
           "state": "value",
           "value": "--- ESM imports (generated) ---"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/subagent-tree.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "subagent-tree.ts — サブエージェントの木（Hub からの SubagentTree）を、"
         },
         "authentication": {
           "state": "not_configured"
@@ -23081,6 +23820,36 @@
         "summary": {
           "state": "value",
           "value": "Pure transcript identity helpers. Kept DOM-free so the update-in-place"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/turn-end-notify-store.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "turn-end-notify-store.ts — セッションが running から standby へ戻った瞬間を検知し、"
         },
         "authentication": {
           "state": "not_configured"
@@ -24418,6 +25187,32 @@
       "unresolved": []
     },
     {
+      "path": "web/src/styles/shortcut-help.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/styles/spawn-confirm.css",
       "adapter": "css",
       "status": "analyzed",
@@ -24809,6 +25604,36 @@
       "unresolved": []
     },
     {
+      "path": "web/tests/command-palette-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/tests/derive-dialog-store.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -24990,6 +25815,66 @@
     },
     {
       "path": "web/tests/spawn-model-groups.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/subagent-tree.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/turn-end-notify-store.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

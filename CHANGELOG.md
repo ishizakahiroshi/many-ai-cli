@@ -27,9 +27,8 @@ Release artifacts are published at
   a summary — updated / already latest / failed — plus a per-row reason for
   any failure, a **Retry the failed ones** button that reruns only the failed
   CLIs one at a time, and a **Log** button per run. The bundled 7 providers
-  ship with default update commands; Cursor Agent CLI and Command Code
-  default to update *off*, since updating can prompt for a re-login the Hub
-  cannot answer. Any provider's update command can be changed, or turned on
+  ship with default update commands and update turned on (updating Cursor
+  Agent CLI or Command Code can occasionally prompt for a re-login). Any provider's update command can be changed, or turned on
   for a CLI you added yourself, in Settings → AI CLI integrations → edit →
   *Version and update* (the bundled providers' "restore defaults" resets this
   section along with the rest of that provider). A CLI with a running session
@@ -217,8 +216,61 @@ Release artifacts are published at
   `orchestration.child_execution_mode` for `orchestrate spawn`'s children and
   `orchestration.relay_execution_mode` for relay roles (each `auto` /
   `interactive` / `headless`), or pass `--execution-mode` per launch.
+- **Desktop notification and sound can now also fire when a session finishes a
+  run and goes back to idle, not only when it needs approval.** A short run
+  (under 20 seconds) does not ring one. A new **"Notify when a run finishes"**
+  toggle in Settings → Notify/Sound (on by default) sits on top of the
+  existing desktop-notification and sound switches, and a bell button on each
+  session card mutes this per session — that mute lives in the browser only
+  and is forgotten on a Hub restart.
+- **Review now has its own tab in the top bar**, next to Git, instead of only
+  being reachable from Files' + menu or a chat turn's "Review" link. Like
+  Files and Git it loads lazily on first click. Opening it from any of the
+  three entry points shows the same Review pane and highlights the same tab.
+  A session whose folder is not a git repository shows a plain explanation
+  instead of a diff.
+- **`Ctrl+K` is now a command palette, not just cross-session search.** Above
+  the search results it now lists commands — jump to the next pending
+  approval or the next idle session, start a new session, open Review, Files,
+  or Git for the current session, jump to Settings → Notify or Approval, or
+  show the keyboard shortcut list — and `↑`/`↓` + `Enter` move through both
+  the commands and the search results below them. Typing filters both by
+  label and by keyword (English and Japanese). A command that does not apply
+  right now, such as no pending approvals, stays visible but greyed out with
+  a reason instead of disappearing. **`?` opens a list of every keyboard
+  shortcut**, including `Ctrl+K` and `Alt+1..9`; it does nothing while typing
+  in a text field or while another overlay is open.
+- **The Workflow popup can now show a live tree of subagents**, not just
+  Workflow's own phases and agents. A chip appears above the input box even
+  without a Workflow running — for example "Subagents (1 running · 2 done ·
+  13m)" — and opening it lists each child indented under the instruction that
+  spawned it, with its current tool and target, how long it has been running,
+  and how many seconds since it last did anything. Finished children stay in
+  the list, dimmed, instead of disappearing, until the next turn starts a
+  fresh batch. So far this reads Claude Code's `Agent` tool.
+- **The Workflow popup's subagent tree (above) now also reads Codex's spawned
+  agents** (`spawn_agent`), not just Claude Code's. A Codex child shows the
+  same nickname, current tool, and running/done/failed state as a Claude
+  child, in the same tree.
+- **The Workflow popup's subagent tree (above) now also reads Grok Build's
+  spawned agents** (`subagents`), not just Claude Code's and Codex's. A Grok
+  child shows the same current tool and running/done/failed state as a
+  Claude or Codex child, in the same tree.
 
 ### Changed
+- **The approval patterns you add in `~/.many-ai-cli/approval-patterns/` now
+  drive the Hub's detection of CLI approval prompts.** They used to apply only
+  in an open browser tab. The Hub rereads them at startup and whenever the
+  settings screen or an official update rewrites the files.
+- **✕ on the approval panel now folds it into a one-line strip instead of
+  hiding it.** The strip sits just above the input bar and shows that an
+  approval is waiting along with the start of the question; click it (or focus
+  it and press Enter) to open the panel again. While the panel is folded, your
+  keys go to the terminal, so you can read what the panel was covering or
+  answer the CLI directly. The approval stays pending, and the same approval
+  stays folded when you reload the page (each browser tab keeps its own). The
+  ✕ on the multi-question notice, the "✕ Approval" button at the bottom right
+  of the terminal, and closing the mobile approval sheet all fold the same way.
 - **Voice input now runs on the shared `vtype-core` engine.** The speech
   recognition and Whisper recording code moved out of many-ai-cli into
   `vtype-core`, the library behind the vtype browser extension, and is bundled
@@ -334,8 +386,42 @@ Release artifacts are published at
   adds one dependency, `github.com/pelletier/go-toml/v2` (MIT), recorded in
   `THIRD_PARTY_NOTICES.md`.
 
+### Removed
+
+- **The "↻ Approval" button at the bottom right of the terminal.** It redrew an
+  approval the browser had failed to show; the dashboard now always draws the
+  Hub's record, so there is nothing left to redraw. To reopen an approval you
+  folded with ✕, click its strip. The "✕ Approval" button there now shows only
+  while the approval panel is open, and "↻ Re-detect" on the notice about an
+  unreadable approval block now asks the Hub to read the terminal screen again.
+
 ### Fixed
 
+- **The approval panel now shows up as soon as you switch to a session, reload
+  the page, or reconnect.** An approval that arrived while you were looking at
+  another session could stay invisible after you switched to it — the panel was
+  blank or missing, and ↻ Approval did not bring it back. The browser used to
+  rebuild approvals from terminal text and retry on timers. The Hub now keeps
+  each session's pending approval as a single record, sends the current records
+  to a browser when it connects and every change after that, and the dashboard
+  only draws those records.
+- **"Pending" and approval notifications (Web Push, ntfy / webhook) no longer
+  need an open dashboard.** Approval-marker questions, Claude's AskUserQuestion
+  picker, `(Y:1/N:0)` questions without a marker, `Q1:`-style sequential
+  questions, and the older numbered "which option" questions used to be picked
+  up only by an open browser tab reading the terminal, so with no tab open the
+  session never showed Pending and nothing was sent. The Hub now detects all of
+  them itself. The questions without a marker are shown once the AI has stopped
+  writing, so a numbered list in the middle of its work is no longer taken for
+  a question. With Claude Code and Codex, such a question is also withdrawn if
+  the AI carries on without waiting for your answer.
+- **A CLI's own approval prompt notifies once instead of possibly twice.**
+- **⊟ (compact text) on the approval panel now also works for batch approvals
+  and multi-question prompts.** It used to shorten only the panel's label and
+  buttons, so a batch approval kept its full height and a single question kept
+  its full text. Now the preamble, the question tabs, the question text, the
+  selected answer's details and the command summary each shrink to one line
+  too; ⊞ shows the full text again.
 - **Git errors now say why the command failed.** When a pre-commit hook refuses
   a commit, the dialog used to show only `git command failed`, because any
   output containing a path was dropped wholesale — and hook output almost
@@ -406,6 +492,14 @@ Release artifacts are published at
 - **Sent history stays tied to the session that opened it.** A delayed history
   restore can no longer replace another session's open list, and the modal
   title identifies its session.
+- **The Workflow chip no longer appears for a Claude Code session that never
+  ran a Workflow.** Claude Code's own "Dynamic workflows" tip text contains
+  the word "workflow", and the persistent agent-status lines under the input
+  box (for example a running subagent) matched the same agent-row pattern the
+  Workflow parser uses, together producing a chip with a garbled name and a
+  bogus completion count. The tip line and the lines below the input box's
+  own boundary are no longer read as Workflow output
+  (`web/src/app/workflow-progress.ts`, `internal/hub/workflow_scan.go`).
 
 ### Security
 - The derive dialog's permission preview now follows execution mode. Choosing

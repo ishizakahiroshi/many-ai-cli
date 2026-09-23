@@ -26,15 +26,29 @@ const (
 )
 
 var (
-	workflowCSIRe     = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
-	workflowOSCRe     = regexp.MustCompile(`\x1b\][^\x07]*(?:\x07|\x1b\\)`)
-	workflowTreeRe    = regexp.MustCompile(`^[\s│├└─╰╭╮╯┃┣┗┏┓┛┆┊▕▏▸▹‣•·]+`)
+	workflowCSIRe = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
+	workflowOSCRe = regexp.MustCompile(`\x1b\][^\x07]*(?:\x07|\x1b\\)`)
+	// `⎿`（U+23BF）と U+00A0 は Claude Code の Tip 行（案内文）の行頭記号（実測 67/67 件が
+	// `⎿` + U+00A0 で始まる）。これが無いと Tip 行除外（workflowTipLineRe）が一致せず効かない
+	// （敵対レビュー指摘 R8）。Go の \s は ASCII のみ（[\t\n\f\r ]）で U+00A0 を含まないため
+	// 明示的に足す（TS 版の \s は U+00A0 を含むため見た目は非対称だが挙動は揃う）。
+	workflowTreeRe    = regexp.MustCompile(`^[\s\x{00A0}│├└─╰╭╮╯┃┣┗┏┓┛┆┊▕▏▸▹‣•·⎿]+`)
 	workflowHeaderRe  = regexp.MustCompile(`(?i)\bworkflows?\b`)
 	workflowSummaryRe = regexp.MustCompile(`(?i)([0-9]{1,4})\s*/\s*([0-9]{1,4})\s+agents?\b`)
 	workflowWaitingRe = regexp.MustCompile(`(?i)\bwaiting for\s+([0-9]{1,3})\s+dynamic\s+workflows?\s+to\s+finish\b`)
 	workflowPercentRe = regexp.MustCompile(`([0-9]{1,3})\s*%`)
 	workflowTimeRe    = regexp.MustCompile(`(?i)([0-9]+)\s*([hms])`)
 	workflowMetricsRe = regexp.MustCompile(`\s{2,}`)
+	// "Tip: …" は Claude Code の案内文で、"workflow" の語を含むことがあるが見出しではない。
+	workflowTipLineRe = regexp.MustCompile(`(?i)^tip[:：]`)
+	// 入力欄の区切り（罫線や ❯ プロンプト）。この行から下は常時表示の UI 領域で
+	// Workflow の出力ではないため、見出し発見後の走査をここで打ち切る（誤検出防止）。
+	// 罫線側は「行全体が横線文字（─━═）と空白だけ」の行に限定する（敵対レビュー指摘 R9）。
+	// 以前は `[─━═]{3,}` を行のどこかに含むだけで打ち切っていたため、Workflow のブロック内の
+	// 枠線（`╭─── Review ───╮` のように角や文字を含む行）まで区切りと誤認して本物のツリーを
+	// 打ち切る恐れがあった。❯ プロンプト行は今までどおり行のどこかに含むだけで区切りとする
+	// （実ログでは区切り線の直後に必ず ❯ 行が続き、そちらが安全網になるため）。
+	workflowInputBoundaryRe = regexp.MustCompile(`^[\s\x{00A0}─━═]*[─━═]{3,}[\s\x{00A0}─━═]*$|❯`)
 )
 
 const (
@@ -83,6 +97,9 @@ func truncateWorkflowText(s string, maxRunes int) string {
 }
 
 func workflowHeaderName(line string) (string, bool) {
+	if workflowTipLineRe.MatchString(strings.TrimSpace(line)) {
+		return "", false
+	}
 	hasGear := strings.Contains(line, "⚙")
 	if !hasGear && !workflowHeaderRe.MatchString(line) {
 		return "", false
@@ -223,6 +240,10 @@ func parseWorkflowVT(lines []string) *proto.WorkflowProgress {
 	explicitPercent := -1
 	hasSummary := false
 	for i := start; i < len(lines); i++ {
+		// 見出し行より下で入力欄の区切りに達したら打ち切る（下は常時表示の UI）。
+		if i > start && workflowInputBoundaryRe.MatchString(stripWorkflowANSI(lines[i])) {
+			break
+		}
 		line := stripWorkflowTree(lines[i])
 		if line == "" {
 			continue

@@ -1,3 +1,8 @@
+// 画面のパーサは Hub の記録のブロックを選択肢にするだけ（approval-parser.ts の冒頭）。
+// マーカー無しの Yes/No・旧形式の選択・推測での拾い上げ・複数質問の判定は Hub（Go）だけにあり、
+// その入力と期待値は internal/hub/approval_text_question_test.go / approval_detector_test.go が持つ
+// （2026-09-23 にここから移した。docs/local/plan_approval-display-single-source_c3_web-switch.md の C3）。
+// 順次質問のパーサは両方にあり、Hub は記録の Block をこちらと同じ形で作る。片方を直すときはもう片方も直す。
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { approvalParser as parser } from './approval-parser.js';
@@ -10,53 +15,23 @@ function numbers(options) {
   return (options || []).map(o => o.num);
 }
 
-function detectFallback(provider, lines, matcher) {
-  const extraction = parser.extractApprovalOptions(lines);
-  const options = extraction.options;
-  const contextLines = parser.approvalContextLines(lines, extraction.cluster);
-  parser.markHubChoiceDefault(options, contextLines);
-  const hasCursor = options.some(o => o.isCurrent);
-  const hasNativePromptHint = contextLines.some(line => matcher(provider, line) || parser.matchNativeApprovalTrigger(line));
-  const isShortcutApprovalMenu = (provider === 'codex' || provider === 'copilot' || provider === 'cursor-agent') && options.some(o => o._sendText) && hasNativePromptHint;
-  const approvalNear = (parser.hasApprovalLikeLabel(options) &&
-    (parser.linesHaveHint(provider, contextLines, matcher) || hasNativePromptHint)) ||
-    parser.isHubChoicePrompt(contextLines, options) ||
-    isShortcutApprovalMenu;
-  const hasChoiceMenu = hasCursor && options.length > 0 && hasNativePromptHint;
-  return (options.length > 0 && approvalNear && (hasCursor || isShortcutApprovalMenu)) || hasChoiceMenu
-    ? options
-    : [];
+// 選択肢の組の見た目の同一性（番号・ラベル・Yes/No の質問ハッシュ）。別の行の分け方から
+// 同じ選択肢が取れているかを比べる。
+function optionsSig(options) {
+  return JSON.stringify((options || []).map(o => `${o.num}:${String(o.label || '').trim().replace(/\s+/g, ' ')}|${o._ctx || ''}`));
 }
 
 test('approval parser fixtures', () => {
-  const triggerMatcher = (_provider, line) => /requires approval|would you like to run/i.test(String(line || ''));
-  assert.equal(parser.userSpecifiesRe.test('User specifies'), true);
-  assert.equal(parser.userSpecifiesRe.test('その他指定'), true);
-
   const hub = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
     'Proceed with this change? (Y:1/N:0)',
     '[/MANY-AI-CLI]',
   ]);
   assert.deepEqual(numbers(hub), [1, 0]);
-  assert.equal(parser.approvalSig(hub), parser.approvalSig(parser.extractHubMarkerApproval([
+  assert.equal(optionsSig(hub), optionsSig(parser.extractHubMarkerApproval([
     '[MANY-AI-CLI] Proceed with this change? (Y:1/N:0) [/MANY-AI-CLI]',
   ])));
 
-  const plain = parser.extractPlainYesNoApproval([
-    'Do you want to apply this patch? (Y:1/N:0)',
-  ]);
-  assert.deepEqual(labels(plain), ['Yes (1)', 'No (0)']);
-  assert.deepEqual(labels(parser.extractPlainYesNoApproval([
-    'A拠点・B拠点・C拠点の3台で対象機能を無効化しますか？ （Y：1／N：0）',
-  ])), ['Yes (1)', 'No (0)']);
-  assert.deepEqual(labels(parser.extractPlainYesNoApproval([
-    'A拠点・B拠点・C拠点の3台で対象機能を無効化しますか？ (Y:1/',
-    'N:0)',
-  ])), ['Yes (1)', 'No (0)']);
-  assert.equal(parser.extractPlainYesNoApproval([
-    'question? (Y:1/N:0)',
-  ]), null);
   assert.equal(parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
     'question? (Y:1/N:0)',
@@ -105,18 +80,6 @@ test('approval parser fixtures', () => {
   assert.equal((singleQ as any)._preamble, 'path-exists の挙動をどうしますか？');
   assert.equal((singleQ as any)._freeInput, true);
 
-  // 質問キー: ラベルが揺れても _question が同じなら同一キー（手動 dismiss 抑止用）。
-  const singleQLabelJitter = parser.extractHubMarkerApproval([
-    '[MANY-AI-CLI]',
-    'path-exists の挙動をどうしますか？',
-    '1. 実在判定可にする (Recommended) 追加ノイズ',
-    '2. 許可リストを維持（別表記）',
-    'N. User specifies',
-    '[/MANY-AI-CLI]',
-  ]);
-  assert.equal(parser.approvalQuestionKey(singleQ), parser.approvalQuestionKey(singleQLabelJitter));
-  assert.notEqual(parser.approvalSig(singleQ), parser.approvalSig(singleQLabelJitter));
-
   // マーカー文字列が質問/ラベルに漏れ込んだ壊れたパース結果は出さない（Grok 再描画残骸）。
   assert.equal(parser.extractHubMarkerApproval([
     '[MANY-AI-CLI]',
@@ -145,49 +108,6 @@ test('approval parser fixtures', () => {
   ]);
   assert.deepEqual(numbers(ynQ), [1, 0]);
   assert.equal((ynQ as any)._question, 'この変更を適用しますか？');
-
-  const codexLines = [
-    'This command requires approval',
-    '> 1. Yes (y)',
-    '  2. Yes, and don\'t ask again for this command (p)',
-    '  3. No (n)',
-  ];
-  const codex = detectFallback('codex', codexLines, triggerMatcher);
-  assert.deepEqual(numbers(codex), [1, 2, 3]);
-  assert.equal(codex[0]._sendText, 'y');
-  assert.equal(codex[1]._sendText, 'p');
-  assert.equal(codex[2]._sendText, 'n');
-
-  const copilotLines = [
-    'Permission required',
-    '> 1. Allow once (y)',
-    '  2. Deny once (n)',
-    '  3. Allow all similar for this session (!)',
-    '  4. Show details (?)',
-  ];
-  const copilot = detectFallback('copilot', copilotLines, triggerMatcher);
-  assert.deepEqual(numbers(copilot), [1, 2, 3, 4]);
-  assert.equal(copilot[0]._sendText, 'y');
-  assert.equal(copilot[1]._sendText, 'n');
-  assert.equal(copilot[2]._sendText, '!');
-  assert.equal(copilot[3]._sendText, '?');
-
-  // cursor-agent 実機 UI（キー表記のみのメニュー: (y)/(tab)/(shift+tab)/(esc or n)）は
-  // Go バックエンドの native 検出（go_vt 経路）で処理する。ここでは fallback パーサが
-  // cursor-agent を shortcut-menu provider として扱う汎用挙動（番号付きバリアント）のみ検証する。
-  const cursorAgentLines = [
-    'Permission required',
-    '> 1. Allow once (y)',
-    '  2. Deny once (n)',
-    '  3. Allow all similar for this session (!)',
-    '  4. Show details (?)',
-  ];
-  const cursorAgent = detectFallback('cursor-agent', cursorAgentLines, triggerMatcher);
-  assert.deepEqual(numbers(cursorAgent), [1, 2, 3, 4]);
-  assert.equal(cursorAgent[0]._sendText, 'y');
-  assert.equal(cursorAgent[1]._sendText, 'n');
-  assert.equal(cursorAgent[2]._sendText, '!');
-  assert.equal(cursorAgent[3]._sendText, '?');
 
   const seq = parser.extractSequentialChoicePrompts([
     'Q1: Choose branch',
@@ -479,120 +399,12 @@ test('approval parser fixtures', () => {
   ]);
   assert.equal(parser.isMultiSelectOptions(singleSelect), false);
 
-  const numberedList = [
-    'Implementation notes:',
-    '1. Read the config',
-    '2. Update the renderer',
-    '3. Add a test',
-  ];
-  assert.deepEqual(detectFallback('claude', numberedList, triggerMatcher), []);
-  assert.equal(parser.linesHaveHint('claude', numberedList, triggerMatcher), false);
-
-  // 通常の手順説明に Q1 と「（推奨）」が混ざっても、確認待ちにはしない。
-  // 2026-07-20 実測: 質問が選択肢の後ろにあるだけの応答を Hub がポップアップ化していた。
-  const proseWithQuestionWord = [
-    '1. metricId 一致のみでマージ判定する（推奨）— データ消失の責任範囲を除去する。',
-    '2. 上記に加えて週利用量誤命名の根本原因も追加調査する。',
-    '3. 結果、月間利用量は普通に追加し、ローリング利用量は表示名だけ直す。',
-    'Q1 どちらで進めますか？',
-  ];
-  assert.deepEqual(detectFallback('claude', proseWithQuestionWord, triggerMatcher), []);
-
-  // マーカー移行前の旧形式は、質問→選択肢→自由入力行という明確な構造に限って救済する。
-  const legacyHubChoice = [
-    'Q1 どちらで進めますか？',
-    '1. 最小修正 (Recommended)',
-    '2. 原因調査も行う',
-    'N. User specifies',
-  ];
-  assert.deepEqual(numbers(detectFallback('claude', legacyHubChoice, triggerMatcher)), [1, 2]);
-
-  // Ink のカーソル位置制御描画で選択肢間の改行が失われ「1. … 2. … 3. … N. User specifies」が
-  // 1行へ連結されたケースの回帰（=「承認ボタンが全部1つに潰れる」症状）。
-  // フォールパック経路（extractApprovalOptions）で 3 選択肢へ復元でき、
-  // N. User specifies が最後の選択肢ラベルへ混入しないこと。
-  const gluedFallback = parser.extractApprovalOptions([
-    '1. 質問2=「PCも含め全画面で効かせる」を選択（質問1の初期値はON=既定で表示のまま）(Recommended)2. 質問1=「初期値OFF=既定で非表示」を選択（質問2の適用範囲はスマホのみのまま）3. 両方とも option 2（初期値OFF かつ 全画面で効かせる） N. User specifies',
-  ]);
-  assert.deepEqual(numbers(gluedFallback.options), [1, 2, 3]);
-  assert.equal(/User specifies/.test(gluedFallback.options[2].label), false);
-  assert.equal(/Recommended/.test(gluedFallback.options[0].label), true);
-
-  // xterm のハードラップで option 1(Recommended・最長本文)が物理2行へ折り返され、
-  // 継続行が行頭に空白を持たないケース。フォールバック経路（extractApprovalOptions）が
-  // 継続行で break して option 1 ごと脱落していた回帰（「確認メッセージの 1 が途切れる」頻発症状）。
-  // 継続行を直前(上方)の option 1 ラベルへ結合し、1/2/3 すべて復元できること。
-  const wrappedFallbackOpt1 = parser.extractApprovalOptions([
-    'どこまで進めるか確認します。',
-    '1. C4(docs) + C3の「全アクセス失効」ボタンのみ（＝最小構成完成・C1を実際に使え',
-    'る状態に。PINは見送り）  (Recommended)',
-    '2. 上記に加えて C2+C3のPIN一式も実装（任意PIN・ロックアウト・SEC-C新規デバイス通知まで全部）',
-    '3. C4(docs)だけ先に作る（ボタンUIは後回し）',
-    'N. User specifies',
-  ]);
-  assert.deepEqual(numbers(wrappedFallbackOpt1.options), [1, 2, 3]);
-  assert.equal(/Recommended/.test(wrappedFallbackOpt1.options[0].label), true);
-  assert.equal(/る状態に/.test(wrappedFallbackOpt1.options[0].label), true);
-
-  // 連番でない「1. … 3. …」や小数「1.5」は誤分割しないこと（保守的分割の確認）。
-  const notSequential = parser.extractApprovalOptions([
-    '1. first 3. third',
-  ]);
-  assert.equal(notSequential.options.length <= 1, true);
-
   // marker 経路でブロック全体が1行へ完全に潰れたケースの回帰。
   // 見出し「1 …?」と選択肢「1. 2. 3.」が混在連結されても 3 選択肢へ復元できること。
   const gluedMarker = parser.extractHubMarkerApproval([
     '[MANY-AI-CLI] 1 「2」はどの設定を指していますか? 1. A を選択(Recommended)2. B を選択 3. 両方とも C N. User specifies [/MANY-AI-CLI]',
   ]);
   assert.deepEqual(numbers(gluedMarker), [1, 2, 3]);
-
-  // Claude のネイティブ AskUserQuestion ピッカー（末尾に "Type something" /
-  // "Chat about this" の自由入力肢を持つ arrow 駆動 UI）は extractApprovalOptions で
-  // 抑止し Web ボタン化しないこと（VT スクレイプで番号がズレ誤選択を招くため）。
-  const askUserQuestion = parser.extractApprovalOptions([
-    'スキーマ差分の適用範囲は?',
-    '❯ 1. 全差分を全環境へ適用',
-    '  2. 必要なものだけ精査して適用',
-    '  3. コードだけ先にデプロイ',
-    '  4. 差分の中身を先に見たい',
-    '  5. Type something.',
-    '  6. Chat about this',
-  ]);
-  assert.deepEqual(askUserQuestion.options, []);
-
-  // 標準のツール許可プロンプト（Yes / Yes, and / No）は "Type something" を
-  // 含まないため抑止されず、これまで通り選択肢を返すこと（誤抑止の回帰防止）。
-  const normalApproval = parser.extractApprovalOptions([
-    'This command requires approval',
-    '❯ 1. Yes',
-    '  2. Yes, and don\'t ask again for this command',
-    '  3. No',
-  ]);
-  assert.deepEqual(numbers(normalApproval.options), [1, 2, 3]);
-
-  // Grok Build ツール許可カード（実機 PTY 2026-08-20）。番号の直後はピリオドではなくラジオ印。
-  const grokRadioLines = [
-    'Check MANY_AI_CLI hub session env',
-    '$env:MANY_AI_CLI',
-    '1 (•) Yes, and don\'t ask again for anything (always-approve mode)',
-    '2 (○) Yes, proceed',
-    '3 (○) No, reject (type to add feedback)',
-    '1/3:select | Tab:next option | Ctrl+o:always-approve | Ctrl+c:cancel | Esc:scrollback',
-  ];
-  const grokRadio = parser.extractApprovalOptions(grokRadioLines);
-  assert.deepEqual(numbers(grokRadio.options), [1, 2, 3]);
-  assert.deepEqual(labels(grokRadio.options), [
-    'Yes, and don\'t ask again for anything (always-approve mode)',
-    'Yes, proceed',
-    'No, reject (type to add feedback)',
-  ]);
-  assert.equal(grokRadio.options[0].isCurrent, true);
-  assert.equal(grokRadio.options[1].isCurrent, false);
-  assert.equal(grokRadio.options[2].isCurrent, false);
-  assert.equal(parser.matchNativeApprovalTrigger(grokRadioLines[5]), true);
-  const grokVisible = detectFallback('grok', grokRadioLines, () => false);
-  assert.deepEqual(numbers(grokVisible), [1, 2, 3]);
 
   const chunkPath = parser.extractHubMarkerApproval([
     'noise',
@@ -605,7 +417,7 @@ test('approval parser fixtures', () => {
     'Proceed? (Y:1/N:0)',
     '[/MANY-AI-CLI]',
   ]);
-  assert.equal(parser.approvalSig(chunkPath), parser.approvalSig(bufferPath));
+  assert.equal(optionsSig(chunkPath), optionsSig(bufferPath));
 
   // xterm がラベル/見出し途中で物理行に折り返し、続き行が数字始まりにならないケース。
   // 続き行を直前の選択肢ラベル・見出しタイトルへ結合し、「N. User specifies」は混入させない。
@@ -725,82 +537,6 @@ test('approval parser fixtures', () => {
   assert.equal((qInsideOption as any)._question, 'どうする？（複数選択可）');
   assert.equal((qInsideOption as any)._freeInput, true);
 
-  // claude /model のような承認ではないカーソル駆動 TUI 選択メニュー。
-  // フッターの「Esc to cancel」を matchNativeApprovalTrigger が拾い、❯ カーソル付き選択肢が
-  // あるため detectFallback の choice-menu 経路で検出される（=action-bar が出る）。
-  // 承認ラベル（yes/no/allow/deny…）を含まないので「承認」ではなく「選択メニュー」として
-  // 扱える（detectApproval 側で _selectMenu タグを付け、入力ガード・メニュータイトル表示に使う）。
-  const modelMenuLines = [
-    'Select model',
-    'Switch between Claude models. Your pick becomes the default for new sessions.',
-    '❯ 1. Default (recommended) ✔ Opus 4.8 with 1M context',
-    '  2. Opus  Opus 4.8 with 1M context',
-    '  3. Sonnet  Sonnet 4.6',
-    '  4. Haiku  Haiku 4.5',
-    '  5. Fable  Claude Fable 5 is currently unavailable',
-    '',
-    'Enter to set as default · s to use this session only · Esc to cancel',
-  ];
-  const modelMenu = detectFallback('claude', modelMenuLines, triggerMatcher);
-  assert.deepEqual(numbers(modelMenu), [1, 2, 3, 4, 5]);
-  assert.equal(modelMenu[0].isCurrent, true);
-  // 承認ラベルを含まない（=承認ではなく選択メニュー）。
-  assert.equal(parser.hasApprovalLikeLabel(modelMenu), false);
-  // フッターは native approval/menu ヒントとして拾われる（choice-menu 経路の発火条件）。
-  assert.equal(parser.matchNativeApprovalTrigger('Enter to set as default · s to use this session only · Esc to cancel'), true);
-
-  // 選択メニューの本文に紛れた通常の番号付き箇条書き（フッターヒントなし）は誤検出しない。
-  const plainNumbered = [
-    'Here is the plan:',
-    '1. Read the file',
-    '2. Apply the patch',
-    '3. Run tests',
-  ];
-  assert.deepEqual(detectFallback('claude', plainNumbered, triggerMatcher), []);
-
-  // Command Code（2026-09-13 Windows / 1.53.0）。番号行 + ❯。数字キーではなく ↑/↓+Enter。
-  // shortcut 型ではないので isShortcutApprovalMenu には載せない。G / A / Tool Permission はカード、
-  // git status（確認なし）は出さない。
-  const commandCodeTrust = [
-    'Do you trust the files in this folder?',
-    'Command Code may read files in this folder.',
-    '❯ 1. Yes, proceed',
-    '  2. No, exit',
-    '↑/↓ to navigate · enter to select · esc to exit',
-  ];
-  const commandCodeTrustOpts = detectFallback('command-code', commandCodeTrust, triggerMatcher);
-  assert.deepEqual(numbers(commandCodeTrustOpts), [1, 2]);
-  assert.equal(commandCodeTrustOpts[0].isCurrent, true);
-  assert.equal(commandCodeTrustOpts[0]._sendText, undefined);
-
-  const commandCodeEdit = [
-    'Edit File README.md',
-    'Do you want to make this edit to README.md?',
-    '❯ 1. Yes',
-    '  2. Yes, allow all edits this session [shift+tab]',
-    '  3. No, tell Command Code what to do differently',
-    '↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()',
-  ];
-  assert.deepEqual(numbers(detectFallback('command-code', commandCodeEdit, triggerMatcher)), [1, 2, 3]);
-
-  const commandCodeTool = [
-    'Tool Permission',
-    'Command Code needs to run powershell.',
-    '❯ 1. Yes',
-    '  2. Yes, don\'t ask again for powershell in this project',
-    '  3. No, tell Command Code what to do differently',
-    '↑/↓ navigate · enter select · Run cmd --yolo to bypass all permissions ()',
-  ];
-  assert.deepEqual(numbers(detectFallback('command-code', commandCodeTool, triggerMatcher)), [1, 2, 3]);
-
-  const commandCodeGitStatus = [
-    'SHELL [git status]',
-    'On branch main',
-    'Changes not staged for commit',
-    'Tip: Use shift+tab to enable auto-accept',
-    'Ask your question...',
-  ];
-  assert.deepEqual(detectFallback('command-code', commandCodeGitStatus, triggerMatcher), []);
 });
 
 // Detached Session Grid URL の layout parse ロジックを検証する。
@@ -856,9 +592,7 @@ test('detached-grid layout parse', () => {
 });
 
 test('ungluedApprovalLines splits glued numbered options for CLI display', () => {
-  // CLI 側マーカーフィルタ（terminal.ts の flushMarkerBlockToBytes）が呼ぶ公開関数。
-  // ポップアップ用に既に内部利用されているが、export 経由でも同じ挙動になることを担保する
-  // （CLI と popup で同じ整形結果＝同じ質問が読めることが「ちぐはぐ」修正の核）。
+  // parseHubBlock の前処理。export 経由でも同じ挙動になることを担保する。
   const glued = [
     '  どの方向でいきますか？',
     '1. [A] 説明A (Recommended)2. [B] 説明B3. [C] 説明C',
@@ -879,37 +613,6 @@ test('ungluedApprovalLines splits glued numbered options for CLI display', () =>
   const properResult = parser.ungluedApprovalLines(proper);
   assert.equal(properResult.filter(l => /^\s*1\./.test(l)).length, 1);
   assert.equal(properResult.filter(l => /^\s*2\./.test(l)).length, 1);
-});
-
-test('fallback cache inherits marker block signature only for the same approval', () => {
-  const marker = parser.extractHubMarkerApproval([
-    '[MANY-AI-CLI]',
-    'Proceed with this change?',
-    '1. Yes (Recommended)',
-    '2. No',
-    'N. User specifies',
-    '[/MANY-AI-CLI]',
-  ]);
-  assert.ok(marker?.[0]?._blockSig);
-
-  const sameFallback = marker.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
-  (sameFallback as any)._question = (marker as any)._question;
-  assert.equal(sameFallback[0]._blockSig, undefined);
-  parser.inheritMarkerBlockSig(sameFallback, marker);
-  assert.equal(sameFallback[0]._blockSig, marker[0]._blockSig);
-  assert.equal(sameFallback[1]._blockSig, marker[0]._blockSig);
-
-  const differentQuestion = sameFallback.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
-  (differentQuestion as any)._question = 'Deploy this change now?';
-  assert.equal(parser.approvalSig(differentQuestion), parser.approvalSig(marker));
-  parser.inheritMarkerBlockSig(differentQuestion, marker);
-  assert.equal(differentQuestion[0]._blockSig, undefined);
-
-  const differentFallback = sameFallback.map(({ _blockSig: _ignored, ...option }) => ({ ...option }));
-  (differentFallback as any)._question = (marker as any)._question;
-  differentFallback[0].label = 'Choose another action';
-  parser.inheritMarkerBlockSig(differentFallback, marker);
-  assert.equal(differentFallback[0]._blockSig, undefined);
 });
 
 // 構造が壊れた承認ブロックは承認 UI を出さない。

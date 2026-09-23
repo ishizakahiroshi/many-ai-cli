@@ -40,7 +40,7 @@ import (
 // /workflows 等でバックグラウンドエージェントが動いている間は進捗ツリーの再描画が
 // 数秒おきのバースト出力になるため、500ms では running↔standby が点滅する。
 // 3s に延長してヒステリシスを持たせる（standby→running は markRunning で即時のまま。
-// 承認検出 waiting は approvalVisible フラグで idleAfter を待たず即時遷移するため影響なし）。
+// 承認の waiting は保留中の承認の記録が開いた時点で即時遷移するため影響なし）。
 // tickerInterval: 状態評価 ticker の間隔。
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
@@ -62,14 +62,7 @@ const (
 	nativeApprovalBlankLineLimit = 2
 	vtResizeDebounce             = 200 * time.Millisecond
 	approvalConsumedTTL          = 10 * time.Second
-	// approvalVisibleLease: session_hint(approval_visible=true) の有効期限。
-	// UI は承認可視中 5s 間隔（approval-ui.js の APPROVAL_HINT_REASSERT_MS）で
-	// 再主張するため、リース 15s = 再主張 3 回分。リロード desync・複数クライアント・
-	// H9 復元固着など false ヒントが失われるどの経路でも最大 15s で自動回復する。
-	// ただし Hub 自身の go_vt detector が native prompt を見ている間
-	// （nativeApprovalSig != ""）はリース切れでもクリアしない。
-	approvalVisibleLease = 15 * time.Second
-	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
+	wsMaxPayloadBytes            = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"
@@ -110,7 +103,7 @@ const (
 )
 
 // SessionActivity が状態の正本で、State は互換表示用の派生値である。
-// approval_visible は UI が xterm.js バッファをスキャンして session_hint で伝える。
+// 承認待ち（AwaitingApproval / AwaitingUser）は pendingApproval の有無だけから決める。
 type session struct {
 	ID               int    `json:"id"`
 	Provider         string `json:"provider"`
@@ -198,10 +191,8 @@ type session struct {
 	SubscriptionLogin bool `json:"-"`
 
 	// JSON 外: 状態評価用
-	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
-	approvalVisible   bool
-	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
-	branchCheckedAt   time.Time
+	lastOutputAt    time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
+	branchCheckedAt time.Time
 
 	// JSON 外: transcript 停滞検知（transcript_stall.go）。
 	// パス解決はディレクトリ走査を伴うので一度当たったらキャッシュし、以後は stat だけ回す。
@@ -277,20 +268,21 @@ type session struct {
 	approvalConsumedCandidateShape string
 	approvalConsumedEpoch          uint64
 	vtResizeDebounceUntil          time.Time
-	nativeApprovalSig              string
-	nativeApprovalCandidateKey     string
-	nativeApprovalCandidateShape   string
-	nativeApprovalSourceEpoch      uint64
-	nativeApprovalTailSig          string
-	nativeApprovalScanQueued       bool
-	nativeApprovalClearMisses      int
-	crossSessionMessageScreenSig   string
-	nativeApprovalConsumed         string
-	nativeApprovalConsumedAt       time.Time
-	approvalMarkerSig              string
-	approvalMarkerCandidateKey     string
-	approvalMarkerCandidateShape   string
-	approvalMarkerSourceEpoch      uint64
+	// 保留中の承認の記録。1 セッション 1 件で、規則の正本は approval_record.go の冒頭。
+	pendingApproval *approvalRecord
+	// トランスクリプトの最後の assistant メッセージから読んだ、マーカー無しの文章の質問。
+	// 出力が落ち着いたら記録として開く候補で、まだ保留中ではない（approval_text_question.go の
+	// 「出力が落ち着いてから開く」節）。
+	textQuestionAtIdle *textQuestion
+	// approvalStateVersion は記録を開閉するたびに 1 進む版番号。画面が逆順に届いた
+	// approval_state を捨てるための並び順で、承認の同一性ではない。reattach で引き継ぐ。
+	approvalStateVersion         uint64
+	nativeApprovalTailSig        string
+	nativeApprovalScanQueued     bool
+	nativeApprovalClearMisses    int
+	crossSessionMessageScreenSig string
+	nativeApprovalConsumed       string
+	nativeApprovalConsumedAt     time.Time
 	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
 	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
 	approvalMarkerSuppressedSig string
@@ -352,6 +344,37 @@ type session struct {
 	taskDetailTimer           *time.Timer
 	taskDetailFileState       workflowTaskDetailFileState
 	taskDetailProgress        *proto.WorkflowProgress
+
+	// JSON 外: サブエージェントの木（子 plan
+	// plan_subagent-tree-popup_c2_hub-core-claude.md 内部 C3）。ターン開始時刻
+	// subagentTurnStartedAt は、直近に組んだ木の走行中(running)ノード数が 0 の
+	// ときのユーザー入力でだけ進む（親 plan 方針4; input_gate.go の
+	// ensureApprovalSourceEpochLocked 直後で更新）。ポーリングは
+	// workflow_task_detail.go と同じ自己連鎖タイマー（3秒間隔・generation ガード、
+	// internal/hub/subagent_tree.go）。subagentReaderState は選ばれた
+	// subagent:* reader が読み取りオフセット等を持ち越す opaque な値
+	// （具象型は reader ごとに異なる。subagentReader 契約のドキュメントを参照）。
+	// subagentBroadcastSignature は意図的に reattach 時に引き継がない
+	// （reattach_state.go）。subagentParentPath / subagentParentPathAttemptedAt
+	// は親の記録のパス解決結果のキャッシュ（親 plan C10・R6）: 解決済みで実在する
+	// 間は runSubagentTreePoll が subagentParentPathResolver を呼び直さない。
+	// reattach では意図的に引き継がない（reattach_state.go には無い）ので、
+	// reattach 直後の最初の poll は必ず一度だけ解決し直す。
+	subagentTurnStartedAt         time.Time
+	subagentReaderState           any
+	subagentTree                  *proto.SubagentTree
+	subagentRunningCount          int
+	subagentBroadcastSignature    string
+	subagentTimer                 *time.Timer
+	subagentGeneration            uint64
+	subagentParentPath            string
+	subagentParentPathAttemptedAt time.Time
+	// subagentParentPathFor is the resolver input subagentParentPath was
+	// resolved from. When the session's identifying fields change (e.g. a new
+	// AgentSessionID after /clear, or NativeLogPath set by Codex's Stop hook),
+	// the cached path is dropped and re-resolved immediately, instead of
+	// reading the old transcript for as long as that file still exists.
+	subagentParentPathFor subagentParentInfo
 
 	// JSON 外: provider-owned structured transcript tail. The path, byte cursor,
 	// and bounded ephemeral parser state are retained only for the live poll;
@@ -893,6 +916,9 @@ type Server struct {
 	notifyMgr         *notify.Manager
 	oneTapApprovals   *oneTapApprovalManager
 	orchestration     *orchestrationManager
+	// approvalTriggerPhrases は承認パターンファイルの手がかり語（approval_trigger_phrases.go）。
+	// 未読み込み（nil）のときは既定の手がかり語だけで検出する。
+	approvalTriggerPhrases atomic.Pointer[approvalTriggerPhraseSet]
 	// orchestrationAdmissionMu serializes the session snapshot with child-slot
 	// reservations. Preparation and wrapper startup happen after this lock is
 	// released; only admission and reservation-map mutations use it.
@@ -1378,6 +1404,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	if err := SyncApprovalPatterns(cfg.ApprovalProfiles); err != nil {
 		logger.Warn("sync approval patterns failed", "err", err)
 	}
+	s.reloadApprovalTriggerPhrases()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.Handle("/app-entry.js", staticHandler)
@@ -2139,10 +2166,10 @@ func (s *Server) uiLoopAtEpoch(conn *websocket.Conn, authEpoch uint64) {
 			})
 		case "ui_active_session":
 			uc.runIfAuthorized(func() { s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows) })
-		case "session_hint":
-			uc.runIfAuthorized(func() { s.handleHint(m) })
 		case "approval_consumed":
 			uc.runIfAuthorized(func() { s.handleConsumed(m) })
+		case "approval_resync":
+			uc.runIfAuthorized(func() { s.handleApprovalResync(uc, m.SessionID) })
 		case "session_history_reset":
 			reset := false
 			uc.runIfAuthorized(func() { reset = s.handleHistoryReset(m) })
@@ -2290,32 +2317,6 @@ func (s *Server) claimResizeOwnershipLocked(conn *websocket.Conn, sessionID, col
 // notifyInputDeferred) と定数 (maxPendingInputPerSession / initialInjectGateMaxAge)
 // は C4 追加分割で internal/hub/input_gate.go へ移動した。
 
-// handleHint は session_hint メッセージを処理し、待機軸と派生 State を即時更新する。
-func (s *Server) handleHint(m proto.Message) {
-	s.sessionsMu.Lock()
-	ses := s.sessions[m.SessionID]
-	var update proto.Message
-	if ses != nil {
-		ses.approvalVisible = m.ApprovalVisible
-		if m.ApprovalVisible {
-			ses.approvalVisibleAt = time.Now()
-		} else {
-			ses.approvalVisibleAt = time.Time{}
-		}
-		if !isTerminalSessionState(ses.State) {
-			ses.Activity.AwaitingApproval = ses.approvalVisible
-			ses.Activity.AwaitingUser = ses.approvalVisible
-			ses.Activity.Normalize()
-			ses.State = ses.Activity.DisplayState()
-			update = sessionUpdateMessage(ses)
-		}
-	}
-	s.sessionsMu.Unlock()
-	if update.SessionID != 0 {
-		s.broadcast(update)
-	}
-}
-
 // handleConsumed は approval_consumed メッセージを処理する。
 func (s *Server) handleConsumed(m proto.Message) {
 	s.markNativeApprovalConsumed(m)
@@ -2327,6 +2328,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 	s.sessionsMu.Lock()
 	ids := make([]int, 0, 1)
 	updates := make([]proto.Message, 0, 1)
+	var closures []*approvalRecordClosure
 	resetOne := func(id int, ses *session) {
 		if ses == nil {
 			return
@@ -2337,7 +2339,9 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		if ses.vt != nil {
 			ses.vt.Reset()
 		}
-		ses.nativeApprovalSig = ""
+		// 台帳の行は ClearSessionHistory が消すので、記録は閉じるだけでよい。
+		closures = append(closures, closeApprovalRecordLocked(ses, id, approvalCloseHistoryReset, time.Now()))
+		ses.textQuestionAtIdle = nil
 		ses.nativeApprovalTailSig = ""
 		ses.nativeApprovalScanQueued = false
 		ses.nativeApprovalClearMisses = 0
@@ -2351,13 +2355,6 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		if ses.approvalSourceEpoch == 0 {
 			ses.approvalSourceEpoch = 1
 		}
-		ses.approvalMarkerSig = ""
-		ses.nativeApprovalCandidateKey = ""
-		ses.nativeApprovalCandidateShape = ""
-		ses.nativeApprovalSourceEpoch = 0
-		ses.approvalMarkerCandidateKey = ""
-		ses.approvalMarkerCandidateShape = ""
-		ses.approvalMarkerSourceEpoch = 0
 		ses.approvalMarkerSuppressedSig = ""
 		ses.approvalMarkerSuppressedAt = time.Time{}
 		ids = append(ids, id)
@@ -2371,6 +2368,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		}
 	}
 	s.sessionsMu.Unlock()
+	s.finishApprovalRecordClosures(closures...)
 	for _, id := range ids {
 		if s.sessionStore != nil {
 			if err := s.sessionStore.ClearSessionHistory(id); err != nil {
@@ -2433,8 +2431,15 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var endedWorktreeCleanup string
 	var endedUsageProbe bool
 	var endedGitTurnIndexDir string
+	var approvalClosure *approvalRecordClosure
 	if exists {
 		ses := s.sessions[m.SessionID]
+		// dismiss では wrapper 切断の後始末が走らない（wrapperCleanupAlreadyDismissedLocked）
+		// ので、保留中の承認はここで閉じる。
+		approvalClosure = closeApprovalRecordLocked(ses, m.SessionID, approvalCloseSessionEnd, time.Now())
+		// セッション自体を消すので「保留中」を下ろす session_update は要らない
+		// （画面は session_dismissed でカードごと消す）。
+		approvalClosure.dropActivity()
 		s.stopAgentChatTailLocked(ses)
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
@@ -2454,6 +2459,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
+	s.finishApprovalRecordClosures(approvalClosure)
 	removeGitTurnIndexDir(endedGitTurnIndexDir)
 	// The hasPendingSpawnConfirmation guard above already refused this dismiss
 	// for any parent that had a confirmation pending when the request arrived,
@@ -2571,7 +2577,7 @@ func (s *Server) handleAttachRequest(m proto.Message) (skip bool) {
 
 // markRunning は PTY 出力受信時に呼ばれ、状態を running に更新して
 // lastOutputAt を現在時刻に進める。状態遷移があった場合のみ broadcast する。
-// approvalVisible=true の間は running への強制遷移を行わない（カーソルブリンク等の
+// 保留中の承認の記録がある間は running への強制遷移を行わない（カーソルブリンク等の
 // 継続的な PTY データで "待機中" 判定が阻害されるのを防ぐ）。
 // アイドル状態機械の 5 関数 (markRunning / stateTicker / evaluateIdle /
 // startIdleTimerLocked / stopIdleTimerLocked) は C4 追加分割で

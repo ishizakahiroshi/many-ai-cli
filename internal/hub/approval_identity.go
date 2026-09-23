@@ -313,11 +313,8 @@ func approvalCandidateShapeForKeyLocked(ses *session, candidateKey string) strin
 	if ses == nil || candidateKey == "" {
 		return ""
 	}
-	if ses.nativeApprovalCandidateKey == candidateKey {
-		return ses.nativeApprovalCandidateShape
-	}
-	if ses.approvalMarkerCandidateKey == candidateKey {
-		return ses.approvalMarkerCandidateShape
+	if record := ses.pendingApproval; record != nil && record.CandidateKey == candidateKey {
+		return record.CandidateShape
 	}
 	if ses.approvalConsumedCandidateKey == candidateKey {
 		return ses.approvalConsumedCandidateShape
@@ -351,12 +348,8 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 	// 区切っていた頃は、答えた後にユーザーが 2 回何かを送っただけで、画面に
 	// 出たままの回答済みブロックが未回答の候補へ戻っていた。ファイル冒頭の
 	// ルール本文に、この変更で受け入れた代償も書いてある。
-	marker := extractApprovalMarkerBlockFromVT(ses.vt)
-	if marker == nil {
-		return
-	}
-	identity := approvalMarkerCandidateIdentity(ses.Provider, marker.Block)
-	if identity.key != consumedKey {
+	identity, ok := latestVTQuestionIdentityLocked(ses)
+	if !ok || identity.key != consumedKey {
 		return
 	}
 	ses.approvalConsumedCandidateShape = identity.shape
@@ -367,6 +360,28 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 	ses.approvalEpochPending = true
 }
 
+// latestVTQuestionIdentityLocked は、端末ミラーでいちばん新しい文章の質問（承認マーカー、
+// 無ければマーカー無しの文章の質問）の同一性を返す。どちらを先に見るかは検出の経路
+// （マーカーは wrapper_loop.go の pty_data、文章の質問は approval_text_question.go の
+// vtTextQuestionLocked）と同じにする。違えると、画面に残った回答済みの質問を持ち越せず、
+// 次のターンで未回答の質問として開き直す。
+//
+// マーカー無しの文章の質問を端末ミラーから読むのは、端末ミラーが供給元のセッションだけ
+// （approval_text_question.go）。トランスクリプトが供給元のセッションは新しいメッセージでしか
+// 質問を立てないので、画面に残った質問が開き直ることはなく、持ち越しも要らない。
+func latestVTQuestionIdentityLocked(ses *session) (struct{ key, shape string }, bool) {
+	if marker := extractApprovalMarkerBlockFromVT(ses.vt); marker != nil {
+		return approvalMarkerCandidateIdentity(ses.Provider, marker.Block), true
+	}
+	if approvalMarkerSourceIsTranscriptLocked(ses) {
+		return struct{ key, shape string }{}, false
+	}
+	if q := detectTextQuestion(ses.vt.TailLines(vtTailLinesForApproval)); q != nil {
+		return q.candidateIdentity(ses.Provider), true
+	}
+	return struct{ key, shape string }{}, false
+}
+
 func approvalCandidateActiveLocked(ses *session) bool {
-	return ses != nil && (ses.nativeApprovalSig != "" || ses.approvalMarkerCandidateKey != "")
+	return ses != nil && ses.pendingApproval != nil
 }

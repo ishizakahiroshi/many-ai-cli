@@ -26,6 +26,7 @@
 @import url("/styles/bug-report.css");
 @import url("/styles/subscriptions.css");
 @import url("/styles/close-button.css");
+@import url("/styles/shortcut-help.css");
 
 #deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); }
 #deferred-send-status[hidden] { display:none; }
@@ -1168,6 +1169,7 @@ header {
   .session-board-open-btn,
   .session-relay-open-btn,
   .session-derive-open-btn,
+  .session-turn-end-bell-btn,
   .project-group-files-btn,
   .quick-cmd-btn,
   .spawn-btn-browse {
@@ -1947,7 +1949,8 @@ header {
 .session-history-reset-btn,
 .session-board-open-btn,
 .session-relay-open-btn,
-.session-derive-open-btn {
+.session-derive-open-btn,
+.session-turn-end-bell-btn {
   position: static;
   background: none;
   appearance: none;
@@ -1970,6 +1973,10 @@ header {
 .session-board-open-btn:hover { color: var(--accent-text); }
 .session-relay-open-btn:hover { color: var(--accent-text); }
 .session-derive-open-btn:hover { color: var(--accent-text); }
+/* ベルは OFF（ミュート）を色だけでなく絵文字とラベルでも示す（title/aria-label 側）。
+   ここでは OFF 時に少し薄くして「鳴らない」を視覚的にも添える。 */
+.session-turn-end-bell-btn:hover { color: var(--accent-text); }
+.session-turn-end-bell-btn.muted { opacity: 0.55; }
 
 /* ドラッグ状態 */
 .card.dragging { opacity: 0.4; cursor: grabbing; }

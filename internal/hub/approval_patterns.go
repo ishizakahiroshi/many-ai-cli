@@ -487,4 +487,5 @@ func (s *Server) refreshActiveMirror() {
 	if err := RefreshActiveMirrors(profiles); err != nil {
 		s.logger.Warn("refresh approval pattern mirrors failed", "err", err)
 	}
+	s.reloadApprovalTriggerPhrases()
 }

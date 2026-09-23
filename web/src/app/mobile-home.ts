@@ -3,7 +3,8 @@
 // PC には一切副作用を与えない。全エントリーポイントは isMobileViewport() で early return する。
 
 import { t } from '../i18n.js';
-import { orderSessions, sessions, approvalVisibleCache, multiQuestionVisibleCache, activeSessionId, set_activeSessionId } from './state.js';
+import { orderSessions, sessions, activeSessionId, set_activeSessionId } from './state.js';
+import { isApprovalPending } from './approval-store.js';
 import { activateSession, moveSessionToSiblingFront, providerIconHtml } from './session-list.js';
 import { sessionTitle } from './approval-queue-tab.js';
 import { openServerModal } from './server-modal.js';
@@ -125,7 +126,7 @@ function bindMhSessionTapRoot(root: HTMLElement, mode: 'drawer' | 'home', rowSel
 
 function getSessionBucket(id: number): SessionBucket {
   const s = sessions.get(id);
-  if (approvalVisibleCache.get(id) || multiQuestionVisibleCache.get(id)) return 'pending';
+  if (isApprovalPending(id)) return 'pending';
   const state = s?.state || 'standby';
   if (state === 'error' || state === 'disconnected') return 'error';
   if (state === 'running') return 'running';

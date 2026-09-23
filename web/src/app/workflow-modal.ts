@@ -25,12 +25,16 @@ import { parseWorkflowProgress, WorkflowProgress, WfAgentState } from './workflo
 import {
   extrapolatedWorkflowElapsedSec,
   getHubWorkflowEntry,
+  getSubagentTreeEntry,
   getWorkflowLedger,
   isHubWorkflowAuthoritative,
   recordWorkflowDoneLabels,
   removeWorkflowStore,
   setHubWorkflowProgress,
 } from './workflow-store.js';
+// 表示行への組み立ては純関数側（DOM/i18n 非依存）に分離済み。ここは描画と配線だけ
+// （子 plan: plan_subagent-tree-popup_c5_web-popup.md の C1/C2 と同じ分け方）。
+import { buildSubagentTreeRows, SubagentRowState, SubagentTreeRow, SubagentTreeSummary, SubagentTreeView } from './subagent-tree.js';
 
 // 進捗ブロックはビューポート近傍に出るので、末尾の十分な行数だけ見れば足りる。
 const SCAN_LINES = 200;
@@ -58,6 +62,11 @@ interface WfSnapshot {
 
 const snapshots = new Map<number, WfSnapshot>();
 const missCounts = new Map<number, number>();
+// サブエージェントの木のチップ/モーダルは WfSnapshot を持たない（純関数側に状態が
+// 無いため）。✕ で閉じた事実だけをセッション単位で覚える。木が空になった
+// （getSubagentTreeEntry が null を返す）ときに削除し、次に現れる木は必ず
+// 未読状態から始める（親 plan 方針4の「今のまとまり」区切りと同じ考え方）。
+const subagentDismissed = new Set<number>();
 // フレーム凍結検出: 走行中なのに frameSig が連続で不変＝スピナーが止まっている
 // （＝完了したのに走行中グリフがバッファに残っている）状態。連続一致回数を数える。
 const freezeCounts = new Map<number, number>();
@@ -251,6 +260,15 @@ function activeSnapshot(): WfSnapshot | null {
   return snapshots.get(sid) || null;
 }
 
+/** 今のセッションのサブエージェントの木を、描画用の行へ組み立てて返す。木が無ければ null。 */
+function activeSubagentView(now: number): SubagentTreeView | null {
+  const sid = activeSessionId;
+  if (sid === null) return null;
+  const entry = getSubagentTreeEntry(sid);
+  if (!entry) return null;
+  return buildSubagentTreeRows(entry.tree, now);
+}
+
 // hub ソースの完了判定は Hub の Settled のみを権威とする。カウントが完了形でも
 // Hub が意図的に Settled=false を保持する窓（journal 紐付け待ち・10 秒静止待ち）
 // があり、!running への OR フォールバックはその窓で「完了」を先走らせる
@@ -307,17 +325,52 @@ function formatAgentDetailMetrics(detail: WfAgentDetail): string {
   return parts.join(' · ');
 }
 
-function renderPill(): void {
-  const pill = ensurePill();
-  const snap = activeSnapshot();
-  if (!snap || snap.dismissed || !snap.result.detected ||
-      (snap.result.totalCount === 0 && snap.result.waitingDynamic === 0)) {
-    pill.hidden = true;
-    if (modalOpen) closeWorkflowModal();
-    return;
+// Workflow が検出されているときの表示文言（既存ロジックをそのまま関数化しただけ）。
+function workflowPillText(snap: WfSnapshot, done: boolean): string {
+  const elapsed = snap.result.elapsedSec && snap.result.elapsedSec > 0
+    ? formatElapsed(snap.result.elapsedSec, true)
+    : '';
+  if (done) return t('wf_progress_pill_done', { n: snap.result.totalCount });
+  if (snap.result.totalCount === 0 && snap.result.waitingDynamic > 0) {
+    return t('wf_progress_pill_waiting', { n: snap.result.waitingDynamic });
   }
+  if (elapsed) {
+    return t('wf_progress_pill_live_elapsed', {
+      done: snap.result.doneCount,
+      total: snap.result.totalCount,
+      elapsed,
+    });
+  }
+  if (snap.result.live) {
+    // 背景実行（N/M agents done）は done/total で下のステータス行と表示を揃える。
+    return t('wf_progress_pill_live', { done: snap.result.doneCount, total: snap.result.totalCount });
+  }
+  return t('wf_progress_pill_running', { n: snap.result.runningCount });
+}
+
+// Workflow が無いときの、サブエージェントの木だけのチップ文言。
+// 「{n} 実行中 · 完了 {n} · {いちばん古い走行中の子の経過時間}」（mockup S-01）。
+// 走行中が 0 なら経過時間を出さず、各セグメントは値が 0 のものを落とす。
+function subagentPillText(view: SubagentTreeView): string {
+  const { running, done, failed } = view.summary;
+  const parts: string[] = [];
+  if (running > 0) parts.push(t('subagent_tree_pill_running_seg', { n: running }));
+  if (done > 0) parts.push(t('subagent_tree_pill_done_seg', { n: done }));
+  if (failed > 0) parts.push(t('subagent_tree_pill_failed_seg', { n: failed }));
+  if (running > 0) {
+    const oldest = view.rows.reduce(
+      (max, row) => (row.state === 'running' && row.elapsedSec !== undefined ? Math.max(max, row.elapsedSec) : max),
+      0,
+    );
+    if (oldest > 0) parts.push(formatElapsed(oldest, true));
+  }
+  const body = parts.join(' · ');
+  return body ? t('subagent_tree_pill', { body }) : t('subagent_tree_modal_title');
+}
+
+// チップの DOM 更新は Workflow / サブエージェントの木で共通（記号・色・文言の差し替えだけ）。
+function applyPillModel(pill: HTMLElement, done: boolean, text: string, title: string): void {
   pill.hidden = false;
-  const done = snapshotDone(snap);
   pill.classList.toggle('wf-done', done);
   // 走行中は回る輪、終わったらチェック。記号はモーダルの各エージェント行と同じものを使う。
   const spinnerEl = pill.querySelector('.wf-pill-spinner') as HTMLElement | null;
@@ -330,38 +383,55 @@ function renderPill(): void {
     }
   }
   const textEl = pill.querySelector('.wf-pill-text') as HTMLElement | null;
-  if (textEl) {
-    const elapsed = snap.result.elapsedSec && snap.result.elapsedSec > 0
-      ? formatElapsed(snap.result.elapsedSec, true)
-      : '';
-    if (done) {
-      textEl.textContent = t('wf_progress_pill_done', { n: snap.result.totalCount });
-    } else if (snap.result.totalCount === 0 && snap.result.waitingDynamic > 0) {
-      textEl.textContent = t('wf_progress_pill_waiting', { n: snap.result.waitingDynamic });
-    } else if (elapsed) {
-      textEl.textContent = t('wf_progress_pill_live_elapsed', {
-        done: snap.result.doneCount,
-        total: snap.result.totalCount,
-        elapsed,
-      });
-    } else if (snap.result.live) {
-      // 背景実行（N/M agents done）は done/total で下のステータス行と表示を揃える。
-      textEl.textContent = t('wf_progress_pill_live', {
-        done: snap.result.doneCount,
-        total: snap.result.totalCount,
-      });
-    } else {
-      textEl.textContent = t('wf_progress_pill_running', { n: snap.result.runningCount });
-    }
-  }
+  if (textEl) textEl.textContent = text;
   const openBtn = pill.querySelector('.wf-pill-open') as HTMLElement | null;
-  if (openBtn) openBtn.title = done ? t('wf_progress_done') : t('wf_progress_running');
+  if (openBtn) openBtn.title = title;
+}
+
+function renderPill(): void {
+  const pill = ensurePill();
+  const sid = activeSessionId;
+  const snap = activeSnapshot();
+  const workflowVisible = !!snap && !snap.dismissed && snap.result.detected &&
+    (snap.result.totalCount > 0 || snap.result.waitingDynamic > 0);
+
+  if (workflowVisible) {
+    const done = snapshotDone(snap!);
+    applyPillModel(pill, done, workflowPillText(snap!, done), done ? t('wf_progress_done') : t('wf_progress_running'));
+    return;
+  }
+
+  // Workflow が無い。サブエージェントの木があればそちらでチップを出す（親 plan 方針7）。
+  const view = sid !== null ? activeSubagentView(Date.now()) : null;
+  if (!view || view.rows.length === 0) {
+    // 木が空＝次のまとまりの始まり。✕ で閉じた記憶も一緒に手放す。
+    if (sid !== null) subagentDismissed.delete(sid);
+    pill.hidden = true;
+    if (modalOpen) closeWorkflowModal();
+    return;
+  }
+  if (sid !== null && subagentDismissed.has(sid)) {
+    pill.hidden = true;
+    if (modalOpen) closeWorkflowModal();
+    return;
+  }
+  const done = view.summary.running === 0;
+  applyPillModel(
+    pill,
+    done,
+    subagentPillText(view),
+    done ? t('subagent_tree_pill_title_done') : t('subagent_tree_pill_title_running'),
+  );
 }
 
 function dismissActive(ev?: Event): void {
   ev?.stopPropagation();
+  // 表示中のピルが Workflow・サブエージェントのどちらでも、✕ は「今見えているもの」を
+  // まとめて閉じる（片方だけ閉じると、閉じた直後にもう片方のチップへ入れ替わって見える）。
   const snap = activeSnapshot();
   if (snap) snap.dismissed = true;
+  const sid = activeSessionId;
+  if (sid !== null) subagentDismissed.add(sid);
   if (modalOpen) closeWorkflowModal();
   renderPill();
 }
@@ -472,18 +542,187 @@ function stateIcon(state: WfAgentState): HTMLElement {
   return span;
 }
 
+// サブエージェントの木は状態が 3 + 1（running/done/failed/unknown）で、Workflow の
+// pending には対応しない。記号・色は「新しい丸を作らない」の規約どおり Workflow の
+// バケツをそのまま借りる（unknown だけ、色バケツは pending＝灰色の点を流用しつつ、
+// 読み上げ文言は「状態不明」で別にする）。
+const SUBAGENT_ICON_KIND: Record<SubagentRowState, string> = {
+  running: 'ring',
+  done: 'check',
+  failed: 'cross',
+  unknown: 'dot',
+};
+
+function subagentStateIcon(state: SubagentRowState): HTMLElement {
+  const span = document.createElement('span');
+  const cssState = state === 'unknown' ? 'pending' : state;
+  span.className = 'wf-agent-icon wf-state-' + cssState;
+  const label = t('subagent_tree_state_' + state);
+  span.setAttribute('role', 'img');
+  span.setAttribute('aria-label', label);
+  span.title = label;
+  span.innerHTML = stateIconSvgHtml(SUBAGENT_ICON_KIND[state]);
+  return span;
+}
+
+// 見出し横の集計（モーダル上部のカウント欄・Workflow 併記時のサブエージェント節見出し
+// で共用）。「実行中 n · 完了 n」に、失敗があれば「失敗 n」を足す（値が 0 の区分は出さない）。
+function subagentCountsText(summary: SubagentTreeSummary): string {
+  const parts: string[] = [];
+  if (summary.running > 0) parts.push(t('subagent_tree_header_running', { n: summary.running }));
+  if (summary.done > 0) parts.push(t('subagent_tree_header_done', { n: summary.done }));
+  if (summary.failed > 0) parts.push(t('subagent_tree_header_failed', { n: summary.failed }));
+  return parts.join(' · ');
+}
+
+// 1 行分の右側テキスト（経過時間 / 失敗ラベル）。「最後の動き」は別枠（呼び出し側で
+// 付け足す）なので、ここには含めない。
+function subagentRowTimeText(row: SubagentTreeRow): string {
+  const parts: string[] = [];
+  if (row.state === 'failed') parts.push(t('subagent_tree_failed_label'));
+  if (row.elapsedSec !== undefined) parts.push(formatElapsed(row.elapsedSec, false));
+  return parts.join(' · ');
+}
+
+function subagentIndentPx(depth: number): string {
+  return (Math.max(1, depth) - 1) * 18 + 'px';
+}
+
+// 走行中で今のツールの行が出る子かどうか（buildSubagentToolEl が実際に行を返す条件と
+// 常にそろえる）。C11: この場合だけ、種別・モデル（row.detail）を名前の行ではなく
+// ツールの行の右端に出す（完成イメージ S-02。560px のモーダルで名前を切らないため）。
+function subagentHasToolLine(row: SubagentTreeRow): boolean {
+  return row.state === 'running' && !!row.tool;
+}
+
+function buildSubagentRowEl(row: SubagentTreeRow): HTMLElement {
+  const el = document.createElement('div');
+  const settledClass =
+    row.state === 'done' ? ' wf-subagent-row-done' : row.state === 'failed' ? ' wf-subagent-row-failed' : '';
+  el.className = 'wf-agent-row wf-agent-' + row.state + settledClass;
+  el.style.marginLeft = subagentIndentPx(row.depth);
+  el.appendChild(subagentStateIcon(row.state));
+
+  const lbl = document.createElement('span');
+  lbl.className = 'wf-agent-label';
+  lbl.textContent = row.name || t('subagent_tree_unnamed');
+  el.appendChild(lbl);
+
+  // ツールの行がある子は、種別・モデルをそちら（buildSubagentToolEl）へ移す。
+  if (row.detail && !subagentHasToolLine(row)) {
+    const detail = document.createElement('span');
+    detail.className = 'wf-subagent-detail';
+    detail.textContent = row.detail;
+    el.appendChild(detail);
+  }
+
+  const timeText = subagentRowTimeText(row);
+  if (timeText || row.lastActivitySec !== undefined) {
+    const mt = document.createElement('span');
+    mt.className = 'wf-agent-metrics';
+    if (timeText) mt.appendChild(document.createTextNode(timeText));
+    if (row.lastActivitySec !== undefined) {
+      if (timeText) mt.appendChild(document.createTextNode(' · '));
+      const age = document.createElement('span');
+      age.className = 'wf-subagent-age';
+      age.textContent = t('subagent_tree_last_activity', { n: row.lastActivitySec });
+      mt.appendChild(age);
+    }
+    el.appendChild(mt);
+  }
+  return el;
+}
+
+// 走行中で今のツールが分かる行にだけ、既存の Workflow 詳細と同じ文面を足す
+// （子 plan C1 の「実装時の確定」: 生の値のまま返すので、i18n は wf_detail_last_tool を流用）。
+// C11: 種別・モデル（row.detail）が付くときは、行の右端（.wf-subagent-detail）へ足す
+// （完成イメージ S-02 の `.tool .tx` / `.tool .sub`）。名前の行 (buildSubagentRowEl) 側では
+// 出さないので、二重には出ない。
+function buildSubagentToolEl(row: SubagentTreeRow): HTMLElement | null {
+  if (!subagentHasToolLine(row)) return null;
+  const el = document.createElement('div');
+  el.className = 'wf-subagent-tool';
+  el.style.marginLeft = subagentIndentPx(row.depth);
+
+  const text = document.createElement('span');
+  text.className = 'wf-subagent-tool-text';
+  // Grok の記録にはツールの対象の欄が無く、要約は常に空になる（親 plan §C9）。空のときに
+  // 「read_file —」と区切りだけが残らないよう、名前だけの文面に切り替える。
+  const summary = clampForLine(row.tool?.summary || '');
+  text.textContent = summary
+    ? t('wf_detail_last_tool', { name: row.tool?.name || '', summary })
+    : t('wf_detail_last_tool_name_only', { name: row.tool?.name || '' });
+  el.appendChild(text);
+
+  if (row.detail) {
+    const detail = document.createElement('span');
+    detail.className = 'wf-subagent-detail';
+    detail.textContent = row.detail;
+    el.appendChild(detail);
+  }
+  return el;
+}
+
+// Workflow の節の下（併記時）／モーダル本文の先頭（単独時）に足す「サブエージェント」節。
+// headingSub は S-02 の「最終更新 N 秒前」・S-03 の「実行中 n」のどちらか（無ければ省略）。
+function buildSubagentSectionEl(view: SubagentTreeView, headingText: string, headingSub?: string): HTMLElement {
+  const section = document.createElement('section');
+  section.className = 'wf-subagent-section';
+
+  const heading = document.createElement('div');
+  heading.className = 'wf-subagent-heading';
+  heading.textContent = headingText;
+  if (headingSub) {
+    const sub = document.createElement('span');
+    sub.className = 'wf-subagent-heading-sub';
+    sub.textContent = headingSub;
+    heading.appendChild(sub);
+  }
+  section.appendChild(heading);
+
+  const rows = document.createElement('div');
+  rows.className = 'wf-agent-list';
+  for (const row of view.rows) {
+    rows.appendChild(buildSubagentRowEl(row));
+    const toolEl = buildSubagentToolEl(row);
+    if (toolEl) rows.appendChild(toolEl);
+  }
+  section.appendChild(rows);
+
+  if (view.summary.omitted > 0) {
+    const omit = document.createElement('div');
+    omit.className = 'wf-subagent-omitted';
+    omit.textContent = t('subagent_tree_omitted', { n: view.summary.omitted });
+    section.appendChild(omit);
+  }
+  return section;
+}
+
 function renderModalBody(): void {
   const overlay = document.getElementById('workflow-modal');
   if (!overlay) return;
   const counts = overlay.querySelector('.wf-modal-counts') as HTMLElement | null;
+  const titleEl = overlay.querySelector('.wf-modal-title') as HTMLElement | null;
   const body = overlay.querySelector('.wf-modal-body') as HTMLElement | null;
   if (!body) return;
 
   const snap = activeSnapshot();
   const r = snap && !snap.dismissed ? snap.result : null;
+  const workflowDetected = !!r && r.detected && (r.totalCount > 0 || r.waitingDynamic > 0);
 
-  // 解釈不能（検出が外れた / フォーマット不一致）: クラッシュさせず案内を出す。
-  if (!r || !r.detected || (r.totalCount === 0 && r.waitingDynamic === 0)) {
+  const sidForTree = activeSessionId;
+  const now = Date.now();
+  const subagentView = sidForTree !== null ? activeSubagentView(now) : null;
+  // 単独表示（Workflow 無し）のときだけ ✕ の記憶を見る。Workflow と併記のときは
+  // Workflow 側の dismissed が既にモーダルごと閉じている（呼び出し元 renderPill/
+  // dismissActive が両方を一緒に閉じる）ので、ここで二重に隠さない。
+  const subagentSuppressed = !workflowDetected && sidForTree !== null && subagentDismissed.has(sidForTree);
+  const hasSubagent = !!subagentView && subagentView.rows.length > 0 && !subagentSuppressed;
+
+  // 解釈不能（検出が外れた / フォーマット不一致）かつサブエージェントの木も無い:
+  // クラッシュさせず案内を出す。
+  if (!workflowDetected && !hasSubagent) {
+    if (titleEl) titleEl.textContent = t('wf_progress_title');
     if (counts) counts.textContent = '';
     body.innerHTML = '';
     const empty = document.createElement('div');
@@ -493,6 +732,28 @@ function renderModalBody(): void {
     return;
   }
 
+  body.innerHTML = '';
+
+  if (!workflowDetected) {
+    // Workflow 無し・サブエージェントの木だけ。モーダル上部はこちらの集計にする。
+    if (titleEl) titleEl.textContent = t('subagent_tree_modal_title');
+    if (counts) counts.textContent = subagentCountsText(subagentView!.summary);
+    const provider = String(getSubagentTreeEntry(sidForTree!)?.tree.provider || '').toUpperCase();
+    let headingSub: string | undefined;
+    if (subagentView!.summary.running > 0) {
+      const receivedAt = getSubagentTreeEntry(sidForTree!)?.receivedAt;
+      if (receivedAt !== undefined) {
+        headingSub = t('subagent_tree_section_updated', { n: Math.max(0, Math.round((now - receivedAt) / 1000)) });
+      }
+    }
+    const headingText = provider
+      ? t('subagent_tree_section_standalone', { provider })
+      : t('subagent_tree_modal_title');
+    body.appendChild(buildSubagentSectionEl(subagentView!, headingText, headingSub));
+    return;
+  }
+
+  if (titleEl) titleEl.textContent = t('wf_progress_title');
   const done = snapshotDone(snap!);
   // done（settle 済み / 走行終了）のときは表示を完了側へ倒す。
   // settle はフレーム凍結ヒューリスティックで確定するため、生パース結果の
@@ -519,8 +780,6 @@ function renderModalBody(): void {
     if (r.tokensRaw) parts.push(r.tokensRaw);
     counts.textContent = parts.join(' · ');
   }
-
-  body.innerHTML = '';
 
   // 進捗バー（percent があれば。done なら 100% 固定）。
   if (dispPercent !== null && r.totalCount > 0) {
@@ -657,6 +916,14 @@ function renderModalBody(): void {
       body.appendChild(section);
     }
   }
+
+  // Workflow の節の下に、サブエージェントの節を足す（S-03）。Workflow の子は上で
+  // 数えているので、ここで二重に出さない（親 plan 方針6・Hub 側が別フィールドで
+  // 送ってくる時点で二重化は起きない）。
+  if (hasSubagent) {
+    const headingSub = subagentCountsText(subagentView!.summary);
+    body.appendChild(buildSubagentSectionEl(subagentView!, t('subagent_tree_modal_title'), headingSub));
+  }
 }
 
 // ── 外部 API ─────────────────────────────────────────────────────────────────
@@ -682,8 +949,22 @@ export function removeWorkflowSnapshot(sessionId: number): void {
   missCounts.delete(sessionId);
   freezeCounts.delete(sessionId);
   lastFrameSig.delete(sessionId);
+  subagentDismissed.delete(sessionId);
   removeWorkflowStore(sessionId);
   if (sessionId === activeSessionId) renderPill();
+}
+
+/**
+ * ws-client が subagent_tree を保持した直後に呼ぶ。800ms の poll を待たず、今見て
+ * いるセッションのものならチップ/モーダルをすぐ描き直す（receiveWorkflowProgress
+ * と同じ即時反映）。
+ */
+export function receiveSubagentTree(sessionId: number): void {
+  if (!Number.isFinite(sessionId) || sessionId <= 0) return;
+  if (sessionId === activeSessionId) {
+    renderPill();
+    if (modalOpen) renderModalBody();
+  }
 }
 
 /** DOM 準備後に呼ぶ。ポーリングを開始し、Workflow 検出時のみピルを出す。 */

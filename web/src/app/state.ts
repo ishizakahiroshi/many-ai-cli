@@ -1,8 +1,8 @@
 // --- ESM imports (generated) ---
 import { STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_COLLAPSED_NODES_KEY, STORAGE_GROUP_ORDER_KEY, STORAGE_ORDER_KEY, STORAGE_PROJECT_FAVORITES_KEY, setUserPref } from './user-prefs.js';
 import { activateSession } from './session-list.js';
-import { isBatchOptions } from './approval-parser.js';
 import { setApprovalProviderResolver, _approvalCtxHash } from './approval-answered.js';
+import { isApprovalFolded, isApprovalPending } from './approval-store.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import { buildSidebarTree, deriveProjectKeyFromCwd, flattenSidebarTree } from './sidebar-tree.js';
 
@@ -19,7 +19,6 @@ export interface TerminalEntry {
   pendingFlushWatchdog?: ReturnType<typeof setTimeout> | null;
   layoutGeneration?: number;
   webglAddon?: { dispose?: () => void } | null;
-  pendingTextTail?: string;
   textDecoder?: TextDecoder;
   markerFilterCarry?: Uint8Array;
   reverseVideoFilterCarry?: Uint8Array;
@@ -62,43 +61,22 @@ export interface SequentialChoicePrompt {
 
 export const sessions = new Map<number, SessionSnapshot>();
 export const terminals = new Map<number, TerminalEntry>(); // sessionId -> terminal state
-export const approvalVisibleCache = new Map<number, boolean>();
-export const multiQuestionVisibleCache = new Map<number, boolean>(); // sessionId → bool（Claude Code AskUserQuestion 等の複数質問 UI が画面に出ているか）
-export const multiQuestionDismissedCache = new Map<number, boolean>(); // sessionId → bool（banner の ✕ ボタンで誤検出を手動 dismiss した状態。次の PTY 送信でクリア）
-export const multiQuestionLatchAt = new Map<number, number>(); // sessionId → epoch ms（複数質問 UI のタブ行を最後にライブ検出した時刻。Ink 部分再描画でタブ行が一瞬窓から外れても multiQ 終了に倒さないためのデバウンス基準）
 export const approvalSuppressedCache = new Map<number, string>(); // sessionId → 抑止理由（marker_leak / option_start / duplicate_option / box_rule / client_corrupt）。承認マーカーが構造破損で配信されなかったことの告知用
 export const approvalSuppressedDismissedCache = new Map<number, boolean>(); // sessionId → bool（抑止告知バナーを ✕ で閉じた状態。新しい抑止／正常マーカー到着でクリア）
 export const sequentialChoiceCache = new Map<number, any>(); // sessionId → { sig, prompts, answers, index }
-export const approvalRawOptionsCache = new Map<number, ApprovalOptionLike[] | any[]>(); // sessionId → approval options
 // 承認の同一性・回答済み state は approval-answered.ts が持つ（DOM 非依存にして
 // ブラウザ無しで試せるようにするため）。ここでは従来どおりの名前で再輸出する。
 export {
   annotateApprovalIdentity,
-  answeredApprovalCandidates,
-  answeredApprovalShapeKeys,
-  approvalCandidateDebugKey,
-  approvalCandidateIdentity,
   approvalCandidateShape,
-  approvalReplayState,
-  approvalSourceCache,
-  approvalSourceEpochCache,
-  beginApprovalReplay,
-  clearReplayAnsweredApprovalCandidate,
-  finishApprovalReplay,
-  getApprovalSourceEpoch,
-  isAnsweredApprovalCandidate,
+  forgetAllAnsweredApprovals,
+  forgetAnsweredApprovals,
   isAnsweredApprovalShapeAcrossEpochs,
-  isApprovalReplayPending,
-  isHubMarkerAuthoritative,
   isStaleHistoryRepaint,
-  noteApprovalSourceEpoch,
-  noteHubMarkerDelivered,
-  recordAnsweredApprovalCandidate,
   recordAnsweredApprovalIdentity,
-  replayAnsweredApprovalTokens,
   _approvalCtxHash,
 } from './approval-answered.js';
-export type { ApprovalSourceState, ApprovalCandidateIdentity } from './approval-answered.js';
+export type { ApprovalCandidateIdentity } from './approval-answered.js';
 
 // provider は sessions にしかないので、切り出し先へ解決関数を差す。
 setApprovalProviderResolver((id) => String(sessions.get(id)?.provider || ''));
@@ -109,33 +87,10 @@ export const batchActiveQ = new Map<number, number>(); // sessionId → アク�
 export let batchFocusIdx = -1; // 現在フォーカス中のバッチセクション index（-1: 未フォーカス / 範囲外）
 export const multiSelectSelections = new Map<number, Set<number>>(); // sessionId → Set<選択番号>（複数選択 #multi の ON 状態）
 export let multiSelectFocusIdx = -1; // 現在フォーカス中の複数選択肢 index（-1: 未フォーカス）
-export const approvalSwitchCandidates = new Map<number, any>(); // sessionId → { sig, options, firstSeenAt }（表示中の承認と異なる選択肢が検出されたときの安定性チェック用）
-export const APPROVAL_PENDING_TEXT_TAIL_LIMIT = 12000;
-
-// 承認選択肢の sig を計算。Ink の再描画やスクロールバック残骸による
-// label の微妙な差異（前後空白、空白の重複、truncate 位置）を吸収するため normalize する。
-// (Y:1/N:0) Yes/No プロンプトはどれも同じ label を持つため、_ctx に質問文ハッシュを
-// 載せて区別する（連続する別質問が同一 sig で誤抑制されないように）。
-export function approvalSig(options: ApprovalOptionLike[] | any[]): string {
-  if (isBatchOptions(options)) {
-    return JSON.stringify(options.map(s => ({
-      n: s.num,
-      t: String(s.title || '').replace(/\s+/g, ' ').slice(0, 80),
-      o: (s.options || []).map((o: ApprovalOptionLike) => `${o.num}:${String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80)}`),
-    })));
-  }
-  return JSON.stringify((options || []).map(o => {
-    const lbl = String(o.label || '').trim().replace(/\s+/g, ' ').slice(0, 80);
-    const ctx = o && o._ctx ? `|${o._ctx}` : '';
-    return `${o.num}:${lbl}${ctx}`;
-  }));
-}
 
 export function sequentialChoiceSig(prompts: SequentialChoicePrompt[] | any[]): string {
   return _approvalCtxHash((prompts || []).map(p => `${p.key}:${p.question}:${p.options.map((o: ApprovalOptionLike) => `${o.num}.${o.label}`).join('|')}`).join('\n'));
 }
-export const approvalHintConfirmTimers = new Map<number, ReturnType<typeof setTimeout>>(); // sessionId → timer（生バイト検出を短時間 debounce してチカチカを防ぐ）
-export const approvalHintConfirmTrusted = new Map<number, boolean>(); // sessionId → true: marker/plainYesNo 由来の信頼性の高い検出（fallback に上書きさせない）
 export const sessionInputState = new Map<number, any>(); // sessionId → { inputValue, pastedTextsData, pendingAttachFiles }（サムネイルは各エントリの wrapper から再構築）
 
 // =========================================================================
@@ -170,7 +125,6 @@ export const chatHistoryAutoCommitTimers = new Map<number, ReturnType<typeof set
 export const CHAT_HISTORY_USER_TURN_MARKER = "\x1b]47777;user-turn\x07";
 
 export const autoDismissTimers = new Map<number, ReturnType<typeof setTimeout>>(); // sessionId → timer
-export const approvalSuppressUntil = new Map<number, number>(); // sessionId → timestamp (sendChoice 後の誤再表示を抑制)
 export const approvalAutoSwitchQueue: number[] = [];
 export const utf8Decoder = new TextDecoder('utf-8');
 export const utf8Encoder = new TextEncoder();
@@ -317,7 +271,7 @@ export function isApprovalAutoSwitchEnabled() {
 
 export function isCurrentSessionHoldingApprovalFocus() {
   if (activeSessionId === null) return false;
-  return !!approvalVisibleCache.get(activeSessionId);
+  return isApprovalPending(activeSessionId);
 }
 
 export function removeApprovalAutoSwitchTarget(sessionId: number): void {
@@ -345,7 +299,9 @@ export function maybeAutoSwitchToNextApproval() {
 
   while (approvalAutoSwitchQueue.length > 0) {
     const nextId = approvalAutoSwitchQueue[0];
-    if (!sessions.has(nextId) || !approvalVisibleCache.get(nextId) || nextId === activeSessionId) {
+    // 帯に畳んだ承認は移動先から外す。畳むのは「見たうえで後にする」操作なので、
+    // その画面で引き戻さない（畳み状態はタブごとで、別の画面・端末とは共有しない）。
+    if (!sessions.has(nextId) || !isApprovalPending(nextId) || isApprovalFolded(nextId) || nextId === activeSessionId) {
       approvalAutoSwitchQueue.shift();
       continue;
     }

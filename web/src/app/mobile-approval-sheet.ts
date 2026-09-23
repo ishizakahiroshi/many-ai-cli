@@ -3,22 +3,22 @@ import { isBatchOptions, isMultiSelectOptions } from './approval-parser.js';
 import { sessionTitle, approvalQuestionContext } from './approval-queue-tab.js';
 import {
   BATCH_FREE,
+  foldApprovalPanel,
   getSingleFreeText,
+  pendingApprovalOptions,
   sendBatchChoices,
   sendChoice,
   sendMultiSelectChoices,
   sendSingleFreeText,
   setSingleFreeText,
+  unfoldApprovalPanel,
 } from './approval.js';
+import { isApprovalFolded, isApprovalPending as isStoreApprovalPending } from './approval-store.js';
 import {
   activeSessionId,
-  approvalRawOptionsCache,
-  approvalSig,
-  approvalVisibleCache,
   batchActiveQ,
   batchFreeText,
   batchSelections,
-  multiQuestionVisibleCache,
   multiSelectSelections,
   sessions,
 } from './state.js';
@@ -34,7 +34,6 @@ let contentEl: HTMLElement | null = null;
 let openSessionId: number | null = null;
 let suppressedActiveApproval = false;
 let touchStartY: number | null = null;
-const manuallyDismissedApprovalSigs = new Map<number, string>();
 
 function isMobileViewport(): boolean {
   return !!mobileMql?.matches;
@@ -42,33 +41,13 @@ function isMobileViewport(): boolean {
 
 function isApprovalPending(sessionId: number | null): boolean {
   if (sessionId === null) return false;
-  return !!(approvalVisibleCache.get(sessionId) || multiQuestionVisibleCache.get(sessionId));
+  return isStoreApprovalPending(sessionId);
 }
 
-function approvalDismissSig(sessionId: number): string {
-  const options = approvalRawOptionsCache.get(sessionId);
-  return Array.isArray(options) ? approvalSig(options) : `session:${sessionId}`;
-}
-
+// 手動で閉じたシートは、パネルの ✕ と同じ畳み状態（approval-store.ts の「畳む」）にする。
+// 同じ承認の間は開き直さず、パネルの場所には 1 行の帯が残る。記録が閉じれば畳み状態も消える。
 function isApprovalManuallyDismissed(sessionId: number): boolean {
-  const dismissedSig = manuallyDismissedApprovalSigs.get(sessionId);
-  const currentSig = approvalDismissSig(sessionId);
-  if (dismissedSig === `session:${sessionId}` && currentSig !== dismissedSig) {
-    manuallyDismissedApprovalSigs.set(sessionId, currentSig);
-    return true;
-  }
-  return dismissedSig === currentSig;
-}
-
-function clearDismissedResolvedApprovals(): void {
-  manuallyDismissedApprovalSigs.forEach((_sig, sessionId) => {
-    if (!isApprovalPending(sessionId)) manuallyDismissedApprovalSigs.delete(sessionId);
-  });
-}
-
-function latchManualDismissal(sessionId: number | null): void {
-  if (sessionId === null || !isApprovalPending(sessionId)) return;
-  manuallyDismissedApprovalSigs.set(sessionId, approvalDismissSig(sessionId));
+  return isApprovalFolded(sessionId);
 }
 
 function isComposerBusy(): boolean {
@@ -156,15 +135,20 @@ function setSheetOpen(open: boolean): void {
 }
 
 export function closeApprovalSheet(options: { manual?: boolean } = {}): void {
-  if (options.manual) latchManualDismissal(openSessionId);
+  const sessionId = openSessionId;
   setSheetOpen(false);
+  // 畳むとパネルが帯に変わり、承認の一覧も描き直される（シートを閉じてから畳む。
+  // 開いたまま畳むと、描き直しの知らせで閉じる前のシートを描き直してしまう）。
+  if (options.manual && sessionId !== null && isApprovalPending(sessionId)) foldApprovalPanel(sessionId);
 }
 
 export function openApprovalSheet(sessionId: number | null = activeSessionId): void {
   if (!isMobileViewport()) return;
   if (sessionId === null || !isApprovalPending(sessionId)) return;
-  manuallyDismissedApprovalSigs.delete(sessionId);
   openSessionId = sessionId;
+  // 畳んでいた承認を開く（パネルの帯も開く）。モバイルでは入力欄へフォーカスを移さない
+  // （ソフトキーボードが出てシートを押し上げるため）。
+  if (isApprovalFolded(sessionId)) unfoldApprovalPanel(sessionId, { focusInput: false });
   suppressedActiveApproval = false;
   renderSheet();
   setSheetOpen(true);
@@ -440,7 +424,7 @@ function renderFallback(sessionId: number): void {
   renderHeader(contentEl, sessionId, t('chat_system_approval_title'));
   const msg = document.createElement('div');
   msg.className = 'mas-empty';
-  msg.textContent = t('approval_tab_detecting');
+  msg.textContent = t('approval_tab_answer_in_terminal');
   contentEl.appendChild(msg);
 }
 
@@ -449,7 +433,7 @@ function renderSheet(): void {
   ensureSheet();
   if (!contentEl || openSessionId === null) return;
   contentEl.innerHTML = '';
-  const options = approvalRawOptionsCache.get(openSessionId);
+  const options = pendingApprovalOptions(openSessionId);
   if (Array.isArray(options) && isBatchOptions(options)) renderBatch(openSessionId, options);
   else if (Array.isArray(options) && isMultiSelectOptions(options)) renderMulti(openSessionId, options);
   else if (Array.isArray(options) && options.length > 0) renderSingle(openSessionId, options);
@@ -461,7 +445,6 @@ function maybeAutoOpen(): void {
     hideExistingSheet();
     return;
   }
-  clearDismissedResolvedApprovals();
   if (openSessionId !== null && !isApprovalPending(openSessionId)) {
     closeApprovalSheet();
     showToast(t('mobile_approval_resolved_toast'));

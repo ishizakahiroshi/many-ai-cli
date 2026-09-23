@@ -118,6 +118,7 @@ func deriveCapabilities(definition Definition) CapabilitySummary {
 	capabilities.Usage = adapterAvailable(definition.Adapters.Usage)
 	capabilities.Subscription = adapterAvailable(definition.Adapters.Subscription)
 	capabilities.Permissions = adapterAvailable(definition.Adapters.Permissions)
+	capabilities.Subagents = adapterAvailable(definition.Adapters.Subagents)
 	return capabilities
 }
 

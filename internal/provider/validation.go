@@ -271,6 +271,7 @@ func validateAdapters(refs AdapterRefs, adapters AdapterCatalog) []Diagnostic {
 		{"adapters.launch", refs.Launch}, {"adapters.approval", refs.Approval},
 		{"adapters.transcript", refs.Transcript}, {"adapters.usage", refs.Usage},
 		{"adapters.subscription", refs.Subscription}, {"adapters.permissions", refs.Permissions},
+		{"adapters.subagents", refs.Subagents},
 	}
 	var diagnostics []Diagnostic
 	for _, value := range values {
@@ -284,7 +285,7 @@ func validateAdapters(refs AdapterRefs, adapters AdapterCatalog) []Diagnostic {
 
 func knownCapability(key string) bool {
 	switch key {
-	case "models", "effort", "headless", "approval", "transcript", "usage", "subscription", "permissions":
+	case "models", "effort", "headless", "approval", "transcript", "usage", "subscription", "permissions", "subagents":
 		return true
 	default:
 		return false
