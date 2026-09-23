@@ -37,9 +37,12 @@
 .zero-session-status { text-align: left; }
 .zero-session-status .cli-maint-heading { margin-top: 0; }
 /* フッターは body の中に置く（body の gap 18px + 6px で従来の 24px 相当）。
-   導入状況があるときは手順（畳みボタン込み）をフッターの下へ回し、ツアー等の導線を押し下げない。 */
+   導入状況があるときは リンク → 手順（畳みボタン込み）→ 導入状況 の順に並べる。
+   導入状況は CLI の数だけ伸びるので、上に置くとツアー等の導線が画面外へ押し出される。 */
 .zero-session-body > .zero-session-footer { margin-top: 6px; }
+.zero-session-card.has-status .zero-session-footer { margin-top: 0; }
 .zero-session-card.has-status .zero-session-guide { order: 1; }
+.zero-session-card.has-status .zero-session-status { order: 2; }
 .zero-session-steps-toggle { align-self: center; margin: 0 auto 12px; display: block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; background: var(--bg-elev); color: var(--muted); font: inherit; font-size: .86rem; cursor: pointer; }
 .zero-session-steps-toggle:hover { color: var(--text); border-color: var(--accent); }
 .zero-session-card.is-steps-collapsed .zero-session-steps { display: none; }

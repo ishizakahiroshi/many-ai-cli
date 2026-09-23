@@ -47,8 +47,8 @@ function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
   maintenanceHandle?.destroy();
   maintenanceHandle = null;
   root.className = 'zero-session';
-  // 広い画面では手順（左）と導入状況（右）を並べ、狭い画面では導入状況を上に出して
-  // 手順を 1 行に畳む（どちらもスクロールせずに更新一覧が見えるようにするため）。
+  // 広い画面では手順（左）と導入状況（右）を並べ、狭い画面では手順を 1 行に畳んで
+  // リンク・畳みボタンの下に導入状況を出す（どちらもスクロールせずに更新一覧が見えるようにするため）。
   // 導入状況が無いときは畳まない（畳むと画面に何も残らない）。
   const collapsible = !!statuses?.length;
   root.innerHTML = `
