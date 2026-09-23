@@ -857,6 +857,7 @@ type Server struct {
 	netHintEnvKind string
 
 	usageLinkCache      *ttlCache[UsageLinkDefaults]
+	installLinkCache    *ttlCache[InstallLinkDefaults]
 	subscriptionUsageMu sync.Mutex
 	subscriptionUsage   *subscriptionUsageStore
 	usageProbe          *usageProbeManager
@@ -1254,6 +1255,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
+		installLinkCache:      newInstallLinkCache(),
 		subscriptionUsage:     newSubscriptionUsageStore(),
 		usageProbe:            newUsageProbeManager(),
 		modelsCache:           &modelsCache{},
@@ -1451,6 +1453,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
 	mux.HandleFunc("/api/usage-link-defaults", s.handleUsageLinkDefaults)
+	mux.HandleFunc("/api/install-link-defaults", s.handleInstallLinkDefaults)
 	mux.HandleFunc("/api/models", s.handleModels)
 	mux.HandleFunc("/api/approval-patterns", s.handleApprovalPatterns)
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)

@@ -1,12 +1,13 @@
 # `resources/` — 実行時配信リソース（リリース不要で更新できるもの）
 
-> 最終更新: 2026-09-13(日) — モデル catalog key と実行元の管理境界を明記
+> 最終更新: 2026-09-23(水) 10:08:57 — install-links を追加
 
-このディレクトリの 4 つは **バイナリに焼き込まれず、`main` の raw URL から実行時に fetch される**。URL 定数は `internal/config/config.go` の `Default*Source`。
+このディレクトリの 5 つは **バイナリに焼き込まれず、`main` の raw URL から実行時に fetch される**。URL 定数は `internal/config/config.go` の `Default*Source`。
 
 | ディレクトリ | 中身 | 消費側 |
 |---|---|---|
 | `approval-patterns/` | 承認 trigger phrase | `internal/hub/` の承認検出 |
+| `install-links/` | CLI の公式インストール手順リンク | `internal/hub/install_link_fetch.go` |
 | `models/` | spawn パネルのモデル候補（`defaults.json`） | `internal/hub/models_fetch.go` |
 | `slash-commands/` | スラッシュコマンドピッカー | `internal/hub/slash_cmd_fetch.go` |
 | `usage-links/` | 利用状況リンク | Hub UI |

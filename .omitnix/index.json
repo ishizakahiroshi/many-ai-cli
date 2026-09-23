@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "3367ae89d17c6fb69c6ab1bc5a506a8c6994b94c",
+    "commit": "d40fea865c74073a59872bce384b25f8d7c8b1b0",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 965,
-    "analyzed": 738,
-    "unresolved": 31,
+    "discovered": 968,
+    "analyzed": 739,
+    "unresolved": 32,
     "unknown": 1,
-    "unclaimed": 195,
+    "unclaimed": 196,
     "skipped_by_config": 0
   },
   "files": [
@@ -6147,6 +6147,64 @@
     },
     {
       "path": "internal/hub/input_gate.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/install_link_fetch.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/install_links_resource_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -17732,6 +17790,14 @@
       "reason": "no adapter claims '.md'"
     },
     {
+      "path": "resources/install-links/defaults.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
       "path": "resources/models/defaults.json",
       "adapter": null,
       "status": "unclaimed",
@@ -23148,7 +23214,7 @@
     {
       "path": "web/src/app/zero-session-empty-state.ts",
       "adapter": "tsjs",
-      "status": "analyzed",
+      "status": "unresolved",
       "fields": {
         "summary": {
           "state": "none_observed",
@@ -23169,11 +23235,18 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "none_observed",
-          "value": []
+          "state": "value",
+          "value": [
+            "/api/install-link-defaults?token=*"
+          ]
         }
       },
-      "unresolved": []
+      "unresolved": [
+        {
+          "code": "dynamic_endpoint",
+          "detail": "part of this address is filled in at run time: /api/install-link-defaults?token=*"
+        }
+      ]
     },
     {
       "path": "web/src/debug/index.ts",

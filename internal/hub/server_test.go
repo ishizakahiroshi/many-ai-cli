@@ -36,6 +36,7 @@ func newTestServer() *Server {
 		slashCmdCache:       map[string]*slashCmdCacheEntry{},
 		approvalRuleTargets: map[string]approvalRuleTarget{},
 		usageLinkCache:      newUsageLinkCache(),
+		installLinkCache:    newInstallLinkCache(),
 		modelsCache:         &modelsCache{},
 		modelsRemoteCache:   newModelsRemoteCache(),
 		orchestration:       newOrchestrationManager(),

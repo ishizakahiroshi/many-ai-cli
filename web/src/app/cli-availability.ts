@@ -36,6 +36,33 @@ export function aiCliGuideEntries(providers: { id: string; display_name?: string
     }));
 }
 
+export type CliInstallStatus = {
+  id: string;
+  displayName: string;
+  installed: boolean;
+  installUrl?: string;
+};
+
+// cliInstallStatuses は初回画面の導入状況一覧が使う。aiCliGuideEntries と同じ
+// 除外条件（無効 provider / shell / 追加行を除く）で並べ、PATH 上の有無
+// （missingIds）と公式手順の URL（installLinks）を突き合わせる。installUrl は
+// https:// で始まる値だけを通す（Hub 側の sanitize と同じ最終防御を画面側にも置く）。
+export function cliInstallStatuses(
+  providers: { id: string; display_name?: string; enabled?: boolean }[],
+  missingIds: Set<string>,
+  installLinks: Record<string, string> | null | undefined,
+): CliInstallStatus[] {
+  return aiCliGuideEntries(providers).map((entry) => {
+    const installed = !missingIds.has(entry.id);
+    const rawUrl = installLinks ? installLinks[entry.id] : undefined;
+    const status: CliInstallStatus = { id: entry.id, displayName: entry.displayName, installed };
+    if (typeof rawUrl === 'string' && rawUrl.startsWith('https://')) {
+      status.installUrl = rawUrl;
+    }
+    return status;
+  });
+}
+
 export function hasAvailableAiCli(
   providers: { id: string; enabled?: boolean }[],
   missingIds: Set<string>,

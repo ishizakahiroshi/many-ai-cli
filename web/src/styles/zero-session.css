@@ -20,6 +20,14 @@
 .zero-session-cli-copy { border: 0; background: transparent; color: var(--accent); font-family: inherit; font-size: .86rem; cursor: pointer; }
 .zero-session-cli-copy:hover { text-decoration: underline; }
 .zero-session-cli-hint { margin: 0 auto 8px; max-width: 520px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+.zero-session-install-list { max-width: 520px; margin: 0 auto 20px; }
+.zero-session-cli-item-installed { border-color: var(--ok, #2e7d32); }
+.zero-session-cli-check { flex: none; color: var(--ok, #2e7d32); font-weight: 700; }
+.zero-session-cli-status { flex: none; color: var(--muted); font-size: .82rem; }
+.zero-session-cli-item-missing .zero-session-cli-status { color: var(--warn, #d4a017); }
+.zero-session-cli-install-link { flex: none; color: var(--accent); font-size: .86rem; text-decoration: none; }
+.zero-session-cli-install-link:hover { text-decoration: underline; }
+.zero-session-cli-install-unavailable { flex: none; color: var(--muted); font-size: .82rem; }
 .zero-session-missing-still { margin: 12px auto 0; max-width: 520px; color: var(--warn, #d4a017); font-size: .86rem; line-height: 1.55; }
 .zero-session-recheck { font-weight: 600; color: var(--text) !important; }
 @media (max-width: 720px) { #zero-session-empty-state { padding: 20px 16px; align-items: start; } .zero-session-card { margin-top: 22px; } }

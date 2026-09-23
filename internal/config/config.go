@@ -269,6 +269,8 @@ const (
 
 const DefaultUsageLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json"
 
+const DefaultInstallLinkSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json"
+
 const DefaultModelsSource = "https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json"
 
 const DefaultOllamaBaseURL = "http://localhost:11434"

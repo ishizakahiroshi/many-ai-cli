@@ -1,13 +1,13 @@
 import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import {
-  aiCliGuideEntries,
+  cliInstallStatuses,
   commandMissingIds,
   hasAvailableAiCli,
-  type CliGuideEntry,
+  type CliInstallStatus,
 } from './cli-availability.js';
 import { loadProviderSummaries } from './provider-store.js';
-import { escapeHtml, showToast } from './util.js';
+import { escapeHtml, showToast, token } from './util.js';
 
 let root: HTMLElement | null = null;
 let afterRecheckStillMissing = false;
@@ -25,7 +25,39 @@ let paintGeneration = 0;
 const SHARED_SKILLS_URL =
   'https://github.com/ishizakahiroshi/many-ai-cli/blob/main/docs/manual_shared-skills-and-rules.md';
 
-function renderUsageGuide(): void {
+// renderInstallStatusList は「入っている / 入っていない」の一覧を組み立てる。
+// statuses が空（provider 定義が無い等）なら見出しごと出さない。displayName・
+// installUrl は provider 定義 / install-links JSON 由来なので必ず escapeHtml を通す。
+function renderInstallStatusList(statuses: CliInstallStatus[]): string {
+  if (!statuses.length) return '';
+  const items = statuses.map((status) => {
+    if (status.installed) {
+      return (
+        `<li class="zero-session-cli-item zero-session-cli-item-installed">` +
+        `<span class="zero-session-cli-check" aria-hidden="true">✓</span>` +
+        `<span class="zero-session-cli-label">${escapeHtml(status.displayName)}</span>` +
+        `<span class="zero-session-cli-status">${t('zero_session_install_status_installed')}</span>` +
+        `</li>`
+      );
+    }
+    const link = status.installUrl
+      ? `<a class="zero-session-cli-install-link" href="${escapeHtml(status.installUrl)}" target="_blank" rel="noopener">${t('zero_session_install_link_label')}</a>`
+      : `<span class="zero-session-cli-install-unavailable">${t('zero_session_install_link_unavailable')}</span>`;
+    return (
+      `<li class="zero-session-cli-item zero-session-cli-item-missing">` +
+      `<span class="zero-session-cli-label">${escapeHtml(status.displayName)}</span>` +
+      `<span class="zero-session-cli-status">${t('zero_session_install_status_missing')}</span>` +
+      link +
+      `</li>`
+    );
+  }).join('');
+  return (
+    `<p class="zero-session-cli-heading">${t('zero_session_install_status_heading')}</p>` +
+    `<ul class="zero-session-cli-list zero-session-install-list">${items}</ul>`
+  );
+}
+
+function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
   if (!root) return;
   root.className = 'zero-session';
   root.innerHTML = `
@@ -34,10 +66,12 @@ function renderUsageGuide(): void {
       <h1 id="zero-session-title">${t('zero_session_title')}</h1>
       <p class="zero-session-intro">${t('zero_session_intro')}</p>
       <ol class="zero-session-steps">
+        <li><div><strong>${t('zero_session_install_title')}</strong><span>${t('zero_session_install_body')}</span></div></li>
         <li><div><strong>${t('zero_session_step1_title')}</strong><span>${t('zero_session_step1_body')}</span></div></li>
         <li><div><strong>${t('zero_session_step2_title')}</strong><span>${t('zero_session_step2_body')}</span></div></li>
         <li><div><strong>${t('zero_session_step3_title')}</strong><span>${t('zero_session_step3_body')}</span></div></li>
       </ol>
+      ${statuses ? renderInstallStatusList(statuses) : ''}
       <div class="zero-session-footer"><button type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
     </section>`;
   bindUsageGuideButtons();
@@ -50,14 +84,20 @@ function bindUsageGuideButtons(): void {
   root.querySelector('[data-zero-wiring]')?.addEventListener('click', () => window.open(SHARED_SKILLS_URL, '_blank', 'noopener'));
 }
 
-function renderMissingGuide(entries: CliGuideEntry[]): void {
+function renderMissingGuide(entries: CliInstallStatus[]): void {
   if (!root) return;
-  const items = entries.map((entry) => (
-    `<li class="zero-session-cli-item">` +
-    `<span class="zero-session-cli-label">${escapeHtml(entry.displayName)}</span>` +
-    `<button type="button" class="zero-session-cli-copy" data-copy="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</button>` +
-    `</li>`
-  )).join('');
+  const items = entries.map((entry) => {
+    const link = entry.installUrl
+      ? `<a class="zero-session-cli-install-link" href="${escapeHtml(entry.installUrl)}" target="_blank" rel="noopener">${t('zero_session_install_link_label')}</a>`
+      : '';
+    return (
+      `<li class="zero-session-cli-item">` +
+      `<span class="zero-session-cli-label">${escapeHtml(entry.displayName)}</span>` +
+      `<button type="button" class="zero-session-cli-copy" data-copy="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</button>` +
+      link +
+      `</li>`
+    );
+  }).join('');
   const still = afterRecheckStillMissing
     ? `<p class="zero-session-missing-still">${t('zero_session_missing_recheck_still')}</p>`
     : '';
@@ -95,25 +135,44 @@ async function copyCommandName(button: HTMLButtonElement): Promise<void> {
   }
 }
 
+// fetchInstallLinkDefaults は provider id → 公式インストール手順 URL を取得する。
+// C2 の /api/install-link-defaults と同じ、settings.ts の usage-link-defaults 取得
+// と揃えた書き方（token をクエリに付ける生 fetch）。取得できなくても画面は
+// 出す方針なので、失敗時は例外を投げずに空 map を返す。
+async function fetchInstallLinkDefaults(): Promise<Record<string, string>> {
+  try {
+    const res = await fetch(`/api/install-link-defaults?token=${encodeURIComponent(token || '')}`);
+    if (!res.ok) return {};
+    const body = await res.json();
+    return body && typeof body === 'object' ? body : {};
+  } catch (_) {
+    return {};
+  }
+}
+
 async function paintEmptyState(fromRecheck = false): Promise<void> {
   const generation = ++paintGeneration;
-  const response = await loadProviderSummaries({ includeDisabled: true });
+  const [response, installLinks] = await Promise.all([
+    loadProviderSummaries({ includeDisabled: true }),
+    fetchInstallLinkDefaults(),
+  ]);
   if (generation !== paintGeneration) return;
   if (!root?.isConnected) return;
   if (!response) {
     afterRecheckStillMissing = false;
-    renderUsageGuide();
+    renderUsageGuide(null);
     return;
   }
   const missingIds = commandMissingIds(response.diagnostics);
   const available = hasAvailableAiCli(response.providers, missingIds);
+  const statuses = cliInstallStatuses(response.providers, missingIds, installLinks);
   if (available) {
     afterRecheckStillMissing = false;
-    renderUsageGuide();
+    renderUsageGuide(statuses);
     return;
   }
   if (fromRecheck) afterRecheckStillMissing = true;
-  renderMissingGuide(aiCliGuideEntries(response.providers));
+  renderMissingGuide(statuses);
 }
 
 async function recheckCliAvailability(): Promise<void> {

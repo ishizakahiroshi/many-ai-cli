@@ -285,3 +285,14 @@ func (s *Server) handleUsageLinkDefaults(w http.ResponseWriter, r *http.Request)
 	defaults := s.usageLinkCache.get(config.DefaultUsageLinkSource)
 	writeJSON(w, defaults)
 }
+
+// handleInstallLinkDefaults は全 provider の公式インストール手順 URL を返す。
+// GitHub の resources/install-links/defaults.json から TTL 24h でキャッシュして提供し、
+// 取得失敗時は空の map を返す（静的フォールバックは持たない）。
+func (s *Server) handleInstallLinkDefaults(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	defaults := s.installLinkCache.get(config.DefaultInstallLinkSource)
+	writeJSON(w, defaults)
+}

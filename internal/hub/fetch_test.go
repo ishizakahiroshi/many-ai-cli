@@ -169,6 +169,69 @@ func TestFetchUsageLinkDefaultsRejectsNon2xx(t *testing.T) {
 	}
 }
 
+func TestFetchInstallLinkDefaultsRejectsNon2xx(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
+
+	_, err := fetchInstallLinkDefaults(ts.URL)
+	if err == nil {
+		t.Fatal("expected error for 500, got nil")
+	}
+}
+
+func TestFetchInstallLinkDefaultsReadsValidJSON(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"claude":"https://example.com/claude","codex":"https://example.com/codex"}`))
+	}))
+	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
+
+	got, err := fetchInstallLinkDefaults(ts.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got["claude"] != "https://example.com/claude" {
+		t.Fatalf("expected claude URL to be read, got %+v", got)
+	}
+	if got["codex"] != "https://example.com/codex" {
+		t.Fatalf("expected codex URL to be read, got %+v", got)
+	}
+}
+
+func TestSanitizeInstallLinkDefaultsDropsUnsafeURLs(t *testing.T) {
+	fetched := InstallLinkDefaults{
+		"claude":  "https://example.com/claude",
+		"http":    "http://example.com/insecure",
+		"js":      "javascript:alert(1)",
+		"missing": "",
+	}
+	got := sanitizeInstallLinkDefaults(fetched)
+	if len(got) != 1 {
+		t.Fatalf("expected only the https:// entry to survive, got %+v", got)
+	}
+	if got["claude"] != "https://example.com/claude" {
+		t.Fatalf("expected claude URL to survive sanitization, got %+v", got)
+	}
+}
+
+func TestInstallLinkCacheReturnsEmptyMapOnFetchFailure(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
+
+	cache := newInstallLinkCache()
+	got := cache.get(ts.URL)
+	if len(got) != 0 {
+		t.Fatalf("expected empty map on fetch failure, got %+v", got)
+	}
+}
+
 // --- C4: 負キャッシュ ---
 
 func TestModelsRemoteCacheNegativeTTL(t *testing.T) {
