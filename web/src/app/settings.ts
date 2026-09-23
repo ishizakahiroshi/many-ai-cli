@@ -1327,7 +1327,9 @@ function initSettingsInformationArchitecture(): void {
   const panel = document.getElementById('settings-panel');
   const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
   const status = document.getElementById('settings-search-status');
-  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-level]'));
+  // セクションの <details> も同じ data-settings-level（かんたん/すべての分類）を持つので、
+  // 属性だけで拾うとセクション内のクリックで表示種別が切り替わる。切替ボタンの入れ物に絞る。
+  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.settings-ia-level [data-settings-level]'));
   const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
   if (!panel || !search || levelButtons.length === 0 || sections.length === 0) return;
 
