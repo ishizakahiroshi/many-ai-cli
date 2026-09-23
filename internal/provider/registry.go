@@ -189,5 +189,15 @@ func cloneDefinition(input Definition) Definition {
 		presentation := *input.Presentation
 		out.Presentation = &presentation
 	}
+	if input.Update != nil {
+		update := *input.Update
+		update.VersionArgs = append([]string(nil), input.Update.VersionArgs...)
+		update.Args = append([]string(nil), input.Update.Args...)
+		if input.Update.Enabled != nil {
+			enabled := *input.Update.Enabled
+			update.Enabled = &enabled
+		}
+		out.Update = &update
+	}
 	return out
 }

@@ -1,0 +1,96 @@
+/* cli-maintenance.css — 導入状況一覧の「導入済み」行の見た目（cli-maintenance.ts）。
+   既存の .zero-session-cli-item の配色・境界線に揃える（plan_provider-cli-update_c4_list-ui.md）。
+   初回画面（.zero-session-cli-maintenance-slot 経由）と「設定 → AI CLI 連携」
+   （#cli-maintenance-panel）の両方から差し込まれる。 */
+
+.cli-maint-heading { margin: 18px 0 10px; color: var(--text); font-size: .9rem; font-weight: 600; }
+.cli-maint-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.cli-maint-note { margin: 0 0 10px; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+
+.cli-maint-btn {
+  display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line);
+  border-radius: 999px; padding: 5px 14px; background: var(--bg-elev); color: var(--text);
+  font: inherit; font-size: .84rem; cursor: pointer;
+}
+.cli-maint-btn:hover { border-color: var(--accent); }
+.cli-maint-btn.is-primary { border-color: var(--accent); background: var(--accent); color: var(--accent-text, #fff); }
+.cli-maint-btn.is-disabled, .cli-maint-btn[disabled] { opacity: .6; cursor: default; pointer-events: none; }
+
+.cli-maint-list { display: grid; gap: 8px; margin: 0 0 16px; }
+.cli-maint-row {
+  display: grid; grid-template-columns: 18px 20px minmax(8em, 14em) minmax(0, 1fr) auto auto;
+  align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg-elev);
+  border: 1px solid var(--line); border-radius: 10px; font-size: .86rem;
+}
+.cli-maint-row-missing { border-style: dashed; }
+.cli-maint-chk { color: var(--ok, #2e7d32); font-weight: 700; text-align: center; }
+.cli-maint-name { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.cli-maint-version-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cli-maint-version { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82rem; color: var(--text); overflow-wrap: anywhere; }
+.cli-maint-version-unchecked, .cli-maint-version-checking { font-family: inherit; color: var(--muted); }
+.cli-maint-version-error { font-family: inherit; color: var(--bad, #c0392b); }
+.cli-maint-version-sub { font-size: .74rem; color: var(--muted); }
+.cli-maint-status { color: var(--muted); font-size: .8rem; white-space: nowrap; }
+.cli-maint-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.cli-maint-note-inline { color: var(--muted); font-size: .78rem; text-align: right; }
+.cli-maint-pill { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; font-size: .72rem; color: var(--muted); }
+.cli-maint-install-link { color: var(--accent); font-size: .84rem; text-decoration: none; }
+.cli-maint-install-link:hover { text-decoration: underline; }
+.cli-maint-install-unavailable { color: var(--muted); font-size: .82rem; }
+
+.cli-maint-tag {
+  display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px;
+  font-size: .76rem; font-weight: 600; color: var(--text); background: var(--bg-elev);
+}
+.cli-maint-tag.is-ok { border-color: var(--ok, #2e7d32); color: var(--ok, #2e7d32); }
+.cli-maint-tag.is-accent { border-color: var(--accent); color: var(--accent); }
+.cli-maint-tag.is-warn { border-color: var(--warn, #d4a017); color: var(--warn, #d4a017); }
+.cli-maint-tag.is-bad { border-color: var(--bad, #c0392b); color: var(--bad, #c0392b); }
+
+.cli-maint-failure-row {
+  margin: -2px 0 0; padding: 8px 12px; border: 1px dashed var(--bad, #c0392b); border-radius: 10px;
+  background: var(--bg-elev); color: var(--text); font-size: .82rem; line-height: 1.5;
+}
+
+.cli-maint-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-elev); font-size: .84rem; }
+
+@media (max-width: 720px) {
+  .cli-maint-row { grid-template-columns: 18px 20px 1fr; row-gap: 4px; }
+  .cli-maint-row .cli-maint-version-cell, .cli-maint-row .cli-maint-status, .cli-maint-row .cli-maint-actions { grid-column: 1 / -1; }
+  .cli-maint-actions { justify-content: flex-start; }
+}
+
+/* ── 確認ダイアログ / ログダイアログ ──
+   ネイティブ <dialog> を position:fixed; inset:0; margin:auto で中央寄せする書き方は
+   spawn-confirm.css の .spawn-confirm-dialog に揃える。 */
+.cli-maint-confirm-dialog {
+  position: fixed; inset: 0; margin: auto; z-index: 12100; box-sizing: border-box;
+  width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px);
+  max-height: min(84dvh, 720px); padding: 0; overflow: hidden auto;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-elev);
+  color: var(--text); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+.cli-maint-log-dialog {
+  position: fixed; inset: 0; margin: auto; z-index: 12100; box-sizing: border-box;
+  width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px);
+  max-height: min(84dvh, 720px); padding: 0; overflow: hidden auto;
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--bg-elev);
+  color: var(--text); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+}
+.cli-maint-confirm-dialog::backdrop, .cli-maint-log-dialog::backdrop { background: rgba(0, 0, 0, 0.62); }
+.cli-maint-confirm-header {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2);
+  flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line);
+}
+.cli-maint-confirm-title { margin: 0; font-size: .95rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.cli-maint-confirm-body { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.cli-maint-confirm-group { display: flex; flex-direction: column; gap: 6px; font-size: .84rem; }
+.cli-maint-confirm-group strong { color: var(--text); }
+.cli-maint-confirm-item { color: var(--muted); overflow-wrap: anywhere; }
+.cli-maint-confirm-item code { font-size: .82rem; }
+.cli-maint-confirm-empty { font-style: italic; }
+.cli-maint-confirm-note { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.55; }
+.cli-maint-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+
+.cli-maint-log-body { padding: 12px 16px; overflow: auto; }
+.cli-maint-log-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .78rem; color: var(--text); }

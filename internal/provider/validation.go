@@ -59,6 +59,7 @@ func validateDefinitionObject(object map[string]json.RawMessage, definition Defi
 		"schema_version": {}, "id": {}, "display_name": {}, "description": {},
 		"enabled": {}, "launch": {}, "models": {}, "capabilities": {},
 		"adapters": {}, "presentation": {}, "approval_pattern_source": {}, "source": {},
+		"update": {},
 	}
 	for field := range object {
 		if _, ok := known[field]; !ok {
@@ -101,6 +102,9 @@ func validateDefinitionObject(object map[string]json.RawMessage, definition Defi
 		if len(definition.Presentation.Color) > MaxStringLength || containsControl(definition.Presentation.Color) {
 			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_presentation", Severity: SeverityError, Field: "presentation.color", Message: "presentation color is invalid"})
 		}
+	}
+	if definition.Update != nil {
+		diagnostics = append(diagnostics, validateUpdate(*definition.Update)...)
 	}
 	return diagnostics
 }
@@ -216,6 +220,24 @@ func validateHeadless(headless HeadlessDefinition) []Diagnostic {
 		diagnostics = append(diagnostics, Diagnostic{Code: "invalid_headless_prompt", Severity: SeverityError, Field: "launch.headless.prompt_via", Message: "prompt_via must be stdin or arg"})
 	}
 	diagnostics = append(diagnostics, validateArgs("launch.headless.args", headless.Args, false)...)
+	return diagnostics
+}
+
+func validateUpdate(update UpdateDefinition) []Diagnostic {
+	var diagnostics []Diagnostic
+	if update.Enabled != nil && *update.Enabled && len(update.Args) == 0 {
+		diagnostics = append(diagnostics, Diagnostic{Code: "update_enabled_without_args", Severity: SeverityError, Field: "update.enabled", Message: "update.enabled is true but update.args is empty"})
+	}
+	diagnostics = append(diagnostics, validateArgs("update.args", update.Args, false)...)
+	diagnostics = append(diagnostics, validateArgs("update.version_args", update.VersionArgs, false)...)
+	if update.Executable != "" {
+		if err := validateArg(update.Executable, "update.executable"); err != nil {
+			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_update_executable", Severity: SeverityError, Field: "update.executable", Message: err.Error()})
+		}
+	}
+	if update.TimeoutSeconds < 0 || update.TimeoutSeconds > maxUpdateTimeoutSec {
+		diagnostics = append(diagnostics, Diagnostic{Code: "invalid_update_timeout", Severity: SeverityError, Field: "update.timeout_seconds", Message: fmt.Sprintf("update.timeout_seconds must be between 0 and %d", maxUpdateTimeoutSec)})
+	}
 	return diagnostics
 }
 

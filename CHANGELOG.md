@@ -11,6 +11,29 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **The "install status" list — on the first-run screen and in Settings → AI
+  CLI integrations — now shows a provider icon per row, and can check CLI
+  versions and update them from the Hub.** A **Check versions** button runs
+  each CLI's `--version` on demand (never automatically), and shows the
+  result and the executable's last-modified date per row. **Update** (per
+  row) and **Update all** run together by default and open a confirmation
+  dialog first, showing the exact command that will run. Results come back as
+  a summary — updated / already latest / failed — plus a per-row reason for
+  any failure, a **Retry the failed ones** button that reruns only the failed
+  CLIs one at a time, and a **Log** button per run. The bundled 7 providers
+  ship with default update commands; Cursor Agent CLI and Command Code
+  default to update *off*, since updating can prompt for a re-login the Hub
+  cannot answer. Any provider's update command can be changed, or turned on
+  for a CLI you added yourself, in Settings → AI CLI integrations → edit →
+  *Version and update* (the bundled providers' "restore defaults" resets this
+  section along with the rest of that provider). A CLI with a running session
+  cannot be updated until the session ends, and starting a new session with a
+  CLI is blocked while it is being updated. Update output is written under
+  `~/.many-ai-cli/logs/cli-updates/` and swept by the same retention as
+  session logs. Codex's own `codex update` self-updates npm- and
+  Homebrew-managed installs, but not a VS Code extension-bundled `codex` or a
+  Windows Scoop install; Cursor's `cursor-agent` command still works as
+  Cursor's own backward-compatible alias for its current `agent` command.
 - **You can commit and push straight from the Review tab.** The header now has
   the same Commit all and push buttons as the Git tab, and Commit all opens the
   very same dialog — including Generate and Ask AI — so there is no second set

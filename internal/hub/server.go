@@ -861,6 +861,30 @@ type Server struct {
 	subscriptionUsageMu sync.Mutex
 	subscriptionUsage   *subscriptionUsageStore
 	usageProbe          *usageProbeManager
+	// cliVersions holds the single most recent "バージョン確認" result plus the
+	// in-flight run (if any). It is memory-only by design (経緯: 2026-09-23
+	// 決まったこと表「直近の結果は保存しない」), so a Hub restart clears it.
+	cliVersions *cliVersionState
+
+	// updatingCLIProviders is the "更新中" provider set (子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1). Guarded by
+	// sessionsMu, not a dedicated mutex, so the running-sessions check and
+	// the mark happen inside one critical section — see beginProviderUpdate.
+	updatingCLIProviders map[string]struct{}
+
+	// cliUpdateJobsMu guards the bounded in-memory history of "更新" jobs
+	// (cliUpdateJobHistoryLimit most recent). A Hub restart clears it, same
+	// as cliVersions.
+	cliUpdateJobsMu  sync.Mutex
+	cliUpdateJobs    []*cliUpdateJob
+	cliUpdateJobByID map[string]*cliUpdateJob
+
+	// hubCtx is Run's cancel-on-shutdown context, so background work an HTTP
+	// handler starts (the update job runner) actually stops at Hub shutdown.
+	// nil until Run begins serving; hubContext() falls back to
+	// context.Background() for tests that build *Server without calling Run.
+	hubCtxMu sync.Mutex
+	hubCtx   context.Context
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
@@ -1258,6 +1282,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		installLinkCache:      newInstallLinkCache(),
 		subscriptionUsage:     newSubscriptionUsageStore(),
 		usageProbe:            newUsageProbeManager(),
+		cliVersions:           newCLIVersionState(),
+		updatingCLIProviders:  map[string]struct{}{},
+		cliUpdateJobByID:      map[string]*cliUpdateJob{},
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
 		orchestration:         newOrchestrationManager(),
@@ -1454,6 +1481,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
 	mux.HandleFunc("/api/usage-link-defaults", s.handleUsageLinkDefaults)
 	mux.HandleFunc("/api/install-link-defaults", s.handleInstallLinkDefaults)
+	mux.HandleFunc("/api/cli-versions", s.handleCLIVersions)
+	mux.HandleFunc("/api/cli-updates", s.handleCLIUpdatesCreate)
+	mux.HandleFunc("/api/cli-updates/", s.handleCLIUpdatesItem)
+	mux.HandleFunc("/api/cli-update-eligibility", s.handleCLIUpdateEligibility)
 	mux.HandleFunc("/api/models", s.handleModels)
 	mux.HandleFunc("/api/approval-patterns", s.handleApprovalPatterns)
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)
@@ -1567,6 +1598,9 @@ func (s *Server) Run(ctx context.Context) error {
 	s.stopMu.Lock()
 	s.stopFunc = cancel
 	s.stopMu.Unlock()
+	s.hubCtxMu.Lock()
+	s.hubCtx = runCtx
+	s.hubCtxMu.Unlock()
 
 	pidPath := filepath.Join(os.TempDir(), "many-ai-cli.pid")
 	killStalePid(pidPath)
@@ -1661,6 +1695,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
+	s.safeGo("clean_cli_update_logs", s.cleanCliUpdateLogs)
 	s.safeGo("clean_orchestration_artifacts", s.cleanOrchestrationArtifacts)
 	s.safeGo("clean_handoff", s.cleanHandoff)
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })

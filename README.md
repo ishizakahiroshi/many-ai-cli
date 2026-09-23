@@ -64,6 +64,8 @@ Gemini CLI is intentionally out of scope.
 
 Want to run a CLI `many-ai-cli` does not wrap out of the box — including one it deliberately excludes here? You can register it yourself; see [Custom providers](#custom-providers-power-users) below.
 
+The install-status list (first-run screen, and Settings → AI CLI integrations) can check each CLI's version and update it from the Hub — on demand only, never on startup or on a schedule. Update runs the command from that provider's own "Version and update" settings, showing you the exact command in a confirmation dialog first; a CLI with a running session cannot be updated until the session ends. The bundled 7 providers ship with a default update command, except Cursor Agent CLI and Command Code, which default to update *off* because updating can ask you to log in again. Change any provider's update command, or turn it on for a CLI you added yourself, in Settings → AI CLI integrations → edit → *Version and update*. This only ever sees a CLI the Hub itself launched or found on `PATH` — a copy running in a terminal window you opened yourself is invisible to it.
+
 ---
 
 ## Features

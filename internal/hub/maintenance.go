@@ -146,6 +146,7 @@ func (s *Server) maintenanceLoop(ctx context.Context) {
 			s.cleanAttachments()
 			s.cleanSpawnLogs()
 			s.cleanSessionLogs()
+			s.cleanCliUpdateLogs()
 			s.cleanOrchestrationArtifacts()
 			s.cleanHandoff()
 		}

@@ -17,5 +17,10 @@
     "approval": "approval:command-code-v1",
     "transcript": "history:command-code-v1",
     "permissions": "permissions:generic-v1"
+  },
+  "update": {
+    "args": ["update"],
+    "enabled": false,
+    "login_may_be_required": true
   }
 }

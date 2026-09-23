@@ -7,8 +7,13 @@ import {
   originLabelKey,
   providerErrorMessage,
   providerStatusKind,
+  providerUpdateFormValuesFromUpdate,
+  providerUpdateFromFormValues,
+  providerUpdateIsDefault,
+  providerUpdateLoginMayBeRequired,
   statusLabelKey,
   suggestProviderId,
+  type ProviderUpdateFormValues,
 } from './provider-manager-view.js';
 
 test('suggestProviderId: 表示名から小文字スラッグを作る', () => {
@@ -87,4 +92,92 @@ test('formatDiagnosticMessages: 空メッセージを捨てて error 有無を�
   ]);
   assert.equal(formatted.hasError, true);
   assert.equal(formatted.text, 'unknown field is ignored id is required');
+});
+
+test('providerUpdateFormValuesFromUpdate/providerUpdateFromFormValues: 空白区切りの往復変換', () => {
+  const values = providerUpdateFormValuesFromUpdate({ version_args: ['--version'], args: ['update', '--yes'], executable: 'claude', enabled: true, timeout_seconds: 120 });
+  assert.equal(values.versionArgs, '--version');
+  assert.equal(values.args, 'update --yes');
+  assert.equal(values.executable, 'claude');
+  assert.equal(values.enabled, true);
+  assert.equal(values.timeoutSeconds, '120');
+  const result = providerUpdateFromFormValues(values);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.update.version_args, ['--version']);
+    assert.deepEqual(result.update.args, ['update', '--yes']);
+    assert.equal(result.update.executable, 'claude');
+    assert.equal(result.update.enabled, true);
+    assert.equal(result.update.timeout_seconds, 120);
+  }
+});
+
+test('providerUpdateFormValuesFromUpdate: update 無しの定義は「更新しない・引数空」で読める', () => {
+  const fromUndefined = providerUpdateFormValuesFromUpdate(undefined);
+  assert.equal(fromUndefined.enabled, false);
+  assert.equal(fromUndefined.versionArgs, '');
+  assert.equal(fromUndefined.args, '');
+  assert.equal(fromUndefined.executable, '');
+  assert.equal(fromUndefined.timeoutSeconds, '');
+  const fromNull = providerUpdateFormValuesFromUpdate(null);
+  assert.equal(fromNull.enabled, false);
+  assert.equal(fromNull.args, '');
+});
+
+test('providerUpdateFormValuesFromUpdate: enabled 省略時は args の有無から決める（UpdateEnabled と同じ規則）', () => {
+  assert.equal(providerUpdateFormValuesFromUpdate({ args: ['update'] }).enabled, true);
+  assert.equal(providerUpdateFormValuesFromUpdate({}).enabled, false);
+});
+
+test('providerUpdateFromFormValues: 更新の引数が空で ON はエラー', () => {
+  const values: ProviderUpdateFormValues = { enabled: true, versionArgs: '', executable: '', args: '', timeoutSeconds: '' };
+  const result = providerUpdateFromFormValues(values);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.key, 'settings_ai_providers_update_enabled_without_args');
+});
+
+test('providerUpdateFromFormValues: 打ち切り秒が 0〜3600 の外ならエラー、範囲内と空欄は通る', () => {
+  const base: ProviderUpdateFormValues = { enabled: false, versionArgs: '', executable: '', args: '', timeoutSeconds: '' };
+  assert.equal(providerUpdateFromFormValues({ ...base, timeoutSeconds: '-1' }).ok, false);
+  assert.equal(providerUpdateFromFormValues({ ...base, timeoutSeconds: '3601' }).ok, false);
+  assert.equal(providerUpdateFromFormValues({ ...base, timeoutSeconds: '12.5' }).ok, false);
+  assert.equal(providerUpdateFromFormValues({ ...base, timeoutSeconds: 'abc' }).ok, false);
+  const zero = providerUpdateFromFormValues({ ...base, timeoutSeconds: '0' });
+  assert.equal(zero.ok, true);
+  if (zero.ok) assert.equal(zero.update.timeout_seconds, 0);
+  const max = providerUpdateFromFormValues({ ...base, timeoutSeconds: '3600' });
+  assert.equal(max.ok, true);
+  if (max.ok) assert.equal(max.update.timeout_seconds, 3600);
+  const blank = providerUpdateFromFormValues(base);
+  assert.equal(blank.ok, true);
+  if (blank.ok) assert.equal(blank.update.timeout_seconds, undefined);
+});
+
+test('providerUpdateFromFormValues: 空欄フィールドは明示的に undefined を返す（詳細JSONの古い値を上書きするため）', () => {
+  const result = providerUpdateFromFormValues({ enabled: false, versionArgs: '', executable: '', args: '', timeoutSeconds: '' });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.update.version_args, undefined);
+    assert.equal(result.update.args, undefined);
+    assert.equal(result.update.executable, undefined);
+    assert.equal(result.update.enabled, false);
+    assert.equal('version_args' in result.update, true);
+    assert.equal('executable' in result.update, true);
+  }
+});
+
+test('providerUpdateIsDefault: origin が embedded または未指定なら既定値扱い', () => {
+  assert.equal(providerUpdateIsDefault(undefined), true);
+  assert.equal(providerUpdateIsDefault({}), true);
+  assert.equal(providerUpdateIsDefault({ update: { origin: 'embedded' } }), true);
+  assert.equal(providerUpdateIsDefault({ update: {} }), true);
+  assert.equal(providerUpdateIsDefault({ update: { origin: 'override' } }), false);
+  assert.equal(providerUpdateIsDefault({ update: { origin: 'user' } }), false);
+});
+
+test('providerUpdateLoginMayBeRequired: login_may_be_required が true のときだけ true', () => {
+  assert.equal(providerUpdateLoginMayBeRequired({ login_may_be_required: true }), true);
+  assert.equal(providerUpdateLoginMayBeRequired({ login_may_be_required: false }), false);
+  assert.equal(providerUpdateLoginMayBeRequired({}), false);
+  assert.equal(providerUpdateLoginMayBeRequired(undefined), false);
 });

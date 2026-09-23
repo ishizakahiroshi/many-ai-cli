@@ -84,6 +84,12 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	if !validOrchestrationProvider(spec.Provider) {
 		return 0, fmt.Errorf("invalid provider")
 	}
+	// 更新中の provider は起動させない（子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1: 「更新中の集合に入った
+	// 後に起動が来たら必ず止まる」）。
+	if s.providerUpdating(spec.Provider) {
+		return 0, fmt.Errorf("provider %q is currently updating", spec.Provider)
+	}
 	// profile は env を組み立てる前に解決する。存在しない / 無効化された profile を
 	// 指定された場合はここで失敗させ、**別アカウントで黙って起動しない**。
 	subEnv, _, subErr := s.subscriptionLaunch(spec.Provider, spec.SubscriptionProfileID)
@@ -602,6 +608,12 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.validSpawnProvider(body.Provider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
+		return
+	}
+	// 更新中の provider は起動させない（子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1）。
+	if s.providerUpdating(body.Provider) {
+		writeJSONError(w, http.StatusConflict, "provider_updating", "provider is currently updating")
 		return
 	}
 	// custom provider かどうかは以降で何度か使う（subscription 早期拒否・
@@ -1248,6 +1260,12 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Preset == "ai+shell" && !s.validGridAIProvider(aiProvider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")
+		return
+	}
+	// 更新中の provider は起動させない（子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1）。
+	if body.Preset == "ai+shell" && s.providerUpdating(aiProvider) {
+		writeJSONError(w, http.StatusConflict, "provider_updating", "provider is currently updating")
 		return
 	}
 

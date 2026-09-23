@@ -6,12 +6,19 @@ import {
   hasAvailableAiCli,
   type CliInstallStatus,
 } from './cli-availability.js';
+import { fetchInstallLinkDefaults, missingCliRowsHtml, mountCliMaintenance, type CliMaintenanceHandle } from './cli-maintenance.js';
 import { loadProviderSummaries } from './provider-store.js';
-import { escapeHtml, showToast, token } from './util.js';
+import { providerIconHtml } from './session-list.js';
+import { escapeHtml, showToast } from './util.js';
 
 let root: HTMLElement | null = null;
 let afterRecheckStillMissing = false;
 let paintGeneration = 0;
+// installed（導入済み）の行はここへ委譲する（plan_provider-cli-update_c4_list-ui.md）。
+// renderUsageGuide が呼ばれるたびに作り直すので、前の画面用のポーリングを止めてから
+// 新しいものを作る（root ごと innerHTML を書き換えるため、古いハンドルは残しても
+// DOM は既に無い — が setInterval は残るので明示的に destroy する）。
+let maintenanceHandle: CliMaintenanceHandle | null = null;
 
 /**
  * Procedure for sharing one skills shelf and one canonical rule file across CLIs.
@@ -26,39 +33,19 @@ const SHARED_SKILLS_URL =
   'https://github.com/ishizakahiroshi/many-ai-cli/blob/main/docs/manual_shared-skills-and-rules.md';
 
 // renderInstallStatusList は「入っている / 入っていない」の一覧を組み立てる。
-// statuses が空（provider 定義が無い等）なら見出しごと出さない。displayName・
-// installUrl は provider 定義 / install-links JSON 由来なので必ず escapeHtml を通す。
+// statuses が空（provider 定義が無い等）なら見出しごと出さない。導入済みの行は
+// mountCliMaintenance に委譲する（plan_provider-cli-update_c4_list-ui.md）。未導入の
+// 行（インストール手順リンク）は今のまま missingCliRowsHtml が持つ。見出しは
+// mountCliMaintenance 側が出すので、ここでは持たない（二重見出しを避ける）。
 function renderInstallStatusList(statuses: CliInstallStatus[]): string {
   if (!statuses.length) return '';
-  const items = statuses.map((status) => {
-    if (status.installed) {
-      return (
-        `<li class="zero-session-cli-item zero-session-cli-item-installed">` +
-        `<span class="zero-session-cli-check" aria-hidden="true">✓</span>` +
-        `<span class="zero-session-cli-label">${escapeHtml(status.displayName)}</span>` +
-        `<span class="zero-session-cli-status">${t('zero_session_install_status_installed')}</span>` +
-        `</li>`
-      );
-    }
-    const link = status.installUrl
-      ? `<a class="zero-session-cli-install-link" href="${escapeHtml(status.installUrl)}" target="_blank" rel="noopener">${t('zero_session_install_link_label')}</a>`
-      : `<span class="zero-session-cli-install-unavailable">${t('zero_session_install_link_unavailable')}</span>`;
-    return (
-      `<li class="zero-session-cli-item zero-session-cli-item-missing">` +
-      `<span class="zero-session-cli-label">${escapeHtml(status.displayName)}</span>` +
-      `<span class="zero-session-cli-status">${t('zero_session_install_status_missing')}</span>` +
-      link +
-      `</li>`
-    );
-  }).join('');
-  return (
-    `<p class="zero-session-cli-heading">${t('zero_session_install_status_heading')}</p>` +
-    `<ul class="zero-session-cli-list zero-session-install-list">${items}</ul>`
-  );
+  return `<div class="zero-session-cli-maintenance-slot" data-zero-cli-maintenance></div>${missingCliRowsHtml(statuses.filter((s) => !s.installed))}`;
 }
 
 function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
   if (!root) return;
+  maintenanceHandle?.destroy();
+  maintenanceHandle = null;
   root.className = 'zero-session';
   root.innerHTML = `
     <section class="zero-session-card" aria-labelledby="zero-session-title">
@@ -75,6 +62,8 @@ function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
       <div class="zero-session-footer"><button type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
     </section>`;
   bindUsageGuideButtons();
+  const slot = statuses ? root.querySelector<HTMLElement>('[data-zero-cli-maintenance]') : null;
+  if (slot) maintenanceHandle = mountCliMaintenance(slot, statuses!.filter((s) => s.installed));
 }
 
 function bindUsageGuideButtons(): void {
@@ -86,12 +75,15 @@ function bindUsageGuideButtons(): void {
 
 function renderMissingGuide(entries: CliInstallStatus[]): void {
   if (!root) return;
+  maintenanceHandle?.destroy();
+  maintenanceHandle = null;
   const items = entries.map((entry) => {
     const link = entry.installUrl
       ? `<a class="zero-session-cli-install-link" href="${escapeHtml(entry.installUrl)}" target="_blank" rel="noopener">${t('zero_session_install_link_label')}</a>`
       : '';
     return (
       `<li class="zero-session-cli-item">` +
+      providerIconHtml(entry.id, 16) +
       `<span class="zero-session-cli-label">${escapeHtml(entry.displayName)}</span>` +
       `<button type="button" class="zero-session-cli-copy" data-copy="${escapeHtml(entry.id)}">${escapeHtml(entry.id)}</button>` +
       link +
@@ -132,21 +124,6 @@ async function copyCommandName(button: HTMLButtonElement): Promise<void> {
     showToast(t('copied_to_clipboard'), button);
   } catch (_) {
     showToast(t('settings_doctor_copy_failed'), button);
-  }
-}
-
-// fetchInstallLinkDefaults は provider id → 公式インストール手順 URL を取得する。
-// C2 の /api/install-link-defaults と同じ、settings.ts の usage-link-defaults 取得
-// と揃えた書き方（token をクエリに付ける生 fetch）。取得できなくても画面は
-// 出す方針なので、失敗時は例外を投げずに空 map を返す。
-async function fetchInstallLinkDefaults(): Promise<Record<string, string>> {
-  try {
-    const res = await fetch(`/api/install-link-defaults?token=${encodeURIComponent(token || '')}`);
-    if (!res.ok) return {};
-    const body = await res.json();
-    return body && typeof body === 'object' ? body : {};
-  } catch (_) {
-    return {};
   }
 }
 
@@ -191,6 +168,8 @@ export function renderZeroSessionEmptyState(sessions: Iterable<SessionSnapshot>)
   const wrapper = document.getElementById('terminal-area-wrapper');
   if (!wrapper) return;
   if (!isEmpty) {
+    maintenanceHandle?.destroy();
+    maintenanceHandle = null;
     root?.remove();
     root = null;
     afterRecheckStillMissing = false;

@@ -29,6 +29,17 @@
     "adapters": {"type": "object"},
     "presentation": {"type": "object"},
     "approval_pattern_source": {"type": "string", "maxLength": 512},
-    "source": {"type": "object"}
+    "source": {"type": "object"},
+    "update": {
+      "type": "object",
+      "properties": {
+        "version_args": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "args": {"type": "array", "maxItems": 256, "items": {"type": "string", "maxLength": 1024}},
+        "executable": {"type": "string", "maxLength": 1024},
+        "enabled": {"type": "boolean"},
+        "login_may_be_required": {"type": "boolean"},
+        "timeout_seconds": {"type": "integer", "minimum": 0, "maximum": 3600}
+      }
+    }
   }
 }

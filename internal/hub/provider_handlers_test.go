@@ -360,6 +360,30 @@ func TestProviderListReportsCommandMissingDiagnostic(t *testing.T) {
 	}
 }
 
+func TestProviderDetailAPIIncludesUpdateBlock(t *testing.T) {
+	s := newProviderAPITestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/providers/claude?token=test-token", nil)
+	req.Header.Set("Origin", "http://127.0.0.1:47777")
+	req.Host = "127.0.0.1:47777"
+	resp := httptest.NewRecorder()
+	s.handleProviderRoute(resp, req)
+	var body struct {
+		Provider provider.Definition `json:"provider"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Provider.Update == nil {
+		t.Fatalf("expected claude detail response to include update, got %#v", body.Provider)
+	}
+	if len(body.Provider.Update.Args) == 0 {
+		t.Fatalf("expected claude update.args to be non-empty, got %#v", body.Provider.Update)
+	}
+	if body.Provider.Update.Enabled == nil || !*body.Provider.Update.Enabled {
+		t.Fatalf("expected claude update.enabled to be true, got %#v", body.Provider.Update)
+	}
+}
+
 func TestProviderListAPIUsesRegistryAndProtectsSecrets(t *testing.T) {
 	s := newProviderAPITestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/providers?token=test-token", nil)

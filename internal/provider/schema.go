@@ -47,6 +47,7 @@ type Definition struct {
 	Presentation          *PresentationDefinition `json:"presentation,omitempty"`
 	ApprovalPatternSource string                  `json:"approval_pattern_source,omitempty"`
 	Source                SourceRef               `json:"source,omitempty"`
+	Update                *UpdateDefinition       `json:"update,omitempty"`
 }
 
 type LaunchDefinition struct {
@@ -80,6 +81,19 @@ type HeadlessDefinition struct {
 type PresentationDefinition struct {
 	IconText string `json:"icon_text,omitempty"`
 	Color    string `json:"color,omitempty"`
+}
+
+// UpdateDefinition describes how a provider CLI checks its version and how it
+// updates itself. It is read-only data: the argv it produces is resolved by
+// the helpers in update.go, never assembled ad hoc by callers, so every
+// caller (version check, update job, settings UI) agrees on the same rules.
+type UpdateDefinition struct {
+	VersionArgs        []string `json:"version_args,omitempty"`
+	Args               []string `json:"args,omitempty"`
+	Executable         string   `json:"executable,omitempty"`
+	Enabled            *bool    `json:"enabled,omitempty"`
+	LoginMayBeRequired bool     `json:"login_may_be_required,omitempty"`
+	TimeoutSeconds     int      `json:"timeout_seconds,omitempty"`
 }
 
 type AdapterRefs struct {

@@ -191,3 +191,127 @@ export function cycleDialogFocus(root: HTMLElement, event: KeyboardEvent): boole
   }
   return false;
 }
+
+// MAX_UPDATE_TIMEOUT_SECONDS mirrors maxUpdateTimeoutSec in
+// internal/provider/update.go; DEFAULT_UPDATE_TIMEOUT_SECONDS mirrors
+// defaultUpdateTimeoutSec there. Both are display-only here (an empty form
+// field means "use the server's default", never a literal 0 sent to save).
+export const MAX_UPDATE_TIMEOUT_SECONDS = 3600;
+export const DEFAULT_UPDATE_TIMEOUT_SECONDS = 300;
+
+export type ProviderUpdateFormValues = {
+  enabled: boolean;
+  versionArgs: string;
+  executable: string;
+  args: string;
+  timeoutSeconds: string;
+};
+
+function stringArrayField(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+// splitArgLine turns the form's one-line, space-separated input back into an
+// argv array. Quoted/whitespace-containing arguments are out of scope on
+// purpose (the form's hint text says to use the advanced JSON editor for
+// those) so this never has to reimplement shell-style quote parsing.
+function splitArgLine(value: string): string[] {
+  return value.trim().split(/\s+/).filter(Boolean);
+}
+
+// providerUpdateFormValuesFromUpdate reads a provider's `update` block (or
+// `undefined`/`null` for a definition with no block at all, e.g. a freshly
+// added custom provider) into the flat strings the settings form's inputs
+// use. `enabled` falls back to "args is non-empty" when the block omits an
+// explicit flag, mirroring UpdateEnabled in internal/provider/update.go so
+// the form's initial toggle state agrees with what the server would compute.
+export function providerUpdateFormValuesFromUpdate(update: unknown): ProviderUpdateFormValues {
+  const source = (update && typeof update === 'object' && !Array.isArray(update)) ? update as Record<string, unknown> : {};
+  const versionArgs = stringArrayField(source.version_args);
+  const args = stringArrayField(source.args);
+  const enabled = typeof source.enabled === 'boolean' ? source.enabled : args.length > 0;
+  const timeoutSeconds = typeof source.timeout_seconds === 'number' && source.timeout_seconds > 0
+    ? String(source.timeout_seconds)
+    : '';
+  return {
+    enabled,
+    versionArgs: versionArgs.join(' '),
+    executable: typeof source.executable === 'string' ? source.executable : '',
+    args: args.join(' '),
+    timeoutSeconds,
+  };
+}
+
+export type ProviderUpdateFormError = { key: string; fallback: string };
+
+export type ProviderUpdateFromFormResult =
+  | { ok: true; update: Record<string, unknown> }
+  | { ok: false; error: ProviderUpdateFormError };
+
+// providerUpdateFromFormValues is the inverse of
+// providerUpdateFormValuesFromUpdate. It always returns every update.* key,
+// using an explicit `undefined` (never an omitted key) for anything the form
+// leaves blank. That matters to the caller in provider-manager.ts: the
+// result is spread over whatever `update` block the advanced-JSON textarea
+// still carries, and only an explicit `undefined` in the spread's later
+// object wins over — and then JSON.stringify drops — a stale key from
+// there. An omitted key would leave the old value in place instead of
+// clearing it.
+export function providerUpdateFromFormValues(values: ProviderUpdateFormValues): ProviderUpdateFromFormResult {
+  const versionArgs = splitArgLine(values.versionArgs);
+  const args = splitArgLine(values.args);
+  const executable = values.executable.trim();
+  if (values.enabled && args.length === 0) {
+    return {
+      ok: false,
+      error: { key: 'settings_ai_providers_update_enabled_without_args', fallback: 'Enter an update command before turning this on.' },
+    };
+  }
+  let timeoutSeconds: number | undefined;
+  const timeoutRaw = values.timeoutSeconds.trim();
+  if (timeoutRaw !== '') {
+    const parsed = Number(timeoutRaw);
+    if (!Number.isInteger(parsed) || parsed < 0 || parsed > MAX_UPDATE_TIMEOUT_SECONDS) {
+      return {
+        ok: false,
+        error: {
+          key: 'settings_ai_providers_update_timeout_invalid',
+          fallback: `Timeout must be a whole number of seconds between 0 and ${MAX_UPDATE_TIMEOUT_SECONDS}.`,
+        },
+      };
+    }
+    timeoutSeconds = parsed;
+  }
+  return {
+    ok: true,
+    update: {
+      version_args: versionArgs.length > 0 ? versionArgs : undefined,
+      args: args.length > 0 ? args : undefined,
+      executable: executable || undefined,
+      enabled: values.enabled,
+      timeout_seconds: timeoutSeconds,
+    },
+  };
+}
+
+// providerUpdateIsDefault reports whether a provider's `update` block still
+// matches its distributed/embedded value. field_origins is stamped
+// uniformly across every top-level key of a provider the instant any layer
+// overrides that provider at all (registry.go mergeLayers rebuilds the whole
+// fields map from the last layer's source on every merge, not just the keys
+// that layer actually set), so this cannot isolate "only update changed"
+// from "some other field changed". It answers the coarser question the
+// settings form actually needs instead: "has this provider ever been
+// edited", which is what determines whether the existing whole-provider
+// "reset to distributed default" action would revert this section too.
+export function providerUpdateIsDefault(fieldOrigins: unknown): boolean {
+  if (!fieldOrigins || typeof fieldOrigins !== 'object') return true;
+  const entry = (fieldOrigins as Record<string, unknown>).update;
+  if (!entry || typeof entry !== 'object') return true;
+  const origin = (entry as Record<string, unknown>).origin;
+  return origin === 'embedded' || origin === undefined || origin === '';
+}
+
+export function providerUpdateLoginMayBeRequired(update: unknown): boolean {
+  return !!(update && typeof update === 'object' && (update as Record<string, unknown>).login_may_be_required === true);
+}

@@ -1,5 +1,11 @@
 import { t } from '../i18n.js';
 import {
+  cliInstallStatuses,
+  commandMissingIds,
+  type CliInstallStatus,
+} from './cli-availability.js';
+import { fetchInstallLinkDefaults, missingCliRowsHtml, mountCliMaintenance, type CliMaintenanceHandle } from './cli-maintenance.js';
+import {
   createRequestGuard,
   cycleDialogFocus,
   duplicateProviderDraft,
@@ -8,8 +14,13 @@ import {
   originLabelKey,
   providerErrorMessage,
   providerStatusKind,
+  providerUpdateFormValuesFromUpdate,
+  providerUpdateFromFormValues,
+  providerUpdateIsDefault,
+  providerUpdateLoginMayBeRequired,
   statusLabelKey,
   suggestProviderId,
+  type ProviderUpdateFormValues,
 } from './provider-manager-view.js';
 import {
   createProvider,
@@ -67,6 +78,9 @@ function definitionForAdvancedPreview(definition: ProviderEffectiveDefinition): 
 
 function initProviderManager(): void {
   const list = document.getElementById('provider-manager-list');
+  const cliMaintenancePanel = document.getElementById('cli-maintenance-panel');
+  const cliMaintenanceMissing = document.getElementById('cli-maintenance-missing');
+  let cliMaintenanceHandle: CliMaintenanceHandle | null = null;
   const addButton = document.getElementById('provider-add-btn') as HTMLButtonElement | null;
   const status = document.getElementById('provider-manager-status');
   const overlay = document.getElementById('provider-enrollment-overlay');
@@ -75,6 +89,14 @@ function initProviderManager(): void {
   const idInput = document.getElementById('provider-enrollment-id') as HTMLInputElement | null;
   const labelInput = document.getElementById('provider-enrollment-label') as HTMLInputElement | null;
   const executableInput = document.getElementById('provider-enrollment-executable') as HTMLInputElement | null;
+  const updateEnabledInput = document.getElementById('provider-enrollment-update-enabled') as HTMLInputElement | null;
+  const updateVersionArgsInput = document.getElementById('provider-enrollment-update-version-args') as HTMLInputElement | null;
+  const updateExecutableInput = document.getElementById('provider-enrollment-update-executable') as HTMLInputElement | null;
+  const updateArgsInput = document.getElementById('provider-enrollment-update-args') as HTMLInputElement | null;
+  const updateTimeoutInput = document.getElementById('provider-enrollment-update-timeout') as HTMLInputElement | null;
+  const updateLoginNote = document.getElementById('provider-enrollment-update-login-note') as HTMLElement | null;
+  const updateArgsRequiredNote = document.getElementById('provider-enrollment-update-args-required-note') as HTMLElement | null;
+  const updateStatusNote = document.getElementById('provider-enrollment-update-status') as HTMLElement | null;
   const advancedInput = document.getElementById('provider-enrollment-advanced') as HTMLTextAreaElement | null;
   const validateButton = document.getElementById('provider-enrollment-validate') as HTMLButtonElement | null;
   const saveButton = document.getElementById('provider-enrollment-save') as HTMLButtonElement | null;
@@ -88,7 +110,9 @@ function initProviderManager(): void {
   const historyResetButton = document.getElementById('provider-history-reset') as HTMLButtonElement | null;
   const historyRevisionsList = document.getElementById('provider-history-revisions');
   const historyBackupsList = document.getElementById('provider-history-backups');
-  if (!list || !addButton || !status || !overlay || !form || !title || !idInput || !labelInput || !executableInput || !advancedInput || !validateButton || !saveButton || !cancelButton || !closeButton || !result
+  if (!list || !addButton || !status || !overlay || !form || !title || !idInput || !labelInput || !executableInput
+    || !updateEnabledInput || !updateVersionArgsInput || !updateExecutableInput || !updateArgsInput || !updateTimeoutInput || !updateLoginNote || !updateArgsRequiredNote || !updateStatusNote
+    || !advancedInput || !validateButton || !saveButton || !cancelButton || !closeButton || !result
     || !historyOverlay || !historyPanel || !historyCloseButton || !historyStatus || !historyResetButton || !historyRevisionsList || !historyBackupsList) return;
 
   // historyRecovery has no counterpart in index.html: it is created here and
@@ -152,6 +176,61 @@ function initProviderManager(): void {
     (closeButton as HTMLButtonElement).disabled = busy;
   };
 
+  // syncUpdateAvailability keeps the "show the update button" toggle from
+  // ever being ON while update.args is empty: the server rejects that
+  // combination (update_enabled_without_args), so this stops the user from
+  // reaching it in the first place instead of only catching it at save time.
+  const syncUpdateAvailability = (): void => {
+    const hasArgs = updateArgsInput.value.trim().length > 0;
+    if (!hasArgs) updateEnabledInput.checked = false;
+    updateEnabledInput.disabled = !hasArgs;
+    updateArgsRequiredNote.hidden = hasArgs;
+  };
+
+  const readUpdateFormValues = (): ProviderUpdateFormValues => ({
+    enabled: updateEnabledInput.checked,
+    versionArgs: updateVersionArgsInput.value,
+    executable: updateExecutableInput.value,
+    args: updateArgsInput.value,
+    timeoutSeconds: updateTimeoutInput.value,
+  });
+
+  const applyUpdateFormValues = (values: ProviderUpdateFormValues): void => {
+    updateVersionArgsInput.value = values.versionArgs;
+    updateExecutableInput.value = values.executable;
+    updateArgsInput.value = values.args;
+    updateTimeoutInput.value = values.timeoutSeconds;
+    updateEnabledInput.checked = values.enabled;
+    syncUpdateAvailability();
+    // syncUpdateAvailability may have just forced checked back to false
+    // (args empty but the loaded value claimed enabled) — that is the
+    // correct display, not a bug, since the toggle cannot show ON without
+    // an update command to run.
+  };
+
+  // renderUpdateStatus shows the section's login-required note (from the
+  // loaded definition, not user-editable here) and, for built-in providers
+  // only, whether this provider's `update` block is still the distributed
+  // default. Custom providers have no distributed default to compare
+  // against, so the note stays hidden for them.
+  const renderUpdateStatus = (update: unknown, isBuiltin: boolean, fieldOrigins: unknown): void => {
+    updateLoginNote.hidden = !providerUpdateLoginMayBeRequired(update);
+    if (!isBuiltin) {
+      updateStatusNote.hidden = true;
+      updateStatusNote.textContent = '';
+      return;
+    }
+    const stateText = providerUpdateIsDefault(fieldOrigins)
+      ? tx('settings_ai_providers_update_state_default', 'Still the default value.')
+      : tx('settings_ai_providers_update_state_changed', 'Changed from the default value.');
+    const resetHint = tx(
+      'settings_ai_providers_update_reset_hint',
+      'There is no separate reset for just this section — use "Reset to distributed default" above to revert the whole AI CLI, including this section.',
+    );
+    updateStatusNote.textContent = `${stateText} ${resetHint}`;
+    updateStatusNote.hidden = false;
+  };
+
   // definitionFromForm merges the required basic fields with the optional
   // advanced JSON: the basic id/display_name/launch.executable always win
   // (they are the only fields a user can edit without opening the advanced
@@ -161,11 +240,16 @@ function initProviderManager(): void {
   // passes through untouched.
   const definitionFromForm = (): { ok: true; definition: Record<string, unknown> } | { ok: false; message: string } => {
     const executable = executableInput.value.trim();
+    const updateResult = providerUpdateFromFormValues(readUpdateFormValues());
+    if (updateResult.ok === false) {
+      return { ok: false, message: tx(updateResult.error.key, updateResult.error.fallback) };
+    }
     const base: Record<string, unknown> = {
       schema_version: 1,
       id: idInput.value.trim(),
       display_name: labelInput.value.trim(),
       launch: executable ? { executable } : {},
+      update: updateResult.update,
     };
     const advancedRaw = advancedInput.value.trim();
     if (!advancedRaw) return { ok: true, definition: base };
@@ -183,12 +267,17 @@ function initProviderManager(): void {
       ? parsedObject.launch as Record<string, unknown>
       : {};
     const baseLaunch = base.launch as Record<string, unknown>;
+    const parsedUpdate = (parsedObject.update && typeof parsedObject.update === 'object' && !Array.isArray(parsedObject.update))
+      ? parsedObject.update as Record<string, unknown>
+      : {};
+    const baseUpdate = base.update as Record<string, unknown>;
     return {
       ok: true,
       definition: {
         ...parsedObject,
         ...base,
         launch: { ...parsedLaunch, ...baseLaunch },
+        update: { ...parsedUpdate, ...baseUpdate },
       },
     };
   };
@@ -225,6 +314,9 @@ function initProviderManager(): void {
     labelInput.value = value?.display_name || '';
     executableInput.value = '';
     executableInput.required = true;
+    applyUpdateFormValues(providerUpdateFormValuesFromUpdate(undefined));
+    updateStatusNote.hidden = true;
+    updateStatusNote.textContent = '';
     advancedInput.value = '';
     setFormBusy(!!editing?.pending);
     setResult('', '');
@@ -361,6 +453,7 @@ function initProviderManager(): void {
       if (diagnostic.code === 'command_missing') missingIds.add(owner.id);
     }
     render(response.providers, errorIds, missingIds);
+    void refreshCliMaintenance(response.providers, response.diagnostics);
     const formatted = formatDiagnosticMessages(response.diagnostics);
     if (formatted.hasError) {
       setStatus(formatted.text, true);
@@ -369,6 +462,27 @@ function initProviderManager(): void {
     setStatus(currentRevision
       ? tx('settings_ai_providers_revision', 'Revision {revision}', { revision: currentRevision })
       : '');
+  };
+
+  // refreshCliMaintenance places the same 導入状況一覧 part used on the zero-session
+  // screen above #provider-manager-list (画面案 S-01 / plan_provider-cli-update_c4_list-ui.md
+  // 「設定画面: #provider-manager-list の上に同じ部品を置く」). Independent of load()'s own
+  // error/missing highlighting above — this only needs id/display_name/enabled and the
+  // command_missing diagnostics, the same inputs cli-availability.ts's cliInstallStatuses
+  // already expects.
+  const refreshCliMaintenance = async (
+    providers: ProviderSummary[],
+    diagnostics: { code?: string; field?: string }[],
+  ): Promise<void> => {
+    if (!cliMaintenancePanel) return;
+    const missingIds = commandMissingIds(diagnostics);
+    const installLinks = await fetchInstallLinkDefaults();
+    const statuses: CliInstallStatus[] = cliInstallStatuses(providers, missingIds, installLinks);
+    const installed = statuses.filter((s) => s.installed);
+    const missing = statuses.filter((s) => !s.installed);
+    if (cliMaintenanceMissing) cliMaintenanceMissing.innerHTML = missingCliRowsHtml(missing);
+    if (cliMaintenanceHandle) await cliMaintenanceHandle.refresh(installed);
+    else cliMaintenanceHandle = mountCliMaintenance(cliMaintenancePanel, installed);
   };
 
   // editProvider pins the C2 fix: opening B's edit while A's detail fetch is
@@ -393,6 +507,8 @@ function initProviderManager(): void {
     executableInput.value = typeof launch.executable === 'string' ? launch.executable : '';
     const candidates = Array.isArray(launch.executable_candidates) ? launch.executable_candidates : [];
     executableInput.required = !(isBuiltin && !executableInput.value && candidates.length > 0);
+    applyUpdateFormValues(providerUpdateFormValuesFromUpdate(definition.update));
+    renderUpdateStatus(definition.update, isBuiltin, definition.field_origins);
     advancedInput.value = definitionForAdvancedPreview(definition);
     editing = {
       id: provider.id,
@@ -425,6 +541,11 @@ function initProviderManager(): void {
     idInput.value = draft.id;
     labelInput.value = `${draft.displayName}${tx('settings_ai_providers_copy_suffix', ' (copy)')}`;
     executableInput.value = typeof launch.executable === 'string' ? launch.executable : '';
+    // A duplicate always starts as a custom (non-builtin) provider, so
+    // renderUpdateStatus's default/changed note stays hidden here — only the
+    // login-required note (read from the source's update block) applies.
+    applyUpdateFormValues(providerUpdateFormValuesFromUpdate(definition.update));
+    renderUpdateStatus(definition.update, false, undefined);
     advancedInput.value = definitionForAdvancedPreview(definition);
     idTouched = true;
     setFormBusy(false);
@@ -863,6 +984,7 @@ function initProviderManager(): void {
   idInput.addEventListener('input', () => {
     idTouched = true;
   });
+  updateArgsInput.addEventListener('input', syncUpdateAvailability);
   document.addEventListener('provider-enrollment-open', () => showForm());
   document.addEventListener('i18n-ready', () => { void load(); });
   void load();

@@ -441,7 +441,12 @@ export function providerDisplayName(provider) {
 //
 // この関数が 9 provider ぶんの図形の単一ソース。index.html の .usage-menu-icon は同じ図形を
 // 静的 SVG で複製しているので、形を変えるときは両方を揃える。
-export function providerIconHtml(provider, size = 16) {
+//
+// iconText: 同梱 9 provider に当たらなかったとき（利用者が追加した AI）の頭文字を
+// 明示指定する（plan_provider-cli-update_c4_list-ui.md: 「presentation.icon_text が
+// あればそれを使う」）。省略時は従来どおり provider（id）の先頭 1 文字を使う。色は
+// 既定の .prov-shape のままで、新しい色の受け口はここでは作らない。
+export function providerIconHtml(provider, size = 16, iconText?: string) {
   const key = String(provider || '').toLowerCase();
   const parsedSize = Number(size);
   const safeSize = Number.isFinite(parsedSize) && parsedSize > 0 ? Math.min(Math.floor(parsedSize), 64) : 16;
@@ -474,7 +479,8 @@ export function providerIconHtml(provider, size = 16) {
   if (key === 'command-code') {
     return `<svg ${base}><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" ${txt}>M</text></svg>`;
   }
-  const letter = escapeHtml((String(provider || '?').trim()[0] || '?').toUpperCase());
+  const source = (iconText && iconText.trim()) || String(provider || '?').trim();
+  const letter = escapeHtml((source[0] || '?').toUpperCase());
   return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
 }
 

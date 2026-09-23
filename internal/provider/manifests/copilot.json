@@ -16,5 +16,9 @@
   "adapters": {
     "approval": "approval:copilot-v1",
     "permissions": "permissions:generic-v1"
+  },
+  "update": {
+    "args": ["update"],
+    "enabled": true
   }
 }

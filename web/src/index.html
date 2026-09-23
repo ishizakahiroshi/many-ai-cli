@@ -474,6 +474,8 @@
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_ai_providers_desc">Manage built-in and user-added command line providers. Basic registration needs only a display name and executable.</div>
           <div class="settings-note" data-i18n="settings_ai_providers_distribution">Official catalog import stays off until signing keys are configured. Downloaded definitions are never applied automatically.</div>
+          <div id="cli-maintenance-panel" class="cli-maint-panel"></div>
+          <div id="cli-maintenance-missing"></div>
           <div id="provider-manager-list" class="provider-manager-list" aria-live="polite"></div>
           <div class="settings-row-actions provider-manager-toolbar">
             <button id="provider-add-btn" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_add">Add AI CLI</button>
@@ -1121,6 +1123,38 @@
       <div class="settings-row">
         <label class="settings-label" for="provider-enrollment-executable" data-i18n="settings_ai_providers_executable">Executable or path</label>
         <input id="provider-enrollment-executable" class="settings-input-text" autocomplete="off" required>
+      </div>
+      <div class="provider-enrollment-update">
+        <h3 data-i18n="settings_ai_providers_update_heading">Version and update</h3>
+        <div class="settings-note" data-i18n="settings_ai_providers_update_precedence_hint">These fields take precedence over update in the advanced JSON below, the same way the executable field above does.</div>
+        <div class="settings-row">
+          <span class="settings-label" data-i18n="settings_ai_providers_update_enabled">Show the update button in the list</span>
+          <label class="approval-toggle">
+            <input type="checkbox" id="provider-enrollment-update-enabled">
+            <span class="approval-toggle-slider"></span>
+          </label>
+        </div>
+        <div id="provider-enrollment-update-login-note" class="settings-note" data-i18n="settings_ai_providers_update_login_note" hidden>Updating may ask you to log in.</div>
+        <div id="provider-enrollment-update-args-required-note" class="settings-note" data-i18n="settings_ai_providers_update_args_required" hidden>Enter an update command to turn this on.</div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-version-args" data-i18n="settings_ai_providers_update_version_args">Version check arguments</label>
+          <input id="provider-enrollment-update-version-args" class="settings-input-text" autocomplete="off">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-executable" data-i18n="settings_ai_providers_update_executable">Executable for update</label>
+          <input id="provider-enrollment-update-executable" class="settings-input-text" autocomplete="off">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-args" data-i18n="settings_ai_providers_update_args">Update arguments</label>
+          <input id="provider-enrollment-update-args" class="settings-input-text" autocomplete="off">
+        </div>
+        <div class="settings-note" data-i18n="settings_ai_providers_update_args_hint">One line, space-separated. An argument containing whitespace needs the advanced JSON editor below.</div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-timeout" data-i18n="settings_ai_providers_update_timeout">Timeout (seconds)</label>
+          <input id="provider-enrollment-update-timeout" class="settings-input-text" type="number" min="0" max="3600" step="1" autocomplete="off">
+        </div>
+        <div class="settings-note" data-i18n="settings_ai_providers_update_timeout_hint">Blank uses the default (300 seconds). 0-3600.</div>
+        <div id="provider-enrollment-update-status" class="settings-note" aria-live="polite" hidden></div>
       </div>
       <details class="settings-row provider-enrollment-advanced">
         <summary data-i18n="settings_ai_providers_advanced_toggle">Advanced (JSON)</summary>

@@ -21,5 +21,9 @@
     "usage": "usage:opencode-v1",
     "subscription": "subscription:opencode-v1",
     "permissions": "permissions:generic-v1"
+  },
+  "update": {
+    "args": ["upgrade"],
+    "enabled": true
   }
 }

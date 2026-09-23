@@ -61,6 +61,7 @@ export type ProviderDefinition = {
   adapters?: Record<string, unknown>;
   presentation?: Record<string, unknown>;
   approval_pattern_source?: string;
+  update?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
