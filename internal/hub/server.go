@@ -2441,6 +2441,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		// （画面は session_dismissed でカードごと消す）。
 		approvalClosure.dropActivity()
 		s.stopAgentChatTailLocked(ses)
+		s.stopSubagentTreePollLocked(ses)
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider

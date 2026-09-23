@@ -645,3 +645,95 @@ func TestRunSubagentTreePollCachesResolvedParentPath(t *testing.T) {
 		t.Fatalf("resolveCalls once the 30s retry window has elapsed = %d, want 2", resolveCalls)
 	}
 }
+
+// TestSubagentTreePollStoppedOnSessionEnd は監査 F-01 の修正検証テスト。
+// セッション終了（CLI 切断・終了）時および dismiss 時に subagent tree のポーリングタイマーが
+// 確実に停止され、終端状態（StateExited等）のセッションに対して runSubagentTreePoll が
+// 再スケジュールを行わないことを検証する。
+func TestSubagentTreePollStoppedOnSessionEnd(t *testing.T) {
+	t.Run("finalizeSubagentTreeOnSessionEnd stops timer and increments generation", func(t *testing.T) {
+		s := newTestServer()
+		s.cfg.Workflow.SubagentTreeEnabled = true
+		ses := registerTestSession(s, 1, "claude")
+
+		// タイマーを疑似的にセット
+		s.sessionsMu.Lock()
+		ses.subagentTimer = time.AfterFunc(time.Hour, func() {})
+		initialGen := ses.subagentGeneration
+		s.sessionsMu.Unlock()
+
+		// セッション終了通知
+		s.finalizeSubagentTreeOnSessionEnd(1)
+
+		s.sessionsMu.Lock()
+		defer s.sessionsMu.Unlock()
+		if ses.subagentTimer != nil {
+			t.Fatal("finalizeSubagentTreeOnSessionEnd did not clear subagentTimer")
+		}
+		if ses.subagentGeneration <= initialGen {
+			t.Fatalf("generation = %d, want > initialGen %d", ses.subagentGeneration, initialGen)
+		}
+	})
+
+	t.Run("runSubagentTreePoll does not reschedule on terminal session state", func(t *testing.T) {
+		terminalStates := []string{"completed", "error", "disconnected", "done", "timeout", "dismissed"}
+		for _, st := range terminalStates {
+			t.Run(st, func(t *testing.T) {
+				s := newTestServer()
+				s.cfg.Workflow.SubagentTreeEnabled = true
+				ses := registerTestSession(s, 1, "claude")
+
+				s.sessionsMu.Lock()
+				ses.State = st
+				s.sessionsMu.Unlock()
+
+				s.runSubagentTreePoll(1, ses, ses.subagentGeneration)
+
+				s.sessionsMu.Lock()
+				defer s.sessionsMu.Unlock()
+				if ses.subagentTimer != nil {
+					t.Fatalf("runSubagentTreePoll rescheduled timer on terminal session state %q", st)
+				}
+			})
+		}
+	})
+
+	t.Run("runSubagentTreePoll does not reschedule on stale generation", func(t *testing.T) {
+		s := newTestServer()
+		s.cfg.Workflow.SubagentTreeEnabled = true
+		ses := registerTestSession(s, 1, "claude")
+
+		s.sessionsMu.Lock()
+		curGen := ses.subagentGeneration
+		s.sessionsMu.Unlock()
+
+		// 古い世代番号で poll を呼び出す
+		s.runSubagentTreePoll(1, ses, curGen-1)
+
+		s.sessionsMu.Lock()
+		defer s.sessionsMu.Unlock()
+		if ses.subagentTimer != nil {
+			t.Fatal("runSubagentTreePoll rescheduled timer with stale generation")
+		}
+	})
+
+	t.Run("stopSubagentTreePollLocked stops timer", func(t *testing.T) {
+		s := newTestServer()
+		s.cfg.Workflow.SubagentTreeEnabled = true
+		ses := registerTestSession(s, 1, "claude")
+
+		s.sessionsMu.Lock()
+		ses.subagentTimer = time.AfterFunc(time.Hour, func() {})
+		initialGen := ses.subagentGeneration
+		s.stopSubagentTreePollLocked(ses)
+		defer s.sessionsMu.Unlock()
+
+		if ses.subagentTimer != nil {
+			t.Fatal("stopSubagentTreePollLocked did not clear subagentTimer")
+		}
+		if ses.subagentGeneration <= initialGen {
+			t.Fatalf("generation = %d, want > initialGen %d", ses.subagentGeneration, initialGen)
+		}
+	})
+}
+

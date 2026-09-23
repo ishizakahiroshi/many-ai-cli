@@ -1104,6 +1104,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// 実行中 workflow の heartbeat/journal タイマーを終端させる。
 				// 放置すると stale VT が settle を永久ブロックする（F1）。
 				s.finalizeWorkflowOnSessionEnd(id)
+				s.finalizeSubagentTreeOnSessionEnd(id)
 			}
 		}
 	}
@@ -1188,9 +1189,10 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			"seq_end", requeuedMaxSeq,
 			"cause", "wrapper_disconnect")
 	}
-	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow の
+	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow と subagent_tree の
 	// 追跡タイマーを必ず終端させる（session_end 経由と重複しても冪等）。
 	s.finalizeWorkflowOnSessionEnd(id)
+	s.finalizeSubagentTreeOnSessionEnd(id)
 	if endState == "disconnected" {
 		if historyToClose != nil {
 			ev := map[string]any{

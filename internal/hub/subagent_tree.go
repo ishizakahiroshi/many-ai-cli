@@ -305,6 +305,28 @@ func (s *Server) restartSubagentTreePollLocked(id int, ses *session, now time.Ti
 	s.scheduleSubagentTreePollLocked(id, ses, 0)
 }
 
+// stopSubagentTreePollLocked cancels any in-flight subagent tree poll timer
+// and invalidates pending ticks by bumping subagentGeneration.
+// 呼び出し側は sessionsMu を保持していること。
+func (s *Server) stopSubagentTreePollLocked(ses *session) {
+	if ses == nil {
+		return
+	}
+	if ses.subagentTimer != nil {
+		ses.subagentTimer.Stop()
+		ses.subagentTimer = nil
+	}
+	ses.subagentGeneration++
+}
+
+// finalizeSubagentTreeOnSessionEnd stops subagent tree polling when a session ends.
+// Idempotent.
+func (s *Server) finalizeSubagentTreeOnSessionEnd(id int) {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	s.stopSubagentTreePollLocked(s.sessions[id])
+}
+
 // subagentTreeEnabled reads the config toggle the same way
 // workflowTaskDetailEnabled does (子 plan C1 が追加した
 // Workflow.SubagentTreeEnabled, 既定 true).
@@ -332,6 +354,10 @@ func (s *Server) runSubagentTreePoll(id int, expected *session, generation uint6
 		return
 	}
 	ses.subagentTimer = nil
+	if isTerminalSessionState(ses.State) {
+		s.sessionsMu.Unlock()
+		return
+	}
 	providerID := ses.Provider
 	since := ses.subagentTurnStartedAt
 	prior := ses.subagentReaderState
