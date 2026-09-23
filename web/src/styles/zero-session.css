@@ -36,12 +36,17 @@
 .zero-session-body { display: flex; flex-direction: column; gap: 18px; }
 .zero-session-status { text-align: left; }
 .zero-session-status .cli-maint-heading { margin-top: 0; }
+/* フッターは body の中に置く（body の gap 18px + 6px で従来の 24px 相当）。
+   導入状況があるときは手順（畳みボタン込み）をフッターの下へ回し、ツアー等の導線を押し下げない。 */
+.zero-session-body > .zero-session-footer { margin-top: 6px; }
+.zero-session-card.has-status .zero-session-guide { order: 1; }
 .zero-session-steps-toggle { align-self: center; margin: 0 auto 12px; display: block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; background: var(--bg-elev); color: var(--muted); font: inherit; font-size: .86rem; cursor: pointer; }
 .zero-session-steps-toggle:hover { color: var(--text); border-color: var(--accent); }
 .zero-session-card.is-steps-collapsed .zero-session-steps { display: none; }
 @container (min-width: 1040px) {
   .zero-session-card.has-status { width: min(1240px, 100%); }
-  .zero-session-card.has-status .zero-session-body { display: grid; grid-template-columns: minmax(280px, 5fr) minmax(0, 8fr); grid-template-areas: "guide status"; align-items: start; gap: 24px; }
+  .zero-session-card.has-status .zero-session-body { display: grid; grid-template-columns: minmax(280px, 5fr) minmax(0, 8fr); grid-template-areas: "guide status" "footer footer"; align-items: start; gap: 24px; }
+  .zero-session-card.has-status .zero-session-footer { grid-area: footer; margin-top: 0; }
   .zero-session-card.has-status .zero-session-guide { grid-area: guide; }
   .zero-session-card.has-status .zero-session-status { grid-area: status; }
   .zero-session-card.has-status .zero-session-steps-toggle { display: none; }

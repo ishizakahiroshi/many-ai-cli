@@ -67,8 +67,8 @@ function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
             <li><div><strong>${t('zero_session_step3_title')}</strong><span>${t('zero_session_step3_body')}</span></div></li>
           </ol>
         </div>
+        <div class="zero-session-footer"><button type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
       </div>
-      <div class="zero-session-footer"><button type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
     </section>`;
   bindUsageGuideButtons();
   const slot = statuses ? root.querySelector<HTMLElement>('[data-zero-cli-maintenance]') : null;
