@@ -828,6 +828,22 @@ body.pc-input-tools-off #input-tools { display: none; }
 }
 #tools-flip-btn:hover { opacity: 1; color: var(--text); }
 
+/* 入力欄ツールの並べ替え（ドラッグ&ドロップ）— input-tools-order.ts
+   並びを保存したときだけ .custom-tool-order が付き、各ボタンの --tool-order を order に使う。
+   #input-tools を display: contents にして、中のボタンも外のボタンと混ぜて並べられるようにする
+   （入力補助ツール OFF の body.pc-input-tools-off では従来どおり丸ごと隠す）。
+   HTML5 の drag&drop はタッチで発火しないので、デスクトップだけで効かせる。 */
+@media (min-width: 721px) and (not (pointer: coarse)) {
+  body:not(.pc-input-tools-off) #input-wrap.custom-tool-order #input-tools { display: contents; }
+  #input-wrap.custom-tool-order > *,
+  #input-wrap.custom-tool-order #input-tools > * { order: var(--tool-order, 0); }
+  #input-wrap.custom-tool-order > #input-area { order: -1; }
+  #input-wrap.custom-tool-order > #deferred-send-status { order: 1000; }
+}
+.tool-dragging { opacity: 0.4; }
+.tool-drop-before { box-shadow: -2px 0 0 0 var(--accent); }
+.tool-drop-after  { box-shadow: 2px 0 0 0 var(--accent); }
+
 /* スマホでは入力欄ツールバーの左右切替ボタンは用途がないため非表示 */
 @media (max-width: 720px), (pointer: coarse) {
   #tools-flip-btn { display: none; }

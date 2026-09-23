@@ -45,6 +45,7 @@ import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initBugReportModal } from './app/bug-report-modal.js';
 import { initSubscriptions } from './app/subscriptions.js';
 import { initTabBarOrder } from './app/tab-bar-order.js';
+import { initInputToolsOrder } from './app/input-tools-order.js';
 import { initUiSide } from './app/ui-side.js';
 import { initSessionStrip } from './app/session-strip.js';
 import { initJevOptIn } from './app/jev-opt-in.js';
@@ -80,6 +81,8 @@ initBugReportModal();
 initSubscriptions();
 // 統合タブバーのタブをドラッグ&ドロップで並べ替え（順序は localStorage 保存）
 initTabBarOrder();
+// 入力欄の下段ボタン列をドラッグ&ドロップで並べ替え（順序は localStorage 保存）
+initInputToolsOrder();
 // 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）
 initUiSide();
 // 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
