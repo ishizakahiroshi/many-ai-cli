@@ -669,11 +669,23 @@ func readRevision(path, expectedProviderID string) (RevisionRecord, error) {
 	if definitionDigest(record.Payload) != record.ContentDigest {
 		return RevisionRecord{}, fmt.Errorf("revision content digest mismatch")
 	}
+	// A stored override is a sparse delta against a baseline this function
+	// cannot see, so the placeholder base must supply every field whose
+	// presence another field's rule depends on. Otherwise a legitimate delta
+	// such as {update:{enabled:true}} (args come from the manifest) or
+	// {launch:{headless:{args:[...]}}} (format comes from the manifest) fails
+	// here right after being written, and the save returns 422 with HEAD
+	// never moved. TestSaveEffectiveOverrideAcceptsEverySingleFieldEdit
+	// sweeps every built-in manifest field to catch the next such rule.
 	validationBase := Definition{
 		SchemaVersion: CurrentSchemaVersion,
 		ID:            expectedProviderID,
 		DisplayName:   expectedProviderID,
-		Launch:        &LaunchDefinition{Executable: "validation-placeholder"},
+		Launch: &LaunchDefinition{
+			Executable: "validation-placeholder",
+			Headless:   &HeadlessDefinition{Format: "validation-placeholder"},
+		},
+		Update: &UpdateDefinition{Args: []string{"validation-placeholder"}},
 	}
 	if err := validateOverrideAgainstBaseline(record.Payload, validationBase); err != nil {
 		return RevisionRecord{}, fmt.Errorf("revision payload schema is invalid: %w", err)
