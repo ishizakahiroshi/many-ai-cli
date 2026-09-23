@@ -140,7 +140,14 @@ test('spawnLaunchBlockReason: cwd 欠けが先、次に CLI 未検出', () => {
 const DOW_JA = ['日', '月', '火', '水', '木', '金', '土'];
 
 test('formatCliDateTime: CLAUDE/coding.md の日時形式へ整形する', () => {
-  assert.equal(formatCliDateTime('2026-05-06T10:38:55+09:00', DOW_JA), '2026-05-06(水) 10:38:55');
+  // formatCliDateTime は ISO 文字列をローカル時刻へ変換して表示する実装（CLAUDE/coding.md の
+  // 「UI 表示時のみ日本語形式に変換」節どおり）。固定オフセット '+09:00' の文字列を JST 前提で
+  // 決め打つと、実行環境の TZ が JST 以外（CI の ubuntu-latest は UTC）だと日時がずれて落ちる。
+  // ローカル時刻でコンストラクトした Date から ISO 文字列を作れば、実行 TZ に関わらず
+  // ローカル表示は元の値に戻るので、期待値を固定文字列のまま TZ 非依存にできる。
+  // （期待値を実装と同じ getter で組み立てると、実装の誤りをテストが複製して通してしまう）
+  const local = new Date(2026, 4, 6, 10, 38, 55); // 2026-05-06 10:38:55（ローカル時刻）
+  assert.equal(formatCliDateTime(local.toISOString(), DOW_JA), '2026-05-06(水) 10:38:55');
   assert.equal(formatCliDateTime('', DOW_JA), '');
   assert.equal(formatCliDateTime(undefined, DOW_JA), '');
   assert.equal(formatCliDateTime('not-a-date', DOW_JA), '');

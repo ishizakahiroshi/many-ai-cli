@@ -11,6 +11,12 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **The row of buttons under the input box can be reordered by dragging, the
+  same way tabs can.** The send/stop button, mic, palette, quick commands,
+  `/ ▾`, and ⌫ move with a drag on desktop browsers (this does not work on
+  touch devices). The order is stored per browser and survives a reload.
+  Flipping sides with ⇄ mirrors the saved order left-to-right. Settings →
+  General → "Input bar button order" can restore the default order.
 - **The "install status" list — on the first-run screen and in Settings → AI
   CLI integrations — now shows a provider icon per row, and can check CLI
   versions and update them from the Hub.** A **Check versions** button runs
