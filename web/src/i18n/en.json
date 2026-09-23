@@ -116,6 +116,8 @@
   "zero_session_step3_body": "Start several CLIs and their progress and approval requests all collect here. Enable mobile access and desktop notifications from Settings.",
   "zero_session_tour": "Take the 60-second tour",
   "zero_session_docs": "Open documentation",
+  "zero_session_steps_show": "How to use ▸",
+  "zero_session_steps_hide": "Hide how to use ▾",
   "zero_session_wiring": "Share skills and rules across CLIs",
   "zero_session_missing_kicker": "Getting started",
   "zero_session_missing_title": "This tool is not an AI itself",

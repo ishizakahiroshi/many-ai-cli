@@ -47,18 +47,27 @@ function renderUsageGuide(statuses: CliInstallStatus[] | null): void {
   maintenanceHandle?.destroy();
   maintenanceHandle = null;
   root.className = 'zero-session';
+  // 広い画面では手順（左）と導入状況（右）を並べ、狭い画面では導入状況を上に出して
+  // 手順を 1 行に畳む（どちらもスクロールせずに更新一覧が見えるようにするため）。
+  // 導入状況が無いときは畳まない（畳むと画面に何も残らない）。
+  const collapsible = !!statuses?.length;
   root.innerHTML = `
-    <section class="zero-session-card" aria-labelledby="zero-session-title">
+    <section class="zero-session-card${collapsible ? ' has-status is-steps-collapsed' : ''}" aria-labelledby="zero-session-title">
       <div class="zero-session-kicker">${t('zero_session_kicker')}</div>
       <h1 id="zero-session-title">${t('zero_session_title')}</h1>
       <p class="zero-session-intro">${t('zero_session_intro')}</p>
-      <ol class="zero-session-steps">
-        <li><div><strong>${t('zero_session_install_title')}</strong><span>${t('zero_session_install_body')}</span></div></li>
-        <li><div><strong>${t('zero_session_step1_title')}</strong><span>${t('zero_session_step1_body')}</span></div></li>
-        <li><div><strong>${t('zero_session_step2_title')}</strong><span>${t('zero_session_step2_body')}</span></div></li>
-        <li><div><strong>${t('zero_session_step3_title')}</strong><span>${t('zero_session_step3_body')}</span></div></li>
-      </ol>
-      ${statuses ? renderInstallStatusList(statuses) : ''}
+      <div class="zero-session-body">
+        ${collapsible ? `<div class="zero-session-status">${renderInstallStatusList(statuses!)}</div>` : ''}
+        <div class="zero-session-guide">
+          ${collapsible ? `<button type="button" class="zero-session-steps-toggle" data-zero-steps-toggle aria-expanded="false">${t('zero_session_steps_show')}</button>` : ''}
+          <ol class="zero-session-steps">
+            <li><div><strong>${t('zero_session_install_title')}</strong><span>${t('zero_session_install_body')}</span></div></li>
+            <li><div><strong>${t('zero_session_step1_title')}</strong><span>${t('zero_session_step1_body')}</span></div></li>
+            <li><div><strong>${t('zero_session_step2_title')}</strong><span>${t('zero_session_step2_body')}</span></div></li>
+            <li><div><strong>${t('zero_session_step3_title')}</strong><span>${t('zero_session_step3_body')}</span></div></li>
+          </ol>
+        </div>
+      </div>
       <div class="zero-session-footer"><button type="button" data-zero-tour>${t('zero_session_tour')}</button><span>·</span><button type="button" data-zero-docs>${t('zero_session_docs')}</button><span>·</span><button type="button" data-zero-wiring>${t('zero_session_wiring')}</button></div>
     </section>`;
   bindUsageGuideButtons();
@@ -71,6 +80,13 @@ function bindUsageGuideButtons(): void {
   root.querySelector('[data-zero-tour]')?.addEventListener('click', () => (document.getElementById('first-run-tour-btn') as HTMLButtonElement | null)?.click());
   root.querySelector('[data-zero-docs]')?.addEventListener('click', () => window.open('https://github.com/ishizakahiroshi/many-ai-cli#readme', '_blank', 'noopener'));
   root.querySelector('[data-zero-wiring]')?.addEventListener('click', () => window.open(SHARED_SKILLS_URL, '_blank', 'noopener'));
+  root.querySelector<HTMLButtonElement>('[data-zero-steps-toggle]')?.addEventListener('click', (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    const card = button.closest('.zero-session-card');
+    const collapsed = !!card?.classList.toggle('is-steps-collapsed');
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.textContent = t(collapsed ? 'zero_session_steps_show' : 'zero_session_steps_hide');
+  });
 }
 
 function renderMissingGuide(entries: CliInstallStatus[]): void {

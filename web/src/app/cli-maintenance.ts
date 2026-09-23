@@ -261,7 +261,8 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
     if (r.jobStatus) return jobRowHtml(status, r);
     const cell = cliVersionCellText(r.version || null, !!r.checking, dow());
     const versionText = cell.kind === 'ok' ? (cell.versionText || '') : (cell.primary ? txm(cell.primary) : '');
-    const detailHtml = cell.detail ? `<span class="cli-maint-version-sub">${escapeHtml(txm(cell.detail))}</span>` : '';
+    const detailText = cell.detail ? txm(cell.detail) : '';
+    const detailHtml = detailText ? `<span class="cli-maint-version-sub" title="${escapeHtml(detailText)}">${escapeHtml(detailText)}</span>` : '';
     const btnState = cliUpdateRowState(r.eligibility || null, false);
     return `<div class="cli-maint-row" data-provider="${escapeHtml(status.id)}">
       <span class="cli-maint-chk" aria-hidden="true">✓</span>

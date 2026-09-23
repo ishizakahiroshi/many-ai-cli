@@ -29,10 +29,12 @@
 .cli-maint-version { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .82rem; color: var(--text); overflow-wrap: anywhere; }
 .cli-maint-version-unchecked, .cli-maint-version-checking { font-family: inherit; color: var(--muted); }
 .cli-maint-version-error { font-family: inherit; color: var(--bad, #c0392b); }
-.cli-maint-version-sub { font-size: .74rem; color: var(--muted); }
+/* 補足（実行ファイルの更新日など）と更新 OFF の説明は 1 行に収め、全文は title で出す。
+   折り返すと行の高さが 4 行ぶんになり、一覧がスクロールしないと見えなくなるため。 */
+.cli-maint-version-sub { font-size: .74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cli-maint-status { color: var(--muted); font-size: .8rem; white-space: nowrap; }
 .cli-maint-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
-.cli-maint-note-inline { color: var(--muted); font-size: .78rem; text-align: right; }
+.cli-maint-note-inline { max-width: 11em; color: var(--muted); font-size: .78rem; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cli-maint-pill { display: inline-block; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; font-size: .72rem; color: var(--muted); }
 .cli-maint-install-link { color: var(--accent); font-size: .84rem; text-decoration: none; }
 .cli-maint-install-link:hover { text-decoration: underline; }

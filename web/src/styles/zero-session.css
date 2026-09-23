@@ -30,4 +30,21 @@
 .zero-session-cli-install-unavailable { flex: none; color: var(--muted); font-size: .82rem; }
 .zero-session-missing-still { margin: 12px auto 0; max-width: 520px; color: var(--warn, #d4a017); font-size: .86rem; line-height: 1.55; }
 .zero-session-recheck { font-weight: 600; color: var(--text) !important; }
+/* 導入状況があるとき: 狭い幅では導入状況を上・手順は 1 行に畳む。広い幅では左に手順・右に導入状況。
+   幅はサイドバーを除いた表示領域で判定するので container query を使う。 */
+#zero-session-empty-state { container-type: inline-size; }
+.zero-session-body { display: flex; flex-direction: column; gap: 18px; }
+.zero-session-status { text-align: left; }
+.zero-session-status .cli-maint-heading { margin-top: 0; }
+.zero-session-steps-toggle { align-self: center; margin: 0 auto 12px; display: block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; background: var(--bg-elev); color: var(--muted); font: inherit; font-size: .86rem; cursor: pointer; }
+.zero-session-steps-toggle:hover { color: var(--text); border-color: var(--accent); }
+.zero-session-card.is-steps-collapsed .zero-session-steps { display: none; }
+@container (min-width: 1040px) {
+  .zero-session-card.has-status { width: min(1240px, 100%); }
+  .zero-session-card.has-status .zero-session-body { display: grid; grid-template-columns: minmax(280px, 5fr) minmax(0, 8fr); grid-template-areas: "guide status"; align-items: start; gap: 24px; }
+  .zero-session-card.has-status .zero-session-guide { grid-area: guide; }
+  .zero-session-card.has-status .zero-session-status { grid-area: status; }
+  .zero-session-card.has-status .zero-session-steps-toggle { display: none; }
+  .zero-session-card.has-status.is-steps-collapsed .zero-session-steps { display: grid; }
+}
 @media (max-width: 720px) { #zero-session-empty-state { padding: 20px 16px; align-items: start; } .zero-session-card { margin-top: 22px; } }
