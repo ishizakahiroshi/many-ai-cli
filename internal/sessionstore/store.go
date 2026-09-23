@@ -1003,6 +1003,31 @@ func (s *Store) ApprovalsBySessionID(dbID int64, limit int, pendingOnly bool) ([
 	return s.queryApprovals(where, []any{dbID}, limit)
 }
 
+// LatestApprovalOfKinds は稼働中セッションの台帳で、供給元が source で種類が kinds の
+// いずれかの承認のうち、いちばん新しい 1 件を返す。無ければ ok=false。
+//
+// Hub が「端末ミラーに残っている文章の質問は、もう答えたものか」をメモリで判断できない
+// ときにだけ読む（internal/hub/approval_identity.go 冒頭の「回答済みを台帳から戻す」）。
+func (s *Store) LatestApprovalOfKinds(liveSessionID int, source string, kinds []string) (ApprovalRow, bool, error) {
+	if len(kinds) == 0 {
+		return ApprovalRow{}, false, nil
+	}
+	sessionID, err := s.sessionIDForLive(liveSessionID)
+	if err != nil || sessionID == 0 {
+		return ApprovalRow{}, false, err
+	}
+	args := []any{sessionID, source}
+	for _, kind := range kinds {
+		args = append(args, kind)
+	}
+	where := "a.session_id=? AND a.source=? AND a.kind IN (" + strings.TrimSuffix(strings.Repeat("?,", len(kinds)), ",") + ")"
+	rows, err := s.queryApprovals(where, args, 1)
+	if err != nil || len(rows) == 0 {
+		return ApprovalRow{}, false, err
+	}
+	return rows[0], true, nil
+}
+
 // RecentApprovals は全セッション横断で承認を新しい順に返す（承認タブの履歴用）。
 func (s *Store) RecentApprovals(limit int, pendingOnly bool) ([]ApprovalRow, error) {
 	where := ""

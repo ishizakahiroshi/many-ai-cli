@@ -416,6 +416,15 @@ Release artifacts are published at
   a question. With Claude Code and Codex, such a question is also withdrawn if
   the AI carries on without waiting for your answer.
 - **A CLI's own approval prompt notifies once instead of possibly twice.**
+- **A question you have already answered no longer comes back as Pending in
+  Grok, Copilot, Cursor Agent, OpenCode and Command Code sessions.** These
+  sessions read questions from the terminal, and an answered question stays on
+  screen. When the CLI showed its own approval prompt afterwards, or the Hub
+  was restarted, the Hub could forget that the question on screen had been
+  answered and show it again with a new notification. It now keeps the answer
+  across the CLI's approval prompt and, after a restart, looks it up in the
+  session's approval history. A question you had not answered still comes back
+  after a restart.
 - **⊟ (compact text) on the approval panel now also works for batch approvals
   and multi-question prompts.** It used to shorten only the panel's label and
   buttons, so a batch approval kept its full height and a single question kept

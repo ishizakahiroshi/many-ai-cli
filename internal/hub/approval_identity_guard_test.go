@@ -216,3 +216,42 @@ func TestApprovalIdentityRuleIsDocumentedInSource(t *testing.T) {
 		}
 	}
 }
+
+// TestLedgerAnsweredReadIsConfinedToOneFunction は、承認の台帳から回答済みを読む場所が
+// vtQuestionAnsweredInLedger の 1 か所だけであることを固定する（approval_identity.go 冒頭の例外）。
+// 台帳を読む場所が増えると、「回答済みか」を決めるものが実質 2 本になる。増やしたくなったら、
+// まず冒頭のルールを読み、メモリの持ち越し（carryConsumedVTQuestionLocked）で説明できないかを確かめる。
+func TestLedgerAnsweredReadIsConfinedToOneFunction(t *testing.T) {
+	const reader, readerFile, method = "vtQuestionAnsweredInLedger", "approval_text_question.go", "LatestApprovalOfKinds"
+	allowed := 0
+	for _, file := range goSourceFiles(t) {
+		fset := token.NewFileSet()
+		parsed, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range parsed.Decls {
+			fn, _ := decl.(*ast.FuncDecl)
+			inReader := fn != nil && fn.Name.Name == reader && filepath.Base(file) == readerFile
+			ast.Inspect(decl, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || sel.Sel.Name != method {
+					return true
+				}
+				if inReader {
+					allowed++
+					return true
+				}
+				t.Errorf("%s: %s を %s の外から呼んでいる（台帳から回答済みを読むのは 1 か所だけ）", fset.Position(call.Pos()), method, reader)
+				return true
+			})
+		}
+	}
+	if allowed == 0 {
+		t.Fatalf("%s の %s に %s の呼び出しが無い。走査条件が実装とずれている", readerFile, reader, method)
+	}
+}

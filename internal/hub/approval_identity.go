@@ -55,6 +55,17 @@ import (
 //     パネルに出ない（端末には見えている）。回数制限だった頃は、この代償の
 //     代わりに「3 ターン目以降は回答済みが必ず出戻る」を払っていた
 //     （bugfix_approval-panel-reappears-live-after-answer_2026-08-27.md）
+//   - 持ち越しを見直すのは、世代を進めた直後の 2 か所（ユーザーターンの境界と、別の候補が
+//     来たとき）。どちらも carryConsumedVTQuestionLocked を通る
+//   - 例外が 1 つある（2026-09-23 ユーザー判断）。端末ミラーの質問について、メモリがその
+//     質問を知らないとき（ネイティブの承認に Hub 経由で答えて回答済みの枠が上書きされた後・
+//     Hub の再起動後）に限り、承認の台帳（sessionstore の approvals）から回答済みを持ち越しへ
+//     戻す。戻すのは、台帳で最新の端末ミラーの質問が同じ candidateKey で、回答付きで閉じて
+//     いるときだけ。同一性の定義は変えず、台帳を読むのは approval_text_question.go の
+//     vtQuestionAnsweredInLedger の 1 か所だけ（TestLedgerAnsweredReadIsConfinedToOneFunction）。
+//     受け入れた代償は 2 つ。「回答付きで閉じた」は台帳の selected_text が空でないことで
+//     見分ける（閉じた理由の列は無い）。メモリが知らない間は、開こうとするたびに台帳を
+//     1 回読む（bugfix_approval-answered-vt-question-resurrects_2026-09-23.md）
 
 var (
 	approvalIdentityOptionRe   = regexp.MustCompile(`^\s*(\d{1,2})\.\s*(.*?)\s*$`)
@@ -267,6 +278,12 @@ func advanceApprovalSourceEpochLocked(ses *session) uint64 {
 // was just consumed. A different candidate after consumption is a new prompt
 // boundary and is allowed to advance the source epoch. Callers must hold the
 // sessionsMu lock.
+//
+// 世代を進めても、回答済みの質問が端末ミラーのいちばん新しい質問として残っている間は
+// 回答済みのまま持ち越す（ユーザーターンの境界と同じ条件。carryConsumedVTQuestionLocked）。
+// 以前はここで持ち越しを無条件に捨てていたので、答えた端末ミラーのマーカーの後に
+// ネイティブの承認が来て 1 回消えると、scrollback に残るそのマーカーが未回答の質問として
+// 通知付きで開き直った（bugfix_approval-answered-vt-question-resurrects_2026-09-23.md）。
 func approvalCandidateEpochLocked(ses *session, candidateKey string) (uint64, bool) {
 	epoch := ensureApprovalSourceEpochLocked(ses)
 	if ses.approvalEpochPending {
@@ -274,8 +291,8 @@ func approvalCandidateEpochLocked(ses *session, candidateKey string) (uint64, bo
 			ses.approvalConsumedEpoch == epoch {
 			return epoch, true
 		}
-		advanceApprovalSourceEpochLocked(ses)
-		epoch = ses.approvalSourceEpoch
+		epoch = advanceApprovalSourceEpochLocked(ses)
+		carryConsumedVTQuestionLocked(ses, epoch)
 	}
 	return epoch, false
 }
@@ -326,35 +343,41 @@ func markApprovalUserTurnBoundaryLocked(ses *session) {
 	if ses == nil {
 		return
 	}
-	consumedKey := ses.approvalConsumedCandidateKey
-	consumedShape := ses.approvalConsumedCandidateShape
 	// Every confirmed non-empty user turn is a live prompt boundary, including
 	// browser-only fallback sessions where Hub never observed a candidate. The
 	// caller skips this helper when the approval Enter is still waiting for the
 	// approval_consumed frame, so answering that prompt does not jump ahead.
 	epoch := advanceApprovalSourceEpochLocked(ses)
+	carryConsumedVTQuestionLocked(ses, epoch)
+}
+
+// carryConsumedVTQuestionLocked は、回答済みの質問が端末ミラーでいちばん新しい質問として
+// 残っていれば、回答済みを新しい世代 epoch へ持ち越す。呼ぶのは世代を進めた直後の 2 か所
+// （ユーザーターンの境界と、別の候補が来たとき）。
+//
+// The terminal is a scrollback history, so the just-consumed marker can be
+// the latest complete block even after the user has started the next turn.
+// Carry the existing consumed record into this new epoch. This reuses
+// candidateKey + sourceEpoch; it does not introduce another replay
+// suppression state.
+//
+// 持ち越しの回数は数えない。解除条件は下の identity 比較そのもので、
+// エージェントが別のブロックを描くか、答え終わったブロックが画面から
+// 流れれば持ち越しは止まる（＝この if を素通りできなくなる）。回数で
+// 区切っていた頃は、答えた後にユーザーが 2 回何かを送っただけで、画面に
+// 出たままの回答済みブロックが未回答の候補へ戻っていた。ファイル冒頭の
+// ルール本文に、この変更で受け入れた代償も書いてある。
+func carryConsumedVTQuestionLocked(ses *session, epoch uint64) {
+	consumedKey := ses.approvalConsumedCandidateKey
 	if consumedKey == "" || ses.vt == nil {
 		return
 	}
-	// The terminal is a scrollback history, so the just-consumed marker can be
-	// the latest complete block even after the user has started the next turn.
-	// Carry the existing consumed record into this new epoch. This reuses
-	// candidateKey + sourceEpoch; it does not introduce another replay
-	// suppression state.
-	//
-	// 持ち越しの回数は数えない。解除条件は下の identity 比較そのもので、
-	// エージェントが別のブロックを描くか、答え終わったブロックが画面から
-	// 流れれば持ち越しは止まる（＝この if を素通りできなくなる）。回数で
-	// 区切っていた頃は、答えた後にユーザーが 2 回何かを送っただけで、画面に
-	// 出たままの回答済みブロックが未回答の候補へ戻っていた。ファイル冒頭の
-	// ルール本文に、この変更で受け入れた代償も書いてある。
 	identity, ok := latestVTQuestionIdentityLocked(ses)
 	if !ok || identity.key != consumedKey {
 		return
 	}
-	ses.approvalConsumedCandidateShape = identity.shape
-	if ses.approvalConsumedCandidateShape == "" {
-		ses.approvalConsumedCandidateShape = consumedShape
+	if identity.shape != "" {
+		ses.approvalConsumedCandidateShape = identity.shape
 	}
 	ses.approvalConsumedEpoch = epoch
 	ses.approvalEpochPending = true

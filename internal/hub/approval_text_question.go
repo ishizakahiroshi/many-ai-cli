@@ -766,6 +766,9 @@ func (s *Server) openTextQuestion(id int, q *textQuestion, detectedAt time.Time,
 	if q == nil || q.Block == "" || q.Sig == "" {
 		return false
 	}
+	if source == approvalSourceGoVT && s.vtQuestionAnsweredInLedger(id, q) {
+		return false
+	}
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
 	if ses == nil {
@@ -834,6 +837,79 @@ func (s *Server) openTextQuestion(id int, q *textQuestion, detectedAt time.Time,
 	}
 	s.notifyApprovalPush(id, q.Sig, provider, question, "")
 	s.notifyApprovalOutbound(id, q.Sig, provider, question, "")
+	return true
+}
+
+// ---- 回答済みを台帳から戻す ----
+//
+// 端末ミラーの質問は、答えた後も scrollback に残る間は出力のたびに読み直される。それを
+// 開き直さないのは回答済みの持ち越し（approval_identity.go）だけで、持ち越しはメモリの
+// 1 つの枠にある。枠は次の 2 つの場面で失われる
+// （bugfix_approval-answered-vt-question-resurrects_2026-09-23.md）。
+//
+//   - ネイティブの承認に Hub 経由（パネル・ワンタップ・自動承認）で答えると、その回答済みが
+//     同じ枠に書かれ、端末ミラーの質問の回答済みを上書きする
+//   - Hub を再起動するとメモリごと消える。wrapper の replay から組み直した端末ミラーには、
+//     答えた質問がそのまま残っている
+//
+// どちらの場面でも、台帳（sessionstore の approvals）には答えた質問が回答付きで残っている。
+// そこで、メモリがその質問を知らないときに限って台帳を読む。台帳で最新の端末ミラーの
+// 質問が同じ質問で、回答付きで閉じていれば、開かずに持ち越しをメモリへ戻す。
+// 同一性（candidateKey）の定義は変えず、台帳は持ち越しを戻すためにだけ読む
+// （approval_identity.go 冒頭の例外。2026-09-23 のユーザー判断）。
+
+// textQuestionKinds は端末ミラーから開く文章の質問の種類（承認マーカーとマーカー無しの 3 種）。
+var textQuestionKinds = []string{approvalKindMarker, approvalKindPlainYesNo, approvalKindSequentialChoice, approvalKindHubChoice}
+
+// vtQuestionAnsweredInLedger は、端末ミラーの質問 q が台帳で回答済みなら true を返す。
+// 枠が空いていれば持ち越しをメモリへ戻し、以後はメモリだけで判断できるようにする。
+// 枠が別の候補（答えた直後でまだ画面に出ているかもしれないネイティブの承認）を守って
+// いる間は、枠を書き換えずに開かないだけにする。書き換えると、そのネイティブの承認が
+// 開き直る。次のユーザーターンで枠が空けば、そこで戻る。
+func (s *Server) vtQuestionAnsweredInLedger(id int, q *textQuestion) bool {
+	if s.sessionStore == nil {
+		return false
+	}
+	s.sessionsMu.Lock()
+	ses := s.sessions[id]
+	if ses == nil || approvalRecordBlocksVTMarkerLocked(ses) {
+		s.sessionsMu.Unlock()
+		return false
+	}
+	identity := q.candidateIdentity(ses.Provider)
+	// メモリがこの質問を知っているなら、メモリが正しい（いま保留中か、持ち越し中か、
+	// 画面から消えたので持ち越しを外したか）。台帳は読まない。
+	known := identity.key == "" || ses.approvalConsumedCandidateKey == identity.key ||
+		(ses.pendingApproval != nil && ses.pendingApproval.CandidateKey == identity.key)
+	s.sessionsMu.Unlock()
+	if known {
+		return false
+	}
+
+	// 台帳は sessionsMu の外で読む。
+	row, ok, err := s.sessionStore.LatestApprovalOfKinds(id, approvalSourceGoVT, textQuestionKinds)
+	if err != nil || !ok || row.CandidateKey != identity.key || row.State != "resolved" || strings.TrimSpace(row.SelectedText) == "" {
+		return false
+	}
+
+	s.sessionsMu.Lock()
+	ses = s.sessions[id]
+	if ses == nil || ses.approvalConsumedCandidateKey == identity.key {
+		// 読んでいる間にメモリが知った。通常の経路に任せる。
+		s.sessionsMu.Unlock()
+		return false
+	}
+	restored := !ses.approvalEpochPending
+	if restored {
+		markApprovalConsumedAtEpochLocked(ses, identity.key, "", 0)
+		ses.approvalConsumedCandidateShape = identity.shape
+	}
+	provider := ses.Provider
+	s.sessionsMu.Unlock()
+	if restored && s.logger != nil {
+		s.logger.Info("answered approval restored from ledger",
+			"session_id", id, "provider", provider, "sig", shortSig(q.Sig))
+	}
 	return true
 }
 

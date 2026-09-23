@@ -238,3 +238,41 @@ func TestApprovalLedgerMigratesLegacyTable(t *testing.T) {
 		}
 	}
 }
+
+// LatestApprovalOfKinds は供給元と種類で絞った最新の 1 行を返す。別の種類（ネイティブの承認）や
+// 別の供給元の行が後から入っても、それは返さない。答えた・答えていないは呼び出し側が
+// state と selected_text で見る。
+func TestApprovalLedgerLatestOfKinds(t *testing.T) {
+	store, err := OpenForLogDir(filepath.Join(t.TempDir(), "logs"))
+	if err != nil {
+		t.Fatalf("OpenForLogDir: %v", err)
+	}
+	defer store.Close()
+	if _, err := store.StartSession(SessionStart{LiveSessionID: 3, Provider: "grok", State: "running", StartedAt: time.Now().Format(time.RFC3339)}); err != nil {
+		t.Fatalf("StartSession: %v", err)
+	}
+	kinds := []string{"marker", "plain_yes_no"}
+	if _, ok, err := store.LatestApprovalOfKinds(3, "go_vt", kinds); err != nil || ok {
+		t.Fatalf("空の台帳で ok=%v err=%v, want 無し", ok, err)
+	}
+
+	base := time.Now().Add(-time.Hour)
+	store.StoreApprovalDetected(ApprovalDetected{LiveSessionID: 3, Sig: "sig-old", Source: "go_vt", Kind: "marker", CandidateKey: "key-old", DetectedAt: base})
+	store.StoreApprovalConsumed(3, "sig-old", "2", base.Add(time.Minute))
+	store.StoreApprovalDetected(ApprovalDetected{LiveSessionID: 3, Sig: "sig-new", Source: "go_vt", Kind: "plain_yes_no", CandidateKey: "key-new", DetectedAt: base.Add(2 * time.Minute)})
+	store.StoreApprovalConsumed(3, "sig-new", "1", base.Add(3*time.Minute))
+	// 後から入った別の種類・別の供給元の行は数えない。
+	store.StoreApprovalDetected(ApprovalDetected{LiveSessionID: 3, Sig: "sig-native", Source: "go_vt", Kind: "native", CandidateKey: "key-native", DetectedAt: base.Add(4 * time.Minute)})
+	store.StoreApprovalDetected(ApprovalDetected{LiveSessionID: 3, Sig: "sig-transcript", Source: "transcript", Kind: "marker", CandidateKey: "key-transcript", DetectedAt: base.Add(5 * time.Minute)})
+
+	row, ok, err := store.LatestApprovalOfKinds(3, "go_vt", kinds)
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v", ok, err)
+	}
+	if row.CandidateKey != "key-new" || row.State != "resolved" || row.SelectedText != "1" {
+		t.Fatalf("最新の行 = %+v, want key-new の回答済み", row)
+	}
+	if _, ok, _ := store.LatestApprovalOfKinds(99, "go_vt", kinds); ok {
+		t.Fatal("知らないセッションで行が返った")
+	}
+}
