@@ -20,6 +20,8 @@ import {
   isHeadlessCapable,
   isPermissionPresetAvailable,
   rememberedRolePermission,
+  folderTrustOffered,
+  folderTrustDecision,
   spawnConfirmDecisionFromHttp,
   SPAWN_CONFIRM_CLOSED_FALLBACK_MS,
   unregisterDialogController,
@@ -472,5 +474,47 @@ describe('rememberedRolePermission', () => {
     expect(rememberedRolePermission('review')).toBe('bounded');
     setLaunchOptionChoices({ role_permission: { review: null, '': 'full' } });
     expect(rememberedRolePermission('review')).toBe('');
+  });
+});
+
+// 「このフォルダを信頼済みとして登録する」（子 plan:
+// docs/local/plan_child-launch-prompt-and-trust_c3_spawn-confirm-trust.md 内部 C2）。
+describe('folder trust', () => {
+  const offeredFor = (provider: string, message: Record<string, unknown> = {}) =>
+    folderTrustOffered(recordFromMessage(requestedMessage({ trust_grant_providers: ['claude', 'codex'], ...message })), provider);
+
+  test('is offered only for the providers the Hub lists', () => {
+    expect(offeredFor('claude')).toBe(true);
+    expect(offeredFor('codex')).toBe(true);
+    expect(offeredFor('copilot')).toBe(false);
+    expect(offeredFor('cursor-agent')).toBe(false);
+    expect(offeredFor('')).toBe(false);
+  });
+
+  // 欄を持たない古い Hub は grant_folder_trust を受け取れないので、出さない。
+  test('is not offered when the Hub sends no list', () => {
+    const record = recordFromMessage(requestedMessage());
+    expect(record.trustGrantProviders).toEqual([]);
+    expect(folderTrustOffered(record, 'claude')).toBe(false);
+  });
+
+  test('ignores a malformed list instead of throwing', () => {
+    expect(recordFromMessage(requestedMessage({ trust_grant_providers: 'claude' })).trustGrantProviders).toEqual([]);
+    expect(recordFromMessage(requestedMessage({ trust_grant_providers: ['claude', '', null] })).trustGrantProviders).toEqual(['claude']);
+  });
+
+  // 承認して、かつチェックボックスを出しているときだけ欄を送る。
+  test('the decision carries grant_folder_trust only when approved and offered', () => {
+    expect(folderTrustDecision(true, true, true)).toBe(true);
+    expect(folderTrustDecision(true, false, true)).toBe(false);
+    expect(folderTrustDecision(false, true, true)).toBeUndefined(); // copilot などに差し替えた
+    expect(folderTrustDecision(true, true, false)).toBeUndefined(); // 拒否
+  });
+
+  // provider を copilot に差し替えるとチェックボックスが消え、決定に欄が載らない。
+  test('switching to an unsupported provider drops the field from the decision', () => {
+    const record = recordFromMessage(requestedMessage({ trust_grant_providers: ['claude', 'codex'] }));
+    expect(folderTrustDecision(folderTrustOffered(record, 'claude'), true, true)).toBe(true);
+    expect(folderTrustDecision(folderTrustOffered(record, 'copilot'), true, true)).toBeUndefined();
   });
 });

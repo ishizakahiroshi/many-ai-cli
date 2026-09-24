@@ -11,6 +11,20 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **The child-session approval dialog can now register the working folder as
+  trusted by the child's CLI (Claude Code / Codex).** When the checkbox
+  "Register this folder as trusted in <CLI>" is on (the default) and you
+  approve, the Hub adds that one folder to the CLI's own trust list right
+  before the child starts, so the child skips its "do you trust this folder?"
+  prompt and starts on its instructions. It writes only when the CLI has no
+  entry for that exact folder yet, in the same form the CLI writes when you
+  answer Yes: `projects.<folder>.hasTrustDialogAccepted` in the child's
+  `.claude.json`, or a `[projects.'<folder>']` table with
+  `trust_level = "trusted"` appended to the child's Codex `config.toml`. An
+  existing entry for the folder is left as it is, whatever it says. A conductor AI
+  cannot turn this on through its spawn request; only the person approving
+  can. The result is recorded on the orchestration board. Relay children and
+  sessions started from the dashboard do not use it.
 - **The row of buttons under the input box can be reordered by dragging, the
   same way tabs can.** The send/stop button, mic, palette, quick commands,
   `/ ▾`, and ⌫ move with a drag on desktop browsers (this does not work on
@@ -258,6 +272,20 @@ Release artifacts are published at
   Claude or Codex child, in the same tree.
 
 ### Changed
+- **Claude Code and Codex child sessions now get their first instruction as a
+  launch argument instead of having it typed into their screen.** The CLI keeps
+  the instruction through its own startup questions (folder trust, update
+  notices) and starts on it once they are answered, so nothing the Hub types
+  can land on the wrong screen. Your input is no longer held while such a child
+  starts, so you can answer those questions in the child session right away.
+  The Hub counts the instruction as received when it first appears in the CLI's
+  own transcript, and tells the conductor and the board once if the child is
+  still waiting on its folder-trust question. On Windows, when Codex runs
+  through `cmd.exe` (which cuts an argument at its first newline) or the
+  instruction is very long, the argument is a one-line pointer to a private
+  file under `~/.many-ai-cli/tmp` that is removed when the session ends. Other
+  CLIs keep the typed route. As with headless children, the instruction can be
+  read from the machine's process list while the child runs.
 - **The approval patterns you add in `~/.many-ai-cli/approval-patterns/` now
   drive the Hub's detection of CLI approval prompts.** They used to apply only
   in an open browser tab. The Hub rereads them at startup and whenever the
@@ -397,6 +425,22 @@ Release artifacts are published at
 
 ### Fixed
 
+- **A child session started in a folder the CLI had not trusted yet is no longer
+  quit (Claude Code) or trusted on your behalf (Codex) by the Hub.** When the
+  CLI opened with its "do you trust this folder?" question, the Hub could not
+  read it, waited 45 seconds for the input box, and then typed the child's first
+  instruction and Enter into the question. Claude Code 2.1.281 lists "No, exit"
+  first, so that Enter quit the child; Codex v0.156.1 lists "Trust and continue"
+  first, so it trusted the folder without asking you. The Hub now recognises
+  these questions (and Claude's external CLAUDE.md import question), types
+  nothing into them, and tells the conductor and the board that the child is
+  waiting for you to answer in the child session. The hidden usage probe also
+  picks the trust option by its text instead of pressing Enter.
+- **The toast shown while the Hub holds your input for a session that is
+  still receiving its first instruction no longer says "wrapper not
+  connected".** The wrapper was connected; the Hub was holding your keys until
+  the first instruction had been sent. The toast now says so, and the "wrapper
+  not connected" wording is kept for the case it describes.
 - **The approval panel now shows up as soon as you switch to a session, reload
   the page, or reconnect.** An approval that arrived while you were looking at
   another session could stay invisible after you switched to it — the panel was

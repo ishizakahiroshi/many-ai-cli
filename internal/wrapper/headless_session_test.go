@@ -109,8 +109,11 @@ func TestRunRejectsImpossibleHeadlessFlagCombinations(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "subscription-login") {
 		t.Fatalf("err = %v, want the headless/login combination rejected", err)
 	}
-	err = Run(cfg, quietLogger(), "claude", []string{"--prompt-file", "somewhere.md"})
+	// --prompt-file は対話起動でも受け取る（最初の指示を起動引数で渡す・子 plan
+	// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C2）。意味を
+	// なさないのは login セッションとの組み合わせだけ。
+	err = Run(cfg, quietLogger(), "claude", []string{"--subscription-login", "--prompt-file", "somewhere.md"})
 	if err == nil || !strings.Contains(err.Error(), "prompt-file") {
-		t.Fatalf("err = %v, want --prompt-file without --headless rejected", err)
+		t.Fatalf("err = %v, want --prompt-file with --subscription-login rejected", err)
 	}
 }

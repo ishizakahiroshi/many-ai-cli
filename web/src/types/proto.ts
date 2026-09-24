@@ -433,6 +433,11 @@ export interface Message {
 	 */
 	remember_permission?: boolean;
 	/**
+	 * 確認ダイアログで「このフォルダを信頼済みとして登録する」を出してよい provider。
+	 * spawn_confirmation_requested とその再送の両方に載る。
+	 */
+	trust_grant_providers?: string[];
+	/**
 	 * spawn_confirmation_closed の reason は5値のみ:
 	 * approved | refused | superseded | parent_gone | spawn_failed。
 	 * spawn_failed のときだけ text に失敗理由が入る。session_id は親。

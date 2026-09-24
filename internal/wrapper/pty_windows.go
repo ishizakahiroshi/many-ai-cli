@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -138,6 +140,24 @@ func resolveCmd(provider string, customArgv []string, args []string) (string, []
 		return provider, args
 	}
 	return execpath.Resolve(exePath, args)
+}
+
+// launchShellShim reports whether launching provider goes through cmd.exe — an
+// npm shim the wrapper could not unwrap to a real .exe — and which shim cmd.exe
+// would run. launch_prompt.go uses it: cmd.exe cuts an argument at its first
+// newline, so an instruction handed over at launch has to become a one-line
+// pointer on this route.
+//
+// It resolves with a non-empty argument list on purpose. execpath.Resolve takes
+// a different branch when there are no arguments (it tries the .exe next to
+// the shim first), and a launch that carries an instruction always has at
+// least that one argument.
+func launchShellShim(provider string, customArgv []string) (string, bool) {
+	name, args := resolveCmd(provider, customArgv, []string{"probe"})
+	if !strings.EqualFold(filepath.Base(name), "cmd.exe") || len(args) < 2 || !strings.EqualFold(args[0], "/c") {
+		return "", false
+	}
+	return args[1], true
 }
 
 // resolveDefaultShell returns the path to the default interactive shell on

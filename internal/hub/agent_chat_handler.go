@@ -386,6 +386,9 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		transcriptPath = path
 	}
 	s.scanTranscriptApprovalMarkers(id, provider, transcriptPath, messages, stateWasReset, time.Now())
+	// 起動引数で最初の指示を渡した子は、トランスクリプトに最初の user メッセージが
+	// 現れた時点を「指示が受け取られた」とする（打ち込んでいないのでエコーが無い）。
+	s.noteLaunchPromptAccepted(id, messages, time.Now())
 
 	for _, message := range messages {
 		if !s.broadcastAgentChatIfCurrent(id, generation, proto.Message{

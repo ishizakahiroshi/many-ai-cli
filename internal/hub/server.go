@@ -26,6 +26,7 @@ import (
 	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/attach"
 	"many-ai-cli/internal/autoapproval"
+	"many-ai-cli/internal/clitrust"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
@@ -990,6 +991,15 @@ type Server struct {
 	bugReportSaveMarkdown func(string) (string, error)
 	bugReportLogPreviewMu sync.Mutex
 	bugReportLogPreviews  map[string]bugReportLogPreview
+
+	// folderTrustGrant / wrapExecutable は子の起動まわりの外部境界（テストで
+	// 差し替え）。nil なら clitrust.Grant / os.Executable。folderTrustGrant は
+	// 利用者の CLI の設定ファイルへ書くので、テストでは必ず差し替える。
+	folderTrustGrant func(clitrust.Target) (clitrust.Result, error)
+	wrapExecutable   func() (string, error)
+	// launchArgUsable はこの端末で子の最初の指示を起動引数で渡せるか（テストで
+	// 差し替え）。nil なら wrapper.LaunchPromptArgUsable。
+	launchArgUsable func(provider string) (bool, string)
 }
 
 type branchRefreshRequest struct {

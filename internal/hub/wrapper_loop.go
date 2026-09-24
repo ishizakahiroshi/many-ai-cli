@@ -78,6 +78,23 @@ func (s *Server) attachStore(start sessionstore.SessionStart, cardMeta sessionst
 	return storeID, saved
 }
 
+// initialInjectGateNeeded reports whether a registering session holds user
+// input until its first instruction has been typed in (initialInjectPending).
+//
+// orchestration セッションは登録直後に初期プロンプト注入（conductor は wrapperLoop
+// 末尾、子は dispatchSpawn の injectInitialPromptNotify）が走る。通常の /api/spawn が
+// initial_prompt を渡した場合（plan_session-handoff-board_c4_prompted-spawn.md C1）
+// も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を保留し、
+// 起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
+//
+// 最初の指示を起動時に受け取った子（PromptAtLaunch）には掛けない。注入が来ないので
+// ゲートを解く人がおらず、90 秒の上限まで利用者の入力 — 子の画面に出た信頼確認への
+// 回答も — が届かなくなる（子 plan
+// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3）。
+func initialInjectGateNeeded(meta pendingChild) bool {
+	return (meta.OrchestrationID != "" || meta.InitialPrompt != "") && !meta.PromptAtLaunch
+}
+
 func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	startedAt := time.Now()
 	branch := gitBranch(reg.CWD)
@@ -216,12 +233,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		customProviderSession: customProviderSession,
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
-	if childMeta.OrchestrationID != "" || childMeta.InitialPrompt != "" {
-		// orchestration セッションは登録直後に初期プロンプト注入（conductor は本関数末尾、
-		// 子は handleSpawnChild の injectInitialPrompt）が走る。通常の /api/spawn が
-		// initial_prompt を渡した場合（plan_session-handoff-board_c4_prompted-spawn.md C1）
-		// も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を
-		// 保留し、起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
+	if initialInjectGateNeeded(childMeta) {
 		ses.initialInjectPending = true
 		ses.initialInjectGateAt = time.Now()
 	}

@@ -1160,7 +1160,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 	// docs/local/plan_child_execution_modes_headless.md 内部 C2）。どちらも省略が
 	// 既定なので、これらを知らない起動は 1 バイトも変わらない。
 	headless := fs.Bool("headless", false, "run the provider's own non-interactive mode (no PTY) instead of an interactive session; requires a headless definition for the provider")
-	promptFile := fs.String("prompt-file", "", "headless only: file holding the initial prompt. The wrapper reads it once and deletes it, so the prompt never sits in an argument list or a log")
+	promptFile := fs.String("prompt-file", "", "file holding the initial prompt. The wrapper reads it once and deletes it. Headless: passed the way the provider's headless definition says. Interactive: passed as the CLI's first launch argument, or as a one-line pointer to a private file when the launch goes through cmd.exe or the prompt is very long (launch_prompt.go)")
 	_ = fs.Parse(args)
 	providerArgs := fs.Args()
 
@@ -1182,8 +1182,10 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		loginMode = true
 		providerArgs = adapter.LoginArgs()
 	}
-	if strings.TrimSpace(*promptFile) != "" && !*headless {
-		return fmt.Errorf("--prompt-file is only used with --headless")
+	if strings.TrimSpace(*promptFile) != "" && loginMode {
+		// A login session runs the vendor's own sign-in prompt; there is no
+		// instruction to hand it.
+		return fmt.Errorf("--prompt-file cannot be combined with --subscription-login")
 	}
 
 	// Reconstruct provider-specific flags from wrapper-parsed flags
@@ -1502,7 +1504,41 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 		customArgv = argv
 	}
-	ps, err := startProcess(provider, customArgv, providerArgs, cwd, initCols, initRows, providerExtraEnv, cfg.Hub.TerminalColor)
+	// 最初の指示を起動引数で渡す（launch_prompt.go に理由の正本: 打ち込みをやめた
+	// 経緯・先頭に置く理由・cmd.exe と長さで案内の 1 行にする条件・プロセス一覧から
+	// 見えること）。**--settings と委譲の引数を足し終えたここで先頭へ置く。** 後ろに
+	// 置くと、段 2 の `--allowedTools a b …` の値として吸い込まれる。
+	// providerArgs 自体には入れない: 起動に失敗したときの診断（spawn ログ）に
+	// 利用者の指示を書き出さないため。
+	launchArgs := providerArgs
+	if path := strings.TrimSpace(*promptFile); path != "" {
+		dir, dirErr := launchPromptDir()
+		lp, lpCleanup, lpErr := preparedLaunchPrompt{}, func() {}, dirErr
+		if dirErr == nil {
+			lp, lpCleanup, lpErr = prepareLaunchPrompt(path, sessionID, provider, customArgv, dir, os.Getpid())
+		}
+		if lpErr != nil {
+			diagnoseStartFailure(os.Stderr, provider, providerArgs, lpErr)
+			_ = websocket.JSON.Send(conn, proto.Message{
+				Type:      "session_end",
+				SessionID: sessionID,
+				State:     "error",
+				ExitCode:  1,
+				Reason:    classifyStartFailure(lpErr),
+			})
+			_ = conn.Close()
+			return lpErr
+		}
+		if lpCleanup != nil {
+			defer lpCleanup()
+		}
+		if lp.Arg != "" {
+			launchArgs = withLaunchPrompt(providerArgs, lp.Arg)
+			// 指示の本文は出さない。どちらの渡し方になったかだけを残す。
+			logger.Info("launch_prompt_applied", "session_id", sessionID, "provider", provider, "pointer", lp.Pointer)
+		}
+	}
+	ps, err := startProcess(provider, customArgv, launchArgs, cwd, initCols, initRows, providerExtraEnv, cfg.Hub.TerminalColor)
 	if err != nil {
 		// Hub 側の spawn ログ (~/.many-ai-cli/logs/spawn/<provider>-<ts>.log) に
 		// 何が起きたかを残し、Hub UI のセッションカード「Disconnected」表示に

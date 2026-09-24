@@ -43,11 +43,15 @@ type spawnWrappedSpec struct {
 	Effort           string
 	ExecutionMode    string
 	PermissionPreset string
-	// InitialPrompt は headless 起動でのみ使う最初の指示。対話起動では空のまま
-	// で、プロンプトは今までどおり登録後に PTY へ注入される（注入経路は 1 本の
-	// まま）。headless には注入する相手（プロンプト待ちの TUI）が無いので、
-	// 起動時に argv / stdin で渡すしかない
-	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）。
+	// InitialPrompt は起動時に渡す最初の指示。入れるのは 2 通りだけで、どちらも
+	// childLaunchPrompt が決める:
+	//   - headless 起動。注入する相手（プロンプト待ちの TUI）が無いので、起動時に
+	//     渡すしかない（子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）
+	//   - 対話起動で、CLI が最初の指示を起動引数で受け取れるとき（config の
+	//     launch_prompt.go の表。子 plan:
+	//     docs/local/plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3）
+	// それ以外の対話起動では空のままで、指示は今までどおり登録後に PTY へ注入される。
+	// どちらの場合も wrapper へは --prompt-file で渡し、Hub の argv には本文を出さない。
 	InitialPrompt string
 	// SubscriptionProfileID は起動に使うサブスクリプション profile。
 	// 空なら CLI 自身のログイン環境をそのまま使う（従来動作）。
@@ -58,6 +62,17 @@ type spawnWrappedSpec struct {
 	// UsageProbe marks a short-lived internal session that must not be exposed
 	// in the normal UI session feed.
 	UsageProbe bool
+	// FolderTrust は wrapper のプロセスを起動する直前に 1 度だけ、子が実際に受け取る
+	// env と作業フォルダを渡して呼ばれる。承認画面で「このフォルダを信頼済みとして
+	// 登録する」が選ばれた orchestration の子にだけ dispatchSpawn が入れる。nil なら
+	// 何もしない。
+	//
+	// env を呼び出し側で組み立て直さず、ここで受け取るのは、auto の契約選択
+	// （subscriptionLaunch）が呼ぶたびに順番を進めるから。組み立て直すと、信頼を
+	// 書いた契約と子が起動した契約がずれる。戻り値が無いのは、書けなくても起動を
+	// 止めないため（親 plan の不変条件 4）。再起動用の spec（setChildRestartData）には
+	// 写さない — 同じフォルダで起きる再起動には、最初に書いた信頼がそのまま効く。
+	FolderTrust func(env []string, dir string)
 }
 
 const manyAICLIBinEnv = "MANY_AI_CLI_BIN"
@@ -191,8 +206,9 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 	}
 	// headless は provider 別 switch の外。ここまでで組んだ model / effort /
 	// 権限のフラグはそのまま使い（headless 専用の写像を作らない・親 plan からの
-	// 差分 5）、実行モードを 1 組のフラグで足すだけにする。
-	headlessArgs, promptPath, headlessErr := s.headlessWrapArgs(spec.ExecutionMode, spec.InitialPrompt)
+	// 差分 5）、実行モードを 1 組のフラグで足すだけにする。対話起動で最初の指示を
+	// 起動引数で渡す子も、同じ --prompt-file で wrapper へ渡す。
+	headlessArgs, promptPath, headlessErr := s.launchPromptWrapArgs(spec.ExecutionMode, spec.InitialPrompt)
 	if headlessErr != nil {
 		return 0, headlessErr
 	}
@@ -230,7 +246,11 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 // spawn and by the subscription login spawn, which needs the same environment,
 // log, and process-attribute handling but none of the model/permission flags.
 func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []string, effectiveRoute string, wait time.Duration) (int, error) {
-	exe, err := os.Executable()
+	executable := s.wrapExecutable
+	if executable == nil {
+		executable = os.Executable
+	}
+	exe, err := executable()
 	if err != nil {
 		return 0, fmt.Errorf("executable error: %w", err)
 	}
@@ -260,6 +280,11 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 	}
 	if len(subEnv) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
+	}
+	// env はここで確定する。以降で cmd.Env を触らないので、FolderTrust が見る env と
+	// 子が受け取る env は同じもの。
+	if spec.FolderTrust != nil {
+		spec.FolderTrust(cmd.Env, cmd.Dir)
 	}
 
 	var stdinNull, spawnLog *os.File
@@ -478,6 +503,31 @@ func (s *Server) headlessWrapArgs(executionMode, prompt string) ([]string, strin
 	return append(args, "--prompt-file", path), path, nil
 }
 
+// launchPromptWrapArgs is headlessWrapArgs for spawnWrappedSession, which also
+// launches interactive children that take their first instruction as a launch
+// argument. A headless launch gets exactly what headlessWrapArgs gives it. An
+// interactive launch gets `--prompt-file <path>` only when its spec carries an
+// instruction — which childLaunchPrompt puts there only for a CLI in
+// internal/config/launch_prompt.go's table — and nothing otherwise, so every
+// other interactive launch keeps the argv it had before.
+//
+// headlessWrapArgs itself stays headless-only: /api/spawn calls it for
+// screen-started sessions, which still get their instruction typed after
+// registration (the parent plan's C5), and must not receive it twice.
+func (s *Server) launchPromptWrapArgs(executionMode, prompt string) ([]string, string, error) {
+	if config.IsHeadlessExecutionMode(executionMode) {
+		return s.headlessWrapArgs(executionMode, prompt)
+	}
+	if strings.TrimSpace(prompt) == "" {
+		return nil, "", nil
+	}
+	path, err := writeHeadlessPromptFile(prompt)
+	if err != nil {
+		return nil, "", err
+	}
+	return []string{"--prompt-file", path}, path, nil
+}
+
 // writeHeadlessPromptFile writes one launch's prompt into ~/.many-ai-cli/tmp
 // with the same private modes as every other file many-ai-cli owns, and returns
 // its path.
@@ -524,7 +574,13 @@ func removeHeadlessPromptFile(path string) {
 const headlessPromptMaxAge = time.Hour
 
 // sweepStaleHeadlessPrompts deletes prompt files older than headlessPromptMaxAge
-// from dir. It only ever touches the names this package writes.
+// from dir. It only ever touches the names many-ai-cli writes there: this
+// package's prompt-*.md, and the wrapper's launch-<pid>-*.md pointer files
+// (internal/wrapper/launch_prompt.go). A wrapper deletes its own pointer file
+// when it exits; a kill skips that, so the pointer is collected here too — but
+// only once its wrapper is gone. While the wrapper runs, its CLI may still be
+// waiting on a trust dialog without having read the file, and age alone says
+// nothing about that.
 func sweepStaleHeadlessPrompts(dir string, now time.Time) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -532,7 +588,14 @@ func sweepStaleHeadlessPrompts(dir string, now time.Time) {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !strings.HasPrefix(name, "prompt-") || !strings.HasSuffix(name, ".md") {
+		if entry.IsDir() {
+			continue
+		}
+		if pid, ok := wrapper.LaunchPromptFileOwner(name); ok {
+			if pidAlive(pid) {
+				continue
+			}
+		} else if !strings.HasPrefix(name, "prompt-") || !strings.HasSuffix(name, ".md") {
 			continue
 		}
 		info, err := entry.Info()

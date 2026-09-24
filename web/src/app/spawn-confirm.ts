@@ -39,6 +39,8 @@ import {
   INTERNAL_BOUNDED_PERMISSION_MODE,
   approvalForSelection,
   headlessUnsupportedForSelection,
+  folderTrustOffered,
+  folderTrustDecision,
   type ChildApproval,
   type SpawnConfirmationRecord,
 } from './spawn-confirm-store.js';
@@ -208,6 +210,19 @@ export function headlessUnsupportedNoticeHtml(): string {
   return `<span class="spawn-confirm-approval-fallback">${escapeHtml(t('spawn_confirm_headless_unsupported'))}</span>`;
 }
 
+// 「このフォルダを信頼済みとして登録する」の文言に入れる CLI 名。provider の select と
+// 同じ表示名を使う（名前を 2 か所に書かない）。
+function folderTrustCliName(provider: string): string {
+  const option = ORCHESTRATION_CLI_OPTIONS.find((o) => o.value === provider);
+  return option?.label || provider;
+}
+
+function folderTrustTextHtml(provider: string): string {
+  const cli = folderTrustCliName(provider);
+  return `<span>${escapeHtml(t('spawn_confirm_grant_folder_trust', { cli }))}</span>
+          <span class="spawn-confirm-trust-note">${escapeHtml(t('spawn_confirm_grant_folder_trust_note', { cli }))}</span>`;
+}
+
 function outcomeMessage(reason: string, m: any): string {
   switch (reason) {
     case 'approved':
@@ -306,6 +321,10 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
         <input type="checkbox" name="remember_permission"${record.rememberPermission ? ' checked' : ''}>
         <span>${escapeHtml(t('spawn_confirm_remember_permission'))}</span>
       </label>
+      <label class="spawn-confirm-remember spawn-confirm-trust" data-spawn-confirm-trust${folderTrustOffered(record, provider) ? '' : ' hidden'}>
+        <input type="checkbox" name="grant_folder_trust" checked>
+        <span class="spawn-confirm-trust-text" data-spawn-confirm-trust-text>${folderTrustTextHtml(provider)}</span>
+      </label>
     </div>
     <div class="spawn-confirm-prompt-block">
       <div class="spawn-confirm-prompt-head">
@@ -335,6 +354,17 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
   const presetSelect = dialog.querySelector('[name=permission_preset]') as HTMLSelectElement | null;
   const executionSelect = dialog.querySelector('[name=execution_mode]') as HTMLSelectElement | null;
   const rememberInput = dialog.querySelector('[name=remember_permission]') as HTMLInputElement | null;
+  const trustField = dialog.querySelector('[data-spawn-confirm-trust]') as HTMLElement | null;
+  const trustText = dialog.querySelector('[data-spawn-confirm-trust-text]') as HTMLElement | null;
+  const trustInput = dialog.querySelector('[name=grant_folder_trust]') as HTMLInputElement | null;
+
+  // 信頼の登録は、選んでいる provider が Hub の一覧にあるときだけ出す。provider を
+  // 差し替えたら、出すかどうかと文言の CLI 名を引き直す。チェックの状態は保つ。
+  function refreshFolderTrust(): void {
+    const provider = providerSelect?.value || record.provider;
+    if (trustField) trustField.hidden = !folderTrustOffered(record, provider);
+    if (trustText) trustText.innerHTML = folderTrustTextHtml(provider);
+  }
 
   // 権限欄は provider と段の 2 つで決まる。どちらを差し替えても同じ 1 本を通して
   // 引き直す（片方だけ追従する経路を作らない）。値は起動時に受け取った表から引くので
@@ -371,6 +401,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       // provider を差し替えたら渡る権限も変わる。アイコンだけ追従して権限欄が
       // 前の provider のまま残ると、承認する人が見ている情報が実物と食い違う。
       refreshApprovalDisplay();
+      refreshFolderTrust();
       // effort の候補も provider ごとに違う。写像が無い provider を選んだら欄を隠し、
       // 前の provider の値を送ってしまわないよう選択も空へ戻す（Hub はその値を
       // 400 で弾くので、残ったままだと承認できなくなる）。
@@ -479,6 +510,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       if (el) el.disabled = true;
     }
     if (rememberInput) rememberInput.disabled = true;
+    if (trustInput) trustInput.disabled = true;
     setActionsToProcessing();
     showStatus(t('spawn_confirm_processing'));
     const modelVal = rawModel;
@@ -504,6 +536,9 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
       permission_preset: permissionPresetVal,
     };
     if (approved) payload.remember_permission = !!rememberInput?.checked;
+    // 信頼の登録は、チェックボックスを出しているときに承認した場合だけ送る。
+    const grantFolderTrust = folderTrustDecision(!!trustField && !trustField.hidden, !!trustInput?.checked, approved);
+    if (grantFolderTrust !== undefined) payload.grant_folder_trust = grantFolderTrust;
     try {
       const res = await fetch(`/api/sessions/${record.parentId}/spawn-confirm?token=${token}`, {
         method: 'POST',

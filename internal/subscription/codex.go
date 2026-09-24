@@ -2,6 +2,7 @@ package subscription
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -33,6 +34,23 @@ func (codexAdapter) LaunchEnv(profileDir string) []string {
 }
 
 func (codexAdapter) LoginArgs() []string { return []string{"login"} }
+
+// CodexConfigFileFromEnv reports which config.toml a Codex process started with
+// env ("KEY=VALUE" entries, normally a child's spawn env) will read. Like
+// ClaudeStateFileFromEnv, and unlike vendorDefaultDir, it keeps a CODEX_HOME
+// that points inside the profiles tree: for a profile child that is the file
+// that matters.
+func CodexConfigFileFromEnv(env []string) string {
+	value, _ := envSliceValue(env, CodexHomeEnv)
+	if dir := strings.TrimSpace(value); dir != "" {
+		return filepath.Join(dir, "config.toml")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".codex", "config.toml")
+}
 
 func (a codexAdapter) Status(ctx context.Context, profileDir string) (Status, error) {
 	out, code, err := runVendorCLI(ctx, "codex", []string{"login", "status"}, a.LaunchEnv(profileDir))

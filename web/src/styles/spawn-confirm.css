@@ -207,6 +207,25 @@
   margin: 0;
   cursor: pointer;
 }
+/* 「このフォルダを信頼済みとして登録する」。見た目は「次回もこの段」と同じで、
+   下に小さく補足（何を書くか・登録しないと何が起きるか）を添える。 */
+.spawn-confirm-trust {
+  align-items: flex-start;
+  line-height: 1.35;
+}
+.spawn-confirm-trust input[type="checkbox"] {
+  flex: none;
+  margin-top: 1px;
+}
+.spawn-confirm-trust-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.spawn-confirm-trust-note {
+  font-size: 0.68rem;
+  opacity: 0.85;
+}
 
 /* ── 最初の指示 ── */
 .spawn-confirm-prompt-head {

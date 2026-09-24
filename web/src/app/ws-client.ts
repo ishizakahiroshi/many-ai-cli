@@ -419,9 +419,12 @@ export function _connectWs() {
   }
 
   if (m.type === 'input_deferred') {
-    // wrapper 未接続/送信失敗で Hub が入力を保留した。再接続時に自動再送されるが、
-    // ユーザーには「今すぐは届いていない」ことを知らせる。
-    showToast(t('toast_input_deferred', { id: m.session_id }));
+    // Hub が入力を保留した。保留は後で自動で届くが、ユーザーには「今すぐは届いていない」
+    // ことを理由つきで知らせる。reason が initial_prompt のときは wrapper は接続していて、
+    // 最初の指示を送り終えるのを待っているだけ（2026-09-24 の #53 では、これを
+    // 「wrapper 未接続」と誤って出していた）。
+    const key = m.reason === 'initial_prompt' ? 'toast_input_deferred_initial' : 'toast_input_deferred';
+    showToast(t(key, { id: m.session_id }));
     return;
   }
 

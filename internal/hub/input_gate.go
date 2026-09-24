@@ -428,6 +428,10 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 
 	s.sessionsMu.Lock()
 	gated := !bypassGate && sessionInjectGated(ses, time.Now())
+	// 保留の理由を利用者に正しく伝えるため、初期プロンプトの送信待ちの間かどうかを
+	// 覚えておく。ゲートの 90 秒を過ぎても、ゲート中に積んだ保留が残っている間は
+	// 新しい入力もその後ろへ並ぶので、理由は同じ「送信待ち」になる。
+	initialPromptPhase := ses.initialInjectPending
 	if s.sessions[sessionID] == nil {
 		s.sessionsMu.Unlock()
 		return false
@@ -454,7 +458,11 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 		"bytes", len(combined), "gated", gated, "has_pending", hasPending, "pending_len", pendingLen,
 		"bypass", bypassGate, "deferred", deferInput)
 	if deferInput {
-		s.notifyInputDeferred(sessionID)
+		reason := inputDeferredWrapper
+		if initialPromptPhase {
+			reason = inputDeferredInitialPrompt
+		}
+		s.notifyInputDeferred(sessionID, reason)
 		return false
 	}
 	rem := s.trySendInput(sessionID, combined)
@@ -470,7 +478,7 @@ func (s *Server) submitInputWithGate(sessionID int, combined string, bypassGate 
 			s.pendingInput[sessionID] = appendPendingInput(s.pendingInput[sessionID], rem)
 			s.sessionsMu.Unlock()
 		}
-		s.notifyInputDeferred(sessionID)
+		s.notifyInputDeferred(sessionID, inputDeferredWrapper)
 		return false
 	}
 	return true
@@ -831,7 +839,16 @@ func appendPendingInput(q []string, item string) []string {
 	return q
 }
 
-// notifyInputDeferred は UI へ「入力を保留した（wrapper 未接続/送信失敗）」を通知する。
-func (s *Server) notifyInputDeferred(sessionID int) {
-	s.broadcast(proto.Message{Type: "input_deferred", SessionID: sessionID})
+// input_deferred の Reason。画面はこれでトーストの文言を選ぶ。
+const (
+	// inputDeferredInitialPrompt: 初期プロンプトを届け終えるまで、利用者の入力を預かっている。
+	// wrapper は接続している（2026-09-24 の #53 では、これを「wrapper 未接続」と表示していた）。
+	inputDeferredInitialPrompt = "initial_prompt"
+	// inputDeferredWrapper: wrapper 未接続・送信失敗で、再接続時に送り直す。
+	inputDeferredWrapper = "wrapper"
+)
+
+// notifyInputDeferred は UI へ「入力を保留した」を理由つきで通知する。
+func (s *Server) notifyInputDeferred(sessionID int, reason string) {
+	s.broadcast(proto.Message{Type: "input_deferred", SessionID: sessionID, Reason: reason})
 }

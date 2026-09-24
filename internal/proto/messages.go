@@ -280,6 +280,14 @@ type Message struct {
 	// (pending_spawn-confirm-permission-disclosure.md, 子 plan
 	// plan_derived-session-launch_c2_permission-tiers.md 内部 C3).
 	SpawnChildApproval map[string]map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
+	// TrustGrantProviders lists the providers for which the confirmation
+	// dialog offers "register this folder as trusted by the CLI" — the ones
+	// internal/clitrust can write trust for. It is a list rather than a flag
+	// because the approver can switch the provider in the dialog, and the UI
+	// shows or hides the checkbox for whatever is selected without asking the
+	// Hub again. Sent on spawn_confirmation_requested and on its resend to a
+	// (re)connecting UI (子 plan plan_child-launch-prompt-and-trust_c3_spawn-confirm-trust.md).
+	TrustGrantProviders []string `json:"trust_grant_providers,omitempty"`
 	// spawn_confirmation_closed: Hub → UI. Tells every browser that a spawn
 	// confirmation is no longer open, so any dialog showing it can close.
 	// Reason is one of exactly five values (C2,

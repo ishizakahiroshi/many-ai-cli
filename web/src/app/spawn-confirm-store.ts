@@ -51,6 +51,11 @@ export interface SpawnConfirmationRecord {
   // 段を既に覚えていれば true で開く。欄を持たない古い Hub からは false になり、
   // そのときは「覚えていない」と同じ見え方になる（承認しても記憶は増えない）。
   rememberPermission: boolean;
+  // 「このフォルダを信頼済みとして登録する」を出してよい provider（Hub の
+  // internal/clitrust が信頼を書ける CLI）。ダイアログで provider を差し替えても
+  // 出し分けられるよう一覧で受け取る。欄を持たない古い Hub からは空で、そのときは
+  // チェックボックスを出さない（Hub が受け取れない欄を送らない）。
+  trustGrantProviders: string[];
   requestedAtMs: number;
   // provider → 段 → 実効権限。2 段のキーにするのは、ダイアログが承認前に
   // provider と段のどちらも差し替えられるため。選び直した瞬間に表示を切り替えられる
@@ -248,9 +253,26 @@ export function recordFromMessage(m: any): SpawnConfirmationRecord {
     executionMode: String(m?.execution_mode || ''),
     permissionPreset: String(m?.permission_preset || ''),
     rememberPermission: Boolean(m?.remember_permission),
+    trustGrantProviders: Array.isArray(m?.trust_grant_providers)
+      ? m.trust_grant_providers.map((v: any) => String(v ?? '').trim()).filter((v: string) => v)
+      : [],
     requestedAtMs: Number(m?.spawn_requested_at_ms || 0) || Date.now(),
     approval: approvalsFromMessage(m?.spawn_child_approval),
   };
+}
+
+// 選んでいる provider で「このフォルダを信頼済みとして登録する」を出すか。
+export function folderTrustOffered(record: SpawnConfirmationRecord, provider: string): boolean {
+  return record.trustGrantProviders.includes(String(provider || '').trim());
+}
+
+// 決定の本文に載せる grant_folder_trust。承認し、かつチェックボックスを出している
+// ときだけ値を返す。それ以外は undefined で、呼び出し側は欄ごと送らない:
+// 拒否や対象外の CLI で「書かない」をわざわざ送る意味は無く、Hub も欄なしを
+// 「書かない」と読む。
+export function folderTrustDecision(offered: boolean, checked: boolean, approved: boolean): boolean | undefined {
+  if (!approved || !offered) return undefined;
+  return checked;
 }
 
 // 旧 Hub から届いた（このフィールドを持たない）メッセージでも落ちないよう、

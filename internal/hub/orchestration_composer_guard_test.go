@@ -166,6 +166,103 @@ func TestWaitForComposerReady_BlockedSignalReturnsPromptly(t *testing.T) {
 	}
 }
 
+// claudeFolderTrustScreen は Claude Code 2.1.281 のフォルダ信頼の確認（2026-09-24 に #53 で
+// 観測）を、パスだけ合成に差し替えて再現したもの。既定のカーソルは先頭の「No, exit」。
+const claudeFolderTrustScreen = "Accessing workspace:\r\n\r\nC:\\work\\example\r\n\r\n" +
+	"Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). " +
+	"If not, take a moment to review what's in this folder first.\r\n\r\n" +
+	"Claude Code'll be able to read, edit, and execute files here.\r\n\r\nSecurity guide\r\n\r\n" +
+	"❯ No, exit\r\n  Yes, I trust this folder\r\n\r\nEnter to confirm · Esc to cancel\r\n"
+
+// codexFolderTrustScreen は codex v0.156.1 のフォルダ信頼の確認（2026-09-24 に #51 で観測）。
+// 旧版の「Do you trust the contents of this directory」とは文言が違う。
+const codexFolderTrustScreen = "Folder access C:\\work\\example\r\n\r\n" +
+	"Trust this folder? Codex can read, edit, and run files here, subject to your permission settings.\r\n" +
+	"Folder settings can run code automatically, even without a model request.\r\n\r\n" +
+	"› 1. Trust and continue\r\n  2. Quit\r\n\r\nenter continue · esc quit\r\n"
+
+// TestWaitForComposerReady_FolderTrustScreensAreBlocked は、#53 / #51 のフォルダ信頼の確認を
+// モーダルとして検出し、maxWait を待たずに composerBlocked を返すことを確認する。
+// 検出できないと composerUnknown → 静止待ちへ落ち、確認画面へ本文と Enter を打ち込む
+// （Claude 2.1.281 では既定の「No, exit」が選ばれて子が終了した）。
+func TestWaitForComposerReady_FolderTrustScreensAreBlocked(t *testing.T) {
+	cases := []struct {
+		provider, screen, wantBlocker string
+	}{
+		{"claude", claudeFolderTrustScreen, "Isthisaprojectyoucreatedoroneyoutrust?"},
+		{"codex", codexFolderTrustScreen, "Trustthisfolder?Codexcanread"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.provider, func(t *testing.T) {
+			s := newTestServer()
+			ses := registerTestSession(s, 1, tc.provider)
+			ses.vt = newVTBuffer(130, 35)
+			ses.vt.Write([]byte(tc.screen))
+
+			const maxWait = 5 * time.Second
+			start := time.Now()
+			res, blocker := s.waitForComposerReady(1, maxWait)
+			elapsed := time.Since(start)
+
+			if res != composerBlocked {
+				t.Fatalf("result = %v, want composerBlocked", res)
+			}
+			if blocker != tc.wantBlocker {
+				t.Fatalf("blocker = %q, want %q", blocker, tc.wantBlocker)
+			}
+			if !folderTrustBlockingSignals[blocker] {
+				t.Fatalf("blocker %q is not classified as a folder-trust prompt", blocker)
+			}
+			if elapsed > 5*orchestrationComposerStableFor {
+				t.Fatalf("took %v, want close to stableFor %v, not maxWait %v", elapsed, orchestrationComposerStableFor, maxWait)
+			}
+		})
+	}
+}
+
+// TestInjectInitialPromptNotify_ClaudeFolderTrustNeverInjects は #53 の再発防止。
+// Claude の子がフォルダ信頼の確認で止まっている間は 1 バイトも書き込まず、board と親へ
+// 「子の画面で Yes を選んでから送り直す」手順つきの知らせを 1 回だけ出す。
+func TestInjectInitialPromptNotify_ClaudeFolderTrustNeverInjects(t *testing.T) {
+	s := newTestServer()
+	registerTestSession(s, 1, "claude") // 親。wrapper 未接続なので pendingInput で受ける。
+	child := registerTestSession(s, 2, "claude")
+	child.vt = newVTBuffer(130, 35)
+	child.vt.Write([]byte(claudeFolderTrustScreen))
+
+	var frames []string
+	s.sessionsMu.Lock()
+	s.wrappers[2] = &wrapperConn{sendFunc: func(m any) error {
+		if msg, ok := m.(proto.Message); ok && msg.Type == "pty_input" {
+			frames = append(frames, string(msg.Data))
+		}
+		return nil
+	}}
+	s.sessionsMu.Unlock()
+
+	boardPath := filepath.Join(t.TempDir(), "board.md")
+	s.injectInitialPromptNotify(2, "some prompt", injectNotice{ParentID: 1, BoardPath: boardPath, Role: "verify"})
+
+	if len(frames) != 0 {
+		t.Fatalf("wrapper received pty_input while the child was asking about folder trust: %q", frames)
+	}
+	data, err := os.ReadFile(boardPath)
+	if err != nil {
+		t.Fatalf("board file not written: %v", err)
+	}
+	for _, want := range []string{"initial prompt NOT delivered", "trust its working folder", "orchestrate send"} {
+		if !strings.Contains(string(data), want) {
+			t.Errorf("board missing %q: %s", want, data)
+		}
+	}
+	s.sessionsMu.Lock()
+	joined := strings.Join(s.pendingInput[1], "")
+	s.sessionsMu.Unlock()
+	if n := strings.Count(joined, "[MANY-AI-CLI-ORCHESTRATION-ERROR]"); n != 1 {
+		t.Fatalf("parent received %d orchestration error notices, want exactly 1: %q", n, joined)
+	}
+}
+
 // TestWaitForComposerReady_NeitherSignalTimesOutAsUnknown は、ready にも blocked にも
 // 一致しない画面が続く場合、deadline 経由でのみ composerUnknown を返すことを確認する
 // （この分岐に即時リターンは無い。安定した確定シグナルが無いのだから待つほかない）。

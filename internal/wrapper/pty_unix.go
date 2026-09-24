@@ -140,6 +140,13 @@ func resolveCmd(provider string, customArgv []string, args []string) (string, []
 	return provider, args
 }
 
+// launchShellShim is the Unix half of the Windows function of the same name
+// (pty_windows.go). Nothing here goes through a shell: resolveCmd execs the
+// CLI directly, so an argument reaches it byte for byte, newlines included.
+func launchShellShim(provider string, customArgv []string) (string, bool) {
+	return "", false
+}
+
 // resolveDefaultShell returns the path to the default interactive shell on
 // Unix. Preference order: $SHELL env → bash → sh.
 func resolveDefaultShell() string {
