@@ -272,20 +272,24 @@ Release artifacts are published at
   Claude or Codex child, in the same tree.
 
 ### Changed
-- **Claude Code and Codex child sessions now get their first instruction as a
-  launch argument instead of having it typed into their screen.** The CLI keeps
-  the instruction through its own startup questions (folder trust, update
-  notices) and starts on it once they are answered, so nothing the Hub types
-  can land on the wrong screen. Your input is no longer held while such a child
-  starts, so you can answer those questions in the child session right away.
-  The Hub counts the instruction as received when it first appears in the CLI's
-  own transcript, and tells the conductor and the board once if the child is
-  still waiting on its folder-trust question. On Windows, when Codex runs
-  through `cmd.exe` (which cuts an argument at its first newline) or the
-  instruction is very long, the argument is a one-line pointer to a private
-  file under `~/.many-ai-cli/tmp` that is removed when the session ends. Other
-  CLIs keep the typed route. As with headless children, the instruction can be
-  read from the machine's process list while the child runs.
+- **Claude Code and Codex sessions now get their first instruction as a launch
+  argument instead of having it typed into their screen.** This covers
+  orchestration children, a conductor started with the Orchestration button
+  (its role guide), and a session started with a first instruction (for example
+  a handoff). The CLI keeps the instruction through its own startup questions
+  (folder trust, update notices) and starts on it once they are answered, so
+  nothing the Hub types can land on the wrong screen. Your input is no longer
+  held while such a session starts, so you can answer those questions right
+  away. For a child, the Hub counts the instruction as received when it first
+  appears in the CLI's own transcript, and tells the conductor and the board
+  once if the child is still waiting on its folder-trust question. A conductor
+  started with an instruction still receives only its role guide, as before.
+  On Windows, when the CLI is started through `cmd.exe` (which cuts an argument
+  at its first newline) or the instruction is very long, the argument is a
+  one-line pointer to a private file under `~/.many-ai-cli/tmp` that is removed
+  when the session ends. Other CLIs keep the typed route. As with headless
+  children, the instruction can be read from the machine's process list while
+  the session runs.
 - **The approval patterns you add in `~/.many-ai-cli/approval-patterns/` now
   drive the Hub's detection of CLI approval prompts.** They used to apply only
   in an open browser tab. The Hub rereads them at startup and whenever the
@@ -434,8 +438,11 @@ Release artifacts are published at
   first, so it trusted the folder without asking you. The Hub now recognises
   these questions (and Claude's external CLAUDE.md import question), types
   nothing into them, and tells the conductor and the board that the child is
-  waiting for you to answer in the child session. The hidden usage probe also
-  picks the trust option by its text instead of pressing Enter.
+  waiting for you to answer in the child session. This guards the CLIs that
+  still have their first instruction typed in; Claude Code and Codex now get it
+  as a launch argument (see Changed), and the approval dialog can register the
+  folder as trusted up front (see Added). The hidden usage probe also picks the
+  trust option by its text instead of pressing Enter.
 - **The toast shown while the Hub holds your input for a session that is
   still receiving its first instruction no longer says "wrapper not
   connected".** The wrapper was connected; the Hub was holding your keys until

@@ -1,10 +1,12 @@
 package config
 
 // launch_prompt.go is the one table that says, per provider, whether an
-// **interactive** launch can take the child's first instruction as a launch
-// argument instead of having the Hub type it into the CLI's screen
-// (親 plan: docs/local/plan_child-launch-prompt-and-trust.md 不変条件 1.
-// 子 plan: docs/local/plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C1).
+// **interactive** launch can take its first instruction as a launch argument
+// instead of having the Hub type it into the CLI's screen — an orchestration
+// child's, and that of a conductor or a prompted session started from the
+// screen (親 plan: docs/local/plan_child-launch-prompt-and-trust.md 不変条件 1.
+// 子 plan: docs/local/plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C1,
+// docs/local/plan_child-launch-prompt-and-trust_c5_ui-launched.md 内部 C1).
 //
 // Why this exists. Typing into a screen the Hub cannot read is what went wrong
 // on 2026-09-24 (#53): Claude Code 2.1.281 opened its folder-trust dialog with

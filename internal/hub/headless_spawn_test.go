@@ -191,7 +191,7 @@ func TestLaunchArgProvidersAreNeverTyped(t *testing.T) {
 	board := filepath.Join(t.TempDir(), "board.md")
 	for _, provider := range orchestrationProviders {
 		for _, mode := range []string{"", config.ExecutionModeInteractive} {
-			viaArg := s.childPromptViaLaunchArg(provider, mode)
+			viaArg := s.promptViaLaunchArg(provider, mode)
 			_, inject := childLaunchPrompt(mode, viaArg, "hi", board, "review", "")
 			if want := !config.LaunchPromptViaArg(provider); inject != want {
 				t.Errorf("provider %q mode %q: inject = %v, want %v", provider, mode, inject, want)
@@ -253,14 +253,14 @@ func TestInitialInjectGateSkipsChildrenThatGotTheirPromptAtLaunch(t *testing.T) 
 
 // 表で true でも、この端末で渡せない（cmd.exe を通り、shim のパスに空白がある等）なら
 // 打ち込みへ戻す。headless は表と関係なく headless のまま。
-func TestChildPromptViaLaunchArgFallsBackWhenTheMachineCannot(t *testing.T) {
+func TestPromptViaLaunchArgFallsBackWhenTheMachineCannot(t *testing.T) {
 	s := newTestServer()
 	s.launchArgUsable = func(string) (bool, string) { return false, "synthetic: shim path contains whitespace" }
-	if s.childPromptViaLaunchArg("claude", "") {
+	if s.promptViaLaunchArg("claude", "") {
 		t.Fatal("an unusable launch argument was chosen")
 	}
 	s.launchArgUsable = func(string) (bool, string) { return true, "" }
-	if s.childPromptViaLaunchArg("claude", config.ExecutionModeHeadless) {
+	if s.promptViaLaunchArg("claude", config.ExecutionModeHeadless) {
 		t.Fatal("a headless child was put on the interactive launch-argument route")
 	}
 }

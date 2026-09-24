@@ -503,17 +503,14 @@ func (s *Server) headlessWrapArgs(executionMode, prompt string) ([]string, strin
 	return append(args, "--prompt-file", path), path, nil
 }
 
-// launchPromptWrapArgs is headlessWrapArgs for spawnWrappedSession, which also
-// launches interactive children that take their first instruction as a launch
-// argument. A headless launch gets exactly what headlessWrapArgs gives it. An
-// interactive launch gets `--prompt-file <path>` only when its spec carries an
-// instruction — which childLaunchPrompt puts there only for a CLI in
-// internal/config/launch_prompt.go's table — and nothing otherwise, so every
-// other interactive launch keeps the argv it had before.
-//
-// headlessWrapArgs itself stays headless-only: /api/spawn calls it for
-// screen-started sessions, which still get their instruction typed after
-// registration (the parent plan's C5), and must not receive it twice.
+// launchPromptWrapArgs is headlessWrapArgs for launches that may also be
+// interactive sessions taking their first instruction as a launch argument:
+// orchestration children (spawnWrappedSession) and sessions started from the
+// screen (/api/spawn). A headless launch gets exactly what headlessWrapArgs
+// gives it. An interactive launch gets `--prompt-file <path>` only when it is
+// handed an instruction — which childLaunchPrompt and screenSpawnLaunchPrompt
+// do only for a CLI in internal/config/launch_prompt.go's table — and nothing
+// otherwise, so every other interactive launch keeps the argv it had before.
 func (s *Server) launchPromptWrapArgs(executionMode, prompt string) ([]string, string, error) {
 	if config.IsHeadlessExecutionMode(executionMode) {
 		return s.headlessWrapArgs(executionMode, prompt)
@@ -526,6 +523,32 @@ func (s *Server) launchPromptWrapArgs(executionMode, prompt string) ([]string, s
 		return nil, "", err
 	}
 	return []string{"--prompt-file", path}, path, nil
+}
+
+// screenSpawnLaunchPrompt decides how an interactive session started from the
+// screen (/api/spawn) is given its first instruction, and returns the text to
+// hand the wrapper at launch — or "" when the instruction, if any, is typed in
+// after the session registers, as before (子 plan:
+// docs/local/plan_child-launch-prompt-and-trust_c5_ui-launched.md 内部 C1).
+//
+// The rule is the orchestration child's (childLaunchPrompt): a CLI that takes
+// its first instruction as a launch argument, on a machine that can pass one
+// (promptViaLaunchArg), gets it at launch; every other CLI keeps the typed
+// route. The text is exactly what registrationInjectPrompt would have typed:
+// the conductor's role guide for a conductor — even when an instruction came
+// along too, since the guide alone is what a conductor has always received —
+// and the screen's own instruction otherwise.
+func (s *Server) screenSpawnLaunchPrompt(provider, executionMode, orchestrationID, initialPrompt string) string {
+	if orchestrationID == "" && initialPrompt == "" {
+		return ""
+	}
+	if !s.promptViaLaunchArg(provider, executionMode) {
+		return ""
+	}
+	if orchestrationID != "" {
+		return buildConductorInitialPrompt(orchestrationID, s.orchestrationRolesFor(orchestrationID))
+	}
+	return initialPrompt
 }
 
 // writeHeadlessPromptFile writes one launch's prompt into ~/.many-ai-cli/tmp
@@ -658,8 +681,9 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		OrchestrationRoles map[string]*orchestrationRoleAssignment `json:"orchestration_roles"`
 		// InitialPrompt (plan_session-handoff-board_c4_prompted-spawn.md C1):
 		// 画面から渡す最初の指示。空文字（省略）は「従来どおり何も注入しない」で、
-		// この分岐に一切入らない。配送は spawn-child が使っている
-		// injectInitialPrompt を共有する（新しい配送方式を作らない）。
+		// この分岐に一切入らない。配送は子と同じ 2 通りで、起動引数で受け取れる
+		// CLI には起動時に --prompt-file で渡し、それ以外は spawn-child が使っている
+		// injectInitialPrompt を共有する（screenSpawnLaunchPrompt が決める）。
 		InitialPrompt string `json:"initial_prompt"`
 		// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3):
 		// 引き継ぎ元セッションの ID。看板 UI からの起動でのみ渡され、それ以外の
@@ -872,6 +896,12 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// 挙動が変わらない。
 	initialPrompt := sanitizeSpawnInitialPrompt(body.InitialPrompt)
 	headlessSpawn := config.IsHeadlessExecutionMode(body.ExecutionMode)
+	// 起動引数で最初の指示を受け取れる CLI の対話セッションは、conductor の案内も
+	// 画面の文面も起動時に渡し、登録後に打ち込まない。Hub が中身を読めない起動直後の
+	// 画面（フォルダの信頼の確認など）へ打ち込まないため（子 plan:
+	// docs/local/plan_child-launch-prompt-and-trust_c5_ui-launched.md 内部 C1）。
+	// 空なら今までどおり登録後に打ち込む。
+	launchPrompt := s.screenSpawnLaunchPrompt(body.Provider, body.ExecutionMode, orchestrationID, initialPrompt)
 	if lbl := spawnPendingLabelForInitialPrompt(body.Label, initialPrompt, time.Now()); lbl != "" {
 		body.Label = lbl
 		s.orchestration.mu.Lock()
@@ -880,16 +910,27 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// 同じく上書きせずマージする。
 		meta := s.orchestration.pending[body.Label]
 		// headless では注入しない（注入する相手が無い）。文面は起動時に
-		// --prompt-file で渡す。pending 自体は残すので、引き継ぎ元の記録
-		// （HandoffFrom）は対話起動と同じように残る
+		// --prompt-file で渡す。起動引数で渡す対話セッションも同じで、ここに
+		// 入れると同じ指示が 2 回届く。pending 自体は残すので、引き継ぎ元の記録
+		// （HandoffFrom）は注入するときと同じように残る
 		// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）。
-		if !headlessSpawn {
+		if !headlessSpawn && launchPrompt == "" {
 			meta.InitialPrompt = initialPrompt
 		}
 		meta.HandoffFrom = body.HandoffFrom
 		if meta.SpawnedAt.IsZero() {
 			meta.SpawnedAt = time.Now()
 		}
+		s.orchestration.pending[body.Label] = meta
+		s.orchestration.mu.Unlock()
+	}
+	if launchPrompt != "" {
+		// 起動時に渡した印。wrapperLoop はこれを見て、登録後に打ち込まず
+		// （registrationInjectPrompt）、入力保留も掛けない（initialInjectGateNeeded）。
+		// label は conductor の予約か、上の initial_prompt の分岐で必ず決まっている。
+		s.orchestration.mu.Lock()
+		meta := s.orchestration.pending[body.Label]
+		meta.PromptAtLaunch = true
 		s.orchestration.pending[body.Label] = meta
 		s.orchestration.mu.Unlock()
 	}
@@ -1098,14 +1139,20 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if args := allowedToolsWrapArgs(allowedTools); len(args) > 0 {
 		wrapArgs = append(wrapArgs, args...)
 	}
-	// headless も同じく switch の外。対話起動では 1 引数も増えない。
-	headlessArgs, promptPath, headlessErr := s.headlessWrapArgs(body.ExecutionMode, initialPrompt)
-	if headlessErr != nil {
+	// 起動時に渡す指示も同じく switch の外。headless は画面の文面そのもの、対話は
+	// 起動引数の経路に乗ったときだけ（launchPrompt）。どちらでもない対話起動では
+	// 1 引数も増えない。
+	promptAtLaunch := launchPrompt
+	if headlessSpawn {
+		promptAtLaunch = initialPrompt
+	}
+	promptArgs, promptPath, promptErr := s.launchPromptWrapArgs(body.ExecutionMode, promptAtLaunch)
+	if promptErr != nil {
 		cleanupIsolated()
-		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("headless prompt error", headlessErr))
+		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("prompt file error", promptErr))
 		return
 	}
-	wrapArgs = append(wrapArgs, headlessArgs...)
+	wrapArgs = append(wrapArgs, promptArgs...)
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
 	effectiveRoute := body.Route
@@ -1181,7 +1228,11 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	setCmdSysProcAttr(cmd)
-	if err := cmd.Start(); err != nil {
+	start := s.startSpawnCmd
+	if start == nil {
+		start = (*exec.Cmd).Start
+	}
+	if err := start(cmd); err != nil {
 		cleanupIsolated()
 		// 読む相手が起動しなかったので、書いたプロンプトを引き取る。
 		removeHeadlessPromptFile(promptPath)

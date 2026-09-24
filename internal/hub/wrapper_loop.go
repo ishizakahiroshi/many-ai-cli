@@ -87,12 +87,40 @@ func (s *Server) attachStore(start sessionstore.SessionStart, cardMeta sessionst
 // も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を保留し、
 // 起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
 //
-// 最初の指示を起動時に受け取った子（PromptAtLaunch）には掛けない。注入が来ないので
-// ゲートを解く人がおらず、90 秒の上限まで利用者の入力 — 子の画面に出た信頼確認への
-// 回答も — が届かなくなる（子 plan
-// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3）。
+// 最初の指示を起動時に受け取ったセッション（PromptAtLaunch）には掛けない。注入が
+// 来ないのでゲートを解く人がおらず、90 秒の上限まで利用者の入力 — 画面に出た信頼
+// 確認への回答も — が届かなくなる（子 plan
+// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3、画面から起動した
+// conductor・指示付きのセッションは plan_child-launch-prompt-and-trust_c5_ui-launched.md）。
 func initialInjectGateNeeded(meta pendingChild) bool {
 	return (meta.OrchestrationID != "" || meta.InitialPrompt != "") && !meta.PromptAtLaunch
+}
+
+// registrationInjectPrompt is what wrapperLoop types into a session right after
+// it registers, and the name of the goroutine that types it. An empty prompt
+// means nothing is typed.
+//
+//   - A conductor started from the toolbar's "Orchestration" button (Auto is
+//     false) gets the role guide (plan_orchestration-spawn-ui-exposure.md C2).
+//     spawn-child's own children (Auto is true) are typed by dispatchSpawn,
+//     never here.
+//   - A plain /api/spawn with an instruction gets that instruction as is,
+//     without the board/role framing (plan_session-handoff-board_c4_prompted-spawn.md
+//     C1). A conductor that also carried one gets only the role guide.
+//   - Either of the two handed over at launch instead (PromptAtLaunch — a CLI
+//     that takes its first instruction as a launch argument; 子 plan
+//     plan_child-launch-prompt-and-trust_c5_ui-launched.md) gets nothing: the
+//     CLI already holds the same text.
+func (s *Server) registrationInjectPrompt(meta pendingChild) (prompt, name string) {
+	switch {
+	case meta.PromptAtLaunch:
+		return "", ""
+	case meta.OrchestrationID != "" && !meta.Auto:
+		return buildConductorInitialPrompt(meta.OrchestrationID, s.orchestrationRolesFor(meta.OrchestrationID)), "inject_initial_prompt_conductor"
+	case meta.OrchestrationID == "" && meta.InitialPrompt != "":
+		return meta.InitialPrompt, "inject_initial_prompt_spawn"
+	}
+	return "", ""
 }
 
 func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
@@ -280,27 +308,17 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, Auto: childMeta.Auto, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
-	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの
-	// 「オーケストレーション」ボタン経由・Auto=false）にだけ役割マッピングの案内を注入する。
-	// spawn-child で自動生成される子（Auto=true）は handleSpawnChild 側で
-	// buildChildInitialPrompt を既に注入済みなのでここでは対象外。
-	if childMeta.OrchestrationID != "" && !childMeta.Auto {
-		roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
+	// 登録直後に打ち込む最初の指示（conductor の案内か、画面から渡した文面。何を
+	// 打ち込むか・打ち込まないかは registrationInjectPrompt だけが決める）。
+	if prompt, name := s.registrationInjectPrompt(childMeta); prompt != "" {
 		// goroutine で注入する: ここは wrapperMessageLoop 開始前のため、同期で
 		// waitForInputReady を呼ぶと出力が観測できず常に maxWait までブロックし、
 		// その間 PTY 出力の中継も止まる。
 		// safeGo で panic を recover する（素の go だと injectInitialPrompt 中の panic が
 		// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
-		prompt := buildConductorInitialPrompt(childMeta.OrchestrationID, roles)
-		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
-	} else if childMeta.OrchestrationID == "" && childMeta.InitialPrompt != "" {
-		// C1 (plan_session-handoff-board_c4_prompted-spawn.md): 通常の /api/spawn
-		// が画面から渡した文面。orchestration 経路のような board/role の枠組み文は
-		// 付けず、sanitizeSpawnInitialPrompt 済みの文面をそのまま注入する。
-		// 同じ safeGo + injectInitialPrompt を使うので、Enter が消える不具合の
-		// 再発防止（confirmInitialPromptSubmitted 等）もそのまま効く。
-		prompt := childMeta.InitialPrompt
-		s.safeGo("inject_initial_prompt_spawn", func() { s.injectInitialPrompt(id, prompt) })
+		// conductor も画面の文面も同じ injectInitialPrompt を使うので、Enter が消える
+		// 不具合の再発防止（confirmInitialPromptSubmitted 等）もそのまま効く。
+		s.safeGo(name, func() { s.injectInitialPrompt(id, prompt) })
 	}
 	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
 	// sessionUpdateMessage は approvalSourceEpoch を読むため、ここだけは

@@ -1000,6 +1000,10 @@ type Server struct {
 	// launchArgUsable はこの端末で子の最初の指示を起動引数で渡せるか（テストで
 	// 差し替え）。nil なら wrapper.LaunchPromptArgUsable。
 	launchArgUsable func(provider string) (bool, string)
+	// startSpawnCmd は /api/spawn が組んだ wrapper の起動（テストで差し替え）。
+	// nil なら cmd.Start。テストはプロセスを立てずに、組み上がった引数と
+	// --prompt-file の中身を見る。
+	startSpawnCmd func(cmd *exec.Cmd) error
 }
 
 type branchRefreshRequest struct {

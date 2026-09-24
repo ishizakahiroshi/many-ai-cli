@@ -150,7 +150,8 @@ type pendingChild struct {
 	// orchestration sessions, just without the board/role framing text
 	// buildConductorInitialPrompt / buildChildInitialPrompt add. Already
 	// sanitized and length-capped by sanitizeSpawnInitialPrompt before it
-	// lands here.
+	// lands here. Empty when the instruction was handed over at launch instead
+	// (PromptAtLaunch), so it is never delivered twice.
 	InitialPrompt string
 	// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3): the
 	// predecessor session's ID when this /api/spawn request is starting a
@@ -160,11 +161,12 @@ type pendingChild struct {
 	// creates a UI parent/child relationship (the successor is a new peer
 	// session, not this one's child).
 	HandoffFrom int
-	// PromptAtLaunch: この子は最初の指示を起動時に受け取った（headless か、対話で
-	// 起動引数を受け取れる CLI。childLaunchPrompt が決める）。注入が来ないので、
-	// wrapperLoop は登録時に入力保留（initialInjectPending）を掛けない — 掛けると、
-	// 解く人（注入の後始末）がいないまま 90 秒、利用者の入力（信頼確認への回答も）が
-	// 届かない。
+	// PromptAtLaunch: このセッションは最初の指示を起動時に受け取った（子は headless
+	// か、対話で起動引数を受け取れる CLI。childLaunchPrompt が決める。画面から起動した
+	// conductor・指示付きのセッションは screenSpawnLaunchPrompt が決める）。wrapperLoop
+	// は登録時に打ち込まず（registrationInjectPrompt）、入力保留（initialInjectPending）
+	// も掛けない — 掛けると、解く人（注入の後始末）がいないまま 90 秒、利用者の入力
+	// （信頼確認への回答も）が届かない。
 	PromptAtLaunch bool
 }
 
@@ -1174,7 +1176,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	// 最初の指示の渡し方は 3 通りで、どの子も必ずどれか 1 つだけを通る
 	// （childLaunchPrompt がその「1 つだけ」を決める唯一の場所）。登録時の入力保留を
 	// 掛けるかどうかがこの結果で決まるので、pending へ積む前に決める。
-	viaArg := s.childPromptViaLaunchArg(body.Provider, body.ExecutionMode)
+	viaArg := s.promptViaLaunchArg(body.Provider, body.ExecutionMode)
 	launchPrompt, injectAfterStart := childLaunchPrompt(body.ExecutionMode, viaArg, body.InitialPrompt, prep.boardPath, body.Role, prep.branch)
 	meta := pendingChild{
 		ParentSessionID: parentID,
@@ -2975,7 +2977,7 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 		defer s.releaseOrchestrationChildren(admissionID)
 		// 再起動も最初の起動と同じ childLaunchPrompt を通す（渡し方を 2 か所で決めない）。
 		// 再起動用の spec は InitialPrompt を持たないので、ここで入れ直す。
-		viaArg := s.childPromptViaLaunchArg(spec.Provider, spec.ExecutionMode)
+		viaArg := s.promptViaLaunchArg(spec.Provider, spec.ExecutionMode)
 		launchPrompt, injectAfterStart := childLaunchPrompt(spec.ExecutionMode, viaArg, child.InitialPrompt, board.Path, child.Role, child.WorktreeBranch)
 		spec.InitialPrompt = launchPrompt
 		meta := pendingChild{ParentSessionID: child.ParentID, Role: child.Role, Auto: true, Depth: 1, OrchestrationID: boardID, BoardPath: board.Path, WorktreeBranch: child.WorktreeBranch, SpawnedAt: time.Now(), PromptAtLaunch: !injectAfterStart}
@@ -3904,7 +3906,7 @@ func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int
 //	            a non-interactive process has no input box to type into, and
 //	            the injector would wait for one forever.
 //	launch arg  interactive, and the CLI takes its first instruction as a
-//	            launch argument (viaArg — childPromptViaLaunchArg). Handed over
+//	            launch argument (viaArg — promptViaLaunchArg). Handed over
 //	            at launch the same way, and nothing is injected: the CLI holds
 //	            the instruction through its own startup dialogs (a folder-trust
 //	            prompt, an update notice) and runs it afterwards. Typing into
@@ -3922,14 +3924,16 @@ func childLaunchPrompt(executionMode string, viaArg bool, base, boardPath, role,
 	return buildHeadlessChildInitialPrompt(base, boardPath, role, branch), false
 }
 
-// childPromptViaLaunchArg reports whether an interactive child of provider gets
-// its first instruction as a launch argument. It is true only for a CLI in
+// promptViaLaunchArg reports whether an interactive session of provider gets
+// its first instruction as a launch argument — an orchestration child
+// (childLaunchPrompt) or a session started from the screen with an instruction
+// (screenSpawnLaunchPrompt). It is true only for a CLI in
 // internal/config/launch_prompt.go's table, and only when this machine can
 // actually pass it (wrapper.LaunchPromptArgUsable — a launch through cmd.exe
 // from a shim path with whitespace cannot). When the table says yes but the
-// machine says no, the child falls back to the typed route and the reason is
+// machine says no, the session falls back to the typed route and the reason is
 // logged once per launch.
-func (s *Server) childPromptViaLaunchArg(provider, executionMode string) bool {
+func (s *Server) promptViaLaunchArg(provider, executionMode string) bool {
 	if config.IsHeadlessExecutionMode(executionMode) || !config.LaunchPromptViaArg(provider) {
 		return false
 	}
@@ -3939,7 +3943,7 @@ func (s *Server) childPromptViaLaunchArg(provider, executionMode string) bool {
 	}
 	ok, reason := usable(provider)
 	if !ok {
-		s.logger.Warn("orchestration child first instruction falls back to typing", "provider", provider, "reason", reason)
+		s.logger.Warn("first instruction falls back to typing", "provider", provider, "reason", reason)
 	}
 	return ok
 }

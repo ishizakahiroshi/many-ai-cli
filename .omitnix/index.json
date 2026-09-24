@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "b3470e8a7ec95a16f46344fe3da7bfee7d745d7c",
+    "commit": "4c9374551b578529cdd5363e8f65756a2c15d6a4",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1030,
-    "analyzed": 799,
+    "discovered": 1031,
+    "analyzed": 800,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 199,
@@ -9453,6 +9453,35 @@
     },
     {
       "path": "internal/hub/safe_go_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/screen_launch_prompt_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
