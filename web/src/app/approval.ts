@@ -2012,7 +2012,11 @@ window.addEventListener('alt-scroll-live', (ev) => {
       childList: true,
     });
   }
-  syncApprovalRecallBar();
+  // 循環 import（state.js → session-list.js → … → approval.js）により、本モジュールは
+  // state.js の本体評価より前に評価されうる。ここで同期的に呼ぶと activeSessionId が
+  // TDZ で落ち、モジュールグラフ全体の初期化が中断して画面が「読み込み中...」のまま
+  // 止まる。app.js の syncMobileLayoutState と同じく評価完了後のマイクロタスクへ遅延する。
+  queueMicrotask(syncApprovalRecallBar);
 })();
 document.getElementById('approval-dismiss-btn')?.addEventListener('click', () => {
   if (activeSessionId === null) return;
