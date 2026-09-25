@@ -37,6 +37,30 @@ var ErrRevisionConflict = errors.New("provider revision conflict")
 // names (see OverrideClearsValueError).
 var ErrOverrideClearsValue = errors.New("provider override cannot clear a distributed value")
 
+// ErrInvalidDefinition marks a failure that is about the definition or the ids
+// a caller passed — a definition the provider schema rejects, a malformed or
+// reserved provider id, a malformed revision or backup id, a provider that is
+// not stored — as opposed to one reading or writing the stores. Such a message
+// names a field or an id and a reason, never a value from the definition and
+// never a path, so the API boundary returns it as the reason (errors.Is).
+// Every other failure is answered there with a fixed sentence and logged in
+// full on the Hub only: a file-system error carries an absolute path, and the
+// path runs through the user's home folder, i.e. the user name (v0.9 release
+// review C4-D 観点 4 F1; the user's answer Q8).
+var ErrInvalidDefinition = errors.New("provider definition is invalid")
+
+// invalidDefinition marks err as ErrInvalidDefinition without changing its
+// message, so errors.Is finds both the mark and whatever err already wraps.
+func invalidDefinition(err error) error {
+	return &invalidDefinitionError{err: err}
+}
+
+type invalidDefinitionError struct{ err error }
+
+func (e *invalidDefinitionError) Error() string { return e.err.Error() }
+
+func (e *invalidDefinitionError) Unwrap() []error { return []error{ErrInvalidDefinition, e.err} }
+
 // OverrideClearsValueError names the fields whose edit would not survive the
 // save: dotted and sorted, written like Diagnostic.Field (update.args,
 // launch.headless.prompt_via). errors.Is(err, ErrOverrideClearsValue) matches
@@ -103,7 +127,7 @@ func (s *HistoryStore) SaveOverride(providerID string, payload, baseline Definit
 		payload.ID = providerID
 	}
 	if payload.ID != providerID {
-		return RevisionRecord{}, fmt.Errorf("payload provider id does not match %q", providerID)
+		return RevisionRecord{}, invalidDefinition(fmt.Errorf("payload provider id does not match %q", providerID))
 	}
 	if reason == "" {
 		reason = "edit"
@@ -148,7 +172,7 @@ func (s *HistoryStore) SaveEffectiveOverride(providerID string, desired, baselin
 		desired.ID = providerID
 	}
 	if desired.ID != providerID {
-		return RevisionRecord{}, fmt.Errorf("payload provider id does not match %q", providerID)
+		return RevisionRecord{}, invalidDefinition(fmt.Errorf("payload provider id does not match %q", providerID))
 	}
 	if err := validateOverrideAgainstBaseline(desired, Definition{}); err != nil {
 		return RevisionRecord{}, err
@@ -349,7 +373,7 @@ func validateOverrideAgainstBaseline(payload, baseline Definition) error {
 	// "invalid". Messages never echo the submitted value.
 	for _, diagnostic := range diagnostics {
 		if diagnostic.IsError() {
-			return fmt.Errorf("override payload is invalid: %s: %s", diagnostic.Field, diagnostic.Message)
+			return invalidDefinition(fmt.Errorf("override payload is invalid: %s: %s", diagnostic.Field, diagnostic.Message))
 		}
 	}
 	return nil
@@ -482,7 +506,7 @@ func (s *HistoryStore) GetRevision(providerID, revision string) (RevisionRecord,
 		return RevisionRecord{}, err
 	}
 	if revision == "" || filepath.Base(revision) != revision {
-		return RevisionRecord{}, fmt.Errorf("revision is invalid")
+		return RevisionRecord{}, invalidDefinition(fmt.Errorf("revision is invalid"))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -501,7 +525,7 @@ func (s *HistoryStore) BackupSnapshot(providerID string, payload Definition, rea
 		return RevisionRecord{}, err
 	}
 	if payload.ID != providerID {
-		return RevisionRecord{}, fmt.Errorf("payload provider id does not match %q", providerID)
+		return RevisionRecord{}, invalidDefinition(fmt.Errorf("payload provider id does not match %q", providerID))
 	}
 	payload.Source = SourceRef{}
 	if err := validateOverrideAgainstBaseline(payload, Definition{}); err != nil {
@@ -622,7 +646,7 @@ func (s *HistoryStore) VerifyBackup(providerID, backupID string) (RevisionRecord
 // いた）。正規化と検査を 1 本にまとめて、次の呼び出し口が同じ穴を空けられなくする。
 func backupFileName(backupID string) (string, error) {
 	if filepath.Base(backupID) != backupID || strings.TrimSuffix(backupID, ".json") == "" {
-		return "", fmt.Errorf("invalid backup id")
+		return "", invalidDefinition(fmt.Errorf("invalid backup id"))
 	}
 	if filepath.Ext(backupID) == "" {
 		return backupID + ".json", nil
@@ -716,7 +740,7 @@ func (s *HistoryStore) readRevisionLocked(providerID, revision string) (Revision
 		return RevisionRecord{}, err
 	}
 	if revision == "" || filepath.Base(revision) != revision {
-		return RevisionRecord{}, fmt.Errorf("invalid revision")
+		return RevisionRecord{}, invalidDefinition(fmt.Errorf("invalid revision"))
 	}
 	path := filepath.Join(s.root, providerID, "revisions", revision+".json")
 	if err := ensureInsideRoot(s.root, path); err != nil {
@@ -834,10 +858,10 @@ func revisionID(providerID, parent, digest, createdAt string) string {
 
 func ValidateHistoryProviderID(id string) error {
 	if err := validateID(id); err != nil {
-		return err
+		return invalidDefinition(err)
 	}
 	if id == "shell" {
-		return fmt.Errorf("shell is reserved")
+		return invalidDefinition(fmt.Errorf("shell is reserved"))
 	}
 	return nil
 }

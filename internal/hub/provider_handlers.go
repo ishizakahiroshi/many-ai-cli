@@ -77,7 +77,10 @@ func providerCommandFound(launch *provider.LaunchDefinition) bool {
 // 422 provider_override_clears_value with the field names in "fields", so the
 // dialog can name them in the user's language. It stays 422, not 409: the UI
 // reads 409 as "changed elsewhere, reload", which is not what happened.
-func writeProviderHistoryError(w http.ResponseWriter, fallbackCode string, err error) {
+//
+// The fallback goes through writeProviderFailure, so a file-system failure
+// answers with a fixed sentence instead of its path.
+func (s *Server) writeProviderHistoryError(w http.ResponseWriter, fallbackCode string, err error) {
 	if errors.Is(err, provider.ErrRevisionConflict) {
 		writeJSONError(w, http.StatusConflict, "revision_conflict", err.Error())
 		return
@@ -92,7 +95,48 @@ func writeProviderHistoryError(w http.ResponseWriter, fallbackCode string, err e
 		})
 		return
 	}
-	writeJSONError(w, http.StatusUnprocessableEntity, fallbackCode, err.Error())
+	s.writeProviderFailure(w, http.StatusUnprocessableEntity, fallbackCode, err)
+}
+
+// providerFailureSentences is what the provider API says, per error code, when
+// an operation fails for a reason other than what the request sent — reading
+// or writing the provider stores, above all. Such an error's own text carries
+// an absolute path through the user's home folder (the user name), and the
+// settings dialog shows a 4xx reason as it is sent (providerErrorMessage in
+// web/src/app/provider-manager-view.ts). v0.9 release review C4-D 観点 4 F1;
+// the user's answer Q8.
+var providerFailureSentences = map[string]string{
+	"provider_save_failed":     "could not save the provider",
+	"provider_override_failed": "could not save the provider override",
+	"provider_backup_failed":   "could not back up the provider before changing it",
+	"provider_reload_failed":   "could not reload the providers after the change",
+	"provider_delete_failed":   "could not remove the provider",
+	"provider_reset_failed":    "could not reset the provider",
+	"provider_restore_failed":  "could not restore the provider revision",
+	"backup_restore_failed":    "could not restore the provider backup",
+	"history_not_found":        "could not read the provider history",
+	"backups_not_found":        "could not read the provider backups",
+	"backup_verify_failed":     "could not verify the provider backup",
+	"invalid_provider_id":      "could not check whether the provider needs recovery",
+	"provider_recovery_failed": "could not recover the provider",
+}
+
+// writeProviderFailure answers a failed provider operation with status and
+// code. The reason is the error's own message only when the failure is about
+// what the request sent (provider.ErrInvalidDefinition: a field or an id and
+// why). Anything else answers with the fixed sentence for code, and the
+// original error — path included — goes to the Hub log alone.
+func (s *Server) writeProviderFailure(w http.ResponseWriter, status int, code string, err error) {
+	if errors.Is(err, provider.ErrInvalidDefinition) {
+		writeJSONError(w, status, code, err.Error())
+		return
+	}
+	s.logger.Warn("provider operation failed", "code", code, "status", status, "err", err)
+	sentence, ok := providerFailureSentences[code]
+	if !ok {
+		sentence = "the provider operation failed"
+	}
+	writeJSONError(w, status, code, sentence)
 }
 
 type providerListResponse struct {
@@ -153,18 +197,18 @@ func (s *Server) handleProviderCreate(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusConflict, "provider_id_exists", "provider id already exists")
 			return
 		}
-		writeJSONError(w, http.StatusUnprocessableEntity, "provider_save_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusUnprocessableEntity, "provider_save_failed", err)
 		return
 	}
 	if s.historyStore != nil {
 		if _, err := s.historyStore.BackupSnapshot(definition.ID, definition, "create"); err != nil {
 			_ = s.providerStore.Delete(definition.ID)
-			writeJSONError(w, http.StatusInternalServerError, "provider_backup_failed", err.Error())
+			s.writeProviderFailure(w, http.StatusInternalServerError, "provider_backup_failed", err)
 			return
 		}
 	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	} else {
 		writeJSONStatus(w, http.StatusCreated, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -327,11 +371,11 @@ func (s *Server) handleProviderPatch(w http.ResponseWriter, r *http.Request, id 
 			return
 		}
 		if _, err := s.historyStore.SaveEffectiveOverride(id, body.Definition, s.baselineProviderDefinition(id), expected, "edit"); err != nil {
-			writeProviderHistoryError(w, "provider_override_failed", err)
+			s.writeProviderHistoryError(w, "provider_override_failed", err)
 			return
 		}
 		if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+			s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 			return
 		} else {
 			writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -345,16 +389,16 @@ func (s *Server) handleProviderPatch(w http.ResponseWriter, r *http.Request, id 
 	}
 	if current, ok := registry.Lookup(id); ok && s.historyStore != nil {
 		if _, err := s.historyStore.BackupSnapshot(id, current.Definition, "before-edit"); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "provider_backup_failed", err.Error())
+			s.writeProviderFailure(w, http.StatusInternalServerError, "provider_backup_failed", err)
 			return
 		}
 	}
 	if err := s.providerStore.Save(body.Definition); err != nil {
-		writeJSONError(w, http.StatusUnprocessableEntity, "provider_save_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusUnprocessableEntity, "provider_save_failed", err)
 		return
 	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	} else {
 		writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -404,11 +448,11 @@ func (s *Server) handleProviderDelete(w http.ResponseWriter, r *http.Request, id
 		// baseline, so it still comes out schema-valid.
 		disabled := false
 		if _, err := s.historyStore.SaveOverride(id, provider.Definition{ID: id, Enabled: &disabled}, s.baselineProviderDefinition(id), expected, "delete"); err != nil {
-			writeProviderHistoryError(w, "provider_override_failed", err)
+			s.writeProviderHistoryError(w, "provider_override_failed", err)
 			return
 		}
 		if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+			s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 			return
 		} else {
 			writeJSON(w, map[string]any{"ok": true, "disabled": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -422,16 +466,16 @@ func (s *Server) handleProviderDelete(w http.ResponseWriter, r *http.Request, id
 	}
 	if current, ok := registry.Lookup(id); ok && s.historyStore != nil {
 		if _, err := s.historyStore.BackupSnapshot(id, current.Definition, "before-delete"); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "provider_backup_failed", err.Error())
+			s.writeProviderFailure(w, http.StatusInternalServerError, "provider_backup_failed", err)
 			return
 		}
 	}
 	if err := s.providerStore.Delete(id); err != nil {
-		writeJSONError(w, http.StatusNotFound, "provider_delete_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusNotFound, "provider_delete_failed", err)
 		return
 	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	} else {
 		writeJSON(w, map[string]any{"ok": true, "removed": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -448,7 +492,7 @@ func (s *Server) handleProviderHistory(w http.ResponseWriter, r *http.Request, i
 	}
 	revisions, err := s.historyStore.List(id)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "history_not_found", err.Error())
+		s.writeProviderFailure(w, http.StatusNotFound, "history_not_found", err)
 		return
 	}
 	writeJSON(w, map[string]any{"provider_id": id, "revisions": revisions})
@@ -464,12 +508,12 @@ func (s *Server) handleProviderHistoryDiff(w http.ResponseWriter, r *http.Reques
 	}
 	selected, err := s.historyStore.GetRevision(id, revision)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "history_not_found", err.Error())
+		s.writeProviderFailure(w, http.StatusNotFound, "history_not_found", err)
 		return
 	}
 	current, err := s.historyStore.Current(id)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "history_not_found", err.Error())
+		s.writeProviderFailure(w, http.StatusNotFound, "history_not_found", err)
 		return
 	}
 	writeJSON(w, map[string]any{
@@ -503,11 +547,11 @@ func (s *Server) handleProviderReset(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	if _, err := s.historyStore.Reset(id, *body.ExpectedRevision); err != nil {
-		writeProviderHistoryError(w, "provider_reset_failed", err)
+		s.writeProviderHistoryError(w, "provider_reset_failed", err)
 		return
 	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	} else {
 		writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -534,11 +578,11 @@ func (s *Server) handleProviderRestore(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 	if _, err := s.historyStore.Restore(id, body.Revision, body.ExpectedRevision); err != nil {
-		writeProviderHistoryError(w, "provider_restore_failed", err)
+		s.writeProviderHistoryError(w, "provider_restore_failed", err)
 		return
 	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	} else {
 		writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -561,7 +605,7 @@ func (s *Server) handleProviderBackups(w http.ResponseWriter, r *http.Request, i
 	}
 	backups, err := s.historyStore.ListBackups(id)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "backups_not_found", err.Error())
+		s.writeProviderFailure(w, http.StatusNotFound, "backups_not_found", err)
 		return
 	}
 	writeJSON(w, map[string]any{"provider_id": id, "backups": backups})
@@ -577,7 +621,7 @@ func (s *Server) handleProviderBackupVerify(w http.ResponseWriter, r *http.Reque
 	}
 	backup, err := s.historyStore.VerifyBackup(id, backupID)
 	if err != nil {
-		writeJSONError(w, http.StatusUnprocessableEntity, "backup_verify_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusUnprocessableEntity, "backup_verify_failed", err)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "backup": backup})
@@ -602,11 +646,11 @@ func (s *Server) handleProviderBackupRestore(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if _, err := s.historyStore.RestoreBackup(id, backupID, *body.ExpectedRevision); err != nil {
-		writeProviderHistoryError(w, "backup_restore_failed", err)
+		s.writeProviderHistoryError(w, "backup_restore_failed", err)
 		return
 	}
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	} else {
 		writeJSON(w, map[string]any{"ok": true, "revision": s.providerRegistrySnapshot().Revision(), "diagnostics": diagnostics})
@@ -649,7 +693,7 @@ func (s *Server) handleProviderRecovery(w http.ResponseWriter, r *http.Request, 
 func (s *Server) handleProviderRecoveryGet(w http.ResponseWriter, r *http.Request, id string) {
 	needsRecovery, err := s.historyStore.NeedsRecovery(id)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid_provider_id", err.Error())
+		s.writeProviderFailure(w, http.StatusBadRequest, "invalid_provider_id", err)
 		return
 	}
 	state := "ok"
@@ -684,11 +728,11 @@ func (s *Server) handleProviderRecoveryPost(w http.ResponseWriter, r *http.Reque
 	}
 	recovered, err := s.historyStore.RecoverHead(id, body.Revision)
 	if err != nil {
-		writeJSONError(w, http.StatusUnprocessableEntity, "provider_recovery_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusUnprocessableEntity, "provider_recovery_failed", err)
 		return
 	}
 	if _, err := s.reloadProviderRegistry(); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "provider_reload_failed", err.Error())
+		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "revision": recovered.Revision})

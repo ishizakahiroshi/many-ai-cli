@@ -104,14 +104,17 @@ func validateAndEncodeUserDefinition(definition Definition) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The rejections below are about what the caller sent, and are marked so
+	// the API returns them as the reason; the file errors in Save / CreateNew
+	// are not (ErrInvalidDefinition).
 	if hasDiagnosticError(diagnostics) {
-		return nil, fmt.Errorf("provider definition is invalid")
+		return nil, ErrInvalidDefinition
 	}
 	if IsBuiltinID(definition.ID) || definition.ID == "shell" {
-		return nil, fmt.Errorf("provider id %q is reserved", definition.ID)
+		return nil, invalidDefinition(fmt.Errorf("provider id %q is reserved", definition.ID))
 	}
 	if err := ValidateUserID(definition.ID); err != nil {
-		return nil, err
+		return nil, invalidDefinition(err)
 	}
 	return raw, nil
 }
@@ -176,13 +179,13 @@ func (s *FileStore) Delete(id string) error {
 		return fmt.Errorf("provider store is nil")
 	}
 	if err := ValidateUserID(id); err != nil {
-		return err
+		return invalidDefinition(err)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := os.Remove(filepath.Join(s.root, id+".json")); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("provider %q is not stored", id)
+			return invalidDefinition(fmt.Errorf("provider %q is not stored", id))
 		}
 		return fmt.Errorf("delete provider definition: %w", err)
 	}
