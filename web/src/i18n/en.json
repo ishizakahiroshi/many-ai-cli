@@ -497,6 +497,7 @@
   "toast_model_blocked_on_ollama": "/model is disabled for sessions launched on Ollama or LM Studio. Start a new session to switch models.",
   "toast_select_menu_active": "A select menu is open. Pick an option from the buttons below or in the terminal pane (your input was held).",
   "toast_template_send_no_session": "Select a session before sending a template. The text was added to the input box.",
+  "toast_folded_high_risk_empty_submit": "A high-risk approval is folded, so the empty Enter was not sent. Click the ⚠ Approval pending strip to open the popup and answer there (or type the option number and send it).",
   "shell_ai_launch_title": "Open a dedicated session?",
   "shell_ai_launch_msg": "You are about to launch {provider} inside a shell session. The shell-tuned input/approval handling will mismatch the AI CLI, causing garbled slash commands and broken approval buttons. We recommend opening a dedicated {provider} session instead.",
   "shell_ai_launch_open": "Open {provider} session",

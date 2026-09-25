@@ -457,6 +457,27 @@ export function isApprovalPending(sessionId: number): boolean {
 }
 
 /**
+ * 入力欄の空の送信（Enter・送信ボタン）を止めるべきか。畳んだ高リスクのネイティブの承認が
+ * 保留中のときだけ true。
+ *
+ * 畳んでいる間はパネルのキー操作が効かず、空の送信は '\r' だけを端末へ送る（app.ts の
+ * buildBodySubmitPart）。CLI はそれで選択中の項目を確定するので、パネルなら長押しか確認を
+ * 求める高リスクの承認が、何の確認もなく通る（pending_approval-single-source-review-leftovers.md の #8）。
+ *
+ * 高リスクの判定はパネルの守り（approval.ts の isHighRiskApprovalSelection）と同じ `_summary.risk`。
+ * CLI で選ばれている項目は見ない。Hub は同じ候補の記録を差し替えないので、畳んでいる間に
+ * ↓ で動かしたカーソルは記録の isCurrent に届かない（internal/hub/approval_native.go の
+ * handleNativeApprovalDetection）。そのため、断るつもりの空の Enter も止める。
+ */
+export function emptySubmitHitsFoldedHighRiskApproval(sessionId: number): boolean {
+  const record = approvalRecordFor(sessionId);
+  if (!record || record.origin !== APPROVAL_ORIGIN_NATIVE) return false;
+  if (isApprovalRecordAnswered(sessionId, record) || !isApprovalRecordFolded(sessionId, record)) return false;
+  const content = recordContent(record);
+  return content.kind === 'options' && (content.options as any)?._summary?.risk === 'high';
+}
+
+/**
  * テスト専用。ストアを空にし、購読者も外す（ページの読み込み直しに当たる）。
  * 畳み状態の保存先は残し、写しだけを捨てて読み直させる。
  */

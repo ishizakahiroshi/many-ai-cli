@@ -497,6 +497,7 @@
   "toast_model_blocked_on_ollama": "/model bị tắt với session chạy trên Ollama hoặc LM Studio. Khởi động session mới để đổi model.",
   "toast_select_menu_active": "Menu chọn đang mở. Chọn tùy chọn từ nút bên dưới hoặc khung terminal (input của bạn đã được giữ).",
   "toast_template_send_no_session": "Hãy chọn phiên trước khi gửi mẫu. Nội dung đã được điền vào ô nhập.",
+  "toast_folded_high_risk_empty_submit": "Một phê duyệt rủi ro cao đang được thu gọn nên phím Enter trống chưa được gửi. Bấm vào dải ⚠ Đang chờ phê duyệt để mở popup và trả lời ở đó (hoặc gõ số của lựa chọn rồi gửi).",
   "shell_ai_launch_title": "Mở session riêng?",
   "shell_ai_launch_msg": "Bạn sắp khởi chạy {provider} trong session shell. Xử lý input/phê duyệt theo shell sẽ lệch với AI CLI, khiến slash command rối và nút phê duyệt hỏng. Khuyến nghị mở session {provider} riêng.",
   "shell_ai_launch_open": "Mở session {provider}",

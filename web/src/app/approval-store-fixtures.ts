@@ -10,6 +10,7 @@ import {
   approvalStoreVersion,
   approvalViewFor,
   approvalViewForRecord,
+  emptySubmitHitsFoldedHighRiskApproval,
   _setApprovalFoldStorageForTest,
   foldApproval,
   forgetApprovalSession,
@@ -392,6 +393,52 @@ test('a snapshot prunes folds of records that closed while the page was away', (
   ]);
   assert.equal(isApprovalFolded(1), true);
   assert.equal(storage.stored().length, 1);
+});
+
+// 畳んだ承認へ入力欄の空の Enter（'\r' だけ）が届くと、CLI で選ばれている項目がパネルの長押しも
+// 確認も無しに確定する（pending_approval-single-source-review-leftovers.md の #8）。止めるのは、
+// パネルなら長押しか確認を求める承認（ネイティブ・高リスク）を畳んでいるときだけ。
+test('an empty submit is held back only while a high-risk native approval is folded', () => {
+  _setApprovalFoldStorageForTest(new MemoryStorage());
+  const risky = (key: string) => nativeRecord(key, 1, { summary: { command: 'rm -rf build', risk: 'high' } });
+
+  reset(1);
+  connect('hub-a', [{ session_id: 1, version: 1, record: risky('danger') }]);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), false, 'an open panel guards the approval itself');
+  foldApproval(1);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), true, 'folded, native and high risk');
+  unfoldApproval(1);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), false, 'unfolding gives the panel back');
+
+  for (const risk of ['low', 'mid'] as const) {
+    reset(1);
+    connect('hub-a', [{ session_id: 1, version: 1, record: nativeRecord(`risk-${risk}`, 1, { summary: { command: 'git status', risk } }) }]);
+    foldApproval(1);
+    assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), false, `a ${risk}-risk approval has no hold in the panel either`);
+  }
+
+  reset(1);
+  connect('hub-a', [{ session_id: 1, version: 1, record: markerRecord('marker') }]);
+  foldApproval(1);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), false, 'a marker record is answered by a message, not by the CLI selection');
+
+  reset(1);
+  connect('hub-a', [{ session_id: 1, version: 1, record: nativeRecord('no-options', 1, { options: [], summary: { command: 'rm -rf build', risk: 'high' } }) }]);
+  foldApproval(1);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), false, 'a native notice without options has no panel buttons to guard');
+
+  reset(1);
+  const answered = risky('answered');
+  connect('hub-a', [{ session_id: 1, version: 1, record: answered }]);
+  foldApproval(1);
+  recordAnsweredApprovalIdentity(1, answered.candidate_key, answered.source_epoch);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), false, 'an approval the screen already answered is not pending');
+
+  reset(1, 2);
+  connect('hub-a', [{ session_id: 1, version: 1, record: risky('here') }, { session_id: 2, version: 1 }]);
+  foldApproval(1);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(2), false, 'another session without a record sends as usual');
+  _setApprovalFoldStorageForTest(null);
 });
 
 test('forgetting a session drops its fold, and the number of folds is capped', () => {

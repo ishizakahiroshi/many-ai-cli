@@ -18,7 +18,7 @@ import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
 import { clearSequentialChoiceState, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isShellProvider, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
 import { isAskUserQuestionPending, noteApprovalAnsweredByTyping } from './app/approval.js';
-import { forgetApprovalSession } from './app/approval-store.js';
+import { emptySubmitHitsFoldedHighRiskApproval, forgetApprovalSession } from './app/approval-store.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -452,10 +452,28 @@ export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   return true;
 }
 
+// 送ると本文が空になるか（doSend と同じく、自動送信のトリガーフレーズは除いて見る）。
+// 空白だけの本文も、送れば最後に確定の '\r' が届く（buildBodySubmitPart の遅延 Enter）ので空に数える。
+function isEmptySubmit() {
+  if (pendingAttachFiles.length > 0) return false;
+  let text = buildSendText();
+  const phrase = getActiveTriggerPhrase();
+  if (phrase && textEndsWithTriggerPhrase(text, phrase)) text = stripTrailingTriggerPhrase(text, phrase);
+  return text.trim() === '';
+}
+
 export async function doSend(sessionId) {
   // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
   if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
   if (doSendInFlight.has(sessionId)) return;
+  // 畳んだ高リスクの承認があるときの空の送信は '\r' だけになり、CLI で選ばれている項目
+  // （多くは Yes）を長押しも確認も無しに確定させる。送らずに帯を開くよう案内する
+  // （approval-store.ts の emptySubmitHitsFoldedHighRiskApproval）。Enter・送信ボタン・
+  // IME の確定後・音声の自動送信・テンプレートの即送信は、どれもここを通る。
+  if (isEmptySubmit() && emptySubmitHitsFoldedHighRiskApproval(sessionId)) {
+    showToast(t('toast_folded_high_risk_empty_submit'), undefined, 4500);
+    return;
+  }
   // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
   // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。
   cancelDeferredEnter(sessionId, 'do_send');
