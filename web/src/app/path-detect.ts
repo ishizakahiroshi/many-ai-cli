@@ -140,10 +140,14 @@ export function looksLikePathWrapContinuation(
   return last.end >= prevCore.length;
 }
 
+export type WrapContinuation = (prev: PathWrapRow, next: PathWrapRow, cols?: number) => boolean;
+
+// continues を差し替えると、パス以外（URL など）の折り返しも同じ手順で 1 本に戻せる。
 export function expandLogicalPathLine(
   getRow: (index: number) => PathWrapRow | null,
   index: number,
   cols?: number,
+  continues: WrapContinuation = looksLikePathWrapContinuation,
 ): { start: number; end: number } {
   if (index < 0 || !getRow(index)) return { start: Math.max(0, index), end: Math.max(0, index) };
 
@@ -158,7 +162,7 @@ export function expandLogicalPathLine(
       continue;
     }
     if (hardBack >= MAX_HARD_WRAP_EXTRA) break;
-    if (looksLikePathWrapContinuation(prev, cur, cols)) {
+    if (continues(prev, cur, cols)) {
       start -= 1;
       hardBack += 1;
       continue;
@@ -177,7 +181,7 @@ export function expandLogicalPathLine(
       continue;
     }
     if (hardFwd >= MAX_HARD_WRAP_EXTRA) break;
-    if (looksLikePathWrapContinuation(cur, next, cols)) {
+    if (continues(cur, next, cols)) {
       end += 1;
       hardFwd += 1;
       continue;

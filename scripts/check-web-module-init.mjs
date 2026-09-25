@@ -63,7 +63,7 @@ const BROWSER_GLOBALS = [
   'MutationObserver', 'ResizeObserver', 'IntersectionObserver', 'DOMParser', 'FileReader',
   'HTMLElement', 'HTMLButtonElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLDivElement',
   'HTMLCanvasElement', 'HTMLImageElement', 'Element', 'Node', 'CSS', 'KeyboardEvent', 'MouseEvent',
-  'Terminal', 'FitAddon', 'Unicode11Addon', 'WebLinksAddon', 'WebglAddon', 'marked', 'DOMPurify', 'hljs', 'QRCode',
+  'Terminal', 'FitAddon', 'Unicode11Addon', 'WebglAddon', 'marked', 'DOMPurify', 'hljs', 'QRCode',
 ];
 
 // 検査そのものを実行できなかった（依存が無い・子の node が結果を返さない等）。exit 2 で終わる。

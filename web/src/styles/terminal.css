@@ -1034,11 +1034,27 @@ body.pc-input-tools-off #input-tools { display: none; }
   outline: none;
 }
 
+/* url-links が生成する URL リンク（ファイルプレビュー・展開ポップアップ等で共用。
+   チャット欄は chat.css の #chat-pane .url-link、Grok 履歴は .gcv-url-link が見た目を持つ） */
+.url-link {
+  color: var(--accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.url-link:hover,
+.url-link:focus-visible {
+  text-decoration-thickness: 2px;
+  outline: none;
+}
+
 /* Path popup */
 /* ---- パスリンクポップアップ ---- */
+/* パス・URL のリンクを置く画面（ファイルのモーダル 9400 など）より上に出す。
+   トースト（9999）や PIN・確認ダイアログ（10000 以上）よりは下 */
 .path-link-popup {
   position: fixed;
-  z-index: 9000;
+  z-index: 9900;
   background: var(--bg-elev);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
@@ -1063,6 +1079,17 @@ body.pc-input-tools-off #input-tools { display: none; }
 .path-link-popup-item:hover {
   background: var(--accent-soft);
   color: var(--text);
+}
+/* URL のメニューの先頭に出す行き先（開く前に全文を見せる） */
+.path-link-popup-url {
+  max-width: min(520px, 80vw);
+  padding: 4px 14px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  word-break: break-all;
+  user-select: text;
 }
 
 /* Expand capture popup */
@@ -1327,7 +1354,7 @@ body.pc-input-tools-off #input-tools { display: none; }
   -webkit-user-select: text;
 }
 /* パスリンクは .tool-output-path-link（path-links.appendLinkedText）を流用。
-   URL は Chat タブ .url-link と同系の見た目で別タブオープン */
+   URL は Chat タブ .url-link と同系の見た目。クリック時の動きは url-links.ts の共通メニュー */
 #grok-chat-viewer .gcv-url-link {
   color: #93c5fd;
   text-decoration: underline;

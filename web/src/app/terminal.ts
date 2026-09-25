@@ -17,6 +17,8 @@ import {
   trimTerminalPathCandidate,
   type PathWrapRow,
 } from './path-detect.js';
+import { findUrlCandidates, looksLikeLinkWrapContinuation } from './url-detect.js';
+import { showUrlPopup } from './url-links.js';
 import { ws } from './ws-client.js';
 import { isShellProvider } from './approval.js';
 import { probe } from '../debug/probe.js';
@@ -196,6 +198,18 @@ export function ensureTerminal(id) {
     theme: currentXtermTheme(),
     disableStdin: true,
     allowProposedApi: true,
+    // CLI が OSC 8 のハイパーリンクで出した URL も、画面上の URL と同じメニューで開く
+    //（未指定だと xterm 既定の window.confirm が出る）。http(s) 以外は xterm が渡してこない。
+    linkHandler: {
+      activate(event, uri) {
+        event.preventDefault();
+        event.stopPropagation();
+        showUrlPopup(uri, event.clientX, event.clientY);
+      },
+      leave() {
+        scheduleHidePathPopup();
+      },
+    },
   });
   term.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') return true;
@@ -228,13 +242,10 @@ export function ensureTerminal(id) {
   });
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
-  if (typeof WebLinksAddon !== 'undefined') {
-    const webLinks = new WebLinksAddon.WebLinksAddon((event, uri) => {
-      event.preventDefault();
-      window.open(uri, '_blank', 'noopener,noreferrer');
-    });
-    term.loadAddon(webLinks);
-  }
+  // URL・パス・折りたたみマーカーのリンクは、この 1 つの provider で検出する。
+  // URL は以前 xterm-addon-web-links に任せていたが、あちらは xterm が自動で折り返した行しか
+  // つながず（CLI が改行を入れて割った URL は途中までしかリンクにならない）、URL の直後に続く
+  // 日本語までリンクに含めていた。判定は url-detect.ts に寄せてある。
   term.registerLinkProvider({
     provideLinks(y, callback) {
       const buf = term.buffer.active;
@@ -269,8 +280,8 @@ export function ensureTerminal(id) {
           contentWidth: contentWidthOf(line),
         };
       };
-      // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス分断も結合する
-      const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols);
+      // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス・URL の分断も結合する
+      const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols, looksLikeLinkWrapContinuation);
 
       const physRows = [];
       for (let i = start; i <= end; i++) {
@@ -338,6 +349,28 @@ export function ensureTerminal(id) {
         });
       };
 
+      // URL を先に取る。パスの判定は URL の中にも当たる（「https://…」の「s://…」を Windows の
+      // ドライブパスとみなす）ので、URL の範囲を先に埋めて重なるパスを捨てさせる。
+      for (const c of findUrlCandidates(combined)) {
+        const startCI = c.start;
+        const endCI = c.end - 1;
+        if (overlapsExistingLink(startCI, endCI)) continue;
+        occupiedRanges.push({ start: startCI, end: endCI });
+        const url = c.url;
+        links.push({
+          range: { start: ciToXY(startCI), end: ciToXY(endCI) },
+          text: url,
+          hover() {},
+          leave() {
+            scheduleHidePathPopup();
+          },
+          activate(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            showUrlPopup(url, event.clientX, event.clientY);
+          },
+        });
+      }
       for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
         re.lastIndex = 0;
         let m;

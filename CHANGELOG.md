@@ -11,6 +11,28 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **`http://` / `https://` URLs are now clickable wherever the dashboard shows
+  text, and every click behaves the same way.** Plain-text and source files in
+  the file preview (the "Open in modal" window and the Files tab), code blocks
+  in Markdown previews, and the expanded "+N lines" popup now turn URLs into
+  links, alongside the terminal, the Chat history and the Grok history that
+  already did. Clicking a URL no longer opens it straight away: a small menu,
+  the same one file paths use, shows the full address with **Open in browser**
+  and **Copy URL**, so you see where a link goes before leaving the dashboard.
+  This replaces the browser's confirmation dialog in the Chat and Grok
+  histories, and the one-click opening in the terminal and Markdown previews;
+  links the CLI prints as OSC 8 hyperlinks use the same menu. Outside the
+  terminal, middle-click and right-click on a link still do what the browser
+  normally does. URL detection is
+  now shared by every view: a URL ends before Japanese text or full-width
+  punctuation that follows it without a space (`https://example.com。…`),
+  trailing punctuation and unmatched closing brackets are left out, while
+  brackets inside the URL (`…/wiki/Foo_(bar)`) are kept. In the terminal, a
+  long URL that the CLI split over several lines with its own line breaks is
+  joined back into one link. The terminal no longer loads the bundled
+  `xterm-addon-web-links`, which has been removed. URLs containing
+  non-ASCII characters in the path are linked only up to the first such
+  character.
 - **The child-session approval dialog can now register the working folder as
   trusted by the child's CLI (Claude Code / Codex).** When the checkbox
   "Register this folder as trusted in <CLI>" is on (the default) and you

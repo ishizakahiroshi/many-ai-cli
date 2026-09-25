@@ -3,6 +3,8 @@ import { t } from '../i18n.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
+import { findUrlCandidates } from './url-detect.js';
+import { bindUrlLinksIn, linkifyUrlsInElement } from './url-links.js';
 import { refitActiveTerminalAfterLayout } from './terminal.js';
 import { markTabLazyLoaded, refreshLazyTabClasses } from './settings.js';
 import { openLightbox, terminalWrapper } from './attachments.js';
@@ -2144,6 +2146,8 @@ export const FilesPreview = (function () {
       html = escapeHtml(content);
     }
     code.innerHTML = html;
+    // テキスト・ソース中の http(s) URL をリンクにする（クリックで開く / コピーのメニュー）
+    linkifyUrlsInElement(code);
     pre.appendChild(code);
     return pre;
   }
@@ -2170,12 +2174,24 @@ export const FilesPreview = (function () {
         text = token.tokens ? token.tokens.map(t => t.raw || '').join('') : (token.text || href || '');
       }
       text = text || href || '';
+      let tail = '';
+      if (/^https?:\/\//i.test(href) && !title && (text === href || text === escapeHtml(href))) {
+        // 本文に裸で書かれた URL の自動リンク。marked は空白の手前まで URL に含めるので、
+        // 直後に続く日本語や閉じ括弧は URL の判定（url-detect.ts）で外して本文へ戻す。
+        const c = findUrlCandidates(href)[0];
+        if (c && c.start === 0) {
+          tail = href.slice(c.end);
+          href = c.url;
+        }
+        text = href;
+      }
       const safeHref = escapeHtml(href || '');
       const safeText = escapeHtml(text);
       const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
 
       if (/^https?:\/\//i.test(href)) {
-        return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${safeTitle}>${safeText}</a>`;
+        // クリック時の動きは描画後の bindUrlLinksIn が付ける
+        return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${safeTitle}>${safeText}</a>${escapeHtml(tail)}`;
       }
       if (/\.(md|txt)$/i.test(href) && !/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         // 相対 md リンク → data 属性で処理
@@ -2919,6 +2935,8 @@ export const FilesPreview = (function () {
               if (p) showPathPopup(p, e.clientX, e.clientY, sessionId || '');
             });
           });
+          bindUrlLinksIn(contentEl);
+          contentEl.querySelectorAll('pre code').forEach((code) => { linkifyUrlsInElement(code); });
         } else {
           // .txt など — hljs.highlightAuto で自動判定（巨大ファイルはプレーン）
           contentEl.innerHTML = '';

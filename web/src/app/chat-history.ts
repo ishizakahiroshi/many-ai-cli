@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
-import { escapeHtml, openExternalLinkWithConfirmation, showToast, ti18n, token } from './util.js';
+import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { appendTextWithUrlLinks } from './url-links.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
@@ -652,9 +653,13 @@ export function renderInlineText(text) {
 }
 
 // プレーンテキストから URL とファイルパスを抽出し、frag に追加する。
+// URL の判定とクリック時の動きは共通部品（url-links.ts）に任せ、ここでは URL 以外の区間のパスだけを扱う。
 export function _appendPlainWithLinks(frag, text) {
   if (!text) return;
-  // URL: http(s)://...
+  appendTextWithUrlLinks(frag, text, _appendPlainWithPaths);
+}
+
+function _appendPlainWithPaths(frag, text) {
   // path 候補:
   //   - 絶対パス Unix: /usr/... (ただしコードブロック外)
   //   - 絶対パス Windows: C:\... or C:/...
@@ -662,9 +667,7 @@ export function _appendPlainWithLinks(frag, text) {
   //   - 拡張子付き相対: foo/bar.ext または bar.ext (拡張子に絞る)
   //
   // 安全側: 末尾の句読点 ,.;:!?) を除外する。
-
-  // 単一の包括 regex
-  const re = /(https?:\/\/[^\s<>"'`)\]]+)|((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`(\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
+  const re = /((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`(\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
   let last = 0;
   let m;
   while ((m = re.exec(text)) !== null) {
@@ -681,25 +684,11 @@ export function _appendPlainWithLinks(frag, text) {
       last = m.index + m[0].length;
       continue;
     }
-    if (m[1]) {
-      // URL
-      const a = document.createElement('a');
-      a.className = 'url-link';
-      a.href = token;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.title = `External link: ${token}`;
-      a.addEventListener('click', (event) => openExternalLinkWithConfirmation(event, token));
-      a.textContent = token;
-      frag.appendChild(a);
-    } else {
-      // path
-      const span = document.createElement('span');
-      span.className = 'path-link';
-      span.dataset.path = token;
-      span.textContent = token;
-      frag.appendChild(span);
-    }
+    const span = document.createElement('span');
+    span.className = 'path-link';
+    span.dataset.path = token;
+    span.textContent = token;
+    frag.appendChild(span);
     if (trail) frag.appendChild(document.createTextNode(trail));
     last = m.index + m[0].length;
   }

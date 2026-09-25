@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "dfcb125c31698479ab5644f37b4ffb411ba95d82",
+    "commit": "01c651c6d1bf52e54445a059b4dfea9739e5043c",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1044,
-    "analyzed": 813,
+    "discovered": 1047,
+    "analyzed": 816,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 199,
@@ -24717,6 +24717,96 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/url-detect-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/url-detect.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "テキスト中の URL 検出。DOM / xterm に依存しない純関数だけを置く。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/url-links.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "URL リンクの共通部品。URL の判定は url-detect.ts、ここは DOM とクリック時の動きだけを持つ。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/usage-limit-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -25386,7 +25476,6 @@
             "/vendor/qrcode.js",
             "/vendor/xterm-addon-fit.min.js",
             "/vendor/xterm-addon-unicode11.min.js",
-            "/vendor/xterm-addon-web-links.min.js",
             "/vendor/xterm-addon-webgl.min.js",
             "/vendor/xterm.min.js"
           ]

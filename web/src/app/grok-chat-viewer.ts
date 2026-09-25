@@ -6,15 +6,12 @@
 //
 // パス・URL は Chat タブ相当のクリック／右クリック操作を提供する（読み取り専用でも
 // ファイルを開く・コピーする導線は必要。textContent 直書きだとプレーン文字列のまま）。
-import { openExternalLinkWithConfirmation, showToast, ti18n, token } from './util.js';
+import { showToast, ti18n, token } from './util.js';
 import { sessions } from './state.js';
-import { appendLinkedText } from './path-links.js';
+import { appendTextWithLinks } from './url-links.js';
 
 // 1 リクエストで取得するメッセージ件数（サーバ側上限 200 以内）
 const GCV_PAGE_MESSAGES = 100;
-
-// Chat タブ (_appendPlainWithLinks) と同系の URL 検出。末尾句読点は本文側に残す。
-const GCV_URL_RE = /(https?:\/\/[^\s<>"'`)\]]+)/g;
 
 let gcvRoot: any = null;
 let gcvState: { sid: number; total: number; offset: number } | null = null;
@@ -100,55 +97,9 @@ async function gcvFetchPage(sid: number, offset: number, limit: number) {
 }
 
 // URL とファイルパスをリンク化し、クリック／右クリックで開く・コピーできるようにする。
-// パスは path-links.appendLinkedText（showPathPopup 付き）を流用。URL は別タブで開く <a>。
+// URL もパスも、クリックで出るメニューは共通部品（url-links.ts / path-links.ts）のもの。
 function gcvFillTextWithLinks(container: HTMLElement, raw: string, sessionId: number) {
-  const text = String(raw || '');
-  if (!text) {
-    container.textContent = '';
-    return;
-  }
-
-  const parts: Array<{ kind: 'url' | 'text'; value: string }> = [];
-  GCV_URL_RE.lastIndex = 0;
-  let last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = GCV_URL_RE.exec(text)) !== null) {
-    if (m.index > last) parts.push({ kind: 'text', value: text.slice(last, m.index) });
-    let token = m[0];
-    let trail = '';
-    while (token.length > 0 && /[.,;:!?)\]}>]/.test(token[token.length - 1]!)) {
-      trail = token[token.length - 1] + trail;
-      token = token.slice(0, -1);
-    }
-    if (token) parts.push({ kind: 'url', value: token });
-    if (trail) parts.push({ kind: 'text', value: trail });
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
-  if (parts.length === 0) {
-    appendLinkedText(container, text, sessionId);
-    return;
-  }
-
-  container.textContent = '';
-  for (const part of parts) {
-    if (part.kind === 'url') {
-      const a = document.createElement('a');
-      a.className = 'gcv-url-link';
-      a.href = part.value;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.title = `External link: ${part.value}`;
-      a.addEventListener('click', (event) => openExternalLinkWithConfirmation(event, part.value));
-      a.textContent = part.value;
-      container.appendChild(a);
-      continue;
-    }
-    // appendLinkedText は container を空にしてから埋めるため、区間ごとに一時ノードへ書く
-    const span = document.createElement('span');
-    appendLinkedText(span, part.value, sessionId);
-    while (span.firstChild) container.appendChild(span.firstChild);
-  }
+  appendTextWithLinks(container, String(raw || ''), sessionId, 'gcv-url-link');
 }
 
 function gcvRenderMessage(msg: { role: string; text: string }, sessionId: number) {
