@@ -31,6 +31,19 @@ Release artifacts are published at
   touch devices). The order is stored per browser and survives a reload.
   Flipping sides with ⇄ mirrors the saved order left-to-right. Settings →
   General → "Input bar button order" can restore the default order.
+- **The first-run screen now starts with installing a CLI, and shows which AI
+  CLIs this PC already has.** The getting-started steps are now four:
+  *Install a CLI* comes first, ahead of starting a session, answering
+  approvals and watching sessions in parallel. *Installed on this PC* lists
+  each enabled AI CLI with a check mark when the Hub finds it on `PATH`, or
+  *Not installed* with a link to the vendor's own install instructions; the
+  screen shown when no AI CLI is found at all links them the same way. The
+  links come from `resources/install-links/defaults.json` in this repository,
+  fetched by the Hub and cached for 24 hours, so a moved page can be fixed
+  without a new release; if they cannot be fetched, the list is still shown,
+  just without the links. When the screen is wide enough, the steps and the
+  list sit side by side; when it is narrow, the steps fold into a *How to use
+  ▸* button above the list.
 - **The "install status" list — on the first-run screen and in Settings → AI
   CLI integrations — now shows a provider icon per row, and can check CLI
   versions and update them from the Hub.** A **Check versions** button runs
@@ -73,12 +86,17 @@ Release artifacts are published at
   list. The dialog asks for a display name and executable, then Validate and
   Save. A failed check or save keeps what you typed. After a save from New
   Session, the new CLI is selected so you can start it without reopening
-  Settings. JSON editing is not required.
+  Settings. JSON editing is not required. Each provider row also has a
+  **Duplicate** button that opens the add form with that row as a starting
+  point; the copy is named "<name> (copy)" and gets the id `<id>-copy`.
 - **Provider settings now keep a local history and automatic backups.** A
   failed save or a damaged file does not delete the last good revision; the
   broken copy is quarantined. You can restore from history in Settings or
   with `provider backup list`, `provider backup verify`, `provider backup
-  restore`, and `provider reset --distributed`.
+  restore`, `provider reset --distributed`, and `provider recover`. If a
+  provider's own settings file is damaged, History says so and offers what to
+  restore to, such as the last readable version of your own settings; without
+  the UI, use `many-ai-cli provider recover <provider-id> [revision|--list]`.
 - **Official AI CLI catalog import is prepared but stays off.** Hub can
   compare a signed catalog with your overrides and roll back an accepted
   pointer, but it will not download or activate a remote catalog until
@@ -356,6 +374,26 @@ Release artifacts are published at
   same horizontal position on every card regardless of how many digits the
   number has — easier to scan down a long list for what's still running.
 
+- **The live status line above the terminal and the Workflow chip and popup
+  now use the same state icons as the session cards and the session strip.**
+  They used to draw their own round spinner and text marks (✓ ✗ ○), so one
+  session in one state could look like two different things on the same
+  screen. Running is the dashed ring, waiting for approval the flag, waiting
+  for input the keyboard, idle the circle, and a finished or failed Workflow
+  agent a check or a cross. The live status line now also shows when a
+  session is waiting for approval or input, not only whether it is running.
+  The icon keeps turning even when the OS asks to reduce motion, because the
+  turning is what tells running from idle.
+
+- **The provider order you drag into place in New Session is now shared with
+  the first-run screen's install status list and with AI Usage Links.** You
+  can drag the installed rows in the install status list too, and the other
+  screens follow; reordering there leaves Shell and *Add AI CLI* where they
+  were in New Session. The order is still stored in this browser only, and
+  Settings → *New session provider order* → *Reset to default* puts all three
+  back. Touch devices cannot reorder providers, and the install status rows
+  cannot be dragged while an update is running.
+
 - **The ✕ close buttons across panels and dialogs now look and behave the same.**
   Eleven of them had drifted apart into their own stylesheets — sizes from
   0.85rem to 1.5rem, four different hover treatments, and one (the bug report
@@ -560,6 +598,20 @@ Release artifacts are published at
   bogus completion count. The tip line and the lines below the input box's
   own boundary are no longer read as Workflow output
   (`web/src/app/workflow-progress.ts`, `internal/hub/workflow_scan.go`).
+- **Opening a section in Settings no longer switches the view back to the
+  basic level.** With the switch at the top of Settings on *all*, clicking a
+  section heading such as Token/Cost Statusbar — or any control inside a
+  section that the basic level also shows — switched the view to basic and
+  saved that, so every all-only section disappeared until you switched back.
+  This had been the case since the basic / all switch arrived in 0.5.0.
+- **A session that has been running in the background no longer opens as a
+  nearly blank screen with scattered fragments.** The dashboard kept only the
+  last 100 KB of a background session's output and dropped the rest. A CLI
+  that redraws only the parts of the screen that changed — Grok Build, which
+  fills 100 KB in about 25 seconds — was then left with most of its screen
+  never drawn, and switching away and back did not repair it. Background
+  output is no longer dropped: once that much has piled up, it is written to
+  the hidden terminal straight away (`web/src/app/terminal.ts`).
 
 ### Security
 - The derive dialog's permission preview now follows execution mode. Choosing
