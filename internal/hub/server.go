@@ -2548,6 +2548,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if !endedUsageProbe {
 		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 	}
+	s.completeOrchestrationChildOnSessionEnd(m.SessionID, "dismissed")
 	return false
 }
 

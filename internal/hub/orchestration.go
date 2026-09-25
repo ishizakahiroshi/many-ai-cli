@@ -3078,11 +3078,24 @@ func (s *Server) completeOrchestrationChildOnSessionEnd(sessionID int, state str
 	if boardID == "" {
 		return
 	}
-	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child completed without DONE marker: role=%s session=%d state=%s (session_end)\n", role, sessionID, state))
+	// A child closed from the dashboard (session_dismiss) did not finish its
+	// work. Saying "complete" would let the conductor carry on as if the work
+	// were done, so the dismissal gets its own wording
+	// (bugfix_orchestrate-closed-child-idle-warning_2026-09-25.md).
+	dismissed := state == "dismissed"
+	if dismissed {
+		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child dismissed from the dashboard: role=%s session=%d (closed by the user; its work may be unfinished)\n", role, sessionID))
+	} else {
+		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child completed without DONE marker: role=%s session=%d state=%s (session_end)\n", role, sessionID, state))
+	}
 	if s.relayOwns(boardID) {
 		// The relay stops itself (stopped(child_exited)) and notifies the parent
 		// through its own finish path (D-6).
 		s.relayOnChildExit(boardID, sessionID, state)
+		return
+	}
+	if dismissed {
+		s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child dismissed role=%s id=%d (closed from the dashboard by the user; treat its work as unfinished)\n", role, sessionID))
 		return
 	}
 	s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))

@@ -959,6 +959,54 @@ func Test_checkOrchestrationChildTimers_idleUsesPtyOutput(t *testing.T) {
 	}
 }
 
+// Test_handleDismiss_orchestrationChildGetsNoIdleWarning は、ダッシュボードの ×
+// （session_dismiss）で閉じた子セッションに、あとから idle warning が出ないことと、
+// 親へは「完了」ではなく「利用者が閉じた」と伝わることを確認する
+// （bugfix_orchestrate-closed-child-idle-warning_2026-09-25.md）。
+// 閉じたセッションは s.sessions から消えて PTY 出力時刻が引けなくなるので、
+// handleDismiss が子を完了扱いにしないと、閾値を過ぎたところで警告が出る。
+func Test_handleDismiss_orchestrationChildGetsNoIdleWarning(t *testing.T) {
+	s := newTestServer()
+	cfg := config.OrchestrationConfig{IdleDoneThresholdSec: 60}
+	parent := registerTestSession(s, 1, "codex")
+	child := registerTestSession(s, 10, "codex")
+	child.ParentSessionID = parent.ID
+	child.Role = "tester"
+	path := filepath.Join(t.TempDir(), "board.md")
+	old := time.Now().Add(-10 * time.Minute)
+	s.registerBoardSession("s1", path, parent.ID, "conductor")
+	s.registerBoardChild("s1", path, child.ID, parent.ID, child.Role, old)
+
+	// 警告が出る前に、ダッシュボードの × で閉じる
+	s.handleDismiss(proto.Message{Type: "session_dismiss", SessionID: child.ID})
+	s.checkOrchestrationChildTimers("s1", time.Now(), cfg)
+
+	s.orchestration.mu.Lock()
+	b := s.orchestration.boards["s1"]
+	warned, done := b.IdleWarned[child.ID], b.Children[child.ID].Done
+	s.orchestration.mu.Unlock()
+	if !done {
+		t.Fatal("child.Done = false after dismiss, want true")
+	}
+	if warned {
+		t.Fatal("IdleWarned = true after dismiss, want false (a dismissed child must not trigger idle warnings)")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	board := string(data)
+	if strings.Contains(board, "idle warning") {
+		t.Fatalf("board records an idle warning for the dismissed child:\n%s", board)
+	}
+	if !strings.Contains(board, "child dismissed") {
+		t.Fatalf("board does not tell the conductor the child was dismissed:\n%s", board)
+	}
+	if strings.Contains(board, "child complete via session_end") {
+		t.Fatalf("a dismissed child is reported as completed:\n%s", board)
+	}
+}
+
 func Test_scanOrchestrationChildFiles(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Orchestration.ChildTimeoutSeconds = 0
