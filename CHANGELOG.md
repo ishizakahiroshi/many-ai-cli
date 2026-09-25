@@ -54,8 +54,9 @@ Release artifacts are published at
   a summary — updated / already latest / failed — plus a per-row reason for
   any failure, a **Retry the failed ones** button that reruns only the failed
   CLIs one at a time, and a **Log** button per run. The bundled 7 providers
-  ship with default update commands and update turned on (updating Cursor
-  Agent CLI or Command Code can occasionally prompt for a re-login). Any provider's update command can be changed, or turned on
+  ship with default update commands; Cursor Agent CLI and Command Code
+  default to update *off*, since updating can prompt for a re-login the Hub
+  cannot answer. Any provider's update command can be changed, or turned on
   for a CLI you added yourself, in Settings → AI CLI integrations → edit →
   *Version and update* (the bundled providers' "restore defaults" resets this
   section along with the rest of that provider). A CLI with a running session

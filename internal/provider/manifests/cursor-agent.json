@@ -20,7 +20,7 @@
   },
   "update": {
     "args": ["update"],
-    "enabled": true,
+    "enabled": false,
     "login_may_be_required": true
   }
 }

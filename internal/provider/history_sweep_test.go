@@ -314,13 +314,13 @@ func TestSaveEffectiveOverrideNeverSilentlyDropsAnEdit(t *testing.T) {
 			t.Errorf("no sweep edit emptied %s any more; the manifests or the edit generator changed shape", field)
 		}
 	}
-	// 78 refused on 2026-09-25: the 70 of 2026-09-23, plus adapters.subagents
-	// on claude/codex/grok (added in b0be5ba) and update.args on 5 more
-	// manifests. On 09-23 only the 2 manifests with update.enabled false could
-	// empty update.args on its own; now all 7 ship it true, so emptying args
-	// alone is invalid and the toggle-off edit the form sends is refused for
-	// all 7.
-	if refused < 78 || saved < 100 {
+	// 80 refused on 2026-09-25: the 70 of 2026-09-23, plus adapters.subagents
+	// on claude/codex/grok (added in b0be5ba) and the toggle-off edit the form
+	// sends on all 7 manifests. The 5 that ship update.enabled true cannot
+	// empty update.args on its own (invalid); cursor-agent and command-code
+	// ship it false (login_may_be_required), so emptying args alone is refused
+	// there, as it already was on 09-23.
+	if refused < 80 || saved < 100 {
 		t.Fatalf("sweep refused %d and saved %d edits; the manifests or the edit generator changed shape", refused, saved)
 	}
 }
