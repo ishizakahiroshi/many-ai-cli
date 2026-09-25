@@ -1,4 +1,7 @@
 // ESM entry point (generated). Imports modules in original load order for side effects.
+// boot-guard は必ず最初に import する（最初に評価され、ほかのモジュールの評価中の例外を受け取る）。
+// 最後の文の markAppEntryEvaluated() と合わせて scripts/check-web-module-init.mjs が CI で確かめる。
+import { markAppEntryEvaluated } from './app/boot-guard.js';
 import './i18n.js';
 import './app/util.js';
 import './app/user-prefs.js';
@@ -90,3 +93,6 @@ initUiSide();
 // 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
 initSessionStrip();
 initJevOptIn();
+// ここまで評価が届いたら初期化は完了。これより後に文を足さない（足した文の例外は、
+// 「画面を読み込めませんでした」の表示に乗らない）。
+markAppEntryEvaluated();
