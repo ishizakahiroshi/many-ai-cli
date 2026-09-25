@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -730,5 +731,90 @@ func TestHistoryStoreSaveEffectiveOverrideKeepsOnlyChangedFields(t *testing.T) {
 	}
 	if merged.DisplayName != "My Codex" {
 		t.Fatalf("modified display name was lost: %q", merged.DisplayName)
+	}
+}
+
+// TestSaveEffectiveOverrideReadsRevisionWrittenByEarlierVersion pins that the
+// round-trip refusal changed nothing about the stored format: a sparse
+// revision placed on disk directly (the shape saves already wrote, not
+// produced by the save functions here) still loads, and an ordinary edit
+// saves on top of it and resolves to what was edited.
+func TestSaveEffectiveOverrideReadsRevisionWrittenByEarlierVersion(t *testing.T) {
+	definitions, _, err := EmbeddedDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var baseline Definition
+	for _, definition := range definitions {
+		if definition.ID == "cursor-agent" {
+			baseline = definition
+		}
+	}
+	if baseline.ID == "" {
+		t.Fatal("cursor-agent manifest is missing")
+	}
+	baseline.Source = SourceRef{}
+
+	root := filepath.Join(t.TempDir(), "overrides")
+	enabled := true
+	payload := Definition{ID: "cursor-agent", Update: &UpdateDefinition{Enabled: &enabled}}
+	createdAt := "2026-09-23T04:37:30Z"
+	digest := definitionDigest(payload)
+	revision := revisionID("cursor-agent", "", digest, createdAt)
+	record := RevisionRecord{
+		SchemaVersion: historySchemaVersion,
+		ProviderID:    "cursor-agent",
+		Revision:      revision,
+		CreatedAt:     createdAt,
+		Reason:        "edit",
+		ContentDigest: digest,
+		Payload:       payload,
+	}
+	revisionDir := filepath.Join(root, "cursor-agent", "revisions")
+	if err := os.MkdirAll(revisionDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONAtomic(filepath.Join(revisionDir, revision+".json"), record); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "cursor-agent", "HEAD"), []byte(revision), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewHistoryStore(root, filepath.Join(t.TempDir(), "backups"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	overrides, diagnostics, err := store.LoadOverrides()
+	if err != nil || len(overrides) != 1 || hasDiagnosticError(diagnostics) {
+		t.Fatalf("existing revision did not load: err=%v overrides=%d diagnostics=%v", err, len(overrides), diagnostics)
+	}
+
+	desired, err := mergeDefinitionValues(baseline, overrides[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	desired.Source = SourceRef{}
+	desired.DisplayName = "Cursor Agent (edited)"
+	saved, err := store.SaveEffectiveOverride("cursor-agent", desired, baseline, revision, "edit")
+	if err != nil {
+		t.Fatalf("ordinary edit on top of an existing revision failed: %v", err)
+	}
+	if saved.ParentRevision != revision {
+		t.Fatalf("parent revision = %q, want %q", saved.ParentRevision, revision)
+	}
+	overrides, diagnostics, err = store.LoadOverrides()
+	if err != nil || len(overrides) != 1 || hasDiagnosticError(diagnostics) {
+		t.Fatalf("edited revision did not load: err=%v overrides=%d diagnostics=%v", err, len(overrides), diagnostics)
+	}
+	effective, err := mergeDefinitionValues(baseline, overrides[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	effective.Source = SourceRef{}
+	got, _ := json.Marshal(effective)
+	want, _ := json.Marshal(desired)
+	if string(got) != string(want) {
+		t.Fatalf("edited override resolves to\n%s\nwant\n%s", got, want)
 	}
 }

@@ -26,6 +26,31 @@ const historySchemaVersion = 1
 // into the same conflict as a stale one.
 var ErrRevisionConflict = errors.New("provider revision conflict")
 
+// ErrOverrideClearsValue is the sentinel for a built-in provider edit that
+// would otherwise be reported as saved while the distributed value quietly
+// comes back. The stored override is a delta against the distributed
+// definition, and that delta cannot say "this field is now empty": omitempty
+// drops empty strings, empty arrays, zero and non-pointer false from the
+// JSON, so the field never reaches the delta and the merge shows the
+// distributed value again. Such an edit is refused instead. Callers on the
+// API boundary map it to 422 provider_override_clears_value with the field
+// names (see OverrideClearsValueError).
+var ErrOverrideClearsValue = errors.New("provider override cannot clear a distributed value")
+
+// OverrideClearsValueError names the fields whose edit would not survive the
+// save: dotted and sorted, written like Diagnostic.Field (update.args,
+// launch.headless.prompt_via). errors.Is(err, ErrOverrideClearsValue) matches
+// it.
+type OverrideClearsValueError struct {
+	Fields []string
+}
+
+func (e *OverrideClearsValueError) Error() string {
+	return ErrOverrideClearsValue.Error() + ": " + strings.Join(e.Fields, ", ")
+}
+
+func (e *OverrideClearsValueError) Unwrap() error { return ErrOverrideClearsValue }
+
 type RevisionRecord struct {
 	SchemaVersion  int        `json:"schema_version"`
 	ProviderID     string     `json:"provider_id"`
@@ -100,6 +125,18 @@ func (s *HistoryStore) SaveOverride(providerID string, payload, baseline Definit
 // Keeping this conversion at the service boundary prevents callers that send
 // a full form snapshot from freezing every distribution field into the local
 // override forever.
+//
+// Before anything is written, the delta is merged back onto baseline — what
+// the registry will resolve once this save lands — and compared with desired
+// field by field. Any difference is refused with OverrideClearsValueError.
+// The property this protects is "a save that reports success leaves the
+// provider resolving to what the user saved". Today the way to break it is
+// clearing a field the distributed definition fills in (the delta cannot
+// express an empty value; the 2026-09-23 sweep found 70 such edits that
+// saved "successfully" and reverted). Keep this check even after the stored
+// format learns to express cleared fields: with a correct format it always
+// passes, and it stops the next divergence between definitionOverrideDelta
+// and mergeDefinition before a user runs into it.
 func (s *HistoryStore) SaveEffectiveOverride(providerID string, desired, baseline Definition, expectedRevision, reason string) (RevisionRecord, error) {
 	if s == nil {
 		return RevisionRecord{}, fmt.Errorf("history store is nil")
@@ -121,6 +158,13 @@ func (s *HistoryStore) SaveEffectiveOverride(providerID string, desired, baselin
 		return RevisionRecord{}, err
 	}
 	delta.ID = providerID
+	dropped, err := overrideRoundTripMismatches(baseline, delta, desired)
+	if err != nil {
+		return RevisionRecord{}, err
+	}
+	if len(dropped) > 0 {
+		return RevisionRecord{}, &OverrideClearsValueError{Fields: dropped}
+	}
 	if reason == "" {
 		reason = "edit"
 	}
@@ -181,6 +225,85 @@ func diffDefinitionObject(base, desired map[string]json.RawMessage) map[string]j
 		}
 	}
 	return out
+}
+
+// overrideRoundTripMismatches lists the fields where saving delta would not
+// reproduce desired. delta merged onto baseline is exactly what the registry
+// resolves after the save, so every field listed here is an edit the save
+// would silently drop. Both sides go through the same Definition encoding;
+// source is bookkeeping, not an edit, and is left out. A key present on only
+// one side is reported by its own name without descending into it, and
+// arrays are compared whole, the way the delta and the merge treat them.
+//
+// A top-level enabled that is unset counts as true on both sides — the
+// default Build applies — so a caller that leaves it out is not told it
+// cleared something the registry would resolve identically anyway.
+func overrideRoundTripMismatches(baseline, delta, desired Definition) ([]string, error) {
+	effective, err := mergeDefinitionValues(baseline, delta)
+	if err != nil {
+		return nil, err
+	}
+	effectiveObject, err := definitionComparisonObject(effective)
+	if err != nil {
+		return nil, err
+	}
+	desiredObject, err := definitionComparisonObject(desired)
+	if err != nil {
+		return nil, err
+	}
+	var fields []string
+	collectDefinitionMismatches("", effectiveObject, desiredObject, &fields)
+	sort.Strings(fields)
+	return fields, nil
+}
+
+func definitionComparisonObject(definition Definition) (map[string]json.RawMessage, error) {
+	if definition.Enabled == nil {
+		enabled := true
+		definition.Enabled = &enabled
+	}
+	raw, err := json.Marshal(definition)
+	if err != nil {
+		return nil, fmt.Errorf("encode override comparison: %w", err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil, err
+	}
+	delete(object, "source")
+	return object, nil
+}
+
+func collectDefinitionMismatches(prefix string, left, right map[string]json.RawMessage, out *[]string) {
+	keys := make(map[string]struct{}, len(left)+len(right))
+	for key := range left {
+		keys[key] = struct{}{}
+	}
+	for key := range right {
+		keys[key] = struct{}{}
+	}
+	for key := range keys {
+		name := key
+		if prefix != "" {
+			name = prefix + "." + key
+		}
+		leftValue, inLeft := left[key]
+		rightValue, inRight := right[key]
+		if !inLeft || !inRight {
+			*out = append(*out, name)
+			continue
+		}
+		if isJSONObject(leftValue) && isJSONObject(rightValue) {
+			var leftObject, rightObject map[string]json.RawMessage
+			_ = json.Unmarshal(leftValue, &leftObject)
+			_ = json.Unmarshal(rightValue, &rightObject)
+			collectDefinitionMismatches(name, leftObject, rightObject, out)
+			continue
+		}
+		if string(leftValue) != string(rightValue) {
+			*out = append(*out, name)
+		}
+	}
 }
 
 // mergeWithCurrentOverrideLocked applies payload on top of the current
@@ -675,7 +798,7 @@ func readRevision(path, expectedProviderID string) (RevisionRecord, error) {
 	// such as {update:{enabled:true}} (args come from the manifest) or
 	// {launch:{headless:{args:[...]}}} (format comes from the manifest) fails
 	// here right after being written, and the save returns 422 with HEAD
-	// never moved. TestSaveEffectiveOverrideAcceptsEverySingleFieldEdit
+	// never moved. TestSaveEffectiveOverrideNeverSilentlyDropsAnEdit
 	// sweeps every built-in manifest field to catch the next such rule.
 	validationBase := Definition{
 		SchemaVersion: CurrentSchemaVersion,
