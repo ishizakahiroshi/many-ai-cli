@@ -182,6 +182,30 @@ func TestPrepareLaunchPromptKeepsALeadingDashFromBeingAFlag(t *testing.T) {
 	}
 }
 
+// 空白を含まない 1 語の指示は、CLI のサブコマンド名（claude の update / doctor / mcp、
+// codex の resume / login / exec など）と一致しうる。最初の引数がサブコマンド名そのもの
+// だと、指示ではなくそのコマンドとして起動するので、先頭に空白を足して渡す
+// （v0.9 リリース前の敵対レビュー B の指摘 7）。
+func TestPrepareLaunchPromptKeepsASingleWordFromBeingASubcommand(t *testing.T) {
+	for _, word := range []string{"update", "doctor", "resume", "login"} {
+		lp, _, err := prepareLaunchPrompt(writePromptFile(t, word), 1, "synthetic", directLaunchArgv(t), t.TempDir(), 1)
+		if err != nil {
+			t.Fatalf("prepareLaunchPrompt(%q): %v", word, err)
+		}
+		if lp.Arg != " "+word {
+			t.Errorf("Arg = %q, want %q with a leading space", lp.Arg, " "+word)
+		}
+	}
+	// 空白を含む指示は 1 つの引数として届くので、サブコマンド名と一致しない。今までどおり渡す。
+	lp, _, err := prepareLaunchPrompt(writePromptFile(t, "update the readme"), 1, "synthetic", directLaunchArgv(t), t.TempDir(), 1)
+	if err != nil {
+		t.Fatalf("prepareLaunchPrompt: %v", err)
+	}
+	if lp.Arg != "update the readme" {
+		t.Errorf("Arg = %q, want the instruction unchanged", lp.Arg)
+	}
+}
+
 // 空の指示は何も渡さない（引数を増やさない）。
 func TestPrepareLaunchPromptPassesNothingForAnEmptyInstruction(t *testing.T) {
 	lp, _, err := prepareLaunchPrompt(writePromptFile(t, "  \n"), 1, "synthetic", directLaunchArgv(t), t.TempDir(), 1)

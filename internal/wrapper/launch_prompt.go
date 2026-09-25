@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf16"
 
 	"many-ai-cli/internal/config"
@@ -173,8 +174,15 @@ func withLaunchPrompt(providerArgs []string, arg string) []string {
 // launchPromptArg keeps an instruction that happens to start with "-" from
 // being read as a flag: a leading space is harmless to the model and makes the
 // argument a positional to every flag parser.
+//
+// The same space keeps a one-word instruction from being read as a
+// subcommand. The instruction is the CLI's first argument, and a first
+// argument equal to a subcommand name (claude's update / doctor / mcp, codex's
+// resume / login / exec, ...) starts that command instead of a session. Only a
+// word without whitespace can equal a name, so longer instructions pass as they
+// are.
 func launchPromptArg(prompt string) string {
-	if strings.HasPrefix(prompt, "-") {
+	if strings.HasPrefix(prompt, "-") || !strings.ContainsFunc(prompt, unicode.IsSpace) {
 		return " " + prompt
 	}
 	return prompt
