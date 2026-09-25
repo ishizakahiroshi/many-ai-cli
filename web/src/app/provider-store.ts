@@ -74,7 +74,7 @@ export type ProviderEffectiveDefinition = ProviderDefinition & {
 export type ProviderRequestFailure =
   | { ok: false; kind: 'network' }
   | { ok: false; kind: 'aborted' }
-  | { ok: false; kind: 'http'; status: number; code?: string; detail?: string };
+  | { ok: false; kind: 'http'; status: number; code?: string; detail?: string; fields?: string[] };
 
 export type ProviderDetailResult =
   | { ok: true; revision: string; provider: ProviderEffectiveDefinition; diagnostics: ProviderDiagnostic[] }
@@ -118,6 +118,10 @@ function providerHTTPFailure(status: number, body: any): ProviderRequestFailure 
     status,
     code: typeof body?.error === 'string' ? body.error : undefined,
     detail: typeof body?.detail === 'string' ? body.detail : undefined,
+    // Field names the Hub refused to save empty (422 provider_override_clears_value).
+    fields: Array.isArray(body?.fields) && body.fields.every((field: unknown) => typeof field === 'string')
+      ? body.fields
+      : undefined,
   };
 }
 

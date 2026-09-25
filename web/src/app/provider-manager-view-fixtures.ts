@@ -73,6 +73,38 @@ test('providerErrorMessage: offline / 409 / 5xx / その他 で別キーを返�
   assert.equal(other.vars.status, 400);
 });
 
+test('providerErrorMessage: 空にできない項目の拒否は、項目名を差し込んだ文にする', () => {
+  const message = providerErrorMessage({
+    kind: 'http',
+    status: 422,
+    code: 'provider_override_clears_value',
+    detail: 'provider override cannot clear a distributed value: launch.model_args, update.args',
+    fields: ['launch.model_args', 'update.args'],
+  });
+  assert.equal(message.key, 'settings_ai_providers_cannot_clear');
+  assert.equal(message.vars.fields, 'launch.model_args, update.args');
+});
+
+test('providerErrorMessage: 理由付きの 4xx はサーバーの理由を文に入れる', () => {
+  const detail = 'override payload is invalid: update.enabled: update.enabled is true but update.args is empty';
+  const message = providerErrorMessage({ kind: 'http', status: 422, code: 'provider_override_failed', detail });
+  assert.equal(message.key, 'settings_ai_providers_request_failed_detail');
+  assert.equal(message.vars.detail, detail);
+  assert.equal(message.vars.status, 422);
+});
+
+test('providerErrorMessage: 拒否の code でも項目名が無ければ理由付きの文へ落ちる', () => {
+  const message = providerErrorMessage({
+    kind: 'http',
+    status: 422,
+    code: 'provider_override_clears_value',
+    detail: 'provider override cannot clear a distributed value: ',
+    fields: [],
+  });
+  assert.equal(message.key, 'settings_ai_providers_request_failed_detail');
+  assert.equal(message.vars.status, 422);
+});
+
 test('createRequestGuard: 後から begin した token だけが isCurrent になる', () => {
   const guard = createRequestGuard();
   const first = guard.begin();

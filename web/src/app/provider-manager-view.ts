@@ -117,7 +117,13 @@ export function isBuiltinProviderID(id: string): boolean {
 
 export type ProviderRequestFailureKind = 'network' | 'aborted' | 'http';
 
-export type ProviderRequestFailureLike = { kind: ProviderRequestFailureKind; status?: number };
+export type ProviderRequestFailureLike = {
+  kind: ProviderRequestFailureKind;
+  status?: number;
+  code?: string;
+  detail?: string;
+  fields?: string[];
+};
 
 // providerErrorMessage is the single place that turns a failed provider API
 // call into user-facing copy, so "offline", "409 conflict", and "5xx" each
@@ -128,11 +134,31 @@ export function providerErrorMessage(failure: ProviderRequestFailureLike): { key
   if (failure.kind === 'network') {
     return { key: 'settings_ai_providers_offline', fallback: 'You appear to be offline. Check your connection and try again.', vars: {} };
   }
+  // The Hub refused a built-in edit that would empty a field the distributed
+  // definition fills in; only the Hub knows those values, so it names the
+  // fields and this just says which ones to put back.
+  if (failure.kind === 'http' && failure.code === 'provider_override_clears_value' && Array.isArray(failure.fields) && failure.fields.length > 0) {
+    return {
+      key: 'settings_ai_providers_cannot_clear',
+      fallback: "These fields have a distributed default and can't be saved empty: {fields}. Keep the value or enter a different one.",
+      vars: { fields: failure.fields.join(', ') },
+    };
+  }
   if (failure.kind === 'http' && failure.status === 409) {
     return { key: 'settings_ai_providers_revision_conflict', fallback: 'This was changed elsewhere. Reload and try again.', vars: {} };
   }
   if (failure.kind === 'http' && (failure.status ?? 0) >= 500) {
     return { key: 'settings_ai_providers_server_error', fallback: 'Server error ({status}). Try again shortly.', vars: { status: failure.status ?? 0 } };
+  }
+  // Any other 4xx that carries the Hub's reason shows it as sent: the
+  // validation messages exist only on the Hub, so there is no table here to
+  // translate them from (a 422 used to say only "Request failed (422).").
+  if (failure.kind === 'http' && typeof failure.detail === 'string' && failure.detail !== '') {
+    return {
+      key: 'settings_ai_providers_request_failed_detail',
+      fallback: 'Request failed ({status}): {detail}',
+      vars: { status: failure.status ?? 0, detail: failure.detail },
+    };
   }
   if (failure.kind === 'http') {
     return { key: 'settings_ai_providers_request_failed', fallback: 'Request failed ({status}).', vars: { status: failure.status ?? 0 } };
