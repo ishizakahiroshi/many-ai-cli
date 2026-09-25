@@ -470,6 +470,10 @@
   scrollbar-width: thin;
 }
 .action-preamble.expanded .action-preamble-body { max-height: 22em; }
+/* 開いた経緯は縮めない。高さの決まった右カラムでは、本文だけ伸びて
+   overflow:hidden の枠に切られ、クリックしても続きが見えない。
+   伸びた分は #action-bar の縦スクロールに出す。 */
+.action-preamble.expanded { flex-shrink: 0; }
 
 .action-section {
   display: flex;
@@ -861,13 +865,22 @@ body.close-left .action-collapse-btn { right: auto; left: calc(12px + var(--cont
    選択肢が見えなくなる）。 */
 #action-bar.collapsed .action-preamble { margin-bottom: 4px; }
 #action-bar.collapsed .action-preamble-head { padding: 2px 8px; }
-#action-bar.collapsed .action-preamble-body,
-#action-bar.collapsed .action-preamble.expanded .action-preamble-body {
+#action-bar.collapsed .action-preamble-body {
   max-height: none;
   padding: 2px 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* コンパクト表示でも「クリックで全文」は折り返して見せる。
+   上の 1 行省略に expanded を含めると、クラスを付けても高さが変わらない。 */
+#action-bar.collapsed .action-preamble.expanded .action-preamble-body {
+  max-height: 22em;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  overflow-x: hidden;
+  overflow-y: auto;
+  text-overflow: clip;
 }
 #action-bar.collapsed .approval-summary-card { padding: 3px 8px; }
 #action-bar.collapsed .action-qtabs {
