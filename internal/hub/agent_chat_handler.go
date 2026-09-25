@@ -177,8 +177,8 @@ func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
 		if snap.CWD == "" || root == "" {
 			return "", false
 		}
-		// NativeLogPath は Stop hook が当該 session へ直接設定した exact path。
-		// 秒精度の開始時刻を使う fallback より必ず優先する。
+		// NativeLogPath は会話の切り替えへの追従（codex_thread_follow.go）か Stop hook が
+		// 当該 session へ直接設定した exact path。秒精度の開始時刻を使う fallback より必ず優先する。
 		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
 			return snap.NativeLogPath, true
 		}
@@ -326,6 +326,12 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	s.sessionsMu.Unlock()
 
 	snap := s.agentChatSnapshot(id)
+	// Codex が同じプロセスの中で新しい会話へ切り替えていたら、そちらへ乗り換える
+	// （codex_thread_follow.go）。乗り換えは NativeLogPath に入るので、取り直した
+	// snapshot で下の解決がそのまま新しい rollout を選ぶ。
+	if provider == "codex" && previousPath != "" && s.followCodexThreadSwitch(id, previousPath, time.Now()) {
+		snap = s.agentChatSnapshot(id)
+	}
 	path, pathOK := agentChatTranscriptPathForSnapshot(snap)
 	if pathOK && path != previousPath {
 		previousOffset = 0

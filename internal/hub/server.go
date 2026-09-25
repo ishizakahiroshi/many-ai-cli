@@ -391,6 +391,11 @@ type session struct {
 	// 承認マーカーの供給元をトランスクリプトへ固定したまま戻れなくなるのを防ぐ
 	// 退避路で使う（approval_marker_transcript.go）。
 	agentChatMissStreak int
+	// codexThreadCheckedAt / codexThreadAmbiguous は Codex の会話の切り替えへの
+	// 追従で使う（codex_thread_follow.go）。Ambiguous の間は、乗り換え先を 1 本に
+	// 絞れないので承認マーカーの供給元を VT ミラーへ戻す。
+	codexThreadCheckedAt time.Time
+	codexThreadAmbiguous bool
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int
@@ -460,8 +465,9 @@ type session struct {
 	LogPath   string `json:"log_path,omitempty"`
 	JSONLPath string `json:"jsonl_path,omitempty"`
 	// NativeLogPath is the raw transcript written by the provider itself (not
-	// many-ai-cli's optional PTY session log). Currently Codex reports this via
-	// its Stop hook; other providers resolve it from their local store on demand.
+	// many-ai-cli's optional PTY session log). For Codex it is set when the Hub
+	// follows a switch to a new conversation (codex_thread_follow.go) or when the
+	// Stop hook reports it; other providers resolve it from their local store on demand.
 	NativeLogPath  string             `json:"-"`
 	AgentSessionID string             `json:"-"`
 	History        *sessionlog.Writer `json:"-"`

@@ -65,9 +65,14 @@ const approvalMarkerTranscriptMissLimit = 3
 // 以前は 1 つの provider 一覧で両方を答えていたため、チャットの読み取り対象を
 // 増やした瞬間にその provider の承認供給元まで黙って移る作りだった。
 // 承認の同一性（candidateKey + sourceEpoch の 1 本）が事故で動く経路は残さない。
+//
+// 読めていても当てにならないとき（2026-09-25 追記・codex_thread_follow.go）:
+// Codex が新しい会話へ切り替えたのに、同じ CODEX_HOME・cwd の別セッションと取り違えずに
+// 乗り換え先を決められない間は、読めている古い rollout に新しい質問は来ない。
+// そのまま供給元にしておくと承認が無音で消えるので、読めない場合と同じく VT へ戻す。
 func approvalMarkerSourceIsTranscriptLocked(ses *session) bool {
 	return ses != nil && providerApprovalMarkerFromTranscript(ses.Provider) && ses.agentChatPath != "" &&
-		ses.agentChatMissStreak < approvalMarkerTranscriptMissLimit
+		ses.agentChatMissStreak < approvalMarkerTranscriptMissLimit && !ses.codexThreadAmbiguous
 }
 
 // approvalMarkerFromTranscriptText は assistant メッセージ 1 通の本文から承認マーカー

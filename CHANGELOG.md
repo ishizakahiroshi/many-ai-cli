@@ -557,6 +557,17 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Codex questions and approval panels no longer go missing after you start a
+  new conversation inside the same Codex session (for example with `/new`).**
+  Codex writes the new conversation to a new rollout file, but the Hub found the
+  file only by the session's start time and kept reading the first one. That old
+  file was still readable, so the Hub never fell back to reading the terminal
+  screen, and the question was lost without a trace. The Hub now notices the
+  newer conversation in the same folder and switches to it, without relying on
+  Codex hooks. It ignores Codex's own subagent conversations. If another Codex
+  session is running in the same folder with the same account, the Hub cannot
+  tell whose conversation it is, so it reads approvals from the terminal screen
+  instead and logs a warning.
 - **A child session started in a folder the CLI had not trusted yet is no longer
   quit (Claude Code) or trusted on your behalf (Codex) by the Hub.** When the
   CLI opened with its "do you trust this folder?" question, the Hub could not

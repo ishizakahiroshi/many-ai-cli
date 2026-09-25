@@ -120,8 +120,8 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 		if snap.CWD == "" || root == "" {
 			return agentLogLocation{Reason: "Codex home directory is unavailable"}
 		}
-		// Stop hook から得た path は当該 session に直接ひも付くため、時刻による
-		// fallback より先に使う。同一 cwd で複数 session が同時起動しても混同しない。
+		// 会話の切り替えへの追従（codex_thread_follow.go）か Stop hook から得た path は
+		// 当該 session に直接ひも付くため、時刻による fallback より先に使う。
 		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
 			return agentLogLocation{Available: true, Path: snap.NativeLogPath, Label: "Codex rollout transcript"}
 		}
@@ -233,11 +233,15 @@ const codexRolloutMatchWindow = 10 * time.Minute
 const codexRolloutAmbiguityWindow = time.Second
 
 // codexSessionMeta は rollout JSONL 先頭行（type: "session_meta"）の抜粋。
+// ThreadSource / ParentThreadID は、利用者が始めた会話と、Codex が同じ cwd で
+// 起こすサブエージェントの会話を見分けるために読む（codex_thread_follow.go）。
 type codexSessionMeta struct {
 	Type    string `json:"type"`
 	Payload struct {
-		CWD       string `json:"cwd"`
-		Timestamp string `json:"timestamp"`
+		CWD            string `json:"cwd"`
+		Timestamp      string `json:"timestamp"`
+		ThreadSource   string `json:"thread_source,omitempty"`
+		ParentThreadID string `json:"parent_thread_id,omitempty"`
 	} `json:"payload"`
 }
 
@@ -416,14 +420,23 @@ func findCursorChatDir(cursorHome, cwd string, startedAt time.Time) (string, boo
 }
 
 func codexTranscriptPathAllowed(ses *session, path string) bool {
-	root := strings.TrimSpace(ses.CodexHome)
-	if root == "" {
-		root = filepath.Join(ses.HomeDir, ".codex")
-	}
+	root := codexHomeForSession(ses)
 	if root == "" {
 		return false
 	}
 	return isAncestorOrEqual(filepath.Join(root, "sessions"), path)
+}
+
+// codexHomeForSession はセッションの Codex が実際に使っている CODEX_HOME を返す。
+// 複数サブスクリプションでは契約ごとのディレクトリ、それ以外は ~/.codex。
+func codexHomeForSession(ses *session) string {
+	if root := strings.TrimSpace(ses.CodexHome); root != "" {
+		return root
+	}
+	if strings.TrimSpace(ses.HomeDir) == "" {
+		return ""
+	}
+	return filepath.Join(ses.HomeDir, ".codex")
 }
 
 func claudeProjectDirName(cwd string) string {

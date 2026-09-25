@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "01c651c6d1bf52e54445a059b4dfea9739e5043c",
+    "commit": "e4e385c45e0aea384712023f95a4b2213c084f62",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1047,
-    "analyzed": 816,
+    "discovered": 1049,
+    "analyzed": 818,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 199,
@@ -5132,6 +5132,64 @@
     },
     {
       "path": "internal/hub/cli_version_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/codex_thread_follow.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/codex_thread_follow_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
