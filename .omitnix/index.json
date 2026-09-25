@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "aad3535b3bb4964d1d3497fd36f5177d5e86a4d8",
+    "commit": "67efbccd1b6b45d245168f008bfbf779810a23e2",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1040,
-    "analyzed": 809,
+    "discovered": 1041,
+    "analyzed": 810,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 199,
@@ -7133,6 +7133,35 @@
     },
     {
       "path": "internal/hub/jev_evaluate_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/launch_arg_startup_screen_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {

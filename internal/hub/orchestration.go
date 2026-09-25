@@ -240,9 +240,10 @@ type orchestrationChild struct {
 	// standby の猶予で起動失敗と見なされる（子 plan
 	// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C4）。
 	PromptViaLaunchArg bool
-	// TrustWaitNotified: 起動引数で指示を渡した子が信頼確認で利用者を待っていることを、
-	// 親と board へ知らせ済み。1 つの子につき 1 回だけ知らせるためのラッチ。
-	TrustWaitNotified bool
+	// StartupWaitNotified: 起動引数で指示を渡した子が起動画面（信頼確認に限らない）で
+	// 利用者を待っていることを、親と board へ知らせ済み。1 つの子につき 1 回だけ知らせる
+	// ためのラッチ。
+	StartupWaitNotified bool
 }
 
 type boardDoneEvent struct {
@@ -1764,6 +1765,14 @@ func (s *Server) handleSendChild(w http.ResponseWriter, r *http.Request, parentI
 		writeJSONError(w, http.StatusNotFound, "no_live_child", fmt.Sprintf("no live child for role %q; use `many-ai-cli orchestrate spawn --role %s \"<prompt>\"`", body.Role, body.Role))
 		return
 	}
+	// 起動引数で指示を渡した子がまだそれを受け取っていない（起動中か起動画面で待っている）
+	// 間は打ち込まない。文字と Enter が起動画面の既定の選択肢を選び、子が終わりうる（#53）。
+	// board にも記録せず、打ち込まなかったことと理由を送った側（conductor）へ返す
+	// （子 plan plan_v0.9-release-readiness_c10_answer-fixes.md C2 (b)）。
+	if s.launchInstructionNotTaken(child.ID) {
+		writeJSONError(w, http.StatusConflict, "child_not_ready", launchInstructionNotTakenDetail(child.Role, child.ID))
+		return
+	}
 	// body.Text は conductor 経由でユーザー由来のフリーテキストが入るため、
 	// BEL/ESC 等の C0 制御文字を除去してから board 記録と PTY 注入の両方に使う。
 	safeText := sanitizeInjectText(body.Text)
@@ -1983,18 +1992,145 @@ func (s *Server) noteLaunchPromptAccepted(sessionID int, messages []agentChatMes
 	}
 }
 
-// folderTrustBlockerOnScreen returns the folder-trust signal visible in a
-// collapsed screen (collapseWhitespace) of provider, or "" when none is. The
-// signals are the same table the typed route's composer guard uses
-// (providerBlockingSignals, narrowed by folderTrustBlockingSignals), so both
-// routes recognise the same dialog.
-func folderTrustBlockerOnScreen(provider, screen string) string {
+// launchArgStartupQuiet is how long the screen of a launch-argument child must
+// have been still before Hub reads it as a startup screen waiting for a person.
+// Claude Code 2.1.281's folder-trust screen drew once and then stayed silent
+// for 44 s, until the Hub typed into it (the session log of #53, 2026-09-24);
+// a CLI that has taken its instruction keeps drawing while it works. 10 s is
+// above the longest silence measured inside a normal Claude start (8 s, see
+// orchestrationInjectQuiet).
+const launchArgStartupQuiet = 10 * time.Second
+
+// launchArgStartupScreen judges, from the state of the screen, whether a child
+// that was handed its first instruction as a launch argument — and whose
+// transcript does not show it taken yet — is waiting on a startup screen of its
+// CLI (folder trust, external imports, an update menu, or one Hub has no words
+// for). screen is collapsed (collapseWhitespace). 子 plan
+// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (a)(c).
+//
+// It goes by the state of the screen, not by its words. What separates "the
+// CLI is still in front of its input box" from "the CLI took the instruction"
+// is whether the input box is on screen (providerComposerSignals). Once it is,
+// any startup-screen wording on screen is the instruction itself, shown in the
+// transcript: an instruction that quotes the folder-trust question must not be
+// read as that question. A screen that is still moving is a CLI at work, not a
+// screen waiting for an answer.
+//
+// waiting is true for a drawn screen without the input box that has been still
+// for launchArgStartupQuiet, when either a registered startup screen is showing
+// (providerBlockingSignals; blocker names it) or the CLI has had
+// orchestrationComposerMaxWait since spawn to reach its input box and has not
+// (blocker is ""). A provider with no composer signal is never judged.
+func launchArgStartupScreen(provider, screen string, spawnedAt, lastOutput, now time.Time) (waiting bool, blocker string) {
+	composer := providerComposerSignals[provider]
+	if len(composer) == 0 || screen == "" || containsAnySignal(screen, composer) {
+		return false, ""
+	}
+	if now.Sub(lastOutput) < launchArgStartupQuiet {
+		return false, ""
+	}
 	for _, sig := range providerBlockingSignals[provider] {
-		if folderTrustBlockingSignals[sig] && strings.Contains(screen, sig) {
-			return sig
+		if strings.Contains(screen, sig) {
+			return true, sig
 		}
 	}
-	return ""
+	if now.Sub(spawnedAt) < orchestrationComposerMaxWait {
+		return false, ""
+	}
+	return true, ""
+}
+
+// launchArgStartupWaits returns the children of boardID that were handed their
+// first instruction as a launch argument, have neither taken it (transcript)
+// nor written their progress file, and are waiting on a startup screen
+// (launchArgStartupScreen). The value is the registered signal on screen, ""
+// for a screen Hub does not recognise.
+//
+// Locks follow checkOrchestrationChildTimers' rule — short, never nested: the
+// candidates are read under orchestration.mu, their screens under sessionsMu.
+func (s *Server) launchArgStartupWaits(boardID string, now time.Time) map[int]string {
+	type candidate struct {
+		id        int
+		spawnedAt time.Time
+	}
+	var candidates []candidate
+	s.orchestration.mu.Lock()
+	if b := s.orchestration.boards[boardID]; b != nil {
+		for id, child := range b.Children {
+			if !child.PromptViaLaunchArg || !child.PromptDeliveredAt.IsZero() || !child.FileMod.IsZero() ||
+				child.Done || b.Done[id] || b.StartupFailed[id] {
+				continue
+			}
+			candidates = append(candidates, candidate{id: id, spawnedAt: child.SpawnedAt})
+		}
+	}
+	s.orchestration.mu.Unlock()
+	if len(candidates) == 0 {
+		return nil
+	}
+	waits := map[int]string{}
+	s.sessionsMu.Lock()
+	for _, c := range candidates {
+		ses := s.sessions[c.id]
+		if ses == nil || ses.vt == nil {
+			continue
+		}
+		screen := collapseWhitespace(strings.Join(ses.vt.Lines(), ""))
+		if waiting, blocker := launchArgStartupScreen(ses.Provider, screen, c.spawnedAt, ses.lastOutputAt, now); waiting {
+			waits[c.id] = blocker
+		}
+	}
+	s.sessionsMu.Unlock()
+	return waits
+}
+
+// launchInstructionNotTaken reports whether sessionID is a child that was
+// handed its first instruction as a launch argument and, as far as Hub can
+// tell, has not taken it yet: its transcript shows no user message, it has
+// never written its progress file, and its input box is not on screen. Such a
+// child is still starting or sitting on a startup screen of its CLI, and
+// whatever Hub types lands on that screen — an Enter picks the screen's default,
+// which on Claude Code 2.1.281's folder-trust screen is "No, exit" (#53). 子 plan
+// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (b).
+//
+// Unlike launchArgStartupScreen this does not wait for the screen to settle:
+// typing into a CLI that is still starting is the same accident a moment
+// earlier. Once the input box is on screen the child is typeable, even before
+// the transcript poll has seen the instruction.
+func (s *Server) launchInstructionNotTaken(sessionID int) bool {
+	pending := false
+	s.orchestration.mu.Lock()
+	for _, b := range s.orchestration.boards {
+		if child := b.Children[sessionID]; child != nil {
+			pending = child.PromptViaLaunchArg && child.PromptDeliveredAt.IsZero() && child.FileMod.IsZero() &&
+				!child.Done && !b.Done[sessionID]
+			break
+		}
+	}
+	s.orchestration.mu.Unlock()
+	if !pending {
+		return false
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return false
+	}
+	screen := ""
+	if ses.vt != nil {
+		screen = collapseWhitespace(strings.Join(ses.vt.Lines(), ""))
+	}
+	return !containsAnySignal(screen, providerComposerSignals[ses.Provider])
+}
+
+// launchInstructionNotTakenDetail is what the sender is told when Hub held
+// text back from such a child (orchestrate send; the relay's reminder goes on
+// the board instead).
+func launchInstructionNotTakenDetail(role string, childID int) string {
+	return fmt.Sprintf("child role=%s id=%d has not taken its launch instructions yet (it is still starting or waiting on a startup screen such as folder trust); nothing was typed. "+
+		"The instructions it was spawned with start by themselves once the user answers that screen in the child session; send this again after the child has started working",
+		role, childID)
 }
 
 // folderTrustWaitMessage is the one notice for a launch-argument child that
@@ -2007,58 +2143,58 @@ func folderTrustWaitMessage(role string, childID int, blocker string) string {
 		role, childID, blocker)
 }
 
-// noticeChildrenWaitingOnFolderTrust tells the parent and the board, once per
-// child, that a launch-argument child is sitting on its folder-trust prompt
-// before it has accepted its instruction (子 plan
-// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C4).
+// startupScreenWaitMessage is the notice for a launch-argument child waiting on
+// any other startup screen: one Hub knows by its words (blocker), or one it
+// does not (blocker is "").
+func startupScreenWaitMessage(role string, childID int, blocker string) string {
+	screen := blocker
+	if screen == "" {
+		screen = "a screen Hub does not recognise; the input box has not appeared"
+	}
+	return fmt.Sprintf("child waiting on a startup screen before taking its instructions: role=%s id=%d (%s). "+
+		"The instructions were handed over at launch and start as soon as the user opens the child session and answers that screen; do not send them again",
+		role, childID, screen)
+}
+
+// noticeChildrenWaitingOnStartupScreen tells the parent and the board, once per
+// child, that a launch-argument child is sitting on a startup screen before it
+// has taken its instruction (子 plan
+// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C4; any
+// startup screen, not only folder trust: plan_v0.9-release-readiness_c10_answer-fixes.md
+// C2 (a)). waits is launchArgStartupWaits for the same tick.
 //
 // Locks follow checkOrchestrationChildTimers' rule — short, never nested: the
-// candidates are read under orchestration.mu, each screen under sessionsMu,
-// and the latch is set under orchestration.mu again before anything is sent.
-func (s *Server) noticeChildrenWaitingOnFolderTrust(boardID string) {
+// latch is set under orchestration.mu before anything is sent.
+func (s *Server) noticeChildrenWaitingOnStartupScreen(boardID string, waits map[int]string) {
+	if len(waits) == 0 {
+		return
+	}
 	type candidate struct {
 		id, parentID int
 		role         string
+		blocker      string
 	}
 	var candidates []candidate
 	boardPath := ""
 	s.orchestration.mu.Lock()
 	if b := s.orchestration.boards[boardID]; b != nil {
 		boardPath = b.Path
-		for id, child := range b.Children {
-			if !child.PromptViaLaunchArg || !child.PromptDeliveredAt.IsZero() || child.TrustWaitNotified ||
-				child.Done || b.Done[id] || b.TimedOut[id] || b.StartupFailed[id] {
+		for id, blocker := range waits {
+			child := b.Children[id]
+			if child == nil || child.StartupWaitNotified || b.TimedOut[id] {
 				continue
 			}
-			candidates = append(candidates, candidate{id: id, parentID: child.ParentID, role: child.Role})
+			child.StartupWaitNotified = true
+			candidates = append(candidates, candidate{id: id, parentID: child.ParentID, role: child.Role, blocker: blocker})
 		}
 	}
 	s.orchestration.mu.Unlock()
 
 	for _, c := range candidates {
-		s.sessionsMu.Lock()
-		ses := s.sessions[c.id]
-		blocker := ""
-		if ses != nil && ses.vt != nil {
-			blocker = folderTrustBlockerOnScreen(ses.Provider, collapseWhitespace(strings.Join(ses.vt.Lines(), "")))
+		msg := startupScreenWaitMessage(c.role, c.id, c.blocker)
+		if folderTrustBlockingSignals[c.blocker] {
+			msg = folderTrustWaitMessage(c.role, c.id, c.blocker)
 		}
-		s.sessionsMu.Unlock()
-		if blocker == "" {
-			continue
-		}
-		s.orchestration.mu.Lock()
-		latched := false
-		if b := s.orchestration.boards[boardID]; b != nil {
-			if child := b.Children[c.id]; child != nil && !child.TrustWaitNotified {
-				child.TrustWaitNotified = true
-				latched = true
-			}
-		}
-		s.orchestration.mu.Unlock()
-		if !latched {
-			continue
-		}
-		msg := folderTrustWaitMessage(c.role, c.id, blocker)
 		if s.relayOwns(boardID) {
 			// notifyBoardEvent は relay の board では何もしない（relay が自分の経路で
 			// 親へ知らせる）。relay と同じ経路で知らせ、board には自分で残す。
@@ -2719,6 +2855,9 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	if owns && s.relayTerminal(boardID) {
 		return
 	}
+	// 起動引数で指示を渡した子のうち、まだ受け取らずに起動画面で利用者を待っているもの。
+	// 下の timeout に数えず、最後に親と board へ知らせる（同じ判定を 1 回だけ行う）。
+	startupWaits := s.launchArgStartupWaits(boardID, now)
 	boardPath := ""
 	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
 	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
@@ -2746,7 +2885,14 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "startup_failed"})
 				continue
 			}
-			if cfg.ChildTimeoutSeconds > 0 {
+			// A child still in front of a startup screen (folder trust and the like)
+			// is waiting for a person, not stuck: it already holds its instruction
+			// and starts once the screen is answered. Counting it as timed out makes
+			// it unsendable while it lives on, and with TimeoutRespawn starts a 2nd
+			// body on the same instruction in the same folder (子 plan
+			// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (c)).
+			_, onStartupScreen := startupWaits[id]
+			if cfg.ChildTimeoutSeconds > 0 && !onStartupScreen {
 				// Measure the timeout from the child's last activity, not its
 				// spawn time. A child still actively writing to the board or
 				// emitting PTY output past ChildTimeoutSeconds is healthy and must
@@ -2814,7 +2960,7 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 			s.notifyBoardEvent(boardID, n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold))
 		}
 	}
-	s.noticeChildrenWaitingOnFolderTrust(boardID)
+	s.noticeChildrenWaitingOnStartupScreen(boardID, startupWaits)
 }
 
 // childStartupFailureScreenTail collects the last few non-empty screen lines

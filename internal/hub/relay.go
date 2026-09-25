@@ -1520,6 +1520,16 @@ func (s *Server) relayOnChildIdle(boardID string, childID int) {
 	if run.roleHeadlessLocked(role) {
 		return
 	}
+	// A child handed its instruction at launch that has not taken it yet is still
+	// starting or sitting on a startup screen; the reminder's text and Enter would
+	// land on that screen and could pick its default ("No, exit" on Claude Code
+	// 2.1.281's folder-trust screen). Hold it back, say so on the board, and keep
+	// the one reminder for later (子 plan
+	// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (b)).
+	if s.launchInstructionNotTaken(childID) {
+		s.relayBoardLocked(run, fmt.Sprintf("reminder not typed: %s #%d has not taken its launch instructions yet (still starting or waiting on a startup screen); they start once the user answers that screen", role, childID))
+		return
+	}
 	run.nudged[childID] = true
 	s.relayDep().inject(childID, "\n"+s.relayNudgeText(run, role)+"\n")
 	s.relayEventLocked(run, proto.RelayEvent{Kind: relayEventNudge, C: run.currentCLocked(), Round: run.round, Text: fmt.Sprintf("%s #%d", role, childID)})
