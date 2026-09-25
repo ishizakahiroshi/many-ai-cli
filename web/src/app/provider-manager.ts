@@ -20,6 +20,7 @@ import {
   providerUpdateLoginMayBeRequired,
   statusLabelKey,
   suggestProviderId,
+  type ProviderRequestFailureLike,
   type ProviderUpdateFormValues,
 } from './provider-manager-view.js';
 import {
@@ -59,19 +60,29 @@ function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): 
   return value;
 }
 
-// The advanced JSON editor prefill drops fields the server computes and never
-// reads back (source/effective_source/revision/capabilities_summary) and the
-// identity fields that already have dedicated required inputs above it.
-function definitionForAdvancedPreview(definition: ProviderEffectiveDefinition): string {
+// withoutServerComputedFields drops what the Hub computes when it answers a
+// read and never takes back on a save (source/effective_source/revision/
+// field_origins/capabilities_summary). The edit dialog (through the advanced
+// JSON prefill below) and the list's Enable button both send a loaded
+// definition back through it, so the two agree on what "the whole
+// definition" is.
+function withoutServerComputedFields(definition: ProviderEffectiveDefinition): Record<string, unknown> {
   const rest: Record<string, unknown> = { ...(definition as unknown as Record<string, unknown>) };
-  delete rest.schema_version;
-  delete rest.id;
-  delete rest.display_name;
   delete rest.source;
   delete rest.effective_source;
   delete rest.revision;
   delete rest.field_origins;
   delete rest.capabilities_summary;
+  return rest;
+}
+
+// The advanced JSON editor prefill drops the server-computed fields and the
+// identity fields that already have dedicated required inputs above it.
+function definitionForAdvancedPreview(definition: ProviderEffectiveDefinition): string {
+  const rest = withoutServerComputedFields(definition);
+  delete rest.schema_version;
+  delete rest.id;
+  delete rest.display_name;
   if (Object.keys(rest).length === 0) return '';
   return JSON.stringify(rest, null, 2);
 }
@@ -164,7 +175,7 @@ function initProviderManager(): void {
   // narrow a discriminated union through `!x.ok` or an else branch (only the
   // positive `x.ok === false` check narrows) — every call site below follows
   // that shape rather than routing through a shared branch-and-report helper.
-  const providerFailureText = (failure: { kind: 'network' | 'aborted' | 'http'; status?: number }): string => {
+  const providerFailureText = (failure: ProviderRequestFailureLike): string => {
     const message = providerErrorMessage(failure);
     return tx(message.key, message.fallback, message.vars);
   };
@@ -946,14 +957,18 @@ function initProviderManager(): void {
       return;
     }
     const expectedRevision = detail.provider.effective_source?.revision || '';
-    // A sparse { id, enabled } payload, not the whole fetched definition:
-    // the Hub merges this onto whatever is already overridden and validates
-    // the result against the current embedded/distribution base, so
-    // re-enabling never freezes launch/model/adapter fields the user never
-    // touched (see internal/provider/history.go SaveOverride).
+    // Enable sends the whole definition just loaded, with enabled:true — the
+    // same "PATCH is the whole definition" contract the edit dialog's save
+    // uses. A built-in PATCH goes through SaveEffectiveOverride (since
+    // 19b43f2): it validates the payload as a complete definition and stores
+    // only its difference from the distributed one. The sparse
+    // { id, enabled } this used to send failed that check with 422, and the
+    // whole definition neither freezes untouched fields into the override nor
+    // drops what the user had edited. Disable stays the sparse
+    // { enabled: false } the Hub merges onto the current override (DELETE).
     const result = provider.enabled
       ? await requestRemoveProvider(provider.id, expectedRevision)
-      : await saveProviderDefinition(provider.id, expectedRevision, { schema_version: 1, id: provider.id, enabled: true });
+      : await saveProviderDefinition(provider.id, expectedRevision, { ...withoutServerComputedFields(detail.provider), enabled: true });
     if (result.ok === false) {
       if (result.kind !== 'aborted') setStatus(providerFailureText(result), true);
       return;

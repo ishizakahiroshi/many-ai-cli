@@ -1715,6 +1715,8 @@
   "settings_ai_providers_server_error": "Lỗi máy chủ ({status}). Thử lại sau ít phút.",
   "settings_ai_providers_request_failed": "Yêu cầu thất bại ({status}).",
   "settings_ai_providers_request_failed_generic": "Yêu cầu thất bại.",
+  "settings_ai_providers_cannot_clear": "Các trường sau có giá trị mặc định phân phối nên không thể lưu trống: {fields}. Hãy giữ giá trị hoặc nhập giá trị khác.",
+  "settings_ai_providers_request_failed_detail": "Yêu cầu thất bại ({status}): {detail}",
   "settings_ai_providers_revision_conflict": "Đã có thay đổi ở nơi khác. Tải lại rồi thử lại.",
   "settings_ai_providers_disable": "Tắt",
   "settings_ai_providers_enable": "Bật",

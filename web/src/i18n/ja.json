@@ -1715,6 +1715,8 @@
   "settings_ai_providers_server_error": "サーバーエラーです（{status}）。しばらくしてからやり直してください。",
   "settings_ai_providers_request_failed": "リクエストに失敗しました（{status}）。",
   "settings_ai_providers_request_failed_generic": "リクエストに失敗しました。",
+  "settings_ai_providers_cannot_clear": "次の項目は配布元の既定値があるため、空にして保存できません: {fields}。元の値を残すか、別の値を入れてください。",
+  "settings_ai_providers_request_failed_detail": "リクエストに失敗しました（{status}）: {detail}",
   "settings_ai_providers_revision_conflict": "他の場所で変更されています。再読込してからやり直してください。",
   "settings_ai_providers_disable": "無効化",
   "settings_ai_providers_enable": "有効化",

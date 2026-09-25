@@ -1715,6 +1715,8 @@
   "settings_ai_providers_server_error": "Server error ({status}). Try again shortly.",
   "settings_ai_providers_request_failed": "Request failed ({status}).",
   "settings_ai_providers_request_failed_generic": "Request failed.",
+  "settings_ai_providers_cannot_clear": "These fields have a distributed default and can't be saved empty: {fields}. Keep the value or enter a different one.",
+  "settings_ai_providers_request_failed_detail": "Request failed ({status}): {detail}",
   "settings_ai_providers_revision_conflict": "This was changed elsewhere. Reload and try again.",
   "settings_ai_providers_disable": "Disable",
   "settings_ai_providers_enable": "Enable",
