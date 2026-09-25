@@ -30,6 +30,7 @@
 | `/learn-taste` | Learn your taste from sessions with other coding agents. | When you want Command Code to pick up your style from past work in another tool. |
 | `/login` | Log in to Command Code. | When authenticating your account in a new environment. |
 | `/logout` | Log out of Command Code. | When you want to remove the current authentication from this environment. |
+| `/loop` | Run a task now and repeat it on a fixed or self-paced schedule. | Automate a recurring or periodic task. |
 | `/mcp` | Manage MCP server connections. | When configuring external tools and data sources. |
 | `/memory` | Manage Command Code memory. | When you want to review or update what the agent remembers. |
 | `/mode` | Show or switch the permission mode. | When you want to change between default, auto-accept, or plan mode. |

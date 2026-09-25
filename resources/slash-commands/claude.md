@@ -5,6 +5,8 @@
 | `/add-dir` | Add a working directory for file access. | When Claude needs files from an external directory. |
 | `/advisor` | Toggle secondary-model advisor guidance. | When you want a second-opinion advisor on the current turn. |
 | `/agents` | Manage subagent configurations. | When delegating tasks to background agents. |
+| `/artifacts` | List and manage artifacts you own or that are shared with you. | Review or organize artifacts created during sessions. |
+| `/auto-mode-setup` | Draft autoMode.environment entries from your project. | Set up automatic environment detection for autonomous runs. |
 | `/autocompact` | Set how full context gets before auto-compacting. | When managing long conversations that risk overflow. |
 | `/autofix-pr` | Watch the current branch's PR and push fixes when CI fails. | When you want automatic CI-driven fixes on a PR. |
 | `/background` | Detach the current session to run as a background agent. | When you need to free the terminal while work continues. |
@@ -26,6 +28,7 @@
 | `/dataviz` | Load data visualization design guidance. | When designing charts, dashboards, or other data visuals. |
 | `/debug` | Enable debug logging and troubleshoot issues. | When diagnosing installation or runtime problems. |
 | `/deep-research` | Fan out web searches and synthesize a cited report. | When researching complex topics that need verification. |
+| `/design` | Draft UI mockups and screen flows as artboards. | Sketch a UI design before implementation. |
 | `/design-login` | Authorize access to design-system assets. | When enabling design system export from a design tool. |
 | `/design-sync` | Convert a design system into React components. | When importing a design system into a React codebase. |
 | `/desktop` | Continue the current session in the Desktop app. | When switching from CLI to desktop. |
@@ -59,6 +62,7 @@
 | `/mobile` | Show a QR code to download the Claude mobile app. | When you want to access Claude on your phone. |
 | `/model` | Change model selection. | Switch models for speed, quality, or cost tradeoffs. |
 | `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
+| `/output-style` | List or switch output styles. | Change how Claude formats its responses. |
 | `/passes` | Share a free week of Claude Code with friends. | When inviting others to try Claude Code. |
 | `/permissions` | Manage allow, ask, and deny rules for tool permissions. | When configuring security and access controls. |
 | `/plan` | Enter plan mode directly from the prompt. | When you want to review planned changes before execution. |
@@ -92,6 +96,7 @@
 | `/setup-vertex` | Configure Google Vertex AI authentication and model pins. | When using Vertex AI as your API provider. |
 | `/share` | Share the conversation or send product feedback. | When collaborating or reporting an issue upstream. |
 | `/simplify` | Review code for cleanup and apply fixes. | When optimizing code without hunting for bugs. |
+| `/skill-doctor` | Show a skill and plugin usage report: cost, tokens, uses, and unused plugins. | Audit which skills and plugins are actually being used. |
 | `/skills` | List available skills. | When discovering what skills are available. |
 | `/stats` | Show usage statistics on the Stats tab. | When viewing usage statistics. |
 | `/status` | Show current status. | Inspect account, connectivity, and runtime state. |
@@ -102,11 +107,13 @@
 | `/team-onboarding` | Generate a team onboarding guide from usage history. | When sharing best practices with teammates. |
 | `/teleport` | Pull a Claude Code on the web session into this terminal. | When continuing a web session locally. |
 | `/test` | Run automated tests on the current project. | When validating changes before committing. |
+| `/theme` | Set the display theme. | Switch between light, dark, or other color themes. |
 | `/thinking` | Toggle extended thinking. | When you want the model to think longer before responding. |
 | `/uninstall` | Remove installed skills, plugins, or MCP servers. | When cleaning up unused extensions. |
 | `/upgrade` | Open the upgrade page. | When switching to a higher plan tier. |
 | `/usage` | Show usage statistics. | Review limits and ongoing usage trends. |
 | `/verify` | Confirm a code change by building and running the app. | When validating changes work in the running application. |
+| `/version` | Show Claude Code version. | Confirm which CLI version is installed. |
 | `/web` | Use web browsing and search capabilities. | When researching or fetching online content. |
 | `/why` | Explain the reasoning behind recent actions. | When you want the decision-making made explicit. |
 | `/worktrees` | Manage git worktrees for parallel branches. | When juggling multiple branches without switching cwd. |
