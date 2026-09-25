@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"many-ai-cli/internal/subscription"
 )
@@ -89,6 +90,10 @@ type providerOps struct {
 	configPath func(env []string) string
 	trusted    func(configPath, dir string) (bool, error)
 	grant      func(configPath, dir string) (Result, error)
+	// reclaim removes what a grant killed mid-write can leave beside
+	// configPath (ReclaimStaleTempFiles). nil when grant leaves no file of
+	// its own behind.
+	reclaim func(configPath string, now time.Time) ReclaimResult
 }
 
 // providers holds the complete set of CLIs this package knows how to grant
@@ -100,7 +105,10 @@ var providers = map[string]providerOps{
 		configPath: subscription.ClaudeStateFileFromEnv,
 		trusted:    claudeTrustedDir,
 		grant:      claudeGrantDir,
+		reclaim:    reclaimClaudeTempFiles,
 	},
+	// codex appends to config.toml in place (appendCodexBlock) and writes no
+	// temp file, so it has no reclaim.
 	"codex": {
 		configPath: subscription.CodexConfigFileFromEnv,
 		trusted:    codexTrustedDir,
@@ -146,6 +154,53 @@ func Grant(t Target) (Result, error) {
 	result, err := ops.grant(configPath, t.Dir)
 	result.ConfigPath = configPath
 	return result, err
+}
+
+// ReclaimResult counts what ReclaimStaleTempFiles did. It holds no path on
+// purpose: the Hub logs it, a configuration file's location carries the user
+// name, and the leftover itself is a copy of a file holding the account.
+type ReclaimResult struct {
+	// Removed is the number of leftover temp files deleted.
+	Removed int
+	// Failed counts folders that could not be listed and leftovers that could
+	// not be deleted. A folder that does not exist is not a failure: most
+	// profiles, and most machines, have never had a Grant write there.
+	Failed int
+}
+
+// ReclaimStaleTempFiles is the Hub-start half of the residue rule in
+// internal/doctor/residue.go's header for the files Grant writes: beside the
+// configuration file each target selects, it removes the temp files a Grant
+// killed between writing and renaming left behind. Grant reclaims the same
+// files before it writes, but only beside the one file it is about to write
+// and only when another child is launched with the trust checkbox — so without
+// this, a copy of .claude.json (oauthAccount included) could stay for good
+// (v0.9 release review, C4-A F6; the user's answer Q6).
+//
+// Only Provider and Env select the file; Target.Dir is not used. A file named
+// by several targets is visited once. A leftover is recognized exactly as
+// Grant's own reclaim recognizes it — this package's name shape and an age of
+// at least claudeStaleTempFileAge — so a temp file another Grant is still
+// writing is left alone. Nothing here stops on an error; failures are counted.
+func ReclaimStaleTempFiles(targets []Target) ReclaimResult {
+	var total ReclaimResult
+	seen := map[string]bool{}
+	now := time.Now()
+	for _, t := range targets {
+		ops, ok := providers[t.Provider]
+		if !ok || ops.reclaim == nil {
+			continue
+		}
+		configPath := ops.configPath(t.Env)
+		if configPath == "" || seen[configPath] {
+			continue
+		}
+		seen[configPath] = true
+		result := ops.reclaim(configPath, now)
+		total.Removed += result.Removed
+		total.Failed += result.Failed
+	}
+	return total
 }
 
 func resolve(t Target) (providerOps, string, error) {

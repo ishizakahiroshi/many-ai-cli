@@ -1739,6 +1739,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("clean_cli_update_logs", s.cleanCliUpdateLogs)
 	s.safeGo("clean_orchestration_artifacts", s.cleanOrchestrationArtifacts)
 	s.safeGo("clean_handoff", s.cleanHandoff)
+	s.safeGo("reclaim_leftover_files", s.reclaimLeftoverFiles)
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })

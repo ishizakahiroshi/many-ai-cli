@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"many-ai-cli/internal/attach"
+	"many-ai-cli/internal/clitrust"
+	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/handoff"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/subscription"
 )
 
 const (
@@ -50,6 +53,89 @@ func (s *Server) recoverTranscripts() {
 			s.logger.Warn("transcript recovery failed", "path", txtPath, "err", err)
 		}
 	}
+}
+
+// reclaimLeftoverFiles runs once at Hub start (Run, under safeGo) and reclaims
+// two kinds of file the Hub writes and normally removes itself, but which a
+// kill can strand (v0.9 release review C4-A F6 / C4-B 9; the user's answer
+// Q6):
+//
+//   - the folder-trust temp copy of .claude.json (internal/clitrust; a copy of
+//     the whole file, oauthAccount included), beside every file a Grant may
+//     have written: see folderTrustReclaimTargets;
+//   - the instruction files in ~/.many-ai-cli/tmp (the Hub's prompt-*.md
+//     hand-over and the wrapper's launch-<pid>-*.md pointer; both hold the
+//     user's own instruction).
+//
+// Before this, each kind was reclaimed only when the same kind of file was
+// next written, which may never happen — the rule in internal/doctor/
+// residue.go asks for the next start.
+//
+// It does NOT assume that no child is running yet. Wrappers outlive a Hub
+// restart and reattach right after Run starts, and a second Hub (a WSL one on
+// the next port, say) may be writing too. What keeps a file that is still in
+// use is the condition each kind's own reclaim already applies: the Claude
+// temp file goes only once it is older than a minute (it lives for the
+// milliseconds between write and rename), prompt-*.md only after
+// headlessPromptMaxAge (a wrapper reads and deletes it within seconds of
+// starting), and launch-<pid>-*.md only once that wrapper's process is gone.
+//
+// Nothing here can stop the start: it returns nothing, and safeGo recovers a
+// panic. The log names kinds and counts only — never a path (it carries the
+// user name) or a file name.
+func (s *Server) reclaimLeftoverFiles() {
+	trust := clitrust.ReclaimStaleTempFiles(s.folderTrustReclaimTargets())
+	var instructions leftoverCount
+	if dir, err := config.Dir(); err == nil {
+		instructions = sweepStaleHeadlessPrompts(filepath.Join(dir, "tmp"), time.Now())
+	} else {
+		instructions.failed++
+	}
+	if trust == (clitrust.ReclaimResult{}) && instructions == (leftoverCount{}) {
+		return
+	}
+	args := []any{
+		"folder_trust_temp_removed", trust.Removed,
+		"folder_trust_temp_failed", trust.Failed,
+		"instruction_files_removed", instructions.removed,
+		"instruction_files_failed", instructions.failed,
+	}
+	if trust.Failed > 0 || instructions.failed > 0 {
+		s.logger.Warn("leftover files reclaimed at hub start, some could not be", args...)
+		return
+	}
+	s.logger.Info("leftover files reclaimed at hub start", args...)
+}
+
+// folderTrustReclaimTargets names every configuration file a folder-trust
+// Grant from this Hub or an earlier one may have written: the file a
+// default-login child of this Hub reads (the Hub's own environment, as
+// startWrapProcess passes it on), the CLI's default with no override at all
+// (an earlier Hub may have run without one), and each configured profile's.
+// Which providers leave temp files at all is clitrust's table, not a list
+// here.
+func (s *Server) folderTrustReclaimTargets() []clitrust.Target {
+	cfg := s.snapshotCfg()
+	configDir := subscriptionConfigDir()
+	var targets []clitrust.Target
+	for _, provider := range trustGrantProviders() {
+		targets = append(targets,
+			clitrust.Target{Provider: provider, Env: os.Environ()},
+			clitrust.Target{Provider: provider},
+		)
+		adapter, ok := subscription.AdapterFor(provider)
+		if !ok || configDir == "" || cfg == nil {
+			continue
+		}
+		for _, profile := range cfg.Subscriptions[provider] {
+			dir, err := config.ResolveSubscriptionProfileDir(configDir, provider, profile)
+			if err != nil {
+				continue
+			}
+			targets = append(targets, clitrust.Target{Provider: provider, Env: adapter.LaunchEnv(dir)})
+		}
+	}
+	return targets
 }
 
 // cleanSpawnLogs removes wrap-process spawn logs (logs/spawn/*.log) older than 7 days.

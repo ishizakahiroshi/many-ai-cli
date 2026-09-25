@@ -596,6 +596,13 @@ func removeHeadlessPromptFile(path string) {
 // an hour is long enough that a slow machine is never mistaken for a crash.
 const headlessPromptMaxAge = time.Hour
 
+// leftoverCount is what one reclaim pass did, as numbers only (the Hub-start
+// reclaim logs it; see reclaimLeftoverFiles).
+type leftoverCount struct {
+	removed int
+	failed  int
+}
+
 // sweepStaleHeadlessPrompts deletes prompt files older than headlessPromptMaxAge
 // from dir. It only ever touches the names many-ai-cli writes there: this
 // package's prompt-*.md, and the wrapper's launch-<pid>-*.md pointer files
@@ -604,10 +611,17 @@ const headlessPromptMaxAge = time.Hour
 // only once its wrapper is gone. While the wrapper runs, its CLI may still be
 // waiting on a trust dialog without having read the file, and age alone says
 // nothing about that.
-func sweepStaleHeadlessPrompts(dir string, now time.Time) {
+//
+// It runs before each new prompt file is written and once at Hub start
+// (reclaimLeftoverFiles). A dir that does not exist yet is not a failure.
+func sweepStaleHeadlessPrompts(dir string, now time.Time) leftoverCount {
+	var count leftoverCount
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return
+		if !os.IsNotExist(err) {
+			count.failed++
+		}
+		return count
 	}
 	for _, entry := range entries {
 		name := entry.Name()
@@ -626,9 +640,16 @@ func sweepStaleHeadlessPrompts(dir string, now time.Time) {
 			continue
 		}
 		if now.Sub(info.ModTime()) > headlessPromptMaxAge {
-			_ = os.Remove(filepath.Join(dir, name))
+			if removeErr := os.Remove(filepath.Join(dir, name)); removeErr != nil {
+				if !os.IsNotExist(removeErr) {
+					count.failed++
+				}
+				continue
+			}
+			count.removed++
 		}
 	}
+	return count
 }
 
 func effortWrapArgs(provider, effort string) []string {

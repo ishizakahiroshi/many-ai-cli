@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -293,11 +294,8 @@ func marshalClaudeJSON(v any, indent string) ([]byte, error) {
 // link into a plain file, and the user's real file would silently stop
 // receiving Claude Code's later writes.
 func writeClaudeRootAtomically(configPath string, root map[string]json.RawMessage) error {
-	target := configPath
-	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
-		target = resolved
-	}
-	cleanStaleClaudeTempFiles(target)
+	target := claudeWriteTarget(configPath)
+	cleanStaleClaudeTempFiles(target, time.Now())
 
 	body, err := marshalClaudeJSON(root, "  ")
 	if err != nil {
@@ -310,7 +308,7 @@ func writeClaudeRootAtomically(configPath string, root map[string]json.RawMessag
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 		return err
 	}
-	tmpPath := fmt.Sprintf("%s.many-ai-cli-%d-%d.tmp", target, os.Getpid(), rand.Int64())
+	tmpPath := fmt.Sprintf("%s%s%d-%d%s", target, claudeTempFileInfix, os.Getpid(), rand.Int64(), claudeTempFileSuffix)
 	if err := writeSyncedFile(tmpPath, body, mode); err != nil {
 		_ = os.Remove(tmpPath)
 		return err
@@ -349,26 +347,72 @@ func writeSyncedFile(path string, body []byte, mode os.FileMode) error {
 	return f.Close()
 }
 
-// cleanStaleClaudeTempFiles removes leftover "*.many-ai-cli-<pid>-<n>.tmp"
-// files from a previous, forcibly-killed write, but only ones older than
-// claudeStaleTempFileAge. This is the "reclaim on the next start" half of the
-// residue rule in internal/doctor/residue.go's header comment — the file this
-// package writes is not covered by that detector, so the reclaim has to live
-// here instead. Failure to clean is never fatal: a leftover temp file next to
-// configPath does not stop Grant from writing its own.
-func cleanStaleClaudeTempFiles(configPath string) {
-	matches, err := filepath.Glob(configPath + ".many-ai-cli-*.tmp")
-	if err != nil {
-		return
+// The temp file writeClaudeRootAtomically writes is named
+// "<target><claudeTempFileInfix><pid>-<n><claudeTempFileSuffix>" and sits
+// beside target; the reclaim recognizes it by exactly that shape.
+const (
+	claudeTempFileInfix  = ".many-ai-cli-"
+	claudeTempFileSuffix = ".tmp"
+)
+
+// claudeWriteTarget is the file writeClaudeRootAtomically actually replaces:
+// the symlink's target when configPath is a link, configPath otherwise
+// (including when it does not exist yet).
+func claudeWriteTarget(configPath string) string {
+	if resolved, err := filepath.EvalSymlinks(configPath); err == nil {
+		return resolved
 	}
-	cutoff := time.Now().Add(-claudeStaleTempFileAge)
-	for _, match := range matches {
-		info, statErr := os.Stat(match)
-		if statErr != nil {
+	return configPath
+}
+
+// reclaimClaudeTempFiles is the providers-table reclaim for Claude, run by
+// ReclaimStaleTempFiles at Hub start: the leftovers sit beside the file the
+// write replaced, so the symlink is resolved the same way first.
+func reclaimClaudeTempFiles(configPath string, now time.Time) ReclaimResult {
+	return cleanStaleClaudeTempFiles(claudeWriteTarget(configPath), now)
+}
+
+// cleanStaleClaudeTempFiles removes leftover temp files from a previous,
+// forcibly-killed write beside target, but only ones older than
+// claudeStaleTempFileAge. The file this package writes is not covered by the
+// detector in internal/doctor/residue.go, so the "reclaim on the next start"
+// half of that file's rule lives here: Grant runs it before each write, and
+// the Hub runs it at start through ReclaimStaleTempFiles. Failure to clean is
+// never fatal: a leftover temp file next to target does not stop Grant from
+// writing its own.
+//
+// The folder is listed and names are compared as strings, not matched with
+// filepath.Glob: a "[" in a folder name (legal on every OS, and possible in a
+// hand-written profile_dir) made the glob fail or match nothing, so the
+// leftover — a copy of the whole .claude.json — was never reclaimed.
+func cleanStaleClaudeTempFiles(target string, now time.Time) ReclaimResult {
+	var result ReclaimResult
+	dir := filepath.Dir(target)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			result.Failed++
+		}
+		return result
+	}
+	prefix := filepath.Base(target) + claudeTempFileInfix
+	cutoff := now.Add(-claudeStaleTempFileAge)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsRegular() || !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, claudeTempFileSuffix) {
 			continue
 		}
-		if info.ModTime().Before(cutoff) {
-			_ = os.Remove(match)
+		info, infoErr := entry.Info()
+		if infoErr != nil || !info.ModTime().Before(cutoff) {
+			continue
 		}
+		if removeErr := os.Remove(filepath.Join(dir, name)); removeErr != nil {
+			if !os.IsNotExist(removeErr) {
+				result.Failed++
+			}
+			continue
+		}
+		result.Removed++
 	}
+	return result
 }
