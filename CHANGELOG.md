@@ -88,7 +88,8 @@ Release artifacts are published at
 - **You can add an AI CLI from the Hub UI.** Open Settings → AI CLI
   integrations, or pick *Add AI CLI* at the end of the New Session provider
   list. The dialog asks for a display name and executable, then Validate and
-  Save. A failed check or save keeps what you typed. After a save from New
+  Save. A failed check or save keeps what you typed and says why, such as
+  which field is invalid. After a save from New
   Session, the new CLI is selected so you can start it without reopening
   Settings. JSON editing is not required. Each provider row also has a
   **Duplicate** button that opens the add form with that row as a starting
@@ -101,6 +102,12 @@ Release artifacts are published at
   provider's own settings file is damaged, History says so and offers what to
   restore to, such as the last readable version of your own settings; without
   the UI, use `many-ai-cli provider recover <provider-id> [revision|--list]`.
+  Editing a built-in provider saves your changes on top of its built-in
+  definition. For now, a field that definition fills in cannot be saved
+  empty — the save is refused and the edit dialog names the fields — and
+  removing a field you changed from *Advanced (JSON)* counts as emptying it;
+  to get the built-in values back, use History → *Reset to distributed
+  default*, which resets the whole provider.
 - **Official AI CLI catalog import is prepared but stays off.** Hub can
   compare a signed catalog with your overrides and roll back an accepted
   pointer, but it will not download or activate a remote catalog until
@@ -331,7 +338,10 @@ Release artifacts are published at
   approval is waiting along with the start of the question; click it (or focus
   it and press Enter) to open the panel again. While the panel is folded, your
   keys go to the terminal, so you can read what the panel was covering or
-  answer the CLI directly. The approval stays pending, and the same approval
+  answer the CLI directly. The one exception is an empty send (Enter or the
+  send button with nothing typed) while a high-risk approval is folded: it is
+  held back, and a toast asks you to open the strip and answer in the panel.
+  The approval stays pending, and the same approval
   stays folded when you reload the page (each browser tab keeps its own). The
   ✕ on the multi-question notice, the "✕ Approval" button at the bottom right
   of the terminal, and closing the mobile approval sheet all fold the same way.
