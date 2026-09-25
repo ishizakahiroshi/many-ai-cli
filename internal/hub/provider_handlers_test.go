@@ -406,6 +406,31 @@ func TestBuiltinProviderReenableWithFullDefinition(t *testing.T) {
 	}
 }
 
+// 何も変えない保存は、どの組み込み provider でも通る。空にした値を拒否する往復一致の
+// 検査（internal/provider/history.go）が、Hub の比較の土台（一番上の enabled を必ず持つ）
+// と同梱の定義の差で普通の保存を拒否しないことを、7 本すべてで固定する。保存を
+// 2 回続けても通る（v0.9 リリース前の敵対レビュー D の F7）。
+func TestBuiltinProviderUnchangedSaveIsAcceptedForEveryProvider(t *testing.T) {
+	s := newProviderAPITestServer(t)
+	for _, id := range provider.BuiltinProviderIDs {
+		t.Run(id, func(t *testing.T) {
+			revision := ""
+			for attempt := 1; attempt <= 2; attempt++ {
+				current, ok := s.providerRegistrySnapshot().Lookup(id)
+				if !ok {
+					t.Fatalf("%s is not registered", id)
+				}
+				resp := patchProviderRequest(t, s, id, revision, current.Definition)
+				if resp.Code != http.StatusOK {
+					t.Fatalf("unchanged save %d: status = %d, body=%s", attempt, resp.Code, resp.Body.String())
+				}
+				after, _ := s.providerRegistrySnapshot().Lookup(id)
+				revision = after.EffectiveSource.Revision
+			}
+		})
+	}
+}
+
 func TestProviderCreateConcurrentSameIDRejectsLoser(t *testing.T) {
 	s := newProviderAPITestServer(t)
 	definition := provider.Definition{SchemaVersion: 1, ID: "race-cli", DisplayName: "Race CLI", Launch: &provider.LaunchDefinition{Executable: "race-cli"}}
