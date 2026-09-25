@@ -297,12 +297,17 @@ func readGitdirFile(path string) (string, bool) {
 
 // readMetadataFile reads a small git metadata file, refusing a symbolic link,
 // anything that is not a regular file, and anything over 64 KiB.
+//
+// gosec G703: path is the approved child's working folder or a file its git
+// metadata points to — the same files Codex reads to decide trust. They are
+// only read, never written, and the result only picks which folder's entry
+// Grant looks at.
 func readMetadataFile(path string) ([]byte, bool) {
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) // #nosec G703 -- git metadata of the approved working folder, read only (see above).
 	if err != nil || !info.Mode().IsRegular() || isSymlink(path) || info.Size() > codexMaxGitMetadataBytes {
 		return nil, false
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G703 -- regular file of at most 64 KiB, checked just above; read only.
 	if err != nil || len(data) > codexMaxGitMetadataBytes {
 		return nil, false
 	}
@@ -324,7 +329,7 @@ func pathExists(path string) bool {
 }
 
 func isSymlink(path string) bool {
-	info, err := os.Lstat(path)
+	info, err := os.Lstat(path) // #nosec G703 -- only reads the file mode of a path under the approved working folder or its git metadata.
 	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
