@@ -72,9 +72,24 @@ func providerCommandFound(launch *provider.LaunchDefinition) bool {
 // caller-supplied fallback. Without this split, the built-in provider's very
 // first override always came back as a generic failure the UI could not tell
 // apart from an actual conflict.
+//
+// An edit that would empty a field the distributed definition fills in is
+// 422 provider_override_clears_value with the field names in "fields", so the
+// dialog can name them in the user's language. It stays 422, not 409: the UI
+// reads 409 as "changed elsewhere, reload", which is not what happened.
 func writeProviderHistoryError(w http.ResponseWriter, fallbackCode string, err error) {
 	if errors.Is(err, provider.ErrRevisionConflict) {
 		writeJSONError(w, http.StatusConflict, "revision_conflict", err.Error())
+		return
+	}
+	var clears *provider.OverrideClearsValueError
+	if errors.As(err, &clears) {
+		writeJSONStatus(w, http.StatusUnprocessableEntity, map[string]any{
+			"ok":     false,
+			"error":  "provider_override_clears_value",
+			"detail": err.Error(),
+			"fields": clears.Fields,
+		})
 		return
 	}
 	writeJSONError(w, http.StatusUnprocessableEntity, fallbackCode, err.Error())

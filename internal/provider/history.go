@@ -344,8 +344,13 @@ func validateOverrideAgainstBaseline(payload, baseline Definition) error {
 	if err != nil {
 		return err
 	}
-	if hasDiagnosticError(diagnostics) {
-		return fmt.Errorf("override payload is invalid")
+	// Name the first error (ValidateDefinition sorts by field), so the 422 the
+	// settings dialog shows says which field is wrong and why instead of only
+	// "invalid". Messages never echo the submitted value.
+	for _, diagnostic := range diagnostics {
+		if diagnostic.IsError() {
+			return fmt.Errorf("override payload is invalid: %s: %s", diagnostic.Field, diagnostic.Message)
+		}
 	}
 	return nil
 }

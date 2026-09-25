@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -262,6 +263,146 @@ func TestBuiltinProviderDisableSavesSparseOverride(t *testing.T) {
 	definition, ok := s.providerRegistrySnapshot().Lookup("claude")
 	if !ok || definition.Launch == nil || definition.Launch.Executable == "" {
 		t.Fatalf("claude lost its embedded launch definition after a sparse disable: %#v", definition)
+	}
+}
+
+type providerErrorBody struct {
+	OK     bool     `json:"ok"`
+	Error  string   `json:"error"`
+	Detail string   `json:"detail"`
+	Fields []string `json:"fields"`
+}
+
+func decodeProviderErrorBody(t *testing.T, resp *httptest.ResponseRecorder) providerErrorBody {
+	t.Helper()
+	var body providerErrorBody
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode error body %q: %v", resp.Body.String(), err)
+	}
+	return body
+}
+
+// TestBuiltinProviderPatchRefusesClearingDistributedValue is the settings
+// dialog path from bugfix_provider-override-sparse-delta_2026-09-23.md: turn
+// the update button OFF and empty the update args. The stored delta cannot
+// express the empty args, so before the refusal this returned 200 while the
+// distributed args stayed in effect. It must be 422 naming the field, and
+// nothing may be written.
+func TestBuiltinProviderPatchRefusesClearingDistributedValue(t *testing.T) {
+	s := newProviderAPITestServer(t)
+	definition, ok := s.providerRegistrySnapshot().Lookup("cursor-agent")
+	if !ok || definition.Update == nil || len(definition.Update.Args) == 0 {
+		t.Fatalf("cursor-agent has no distributed update args: %#v", definition.Update)
+	}
+	distributedArgs := append([]string(nil), definition.Update.Args...)
+	off := false
+	definition.Definition.Update.Enabled = &off
+	definition.Definition.Update.Args = nil
+
+	resp := patchProviderRequest(t, s, "cursor-agent", "", definition.Definition)
+	if resp.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("clearing PATCH status = %d, want 422, body=%s", resp.Code, resp.Body.String())
+	}
+	body := decodeProviderErrorBody(t, resp)
+	if body.OK || body.Error != "provider_override_clears_value" {
+		t.Fatalf("clearing PATCH body = %#v, want error provider_override_clears_value", body)
+	}
+	if len(body.Fields) != 1 || body.Fields[0] != "update.args" {
+		t.Fatalf("clearing PATCH fields = %#v, want [update.args]", body.Fields)
+	}
+	if !strings.Contains(body.Detail, "update.args") {
+		t.Fatalf("clearing PATCH detail = %q, want it to name update.args", body.Detail)
+	}
+	if revisions, err := s.historyStore.List("cursor-agent"); err != nil || len(revisions) != 0 {
+		t.Fatalf("refused PATCH wrote revisions: %d (err=%v)", len(revisions), err)
+	}
+	after, ok := s.providerRegistrySnapshot().Lookup("cursor-agent")
+	if !ok || after.Update == nil || fmt.Sprint(after.Update.Args) != fmt.Sprint(distributedArgs) {
+		t.Fatalf("update args after refused PATCH = %#v, want %v", after.Update, distributedArgs)
+	}
+}
+
+// TestBuiltinProviderPatchNamesInvalidField pins that a definition that is
+// broken on its own still fails with provider_override_failed, and that the
+// detail now names the first failing field and why instead of only
+// "override payload is invalid".
+func TestBuiltinProviderPatchNamesInvalidField(t *testing.T) {
+	s := newProviderAPITestServer(t)
+	definition, ok := s.providerRegistrySnapshot().Lookup("cursor-agent")
+	if !ok || definition.Update == nil {
+		t.Fatalf("cursor-agent has no update block: %#v", definition.Update)
+	}
+	on := true
+	definition.Definition.Update.Enabled = &on
+	definition.Definition.Update.Args = nil
+
+	resp := patchProviderRequest(t, s, "cursor-agent", "", definition.Definition)
+	if resp.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid PATCH status = %d, want 422, body=%s", resp.Code, resp.Body.String())
+	}
+	body := decodeProviderErrorBody(t, resp)
+	if body.Error != "provider_override_failed" {
+		t.Fatalf("invalid PATCH error = %q, want provider_override_failed", body.Error)
+	}
+	if !strings.Contains(body.Detail, "update.enabled") || !strings.Contains(body.Detail, "update.args is empty") {
+		t.Fatalf("invalid PATCH detail = %q, want the field and the reason", body.Detail)
+	}
+}
+
+// TestBuiltinProviderReenableWithFullDefinition pins the fix for the
+// settings list's "Enable" button, which answered 422 for a disabled built-in
+// provider: it sent only {schema_version, id, enabled:true}, but a built-in
+// PATCH is the whole definition (validated on its own before the delta is
+// taken). Sending the loaded definition with enabled:true must re-enable the
+// provider and keep what the user had edited; the sparse payload stays 422.
+func TestBuiltinProviderReenableWithFullDefinition(t *testing.T) {
+	for _, edited := range []bool{false, true} {
+		t.Run(fmt.Sprintf("edited=%v", edited), func(t *testing.T) {
+			s := newProviderAPITestServer(t)
+			original, ok := s.providerRegistrySnapshot().Lookup("claude")
+			if !ok {
+				t.Fatal("claude is not registered")
+			}
+			wantName := original.DisplayName
+			revision := ""
+			if edited {
+				wantName = "Claude (edited)"
+				original.Definition.DisplayName = wantName
+				if resp := patchProviderRequest(t, s, "claude", "", original.Definition); resp.Code != http.StatusOK {
+					t.Fatalf("edit status = %d, body=%s", resp.Code, resp.Body.String())
+				}
+				afterEdit, _ := s.providerRegistrySnapshot().Lookup("claude")
+				revision = afterEdit.EffectiveSource.Revision
+			}
+			if resp := deleteProviderRequest(t, s, "claude", revision); resp.Code != http.StatusOK {
+				t.Fatalf("disable status = %d, body=%s", resp.Code, resp.Body.String())
+			}
+			disabled, ok := s.providerRegistrySnapshot().Lookup("claude")
+			if !ok || disabled.Enabled == nil || *disabled.Enabled {
+				t.Fatalf("claude was not disabled: %#v", disabled.Enabled)
+			}
+			disabledRevision := disabled.EffectiveSource.Revision
+
+			on := true
+			sparse := provider.Definition{SchemaVersion: provider.CurrentSchemaVersion, ID: "claude", Enabled: &on}
+			if resp := patchProviderRequest(t, s, "claude", disabledRevision, sparse); resp.Code != http.StatusUnprocessableEntity {
+				t.Fatalf("sparse enable status = %d, want 422 (PATCH is the whole definition), body=%s", resp.Code, resp.Body.String())
+			}
+
+			full := disabled.Definition
+			full.Enabled = &on
+			resp := patchProviderRequest(t, s, "claude", disabledRevision, full)
+			if resp.Code != http.StatusOK {
+				t.Fatalf("full-definition enable status = %d, body=%s", resp.Code, resp.Body.String())
+			}
+			enabled, ok := s.providerRegistrySnapshot().Lookup("claude")
+			if !ok || enabled.Enabled == nil || !*enabled.Enabled {
+				t.Fatalf("claude was not re-enabled: %#v", enabled.Enabled)
+			}
+			if enabled.DisplayName != wantName {
+				t.Fatalf("display name after re-enable = %q, want %q", enabled.DisplayName, wantName)
+			}
+		})
 	}
 }
 
