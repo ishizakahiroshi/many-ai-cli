@@ -36,17 +36,26 @@ Release artifacts are published at
 - **The child-session approval dialog can now register the working folder as
   trusted by the child's CLI (Claude Code / Codex).** When the checkbox
   "Register this folder as trusted in <CLI>" is on (the default) and you
-  approve, the Hub adds that one folder to the CLI's own trust list right
-  before the child starts, so the child skips its "do you trust this folder?"
-  prompt and starts on its instructions. It writes only when the CLI has no
-  entry for that exact folder yet, in the same form the CLI writes when you
-  answer Yes: `projects.<folder>.hasTrustDialogAccepted` in the child's
-  `.claude.json`, or a `[projects.'<folder>']` table with
-  `trust_level = "trusted"` appended to the child's Codex `config.toml`. An
-  existing entry for the folder is left as it is, whatever it says. A conductor AI
-  cannot turn this on through its spawn request; only the person approving
-  can. The result is recorded on the orchestration board. Relay children and
-  sessions started from the dashboard do not use it.
+  approve, the Hub records trust right before the child starts, so the child
+  skips its "do you trust this folder?" prompt and starts on its instructions.
+  It writes the entry the CLI itself writes when you answer Yes, for the same
+  folder: the repository the working folder belongs to (the main repository
+  for a git worktree), or the folder itself outside git — so approving a
+  child in a subfolder trusts the whole repository, just as answering Yes in
+  the child would. That is `projects.<folder>.hasTrustDialogAccepted` in the
+  child's `.claude.json`, or a `[projects.'<folder>']` table with
+  `trust_level = "trusted"` appended to the child's Codex `config.toml`.
+  Nothing is written when the CLI already has an entry that decides the
+  folder, or, for Codex, when the folder, its repository or any folder above
+  them is marked untrusted, whatever the letter case. The one entry that is
+  changed is a Claude Code entry nobody has answered yet
+  (`hasTrustDialogAccepted: false`, the value Claude Code starts every entry
+  with): it is set to `true` and its other fields are kept. When the
+  repository would be your home folder or a drive root, or the working folder
+  is a network (UNC) path, nothing is registered and the child asks on its
+  own screen. A conductor AI cannot turn this on through its spawn request;
+  only the person approving can. The result is recorded on the orchestration
+  board. Relay children and sessions started from the dashboard do not use it.
 - **The row of buttons under the input box can be reordered by dragging, the
   same way tabs can.** The send/stop button, mic, palette, quick commands,
   `/ ▾`, and ⌫ move with a drag on desktop browsers (this does not work on
@@ -118,8 +127,11 @@ Release artifacts are published at
   point; the copy is named "<name> (copy)" and gets the id `<id>-copy`.
 - **Provider settings now keep a local history and automatic backups.** A
   failed save or a damaged file does not delete the last good revision; the
-  broken copy is quarantined. You can restore from history in Settings or
-  with `provider backup list`, `provider backup verify`, `provider backup
+  broken copy is quarantined. When a save, restore or backup fails because of
+  the files themselves rather than what you entered, the message is a short
+  fixed sentence and the details, which include file paths, go to `hub.log`.
+  You can restore from history in Settings or with `provider backup list`,
+  `provider backup verify`, `provider backup
   restore`, `provider reset --distributed`, and `provider recover`. If a
   provider's own settings file is damaged, History says so and offers what to
   restore to, such as the last readable version of your own settings; without
@@ -333,6 +345,11 @@ Release artifacts are published at
   each theme's name and ranges before storing it.
 
 ### Changed
+- **After updating, reload any dashboard tab that was open before the update.**
+  The Hub now tells the page about approvals in a new form that the previous
+  version's page does not read, so a tab left open across the update does not
+  show the approval panel for approvals the Hub opens. Reloading the tab loads
+  the new page.
 - **Claude Code and Codex sessions now get their first instruction as a launch
   argument instead of having it typed into their screen.** This covers
   orchestration children, a conductor started with the Orchestration button
@@ -342,9 +359,15 @@ Release artifacts are published at
   nothing the Hub types can land on the wrong screen. Your input is no longer
   held while such a session starts, so you can answer those questions right
   away. For a child, the Hub counts the instruction as received when it first
-  appears in the CLI's own transcript, and tells the conductor and the board
-  once if the child is still waiting on its folder-trust question. A conductor
-  started with an instruction still receives only its role guide, as before.
+  appears in the CLI's own transcript. Until the child has taken it — while
+  the CLI is still starting or sits on a startup screen — the Hub types
+  nothing into it: `orchestrate send` returns an error (`409
+  child_not_ready`) instead, and the relay's reminder is not typed either. A
+  child waiting on a startup screen before its input box, folder trust or any
+  other, is reported once to the conductor and the board, and is not counted
+  as timed out, so `orchestration.timeout_respawn` does not start a second
+  child on the same work. A conductor started with an instruction still
+  receives only its role guide, as before.
   On Windows, when the CLI is started through `cmd.exe` (which cuts an argument
   at its first newline) or the instruction is very long, the argument is a
   one-line pointer to a private file under `~/.many-ai-cli/tmp` that is removed
@@ -447,6 +470,12 @@ Release artifacts are published at
   answer. That shared list, which Claude Code's, Codex's and Copilot's
   suggestions come from, was also brought up to date.
 
+- **When the dashboard fails partway through starting up, it now says so
+  instead of staying on "Loading..." forever.** A bar across the top says the
+  page failed to load and has a **Reload** button; the error itself goes to
+  the browser console, not the page. Until now nothing on the page said what
+  had happened.
+
 - **The ✕ close buttons across panels and dialogs now look and behave the same.**
   Eleven of them had drifted apart into their own stylesheets — sizes from
   0.85rem to 1.5rem, four different hover treatments, and one (the bug report
@@ -508,6 +537,14 @@ Release artifacts are published at
   `~/.codex/config.toml` and `~/.grok/config.toml` are only ever read. This
   adds one dependency, `github.com/pelletier/go-toml/v2` (MIT), recorded in
   `THIRD_PARTY_NOTICES.md`.
+- **The bundled slash-command references catch up with the latest Claude
+  Code, GitHub Copilot CLI and Command Code.** Claude Code gains
+  `/artifacts`, `/auto-mode-setup`, `/design`, `/output-style`,
+  `/skill-doctor`, `/theme` and `/version`; GitHub Copilot CLI gains
+  `/collect-debug-logs`, `/computer`, `/move`, `/vim` and `/worktree`; and
+  Command Code gains `/loop`. Nine more names found in Command Code were left
+  out because no registration for them could be found; typing them by hand
+  works as before (`resources/slash-commands/`).
 
 ### Removed
 
@@ -652,11 +689,11 @@ Release artifacts are published at
   own boundary are no longer read as Workflow output
   (`web/src/app/workflow-progress.ts`, `internal/hub/workflow_scan.go`).
 - **Opening a section in Settings no longer switches the view back to the
-  basic level.** With the switch at the top of Settings on *all*, clicking a
+  basic level.** With the switch at the top of Settings on *All*, clicking a
   section heading such as Token/Cost Statusbar — or any control inside a
   section that the basic level also shows — switched the view to basic and
   saved that, so every all-only section disappeared until you switched back.
-  This had been the case since the basic / all switch arrived in 0.5.0.
+  This had been the case since the *Basic* / *All* switch arrived in 0.5.0.
 - **A session that has been running in the background no longer opens as a
   nearly blank screen with scattered fragments.** The dashboard kept only the
   last 100 KB of a background session's output and dropped the rest. A CLI
@@ -687,6 +724,12 @@ Release artifacts are published at
 - **Cross-session search (`Ctrl+K`) now follows the dashboard language.** Its
   filters, paging buttons, status lines and messages were written in Japanese
   only.
+- **The *Basic* / *All* switch at the top of Settings and the 📄 Raw log
+  button now follow the dashboard language.** The switch
+  showed its labels in Japanese on the English and Vietnamese screens since
+  it arrived in 0.5.0. The Raw log button, its tooltip and the popup it opens
+  had no translations in any language, so since 0.5.1 they showed internal
+  key names such as `agent_log_button` instead of text.
 
 ### Security
 - The derive dialog's permission preview now follows execution mode. Choosing
