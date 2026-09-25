@@ -924,16 +924,17 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		s.orchestration.pending[body.Label] = meta
 		s.orchestration.mu.Unlock()
 	}
-	if launchPrompt != "" {
-		// 起動時に渡した印。wrapperLoop はこれを見て、登録後に打ち込まず
-		// （registrationInjectPrompt）、入力保留も掛けない（initialInjectGateNeeded）。
-		// label は conductor の予約か、上の initial_prompt の分岐で必ず決まっている。
-		s.orchestration.mu.Lock()
-		meta := s.orchestration.pending[body.Label]
-		meta.PromptAtLaunch = true
+	// 起動時に渡した印。wrapperLoop はこれを見て、登録後に打ち込まず
+	// （registrationInjectPrompt）、入力保留も掛けない（initialInjectGateNeeded）。
+	// 渡すときの label は conductor の予約か、上の initial_prompt の分岐で必ず決まっている。
+	// 印は起動のたびに付け直す。起動に失敗した前の起動が同じ label の pending に残した
+	// 印を引き継ぐと、打ち込みで渡すはずの今回の指示がどこからも届かない。
+	s.orchestration.mu.Lock()
+	if meta, ok := s.orchestration.pending[body.Label]; ok || launchPrompt != "" {
+		meta.PromptAtLaunch = launchPrompt != ""
 		s.orchestration.pending[body.Label] = meta
-		s.orchestration.mu.Unlock()
 	}
+	s.orchestration.mu.Unlock()
 
 	exe, err := os.Executable()
 	if err != nil {

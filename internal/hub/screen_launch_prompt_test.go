@@ -199,6 +199,26 @@ func TestScreenSpawnStillTypesWhenTheCLICannotTakeItAtLaunch(t *testing.T) {
 	}
 }
 
+// 起動に失敗した指示付きの起動は pending に印を残す。同じ label で打ち込み側の CLI を
+// 起動し直したとき、前の「起動時に渡した」印が残っていると、今回の指示が引数でも
+// 打ち込みでも届かない（v0.9 リリース前の敵対レビュー B の指摘 5）。
+func TestScreenSpawnRetryWithTheSameLabelDoesNotInheritPromptAtLaunch(t *testing.T) {
+	s, _ := screenSpawnServer(t, true)
+	postScreenSpawn(t, s, map[string]any{"provider": "claude", "label": "retry-under-test", "initial_prompt": "first try"})
+	if !screenSpawnPending(t, s, "retry-under-test").PromptAtLaunch {
+		t.Fatal("前提: claude の起動が起動時に渡す印を立てていない")
+	}
+
+	postScreenSpawn(t, s, map[string]any{"provider": "copilot", "label": "retry-under-test", "initial_prompt": "second try"})
+	meta := screenSpawnPending(t, s, "retry-under-test")
+	if prompt, name := s.registrationInjectPrompt(meta); prompt != "second try" || name != "inject_initial_prompt_spawn" {
+		t.Errorf("registration types %q (%s), want the second instruction; PromptAtLaunch = %v", prompt, name, meta.PromptAtLaunch)
+	}
+	if !initialInjectGateNeeded(meta) {
+		t.Error("registration would not hold the user's input while the instruction is typed")
+	}
+}
+
 // 完了条件 4: conductor に initial_prompt も付いているとき、届くのは conductor の
 // 案内だけ（今の挙動と同じ）。起動時に渡す claude でも、打ち込む copilot でも同じ。
 func TestScreenSpawnConductorWithAnInstructionGetsOnlyTheGuide(t *testing.T) {
