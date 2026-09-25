@@ -43,8 +43,8 @@ type ApprovalAdapter interface {
 // Common secret-masking regular expressions to ensure adapters never surface
 // raw credential values to the Web UI.
 var (
-	bearerTokenRe = regexp.MustCompile(`(?i)\b(Bearer\s+)[A-Za-z0-9_\-\.]{8,}`)
-	keyValueSecretRe = regexp.MustCompile(`(?i)\b((?:api[_-]?key|token|secret|password|auth|private[_-]?key)\s*[:=]\s*["']?)([^"'\s,;]{6,})(["']?)`)
+	bearerTokenRe      = regexp.MustCompile(`(?i)\b(Bearer\s+)[A-Za-z0-9_\-\.]{8,}`)
+	keyValueSecretRe   = regexp.MustCompile(`(?i)\b((?:api[_-]?key|token|secret|password|auth|private[_-]?key)\s*[:=]\s*["']?)([^"'\s,;]{6,})(["']?)`)
 	knownTokenPrefixRe = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_-]{16,}|xox[baprs]-[A-Za-z0-9_-]{16,})`)
 )
 
