@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -220,6 +221,88 @@ func TestCodexTrustedTreatsAMissingFileAsUntrusted(t *testing.T) {
 	if trusted, err := codexTrusted(configPath, "d:/x"); err != nil || trusted {
 		t.Errorf("codexTrusted(missing file) = (%v, %v), want (false, nil)", trusted, err)
 	}
+}
+
+// 同じキーの Grant が同時に 2 本走っても config.toml を壊さない。以前は両方が追記して
+// 表が二重になり、両方が巻き戻しに入って、後から切った側が自分の追記前の長さまで
+// ファイルを伸ばし、末尾が NUL で埋まって codex が読めなくなった（v0.9 リリース前の
+// 敵対レビュー A の F1。200 回中 16 回再現）。
+func TestCodexGrantConcurrentSameKeyKeepsTheFileReadable(t *testing.T) {
+	for round := 0; round < 50; round++ {
+		configPath := writeCodexFixture(t, codexFixtureWithComments)
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for i := 0; i < 2; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-start
+				_, _ = codexGrant(configPath, `d:\work\same`)
+			}()
+		}
+		close(start)
+		wg.Wait()
+		data := mustReadFile(t, configPath)
+		if bytes.IndexByte(data, 0) >= 0 {
+			t.Fatalf("round %d: NUL in config.toml", round)
+		}
+		doc, _, err := readCodexDoc(configPath)
+		if err != nil {
+			t.Fatalf("round %d: %v", round, err)
+		}
+		if doc.Projects[`d:\work\same`].TrustLevel != "trusted" {
+			t.Fatalf("round %d: the key was not left trusted: %+v", round, doc.Projects)
+		}
+	}
+}
+
+// 巻き戻しは、ファイルがちょうど「追記前 + 自分の追記」のときだけ切る。追記の後に
+// 別の書き手（codex 本体）が書き換えていたら触らない。切ると他者の書いた内容を
+// 落とすか、短くなったファイルを NUL で伸ばす。
+func TestCodexRollbackOnlyRemovesItsOwnAppend(t *testing.T) {
+	const original = "model = \"gpt-5-codex\"\n"
+	block := codexTrustBlock(`d:\work\b`, false)
+
+	t.Run("ours is the tail", func(t *testing.T) {
+		configPath := writeCodexFixture(t, original+block)
+		rollbackCodexAppend(configPath, false, int64(len(original)), block)
+		if got := string(mustReadFile(t, configPath)); got != original {
+			t.Errorf("got %q, want %q", got, original)
+		}
+	})
+	t.Run("someone appended after us", func(t *testing.T) {
+		body := original + block + "[other]\nx = 1\n"
+		configPath := writeCodexFixture(t, body)
+		rollbackCodexAppend(configPath, false, int64(len(original)), block)
+		if got := string(mustReadFile(t, configPath)); got != body {
+			t.Errorf("file was cut: got %q", got)
+		}
+	})
+	t.Run("someone rewrote the file shorter", func(t *testing.T) {
+		const rewritten = "model = \"x\"\n"
+		configPath := writeCodexFixture(t, rewritten)
+		rollbackCodexAppend(configPath, false, int64(len(original)), block)
+		if got := string(mustReadFile(t, configPath)); got != rewritten {
+			t.Errorf("file was changed: got %q", got)
+		}
+	})
+	t.Run("we created the file", func(t *testing.T) {
+		first := codexTrustBlock(`d:\work\b`, true)
+		configPath := writeCodexFixture(t, first)
+		rollbackCodexAppend(configPath, true, 0, first)
+		if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+			t.Errorf("the file this grant created was not removed: %v", err)
+		}
+	})
+	t.Run("someone else wrote into the file we created", func(t *testing.T) {
+		first := codexTrustBlock(`d:\work\b`, true)
+		body := first + "[other]\nx = 1\n"
+		configPath := writeCodexFixture(t, body)
+		rollbackCodexAppend(configPath, true, 0, first)
+		if got := string(mustReadFile(t, configPath)); got != body {
+			t.Errorf("file was removed or cut: got %q", got)
+		}
+	})
 }
 
 func mustReadFile(t *testing.T, path string) []byte {

@@ -1,12 +1,14 @@
 package clitrust
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -55,6 +57,9 @@ func codexExistingState(entry codexProjectEntry) string {
 	}
 }
 
+// codexGrantMu serializes codexGrant within this process (see codexGrant).
+var codexGrantMu sync.Mutex
+
 // codexTrusted reads only. codex does not lock config.toml itself (see
 // codexGrant's doc comment for why Grant also skips locking), so a plain read
 // is consistent with how codex reads the file at every startup.
@@ -80,7 +85,13 @@ func codexTrusted(configPath, key string) (bool, error) {
 // leave a torn table at the end — never a truncated config. Rewriting the whole
 // file instead would open a window where the user's MCP servers, model and
 // other settings exist only in this process's memory.
+//
+// Grants in this process run one at a time (codexGrantMu). Two grants of the
+// same key racing each other would both append, making the table a duplicate
+// that no longer parses, and both would then roll back.
 func codexGrant(configPath, key string) (Result, error) {
+	codexGrantMu.Lock()
+	defer codexGrantMu.Unlock()
 	doc, original, err := readCodexDoc(configPath)
 	if err != nil {
 		return Result{}, err
@@ -93,7 +104,8 @@ func codexGrant(configPath, key string) (Result, error) {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
 		return Result{}, err
 	}
-	sizeBefore, err := appendCodexBlock(configPath, codexTrustBlock(key, len(original) == 0))
+	block := codexTrustBlock(key, len(original) == 0)
+	sizeBefore, err := appendCodexBlock(configPath, block)
 	if err != nil {
 		return Result{}, err
 	}
@@ -109,12 +121,26 @@ func codexGrant(configPath, key string) (Result, error) {
 	// 追記後に読めなくなった（または期待した値になっていない）ときは、
 	// 追記した分だけを切り詰めて戻す。ファイルが元々無かった場合
 	// （original == nil）は削除して「無かった」状態に戻す。
-	if original == nil {
-		_ = os.Remove(configPath)
-	} else {
-		_ = os.Truncate(configPath, sizeBefore)
-	}
+	rollbackCodexAppend(configPath, original == nil, sizeBefore, block)
 	return Result{}, verifyErr
+}
+
+// rollbackCodexAppend takes back exactly the block codexGrant appended, and
+// only while the file is still "what was there before + that block". If
+// anything else wrote the file after the append (codex itself answering a
+// prompt in another session), the file is left as it is: truncating it then
+// would cut the other writer's bytes, or pad a file that became shorter with
+// NULs up to sizeBefore — a config.toml codex can no longer read.
+func rollbackCodexAppend(configPath string, created bool, sizeBefore int64, block string) {
+	current, err := os.ReadFile(configPath)
+	if err != nil || int64(len(current)) != sizeBefore+int64(len(block)) || !bytes.HasSuffix(current, []byte(block)) {
+		return
+	}
+	if created {
+		_ = os.Remove(configPath)
+		return
+	}
+	_ = os.Truncate(configPath, sizeBefore)
 }
 
 // codexTrustBlock renders the same table codex itself writes when the user
