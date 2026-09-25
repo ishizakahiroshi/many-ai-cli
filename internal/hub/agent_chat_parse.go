@@ -1101,20 +1101,25 @@ type codexRolloutLine struct {
 }
 
 type codexPayload struct {
-	Type             string          `json:"type"`
-	Role             string          `json:"role"`
-	Text             string          `json:"text"`
-	Message          string          `json:"message"`
-	Name             string          `json:"name"`
-	CallID           string          `json:"call_id"`
-	Arguments        json.RawMessage `json:"arguments"`
-	Input            json.RawMessage `json:"input"`
-	Output           json.RawMessage `json:"output"`
-	Content          json.RawMessage `json:"content"`
-	Summary          json.RawMessage `json:"summary"`
-	TurnID           string          `json:"turn_id"`
-	CompletedAt      float64         `json:"completed_at"`
-	LastAgentMessage json.RawMessage `json:"last_agent_message"`
+	Type                                   string                            `json:"type"`
+	Role                                   string                            `json:"role"`
+	Text                                   string                            `json:"text"`
+	Message                                string                            `json:"message"`
+	Name                                   string                            `json:"name"`
+	CallID                                 string                            `json:"call_id"`
+	Arguments                              json.RawMessage                   `json:"arguments"`
+	Input                                  json.RawMessage                   `json:"input"`
+	Output                                 json.RawMessage                   `json:"output"`
+	Content                                json.RawMessage                   `json:"content"`
+	Summary                                json.RawMessage                   `json:"summary"`
+	TurnID                                 string                            `json:"turn_id"`
+	CompletedAt                            float64                           `json:"completed_at"`
+	LastAgentMessage                       json.RawMessage                   `json:"last_agent_message"`
+	InternalChatMessageMetadataPassthrough *codexInternalChatMessageMetadata `json:"internal_chat_message_metadata_passthrough"`
+}
+
+type codexInternalChatMessageMetadata struct {
+	ContentItemKinds []string `json:"content_item_kinds"`
 }
 
 type codexTaskCompletion struct {
@@ -1175,7 +1180,11 @@ func parseCodexResponseItem(state *agentChatParseState, payload codexPayload, ts
 		if role != "user" && role != "assistant" {
 			return
 		}
-		text, thinking, tools := parseCodexContent(payload.Content)
+		content := payload.Content
+		if role == "user" {
+			content = codexUserMessageContent(content, payload.InternalChatMessageMetadataPassthrough)
+		}
+		text, thinking, tools := parseCodexContent(content)
 		if role == "user" && text == "" {
 			return
 		}
@@ -1220,6 +1229,43 @@ func parseCodexResponseItem(state *agentChatParseState, payload codexPayload, ts
 	case "function_call_output", "custom_tool_call_output":
 		attachCodexToolResult(state, payload)
 	}
+}
+
+// codexUserMessageContent removes Codex's injected AGENTS/environment context
+// from user-role transcript messages. Recent Codex rollouts identify the
+// origin of each content block in internal_chat_message_metadata_passthrough;
+// only user-origin blocks belong in the sent-history view. Old rollouts do not
+// carry this metadata, so retain their existing behavior.
+func codexUserMessageContent(raw json.RawMessage, metadata *codexInternalChatMessageMetadata) json.RawMessage {
+	if metadata == nil || len(metadata.ContentItemKinds) == 0 {
+		return raw
+	}
+
+	var blocks []json.RawMessage
+	if json.Unmarshal(raw, &blocks) != nil {
+		if len(metadata.ContentItemKinds) == 1 && strings.HasPrefix(metadata.ContentItemKinds[0], "user.") {
+			return raw
+		}
+		return nil
+	}
+	if len(blocks) != len(metadata.ContentItemKinds) {
+		return nil
+	}
+
+	userBlocks := make([]json.RawMessage, 0, len(blocks))
+	for i, kind := range metadata.ContentItemKinds {
+		if strings.HasPrefix(kind, "user.") {
+			userBlocks = append(userBlocks, blocks[i])
+		}
+	}
+	if len(userBlocks) == 0 {
+		return nil
+	}
+	filtered, err := json.Marshal(userBlocks)
+	if err != nil {
+		return nil
+	}
+	return filtered
 }
 
 func parseCodexEventMessage(state *agentChatParseState, payload codexPayload, ts string) {
