@@ -36,14 +36,17 @@ Release artifacts are published at
   *Install a CLI* comes first, ahead of starting a session, answering
   approvals and watching sessions in parallel. *Installed on this PC* lists
   each enabled AI CLI with a check mark when the Hub finds it on `PATH`, or
-  *Not installed* with a link to the vendor's own install instructions; the
-  screen shown when no AI CLI is found at all links them the same way. The
-  links come from `resources/install-links/defaults.json` in this repository,
-  fetched by the Hub and cached for 24 hours, so a moved page can be fixed
-  without a new release; if they cannot be fetched, the list is still shown,
-  just without the links. When the screen is wide enough, the steps and the
-  list sit side by side; when it is narrow, the steps fold into a *How to use
-  ▸* button above the list.
+  *Not installed* with a link to the vendor's own install instructions. When
+  no AI CLI is found at all, the screen instead lists the command names to
+  install (click one to copy it), links them the same way, and has an *I
+  installed it — check again* button; New Session likewise marks a CLI that
+  is not on `PATH` as *Not found* and will not start it. The links come from
+  `resources/install-links/defaults.json` in this repository, fetched by the
+  Hub and cached for 24 hours, so a moved page can be fixed without a new
+  release; if they cannot be fetched, the list is still shown, just without
+  the links. When the screen is wide enough, the steps and the list sit side
+  by side; when it is narrow, the steps fold into a *How to use ▸* button
+  above the list.
 - **The "install status" list — on the first-run screen and in Settings → AI
   CLI integrations — now shows a provider icon per row, and can check CLI
   versions and update them from the Hub.** A **Check versions** button runs
@@ -113,7 +116,9 @@ Release artifacts are published at
   the commands it ran, and their results — the same view Claude Code and Codex
   sessions already had, read from Command Code's own session file instead of
   scraped from the terminal. Approval cards keep coming from the terminal, since
-  Command Code's permission screens are never written to that file.
+  Command Code's permission screens are never written to that file. The raw
+  log button (📄) above the input box now finds that file for a Command Code
+  session too, so you can copy its path or open its folder.
 - **Sent history now shows long messages as six-line previews** with a control
   on each message to show the full text or collapse it again. Short messages
   remain fully visible, and copying always includes the complete message.
@@ -289,6 +294,14 @@ Release artifacts are published at
   spawned agents** (`subagents`), not just Claude Code's and Codex's. A Grok
   child shows the same current tool and running/done/failed state as a
   Claude or Codex child, in the same tree.
+- **You can add your own colour themes.** Settings → General → Theme has an
+  **Add** button next to Light and Dark: give the theme a name (up to 16
+  characters), pick Light or Dark as its base, and set its *Tint* and
+  *Contrast*. The terminal's colours follow the theme too. Up to 20 themes can
+  be kept; while one of them is selected, the same place lets you adjust it
+  or **Delete** it. They are saved with your
+  other display settings on the Hub (`display.custom_themes`), which checks
+  each theme's name and ranges before storing it.
 
 ### Changed
 - **Claude Code and Codex sessions now get their first instruction as a launch
@@ -394,6 +407,13 @@ Release artifacts are published at
   Settings → *New session provider order* → *Reset to default* puts all three
   back. Touch devices cannot reorder providers, and the install status rows
   cannot be dragged while an update is running.
+
+- **Model suggestions for Cursor Agent and Grok now come from the installed
+  CLI first.** The Hub asks `cursor-agent --list-models` or `grok models`,
+  keeps the answer for 10 minutes (3 minutes after a failure), and falls back
+  to the shared list in `resources/models/defaults.json` when the CLI cannot
+  answer. That shared list, which Claude Code's, Codex's and Copilot's
+  suggestions come from, was also brought up to date.
 
 - **The ✕ close buttons across panels and dialogs now look and behave the same.**
   Eleven of them had drifted apart into their own stylesheets — sizes from
@@ -613,6 +633,28 @@ Release artifacts are published at
   never drawn, and switching away and back did not repair it. Background
   output is no longer dropped: once that much has piled up, it is written to
   the hidden terminal straight away (`web/src/app/terminal.ts`).
+- **↑ up / ↓ down now go all the way to the start or the end of a Claude Code
+  (or other alternate-screen) session's history.** Each press used to send 12
+  scroll steps, which often stopped short. They now keep scrolling until the
+  screen stops moving — in the main pane, the multi tab and the pop-out grid —
+  and a mouse wheel or drag takes over at once.
+- **Command Code is now offered as a handoff successor.** It was missing from
+  the list of CLIs a session could be handed off to, although it is one of
+  the built-in providers.
+- **A card's child-session toggle (▶ N) is no longer pushed out of sight by
+  the completion summary.** The summary shared the card's second row and
+  pushed the toggle, the context gauge, the role and the branch off the right
+  edge, so a folded parent had no way to show its children. The summary now
+  has a row of its own, and longer text in the second row is shortened with
+  an ellipsis instead.
+- **The Usage menu no longer keeps showing an older Codex remaining
+  percentage after a newer one is available.** The value the Hub received
+  from a running session always won over a newer reading from Codex's own
+  session file. The most recent observation now wins, and a Codex reply
+  without rate-limit data no longer clears the last known value.
+- **Cross-session search (`Ctrl+K`) now follows the dashboard language.** Its
+  filters, paging buttons, status lines and messages were written in Japanese
+  only.
 
 ### Security
 - The derive dialog's permission preview now follows execution mode. Choosing
@@ -660,6 +702,15 @@ Release artifacts are published at
   are unaffected. The pin is kept in step across all four places that carry it
   (`deploy/docker/provider-cli/package.json` and its lockfile,
   `deploy/docker/Dockerfile`, and `scripts/check-docker-build-inputs.mjs`).
+- **An AI CLI definition can no longer carry shell syntax in its executable or
+  arguments.** Besides `;`, `` ` ``, `$(` and `${`, the Windows shell
+  characters `&`, `|`, `<`, `>`, `^` and `%` are now refused in the
+  executable, the launch, model, effort and headless arguments, and the update
+  command. An AI CLI you add or edit in Settings with one of them cannot be
+  saved, and a hand-written `custom_providers:` entry in `config.yaml` whose
+  `command` uses one is marked with an error in Settings → AI CLI
+  integrations until the character is taken out. `SECURITY.md` now says how
+  to report a vulnerability.
 
 ## [0.8.0] - 2026-09-09
 
