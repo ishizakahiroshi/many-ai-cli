@@ -43,6 +43,9 @@ type claudeProjectFlags struct {
 	HasTrustDialogAccepted *bool `json:"hasTrustDialogAccepted"`
 }
 
+// claudeExistingState names an entry's hasTrustDialogAccepted. "untrusted"
+// is false — which Claude writes only as the default of a new entry, never as
+// an answer, so claudeGrantUnderLock treats it as "not answered yet".
 func claudeExistingState(entry json.RawMessage) string {
 	var flags claudeProjectFlags
 	if err := json.Unmarshal(entry, &flags); err != nil || flags.HasTrustDialogAccepted == nil {
@@ -97,9 +100,21 @@ func readClaudeProjects(root map[string]json.RawMessage) (map[string]json.RawMes
 	return projects, nil
 }
 
+func claudeTrustedDir(configPath, dir string) (bool, error) {
+	return claudeTrusted(configPath, claudePlanFor(dir))
+}
+
+func claudeGrantDir(configPath, dir string) (Result, error) {
+	plan := claudePlanFor(dir)
+	if trustTargetTooBroad(plan.target) {
+		return Result{Key: plan.writeKey}, errTrustTargetTooBroad
+	}
+	return claudeGrant(configPath, plan)
+}
+
 // claudeTrusted reads only — it never takes the lock, matching how Claude
 // Code itself reads the file at every startup without locking.
-func claudeTrusted(configPath, key string) (bool, error) {
+func claudeTrusted(configPath string, plan claudePlan) (bool, error) {
 	root, err := readClaudeRoot(configPath)
 	if err != nil {
 		return false, err
@@ -108,18 +123,29 @@ func claudeTrusted(configPath, key string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	entry, ok := projects[key]
-	if !ok {
-		return false, nil
+	_, trusted := claudeTrustingKey(projects, plan)
+	return trusted, nil
+}
+
+// claudeTrustingKey is Claude's own trust check (pI): the project key first,
+// then the folder and each parent in plan.walk. It returns the key whose entry
+// is trusted.
+func claudeTrustingKey(projects map[string]json.RawMessage, plan claudePlan) (string, bool) {
+	for _, key := range append([]string{plan.writeKey}, plan.walk...) {
+		if entry, ok := projects[key]; ok && claudeExistingState(entry) == "trusted" {
+			return key, true
+		}
 	}
-	return claudeExistingState(entry) == "trusted", nil
+	return "", false
 }
 
 // claudeGrant is the Grant half of the Claude provider. Every step mirrors a
-// numbered step in the child plan's C2 ("作業内容"): lock, re-read, add the key
-// only if absent, write atomically, unlock, then verify.
-func claudeGrant(configPath, key string) (Result, error) {
-	result, err := claudeGrantUnderLock(configPath, key)
+// numbered step in the child plan's C2 ("作業内容"): lock, re-read, record the
+// key only if Claude does not trust the folder yet, write atomically, unlock,
+// then verify.
+func claudeGrant(configPath string, plan claudePlan) (Result, error) {
+	key := plan.writeKey
+	result, err := claudeGrantUnderLock(configPath, plan)
 	if err != nil || !result.Written {
 		return result, err
 	}
@@ -127,49 +153,83 @@ func claudeGrant(configPath, key string) (Result, error) {
 	// とき、ロック中でも手元のキャッシュを土台に書くことがある（本体の
 	// saveConfigWithLock の re-base 経路）。その書き込みで消えていないかを、
 	// 他のプロセスがロックを取れる状態に戻してから確かめる。
-	trusted, err := claudeTrusted(configPath, key)
+	root, err := readClaudeRoot(configPath)
 	if err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
-	if !trusted {
-		return Result{}, fmt.Errorf("clitrust: %s does not contain %q as trusted after writing", configPath, key)
+	projects, err := readClaudeProjects(root)
+	if err != nil {
+		return Result{Key: key}, err
+	}
+	if entry, ok := projects[key]; !ok || claudeExistingState(entry) != "trusted" {
+		return Result{Key: key}, fmt.Errorf("clitrust: %s does not contain %q as trusted after writing", configPath, key)
 	}
 	return result, nil
 }
 
-func claudeGrantUnderLock(configPath, key string) (Result, error) {
+func claudeGrantUnderLock(configPath string, plan claudePlan) (Result, error) {
+	key := plan.writeKey
 	release, err := acquireClaudeLock(configPath + ".lock")
 	if err != nil {
 		// 呼び出し側はロックが取れなくても子の起動は止めない（不変条件 4）。
 		// その場合、子の画面には確認がそのまま出る。
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 	defer release()
 
 	root, err := readClaudeRoot(configPath)
 	if err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 	projects, err := readClaudeProjects(root)
 	if err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 
-	if entry, ok := projects[key]; ok {
-		return Result{Written: false, Existing: claudeExistingState(entry)}, nil
+	if trustingKey, ok := claudeTrustingKey(projects, plan); ok {
+		return Result{Written: false, Key: trustingKey, Existing: "trusted"}, nil
 	}
 
-	projects[key] = json.RawMessage(claudeDefaultProjectEntry)
+	entry, exists := projects[key]
+	switch {
+	case !exists:
+		projects[key] = json.RawMessage(claudeDefaultProjectEntry)
+	case claudeExistingState(entry) == "untrusted":
+		// hasTrustDialogAccepted:false is the default every new entry starts
+		// with, not an answer: Claude's "No, exit" writes nothing, and its
+		// "Yes" turns this same entry into {...entry, hasTrustDialogAccepted:
+		// true}. Do exactly that — every other field stays as it was.
+		accepted, err := claudeAcceptedEntry(entry)
+		if err != nil {
+			return Result{Written: false, Key: key, Existing: "other"}, nil
+		}
+		projects[key] = accepted
+	default:
+		return Result{Written: false, Key: key, Existing: claudeExistingState(entry)}, nil
+	}
+
 	projectsJSON, err := marshalClaudeJSON(projects, "")
 	if err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 	root["projects"] = projectsJSON
 
 	if err := writeClaudeRootAtomically(configPath, root); err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
-	return Result{Written: true}, nil
+	return Result{Written: true, Key: key}, nil
+}
+
+// claudeAcceptedEntry returns entry with hasTrustDialogAccepted set to true
+// and every other field carried through as raw JSON (so a large number or a
+// nested value comes back unchanged).
+func claudeAcceptedEntry(entry json.RawMessage) (json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(entry, &fields); err != nil || fields == nil {
+		return nil, fmt.Errorf("clitrust: project entry is not an object")
+	}
+	fields["hasTrustDialogAccepted"] = json.RawMessage("true")
+	return marshalClaudeJSON(fields, "")
 }
 
 // acquireClaudeLock takes the proper-lockfile-shaped directory lock at

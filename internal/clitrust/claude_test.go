@@ -64,7 +64,7 @@ func assertNoLockOrTempLeftover(t *testing.T, configPath string) {
 func TestClaudeGrantPreservesUnrelatedValues(t *testing.T) {
 	configPath := writeClaudeFixture(t, claudeFixtureWithTwoProjects)
 
-	result, err := claudeGrant(configPath, "D:/tmp/sample-repo/cases/new")
+	result, err := claudeGrant(configPath, claudeKeyPlan("D:/tmp/sample-repo/cases/new"))
 	if err != nil {
 		t.Fatalf("claudeGrant: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestClaudeGrantPreservesUnrelatedValues(t *testing.T) {
 func TestClaudeGrantDoesNotHTMLEscape(t *testing.T) {
 	configPath := writeClaudeFixture(t, `{"note":"a<b>&c","projects":{"D:/work/x":{"hasTrustDialogAccepted":true,"memo":"<&>"}}}`)
 
-	result, err := claudeGrant(configPath, "D:/work/new")
+	result, err := claudeGrant(configPath, claudeKeyPlan("D:/work/new"))
 	if err != nil {
 		t.Fatalf("claudeGrant: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestClaudeGrantWritesThroughASymlink(t *testing.T) {
 		t.Skipf("cannot create a symlink here (Windows without developer mode?): %v", err)
 	}
 
-	result, err := claudeGrant(linkPath, "D:/work/through-link")
+	result, err := claudeGrant(linkPath, claudeKeyPlan("D:/work/through-link"))
 	if err != nil {
 		t.Fatalf("claudeGrant: %v", err)
 	}
@@ -155,64 +155,100 @@ func TestClaudeGrantWritesThroughASymlink(t *testing.T) {
 	if info.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("%s is no longer a symlink (mode %v)", linkPath, info.Mode())
 	}
-	if trusted, err := claudeTrusted(realPath, "D:/work/through-link"); err != nil || !trusted {
+	if trusted, err := claudeTrusted(realPath, claudeKeyPlan("D:/work/through-link")); err != nil || !trusted {
 		t.Errorf("link target: claudeTrusted = (%v, %v), want (true, nil)", trusted, err)
 	}
 	assertNoLockOrTempLeftover(t, linkPath)
 	assertNoLockOrTempLeftover(t, realPath)
 }
 
-// C2 完了条件: キーが既にある（true / false の両方）と、ファイルの内容が
-// 1 バイトも変わらない。
-func TestClaudeGrantDoesNotTouchFileWhenKeyExists(t *testing.T) {
-	for _, tc := range []struct {
-		key      string
-		existing string
-	}{
-		{"D:/work/sampleApp", "untrusted"}, // hasTrustDialogAccepted: false
-		{"D:/work/SampleApp", "trusted"},   // hasTrustDialogAccepted: true
-	} {
-		t.Run(tc.existing, func(t *testing.T) {
-			configPath := writeClaudeFixture(t, claudeFixtureWithTwoProjects)
-			before, err := os.ReadFile(configPath)
-			if err != nil {
-				t.Fatal(err)
-			}
+// C2 完了条件: 信頼済み（true）のキーがあると、ファイルの内容が 1 バイトも
+// 変わらない。false の項目は Claude の既定値で回答ではないので、書き換える側
+// （v0.9 リリース前の C10 C1 (c)。grant_test.go の
+// TestGrantClaudeAcceptsAnEntryLeftAtTheDefaultFalse と下のテスト）。
+func TestClaudeGrantDoesNotTouchFileWhenKeyIsTrusted(t *testing.T) {
+	configPath := writeClaudeFixture(t, claudeFixtureWithTwoProjects)
+	before := mustReadFile(t, configPath)
 
-			result, err := claudeGrant(configPath, tc.key)
-			if err != nil {
-				t.Fatalf("claudeGrant: %v", err)
-			}
-			if result.Written {
-				t.Fatalf("Written = true, want false (key already present)")
-			}
-			if result.Existing != tc.existing {
-				t.Errorf("Existing = %q, want %q", result.Existing, tc.existing)
-			}
-
-			after, err := os.ReadFile(configPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !bytes.Equal(before, after) {
-				t.Errorf("file changed even though the key already existed:\nbefore=%s\nafter=%s", before, after)
-			}
-			assertNoLockOrTempLeftover(t, configPath)
-		})
+	result, err := claudeGrant(configPath, claudeKeyPlan("D:/work/SampleApp")) // hasTrustDialogAccepted: true
+	if err != nil {
+		t.Fatalf("claudeGrant: %v", err)
 	}
+	if result.Written || result.Existing != "trusted" {
+		t.Fatalf("result = %+v, want Written=false and Existing=trusted", result)
+	}
+	if after := mustReadFile(t, configPath); !bytes.Equal(before, after) {
+		t.Errorf("file changed even though the key was already trusted:\nbefore=%s\nafter=%s", before, after)
+	}
+	assertNoLockOrTempLeftover(t, configPath)
+}
+
+// false の項目だけが true になり、同じ項目のほかのキー・ほかの項目・ルートの
+// 値は変わらない。
+func TestClaudeGrantAcceptsOnlyTheDefaultFalseEntry(t *testing.T) {
+	configPath := writeClaudeFixture(t, claudeFixtureWithTwoProjects)
+	before := decodeWithNumbers(t, mustReadFile(t, configPath))
+
+	result, err := claudeGrant(configPath, claudeKeyPlan("D:/work/sampleApp")) // {"hasTrustDialogAccepted": false, "extra": 1}
+	if err != nil {
+		t.Fatalf("claudeGrant: %v", err)
+	}
+	if !result.Written || result.Key != "D:/work/sampleApp" {
+		t.Fatalf("result = %+v, want Written for D:/work/sampleApp", result)
+	}
+	after := decodeWithNumbers(t, mustReadFile(t, configPath))
+	for _, key := range []string{"oauthAccount", "bigNumber", "nested"} {
+		if !reflect.DeepEqual(before[key], after[key]) {
+			t.Errorf("root key %q changed", key)
+		}
+	}
+	projects := after["projects"].(map[string]any)
+	want := map[string]any{"hasTrustDialogAccepted": true, "extra": json.Number("1")}
+	if !reflect.DeepEqual(projects["D:/work/sampleApp"], want) {
+		t.Errorf("entry = %#v, want %#v", projects["D:/work/sampleApp"], want)
+	}
+	if !reflect.DeepEqual(projects["D:/work/SampleApp"], before["projects"].(map[string]any)["D:/work/SampleApp"]) {
+		t.Error("the other entry changed")
+	}
+	assertNoLockOrTempLeftover(t, configPath)
+}
+
+// Claude 自身の信頼の判定は、プロジェクトのキーのあとに作業フォルダから親へ
+// 遡る。途中の親が信頼済みなら、Claude は確認を出さないので書かない。
+func TestClaudeGrantDoesNotWriteWhenAParentIsTrusted(t *testing.T) {
+	configPath := writeClaudeFixture(t, claudeFixtureWithTwoProjects)
+	before := mustReadFile(t, configPath)
+	plan := claudePlan{writeKey: "D:/work/SampleApp/sub", walk: []string{"D:/work/SampleApp/sub", "D:/work/SampleApp"}}
+
+	result, err := claudeGrant(configPath, plan)
+	if err != nil {
+		t.Fatalf("claudeGrant: %v", err)
+	}
+	if result.Written || result.Existing != "trusted" || result.Key != "D:/work/SampleApp" {
+		t.Errorf("result = %+v, want the trusted parent reported", result)
+	}
+	if !bytes.Equal(before, mustReadFile(t, configPath)) {
+		t.Error("file changed")
+	}
+}
+
+// claudeKeyPlan is a plan whose project key is key and that walks nothing
+// else, for tests of the file handling alone.
+func claudeKeyPlan(key string) claudePlan {
+	return claudePlan{target: key, writeKey: key}
 }
 
 // C2 完了条件（陽性対照の裏返し）: claudeTrusted も同じ 2 状態を正しく読む。
 func TestClaudeTrustedReadsBothStates(t *testing.T) {
 	configPath := writeClaudeFixture(t, claudeFixtureWithTwoProjects)
 
-	if trusted, err := claudeTrusted(configPath, "D:/work/sampleApp"); err != nil || trusted {
+	if trusted, err := claudeTrusted(configPath, claudeKeyPlan("D:/work/sampleApp")); err != nil || trusted {
 		t.Errorf("claudeTrusted(sampleApp) = (%v, %v), want (false, nil)", trusted, err)
 	}
-	if trusted, err := claudeTrusted(configPath, "D:/work/SampleApp"); err != nil || !trusted {
+	if trusted, err := claudeTrusted(configPath, claudeKeyPlan("D:/work/SampleApp")); err != nil || !trusted {
 		t.Errorf("claudeTrusted(SampleApp) = (%v, %v), want (true, nil)", trusted, err)
 	}
-	if trusted, err := claudeTrusted(configPath, "D:/work/never-seen"); err != nil || trusted {
+	if trusted, err := claudeTrusted(configPath, claudeKeyPlan("D:/work/never-seen")); err != nil || trusted {
 		t.Errorf("claudeTrusted(never-seen) = (%v, %v), want (false, nil)", trusted, err)
 	}
 }
@@ -225,7 +261,7 @@ func TestClaudeGrantLeavesBrokenJSONUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := claudeGrant(configPath, "D:/x"); err == nil {
+	if _, err := claudeGrant(configPath, claudeKeyPlan("D:/x")); err == nil {
 		t.Fatal("claudeGrant: want error for broken JSON, got nil")
 	}
 
@@ -258,7 +294,7 @@ func TestClaudeGrantWaitsForLockThenTimesOut(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(lockDir) }) // このロックは他者役なので自分で片付ける
 
 	start := time.Now()
-	if _, err := claudeGrant(configPath, "D:/x"); err == nil {
+	if _, err := claudeGrant(configPath, claudeKeyPlan("D:/x")); err == nil {
 		t.Fatal("claudeGrant: want error when lock is held, got nil")
 	}
 	if elapsed := time.Since(start); elapsed < claudeLockTimeout {
@@ -278,7 +314,7 @@ func TestClaudeGrantReclaimsAStaleLock(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := claudeGrant(configPath, "D:/tmp/sample-repo/cases/reclaimed")
+	result, err := claudeGrant(configPath, claudeKeyPlan("D:/tmp/sample-repo/cases/reclaimed"))
 	if err != nil {
 		t.Fatalf("claudeGrant: %v", err)
 	}

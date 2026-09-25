@@ -7,14 +7,26 @@ import (
 	"many-ai-cli/internal/subscription"
 )
 
-// C1 完了条件: claudeKey は D:\Tmp\Sample-Repo → D:/Tmp/Sample-Repo、d:\x → D:/x
-// （ドライブ文字だけ大文字化・それ以外の大文字小文字は保持）。
-func TestClaudeKeyUppercasesOnlyTheDriveLetter(t *testing.T) {
+// claudeKey は Claude の lF と同じ: path.normalize のあと Windows だけ "\" を "/"
+// にする。ドライブ文字も含め、大文字小文字は変えない（Claude の realpath は
+// 渡された綴りを保つ。2026-09-25 に claude.exe 2.1.282 の埋め込み JS と
+// Bun 1.3.14 で確認。以前はドライブ文字を大文字にしていた）。
+func TestClaudeKeyNormalizesButKeepsCase(t *testing.T) {
 	cases := map[string]string{
-		`D:\Tmp\Sample-Repo`: "D:/Tmp/Sample-Repo",
-		`d:\x`:               "D:/x",
-		`d:\Tmp\SampleApp`:   "D:/Tmp/SampleApp",
-		`D:\work\sampleApp`:  "D:/work/sampleApp",
+		"/tmp/Sample-Repo":     "/tmp/Sample-Repo",
+		"/tmp/a/../Sample/":    "/tmp/Sample",
+		`/tmp/back\slash`:      `/tmp/back\slash`,
+		"/tmp//double//slash/": "/tmp/double/slash",
+	}
+	if runtime.GOOS == "windows" {
+		cases = map[string]string{
+			`D:\Tmp\Sample-Repo`:   "D:/Tmp/Sample-Repo",
+			`d:\x`:                 "d:/x",
+			`d:\Tmp\SampleApp\`:    "d:/Tmp/SampleApp",
+			`D:\work\a\..\b`:       "D:/work/b",
+			`D:/work/forward/`:     "D:/work/forward",
+			`D:\work\\double\\sep`: "D:/work/double/sep",
+		}
 	}
 	for in, want := range cases {
 		if got := claudeKey(in); got != want {
@@ -33,14 +45,17 @@ func TestClaudeKeyIsCaseSensitiveBeyondTheDriveLetter(t *testing.T) {
 	}
 }
 
-// codex のキーは Windows でのみ小文字化が確認されている。それ以外の OS では
-// 変換しない（判断ログの「未確認」を、テストでも「確認していない変換はしない」
-// という形で表す）。
+// codex のキーは Windows でだけ小文字にする（codex-rs rust-v0.156.1 の
+// normalize_project_lookup_key。それ以外の OS では綴りを変えない）。存在しない
+// フォルダは正規化できないので、codex と同じく渡された綴りのまま使う。
 func TestCodexKeyLowercasesOnWindowsOnly(t *testing.T) {
-	in := `D:\Tmp\Sample-Repo`
+	in := "/Tmp/No-Such-Sample-Repo"
+	if runtime.GOOS == "windows" {
+		in = `D:\Tmp\No-Such-Sample-Repo`
+	}
 	got := codexKey(in)
 	if runtime.GOOS == "windows" {
-		if want := `d:\tmp\sample-repo`; got != want {
+		if want := `d:\tmp\no-such-sample-repo`; got != want {
 			t.Errorf("codexKey(%q) = %q, want %q on windows", in, got, want)
 		}
 		return
@@ -69,7 +84,7 @@ func TestSupportedListsOnlyClaudeAndCodex(t *testing.T) {
 func TestResolveUsesTheChildEnvNotTheProcessEnv(t *testing.T) {
 	t.Setenv(subscription.ClaudeConfigDirEnv, "") // Hub 自身の env にはさせない
 	dir := t.TempDir()
-	_, configPath, _, err := resolve(Target{
+	_, configPath, err := resolve(Target{
 		Provider: "claude",
 		Env:      []string{subscription.ClaudeConfigDirEnv + "=" + dir},
 		Dir:      `D:\x`,
@@ -84,7 +99,7 @@ func TestResolveUsesTheChildEnvNotTheProcessEnv(t *testing.T) {
 }
 
 func TestResolveRejectsUnsupportedProvider(t *testing.T) {
-	if _, _, _, err := resolve(Target{Provider: "gemini"}); err == nil {
+	if _, _, err := resolve(Target{Provider: "gemini"}); err == nil {
 		t.Fatal("resolve: want error for unsupported provider, got nil")
 	}
 }

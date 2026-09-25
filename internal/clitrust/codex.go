@@ -60,20 +60,41 @@ func codexExistingState(entry codexProjectEntry) string {
 // codexGrantMu serializes codexGrant within this process (see codexGrant).
 var codexGrantMu sync.Mutex
 
-// codexTrusted reads only. codex does not lock config.toml itself (see
-// codexGrant's doc comment for why Grant also skips locking), so a plain read
-// is consistent with how codex reads the file at every startup.
-func codexTrusted(configPath, key string) (bool, error) {
+func codexTrustedDir(configPath, dir string) (bool, error) {
+	return codexTrusted(configPath, codexPlanFor(dir))
+}
+
+func codexGrantDir(configPath, dir string) (Result, error) {
+	plan := codexPlanFor(dir)
+	if trustTargetTooBroad(plan.target) {
+		return Result{Key: plan.writeKey}, errTrustTargetTooBroad
+	}
+	return codexGrant(configPath, plan)
+}
+
+// codexTrusted reads only, and answers the way codex's own lookup would
+// (codexLookupEntry over plan.lookup). codex does not lock config.toml itself
+// (see codexGrant's doc comment for why Grant also skips locking), so a plain
+// read is consistent with how codex reads the file at every startup.
+func codexTrusted(configPath string, plan codexPlan) (bool, error) {
 	doc, _, err := readCodexDoc(configPath)
 	if err != nil {
 		return false, err
 	}
-	entry, ok := doc.Projects[key]
+	_, entry, ok := codexLookupEntry(doc.Projects, plan.lookup)
 	return ok && entry.TrustLevel == "trusted", nil
 }
 
 // codexGrant is the Grant half of the codex provider: read, check, append
 // (never rewrite), verify.
+//
+// The check has two parts. First, whatever codex's own lookup finds for the
+// folder (the folder's key, then its repository root's, in any letter case on
+// Windows) is codex's decision and is left alone. Second, an "untrusted"
+// entry for the folder, the trust target, or any folder above either of them
+// also stops the write: appending a trusted key there would let a folder the
+// user once refused be trusted through the approval screen's default
+// checkbox (v0.9 release review, C4-A F4; the user's answer Q4a).
 //
 // No lock is taken here — a deliberate difference from claudeGrant, recorded
 // in the child plan's 判断ログ: codex reads config.toml at startup and writes
@@ -89,31 +110,41 @@ func codexTrusted(configPath, key string) (bool, error) {
 // Grants in this process run one at a time (codexGrantMu). Two grants of the
 // same key racing each other would both append, making the table a duplicate
 // that no longer parses, and both would then roll back.
-func codexGrant(configPath, key string) (Result, error) {
+func codexGrant(configPath string, plan codexPlan) (Result, error) {
 	codexGrantMu.Lock()
 	defer codexGrantMu.Unlock()
+	key := plan.writeKey
 	doc, original, err := readCodexDoc(configPath)
 	if err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 
+	if existingKey, entry, ok := codexLookupEntry(doc.Projects, plan.lookup); ok {
+		return Result{Written: false, Key: existingKey, Existing: codexExistingState(entry)}, nil
+	}
+	if untrustedKey, ok := codexUntrustedAtOrAbove(doc.Projects, plan.guard); ok {
+		return Result{Written: false, Key: untrustedKey, Existing: "untrusted"}, nil
+	}
+	// codexLookupEntry covers every key that lowercases to writeKey on
+	// Windows; the exact key is checked on its own too, because appending a
+	// table that already exists would make the file unreadable on any OS.
 	if entry, ok := doc.Projects[key]; ok {
-		return Result{Written: false, Existing: codexExistingState(entry)}, nil
+		return Result{Written: false, Key: key, Existing: codexExistingState(entry)}, nil
 	}
 
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 	block := codexTrustBlock(key, len(original) == 0)
 	sizeBefore, err := appendCodexBlock(configPath, block)
 	if err != nil {
-		return Result{}, err
+		return Result{Key: key}, err
 	}
 
 	verifyDoc, _, verifyErr := readCodexDoc(configPath)
 	if verifyErr == nil {
 		if entry, ok := verifyDoc.Projects[key]; ok && entry.TrustLevel == "trusted" {
-			return Result{Written: true}, nil
+			return Result{Written: true, Key: key}, nil
 		}
 		verifyErr = fmt.Errorf("clitrust: %s does not contain %q as trusted after writing", configPath, key)
 	}
@@ -122,7 +153,7 @@ func codexGrant(configPath, key string) (Result, error) {
 	// 追記した分だけを切り詰めて戻す。ファイルが元々無かった場合
 	// （original == nil）は削除して「無かった」状態に戻す。
 	rollbackCodexAppend(configPath, original == nil, sizeBefore, block)
-	return Result{}, verifyErr
+	return Result{Key: key}, verifyErr
 }
 
 // rollbackCodexAppend takes back exactly the block codexGrant appended, and
@@ -146,8 +177,9 @@ func rollbackCodexAppend(configPath string, created bool, sizeBefore int64, bloc
 // codexTrustBlock renders the same table codex itself writes when the user
 // answers the trust prompt with "Trust and continue": [projects.'<key>']
 // followed by trust_level = "trusted" (confirmed on Windows — parent plan's
-// T3/T5 trace). The leading blank line separates it from whatever table ends
-// the file; an empty file gets no leading blank line.
+// T3/T5 trace — and in set_project_trust_level_inner, rust-v0.156.1). The
+// leading blank line separates it from whatever table ends the file; an empty
+// file gets no leading blank line.
 func codexTrustBlock(key string, emptyFile bool) string {
 	block := "[projects." + tomlQuoteKey(key) + "]\ntrust_level = \"trusted\"\n"
 	if emptyFile {

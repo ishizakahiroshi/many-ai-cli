@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -41,7 +43,7 @@ func writeCodexFixture(t *testing.T, body string) string {
 func TestCodexGrantPreservesExistingContentAsPrefix(t *testing.T) {
 	configPath := writeCodexFixture(t, codexFixtureWithComments)
 
-	result, err := codexGrant(configPath, "d:/tmp/sample-repo/cases/new")
+	result, err := codexGrant(configPath, codexKeyPlan("d:/tmp/sample-repo/cases/new"))
 	if err != nil {
 		t.Fatalf("codexGrant: %v", err)
 	}
@@ -89,7 +91,7 @@ func TestCodexGrantDoesNotTouchFileWhenKeyExists(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			result, err := codexGrant(configPath, tc.key)
+			result, err := codexGrant(configPath, codexKeyPlan(tc.key))
 			if err != nil {
 				t.Fatalf("codexGrant: %v", err)
 			}
@@ -116,7 +118,7 @@ func TestCodexGrantEscapesASingleQuoteInTheKey(t *testing.T) {
 	configPath := writeCodexFixture(t, codexFixtureWithComments)
 	key := `d:\o'brien\project`
 
-	result, err := codexGrant(configPath, key)
+	result, err := codexGrant(configPath, codexKeyPlan(key))
 	if err != nil {
 		t.Fatalf("codexGrant: %v", err)
 	}
@@ -141,7 +143,7 @@ func TestCodexGrantLeavesBrokenTOMLUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := codexGrant(configPath, "d:/x"); err == nil {
+	if _, err := codexGrant(configPath, codexKeyPlan("d:/x")); err == nil {
 		t.Fatal("codexGrant: want error for broken TOML, got nil")
 	}
 
@@ -161,7 +163,7 @@ func TestCodexGrantRollsBackAnAppendThatBreaksTheFile(t *testing.T) {
 	original := "model = \"gpt-5-codex\"\nprojects = { 'd:\\dev\\a' = { trust_level = \"trusted\" } }\n"
 	configPath := writeCodexFixture(t, original)
 
-	if _, err := codexGrant(configPath, `d:\work\b`); err == nil {
+	if _, err := codexGrant(configPath, codexKeyPlan(`d:\work\b`)); err == nil {
 		t.Fatal("codexGrant: want error when the appended table cannot be read back, got nil")
 	}
 	if got := mustReadFile(t, configPath); !bytes.Equal(got, []byte(original)) {
@@ -172,7 +174,7 @@ func TestCodexGrantRollsBackAnAppendThatBreaksTheFile(t *testing.T) {
 // 書いたときの Result は Written=true で、Existing は空（Result の定義どおり）。
 func TestCodexGrantReportsAWriteWithoutExisting(t *testing.T) {
 	configPath := writeCodexFixture(t, codexFixtureWithComments)
-	result, err := codexGrant(configPath, `d:\work\fresh`)
+	result, err := codexGrant(configPath, codexKeyPlan(`d:\work\fresh`))
 	if err != nil {
 		t.Fatalf("codexGrant: %v", err)
 	}
@@ -187,7 +189,7 @@ func TestCodexGrantCreatesTheFileWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")
 
-	result, err := codexGrant(configPath, "d:/x")
+	result, err := codexGrant(configPath, codexKeyPlan("d:/x"))
 	if err != nil {
 		t.Fatalf("codexGrant: %v", err)
 	}
@@ -202,13 +204,13 @@ func TestCodexGrantCreatesTheFileWhenMissing(t *testing.T) {
 func TestCodexTrustedReadsBothStates(t *testing.T) {
 	configPath := writeCodexFixture(t, codexFixtureWithComments)
 
-	if trusted, err := codexTrusted(configPath, "D:/work/existing-trusted"); err != nil || !trusted {
+	if trusted, err := codexTrusted(configPath, codexKeyPlan("D:/work/existing-trusted")); err != nil || !trusted {
 		t.Errorf("codexTrusted(existing-trusted) = (%v, %v), want (true, nil)", trusted, err)
 	}
-	if trusted, err := codexTrusted(configPath, "D:/work/existing-untrusted"); err != nil || trusted {
+	if trusted, err := codexTrusted(configPath, codexKeyPlan("D:/work/existing-untrusted")); err != nil || trusted {
 		t.Errorf("codexTrusted(existing-untrusted) = (%v, %v), want (false, nil)", trusted, err)
 	}
-	if trusted, err := codexTrusted(configPath, "D:/work/never-seen"); err != nil || trusted {
+	if trusted, err := codexTrusted(configPath, codexKeyPlan("D:/work/never-seen")); err != nil || trusted {
 		t.Errorf("codexTrusted(never-seen) = (%v, %v), want (false, nil)", trusted, err)
 	}
 }
@@ -218,7 +220,7 @@ func TestCodexTrustedReadsBothStates(t *testing.T) {
 func TestCodexTrustedTreatsAMissingFileAsUntrusted(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "config.toml")
-	if trusted, err := codexTrusted(configPath, "d:/x"); err != nil || trusted {
+	if trusted, err := codexTrusted(configPath, codexKeyPlan("d:/x")); err != nil || trusted {
 		t.Errorf("codexTrusted(missing file) = (%v, %v), want (false, nil)", trusted, err)
 	}
 }
@@ -237,7 +239,7 @@ func TestCodexGrantConcurrentSameKeyKeepsTheFileReadable(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				<-start
-				_, _ = codexGrant(configPath, `d:\work\same`)
+				_, _ = codexGrant(configPath, codexKeyPlan(`d:\work\same`))
 			}()
 		}
 		close(start)
@@ -303,6 +305,76 @@ func TestCodexRollbackOnlyRemovesItsOwnAppend(t *testing.T) {
 			t.Errorf("file was removed or cut: got %q", got)
 		}
 	})
+}
+
+// codexKeyPlan is a plan whose only lookup key and write key is key, with no
+// untrusted guard, for tests of the file handling alone.
+func codexKeyPlan(key string) codexPlan {
+	return codexPlan{target: key, writeKey: key, lookup: []string{key}}
+}
+
+// codex の検索は、完全一致の次に「小文字にすると一致する」キーを見る（Windows）。
+// 大文字小文字だけ違う信頼済みの項目があれば、新しい表を足さない。
+func TestCodexGrantFindsAnEntryInAnotherCaseOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("codex folds letter case on Windows only")
+	}
+	configPath := writeCodexFixture(t, "[projects.'D:\\Work\\Repo']\ntrust_level = \"trusted\"\n")
+	before := mustReadFile(t, configPath)
+
+	result, err := codexGrant(configPath, codexKeyPlan(`d:\work\repo`))
+	if err != nil {
+		t.Fatalf("codexGrant: %v", err)
+	}
+	if result.Written || result.Existing != "trusted" || result.Key != `D:\Work\Repo` {
+		t.Errorf("result = %+v, want the existing D:\\Work\\Repo reported as trusted", result)
+	}
+	if !bytes.Equal(before, mustReadFile(t, configPath)) {
+		t.Error("file changed")
+	}
+}
+
+// 未信頼の項目が作業フォルダかその上にあれば書かない。横や下にある項目は
+// 関係ない。ドライブの根・末尾の区切り・"/" 区切りで書かれた項目も同じ扱い。
+func TestCodexUntrustedAtOrAbove(t *testing.T) {
+	sep := string(filepath.Separator)
+	root := filepath.VolumeName(os.TempDir()) + sep
+	folder := filepath.Join(root, "work", "repo", "sub")
+	guard := []string{codexComparable(folder)}
+	for name, tc := range map[string]struct {
+		key     string
+		level   string
+		blocked bool
+	}{
+		"same folder":      {folder, "untrusted", true},
+		"parent":           {filepath.Join(root, "work", "repo"), "untrusted", true},
+		"parent, trailing": {filepath.Join(root, "work", "repo") + sep, "untrusted", true},
+		"filesystem root":  {root, "untrusted", true},
+		"trusted parent":   {filepath.Join(root, "work", "repo"), "trusted", false},
+		"sibling":          {filepath.Join(root, "work", "repo", "other"), "untrusted", false},
+		"prefix only":      {filepath.Join(root, "work", "rep"), "untrusted", false},
+		"below":            {filepath.Join(folder, "deeper"), "untrusted", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			projects := map[string]codexProjectEntry{tc.key: {TrustLevel: tc.level}}
+			if _, blocked := codexUntrustedAtOrAbove(projects, guard); blocked != tc.blocked {
+				t.Errorf("blocked = %v, want %v", blocked, tc.blocked)
+			}
+		})
+	}
+	if runtime.GOOS == "windows" {
+		projects := map[string]codexProjectEntry{strings.ToUpper(strings.ReplaceAll(filepath.Join(root, "work", "repo"), `\`, "/")): {TrustLevel: "untrusted"}}
+		if _, blocked := codexUntrustedAtOrAbove(projects, guard); !blocked {
+			t.Error("an upper-case, slash-separated untrusted parent was not recognized")
+		}
+	}
+}
+
+// codex の小文字化は ASCII だけ（Rust の to_ascii_lowercase）。
+func TestCodexKeyLowercasesASCIIOnly(t *testing.T) {
+	if got, want := asciiLower(`D:\Ärger\ÖL\Abc`), `d:\Ärger\Öl\abc`; got != want {
+		t.Errorf("asciiLower = %q, want %q", got, want)
+	}
 }
 
 func mustReadFile(t *testing.T, path string) []byte {
