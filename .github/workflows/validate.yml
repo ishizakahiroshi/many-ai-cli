@@ -312,6 +312,11 @@ jobs:
       - name: Check module graph evaluates on load
         run: node ../scripts/check-web-module-init.mjs
 
+      # web/tests の単体テスト（bun:test）。src を直接 import するのでビルドは要らない。
+      # 下の `bun run test`（dist の fixture を node --test で回す）とは別物で、以前は CI で走っていなかった。
+      - name: Test frontend unit tests (web/tests)
+        run: bun test ./tests/
+
       - name: Build frontend
         run: bun run build
 
