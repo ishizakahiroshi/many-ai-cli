@@ -437,6 +437,7 @@ test('an empty submit is held back only while a high-risk native approval is fol
   reset(1, 2);
   connect('hub-a', [{ session_id: 1, version: 1, record: risky('here') }, { session_id: 2, version: 1 }]);
   foldApproval(1);
+  assert.equal(emptySubmitHitsFoldedHighRiskApproval(1), true, 'the session holding the folded approval is held back');
   assert.equal(emptySubmitHitsFoldedHighRiskApproval(2), false, 'another session without a record sends as usual');
   _setApprovalFoldStorageForTest(null);
 });

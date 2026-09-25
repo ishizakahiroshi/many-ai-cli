@@ -497,7 +497,7 @@
   "toast_model_blocked_on_ollama": "Ollama または LM Studio で起動中のセッションでは /model を実行できません。モデルを変えたい場合は新しいセッションを起動してください。",
   "toast_select_menu_active": "選択メニュー表示中です。下のボタンか端末ペインで選択してください（送信は保留しました）。",
   "toast_template_send_no_session": "セッションを選んでからテンプレートを送信してください。入力欄には反映済みです。",
-  "toast_folded_high_risk_empty_submit": "高リスクの承認を畳んでいるので、空の Enter は送りませんでした。「⚠ 承認待ち」の帯を押してポップアップを開き、そこで答えてください（番号を打って送れば、そのまま答えられます）。",
+  "toast_folded_high_risk_empty_submit": "高リスクの承認を畳んでいるので、空の送信は止めました。「⚠ 承認待ち」の帯を押してポップアップを開き、そこで答えてください。",
   "shell_ai_launch_title": "専用セッションで起動しますか？",
   "shell_ai_launch_msg": "shell セッション内で {provider} を起動しようとしています。素のシェル前提の入力・承認処理とミスマッチし、スラッシュコマンドの文字化けや承認ボタンの不動作が起きます。{provider} 専用セッションを開くことをおすすめします。",
   "shell_ai_launch_open": "{provider} セッションを開く",

@@ -517,6 +517,13 @@ export async function doSend(sessionId) {
     rawText = rawText.replace(/\r\n?/g, '\n');
     // 候補メニュー確定で付く末尾空白を落とす（付いたままだと内側 CLI がコマンドとして扱わない）。
     rawText = trimTrailingSpaceForSlashCommand(rawText);
+    // 添付のアップロードが全部失敗すると、送るものが確定の '\r' だけになる。入口の判定
+    // （isEmptySubmit）は添付があるので通しているので、畳んだ高リスクの承認があれば
+    // ここでもう一度止める。
+    if (rawText.trim() === '' && injectPrefix === '' && emptySubmitHitsFoldedHighRiskApproval(sessionId)) {
+      showToast(t('toast_folded_high_risk_empty_submit'), undefined, 4500);
+      return false;
+    }
     // ペースト包み・確定 \r 分離の判定は buildBodySubmitPart に共通化（クイックコマンドと共用）。
     // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する。
     let textPart;
