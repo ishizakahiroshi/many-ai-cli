@@ -16,6 +16,7 @@ import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLa
 import {
   fillModelDatalist,
   getCachedSpawnModelGroups,
+  getSpawnModelGroupCacheGeneration,
   getModelGroupsForProvider,
   groupHasModel,
   isModelCompatibleWithProvider,
@@ -75,6 +76,8 @@ export function openSpawnPanelIfClosed(): void {
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
   const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
+  const spawnNVIDIANIMNote = document.getElementById('spawn-nvidia-nim-note');
+  const spawnNVIDIANIMCompatNote = document.getElementById('spawn-nvidia-nim-compat-note');
   const spawnPermissionOpts = document.getElementById('spawn-permission-opts');
   const spawnPermissionMode = document.getElementById('spawn-permission-mode') as HTMLSelectElement | null;
   const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
@@ -536,6 +539,7 @@ export function openSpawnPanelIfClosed(): void {
   function setSpawnModelValue(value) {
     spawnModelInput.value = value || '';
     syncModelClearButton();
+    syncNVIDIANIMNotice();
   }
 
   function clearIncompatibleModelForProvider(provider) {
@@ -558,7 +562,13 @@ export function openSpawnPanelIfClosed(): void {
   }
 
   function populateModelDatalist() {
-    fillModelDatalist(spawnModelDatalist as HTMLDataListElement | null, getCachedSpawnModelGroups(), spawnProviderEl.value);
+    fillModelDatalist(
+      spawnModelDatalist as HTMLDataListElement | null,
+      getCachedSpawnModelGroups(),
+      spawnProviderEl.value,
+      { hosted: t('spawn_model_badge_hosted'), trial: t('spawn_model_badge_trial') },
+    );
+    syncNVIDIANIMNotice();
   }
 
   function resolveRoute(provider, model) {
@@ -583,23 +593,42 @@ export function openSpawnPanelIfClosed(): void {
     return '';
   }
 
+  function syncNVIDIANIMNotice() {
+    const selectedNIMRoute = spawnProviderEl.value === 'opencode' &&
+      resolveRoute(spawnProviderEl.value, spawnModelInput.value) === 'nvidia-nim';
+    if (spawnNVIDIANIMNote) spawnNVIDIANIMNote.hidden = !selectedNIMRoute;
+    if (spawnNVIDIANIMCompatNote) spawnNVIDIANIMCompatNote.hidden = !selectedNIMRoute;
+  }
+
   async function fetchModelGroups(force) {
     if (spawnModelFetchInFlight) return spawnModelFetchInFlight;
-    const p = (async () => {
+    const generation = getSpawnModelGroupCacheGeneration();
+    let p;
+    p = (async () => {
       try {
         const groups = await loadSpawnModelGroups(token, force);
+        if (generation !== getSpawnModelGroupCacheGeneration()) {
+          return { groups: getCachedSpawnModelGroups() || [] };
+        }
         rebuildModelRouteMap(groups);
         populateModelDatalist();
         clearIncompatibleModelForProvider(spawnProviderEl.value);
         clearOllamaModelDefault();
         return { groups };
       } finally {
-        spawnModelFetchInFlight = null;
+        if (spawnModelFetchInFlight === p) spawnModelFetchInFlight = null;
       }
     })();
     spawnModelFetchInFlight = p;
     return p;
   }
+
+  document.addEventListener('spawn-model-groups-invalidated', () => {
+    spawnModelFetchInFlight = null;
+    rebuildModelRouteMap([]);
+    populateModelDatalist();
+    if (newSessionPanel && !newSessionPanel.hidden) void fetchModelGroups(false);
+  });
 
   if (spawnModelRefreshBtn) {
     spawnModelRefreshBtn.addEventListener('click', async () => {
@@ -1167,6 +1196,7 @@ export function openSpawnPanelIfClosed(): void {
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
     clearIncompatibleModelForProvider(p);
+    syncNVIDIANIMNotice();
     // C2 (plan_spawn-form-per-provider-memory.md): 許可設定・worktree・委譲・
     // サブスクリプションの記憶を、切り替えた先の provider のぶんへ差し替える。
     restoreProviderMemory(p);
@@ -1204,11 +1234,13 @@ export function openSpawnPanelIfClosed(): void {
     _savedModelValue = spawnModelInput.value;
     _modelInputDirty = false;
     spawnModelInput.value = '';
+    syncNVIDIANIMNotice();
   });
   spawnModelInput.addEventListener('input', () => {
     _modelInputDirty = true;
     clearModelSelectionState();
     syncModelClearButton();
+    syncNVIDIANIMNotice();
   });
   spawnModelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

@@ -1004,6 +1004,12 @@ type LMStudioConfig struct {
 	AllowPrivateHosts bool   `yaml:"allow_private_hosts,omitempty" json:"allow_private_hosts,omitempty"`
 }
 
+// NVIDIANIMConfig controls whether the OpenCode-only NVIDIA NIM route is
+// available. Credentials live outside config.yaml in internal/nvidianim.
+type NVIDIANIMConfig struct {
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+}
+
 func EffectiveLMStudioBaseURL(baseURL string) string {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -1241,6 +1247,7 @@ type Config struct {
 	RemotePINHash string              `yaml:"remote_pin_hash,omitempty" json:"-"`
 	Ollama        OllamaConfig        `yaml:"ollama,omitempty" json:"ollama,omitempty"`
 	LMStudio      LMStudioConfig      `yaml:"lm_studio,omitempty" json:"lm_studio,omitempty"`
+	NVIDIANIM     NVIDIANIMConfig     `yaml:"nvidia_nim,omitempty" json:"nvidia_nim,omitempty"`
 	LocalModels   []LocalModel        `yaml:"local_models,omitempty" json:"local_models,omitempty"`
 	UserPrefs     UserPrefs           `yaml:"user_prefs,omitempty" json:"user_prefs,omitempty"`
 	Voice         VoiceConfig         `yaml:"voice,omitempty" json:"voice,omitempty"`
@@ -1392,7 +1399,7 @@ func defaultConfig(home string) *Config {
 	// profile (and only then — not for plain `many-ai-cli serve` inside a WSL
 	// shell), place logs under the
 	// Windows %USERPROFILE% so the Hub UI's open-folder button resolves to a
-	// plain C:\Users\... path that Windows Explorer can open directly. A bare
+	// plain absolute Windows path that Windows Explorer can open directly. A bare
 	// WSL session is treated as pure-Linux and keeps logs under Linux $HOME.
 	logHome := home
 	if wslutil.IsWindowsLauncherMode() {

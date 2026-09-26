@@ -18,6 +18,21 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestNVIDIANIMConfigDefaultsDisabledAndContainsNoCredentialField(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.NVIDIANIM.Enabled {
+		t.Fatal("NVIDIA NIM must default to disabled")
+	}
+	cfg.NVIDIANIM.Enabled = true
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "api_key") || strings.Contains(string(out), "NVIDIA_API_KEY") {
+		t.Fatalf("config JSON must not contain a credential field: %s", out)
+	}
+}
+
 // TestNormalizeHandoffIntentModeDefaultsUnknownValues is the C3 completion
 // criterion for the config half of 案 3 (docs/local/plan_session-handoff-board_c3_intent-layer.md
 // 内部 C3): an empty or unrecognized value falls back to done-only, and the
@@ -614,8 +629,8 @@ func TestHubTokenlessAccessRoundTrip(t *testing.T) {
 		t.Fatalf("LoadOrCreate: %v", err)
 	}
 	cfg1.Hub.AllowLoopbackWithoutToken = true
-	cfg1.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
-	cfg1.Hub.AllowedHosts = []string{"10.8.0.1", "hub.example"}
+	cfg1.Hub.TrustedNetworks = []string{"192.0.2.1/32"}
+	cfg1.Hub.AllowedHosts = []string{"192.0.2.1", "hub.example"}
 	if err := Save(cfg1); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -627,10 +642,10 @@ func TestHubTokenlessAccessRoundTrip(t *testing.T) {
 	if !cfg2.Hub.AllowLoopbackWithoutToken {
 		t.Fatal("AllowLoopbackWithoutToken = false, want true")
 	}
-	if got := strings.Join(cfg2.Hub.TrustedNetworks, ","); got != "172.19.0.1/32" {
+	if got := strings.Join(cfg2.Hub.TrustedNetworks, ","); got != "192.0.2.1/32" {
 		t.Fatalf("TrustedNetworks = %q", got)
 	}
-	if got := strings.Join(cfg2.Hub.AllowedHosts, ","); got != "10.8.0.1,hub.example" {
+	if got := strings.Join(cfg2.Hub.AllowedHosts, ","); got != "192.0.2.1,hub.example" {
 		t.Fatalf("AllowedHosts = %q", got)
 	}
 }
@@ -644,7 +659,7 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrCreate: %v", err)
 	}
-	cfg1.Ollama.BaseURL = "http://192.168.11.50:11434"
+	cfg1.Ollama.BaseURL = "http://127.0.0.1:11434"
 	cfg1.Ollama.AllowPrivateHosts = true
 	if err := Save(cfg1); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -654,7 +669,7 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrCreate second: %v", err)
 	}
-	if cfg2.Ollama.BaseURL != "http://192.168.11.50:11434" {
+	if cfg2.Ollama.BaseURL != "http://127.0.0.1:11434" {
 		t.Fatalf("Ollama.BaseURL = %q", cfg2.Ollama.BaseURL)
 	}
 	if !cfg2.Ollama.AllowPrivateHosts {
@@ -686,8 +701,8 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		name string
 		set  func(*Config)
 	}{
-		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://10.0.0.20:11434" }},
-		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://192.168.1.20:1234" }},
+		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://127.0.0.1:11434" }},
+		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://127.0.0.1:1234" }},
 		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://localhost:11434" }},
 	} {
 		cfg := defaultConfig(t.TempDir())
@@ -707,11 +722,11 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		set  func(*Config)
 	}{
 		{"ollama", func(cfg *Config) {
-			cfg.Ollama.BaseURL = "http://10.0.0.20:11434"
+			cfg.Ollama.BaseURL = "http://127.0.0.1:11434"
 			cfg.Ollama.AllowPrivateHosts = true
 		}},
 		{"lm_studio", func(cfg *Config) {
-			cfg.LMStudio.BaseURL = "http://192.168.1.20:1234"
+			cfg.LMStudio.BaseURL = "http://127.0.0.1:1234"
 			cfg.LMStudio.AllowPrivateHosts = true
 		}},
 	} {
@@ -749,7 +764,7 @@ func TestConfigValidationAcceptsNarrowTrustedNetworks(t *testing.T) {
 }
 
 func TestConfigValidationRejectsInvalidAllowedHosts(t *testing.T) {
-	for _, host := range []string{"", "*", "10.8.0.1:47801", "http://10.8.0.1", "bad/host"} {
+	for _, host := range []string{"", "*", "192.0.2.1:47801", "http://192.0.2.1", "bad/host"} {
 		cfg := defaultConfig(t.TempDir())
 		cfg.Hub.AllowedHosts = []string{host}
 		if err := cfg.Validate(); err == nil {
@@ -782,22 +797,22 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg := &Config{}
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
 	cfg.UserPrefs.ProjectFavorites = []string{"one"}
-	cfg.UserPrefs.CwdHistory = []string{"D:/dev/one"}
+	cfg.UserPrefs.CwdHistory = []string{"relative/one"}
 	cfg.UserPrefs.ProjectViews = map[string]UserPrefsProjectView{"/src/box-alpha": {SessionID: 7, Tab: "git"}}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
-	cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
-	cfg.Hub.AllowedHosts = []string{"10.8.0.1"}
+	cfg.Hub.TrustedNetworks = []string{"192.0.2.1/32"}
+	cfg.Hub.AllowedHosts = []string{"192.0.2.1"}
 
 	clone := cfg.Clone()
 	cfg.Spawn.LastModel["legacy"] = "b"
 	cfg.UserPrefs.ProjectFavorites[0] = "two"
-	cfg.UserPrefs.CwdHistory[0] = "D:/dev/two"
+	cfg.UserPrefs.CwdHistory[0] = "relative/two"
 	cfg.UserPrefs.ProjectViews["/src/box-alpha"] = UserPrefsProjectView{SessionID: 99, Tab: "chat"}
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
-	cfg.Hub.TrustedNetworks[0] = "172.19.0.2/32"
-	cfg.Hub.AllowedHosts[0] = "10.8.0.2"
+	cfg.Hub.TrustedNetworks[0] = "192.0.2.1/32"
+	cfg.Hub.AllowedHosts[0] = "192.0.2.1"
 
 	if clone.Spawn.LastModel["legacy"] != "a" {
 		t.Fatalf("legacy spawn map was aliased")
@@ -805,7 +820,7 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	if clone.UserPrefs.ProjectFavorites[0] != "one" {
 		t.Fatalf("project favorites slice was aliased")
 	}
-	if clone.UserPrefs.CwdHistory[0] != "D:/dev/one" {
+	if clone.UserPrefs.CwdHistory[0] != "relative/one" {
 		t.Fatalf("cwd history slice was aliased")
 	}
 	if clone.UserPrefs.Spawn.Defaults["claude"] != "default" {
@@ -817,10 +832,10 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	if clone.UserPrefs.Spawn.LastModel["claude"] != "sonnet" {
 		t.Fatalf("spawn last model map was aliased")
 	}
-	if clone.Hub.TrustedNetworks[0] != "172.19.0.1/32" {
+	if clone.Hub.TrustedNetworks[0] != "192.0.2.1/32" {
 		t.Fatalf("trusted networks slice was aliased")
 	}
-	if clone.Hub.AllowedHosts[0] != "10.8.0.1" {
+	if clone.Hub.AllowedHosts[0] != "192.0.2.1" {
 		t.Fatalf("allowed hosts slice was aliased")
 	}
 }

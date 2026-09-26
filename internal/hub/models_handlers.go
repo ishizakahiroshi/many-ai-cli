@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/nvidianim"
 )
 
 // handleModels は spawn フォーム用のモデル一覧を返す。
@@ -24,10 +25,19 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	ollamaAllowPrivate := s.cfg.Ollama.AllowPrivateHosts
 	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
 	lmStudioAllowPrivate := s.cfg.LMStudio.AllowPrivateHosts
+	nvidiaNIMEnabled := s.cfg.NVIDIANIM.Enabled
 	s.cfgMu.Unlock()
 	if source == "" {
 		source = config.DefaultModelsSource
 	}
-	resp := buildModelsResponse(s.modelsCache, s.modelsRemoteCache, source, localCfg, ollamaBaseURL, lmStudioBaseURL, force, ollamaAllowPrivate, lmStudioAllowPrivate)
+	nvidiaOptions := nvidiaNIMCatalogOptions{enabled: nvidiaNIMEnabled}
+	if nvidiaNIMEnabled {
+		if configDir, err := config.Dir(); err == nil {
+			if apiKey, _, err := nvidianim.ResolveAPIKey(configDir); err == nil {
+				nvidiaOptions.apiKey = apiKey
+			}
+		}
+	}
+	resp := buildModelsResponseWithNVIDIANIM(s.modelsCache, s.modelsRemoteCache, source, localCfg, ollamaBaseURL, lmStudioBaseURL, force, []bool{ollamaAllowPrivate, lmStudioAllowPrivate}, nvidiaOptions)
 	writeJSON(w, resp)
 }

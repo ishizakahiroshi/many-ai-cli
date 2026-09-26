@@ -1,14 +1,208 @@
 package hub
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/nvidianim"
 )
+
+func TestNVIDIANIMSpawnEnvChildHelper(t *testing.T) {
+	if os.Getenv("MANY_AI_CLI_TEST_NIM_CHILD") != "1" {
+		return
+	}
+	var root map[string]any
+	valid := os.Getenv(nvidianim.APIKeyEnv) == "test-key-from-private-file" &&
+		json.Unmarshal([]byte(os.Getenv("OPENCODE_CONFIG_CONTENT")), &root) == nil
+	if valid {
+		providers, ok := root["provider"].(map[string]any)
+		valid = ok
+		if valid {
+			provider, ok := providers["nvidia"].(map[string]any)
+			valid = ok
+			if valid {
+				options, optionsOK := provider["options"].(map[string]any)
+				models, modelsOK := provider["models"].(map[string]any)
+				valid = optionsOK && modelsOK && options["apiKey"] == "{env:NVIDIA_API_KEY}" &&
+					models["moonshotai/kimi-k3"] != nil
+			}
+		}
+	}
+	if valid {
+		fmt.Print("child-ok")
+	} else {
+		fmt.Print("child-invalid")
+	}
+	// Do not include environment values in test output.
+	os.Exit(0)
+}
+
+func TestRouteSpawnEnvNVIDIANIMReachesChildAndMergesConfig(t *testing.T) {
+	s, home := subsTestServer(t)
+	t.Setenv(nvidianim.APIKeyEnv, "")
+	t.Setenv("OPENCODE_CONFIG_CONTENT", `{"provider":{"other":{"npm":"example/provider","models":{"m":{"name":"M"}}}},"theme":"dark"}`)
+	configDir := filepath.Join(home, ".many-ai-cli")
+	if err := nvidianim.SaveAPIKey(configDir, "test-key-from-private-file"); err != nil {
+		t.Fatal("save test key failed")
+	}
+	s.cfg.NVIDIANIM.Enabled = true
+
+	routeEnv, err := s.routeSpawnEnv("opencode", RouteNVIDIANIM, "nvidia/moonshotai/kimi-k3")
+	if err != nil {
+		t.Fatalf("routeSpawnEnv() error = %v", err)
+	}
+	if !containsEnv(routeEnv, nvidianim.APIKeyEnv+"=test-key-from-private-file") {
+		t.Fatal("route environment did not include the resolved API key")
+	}
+	configEnv := ""
+	for _, entry := range routeEnv {
+		if strings.HasPrefix(entry, "OPENCODE_CONFIG_CONTENT=") {
+			configEnv = strings.TrimPrefix(entry, "OPENCODE_CONFIG_CONTENT=")
+		}
+	}
+	if configEnv == "" || strings.Contains(configEnv, "test-key-from-private-file") {
+		t.Fatal("runtime config is missing or contains the API key")
+	}
+	var merged map[string]any
+	if err := json.Unmarshal([]byte(configEnv), &merged); err != nil {
+		t.Fatalf("merged runtime config is not JSON: %v", err)
+	}
+	providers := merged["provider"].(map[string]any)
+	if providers["other"] == nil || merged["theme"] != "dark" {
+		t.Fatal("existing OpenCode provider settings were not preserved")
+	}
+
+	childEnv := mergeEnvOverrides(sanitizeEnv(os.Environ()), routeEnv)
+	childEnv = mergeEnvOverrides(childEnv, []string{"MANY_AI_CLI_TEST_NIM_CHILD=1"})
+	cmd := exec.Command(os.Args[0], "-test.run=^TestNVIDIANIMSpawnEnvChildHelper$")
+	cmd.Env = childEnv
+	out, err := cmd.Output()
+	if err != nil || string(out) != "child-ok" {
+		t.Fatal("fake child did not receive the NVIDIA route environment")
+	}
+}
+
+func TestHandleSpawnPassesNVIDIANIMEnvToWrapperWithoutLaunchingOpenCode(t *testing.T) {
+	s, home := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	s.cfg.Hub.LogDir = t.TempDir()
+	s.cfg.NVIDIANIM.Enabled = true
+	t.Setenv(nvidianim.APIKeyEnv, "")
+	t.Setenv("OPENCODE_CONFIG_CONTENT", `{"theme":"dark"}`)
+	if err := nvidianim.SaveAPIKey(filepath.Join(home, ".many-ai-cli"), "test-key-from-private-file"); err != nil {
+		t.Fatal("save test key failed")
+	}
+
+	var capturedEnv []string
+	var capturedArgs []string
+	s.startSpawnCmd = func(cmd *exec.Cmd) error {
+		capturedEnv = append([]string(nil), cmd.Env...)
+		capturedArgs = append([]string(nil), cmd.Args...)
+		return errors.New("synthetic: intercepted before process start")
+	}
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider": "opencode",
+		"route":    RouteNVIDIANIM,
+		"model":    "nvidia/moonshotai/kimi-k3",
+		"cwd":      s.hubCWD,
+	}))
+	if w.Code != http.StatusInternalServerError || !strings.Contains(w.Body.String(), "intercepted before process start") {
+		t.Fatalf("code = %d, body = %s; want intercepted wrapper start", w.Code, w.Body.String())
+	}
+	if !containsEnv(capturedEnv, nvidianim.APIKeyEnv+"=test-key-from-private-file") {
+		t.Fatal("Hub did not pass the resolved key to the wrapper environment")
+	}
+	if !strings.Contains(strings.Join(capturedArgs, "\n"), "nvidia/moonshotai/kimi-k3") {
+		t.Fatal("Hub did not preserve the selected NVIDIA model in wrapper arguments")
+	}
+
+	childEnv := mergeEnvOverrides(capturedEnv, []string{"MANY_AI_CLI_TEST_NIM_CHILD=1"})
+	cmd := exec.Command(os.Args[0], "-test.run=^TestNVIDIANIMSpawnEnvChildHelper$")
+	cmd.Env = childEnv
+	out, err := cmd.Output()
+	if err != nil || string(out) != "child-ok" {
+		t.Fatal("fake child did not receive the Hub-built NVIDIA route environment")
+	}
+}
+
+func TestNVIDIANIMRouteSpawnValidationAndOpenCodeDefaults(t *testing.T) {
+	for _, provider := range []string{"claude", "codex", "my-custom-provider"} {
+		if err := validateProviderRoute(provider, RouteNVIDIANIM); err == nil {
+			t.Errorf("validateProviderRoute(%q, NVIDIA NIM) succeeded", provider)
+		}
+	}
+	if err := validateProviderRoute("opencode", RouteNVIDIANIM); err != nil {
+		t.Fatalf("OpenCode NVIDIA route rejected: %v", err)
+	}
+	if got := RouteForModel("opencode", "nvidia/moonshotai/kimi-k3", nil, nil); got != RouteNVIDIANIM {
+		t.Fatalf("RouteForModel() = %q, want NVIDIA NIM", got)
+	}
+
+	for _, model := range []string{"", "nvidia/", "nvidia/a//b", "nvidia/../b", "nvidia/a b", "openai/gpt"} {
+		if _, ok := parseOpenCodeNVIDIANIMModel(model); ok {
+			t.Errorf("parseOpenCodeNVIDIANIMModel(%q) accepted invalid model", model)
+		}
+	}
+	if got, ok := parseOpenCodeNVIDIANIMModel("nvidia/moonshotai/kimi-k3"); !ok || got != "moonshotai/kimi-k3" {
+		t.Fatalf("parseOpenCodeNVIDIANIMModel() = (%q, %v)", got, ok)
+	}
+
+	t.Setenv("OPENCODE_CONFIG_CONTENT", "")
+	s, _ := subsTestServer(t)
+	if env, err := s.routeSpawnEnv("opencode", "", "openai/gpt-4o"); err != nil || len(env) != 0 {
+		t.Fatalf("ordinary OpenCode route env = %v, err = %v; want unchanged empty env", env, err)
+	}
+}
+
+func TestHandleSpawnRejectsNVIDIANIMRouteForNonOpenCode(t *testing.T) {
+	s, _ := subsTestServer(t)
+	s.hubCWD = t.TempDir()
+	w := httptest.NewRecorder()
+	s.handleSpawn(w, subsRequest(t, http.MethodPost, "/api/spawn", map[string]any{
+		"provider": "codex",
+		"route":    RouteNVIDIANIM,
+		"cwd":      s.hubCWD,
+	}))
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "route is not available") {
+		t.Fatalf("code = %d, body = %s; want non-OpenCode route rejection", w.Code, w.Body.String())
+	}
+	spec := spawnWrappedSpec{Provider: "codex", Route: RouteNVIDIANIM}
+	if _, err := s.spawnWrappedSession(spec, time.Second); err == nil || err.Error() != errNVIDIANIMRouteRequiresOpenCode.Error() {
+		t.Fatalf("spawnWrappedSession() error = %v; want provider/route rejection", err)
+	}
+}
+
+func TestNVIDIANIMRouteRequiresEnabledAndKey(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(nvidianim.APIKeyEnv, "")
+	s, _ := subsTestServer(t)
+	if _, err := s.routeSpawnEnv("opencode", RouteNVIDIANIM, "nvidia/moonshotai/kimi-k3"); err == nil || err.Error() != "NVIDIA NIM route is disabled" {
+		t.Fatalf("disabled route error = %v", err)
+	}
+	s.cfg.NVIDIANIM.Enabled = true
+	if _, err := s.routeSpawnEnv("opencode", RouteNVIDIANIM, "nvidia/moonshotai/kimi-k3"); err == nil || err.Error() != "NVIDIA API key is unavailable" {
+		t.Fatalf("missing key error = %v", err)
+	}
+
+	t.Setenv("OPENCODE_CONFIG_CONTENT", "private-config-payload-that-must-not-leak")
+	t.Setenv(nvidianim.APIKeyEnv, "fake-key-for-parse-failure")
+	if _, err := s.routeSpawnEnv("opencode", RouteNVIDIANIM, "nvidia/moonshotai/kimi-k3"); err == nil || err.Error() != "invalid OpenCode runtime config" {
+		t.Fatalf("invalid config error = %v", err)
+	}
+}
 
 func TestHubSpawnEnvOverridesHubIdentityAndExecutable(t *testing.T) {
 	got := hubSpawnEnv([]string{

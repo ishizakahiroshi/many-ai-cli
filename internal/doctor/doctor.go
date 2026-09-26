@@ -57,6 +57,7 @@ func Run(ctx context.Context, cfg *config.Config) Report {
 		acl(),
 		ollama(ctx, cfg),
 		whisper(ctx, cfg),
+		nvidiaNIM(cfg),
 		tailscale(cfg),
 		logs(cfg),
 		sessionLog(cfg),

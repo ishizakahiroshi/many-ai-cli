@@ -36,6 +36,8 @@ import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js
 import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
 import { saveProjectView } from './project-view-store.js';
 import { detectSupport } from '../vendor/vtype-core/index.js';
+import type { NVIDIANIMSettingsStatus } from '../types/proto.js';
+import { invalidateSpawnModelGroups } from './spawn-model-groups.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -3829,4 +3831,147 @@ export function attachSummaryToggleListeners(): void {
     });
   });
 }
+
+// NVIDIA key controls stay on the Hub. The browser only receives configured
+// state and source; a saved key is never read back into an input or response.
+(function initNVIDIANIMSettings(): void {
+  if (typeof document === 'undefined') return;
+  const enabled = document.getElementById('nvidia-nim-enabled') as HTMLInputElement | null;
+  const apiKey = document.getElementById('nvidia-nim-api-key') as HTMLInputElement | null;
+  const keyState = document.getElementById('nvidia-nim-key-state');
+  const envNote = document.getElementById('nvidia-nim-env-note');
+  const saveBtn = document.getElementById('nvidia-nim-save') as HTMLButtonElement | null;
+  const testBtn = document.getElementById('nvidia-nim-test') as HTMLButtonElement | null;
+  const deleteBtn = document.getElementById('nvidia-nim-delete-key') as HTMLButtonElement | null;
+  const result = document.getElementById('nvidia-nim-test-result');
+  if (!enabled || !apiKey || !keyState || !envNote || !saveBtn || !testBtn || !deleteBtn || !result) return;
+
+  let current: NVIDIANIMSettingsStatus | null = null;
+  let busy = false;
+  const endpoint = (path: string): string => `${path}?token=${encodeURIComponent(token || '')}`;
+
+  function updateControls(): void {
+    const envManaged = current?.api_key_source === 'env';
+    apiKey.disabled = !!envManaged || busy;
+    deleteBtn.disabled = busy || current?.api_key_source !== 'file';
+    saveBtn.disabled = busy || (!!envManaged && apiKey.value.trim() !== '');
+    testBtn.disabled = busy || !current?.api_key_configured || apiKey.value.trim() !== '';
+  }
+
+  function showResult(key: string): void {
+    result.textContent = t(key);
+    result.hidden = false;
+  }
+
+  async function loadStatus(): Promise<void> {
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim'));
+      const data = await res.json().catch(() => ({})) as Partial<NVIDIANIMSettingsStatus>;
+      if (!res.ok || typeof data.enabled !== 'boolean' || typeof data.api_key_configured !== 'boolean') {
+        throw new Error('status unavailable');
+      }
+      current = data as NVIDIANIMSettingsStatus;
+      enabled.checked = current.enabled;
+      keyState.textContent = t(current.api_key_configured ? 'settings_nim_key_configured' : 'settings_nim_key_missing', {
+        source: t(`settings_nim_key_source_${current.api_key_source}`),
+      });
+      envNote.hidden = current.api_key_source !== 'env';
+      updateControls();
+    } catch (_) {
+      current = null;
+      keyState.textContent = t('settings_nim_key_status_failed');
+      envNote.hidden = true;
+      updateControls();
+    }
+  }
+
+  apiKey.addEventListener('input', updateControls);
+
+  saveBtn.addEventListener('click', async () => {
+    busy = true;
+    result.hidden = true;
+    updateControls();
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled.checked, api_key: apiKey.value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const code = data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked'
+          : data?.error === 'invalid_api_key' ? 'settings_nim_key_invalid'
+          : 'settings_nim_save_failed';
+        showResult(code);
+        return;
+      }
+      apiKey.value = '';
+      invalidateSpawnModelGroups();
+      await loadStatus();
+      showResult('settings_nim_saved');
+    } catch (_) {
+      showResult('settings_nim_save_failed');
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  });
+
+  testBtn.addEventListener('click', async () => {
+    busy = true;
+    result.hidden = true;
+    updateControls();
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim/test'), { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok === true) {
+        showResult('settings_nim_test_ok');
+      } else {
+        if (data?.error === 'api_key_missing') {
+          showResult('settings_nim_test_api_key_missing');
+          return;
+        }
+        const code = typeof data?.code === 'string' ? data.code : '';
+        const known = ['unauthorized', 'payment_required', 'forbidden', 'not_found', 'timeout', 'rate_limited', 'server_error', 'request_rejected', 'connection_failed'];
+        showResult(known.includes(code) ? `settings_nim_test_${code}` : 'settings_nim_test_connection_failed');
+      }
+    } catch (_) {
+      showResult('settings_nim_test_connection_failed');
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  });
+
+  deleteBtn.addEventListener('click', async () => {
+    const confirmed = await appConfirm({
+      title: t('settings_nim_delete_confirm_title'),
+      message: t('settings_nim_delete_confirm_message'),
+      confirmText: t('settings_nim_delete_key'),
+      cancelText: t('cancel'),
+      kind: 'warn',
+    });
+    if (!confirmed) return;
+    busy = true;
+    updateControls();
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim/key'), { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showResult(data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked' : 'settings_nim_delete_failed');
+        return;
+      }
+      invalidateSpawnModelGroups();
+      await loadStatus();
+      showResult('settings_nim_deleted');
+    } catch (_) {
+      showResult('settings_nim_delete_failed');
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  });
+
+  void loadStatus();
+})();
 

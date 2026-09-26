@@ -62,6 +62,16 @@ Terminal pane #1              Terminal pane #2
 
 Gemini CLI は意図的に対象外です。
 
+## NVIDIA NIM trial route（OpenCode 専用）
+
+Hub の設定画面から NVIDIA NIM を OpenCode 専用 provider として有効にできます。推論リクエストは OpenCode から NVIDIA の Chat Completions endpoint（`/v1/chat/completions`）へ直接送られ、Hub は推論を proxy しません。Hub が NVIDIA の `/v1/models` を使うのは、モデルピッカーの一覧取得と Settings の接続試験です。この route は Codex CLI と Claude Code では使えません。
+
+設定は **設定 → NVIDIA NIM** で行います。API key は many-ai-cli のユーザー用保護領域に保存するか、Hub 起動前に `NVIDIA_API_KEY` 環境変数で渡せます。UI は key の有無と取得元だけを表示し、key 自体を返しません。Hub の環境変数で管理する key は UI から置換・削除できません。
+
+NVIDIA API の trial 利用は、別途適用される subscription がない限り、内部評価・テスト向けであり production 利用向けではありません。confidential / controlled / sensitive な情報を送らないでください。Trial Terms では User Content と Generated Content が NVIDIA の製品（AI model を含む）の改善に使われる場合があります。この連携は production の可用性や SLA を保証しません。[NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) を確認してください。
+
+モデルピッカーの一覧には Chat Completions 非対応のモデルが含まれる可能性があります。catalog に載っていることや `/v1/models` 接続試験の成功だけでは、個別モデルの prompt / streaming / tool-use / file edit / shell / resume 互換性を確認できません。特定モデルを使う前に、公開済みで機密情報を含まない検証用リポジトリで確認してください。[NVIDIA LLM API reference](https://docs.api.nvidia.com/nim/re/reference/llm-apis) に Chat Completions endpoint が記載されています。
+
 導入状況一覧（初回画面、および 設定 → AI CLI 連携）では、各 CLI のバージョンを確認し、その場で更新できます。実行するのはボタンを押したときだけで、Hub 起動時や定期実行では走りません。更新は各 provider の「バージョンと更新」設定に書かれたコマンドを実行し、実行前に確認ダイアログで実際のコマンドを見せます。実行中セッションがある CLI は、セッションが終わるまで更新できません。同梱の 7 本は既定の更新コマンドつきですが、Cursor Agent CLI と Command Code だけは既定で更新 OFF です（更新時に再ログインを求められることがあるため）。更新コマンドの変更や、追加した AI での更新の有効化は、設定 → AI CLI 連携 → 編集 → 「バージョンと更新」で行います。この機能が見えるのは Hub 自身が起動した、または `PATH` 上で見つけた CLI だけです。自分でターミナルを開いて動かしている CLI は対象外です。
 
 ---

@@ -11,6 +11,11 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **NVIDIA NIM is available as an optional OpenCode-only route.** The Hub
+  stores the key without returning it, lists NVIDIA models and tests the key
+  through `/v1/models`, while OpenCode connects directly to NVIDIA's Chat
+  Completions API. Trial limitations and per-model compatibility caveats are
+  documented; no production SLA is promised.
 - **You can now save an edited handoff prompt to the board without starting a
   successor session or spending AI tokens.** The derive dialog keeps AI-written
   and manually saved memos as separate files, lists both paths, and opens a

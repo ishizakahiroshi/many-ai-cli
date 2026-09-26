@@ -2,8 +2,17 @@ package hub
 
 import "testing"
 
+func TestNVIDIANIMRouteAcceptedAndNotLocal(t *testing.T) {
+	if !validRoute(RouteNVIDIANIM) {
+		t.Fatal("NVIDIA NIM route should be accepted")
+	}
+	if isLocalRoute(RouteNVIDIANIM) {
+		t.Fatal("NVIDIA NIM is hosted and must not be treated as a local route")
+	}
+}
+
 func TestEnvPresetForWithConfiguredOllamaBase(t *testing.T) {
-	baseURL := "http://192.168.11.50:11434"
+	baseURL := "http://192.0.2.1:11434"
 
 	claude := EnvPresetForWithOllamaBase("claude", RouteOllama, baseURL, "")
 	if !containsEnv(claude, "ANTHROPIC_BASE_URL="+baseURL) {
@@ -17,7 +26,7 @@ func TestEnvPresetForWithConfiguredOllamaBase(t *testing.T) {
 }
 
 func TestEnvPresetForWithConfiguredLMStudioBase(t *testing.T) {
-	baseURL := "http://192.168.11.50:1234"
+	baseURL := "http://192.0.2.1:1234"
 
 	claude := EnvPresetForWithOllamaBase("claude", RouteLMStudio, "", baseURL)
 	if !containsEnv(claude, "ANTHROPIC_BASE_URL="+baseURL) {

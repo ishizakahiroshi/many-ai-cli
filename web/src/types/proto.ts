@@ -4,6 +4,13 @@
 
 export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'command-code' | 'common' | string;
 
+/** REST response from /api/nvidia-nim. Secret values are never returned. */
+export interface NVIDIANIMSettingsStatus {
+  enabled: boolean;
+  api_key_configured: boolean;
+  api_key_source: 'none' | 'env' | 'file' | string;
+}
+
 export type SessionState =
   | 'standby'
   | 'running'

@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -207,7 +208,7 @@ func TestBuildModelsResponsePrefersNativeCatalogAndFallsBack(t *testing.T) {
 }
 
 func TestBuildModelsResponseUsesConfiguredOllamaBaseURL(t *testing.T) {
-	baseURL := "http://192.168.11.50:11434"
+	baseURL := "http://192.0.2.1:11434"
 	cache := &modelsCache{
 		local: &ollamaTagsCacheEntry{
 			models:    []Model{{ID: "qwen3:8b", Label: "qwen3:8b"}},
@@ -216,7 +217,7 @@ func TestBuildModelsResponseUsesConfiguredOllamaBaseURL(t *testing.T) {
 		},
 	}
 	resp := buildModelsResponse(cache, nil, "", nil, baseURL, "", false)
-	if got := resp.Sources["ollama_local"]; got != "http://192.168.11.50:11434/api/tags" {
+	if got := resp.Sources["ollama_local"]; got != "http://192.0.2.1:11434/api/tags" {
 		t.Fatalf("ollama source = %q, want configured /api/tags URL", got)
 	}
 }
@@ -275,4 +276,226 @@ func TestOpenCodeModelsSingleFlight(t *testing.T) {
 			t.Fatalf("request %d models = %+v", i, results[i])
 		}
 	}
+}
+
+func newNVIDIANIMTestModelsCache() *modelsCache {
+	now := time.Now()
+	return &modelsCache{
+		local: &ollamaTagsCacheEntry{fetchedAt: now, tagsURL: ollamaTagsURL("")},
+		lmStudio: &lmStudioModelsCacheEntry{
+			fetchedAt:    now,
+			modelsURL:    lmStudioModelsURL(""),
+			allowPrivate: false,
+		},
+		openCodeLoader: func(bool) ([]Model, error) {
+			return []Model{{ID: "opencode/test", Label: "OpenCode Test"}}, nil
+		},
+		nativeCLIModelLoaders: map[string]func(bool) ([]Model, error){
+			"cursor-agent": func(bool) ([]Model, error) { return nil, nil },
+			"grok":         func(bool) ([]Model, error) { return nil, nil },
+		},
+	}
+}
+
+func TestBuildModelsResponseAddsHostedTrialNVIDIANIMGroup(t *testing.T) {
+	const apiKey = "synthetic-nvidia-key"
+	cache := newNVIDIANIMTestModelsCache()
+	calls := 0
+	cache.nvidiaNIMLoader = func(gotKey string) ([]string, error) {
+		calls++
+		if gotKey != apiKey {
+			t.Errorf("catalog API key = %q, want injected key", gotKey)
+		}
+		return []string{"moonshotai/kimi-k3"}, nil
+	}
+	resp := buildModelsResponseWithNVIDIANIM(cache, nil, "", nil, "", "", false, nil, nvidiaNIMCatalogOptions{
+		enabled: true,
+		apiKey:  apiKey,
+	})
+	if calls != 1 {
+		t.Fatalf("catalog fetch calls = %d, want 1", calls)
+	}
+	var got *ModelGroup
+	for i := range resp.Groups {
+		if resp.Groups[i].Route == RouteNVIDIANIM {
+			got = &resp.Groups[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("NVIDIA NIM group missing: %+v", resp.Groups)
+	}
+	if got.Provider != "opencode" || !got.Hosted || !got.Trial {
+		t.Fatalf("NVIDIA NIM group metadata = %+v", got)
+	}
+	if len(got.Models) != 1 || got.Models[0].ID != "nvidia/moonshotai/kimi-k3" || got.Models[0].Label != "moonshotai/kimi-k3" {
+		t.Fatalf("NVIDIA NIM models = %+v", got.Models)
+	}
+	encoded, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), apiKey) {
+		t.Fatal("serialized model response contains the API key")
+	}
+}
+
+func TestBuildModelsResponseSkipsNVIDIANIMWhenDisabledOrKeyMissing(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		options nvidiaNIMCatalogOptions
+	}{
+		{name: "disabled", options: nvidiaNIMCatalogOptions{apiKey: "test-key"}},
+		{name: "missing key", options: nvidiaNIMCatalogOptions{enabled: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cache := newNVIDIANIMTestModelsCache()
+			cache.nvidiaNIMLoader = func(string) ([]string, error) {
+				t.Fatal("NVIDIA NIM loader called while disabled or unconfigured")
+				return nil, nil
+			}
+			resp := buildModelsResponseWithNVIDIANIM(cache, nil, "", nil, "", "", false, nil, tc.options)
+			for _, group := range resp.Groups {
+				if group.Route == RouteNVIDIANIM {
+					t.Fatal("unexpected NVIDIA NIM group")
+				}
+			}
+		})
+	}
+}
+
+func TestBuildModelsResponseIsolatesNVIDIANIMCatalogFailure(t *testing.T) {
+	cache := newNVIDIANIMTestModelsCache()
+	cache.nvidiaNIMLoader = func(string) ([]string, error) {
+		return nil, errors.New("synthetic failure")
+	}
+	resp := buildModelsResponseWithNVIDIANIM(cache, nil, "", nil, "", "", false, nil, nvidiaNIMCatalogOptions{
+		enabled: true,
+		apiKey:  "synthetic-key",
+	})
+	if !slicesContain(resp.Warnings, "nvidia_nim_unreachable") {
+		t.Fatalf("warnings = %v", resp.Warnings)
+	}
+	for _, group := range resp.Groups {
+		if group.Route == RouteNVIDIANIM {
+			t.Fatal("failed NVIDIA NIM catalog unexpectedly produced a group")
+		}
+		if group.Provider == "opencode" && len(group.Models) > 0 {
+			return
+		}
+	}
+	t.Fatal("NVIDIA NIM failure hid the existing OpenCode model group")
+}
+
+func TestNVIDIANIMModelsCacheTTLForceAndInvalidate(t *testing.T) {
+	calls := 0
+	cache := &modelsCache{nvidiaNIMLoader: func(string) ([]string, error) {
+		calls++
+		return []string{"vendor/model"}, nil
+	}}
+	for _, force := range []bool{false, false, true} {
+		if _, _, err := cache.getNVIDIANIMModels("test-key", force); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("loader calls after cache hit and forced refresh = %d, want 2", calls)
+	}
+	cache.mu.Lock()
+	cache.nvidiaNIM.fetchedAt = time.Now().Add(-nvidiaNIMModelsTTL - time.Second)
+	cache.mu.Unlock()
+	if _, _, err := cache.getNVIDIANIMModels("test-key", false); err != nil {
+		t.Fatal(err)
+	}
+	cache.invalidate()
+	if _, _, err := cache.getNVIDIANIMModels("test-key", false); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 4 {
+		t.Fatalf("loader calls after expiry and invalidation = %d, want 4", calls)
+	}
+}
+
+func TestNVIDIANIMModelsFailureUsesShortNegativeTTL(t *testing.T) {
+	calls := 0
+	cache := &modelsCache{nvidiaNIMLoader: func(string) ([]string, error) {
+		calls++
+		return nil, errors.New("temporary catalog failure")
+	}}
+	for range 2 {
+		if _, _, err := cache.getNVIDIANIMModels("test-key", false); err == nil {
+			t.Fatal("expected catalog failure")
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("loader calls during negative TTL = %d, want 1", calls)
+	}
+	cache.mu.Lock()
+	cache.nvidiaNIM.fetchedAt = time.Now().Add(-nvidiaNIMModelsNegTTL - time.Second)
+	cache.mu.Unlock()
+	if _, _, err := cache.getNVIDIANIMModels("test-key", false); err == nil {
+		t.Fatal("expected catalog failure after negative TTL expired")
+	}
+	if calls != 2 {
+		t.Fatalf("loader calls after negative TTL expiry = %d, want 2", calls)
+	}
+}
+
+func TestNVIDIANIMModelsSingleFlight(t *testing.T) {
+	cache := &modelsCache{}
+	started := make(chan struct{})
+	waiterObserved := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	calls := 0
+	cache.nvidiaNIMLoader = func(string) ([]string, error) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		close(started)
+		<-release
+		return []string{"vendor/model"}, nil
+	}
+	cache.nvidiaNIMWaitHook = func() { close(waiterObserved) }
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	for i := range errs {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _, errs[i] = cache.getNVIDIANIMModels("test-key", false)
+		}(i)
+	}
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("NVIDIA NIM model fetch did not start")
+	}
+	select {
+	case <-waiterObserved:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second NVIDIA NIM model request did not join the in-flight fetch")
+	}
+	close(release)
+	wg.Wait()
+	mu.Lock()
+	gotCalls := calls
+	mu.Unlock()
+	if gotCalls != 1 {
+		t.Fatalf("loader calls = %d, want 1", gotCalls)
+	}
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("request %d error = %v", i, err)
+		}
+	}
+}
+
+func slicesContain(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

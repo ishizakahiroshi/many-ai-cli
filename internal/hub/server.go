@@ -918,11 +918,14 @@ type Server struct {
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
-	sessionStore      *sessionstore.Store
-	push              *pushManager
-	notifyMgr         *notify.Manager
-	oneTapApprovals   *oneTapApprovalManager
-	orchestration     *orchestrationManager
+	// nvidiaNIMTester is overridden only by Hub tests; production uses the
+	// bounded, fixed-endpoint NVIDIA /v1/models probe.
+	nvidiaNIMTester func(string) error
+	sessionStore    *sessionstore.Store
+	push            *pushManager
+	notifyMgr       *notify.Manager
+	oneTapApprovals *oneTapApprovalManager
+	orchestration   *orchestrationManager
 	// approvalTriggerPhrases は承認パターンファイルの手がかり語（approval_trigger_phrases.go）。
 	// 未読み込み（nil）のときは既定の手がかり語だけで検出する。
 	approvalTriggerPhrases atomic.Pointer[approvalTriggerPhraseSet]
@@ -1516,6 +1519,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
+	mux.HandleFunc("/api/nvidia-nim", s.handleNVIDIANIMSettings)
+	mux.HandleFunc("/api/nvidia-nim/key", s.handleNVIDIANIMKeyDelete)
+	mux.HandleFunc("/api/nvidia-nim/test", s.handleNVIDIANIMTest)
 	mux.HandleFunc("/api/encoding-check", s.handleEncodingCheck)
 	mux.HandleFunc("/api/approval/status", s.handleApprovalStatus)
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)

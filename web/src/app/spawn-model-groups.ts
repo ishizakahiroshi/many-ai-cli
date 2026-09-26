@@ -18,14 +18,21 @@ export interface SpawnModelGroup {
   label: string;
   provider?: string;
   route?: string;
+  hosted?: boolean;
+  trial?: boolean;
   models: SpawnModel[];
 }
 
 let cachedGroups: SpawnModelGroup[] | null = null;
 let inFlight: Promise<SpawnModelGroup[]> | null = null;
+let cacheGeneration = 0;
 
 export function getCachedSpawnModelGroups(): SpawnModelGroup[] | null {
   return cachedGroups;
+}
+
+export function getSpawnModelGroupCacheGeneration(): number {
+  return cacheGeneration;
 }
 
 /** テストと fetch 完了時だけが書く。画面は loadSpawnModelGroups 経由。 */
@@ -33,10 +40,29 @@ export function setCachedSpawnModelGroups(groups: SpawnModelGroup[] | null): voi
   cachedGroups = Array.isArray(groups) ? groups : null;
 }
 
+export function invalidateSpawnModelGroups(): void {
+  cacheGeneration++;
+  cachedGroups = null;
+  inFlight = null;
+  if (typeof document !== 'undefined') {
+    document.dispatchEvent(new Event('spawn-model-groups-invalidated'));
+  }
+}
+
 export function groupHasModel(group: SpawnModelGroup | null | undefined, model: string): boolean {
   const m = (model || '').trim();
   if (!m || !group?.models) return false;
   return group.models.some((entry) => entry && entry.id === m);
+}
+
+export function spawnModelGroupPickerLabel(
+  group: SpawnModelGroup,
+  badges: { hosted?: string; trial?: string } = {},
+): string {
+  const tags: string[] = [];
+  if (group.hosted) tags.push(badges.hosted || 'Hosted');
+  if (group.trial) tags.push(badges.trial || 'Trial');
+  return tags.length > 0 ? `${group.label} · ${tags.join(' / ')}` : group.label;
 }
 
 export function getModelGroupsForProvider(
@@ -97,6 +123,7 @@ export function fillModelDatalist(
   datalist: HTMLDataListElement | null,
   groups: SpawnModelGroup[] | null | undefined,
   provider: string,
+  badges: { hosted?: string; trial?: string } = {},
 ): void {
   if (!datalist) return;
   datalist.innerHTML = '';
@@ -106,7 +133,7 @@ export function fillModelDatalist(
       if (!m?.id) continue;
       const opt = document.createElement('option');
       opt.value = m.id;
-      const label = `[${g.label}] ${m.label || m.id}`;
+      const label = `[${spawnModelGroupPickerLabel(g, badges)}] ${m.label || m.id}`;
       opt.setAttribute('label', label);
       opt.textContent = label;
       opt.dataset.route = g.route || '';
@@ -119,15 +146,17 @@ export async function loadSpawnModelGroups(token: string, force = false): Promis
   if (inFlight) return inFlight;
   if (!force && cachedGroups) return cachedGroups;
   const method = force ? 'POST' : 'GET';
+  const generation = cacheGeneration;
   const p = (async () => {
     try {
       const res = await fetch(`/api/models?token=${token}`, { method });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      cachedGroups = Array.isArray(data?.groups) ? data.groups : [];
-      return cachedGroups;
+      const groups = Array.isArray(data?.groups) ? data.groups : [];
+      if (generation === cacheGeneration) cachedGroups = groups;
+      return groups;
     } finally {
-      inFlight = null;
+      if (generation === cacheGeneration) inFlight = null;
     }
   })();
   inFlight = p;

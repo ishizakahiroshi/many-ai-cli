@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/nvidianim"
 )
 
 // Model は /api/models response の 1 件分。
@@ -36,6 +38,8 @@ type ModelGroup struct {
 	Label    string  `json:"label"`
 	Provider string  `json:"provider,omitempty"`
 	Route    string  `json:"route"`
+	Hosted   bool    `json:"hosted,omitempty"`
+	Trial    bool    `json:"trial,omitempty"`
 	Models   []Model `json:"models"`
 }
 
@@ -56,6 +60,8 @@ const (
 	nativeCLIModelsTTL     = 10 * time.Minute
 	nativeCLIModelsNegTTL  = 3 * time.Minute
 	nativeCLIModelsTimeout = 15 * time.Second
+	nvidiaNIMModelsTTL     = 10 * time.Minute
+	nvidiaNIMModelsNegTTL  = time.Minute
 )
 
 // lmStudioModelsResponse は LM Studio `/v1/models` の OpenAI 互換レスポンス構造。
@@ -125,6 +131,28 @@ type nativeCLIModelsCacheState struct {
 	fetch *nativeCLIModelsFetch
 }
 
+type nvidiaNIMModelsCacheEntry struct {
+	models         []Model
+	fetchedAt      time.Time
+	err            error
+	keyFingerprint [32]byte
+	generation     uint64
+}
+
+type nvidiaNIMModelsFetch struct {
+	done           chan struct{}
+	models         []Model
+	fetchedAt      time.Time
+	err            error
+	keyFingerprint [32]byte
+	generation     uint64
+}
+
+type nvidiaNIMCatalogOptions struct {
+	enabled bool
+	apiKey  string
+}
+
 // modelsCache は Ollama Local `/api/tags`、LM Studio `/v1/models` と、CLI から列挙する
 // provider model catalog の取得結果を保持する。
 // cloud 側のカタログは外部 fetch せず、ローカル daemon の remote_host で判定するため
@@ -138,6 +166,10 @@ type modelsCache struct {
 	openCodeFetch         *openCodeModelsFetch
 	nativeCLIModels       map[string]*nativeCLIModelsCacheState
 	nativeCLIModelLoaders map[string]func(bool) ([]Model, error)
+	nvidiaNIM             *nvidiaNIMModelsCacheEntry
+	nvidiaNIMFetch        *nvidiaNIMModelsFetch
+	nvidiaNIMLoader       func(string) ([]string, error)
+	nvidiaNIMWaitHook     func()
 	// openCodeLoader is nil in production. Tests use it to make the
 	// single-flight boundary deterministic without invoking a real CLI.
 	openCodeLoader func(bool) ([]Model, error)
@@ -265,6 +297,81 @@ func (c *modelsCache) getNativeCLIModels(provider string, force bool) ([]Model, 
 	close(fetch.done)
 	c.mu.Unlock()
 	return append([]Model(nil), models...), entry.fetchedAt, err
+}
+
+func (c *modelsCache) getNVIDIANIMModels(apiKey string, force bool) ([]Model, time.Time, error) {
+	if c == nil || strings.TrimSpace(apiKey) == "" {
+		return nil, time.Time{}, nil
+	}
+	fingerprint := sha256.Sum256([]byte(apiKey))
+	for {
+		c.mu.Lock()
+		if entry := c.nvidiaNIM; entry != nil && entry.keyFingerprint == fingerprint && entry.generation == c.generation {
+			ttl := nvidiaNIMModelsTTL
+			if entry.err != nil {
+				ttl = nvidiaNIMModelsNegTTL
+			}
+			if !force && time.Since(entry.fetchedAt) < ttl {
+				models := append([]Model(nil), entry.models...)
+				fetchedAt := entry.fetchedAt
+				err := entry.err
+				c.mu.Unlock()
+				return models, fetchedAt, err
+			}
+		}
+		if fetch := c.nvidiaNIMFetch; fetch != nil {
+			hook := c.nvidiaNIMWaitHook
+			mustRetry := fetch.generation != c.generation || fetch.keyFingerprint != fingerprint
+			c.mu.Unlock()
+			if hook != nil {
+				hook()
+			}
+			<-fetch.done
+			if mustRetry {
+				continue
+			}
+			return append([]Model(nil), fetch.models...), fetch.fetchedAt, fetch.err
+		}
+		loader := c.nvidiaNIMLoader
+		if loader == nil {
+			loader = nvidianim.FetchModels
+		}
+		fetch := &nvidiaNIMModelsFetch{
+			done:           make(chan struct{}),
+			keyFingerprint: fingerprint,
+			generation:     c.generation,
+		}
+		c.nvidiaNIMFetch = fetch
+		c.mu.Unlock()
+
+		ids, err := loader(apiKey)
+		models := make([]Model, 0, len(ids))
+		if err == nil {
+			for _, id := range ids {
+				models = append(models, Model{ID: "nvidia/" + id, Label: id})
+			}
+		}
+		entry := &nvidiaNIMModelsCacheEntry{
+			models:         append([]Model(nil), models...),
+			fetchedAt:      time.Now(),
+			err:            err,
+			keyFingerprint: fingerprint,
+			generation:     fetch.generation,
+		}
+		c.mu.Lock()
+		fetch.models = append([]Model(nil), models...)
+		fetch.fetchedAt = entry.fetchedAt
+		fetch.err = err
+		if c.nvidiaNIMFetch == fetch {
+			c.nvidiaNIMFetch = nil
+		}
+		if c.generation == fetch.generation {
+			c.nvidiaNIM = entry
+		}
+		close(fetch.done)
+		c.mu.Unlock()
+		return append([]Model(nil), models...), entry.fetchedAt, err
+	}
 }
 
 func nativeCLIModelsLoader(provider string) func(bool) ([]Model, error) {
@@ -689,6 +796,7 @@ func (c *modelsCache) invalidate() {
 	c.local = nil
 	c.lmStudio = nil
 	c.nativeCLIModels = nil
+	c.nvidiaNIM = nil
 	c.generation++
 	c.mu.Unlock()
 }
@@ -737,6 +845,10 @@ func (c *modelsCache) getLMStudioModels(force bool, modelsURL string, allowPriva
 // この設計により「daemon が知らない catalog 名」が選択肢に出ない（= 選んだら必ず呼べる）。
 // 新規 cloud モデルの発見は UI 側の外部リンク（https://ollama.com/search?c=cloud）に任せる。
 func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, lmStudioBaseURL string, force bool, privateHosts ...bool) ModelsResponse {
+	return buildModelsResponseWithNVIDIANIM(cache, remote, remoteSource, localConfig, ollamaBaseURL, lmStudioBaseURL, force, privateHosts, nvidiaNIMCatalogOptions{})
+}
+
+func buildModelsResponseWithNVIDIANIM(cache *modelsCache, remote *ttlCache[modelsDefaults], remoteSource string, localConfig []config.LocalModel, ollamaBaseURL string, lmStudioBaseURL string, force bool, privateHosts []bool, nvidiaNIM nvidiaNIMCatalogOptions) ModelsResponse {
 	if force && remote != nil {
 		remote.invalidate()
 	}
@@ -746,7 +858,7 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 	}
 
 	resp := ModelsResponse{
-		Sources: make(map[string]string, len(defaults)+4),
+		Sources: make(map[string]string, len(defaults)+5),
 	}
 	for catalogKey := range defaults {
 		resp.Sources[catalogKey] = remoteSource
@@ -835,6 +947,26 @@ func buildModelsResponse(cache *modelsCache, remote *ttlCache[modelsDefaults], r
 		})
 		if fetchedAt.After(newest) {
 			newest = fetchedAt
+		}
+	}
+
+	if nvidiaNIM.enabled && strings.TrimSpace(nvidiaNIM.apiKey) != "" {
+		nimModels, nimAt, nimErr := cache.getNVIDIANIMModels(nvidiaNIM.apiKey, force)
+		resp.Sources["nvidia_nim"] = nvidianim.CatalogURL
+		if nimErr != nil {
+			resp.Warnings = append(resp.Warnings, "nvidia_nim_unreachable")
+		} else if len(nimModels) > 0 {
+			resp.Groups = append(resp.Groups, ModelGroup{
+				Label:    "NVIDIA NIM",
+				Provider: "opencode",
+				Route:    RouteNVIDIANIM,
+				Hosted:   true,
+				Trial:    true,
+				Models:   nimModels,
+			})
+			if nimAt.After(newest) {
+				newest = nimAt
+			}
 		}
 	}
 

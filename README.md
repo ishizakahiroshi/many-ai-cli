@@ -62,6 +62,16 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 
 Gemini CLI is intentionally out of scope.
 
+## NVIDIA NIM trial route (OpenCode only)
+
+The Hub can add NVIDIA NIM as an optional OpenCode provider. OpenCode sends inference requests directly to NVIDIA's Chat Completions endpoint (`/v1/chat/completions`); the Hub does not proxy inference. The Hub uses NVIDIA's `/v1/models` endpoint only to populate the model picker and to run the Settings connection check. This route is not available for Codex CLI or Claude Code.
+
+Configure it in **Settings → NVIDIA NIM**. The API key can be saved in the user's protected many-ai-cli secret storage or supplied to the Hub as `NVIDIA_API_KEY`. The UI shows only whether a key is configured and its source; it never returns the key. A key managed by the Hub environment cannot be replaced or removed from the UI.
+
+NVIDIA API trial access is for internal testing and evaluation, not production use unless a separate applicable subscription permits it. Do not send confidential, controlled, or sensitive information. NVIDIA's trial terms say user and generated content may be used to improve NVIDIA products, including AI models. This integration makes no production availability or SLA promise. See the [NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
+
+The model picker reflects NVIDIA's catalog, which can include models that do not support Chat Completions. Catalog presence and a successful `/v1/models` check do not establish prompt, streaming, tool-use, file-edit, shell, or resume compatibility. Verify a specific model with a public, non-sensitive test repository before relying on it. The [NVIDIA LLM API reference](https://docs.api.nvidia.com/nim/re/reference/llm-apis) documents the Chat Completions endpoint.
+
 Want to run a CLI `many-ai-cli` does not wrap out of the box — including one it deliberately excludes here? You can register it yourself; see [Custom providers](#custom-providers-power-users) below.
 
 The install-status list (first-run screen, and Settings → AI CLI integrations) can check each CLI's version and update it from the Hub — on demand only, never on startup or on a schedule. Update runs the command from that provider's own "Version and update" settings, showing you the exact command in a confirmation dialog first; a CLI with a running session cannot be updated until the session ends. The bundled 7 providers ship with a default update command, except Cursor Agent CLI and Command Code, which default to update *off* because updating can ask you to log in again. Change any provider's update command, or turn it on for a CLI you added yourself, in Settings → AI CLI integrations → edit → *Version and update*. This only ever sees a CLI the Hub itself launched or found on `PATH` — a copy running in a terminal window you opened yourself is invisible to it.

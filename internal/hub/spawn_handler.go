@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/nvidianim"
 	"many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/wrapper"
@@ -95,9 +97,54 @@ func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []st
 	return wrapArgs
 }
 
+// routeSpawnEnv returns the additional child environment for a selected route.
+// The NVIDIA API key is only resolved and added for the OpenCode NIM route.
+func (s *Server) routeSpawnEnv(provider, route, model string) ([]string, error) {
+	if err := validateProviderRoute(provider, route); err != nil {
+		return nil, err
+	}
+	if route != RouteNVIDIANIM {
+		s.cfgMu.Lock()
+		ollamaBaseURL := s.cfg.Ollama.BaseURL
+		lmStudioBaseURL := s.cfg.LMStudio.BaseURL
+		s.cfgMu.Unlock()
+		return EnvPresetForWithOllamaBase(provider, route, ollamaBaseURL, lmStudioBaseURL), nil
+	}
+
+	s.cfgMu.Lock()
+	enabled := s.cfg.NVIDIANIM.Enabled
+	s.cfgMu.Unlock()
+	if !enabled {
+		return nil, errors.New("NVIDIA NIM route is disabled")
+	}
+	modelID, ok := parseOpenCodeNVIDIANIMModel(model)
+	if !ok {
+		return nil, errors.New("NVIDIA NIM model selection is invalid")
+	}
+	configDir, err := config.Dir()
+	if err != nil {
+		return nil, errors.New("NVIDIA API key is unavailable")
+	}
+	apiKey, _, err := nvidianim.ResolveAPIKey(configDir)
+	if err != nil || apiKey == "" {
+		return nil, errors.New("NVIDIA API key is unavailable")
+	}
+	configContent, err := mergeOpenCodeNVIDIANIMConfig(os.Getenv("OPENCODE_CONFIG_CONTENT"), modelID)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		nvidianim.APIKeyEnv + "=" + apiKey,
+		"OPENCODE_CONFIG_CONTENT=" + configContent,
+	}, nil
+}
+
 func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) (int, error) {
 	if !validOrchestrationProvider(spec.Provider) {
 		return 0, fmt.Errorf("invalid provider")
+	}
+	if err := validateProviderRoute(spec.Provider, spec.Route); err != nil {
+		return 0, err
 	}
 	// 更新中の provider は起動させない（子 plan
 	// plan_provider-cli-update_c3_update-api.md 内部 C1: 「更新中の集合に入った
@@ -220,6 +267,9 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
 		effectiveRoute = RouteForModel(spec.Provider, resolvedModel, known, knownLmStudio)
 	}
+	if err := validateProviderRoute(spec.Provider, effectiveRoute); err != nil {
+		return 0, err
+	}
 	if spec.Provider == "codex" && isLocalRoute(effectiveRoute) {
 		wrapArgs = append(wrapArgs, "--codex-oss")
 	}
@@ -271,12 +321,12 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
-	s.cfgMu.Lock()
-	ollamaBaseURL := s.cfg.Ollama.BaseURL
-	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
-	s.cfgMu.Unlock()
-	if envPreset := EnvPresetForWithOllamaBase(spec.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
-		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	routeEnv, err := s.routeSpawnEnv(spec.Provider, effectiveRoute, spec.Model)
+	if err != nil {
+		return 0, err
+	}
+	if len(routeEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, routeEnv)
 	}
 	if len(subEnv) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
@@ -754,6 +804,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid route")
 		return
 	}
+	if err := validateProviderRoute(body.Provider, body.Route); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "route is not available for this provider")
+		return
+	}
 	// 起動要求の共通 3 項目。空文字は「指定なし」なので、この検証は 3 項目を
 	// 送ってこない既存の呼び出しでは一切失敗しない。
 	if err := validateLaunchRequestOptions(body.Provider, &body.Effort, &body.ExecutionMode, &body.PermissionPreset); err != nil {
@@ -805,6 +859,20 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !spawnValidModelLabel(body.Model) || !spawnValidModelLabel(body.Label) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model or label value")
 		return
+	}
+	// Resolve the hosted route before creating pending-session state or a worktree.
+	// A model selected from the NVIDIA group also implies its route if an older
+	// caller omitted the explicit route field.
+	var nvidiaNIMEnv []string
+	nvidiaNIMSelected := body.Route == RouteNVIDIANIM ||
+		(body.Provider == "opencode" && strings.HasPrefix(strings.TrimSpace(body.Model), "nvidia/"))
+	if nvidiaNIMSelected {
+		var routeErr error
+		nvidiaNIMEnv, routeErr = s.routeSpawnEnv(body.Provider, RouteNVIDIANIM, body.Model)
+		if routeErr != nil {
+			writeJSONError(w, http.StatusBadRequest, "route_unavailable", routeErr.Error())
+			return
+		}
 	}
 	// ドライブ/FS ルートやホーム親ディレクトリ自身は cwd として弾く（AI がホーム配下を巻き込む事故防止）。
 	if spawnCwdTooBroad(cwd) {
@@ -1186,6 +1254,23 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
 		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known, knownLmStudio)
 	}
+	if err := validateProviderRoute(body.Provider, effectiveRoute); err != nil {
+		removeHeadlessPromptFile(promptPath)
+		cleanupIsolated()
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "route is not available for this provider")
+		return
+	}
+	routeEnv := nvidiaNIMEnv
+	if effectiveRoute != RouteNVIDIANIM {
+		var routeErr error
+		routeEnv, routeErr = s.routeSpawnEnv(body.Provider, effectiveRoute, resolvedModel)
+		if routeErr != nil {
+			removeHeadlessPromptFile(promptPath)
+			cleanupIsolated()
+			writeJSONError(w, http.StatusBadRequest, "route_unavailable", routeErr.Error())
+			return
+		}
+	}
 	// Codex CLI は env (OPENAI_BASE_URL 等) だけでは provider を切り替えず、
 	// CLI 引数 --oss / --profile で OSS (Ollama) provider に切替える設計。
 	// route=ollama / lm-studio のときに --oss を渡さないと OpenAI 純正へ向かい認証エラーで落ちる。
@@ -1209,14 +1294,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
-	s.cfgMu.Lock()
-	ollamaBaseURL := s.cfg.Ollama.BaseURL
-	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
-	s.cfgMu.Unlock()
-	if envPreset := EnvPresetForWithOllamaBase(body.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
-		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	if len(routeEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, routeEnv)
 		s.logger.Debug("spawn: env preset applied",
-			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
+			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(routeEnv))
 	}
 	if len(subEnv) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
