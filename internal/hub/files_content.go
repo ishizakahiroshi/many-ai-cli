@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"many-ai-cli/internal/handoff"
 )
 
 const filesContentMaxSize = 1 * 1024 * 1024 // 1 MiB
@@ -116,6 +118,7 @@ func canonicalReadPath(path string) string {
 //
 // 判定は 3 段:
 //  1. cwd / git root / attachments / orchestration 配下なら無条件に許可（readOnly=false）
+//     files-content に限り、看板が参照する handoff メモも読み取り専用で許可
 //  2. 許可ルート外は秘密情報 denylist（isSecretReadDenied）で拒否
 //  3. 直 loopback は許可ルート制限なしで読み取り専用許可、
 //     論理リモートはユーザーがチャットで言及したパスのみ読み取り専用許可
@@ -136,6 +139,9 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (fileReadGrant, error) 
 	}
 	pathParam = filepath.Clean(absPath)
 	readPath := canonicalReadPath(pathParam)
+	if r.URL.Path == "/api/files-content" && isRecordedHandoffMemoPath(pathParam, readPath) {
+		return fileReadGrant{path: readPath, readOnly: true}, nil
+	}
 
 	cwd := s.cwdForRequest(r)
 
@@ -170,6 +176,54 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (fileReadGrant, error) 
 		return fileReadGrant{path: readPath, readOnly: true, viaMention: true}, nil
 	}
 	return fileReadGrant{}, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
+}
+
+// isRecordedHandoffMemoPath allows the existing Markdown viewer to read only
+// an AI-written or manually saved memo that the matching handoff board already
+// references. The exact generated filename, a matching Record.Note path, and
+// the canonical target under handoff.Dir() are all required. This exception is
+// for /api/files-content only; it does not grant list, edit, or download access.
+func isRecordedHandoffMemoPath(path, canonicalPath string) bool {
+	base := filepath.Base(path)
+	if !strings.HasPrefix(base, "s") {
+		return false
+	}
+	name := strings.TrimPrefix(base, "s")
+	suffix := ".note.md"
+	if strings.HasSuffix(name, ".manual.note.md") {
+		suffix = ".manual.note.md"
+	} else if !strings.HasSuffix(name, suffix) {
+		return false
+	}
+	sessionID, err := strconv.Atoi(strings.TrimSuffix(name, suffix))
+	if err != nil || sessionID <= 0 {
+		return false
+	}
+	expectedPath, err := handoff.NotePathFor(sessionID)
+	if suffix == ".manual.note.md" {
+		expectedPath, err = handoff.ManualNotePathFor(sessionID)
+	}
+	if err != nil || filepath.Clean(expectedPath) != filepath.Clean(path) {
+		return false
+	}
+	handoffDir, err := handoff.Dir()
+	if err != nil {
+		return false
+	}
+	underHandoffDir, err := isPathUnderAllowedRoots(canonicalPath, handoffDir)
+	if err != nil || !underHandoffDir {
+		return false
+	}
+	records, err := handoff.ReadSession(sessionID)
+	if err != nil {
+		return false
+	}
+	for _, record := range records {
+		if filepath.Clean(record.Note) == filepath.Clean(path) {
+			return true
+		}
+	}
+	return false
 }
 
 // isPathMentionedInSession は ?session= のチャット（sessionstore）に

@@ -1,6 +1,7 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
+> 最終更新: 2026-09-24(木) 13:11:30 — テスト方針に「AI の確認では `bun run test` を使わない（先頭でビルドする）」を足した
+> 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
 
 `many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
 
@@ -93,6 +94,7 @@
 
 - **Go:** `go test ./...` で単体テスト。PTY 関連は OS 別 build tag で分岐したテストファイル（`_unix_test.go` / `_windows_test.go`）
 - **Web:** `bun run check`（TypeScript）+ `bun run test`（approval-parser fixtures）。Hub 起動 → モックラッパー → UI 操作の E2E は未整備のため、フロント大変更後は手動ブラウザ確認が必要。
+  - **AI の確認では `bun run test` も `bun --cwd web test` も使わない。** package の `test` は先頭で `bun run build` を実行して `web/dist` を書き換える（ビルドはユーザーが行う決まり）。ビルドせずに走らせるには、`web` ディレクトリで `bun test ./tests/<name>.test.ts`、fixture なら `bun test ./src/app/<name>-fixtures.ts` を使う（2026-09-23 と 2026-09-24 に同じ取り違えが 2 回）
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
 
 ### `go test ./...` の赤は、切り分けてから自分の変更を疑う

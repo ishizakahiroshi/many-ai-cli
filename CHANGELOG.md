@@ -11,6 +11,10 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **You can now save an edited handoff prompt to the board without starting a
+  successor session or spending AI tokens.** The derive dialog keeps AI-written
+  and manually saved memos as separate files, lists both paths, and opens a
+  recorded memo in the existing read-only Markdown preview when requested.
 - **`http://` / `https://` URLs are now clickable wherever the dashboard shows
   text, and every click behaves the same way.** Plain-text and source files in
   the file preview (the "Open in modal" window and the Files tab), code blocks

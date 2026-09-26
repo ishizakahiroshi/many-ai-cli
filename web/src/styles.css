@@ -806,6 +806,12 @@ header {
 .derive-dialog h2 { margin: 0 0 10px; font-size: 1rem; flex-shrink: 0; }
 .derive-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .derive-dialog-source { margin: 0 0 10px; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.derive-dialog-note-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.derive-dialog-note-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.derive-dialog-note-copy { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.derive-dialog-note-kind { font-size: 0.76rem; color: var(--text); }
+.derive-dialog-note-path { font-size: 0.7rem; color: var(--muted-2, #9aa4b2); word-break: break-all; }
+.derive-dialog-note-view { flex-shrink: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
 .derive-dialog-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 12px; margin-bottom: 12px; }
 .derive-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; }
 .derive-field[hidden] { display: none; }
@@ -857,7 +863,7 @@ header {
 }
 .derive-dialog-error { margin: 10px 0 0; font-size: 0.74rem; color: var(--danger, #f87171); flex-shrink: 0; }
 .derive-dialog-error[hidden] { display: none; }
-.derive-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 15px; flex-shrink: 0; }
+.derive-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 15px; flex-shrink: 0; }
 .derive-dialog-actions button { padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
 .derive-dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .derive-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }

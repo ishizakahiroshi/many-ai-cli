@@ -49,6 +49,57 @@ func (s *Server) appendHandoff(sessionID int, r handoff.Record) {
 	}
 }
 
+const handoffManualMemoMaxBytes = 256 * 1024
+
+// saveManualHandoffMemo stores the edited handoff prompt separately from an
+// AI-written note and appends only its path to the board. The authenticated
+// Markdown file preview can later read this recorded path on explicit request.
+func (s *Server) saveManualHandoffMemo(sessionID int, text string) (string, string) {
+	if !s.handoffEnabled() {
+		return "", "handoff_disabled"
+	}
+	if len([]byte(text)) > handoffManualMemoMaxBytes {
+		return "", "memo_too_large"
+	}
+	if strings.TrimSpace(text) == "" {
+		return "", "memo_empty"
+	}
+	records, err := handoff.ReadSession(sessionID)
+	if err != nil {
+		s.logger.Warn("handoff manual memo board read failed", "session_id", sessionID, "err", err)
+		return "", "memo_save_failed"
+	}
+	if len(records) == 0 {
+		return "", "handoff_record_not_found"
+	}
+	path, err := handoff.ManualNotePathFor(sessionID)
+	if err != nil {
+		s.logger.Warn("handoff manual memo path failed", "session_id", sessionID, "err", err)
+		return "", "memo_save_failed"
+	}
+	if err := os.MkdirAll(filepath.Dir(path), sessionlog.PrivateDirMode); err != nil {
+		s.logger.Warn("handoff manual memo directory create failed", "session_id", sessionID, "err", err)
+		return "", "memo_save_failed"
+	}
+	body := sessionlog.MaskSecrets(text)
+	if strings.TrimSpace(body) == "" {
+		return "", "memo_empty"
+	}
+	if err := os.WriteFile(path, []byte(body), sessionlog.PrivateFileMode); err != nil {
+		s.logger.Warn("handoff manual memo write failed", "session_id", sessionID, "err", err)
+		return "", "memo_save_failed"
+	}
+	if err := os.Chmod(path, sessionlog.PrivateFileMode); err != nil {
+		s.logger.Warn("handoff manual memo permissions failed", "session_id", sessionID, "err", err)
+		return "", "memo_save_failed"
+	}
+	if err := handoff.Append(sessionID, handoff.Record{Kind: handoff.KindNote, Note: path}); err != nil {
+		s.logger.Warn("handoff manual memo board append failed", "session_id", sessionID, "err", err)
+		return "", "memo_save_failed"
+	}
+	return path, ""
+}
+
 // recordHandoffSessionStart writes a session_start line at initial
 // registration (not on reattach — reattach continues the same session id, it
 // does not start a new one). Only public session metadata goes in; the
@@ -560,12 +611,13 @@ type handoffPreview struct {
 	HandoffTo int `json:"handoff_to,omitempty"`
 	// TranscriptPath / NotePath are the two "thicker than the board" routes
 	// (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md).
-	// Both are **paths only**, and both are present only when the file is
-	// actually there right now: a path recorded 10 days ago whose file the user
-	// has since deleted must not be offered to a successor as something to read.
-	TranscriptPath string `json:"transcript_path,omitempty"`
-	NotePath       string `json:"note_path,omitempty"`
-	Markdown       string `json:"markdown,omitempty"`
+	// They remain paths only. TranscriptPath and the newest NotePath are present
+	// only while their files exist; NotePaths preserves every distinct recorded
+	// memo path that still exists so the UI can show both AI and manual notes.
+	TranscriptPath string   `json:"transcript_path,omitempty"`
+	NotePath       string   `json:"note_path,omitempty"`
+	NotePaths      []string `json:"note_paths,omitempty"`
+	Markdown       string   `json:"markdown,omitempty"`
 	// CandidateProviders (handleHandoffItem のみが埋める): 起動先として選べる
 	// provider の一覧。子 plan 内部 C2「同一 provider の別 subscription
 	// profile は候補に出さない」を満たすため、この一覧に元セッションの
@@ -584,6 +636,7 @@ func (s *Server) handoffIdentityFor(sessionID int) (handoffPreview, error) {
 		return preview, err
 	}
 	preview.Exists = len(records) > 0
+	notePathsSeen := make(map[string]bool)
 	for _, r := range records {
 		switch r.Kind {
 		case handoff.KindSessionStart:
@@ -598,14 +651,20 @@ func (s *Server) handoffIdentityFor(sessionID int) (handoffPreview, error) {
 		}
 		// Transcript / Note are read from every kind that can carry them
 		// (session_start, session_end, and the dedicated transcript/note
-		// lines), newest wins — same rule as render.go. isExistingFile is the
-		// gate: a recorded path whose file is gone is reported as absent rather
-		// than handed to a successor that would then fail to open it.
+		// lines). The latest path wins the singular compatibility field; all
+		// existing distinct memo paths are also returned newest-last.
+		// isExistingFile is the gate: a recorded path whose file is gone is
+		// reported as absent rather than handed to a successor that would then
+		// fail to open it.
 		if path := strings.TrimSpace(r.Transcript); path != "" && isExistingFile(path) {
 			preview.TranscriptPath = path
 		}
 		if path := strings.TrimSpace(r.Note); path != "" && isExistingFile(path) {
 			preview.NotePath = path
+			if !notePathsSeen[path] {
+				notePathsSeen[path] = true
+				preview.NotePaths = append(preview.NotePaths, path)
+			}
 		}
 	}
 	return preview, nil

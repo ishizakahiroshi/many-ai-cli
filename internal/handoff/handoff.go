@@ -20,10 +20,12 @@
 //
 // A path is allowed; what is at the end of it is not. Transcript and Note name
 // files the successor opens with its own tools (親 plan:
-// docs/local/plan_derived-session-launch.md 不変条件 2) — the Hub never reads
-// either file, never copies a line of it into a Record, and never sends it
-// anywhere. Adding "the first 200 lines of the transcript" as a field would be
-// the thing this type exists to prevent.
+// docs/local/plan_derived-session-launch.md 不変条件 2). The authenticated Hub
+// file preview may display a Note only after an explicit user action; its
+// contents are never copied into a Record or the rendered handoff markdown.
+// Transcript contents remain successor-only. Adding "the first 200 lines of
+// the transcript" as a Record field would be the thing this type exists to
+// prevent.
 //
 // This mirrors internal/subscription/adapter.go and internal/doctor/residue.go:
 // the rule lives next to the code that would break it, not in CLAUDE.md.
@@ -119,9 +121,10 @@ type Record struct {
 	// ever reaches a Record (see the package doc). Empty for providers whose
 	// transcript location many-ai-cli cannot resolve.
 	Transcript string `json:"transcript,omitempty"`
-	// Note is the absolute path of the handoff memo the predecessor was asked
-	// to write (~/.many-ai-cli/handoff/s<id>.note.md). Same rule as Transcript:
-	// the Hub records the path and never reads the file.
+	// Note is the absolute path of an AI-written or manually saved handoff memo
+	// under ~/.many-ai-cli/handoff. The Hub records only the path; the existing
+	// authenticated Markdown preview may read this exact recorded file after an
+	// explicit user action.
 	Note string `json:"note,omitempty"`
 }
 
@@ -211,6 +214,18 @@ func NotePathFor(sessionID int) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, fmt.Sprintf("s%d.note.md", sessionID)), nil
+}
+
+// ManualNotePathFor returns the separate file used when a person saves the
+// edited handoff prompt from the derive dialog. It shares Note's path-only
+// board representation and configurable handoff retention (14 days by
+// default), but never overwrites the file an AI may have written at NotePathFor.
+func ManualNotePathFor(sessionID int) (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, fmt.Sprintf("s%d.manual.note.md", sessionID)), nil
 }
 
 // ReadSession is a small convenience wrapper over PathFor+ReadAll for the
@@ -371,9 +386,9 @@ func PruneOlderThan(cutoff time.Time) error {
 
 // isHandoffFileName reports whether name is a file this package owns inside
 // Dir(): a session's jsonl log, its rendered markdown preview
-// (RenderedPathFor), or the memo its AI was asked to write (NotePathFor). All
-// three share the same 14-day retention sweep (子 plan 内部 C1 「C1（器）の保持
-// 14 日と同じ掃除に乗せる」; メモも同じ 14 日: 子 plan
+// (RenderedPathFor), or an AI-written or manually saved handoff memo. All
+// of them share the configured retention sweep (14 days by default; 子 plan
+// 内部 C1 「C1（器）の保持と同じ掃除に乗せる」: 子 plan
 // docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2).
 func isHandoffFileName(name string) bool {
 	return strings.HasSuffix(name, ".jsonl") ||

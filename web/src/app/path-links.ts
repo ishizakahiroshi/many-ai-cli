@@ -215,9 +215,9 @@ export function closeFileModal() {
   }
 }
 
-export function openFileModal(filePath, sessionId) {
+export function openFileModal(filePath, sessionId, cwdOverride = '') {
   const ses = sessions.get(sessionId);
-  const cwd = ses?.cwd;
+  const cwd = ses?.cwd || cwdOverride || dirnameForPath(filePath);
   if (!cwd) { showToast(t('link_open_error')); return; }
   closeFileModal(); // 二重起動防止
 

@@ -20,6 +20,7 @@ import { activateSession } from './session-list.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { loadSubscriptions, selectableProfiles } from './subscriptions.js';
 import { appConfirm } from './settings.js';
+import { openFileModal } from './path-links.js';
 import { approvalDisplayHtml, headlessUnsupportedNoticeHtml, permissionPresetLabel } from './spawn-confirm.js';
 import {
   EXECUTION_MODE_SCHEMA,
@@ -70,6 +71,8 @@ interface DerivePreviewResponse {
   transcript_path?: string;
   /** 前任が書いた引き継ぎメモの絶対パス（同上）。 */
   note_path?: string;
+  /** 看板に記録されているメモの絶対パス一覧。 */
+  note_paths?: string[];
 }
 
 interface DeriveProviderOption {
@@ -87,13 +90,14 @@ interface DeriveSource {
   markdown: string;
   candidateProviders: string[];
   /**
-   * 後継が自分のツールで読む 2 つのパス（子 plan:
-   * docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C1・C2）。
-   * 中身は Hub を通らない。**渡す前に人が見る**ので、文面欄の md に載るのとは別に、
-   * ダイアログにも 1 行ずつ出す（親 plan 不変条件 3）。
+   * 後継が自分のツールで読む会話ログと、引き継ぎメモへのパス。
+   * メモは同じダイアログから既存 Markdown ビューアで明示的に開けるが、本文は Record
+   * と引き継ぎ markdown には入らない。**渡す前に人が見る**ので、文面欄の md に載る
+   * のとは別に、パスとメモ表示ボタンをダイアログにも出す。
    */
   transcriptPath: string;
   notePath: string;
+  notePaths: string[];
 }
 
 function providerLabel(value: string, extras: DeriveProviderOption[]): string {
@@ -134,6 +138,7 @@ async function loadSource(sessionID: number): Promise<DeriveSource> {
     candidateProviders: [],
     transcriptPath: '',
     notePath: '',
+    notePaths: [],
   };
   try {
     const res = await apiFetch(`/api/handoff/${encodeURIComponent(String(sessionID))}`);
@@ -145,6 +150,12 @@ async function loadSource(sessionID: number): Promise<DeriveSource> {
       source.candidateProviders = Array.isArray(data.candidate_providers) ? data.candidate_providers : [];
       source.transcriptPath = String(data.transcript_path || '');
       source.notePath = String(data.note_path || '');
+      source.notePaths = Array.isArray(data.note_paths)
+        ? data.note_paths.map((path) => String(path || '')).filter(Boolean)
+        : [];
+      if (source.notePath && !source.notePaths.includes(source.notePath)) {
+        source.notePaths.push(source.notePath);
+      }
       // 看板側の live は Hub の session 表を見た結果なので、こちらを優先する。
       if (typeof data.live === 'boolean') source.live = data.live;
     }
@@ -243,7 +254,7 @@ function renderDeriveForm(
 
   bodyEl.innerHTML = `
     <p class="derive-dialog-source">${escapeHtml(tx('handoff_dialog_source', '元セッション'))}: #${escapeHtml(String(source.sessionID))} ${escapeHtml(providerLabel(source.provider, customProviders))} — ${escapeHtml(source.cwd)}</p>
-    ${sourcePathHtml(tx('derive_note_path', '引き継ぎメモ'), source.notePath)}
+    <div class="derive-dialog-note-list" data-derive-note-list></div>
     ${sourcePathHtml(tx('derive_transcript_path', '前任の会話ログ'), source.transcriptPath)}
     <div class="derive-dialog-fields">
       <label class="derive-field">
@@ -317,9 +328,29 @@ function renderDeriveForm(
   const approvalEl = bodyEl.querySelector('[data-derive-approval]') as HTMLElement;
   const cwdTerm = bodyEl.querySelector('[data-derive-cwd-term]') as HTMLElement;
   const cwdEl = bodyEl.querySelector('[data-derive-cwd]') as HTMLElement;
-  const sourcePathEls = Array.from(bodyEl.querySelectorAll('[data-derive-source-path]')) as HTMLElement[];
   const promptLabel = bodyEl.querySelector('[data-derive-prompt-label]') as HTMLElement;
   const promptArea = bodyEl.querySelector('#derive-dialog-prompt') as HTMLTextAreaElement;
+  const noteListEl = bodyEl.querySelector('[data-derive-note-list]') as HTMLElement;
+
+  function renderNotePaths(): void {
+    noteListEl.innerHTML = source.notePaths.map((path, index) => {
+      const label = path.toLowerCase().endsWith('.manual.note.md')
+        ? tx('derive_note_manual', '手動保存メモ')
+        : tx('derive_note_ai', 'AI作成メモ');
+      const hidden = kind === 'handoff' ? '' : ' hidden';
+      return `<div class="derive-dialog-note-entry" data-derive-source-path${hidden}>
+        <div class="derive-dialog-note-copy"><span class="derive-dialog-note-kind">${escapeHtml(label)}</span><span class="derive-dialog-note-path">${escapeHtml(path)}</span></div>
+        <button type="button" class="derive-dialog-note-view" data-derive-open-note="${index}">${escapeHtml(tx('derive_note_view', 'Markdownで表示'))}</button>
+      </div>`;
+    }).join('');
+    noteListEl.querySelectorAll<HTMLButtonElement>('[data-derive-open-note]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const path = source.notePaths[Number(button.dataset.deriveOpenNote)];
+        if (path) openFileModal(path, source.sessionID, source.cwd);
+      });
+    });
+  }
+  renderNotePaths();
 
   let promptEdited = false;
   promptArea.addEventListener('input', () => { promptEdited = true; setError(''); refreshStartEnabled(); });
@@ -476,10 +507,12 @@ function renderDeriveForm(
 
   const startBtn = document.createElement('button');
   const cancelBtn = document.createElement('button');
+  const saveBtn = document.createElement('button');
+  let saving = false;
 
   function refreshStartEnabled(): void {
     const reason = deriveSubmitBlockedReason(currentSelection(), getCachedSpawnModelGroups());
-    startBtn.disabled = submitting || reason !== '';
+    startBtn.disabled = submitting || saving || reason !== '';
     startBtn.title = reason === 'provider' ? tx('derive_error_provider', 'CLI を選んでください')
       : reason === 'role' ? tx('derive_error_role', '役割を選んでください')
         : reason === 'prompt' ? tx('derive_error_prompt', '渡す文面を入れてください')
@@ -494,7 +527,8 @@ function renderDeriveForm(
     cwdTerm.hidden = kind !== 'handoff';
     cwdEl.hidden = kind !== 'handoff';
     // 前任のメモ・会話ログは引き継ぎで渡すもの。子は親の続きではないので出さない。
-    sourcePathEls.forEach((el) => { el.hidden = kind !== 'handoff'; });
+    bodyEl.querySelectorAll<HTMLElement>('[data-derive-source-path]').forEach((el) => { el.hidden = kind !== 'handoff'; });
+    saveBtn.hidden = kind !== 'handoff';
     promptLabel.textContent = kind === 'handoff'
       ? tx('handoff_dialog_prompt_label', '初期プロンプト（編集可）')
       : tx('derive_prompt_label_child', '最初の指示（編集可・空でも可）');
@@ -575,9 +609,48 @@ function renderDeriveForm(
     setError(String(data?.detail || data?.error || `HTTP ${response.status}`));
   }
 
+  async function saveManualMemo(): Promise<void> {
+    if (saving || kind !== 'handoff') return;
+    saving = true;
+    saveBtn.disabled = true;
+    refreshStartEnabled();
+    setError('');
+    try {
+      const response = await apiFetch(`/api/handoff/${encodeURIComponent(String(source.sessionID))}/manual-note`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: promptArea.value }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const code = String(data?.error || '');
+        const message = code === 'memo_empty' ? tx('handoff_manual_empty', '保存する文面を入力してください')
+          : code === 'memo_too_large' ? tx('handoff_manual_too_large', '文面が大きすぎます')
+            : code === 'handoff_record_not_found' ? tx('handoff_manual_no_record', '看板の記録が見つかりません')
+              : code === 'handoff_disabled' ? tx('handoff_manual_disabled', '引き継ぎ記録が無効です')
+                : String(data?.detail || data?.error || `HTTP ${response.status}`);
+        setError(message);
+        return;
+      }
+      const path = String(data?.note_path || '');
+      if (path && !source.notePaths.includes(path)) source.notePaths.push(path);
+      renderNotePaths();
+      showToast(tx('handoff_manual_saved', '看板に保存しました'));
+    } catch (error) {
+      setError(String(error instanceof Error ? error.message : error));
+    } finally {
+      saving = false;
+      saveBtn.disabled = false;
+      refreshStartEnabled();
+    }
+  }
+
   cancelBtn.type = 'button';
   cancelBtn.textContent = tx('handoff_dialog_cancel', 'キャンセル');
   cancelBtn.addEventListener('click', close);
+  saveBtn.type = 'button';
+  saveBtn.textContent = tx('handoff_manual_save', '看板に保存');
+  saveBtn.addEventListener('click', () => { void saveManualMemo(); });
   startBtn.type = 'button';
   startBtn.className = 'primary';
   startBtn.textContent = tx('handoff_dialog_start', '起動');
@@ -595,6 +668,7 @@ function renderDeriveForm(
   });
   actionsEl.innerHTML = '';
   actionsEl.appendChild(cancelBtn);
+  actionsEl.appendChild(saveBtn);
   actionsEl.appendChild(startBtn);
 
   kindSelect.value = kind;
