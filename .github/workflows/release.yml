@@ -130,7 +130,7 @@ jobs:
       # release 側の gate が無いと publish 後の artifact 検査まで止められない。
       - name: Check instrumentation before publish
         if: ${{ env.NPM_ONLY != 'true' }}
-        run: node scripts/check-instrumentation.mjs
+        run: node scripts/check-instrumentation.mjs --release
 
       # winget-pkgs fork を upstream (microsoft/winget-pkgs) と同期してから
       # goreleaser の winget publisher に使わせる。winget-pkgs は1日数百コミット

@@ -1,9 +1,19 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-09-24(木) 13:11:30 — テスト方針に「AI の確認では `bun run test` を使わない（先頭でビルドする）」を足した
+> 最終更新: 2026-09-27 05:23:16 — 調査用のログ・追跡・監視機能全般を purge で分離し、リリースへ混ぜない方針を明文化
 > 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
 
 `many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
+
+## 調査用機能の分離と purge
+
+調査のために仕込むログ収集・追跡・監視・計測機能は、種類や案件を問わずリリースへ混ぜない。実装時から、既存の `debug-purge` で一式を外し、必要なら `debug-restore` で戻せる構造にする。通常の製品機能として提供する運用ログとは区別する。
+
+- 記録点は共有の `probe` を経由し、収集・タイマー・Worker・保存 API・専用 UI・付随テストは専用ファイルへ分離する。専用部分を消した後、共有の記録点は no-op になり、通信・保存・監視を起こさないこと。
+- 調査用 Go は `maidebug`、Web は `web/src/debug/` と `MAI_DEBUG` で同梱を制限する。通常ビルドに入れて設定だけで OFF にする方式は使わない。
+- `instrumentation.json` に専用 `files`、共有 `sharedFiles`、`channels`、`endpoints`、`artifactNeedles`、期限と理由を登録する。収集した内容を削除するだけでは機能の purge にならない。
+- リリース前に全 active 項目を既存の `make debug-purge id=<id>` で1件ずつパージし、登録解除と台帳更新をまとめて行う。手作業でファイルを消す運用へ戻さない。単独の撤去コミットを残す既存ルールに従い、再調査時は `debug-restore` を使う。
+- `node scripts/check-instrumentation.mjs --release` は未パージの項目が1件でもあれば失敗する。期限内・ビルドタグ付きでも例外にしない。通常の検査は調査中の active を許可し、成果物は既存 `check-artifact-clean.mjs` でも照合する。台帳の具体的なルールと機械検査を正本とする。
 
 ## 言語別コーディング規約
 

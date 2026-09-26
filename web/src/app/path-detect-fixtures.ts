@@ -1,13 +1,50 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Worker } from 'node:worker_threads';
 import {
   expandLogicalPathLine,
   findPathCandidates,
   isPathContinuationText,
   joinPathWrapRowTexts,
   looksLikePathWrapContinuation,
+  trimTerminalPathCandidate,
+  trimWindowsPathCandidate,
   type PathWrapRow,
 } from './path-detect.js';
+
+test('path suffix: trailing punctuation is removed and internal punctuation is preserved', () => {
+  assert.equal(trimTerminalPathCandidate('  /work/report.md ) ] ;  '), '/work/report.md');
+  assert.equal(trimTerminalPathCandidate('D:/work/(draft)))x.txt'), 'D:/work/(draft)))x.txt');
+  assert.equal(trimWindowsPathCandidate('D:/work/report.md )\n'), 'D:/work/report.md )\n');
+  assert.equal(trimWindowsPathCandidate('D:/work/report.md )'), 'D:/work/report.md');
+});
+
+test('path suffix: long internal punctuation completes without blocking the caller', async () => {
+  // Run in a terminable worker: a regression must fail rather than hang the test runner.
+  // Source fixtures run through Bun; compiled fixtures resolve the adjacent JS file.
+  const moduleUrl = new URL(import.meta.url.endsWith('.ts') ? './path-detect.ts' : './path-detect.js', import.meta.url).href;
+  const worker = new Worker(`
+    const { parentPort, workerData } = require('node:worker_threads');
+    (async () => {
+      const m = await import(workerData);
+      const text = 'D:/work/' + ')'.repeat(10000) + 'x';
+      parentPort.postMessage(m.trimTerminalPathCandidate(text) === text && m.trimWindowsPathCandidate(text) === text);
+    })().catch(error => { throw error; });
+  `, { eval: true, workerData: moduleUrl });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('path trimming exceeded 5 seconds')), 5000);
+      worker.once('message', result => {
+        clearTimeout(timer);
+        if (result === true) resolve();
+        else reject(new Error('internal punctuation was modified'));
+      });
+      worker.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+  } finally {
+    await worker.terminate();
+  }
+});
 
 function row(text: string, opts: { wrapped?: boolean; width?: number } = {}): PathWrapRow {
   return {

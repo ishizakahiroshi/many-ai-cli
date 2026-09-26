@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "9ba73665e9dcf8cf8d905502d4e4a184500cb8c1",
+    "commit": "f51800b214d110aec3c9652769dcc5f4ac8b280b",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1059,
-    "analyzed": 828,
+    "discovered": 1064,
+    "analyzed": 833,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 199,
@@ -5364,6 +5364,64 @@
     },
     {
       "path": "internal/hub/custom_provider_info_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/debug_ui_freeze.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/debug_ui_freeze_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -20077,6 +20135,36 @@
       "unresolved": []
     },
     {
+      "path": "scripts/check-instrumentation.test.mjs",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "scripts/check-slash-commands.mjs",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -20833,8 +20921,8 @@
       "status": "unresolved",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -25424,8 +25512,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -25716,6 +25804,38 @@
         "screen_to_api": {
           "state": "none_observed",
           "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/debug/ui-freeze.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "One module in two realms: the page registers the sink; its dedicated worker"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "value",
+          "value": [
+            "/api/debug/ui-freeze"
+          ]
         }
       },
       "unresolved": []
@@ -27168,6 +27288,36 @@
     },
     {
       "path": "web/tests/turn-end-notify-store.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/ui-freeze.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

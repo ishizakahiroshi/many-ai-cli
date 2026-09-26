@@ -11,3 +11,5 @@
 // 撤去（make debug-purge）はこのファイルを import 0 本の状態へ戻し、
 // 対応する module ファイルを削除する。
 
+import './ui-freeze.js';
+

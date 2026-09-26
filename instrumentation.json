@@ -36,6 +36,7 @@
     "  11. 観測コードの撤去は単独コミットにする。restore は撤去コミットの逆 diff を path 限定で適用する",
     "  12. 再導入は node scripts/debug-restore.mjs --id=<id> --dry-run で対象を確認してから行い、--purge は sharedFiles に触れず sink だけを片付ける",
     "  13. --purge は --id=<id> で 1 件ずつ（ルール 11 の単独コミットのため）。--id 無しは止まる。active 全件を消すときだけ --all を明示する（2026-09-07 追加。撤去前に手元ログの記録件数を数えておく）",
+    "  14. 調査用のログ収集・追跡・監視・計測機能は全件リリース前に purge 必須。個別フラグでの例外は設けない。--release 検査が全件 removed と専用実体・登録の撤去を要求する。build tag による非同梱だけで済ませない",
     "検査: node scripts/check-instrumentation.mjs（release の前提チェックから呼ぶ）"
   ],
   "entries": [
@@ -274,6 +275,39 @@
       ],
       "removedIn": "unreleased",
       "removedOn": "2026-09-04"
+    },
+    {
+      "id": "ui-freeze-recorder",
+      "status": "active",
+      "purpose": "音声入力中のタブ停止に備え、処理前後と heartbeat 欠落を別 Worker から保存する。本文は保存しない",
+      "addedIn": "unreleased",
+      "gate": "opt-in build: MAI_DEBUG=1 / --debug and Go -tags maidebug; no runtime setting changes",
+      "files": [
+        "web/src/debug/ui-freeze.ts",
+        "web/tests/ui-freeze.test.ts",
+        "internal/hub/debug_ui_freeze.go",
+        "internal/hub/debug_ui_freeze_test.go"
+      ],
+      "sharedFiles": [
+        "web/src/debug/probe.ts",
+        "web/src/app.ts",
+        "web/src/app/voice.ts",
+        "web/src/app/terminal.ts"
+      ],
+      "channels": [
+        "ui.freeze"
+      ],
+      "endpoints": [
+        "/api/debug/ui-freeze"
+      ],
+      "artifactNeedles": [
+        "/api/debug/ui-freeze",
+        "ui-freeze.jsonl",
+        "ui-freeze recorder unavailable"
+      ],
+      "due": "2026-10-04",
+      "removalCondition": "原因特定後、または次回リリース前の早い方で make debug-purge id=ui-freeze-recorder を実行。利用者の明示指示により、原因未確定でもリリース前の purge は必須。共有フックは残し sink と登録をパージする",
+      "reason": "2026-09-27 新タブでも音声入力中に全操作が停止。停止後のブラウザ観測はタイムアウトし現行ログに証拠がない。1MB x3、認証必須、入力本文を受理しない固定スキーマ。"
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { probeSpan } from '../debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast } from './util.js';
@@ -325,25 +326,28 @@ import { voiceInput } from './voice-engine.js';
   });
 
   rec.on('result', ({ transcript, isFinal }) => {
-    voiceBar.classList.remove('voice-processing');
-    if (transcript.length > lastInterimLen) {
-      lastKickAt = performance.now();
-      voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
-    }
-    lastInterimLen = isFinal ? 0 : transcript.length;
-    inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
-    if (isFinal) {
-      inputEl.value += ' ';
-      interimStart = inputEl.value.length;
-      const _tp = getActiveTriggerPhrase();
-      if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
-        rec.requestStop();
-        doSend(activeSessionId);
-        return;
+    const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'voice.result', size: transcript.length }));
+    try {
+      voiceBar.classList.remove('voice-processing');
+      if (transcript.length > lastInterimLen) {
+        lastKickAt = performance.now();
+        voiceIntensityTarget = Math.max(voiceIntensityTarget, 0.85);
       }
-    }
-    autoExpand();
-    updateSlashMenu();
+      lastInterimLen = isFinal ? 0 : transcript.length;
+      inputEl.value = inputEl.value.slice(0, interimStart) + transcript;
+      if (isFinal) {
+        inputEl.value += ' ';
+        interimStart = inputEl.value.length;
+        const _tp = getActiveTriggerPhrase();
+        if (_tp && activeSessionId !== null && textEndsWithTriggerPhrase(buildSendText(), _tp)) {
+          rec.requestStop();
+          doSend(activeSessionId);
+          return;
+        }
+      }
+      autoExpand();
+      updateSlashMenu();
+    } finally { finishProbe?.(); }
   });
 
   // aborted / no-speech は core が notify=false にする（旧コードも表示しなかった）。

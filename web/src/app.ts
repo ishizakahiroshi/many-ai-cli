@@ -1,3 +1,4 @@
+import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
@@ -104,22 +105,25 @@ window.addEventListener('many-ai-cli:insert-template', (event: Event) => {
 });
 
 export function autoExpand(opts: any = {}) {
-  const t = activeSessionId === null ? null : terminals.get(activeSessionId);
-  const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
-  if (opts.suppressPtyResize) {
-    suppressPtyResizeForInputLayout();
-  }
-  inputEl.style.height = 'auto';
-  if (inputEl.value === '') {
-    // 空のときは高さを CSS の min-height に任せる。Chrome は placeholder の折り返しも
-    // scrollHeight に含めるため、狭い画面で placeholder が 2 行に折り返すと
-    // 未入力なのにバーが 2 行分に育ってしまう。
-    inputEl.style.height = '';
-  } else {
-    inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
-  }
-  updateInputClearButton();
-  refitActiveTerminalAfterLayout(shouldStickToBottom);
+  const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'input.layout', size: inputEl.value.length }));
+  try {
+    const t = activeSessionId === null ? null : terminals.get(activeSessionId);
+    const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
+    if (opts.suppressPtyResize) {
+      suppressPtyResizeForInputLayout();
+    }
+    inputEl.style.height = 'auto';
+    if (inputEl.value === '') {
+      // 空のときは高さを CSS の min-height に任せる。Chrome は placeholder の折り返しも
+      // scrollHeight に含めるため、狭い画面で placeholder が 2 行に折り返すと
+      // 未入力なのにバーが 2 行分に育ってしまう。
+      inputEl.style.height = '';
+    } else {
+      inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+    }
+    updateInputClearButton();
+    refitActiveTerminalAfterLayout(shouldStickToBottom);
+  } finally { finishProbe?.(); }
 }
 
 export function updateInputClearButton() {

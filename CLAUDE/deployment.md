@@ -1,12 +1,14 @@
 # many-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
+> 最終更新: 2026-09-27 05:23:16 — 調査用機能全件のリリース前 purge と共通検査への導線を追加
 
 `many-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
 v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
 
 ## ビルド前提
+
+リリース前に調査用のログ・追跡・監視・計測機能を全件 `debug-purge` し、`node scripts/check-instrumentation.mjs --release` を通す。方針と分離方法は [coding.md の「調査用機能の分離と purge」](coding.md#調査用機能の分離と-purge)、台帳は `instrumentation.json`。GitHub Release workflow とローカル GoReleaser の before hook の両方で検査し、未パージなら止める。ビルド対象からの除外と、パージ完了は別の条件である。
 
 - Go 1.22+
 - Node.js 20+（ビルドスクリプト `scripts/build.mjs` と `node --test` の実行用）

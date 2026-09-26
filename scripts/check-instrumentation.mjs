@@ -17,6 +17,7 @@
 //      第 1 パスと合わせて「観測 Go ファイル ⊆ maidebug タグ付き」が成り立つ。
 //   6. status=active の各エントリが成果物検査用 artifactNeedles を持つか。
 //      status=removed に removedOn がある場合は日付形式も検査する。
+// --release では全項目が removed になるまで止める（調査機能は例外なく purge）。
 //
 // exit 0 = 問題なし / exit 1 = ブロック。
 
@@ -93,11 +94,12 @@ function daysUntil(due) {
 function parseArgs() {
   const args = process.argv.slice(2);
   const purge = args.includes('--purge');
+  const release = args.includes('--release');
   const all = args.includes('--all');
   const idArgs = args.filter(arg => arg.startsWith('--id='));
-  const unknown = args.filter(arg => arg !== '--purge' && arg !== '--all' && !arg.startsWith('--id='));
+  const unknown = args.filter(arg => arg !== '--purge' && arg !== '--release' && arg !== '--all' && !arg.startsWith('--id='));
   if (unknown.length > 0) {
-    console.error(`使い方: node scripts/check-instrumentation.mjs [--purge (--id=<id> | --all)]`);
+    console.error(`使い方: node scripts/check-instrumentation.mjs [--release | --purge (--id=<id> | --all)]`);
     console.error(`BLOCKED: 未知の引数: ${unknown.join(', ')}`);
     return null;
   }
@@ -126,7 +128,11 @@ function parseArgs() {
     console.error('BLOCKED: --purge は --id=<id> で 1 件ずつ撤去する（1 件 1 commit）。active 全件を消すときだけ --all を明示する');
     return null;
   }
-  return { purge, id };
+  if (release && purge) {
+    console.error('BLOCKED: --release と --purge は同時に指定できません');
+    return null;
+  }
+  return { purge, id, release };
 }
 
 function addDaysUTC(days) {
@@ -213,7 +219,7 @@ function purge(ledger, requestedId) {
     }
   }
 
-  console.log('補足: これはリリース前の必須作業ではありません（成果物への混入は build tag と check-artifact-clean.mjs が防ぎます）。');
+  console.log('補足: 全ての調査用計測・ログ・追跡機能はリリース前に purge 必須です。build tag と check-artifact-clean.mjs も成果物への混入を防ぎます。');
   console.log('確認: 撤去前に手元ログの記録件数を数えたか（hub ログを artifactNeedles で grep）。生きている観測を消すなら、その事実と未再現の理由を commit message に残す。');
   const removedFiles = new Map(selected.map(entry => [entry.id, []]));
   const missingFiles = new Map(selected.map(entry => [entry.id, []]));
@@ -298,6 +304,13 @@ function main() {
   }
 
   const problems = [];
+  if (options.release) {
+    for (const e of entries) {
+      if (e.status !== 'removed') {
+        problems.push(`${e.id}: リリース前の purge が必須です。make debug-purge id=${e.id} で撤去してください`);
+      }
+    }
+  }
   const files = trackedFiles();
 
   // 1. 台帳に無い観測コード
@@ -361,12 +374,12 @@ function main() {
   // 3. removed の実体が残っていないか
   // purge は撤去コミット前の作業ツリーで検査する。git ls-files には
   // index に残った削除済み path も出るため、removed の実体判定では
-  // 現在ファイルが存在するものだけを残存扱いする。
-  const tracked = new Set(files.filter(f => existsSync(join(repoRoot, f))));
+  // 現在ファイルが存在するものだけを残存扱いする。未追跡の置き忘れも
+  // ローカルビルドへ入り得るため、台帳にある専用ファイルは追跡状態を問わない。
   for (const e of entries) {
     if (e.status !== 'removed') continue;
     for (const f of e.files || []) {
-      if (tracked.has(f)) problems.push(`${e.id}: status=removed だが ${f} がまだ追跡されている`);
+      if (existsSync(join(repoRoot, f))) problems.push(`${e.id}: status=removed だが ${f} がまだ存在する`);
     }
     for (const ep of e.endpoints || []) {
       const still = files.filter(f => (f.endsWith('.go') || f.endsWith('.ts')) && !EXCLUDE.some(re => re.test(f)))

@@ -21,7 +21,7 @@ import { findUrlCandidates, looksLikeLinkWrapContinuation } from './url-detect.j
 import { showUrlPopup } from './url-links.js';
 import { ws } from './ws-client.js';
 import { isShellProvider } from './approval.js';
-import { probe } from '../debug/probe.js';
+import { probe, probeSpan } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
@@ -248,164 +248,167 @@ export function ensureTerminal(id) {
   // 日本語までリンクに含めていた。判定は url-detect.ts に寄せてある。
   term.registerLinkProvider({
     provideLinks(y, callback) {
-      const buf = term.buffer.active;
-      const thisLine = buf.getLine(y - 1);
-      if (!thisLine) { callback([]); return; }
+      const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'terminal.links' }));
+      try {
+        const buf = term.buffer.active;
+        const thisLine = buf.getLine(y - 1);
+        if (!thisLine) { callback([]); return; }
 
-      const buildCellMap = (line) => {
-        const cm = [];
-        for (let x = 0; x < line.length; x++) {
-          const cell = line.getCell(x);
-          if (cell && cell.getWidth() !== 0) cm.push(x);
-        }
-        return cm;
-      };
-      const contentWidthOf = (line) => {
-        let width = 0;
-        for (let x = 0; x < line.length; x++) {
-          const cell = line.getCell(x);
-          if (!cell || cell.getWidth() === 0) continue;
-          if (typeof cell.getCode === 'function' && cell.getCode() === 0) continue;
-          width = x + cell.getWidth();
-        }
-        return width;
-      };
-      const getRow = (index: number): PathWrapRow | null => {
-        if (index < 0) return null;
-        const line = buf.getLine(index);
-        if (!line) return null;
-        return {
-          text: line.translateToString(true),
-          isWrapped: !!line.isWrapped,
-          contentWidth: contentWidthOf(line),
+        const buildCellMap = (line) => {
+          const cm = [];
+          for (let x = 0; x < line.length; x++) {
+            const cell = line.getCell(x);
+            if (cell && cell.getWidth() !== 0) cm.push(x);
+          }
+          return cm;
         };
-      };
-      // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス・URL の分断も結合する
-      const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols, looksLikeLinkWrapContinuation);
+        const contentWidthOf = (line) => {
+          let width = 0;
+          for (let x = 0; x < line.length; x++) {
+            const cell = line.getCell(x);
+            if (!cell || cell.getWidth() === 0) continue;
+            if (typeof cell.getCode === 'function' && cell.getCode() === 0) continue;
+            width = x + cell.getWidth();
+          }
+          return width;
+        };
+        const getRow = (index: number): PathWrapRow | null => {
+          if (index < 0) return null;
+          const line = buf.getLine(index);
+          if (!line) return null;
+          return {
+            text: line.translateToString(true),
+            isWrapped: !!line.isWrapped,
+            contentWidth: contentWidthOf(line),
+          };
+        };
+        // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス・URL の分断も結合する
+        const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols, looksLikeLinkWrapContinuation);
 
-      const physRows = [];
-      for (let i = start; i <= end; i++) {
-        const line = buf.getLine(i);
-        if (!line) break;
-        const isWrapped = !!line.isWrapped;
-        let text = line.translateToString(true);
-        let cellMap = buildCellMap(line);
-        // ハードラップ継続行の行頭インデントはパスの一部ではない
-        if (i > start && !isWrapped) {
-          const lead = (text.match(/^[ \t]*/) || [''])[0].length;
-          if (lead > 0) {
-            text = text.slice(lead);
-            cellMap = cellMap.slice(lead);
+        const physRows = [];
+        for (let i = start; i <= end; i++) {
+          const line = buf.getLine(i);
+          if (!line) break;
+          const isWrapped = !!line.isWrapped;
+          let text = line.translateToString(true);
+          let cellMap = buildCellMap(line);
+          // ハードラップ継続行の行頭インデントはパスの一部ではない
+          if (i > start && !isWrapped) {
+            const lead = (text.match(/^[ \t]*/) || [''])[0].length;
+            if (lead > 0) {
+              text = text.slice(lead);
+              cellMap = cellMap.slice(lead);
+            }
+          }
+          physRows.push({ y1: i + 1, text, cellMap });
+        }
+        if (physRows.length === 0) { callback([]); return; }
+
+        // 行テキストを結合し、各行の開始オフセットを記録する
+        const rowOffsets = [];
+        let off = 0;
+        for (const r of physRows) { rowOffsets.push(off); off += r.text.length; }
+        const combined = physRows.map(r => r.text).join('');
+
+        // combined 上の charIndex → xterm の { x (1-based), y (1-based) }
+        const ciToXY = (ci) => {
+          let ri = physRows.length - 1;
+          for (let i = 0; i < physRows.length - 1; i++) {
+            if (ci < rowOffsets[i + 1]) { ri = i; break; }
+          }
+          const r = physRows[ri];
+          const charInRow = ci - rowOffsets[ri];
+          return { x: (r.cellMap[charInRow] ?? charInRow) + 1, y: r.y1 };
+        };
+
+        const links = [];
+        const occupiedRanges = [];
+        const overlapsExistingLink = (start, end) => occupiedRanges.some(r => start <= r.end && end >= r.start);
+        const addPathLink = (rawPath, startCI) => {
+          const pathStr = trimTerminalPathCandidate(rawPath);
+          if (pathStr.length < 3) return;
+          const endCI = startCI + pathStr.length - 1;
+          if (overlapsExistingLink(startCI, endCI)) return;
+          occupiedRanges.push({ start: startCI, end: endCI });
+          const capturedPath = resolveTerminalPathCandidate(pathStr, id);
+          const startPos = ciToXY(startCI);
+          const endPos = ciToXY(endCI);
+          links.push({
+            range: { start: startPos, end: endPos },
+            text: pathStr,
+            hover() {
+              // ホバーではポップアップを開かない（クリック起動のみ）。
+              // xterm のリンク下線表示は維持される。
+            },
+            leave() {
+              scheduleHidePathPopup();
+            },
+            activate(_event, _text) {
+              _event.preventDefault();
+              _event.stopPropagation();
+              showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
+            }
+          });
+        };
+
+        // URL を先に取る。パスの判定は URL の中にも当たる（「https://…」の「s://…」を Windows の
+        // ドライブパスとみなす）ので、URL の範囲を先に埋めて重なるパスを捨てさせる。
+        for (const c of findUrlCandidates(combined)) {
+          const startCI = c.start;
+          const endCI = c.end - 1;
+          if (overlapsExistingLink(startCI, endCI)) continue;
+          occupiedRanges.push({ start: startCI, end: endCI });
+          const url = c.url;
+          links.push({
+            range: { start: ciToXY(startCI), end: ciToXY(endCI) },
+            text: url,
+            hover() {},
+            leave() {
+              scheduleHidePathPopup();
+            },
+            activate(event) {
+              event.preventDefault();
+              event.stopPropagation();
+              showUrlPopup(url, event.clientX, event.clientY);
+            },
+          });
+        }
+        for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(combined)) !== null) {
+            if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(combined, m.index)) continue;
+            addPathLink(m[1], m.index);
           }
         }
-        physRows.push({ y1: i + 1, text, cellMap });
-      }
-      if (physRows.length === 0) { callback([]); return; }
-
-      // 行テキストを結合し、各行の開始オフセットを記録する
-      const rowOffsets = [];
-      let off = 0;
-      for (const r of physRows) { rowOffsets.push(off); off += r.text.length; }
-      const combined = physRows.map(r => r.text).join('');
-
-      // combined 上の charIndex → xterm の { x (1-based), y (1-based) }
-      const ciToXY = (ci) => {
-        let ri = physRows.length - 1;
-        for (let i = 0; i < physRows.length - 1; i++) {
-          if (ci < rowOffsets[i + 1]) { ri = i; break; }
-        }
-        const r = physRows[ri];
-        const charInRow = ci - rowOffsets[ri];
-        return { x: (r.cellMap[charInRow] ?? charInRow) + 1, y: r.y1 };
-      };
-
-      const links = [];
-      const occupiedRanges = [];
-      const overlapsExistingLink = (start, end) => occupiedRanges.some(r => start <= r.end && end >= r.start);
-      const addPathLink = (rawPath, startCI) => {
-        const pathStr = trimTerminalPathCandidate(rawPath);
-        if (pathStr.length < 3) return;
-        const endCI = startCI + pathStr.length - 1;
-        if (overlapsExistingLink(startCI, endCI)) return;
-        occupiedRanges.push({ start: startCI, end: endCI });
-        const capturedPath = resolveTerminalPathCandidate(pathStr, id);
-        const startPos = ciToXY(startCI);
-        const endPos = ciToXY(endCI);
-        links.push({
-          range: { start: startPos, end: endPos },
-          text: pathStr,
-          hover() {
-            // ホバーではポップアップを開かない（クリック起動のみ）。
-            // xterm のリンク下線表示は維持される。
-          },
-          leave() {
-            scheduleHidePathPopup();
-          },
-          activate(_event, _text) {
-            _event.preventDefault();
-            _event.stopPropagation();
-            showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
-          }
-        });
-      };
-
-      // URL を先に取る。パスの判定は URL の中にも当たる（「https://…」の「s://…」を Windows の
-      // ドライブパスとみなす）ので、URL の範囲を先に埋めて重なるパスを捨てさせる。
-      for (const c of findUrlCandidates(combined)) {
-        const startCI = c.start;
-        const endCI = c.end - 1;
-        if (overlapsExistingLink(startCI, endCI)) continue;
-        occupiedRanges.push({ start: startCI, end: endCI });
-        const url = c.url;
-        links.push({
-          range: { start: ciToXY(startCI), end: ciToXY(endCI) },
-          text: url,
-          hover() {},
-          leave() {
-            scheduleHidePathPopup();
-          },
-          activate(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            showUrlPopup(url, event.clientX, event.clientY);
-          },
-        });
-      }
-      for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
-        re.lastIndex = 0;
         let m;
-        while ((m = re.exec(combined)) !== null) {
-          if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(combined, m.index)) continue;
-          addPathLink(m[1], m.index);
+        REL_PATH_RE.lastIndex = 0;
+        while ((m = REL_PATH_RE.exec(combined)) !== null) {
+          const rawPath = m[2];
+          const trimmed = trimTerminalPathCandidate(rawPath);
+          if (!isLikelyRelPath(trimmed)) continue;
+          addPathLink(rawPath, m.index + m[1].length);
         }
-      }
-      let m;
-      REL_PATH_RE.lastIndex = 0;
-      while ((m = REL_PATH_RE.exec(combined)) !== null) {
-        const rawPath = m[2];
-        const trimmed = trimTerminalPathCandidate(rawPath);
-        if (!isLikelyRelPath(trimmed)) continue;
-        addPathLink(rawPath, m.index + m[1].length);
-      }
-      // 折りたたみマーカーをクリック可能にする（ctrl+o キャプチャ → ポップアップ表示）
-      CRUNCH_LINK_RE.lastIndex = 0;
-      let cm;
-      while ((cm = CRUNCH_LINK_RE.exec(combined)) !== null) {
-        const startCI = cm.index;
-        const endCI = cm.index + cm[0].length - 1;
-        if (overlapsExistingLink(startCI, endCI)) continue;
-        occupiedRanges.push({ start: startCI, end: endCI });
-        links.push({
-          range: { start: ciToXY(startCI), end: ciToXY(endCI) },
-          text: cm[0],
-          hover() {},
-          leave() {},
-          activate(event) {
-            handleCrunchLinkClick(id, event.clientX, event.clientY);
-          },
-        });
-      }
-      callback(links);
+        // 折りたたみマーカーをクリック可能にする（ctrl+o キャプチャ → ポップアップ表示）
+        CRUNCH_LINK_RE.lastIndex = 0;
+        let cm;
+        while ((cm = CRUNCH_LINK_RE.exec(combined)) !== null) {
+          const startCI = cm.index;
+          const endCI = cm.index + cm[0].length - 1;
+          if (overlapsExistingLink(startCI, endCI)) continue;
+          occupiedRanges.push({ start: startCI, end: endCI });
+          links.push({
+            range: { start: ciToXY(startCI), end: ciToXY(endCI) },
+            text: cm[0],
+            hover() {},
+            leave() {},
+            activate(event) {
+              handleCrunchLinkClick(id, event.clientX, event.clientY);
+            },
+          });
+        }
+        callback(links);
+      } finally { finishProbe?.(); }
     }
   });
   if (typeof Unicode11Addon !== 'undefined') {
@@ -961,7 +964,8 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   const geoPrevCols = t.term.cols;
   const geoPrevRows = t.term.rows;
-  t.fitAddon.fit();
+  const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'terminal.fit' }));
+  try { t.fitAddon.fit(); } finally { finishProbe?.(); }
   try {
     probe('geo.fit', () => ({
       sessionId: id,

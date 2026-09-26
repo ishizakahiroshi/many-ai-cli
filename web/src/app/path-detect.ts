@@ -17,8 +17,19 @@ export type PathWrapRow = {
 // 1 本のパスが何行に割れても結合はするが、誤結合を抑える上限。
 export const MAX_HARD_WRAP_EXTRA = 6;
 
+// Nested repetitions here can backtrack exponentially on punctuation followed by
+// an ordinary filename character. Link detection runs on the UI thread, so scan
+// the suffix once instead, preserving the original end-anchor semantics.
+function stripTrailingPathPunctuation(text: string): string {
+  const last = /[,;:'"`<>\])}]$/.exec(text);
+  if (!last) return text;
+  let start = last.index;
+  while (start > 0 && /[\s,;:'"`<>\])}]/.test(text[start - 1])) start--;
+  return text.slice(0, start) + text.slice(last.index + 1);
+}
+
 export function trimTerminalPathCandidate(path: string): string {
-  let text = String(path || '').trim().replace(/(?:\s*[,;:'"`<>\])}]+)+$/, '');
+  let text = stripTrailingPathPunctuation(String(path || '').trim());
   // 拡張子の直後に全角/日本語が続く場合はそこで切る（相対パス・Unix 絶対パスにも適用）。
   // Windows 絶対パスは下の trimWindowsPathCandidate で同等処理を行う。
   text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
@@ -33,7 +44,7 @@ export function trimWindowsPathCandidate(path: string): string {
   text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
   text = text.replace(/\s+[぀-ヿ㐀-鿿＀-￯].*$/u, '');
   text = text.replace(/\s+[A-Za-z]$/, '');
-  return text.replace(/(?:\s*[,;:'"`<>\])}]+)+$/, '');
+  return stripTrailingPathPunctuation(text);
 }
 
 export function stripTerminalLineSuffix(path: string): string {
