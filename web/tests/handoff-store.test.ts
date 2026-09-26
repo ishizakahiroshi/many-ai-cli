@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import {
   decideHandoffNotify,
+  handoffListMatches,
   handoffNoteActionFor,
   limitingUsageWindowFromUsageStat,
   newHandoffNotifyLedger,
   normalizeHandoffNoteMode,
+  orderHandoffList,
   remainingPercentFromUsageStat,
   usageWindowsFromUsageStat,
   usedPercentsFromUsageStat,
 } from '../src/app/handoff-store.ts';
+import type { HandoffListItem } from '../src/app/handoff-store.ts';
 import type { Message } from '../src/types/proto.ts';
 
 // 子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2・C3。
@@ -197,5 +200,49 @@ describe('decideHandoffNotify (once per session x usage window)', () => {
     });
     expect(decideHandoffNotify(ledger, 3, codex(95, 40), 10, 'button')?.window.windowMinutes).toBe(300);
     expect(decideHandoffNotify(ledger, 3, codex(95, 93), 10, 'button')?.window.windowMinutes).toBe(10080);
+  });
+});
+
+function row(partial: Partial<HandoffListItem> & Pick<HandoffListItem, 'sessionID'>): HandoffListItem {
+  return {
+    live: false,
+    providerLabel: 'Claude Code',
+    cwd: 'D:\\dev\\github\\public\\many-ai-cli',
+    ...partial,
+  };
+}
+
+describe('orderHandoffList', () => {
+  test('running sessions stay above ended ones, each group newest first', () => {
+    const source = [
+      row({ sessionID: 64 }),
+      row({ sessionID: 10, live: true }),
+      row({ sessionID: 57 }),
+      row({ sessionID: 40, live: true }),
+    ];
+    const ordered = orderHandoffList(source).map((item) => item.sessionID);
+    expect(ordered).toEqual([40, 10, 64, 57]);
+    expect(source.map((item) => item.sessionID)).toEqual([64, 10, 57, 40]);
+  });
+});
+
+describe('handoffListMatches', () => {
+  const item = row({ sessionID: 64, providerLabel: 'Codex CLI', cwd: 'D:\\dev\\github\\public\\many-ai-cli' });
+
+  test('blank query keeps every row', () => {
+    expect(handoffListMatches(item, '   ')).toBe(true);
+  });
+
+  test('number, CLI name, and folder match without case', () => {
+    expect(handoffListMatches(item, '64')).toBe(true);
+    expect(handoffListMatches(item, '#64')).toBe(true);
+    expect(handoffListMatches(item, 'codex cli')).toBe(true);
+    expect(handoffListMatches(item, 'MANY-AI-CLI')).toBe(true);
+  });
+
+  test('a number inside another id still matches, and a longer number does not', () => {
+    expect(handoffListMatches(row({ sessionID: 164 }), '64')).toBe(true);
+    expect(handoffListMatches(item, '640')).toBe(false);
+    expect(handoffListMatches(item, 'grok')).toBe(false);
   });
 });

@@ -1989,6 +1989,8 @@
   "handoff_list_live": "Running",
   "handoff_list_ended": "Ended",
   "handoff_list_preview": "Preview",
+  "handoff_list_search": "Number, CLI, or folder",
+  "handoff_list_no_match": "No matching sessions",
   "derive_button_title": "Derive a session",
   "derive_dialog_title": "Derive a session",
   "derive_kind_label": "Kind",

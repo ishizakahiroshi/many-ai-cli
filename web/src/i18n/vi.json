@@ -1989,6 +1989,8 @@
   "handoff_list_live": "Đang chạy",
   "handoff_list_ended": "Đã kết thúc",
   "handoff_list_preview": "Xem trước",
+  "handoff_list_search": "Số, CLI, hoặc thư mục",
+  "handoff_list_no_match": "Không có session phù hợp",
   "derive_button_title": "Khởi động session phái sinh",
   "derive_dialog_title": "Khởi động session phái sinh",
   "derive_kind_label": "Loại",

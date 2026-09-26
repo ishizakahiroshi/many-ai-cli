@@ -16,9 +16,11 @@ import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
 import { openDeriveDialog } from './derive-dialog.js';
 import {
   decideHandoffNotify,
+  handoffListMatches,
   handoffNoteActionFor,
   newHandoffNotifyLedger,
   normalizeHandoffNoteMode,
+  orderHandoffList,
   type HandoffNoteMode,
   type HandoffUsageWindow,
 } from './handoff-store.js';
@@ -226,24 +228,45 @@ export async function openHandoffListDialog(): Promise<void> {
       body.innerHTML = `<p>${escapeHtml(tx('handoff_list_empty', '引き継ぎの記録はまだありません'))}</p>`;
       return;
     }
+    // 後継番号は各行に既に入っている。実行中を上に並べるのはこの画面だけ。
+    const items = entries.map((entry) => ({
+      entry,
+      sessionID: Number(entry.session_id),
+      live: !!entry.live,
+      providerLabel: providerLabel(String(entry.provider || '')),
+      cwd: String(entry.cwd || ''),
+    }));
+    const ordered = orderHandoffList(items);
     body.innerHTML = '';
-    const list = document.createElement('div');
-    list.className = 'handoff-list-rows';
-    entries.forEach((entry) => {
+    const searchBar = document.createElement('div');
+    searchBar.className = 'handoff-list-search-bar';
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'handoff-list-search';
+    const searchLabel = tx('handoff_list_search', '番号、CLI名、フォルダ');
+    search.placeholder = searchLabel;
+    search.setAttribute('aria-label', searchLabel);
+    search.autocomplete = 'off';
+    search.spellcheck = false;
+    searchBar.appendChild(search);
+    const results = document.createElement('div');
+    results.className = 'handoff-list-results';
+    body.append(searchBar, results);
+
+    const renderRow = (entry: HandoffListEntry, label: string): HTMLElement => {
       const row = document.createElement('div');
       row.className = 'handoff-list-row';
       const status = entry.live ? tx('handoff_list_live', '実行中') : tx('handoff_list_ended', '終了');
       const main = document.createElement('div');
       main.className = 'handoff-list-row-main';
-      // 後継がいる行にはその番号を出す（子 plan:
-      // plan_derived-session-launch_c3_derive-launch.md 内部 C4）。前任の看板には
-      // 何も書かず、Hub 側が後継の handoff_from から逆引きした値をそのまま見せる。
+      // 後継がいる行にはその番号を出す。前任の看板には何も書かず、Hub 側が
+      // 後継の handoff_from から逆引きした値をそのまま見せる。
       const successor = Number(entry.handoff_to || 0);
       const successorHtml = successor
         ? `<span class="handoff-list-row-successor">${escapeHtml(tx('card_handoff_to', `Successor #${successor}`, { id: successor }))}</span>`
         : '';
       main.innerHTML = `<span class="handoff-list-row-id">#${escapeHtml(String(entry.session_id))}</span>` +
-        `<span class="handoff-list-row-provider">${escapeHtml(providerLabel(String(entry.provider || '')))}</span>` +
+        `<span class="handoff-list-row-provider">${escapeHtml(label)}</span>` +
         `<span class="handoff-list-row-status" data-live="${entry.live ? '1' : '0'}">${escapeHtml(status)}</span>` +
         successorHtml +
         `<span class="handoff-list-row-cwd" title="${escapeHtml(String(entry.cwd || ''))}">${escapeHtml(String(entry.cwd || ''))}</span>`;
@@ -257,11 +280,38 @@ export async function openHandoffListDialog(): Promise<void> {
         // そちらが自分で取りに行くので、ここでプレビューを組み立てない。
         void openDeriveDialog(entry.session_id, { kind: 'handoff' });
       });
-      row.appendChild(main);
-      row.appendChild(previewBtn);
-      list.appendChild(row);
-    });
-    body.appendChild(list);
+      row.append(main, previewBtn);
+      return row;
+    };
+
+    const renderResults = (): void => {
+      const visible = ordered.filter((item) => handoffListMatches(item, search.value));
+      results.replaceChildren();
+      if (visible.length === 0) {
+        const empty = document.createElement('p');
+        empty.textContent = tx('handoff_list_no_match', '該当するセッションはありません');
+        results.appendChild(empty);
+        return;
+      }
+      const groups = [
+        { live: true, label: tx('handoff_list_live', '実行中') },
+        { live: false, label: tx('handoff_list_ended', '終了') },
+      ];
+      groups.forEach((group) => {
+        const rows = visible.filter((item) => item.live === group.live);
+        if (rows.length === 0) return;
+        const heading = document.createElement('div');
+        heading.className = 'handoff-list-group-label';
+        heading.textContent = group.label;
+        const list = document.createElement('div');
+        list.className = 'handoff-list-rows';
+        rows.forEach((item) => list.appendChild(renderRow(item.entry, item.providerLabel)));
+        results.append(heading, list);
+      });
+    };
+    search.addEventListener('input', renderResults);
+    renderResults();
+    search.focus();
   } catch (_) {
     body.innerHTML = `<p>${escapeHtml(tx('handoff_list_empty', '引き継ぎの記録はまだありません'))}</p>`;
   }

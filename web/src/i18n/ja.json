@@ -1989,6 +1989,8 @@
   "handoff_list_live": "実行中",
   "handoff_list_ended": "終了",
   "handoff_list_preview": "プレビュー",
+  "handoff_list_search": "番号、CLI名、フォルダ",
+  "handoff_list_no_match": "該当するセッションはありません",
   "derive_button_title": "派生セッションを起動",
   "derive_dialog_title": "派生セッションを起動",
   "derive_kind_label": "種別",

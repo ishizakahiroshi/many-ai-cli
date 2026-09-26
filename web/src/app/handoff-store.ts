@@ -145,3 +145,33 @@ export function handoffNoteActionFor(mode: HandoffNoteMode): HandoffNoteAction {
   if (mode === 'off') return 'none';
   return 'button';
 }
+
+/** 引き継ぎ一覧の 1 行。検索は画面に出る CLI 名とフォルダを見る。 */
+export interface HandoffListItem {
+  sessionID: number;
+  live: boolean;
+  providerLabel: string;
+  cwd: string;
+}
+
+/**
+ * 一覧の表示順。実行中を上、終了を下にし、それぞれの中はセッション番号の新しい順。
+ * 引数の配列は並べ替えない。
+ */
+export function orderHandoffList<T extends Pick<HandoffListItem, 'sessionID' | 'live'>>(items: readonly T[]): T[] {
+  return [...items].sort((a, b) => {
+    if (a.live !== b.live) return a.live ? -1 : 1;
+    return b.sessionID - a.sessionID;
+  });
+}
+
+/**
+ * 検索文字列が番号、画面に出る CLI 名、フォルダパスのどれかに含まれるか。
+ * 空や空白だけなら全部残す。大文字と小文字は区別しない。番号は「64」でも「#64」でも当たる。
+ */
+export function handoffListMatches(item: HandoffListItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const id = String(item.sessionID);
+  return [id, `#${id}`, item.providerLabel, item.cwd].join('\n').toLowerCase().includes(q);
+}

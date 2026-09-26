@@ -706,7 +706,7 @@ header {
   background: var(--bg-elev, #1e2330);
   box-shadow: 0 10px 34px rgba(0,0,0,0.45);
 }
-.handoff-dialog.handoff-list-dialog { width: min(680px, 100%); }
+.handoff-dialog.handoff-list-dialog { width: min(680px, 100%); min-width: 0; }
 .handoff-dialog h2 { margin: 0 0 10px; font-size: 1rem; flex-shrink: 0; }
 .handoff-dialog-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .handoff-dialog-source { margin: 0 0 8px; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); word-break: break-all; }
@@ -742,8 +742,29 @@ header {
 .handoff-dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 .handoff-dialog-actions .primary { color: var(--button-fg, #fff); background: var(--accent, #4568a9); border-color: var(--accent, #4568a9); }
 
+.handoff-list-search-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 10px;
+  background: var(--bg-elev, #1e2330);
+}
+.handoff-list-search {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #14171f);
+  color: var(--text);
+  font: inherit;
+}
+.handoff-list-search:focus { outline: 2px solid var(--accent, #3b82f6); outline-offset: 1px; }
+.handoff-list-results { display: flex; flex-direction: column; gap: 10px; }
+.handoff-list-group-label { font-size: 0.72rem; color: var(--muted-2, #9aa4b2); }
 .handoff-list-rows { display: flex; flex-direction: column; gap: 6px; }
-.handoff-list-row { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.handoff-list-row { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .handoff-list-row-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; font-size: 0.76rem; }
 .handoff-list-row-id { color: var(--muted-2, #9aa4b2); flex-shrink: 0; }
 .handoff-list-row-provider { flex-shrink: 0; }
