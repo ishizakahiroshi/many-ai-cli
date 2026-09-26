@@ -155,7 +155,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 
 **残量**はその掛け算の内訳であって、単独の機能ではありません。Usage メニューにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。とくに Cursor Agent CLI は残量を返すローカルファイルもコマンドも無く（Free tier で確認済み）、検知できません。数字はメニューを開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。
 
-**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<id>` を作り、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・プラン名・有効フラグと、後述の手書き専用の項目（`profile_dir` / `settings_sync` / `profile_owned_keys` / `default_wins_keys`）だけです。
+**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<dir>` を作り（フォルダ名は ID と別の `p1` `p2` … の短い名前。CLI によってはこの中に長さ制限のあるソケットのパスを作るため。これより前に足した profile は ID のままのフォルダを使い続けます）、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・フォルダ名・プラン名・有効フラグと、後述の手書き専用の項目（`profile_dir` / `settings_sync` / `profile_owned_keys` / `default_wins_keys`）だけです。
 
 | プロバイダー | 使う環境変数 | 対応 |
 |---|---|---|

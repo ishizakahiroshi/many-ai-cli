@@ -557,6 +557,18 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Codex 0.157.0 and later start again in a subscription profile on Windows.**
+  That release creates a socket under the profile folder, and Windows refuses
+  socket paths longer than 108 bytes, so a profile whose id came from a long
+  display name failed with `path must be shorter than SUN_LEN`. Profile folders
+  now have their own short name (`p1`, `p2`, …, stored as `dir` in
+  `config.yaml`), kept apart from the id and display name. Profiles added
+  earlier keep their id as the folder name; to move one, stop the Hub, rename
+  the folder, add a matching `dir:` line, and recreate the junction
+  `packages/app-server-daemon/current` inside it (Codex leaves it pointing at
+  the old path, and the next launch fails with `daemon executable not found`).
+  Two profiles pointing at the same folder are now reported as a configuration
+  warning.
 - **Codex questions and approval panels no longer go missing after you start a
   new conversation inside the same Codex session (for example with `/new`).**
   Codex writes the new conversation to a new rollout file, but the Hub found the

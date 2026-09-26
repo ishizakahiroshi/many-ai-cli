@@ -189,7 +189,11 @@ func TestSubscriptionsAPIListAddUpdateRemove(t *testing.T) {
 	if added.ID != "claude-max-main" {
 		t.Fatalf("generated id = %q, want claude-max-main", added.ID)
 	}
-	dir := filepath.Join(home, ".many-ai-cli", "subscriptions", "claude", added.ID)
+	// フォルダ名は ID から作らず、短い連番を振る（vendor CLI のパス長制限のため）。
+	if added.Dir != "p1" {
+		t.Fatalf("generated dir = %q, want p1", added.Dir)
+	}
+	dir := filepath.Join(home, ".many-ai-cli", "subscriptions", "claude", "p1")
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		t.Fatalf("profile dir %q not created: %v", dir, err)
 	}
@@ -204,6 +208,9 @@ func TestSubscriptionsAPIListAddUpdateRemove(t *testing.T) {
 	}
 	if got := s.cfg.Subscriptions["claude"][1].ID; got != "claude-max-main-2" {
 		t.Fatalf("second generated id = %q", got)
+	}
+	if got := s.cfg.Subscriptions["claude"][1].Dir; got != "p2" {
+		t.Fatalf("second generated dir = %q, want p2", got)
 	}
 
 	// rename + disable。
@@ -247,12 +254,32 @@ func TestSubscriptionsAPIListAddUpdateRemove(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("remove#2 code = %d: %s", w.Code, w.Body.String())
 	}
-	dir2 := filepath.Join(home, ".many-ai-cli", "subscriptions", "claude", "claude-max-main-2")
+	dir2 := filepath.Join(home, ".many-ai-cli", "subscriptions", "claude", "p2")
 	if _, err := os.Stat(dir2); !os.IsNotExist(err) {
 		t.Fatalf("profile dir %q still exists after delete_credentials: %v", dir2, err)
 	}
 	if len(s.cfg.Subscriptions["claude"]) != 0 {
 		t.Fatalf("provider key should be cleaned up: %#v", s.cfg.Subscriptions)
+	}
+}
+
+// 登録解除しても認証フォルダは残る（delete_credentials 既定 false）。次に足す profile が
+// そのフォルダを拾うと、前の契約のログインで起動してしまうので、ディスク上の名前も避ける。
+func TestSubscriptionAddSkipsLeftoverFolder(t *testing.T) {
+	s, home := subsTestServer(t)
+	leftover := filepath.Join(home, ".many-ai-cli", "subscriptions", "codex", "p1")
+	if err := os.MkdirAll(leftover, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.handleSubscriptions(w, subsRequest(t, http.MethodPost, "/api/subscriptions", map[string]any{
+		"provider": "codex", "name": "A very long display name for a ChatGPT Plus account",
+	}))
+	if w.Code != http.StatusOK {
+		t.Fatalf("POST add code = %d: %s", w.Code, w.Body.String())
+	}
+	if got := s.cfg.Subscriptions["codex"][0].Dir; got != "p2" {
+		t.Fatalf("dir = %q, want p2 (p1 is a leftover folder)", got)
 	}
 }
 

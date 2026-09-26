@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -93,8 +94,10 @@ func (s *Server) handleSubscriptionAdd(w http.ResponseWriter, r *http.Request) {
 	// 追加要求が同じ採番を得て同じディレクトリを共有しうる。
 	s.cfgMu.Lock()
 	existing := map[string]bool{}
+	usedDirs := map[string]bool{}
 	for _, p := range s.cfg.Subscriptions[provider] {
 		existing[config.NormalizeSubscriptionID(p.ID)] = true
+		usedDirs[p.DirName()] = true
 	}
 	id := config.NormalizeSubscriptionID(body.ID)
 	if id == "" {
@@ -110,7 +113,11 @@ func (s *Server) handleSubscriptionAdd(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusConflict, "duplicate_id", fmt.Sprintf("subscription id %q already exists for %s", id, provider))
 		return
 	}
-	profile := config.SubscriptionProfile{ID: id, Name: name}
+	profile := config.SubscriptionProfile{
+		ID:   id,
+		Name: name,
+		Dir:  nextSubscriptionDirName(filepath.Join(config.SubscriptionsRoot(dir), provider), usedDirs),
+	}
 	profileDir, err := config.ResolveSubscriptionProfileDir(dir, provider, profile)
 	if err != nil {
 		s.cfgMu.Unlock()
@@ -463,6 +470,29 @@ func slugifySubscriptionID(name string) string {
 		slug = strings.Trim(slug[:config.MaxSubscriptionIDLen], "-")
 	}
 	return slug
+}
+
+// nextSubscriptionDirName は新しい profile のフォルダ名を "p1", "p2", … から選ぶ。
+//
+// ID をフォルダ名に使わないのは、vendor CLI がこのフォルダの下に長さ制限のある
+// パスを作るため（config.SubscriptionProfile.Dir の説明を参照）。短く固定の形に
+// しておけば、表示名や ID をどれだけ長くしても置き場所の長さは変わらない。
+//
+// 他の profile が使っている名前に加え、ディスクに残っているフォルダも避ける。
+// 登録だけ解除して認証を残したフォルダを拾うと、前の契約のログインを引き継いでしまう。
+func nextSubscriptionDirName(base string, used map[string]bool) string {
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("p%d", i)
+		if used[candidate] {
+			continue
+		}
+		// 存在するときだけ飛ばす。存在を確かめられない（権限など）ときに飛ばし続けると
+		// 抜けられないので、その名前を返して後段のフォルダ作成に失敗を報告させる。
+		if _, err := os.Lstat(filepath.Join(base, candidate)); err == nil {
+			continue
+		}
+		return candidate
+	}
 }
 
 // uniqueSubscriptionID は base（空なら "profile"）に連番を足して衝突を避ける。

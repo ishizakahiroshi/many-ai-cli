@@ -150,6 +150,44 @@ func TestResolveSubscriptionProfileDirStaysInsideRoot(t *testing.T) {
 	}
 }
 
+// Dir があればフォルダ名は ID ではなく Dir。無ければ従来どおり ID（既存 profile の
+// 置き場所を変えない）。Dir も ID と同じくパス要素なので traversal を拒む。
+func TestResolveSubscriptionProfileDirUsesDirName(t *testing.T) {
+	base := t.TempDir()
+	root := SubscriptionsRoot(base)
+
+	got, err := ResolveSubscriptionProfileDir(base, "codex", SubscriptionProfile{ID: "chat-gpt-plus-long-name", Dir: "P1"})
+	if err != nil {
+		t.Fatalf("ResolveSubscriptionProfileDir: %v", err)
+	}
+	if want := filepath.Join(root, "codex", "p1"); got != want {
+		t.Fatalf("dir = %q, want %q", got, want)
+	}
+
+	for _, dir := range []string{"../../etc", "..", `..\x`, "/abs"} {
+		if resolved, err := ResolveSubscriptionProfileDir(base, "codex", SubscriptionProfile{ID: "main", Dir: dir}); err == nil {
+			t.Fatalf("dir %q resolved to %q; it must be rejected", dir, resolved)
+		}
+	}
+}
+
+func TestSubscriptionWarningsFlagSharedFolder(t *testing.T) {
+	cfg := &Config{Subscriptions: SubscriptionProfiles{
+		"codex": {
+			{ID: "p1"},                 // Dir 無し: フォルダ名は ID の "p1"
+			{ID: "long-id", Dir: "p1"}, // 同じフォルダを指す
+			{ID: "bad", Dir: "../x"},
+		},
+	}}
+	joined := strings.Join(cfg.subscriptionWarnings(), "\n")
+	if !strings.Contains(joined, `folder "p1" is already used by profile "p1"`) {
+		t.Fatalf("shared folder not reported:\n%s", joined)
+	}
+	if !strings.Contains(joined, "subscriptions.codex.bad") {
+		t.Fatalf("invalid dir not reported:\n%s", joined)
+	}
+}
+
 func TestResolveSubscriptionProfileDirCustomPathMustBeAbsolute(t *testing.T) {
 	base := t.TempDir()
 	if _, err := ResolveSubscriptionProfileDir(base, "claude", SubscriptionProfile{ID: "main", ProfileDir: "relative/dir"}); err == nil {

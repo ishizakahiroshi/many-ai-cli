@@ -43,7 +43,19 @@ type SubscriptionProfile struct {
 	// Enabled はポインタ。nil（未設定）は有効として扱う。明示的な false を
 	// omitempty で落とさないための三値表現（UserPrefsTokenStatusbar と同じ理由）。
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	// ProfileDir は既定位置（~/.many-ai-cli/subscriptions/<provider>/<id>）以外へ
+	// Dir は many-ai-cli が管理するフォルダ名（~/.many-ai-cli/subscriptions/<provider>/<dir>）。
+	// 空なら ID をそのままフォルダ名に使う（Dir を持たない既存 profile の置き場所は変えない）。
+	//
+	// ID と分けたのは、フォルダ名の長さが vendor CLI の都合で縛られるため。codex-cli
+	// 0.157.0 は起動時に $CODEX_HOME/app-server-control/app-server-control.sock を作り、
+	// Windows の AF_UNIX はパスが 108 バイト（終端込み）を超えると接続できない
+	// （2026-09-26 に "path must be shorter than SUN_LEN" で起動不能になった）。
+	// 表示名から作る ID は長くなりうるので、Hub が追加する profile には短い Dir を振る。
+	//
+	// ProfileDir と違い、ここは subscriptions ツリーの中なので many-ai-cli の持ち物として
+	// 扱う（delete_credentials で消してよい）。
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+	// ProfileDir は既定位置（~/.many-ai-cli/subscriptions/<provider>/<dir>）以外へ
 	// 実体を置きたいときだけ手で書く上書き。API からは設定できない。
 	ProfileDir string `yaml:"profile_dir,omitempty" json:"profile_dir,omitempty"`
 
@@ -69,6 +81,15 @@ type SubscriptionProfile struct {
 	// 勝つ側へ戻す。全 profile で `theme` を既定に揃えたい場合が実例。同じ鍵を両方へ
 	// 書いたときは DefaultWinsKeys が勝つ（「既定に揃える」と明示した側を優先する）。
 	DefaultWinsKeys []string `yaml:"default_wins_keys,omitempty" json:"default_wins_keys,omitempty"`
+}
+
+// DirName は subscriptions/<provider>/ の下で使うフォルダ名を返す。Dir が空なら ID。
+// 検証はしないので、パスに使う前に ValidateSubscriptionDirName を通すこと。
+func (p SubscriptionProfile) DirName() string {
+	if dir := NormalizeSubscriptionID(p.Dir); dir != "" {
+		return dir
+	}
+	return NormalizeSubscriptionID(p.ID)
 }
 
 // IsEnabled は Enabled が nil（未設定）または true のとき true を返す。
@@ -214,6 +235,22 @@ func ValidateSubscriptionID(id string) error {
 	return nil
 }
 
+// ValidateSubscriptionDirName はフォルダ名をパス要素として信用してよいか検証する。
+// 文字種は ID と同じ規則（大小の扱いが OS で違う問題も同じ）。"auto" は ID の予約語で
+// あってフォルダ名としては害が無いので、ここでは拒まない。
+func ValidateSubscriptionDirName(name string) error {
+	if name == "" {
+		return fmt.Errorf("subscription dir is required")
+	}
+	if len(name) > MaxSubscriptionIDLen {
+		return fmt.Errorf("subscription dir is longer than %d characters", MaxSubscriptionIDLen)
+	}
+	if !subscriptionIDRe.MatchString(name) || strings.Contains(name, "..") {
+		return fmt.Errorf("subscription dir %q may only contain lowercase letters, digits, dot, underscore and hyphen, and must start with a letter or digit", name)
+	}
+	return nil
+}
+
 // ValidateSubscriptionProvider は config の provider キーがパス要素として安全かを検証する。
 func ValidateSubscriptionProvider(provider string) error {
 	if strings.TrimSpace(provider) == "" {
@@ -262,8 +299,12 @@ func ResolveSubscriptionProfileDir(dir, provider string, p SubscriptionProfile) 
 		}
 		return filepath.Clean(expanded), nil
 	}
+	name := p.DirName()
+	if err := ValidateSubscriptionDirName(name); err != nil {
+		return "", err
+	}
 	base := filepath.Join(SubscriptionsRoot(dir), provider)
-	resolved := filepath.Clean(filepath.Join(base, id))
+	resolved := filepath.Clean(filepath.Join(base, name))
 	if !pathWithin(base, resolved) {
 		return "", fmt.Errorf("subscription profile dir for %q escapes %s", id, base)
 	}
@@ -318,6 +359,9 @@ func (cfg *Config) subscriptionWarnings() []string {
 			continue
 		}
 		seen := map[string]bool{}
+		// dirOwner はフォルダ名 → それを使う profile ID。2 件が同じフォルダを指すと
+		// 認証と設定を共有してしまい、profile を分けた意味が無くなる。
+		dirOwner := map[string]string{}
 		for _, p := range cfg.Subscriptions[provider] {
 			id := NormalizeSubscriptionID(p.ID)
 			if err := ValidateSubscriptionID(id); err != nil {
@@ -333,7 +377,18 @@ func (cfg *Config) subscriptionWarnings() []string {
 				if expanded, err := expandSubscriptionHome(custom); err != nil || !filepath.IsAbs(expanded) {
 					warnings = append(warnings, fmt.Sprintf("subscriptions.%s.%s: profile_dir %q must be an absolute path; this profile cannot be selected", provider, id, custom))
 				}
+				continue
 			}
+			name := p.DirName()
+			if err := ValidateSubscriptionDirName(name); err != nil {
+				warnings = append(warnings, fmt.Sprintf("subscriptions.%s.%s: %v; this profile cannot be selected", provider, id, err))
+				continue
+			}
+			if owner, taken := dirOwner[name]; taken {
+				warnings = append(warnings, fmt.Sprintf("subscriptions.%s.%s: folder %q is already used by profile %q; both profiles share one login", provider, id, name, owner))
+				continue
+			}
+			dirOwner[name] = id
 		}
 	}
 	return warnings
