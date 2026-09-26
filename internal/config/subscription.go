@@ -54,6 +54,10 @@ type SubscriptionProfile struct {
 	//
 	// ProfileDir と違い、ここは subscriptions ツリーの中なので many-ai-cli の持ち物として
 	// 扱う（delete_credentials で消してよい）。
+	//
+	// 既存の profile のフォルダを移すときは、Codex が packages/app-server-daemon/current に
+	// 作る junction が旧パスを指したまま残る。移した先で作り直さないと、次の起動が
+	// "daemon executable not found" で落ちる（CHANGELOG の 0.157.0 の項目を参照）。
 	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
 	// ProfileDir は既定位置（~/.many-ai-cli/subscriptions/<provider>/<dir>）以外へ
 	// 実体を置きたいときだけ手で書く上書き。API からは設定できない。
