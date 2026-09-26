@@ -63,6 +63,63 @@ export function remainingPercentFromUsageStat(m: Message): number | null {
   return limitingUsageWindowFromUsageStat(m)?.remainingPercent ?? null;
 }
 
+/**
+ * 帯をもう出したかの台帳。帯は「セッション × 使用枠（窓）」ごとに 1 回出す。
+ *
+ * セッション単位 1 回だと、5h の帯を出した後に猶予枠などで 7d が閾値を切っても、
+ * 7d の帯が出ない（別の窓の話なのに、通知済みで塞がれる）。
+ *
+ * 残量が閾値を上回り直しても通知済みは解除しない。同じタブで同じ窓の帯を出し直すと、
+ * 残量が閾値の付近で上下するたびに帯が点滅するため（従来の「同じタブでは再通知しない」を
+ * 窓単位に細かくしただけで、出し直しの条件は変えていない）。
+ */
+export interface HandoffNotifyLedger {
+  /** `${sessionID}:${windowMinutes}` を通知済みとして持つ。 */
+  windows: Set<string>;
+  /** auto でメモを依頼したセッション。窓が変わっても前任のトークンを二重に使わない。 */
+  noteRequested: Set<number>;
+}
+
+export function newHandoffNotifyLedger(): HandoffNotifyLedger {
+  return { windows: new Set(), noteRequested: new Set() };
+}
+
+export function handoffNotifyKey(sessionID: number, windowMinutes: number): string {
+  return `${sessionID}:${windowMinutes}`;
+}
+
+export interface HandoffNotifyDecision {
+  /** 帯に出す窓（閾値以下で未通知の窓のうち、残量が最少のもの）。 */
+  window: HandoffUsageWindow;
+  /** この帯と同時に前任へメモを依頼するか（auto のセッション初回だけ true）。 */
+  requestNote: boolean;
+}
+
+/**
+ * usage_stat 1 件について、いま帯を出すか・メモを依頼するかを決め、台帳へ記録する。
+ *
+ * 閾値以下の窓が同時に複数あれば帯は 1 枚（一番残量が少ない窓）で、閾値以下の窓は
+ * すべて通知済みにする。未通知の窓だけを候補にするので、5h が既に通知済みでもなお
+ * 5h のほうが 7d より残量が少ない状況で、7d が閾値を切れば 7d の帯が出る。
+ */
+export function decideHandoffNotify(
+  ledger: HandoffNotifyLedger,
+  sessionID: number,
+  m: Message,
+  thresholdPercent: number,
+  action: HandoffNoteAction,
+): HandoffNotifyDecision | null {
+  if (!sessionID) return null;
+  const below = usageWindowsFromUsageStat(m).filter((w) => w.remainingPercent <= thresholdPercent);
+  const fresh = below.filter((w) => !ledger.windows.has(handoffNotifyKey(sessionID, w.windowMinutes)));
+  if (fresh.length === 0) return null;
+  for (const w of below) ledger.windows.add(handoffNotifyKey(sessionID, w.windowMinutes));
+  const window = fresh.reduce((a, b) => (b.remainingPercent < a.remainingPercent ? b : a));
+  const requestNote = action === 'auto' && !ledger.noteRequested.has(sessionID);
+  if (requestNote) ledger.noteRequested.add(sessionID);
+  return { window, requestNote };
+}
+
 /** handoff.note_on_threshold の 3 値（正本は internal/config/config.go）。 */
 export type HandoffNoteMode = 'ask' | 'auto' | 'off';
 

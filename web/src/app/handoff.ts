@@ -15,8 +15,9 @@ import { apiFetch, escapeHtml, showToast } from './util.js';
 import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
 import { openDeriveDialog } from './derive-dialog.js';
 import {
+  decideHandoffNotify,
   handoffNoteActionFor,
-  limitingUsageWindowFromUsageStat,
+  newHandoffNotifyLedger,
   normalizeHandoffNoteMode,
   type HandoffNoteMode,
   type HandoffUsageWindow,
@@ -43,7 +44,7 @@ function providerLabel(value: string): string {
 // ---- 経路 1: 残量が閾値を下回ったときの通知 --------------------------------
 
 let notifyThresholdPercent = 10; // /api/info から上書きされるまでの保守的な既定値
-const notifiedSessions = new Set<number>();
+const notifyLedger = newHandoffNotifyLedger();
 
 // setHandoffNotifyThresholdPercent は settings.ts の /api/info 読み込みから
 // 一度だけ呼ばれる。Hub の handoff.notify_remaining_percent（既定 10）を
@@ -64,14 +65,14 @@ export function setHandoffNoteMode(value: unknown): void {
 // 毎回呼ばれる。残量の実測値は Claude の statusLine / Codex の rate limit
 // フィールドとして usage_stat に既に乗っている（internal/hub/usage_stat.go）
 // ので、新しい WS メッセージ型を増やさずここで閾値判定だけ行う。
-// 一度知らせたセッションは同じブラウザタブでは再度出さない（notifiedSessions）。
+// 同じブラウザタブでは、セッション × 使用枠（5h / 7d 等）ごとに 1 回だけ帯を出す
+// （notifyLedger。判定の本体は handoff-store.ts の decideHandoffNotify）。
 export function checkHandoffNotifyFromUsageStat(m: Message): void {
   const sessionID = Number(m.session_id || 0);
-  if (!sessionID || notifiedSessions.has(sessionID)) return;
-  const limitingWindow = limitingUsageWindowFromUsageStat(m);
-  if (!limitingWindow || limitingWindow.remainingPercent > notifyThresholdPercent) return;
-  notifiedSessions.add(sessionID);
-  showHandoffNotifyBanner(sessionID, String(m.provider || ''), limitingWindow);
+  const decision = decideHandoffNotify(
+    notifyLedger, sessionID, m, notifyThresholdPercent, handoffNoteActionFor(noteMode));
+  if (!decision) return;
+  showHandoffNotifyBanner(sessionID, String(m.provider || ''), decision.window, decision.requestNote);
 }
 
 const HANDOFF_NOTIFY_AUTO_DISMISS_MS = 30000;
@@ -92,8 +93,12 @@ function handoffWindowLabel(windowMinutes: number): string {
   }
 }
 
-function showHandoffNotifyBanner(sessionID: number, provider: string, usageWindow: HandoffUsageWindow): void {
+function showHandoffNotifyBanner(
+  sessionID: number, provider: string, usageWindow: HandoffUsageWindow, requestNote: boolean,
+): void {
   const action = handoffNoteActionFor(noteMode);
+  // 別の窓の帯がまだ残っていれば置き換える（noteBanners は 1 セッション 1 枚で持つ）。
+  noteBanners.get(sessionID)?.remove();
   const el = document.createElement('div');
   el.className = 'handoff-notify-banner';
   el.setAttribute('role', 'status');
@@ -124,8 +129,10 @@ function showHandoffNotifyBanner(sessionID: number, provider: string, usageWindo
   });
   el.querySelector('.handoff-notify-dismiss')?.addEventListener('click', remove);
   window.setTimeout(remove, HANDOFF_NOTIFY_AUTO_DISMISS_MS);
-  // auto は人を待たずに 1 回だけ依頼する。押す先が無いのでボタンは出していない。
-  if (action === 'auto') {
+  // auto は人を待たずに、セッションにつき 1 回だけ依頼する（2 枚目以降の帯では
+  // requestNote が false）。Hub は同時依頼（already_pending）しか弾かないので、
+  // 順に来る 2 回目をここで止めている。押す先が無いのでボタンは出していない。
+  if (action === 'auto' && requestNote) {
     setBannerStatus(sessionID, tx('handoff_note_asked', '引き継ぎメモを依頼しました…'));
     void requestHandoffNote(sessionID);
   }

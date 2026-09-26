@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -128,6 +129,56 @@ func TestSubscriptionUsagePresenceCanonicalAndExplicitClear(t *testing.T) {
 			}
 		}
 	}
+}
+
+// 上限到達後に 5h / 7d の使用率が 100 を超えて届いても、Hub は残量 100% に
+// 化けさせず「使い切り」として扱う。clampPct のように範囲外を 0 へ丸めると、
+// 上限に達したセッションほど残量表示と引き継ぎ帯が黙る。入力は合成データ。
+func TestClampRateLimitUsedPctSaturatesInsteadOfZeroing(t *testing.T) {
+	nan := math.NaN()
+	cases := []struct {
+		in, want float64
+	}{
+		{0, 0}, {42.5, 42.5}, {100, 100},
+		{100.4, 100}, {105.5, 100}, {1e9, 100}, {math.Inf(1), 100},
+		{-3, 0}, {math.Inf(-1), 0}, {nan, 0},
+	}
+	for _, tc := range cases {
+		if got := clampRateLimitUsedPct(tc.in); got != tc.want {
+			t.Errorf("clampRateLimitUsedPct(%v) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+
+	store := newSubscriptionUsageStore()
+	cfg := &config.Config{Subscriptions: config.SubscriptionProfiles{
+		"claude": {{ID: "claude-a", Name: "Claude A"}},
+	}}
+	store.recordSession("claude", "claude-a", &usageStat{
+		ClaudeRateLimitsPresent: true,
+		ClaudeFiveHourPresent:   true,
+		ClaudeSevenDayPresent:   true,
+		RateLimit5hPct:          clampRateLimitUsedPct(105.5),
+		RateLimit7dPct:          clampRateLimitUsedPct(41.2),
+	}, time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC))
+	for _, provider := range store.snapshot(cfg).Providers {
+		for _, profile := range provider.Profiles {
+			if profile.ID != "claude-a" {
+				continue
+			}
+			c := profile.Claude
+			if c == nil || c.FiveHour == nil || c.SevenDay == nil {
+				t.Fatalf("claude windows = %#v", c)
+			}
+			if c.FiveHour.RemainingPercent != 0 || c.FiveHour.UsedPercent != 100 {
+				t.Errorf("5h over 100 = %#v, want used 100 / remaining 0", c.FiveHour)
+			}
+			if c.SevenDay.UsedPercent != 41.2 {
+				t.Errorf("7d = %#v, want used 41.2", c.SevenDay)
+			}
+			return
+		}
+	}
+	t.Fatal("claude-a profile missing from snapshot")
 }
 
 func TestSubscriptionUsageObservationRecencyNotSourcePriority(t *testing.T) {

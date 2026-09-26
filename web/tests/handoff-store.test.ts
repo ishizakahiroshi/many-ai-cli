@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  decideHandoffNotify,
   handoffNoteActionFor,
   limitingUsageWindowFromUsageStat,
+  newHandoffNotifyLedger,
   normalizeHandoffNoteMode,
   remainingPercentFromUsageStat,
   usageWindowsFromUsageStat,
@@ -109,5 +111,91 @@ describe('handoff.note_on_threshold', () => {
     expect(handoffNoteActionFor('ask')).toBe('button');
     expect(handoffNoteActionFor('auto')).toBe('auto');
     expect(handoffNoteActionFor('off')).toBe('none');
+  });
+});
+
+describe('decideHandoffNotify (once per session x usage window)', () => {
+  const both = (pct5h: number, pct7d: number): Message => usage({
+    claude_5h_present: true, rl_5h_pct: pct5h,
+    claude_7d_present: true, rl_7d_pct: pct7d,
+  });
+
+  test('stays quiet while every window is above the threshold', () => {
+    const ledger = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ledger, 3, both(50, 40), 10, 'button')).toBeNull();
+  });
+
+  test('a session without an id or without readable windows never notifies', () => {
+    const ledger = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ledger, 0, both(99, 99), 10, 'button')).toBeNull();
+    expect(decideHandoffNotify(ledger, 3, usage({ tokens_total: 1 }), 10, 'button')).toBeNull();
+  });
+
+  test('the same window does not notify twice, even as its remaining percent keeps dropping', () => {
+    const ledger = newHandoffNotifyLedger();
+    const first = decideHandoffNotify(ledger, 3, both(93, 40), 10, 'button');
+    expect(first?.window).toEqual({ usedPercent: 93, remainingPercent: 7, windowMinutes: 300 });
+    expect(decideHandoffNotify(ledger, 3, both(96, 40), 10, 'button')).toBeNull();
+  });
+
+  test('a 7d window crossing the threshold after 5h was notified still notifies, though 5h remains the lower one', () => {
+    const ledger = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ledger, 3, both(97, 40), 10, 'button')?.window.windowMinutes).toBe(300);
+    // 5h is still the lower window (3% left) but was already notified; 7d (8% left) is new.
+    const second = decideHandoffNotify(ledger, 3, both(97, 92), 10, 'button');
+    expect(second?.window).toEqual({ usedPercent: 92, remainingPercent: 8, windowMinutes: 10080 });
+    expect(decideHandoffNotify(ledger, 3, both(97, 95), 10, 'button')).toBeNull();
+  });
+
+  test('two windows crossing at once make one banner for the lower one and mark both as notified', () => {
+    const ledger = newHandoffNotifyLedger();
+    const got = decideHandoffNotify(ledger, 3, both(95, 92), 10, 'button');
+    expect(got?.window.windowMinutes).toBe(300);
+    expect(decideHandoffNotify(ledger, 3, both(96, 93), 10, 'button')).toBeNull();
+  });
+
+  test('sessions are tracked independently', () => {
+    const ledger = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ledger, 3, both(95, 40), 10, 'button')).not.toBeNull();
+    expect(decideHandoffNotify(ledger, 4, both(95, 40), 10, 'button')).not.toBeNull();
+  });
+
+  test('a window that recovers above the threshold and drops again is not re-announced', () => {
+    const ledger = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ledger, 3, both(95, 40), 10, 'button')).not.toBeNull();
+    expect(decideHandoffNotify(ledger, 3, both(20, 40), 10, 'button')).toBeNull();
+    expect(decideHandoffNotify(ledger, 3, both(95, 40), 10, 'button')).toBeNull();
+  });
+
+  test('the threshold itself counts as low (remaining <= threshold)', () => {
+    const ledger = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ledger, 3, both(90, 40), 10, 'button')).not.toBeNull();
+  });
+
+  test('auto asks for the memo once per session, not once per window', () => {
+    const ledger = newHandoffNotifyLedger();
+    const first = decideHandoffNotify(ledger, 3, both(95, 40), 10, 'auto');
+    expect(first?.requestNote).toBe(true);
+    const second = decideHandoffNotify(ledger, 3, both(95, 92), 10, 'auto');
+    expect(second?.window.windowMinutes).toBe(10080);
+    expect(second?.requestNote).toBe(false);
+  });
+
+  test('ask and off never request a memo by themselves', () => {
+    const ask = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(ask, 3, both(95, 40), 10, handoffNoteActionFor('ask'))?.requestNote).toBe(false);
+    const off = newHandoffNotifyLedger();
+    expect(decideHandoffNotify(off, 3, both(95, 40), 10, handoffNoteActionFor('off'))?.requestNote).toBe(false);
+  });
+
+  test('codex windows are keyed by window_minutes', () => {
+    const ledger = newHandoffNotifyLedger();
+    const codex = (primary: number, secondary: number): Message => usage({
+      provider: 'codex',
+      codex_primary_present: true, codex_primary_used_pct: primary, codex_primary_window_minutes: 300,
+      codex_secondary_present: true, codex_secondary_used_pct: secondary, codex_secondary_window_minutes: 10080,
+    });
+    expect(decideHandoffNotify(ledger, 3, codex(95, 40), 10, 'button')?.window.windowMinutes).toBe(300);
+    expect(decideHandoffNotify(ledger, 3, codex(95, 93), 10, 'button')?.window.windowMinutes).toBe(10080);
   });
 });

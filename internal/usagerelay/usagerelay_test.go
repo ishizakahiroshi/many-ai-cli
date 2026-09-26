@@ -344,6 +344,66 @@ func TestTokenCountEventResolveLegacyFormats(t *testing.T) {
 	}
 }
 
+// TestRunClaudeRateLimitsToleratesUnexpectedValues は、上限到達後の猶予枠などで
+// rate_limits に想定外の値が来ても、statusLine の他の項目（コスト・モデル）を
+// 落とさず、値を書き換えずに Hub へ渡す（丸めは Hub 側の責務）ことを固定する。
+// 入力は合成データで、実機の statusLine JSON を観測したものではない。
+func TestRunClaudeRateLimitsToleratesUnexpectedValues(t *testing.T) {
+	cases := []struct {
+		name         string
+		rateLimits   string
+		bodyPresent  bool
+		fiveHour     bool
+		fivePct      float64
+		fiveReset    int64
+		sevenDay     bool
+		sevenPct     float64
+		sevenReset   int64
+	}{
+		{name: "used over 100 passes through", rateLimits: `{"five_hour":{"used_percentage":105.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}`, bodyPresent: true, fiveHour: true, fivePct: 105.5, fiveReset: 1738425600, sevenDay: true, sevenPct: 41.2, sevenReset: 1738857600},
+		{name: "negative used passes through", rateLimits: `{"five_hour":{"used_percentage":-3,"resets_at":1738425600}}`, bodyPresent: true, fiveHour: true, fivePct: -3, fiveReset: 1738425600},
+		{name: "null used reads as zero with window present", rateLimits: `{"five_hour":{"used_percentage":null,"resets_at":1738425600}}`, bodyPresent: true, fiveHour: true, fiveReset: 1738425600},
+		{name: "missing used reads as zero with window present", rateLimits: `{"five_hour":{"resets_at":1738425600}}`, bodyPresent: true, fiveHour: true, fiveReset: 1738425600},
+		{name: "resets_at zero and past", rateLimits: `{"five_hour":{"used_percentage":100,"resets_at":0},"seven_day":{"used_percentage":50,"resets_at":1}}`, bodyPresent: true, fiveHour: true, fivePct: 100, sevenDay: true, sevenPct: 50, sevenReset: 1},
+		{name: "five_hour null with seven_day only", rateLimits: `{"five_hour":null,"seven_day":{"used_percentage":97,"resets_at":1738857600}}`, bodyPresent: true, sevenDay: true, sevenPct: 97, sevenReset: 1738857600},
+		{name: "unknown extra fields are ignored", rateLimits: `{"five_hour":{"used_percentage":100,"resets_at":1738425600,"grace":{"used_percentage":12}},"overage":{"used_percentage":3},"seven_day":{"used_percentage":60,"resets_at":1738857600,"extra":true}}`, bodyPresent: true, fiveHour: true, fivePct: 100, fiveReset: 1738425600, sevenDay: true, sevenPct: 60, sevenReset: 1738857600},
+		// used_percentage が文字列・resets_at が小数だと rate_limits 全体が不正扱いで
+		// 捨てられる（直前の良い値を消さないための設計）。コストなど他の項目は届く。
+		{name: "string used drops the whole rate_limits", rateLimits: `{"five_hour":{"used_percentage":"100","resets_at":1738425600}}`},
+		{name: "fractional resets_at drops the whole rate_limits", rateLimits: `{"five_hour":{"used_percentage":100,"resets_at":1738425600.5}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got hubUsagePayload
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+					t.Errorf("decode payload: %v", err)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer srv.Close()
+			statusLine := `{"model":{"display_name":"Opus"},"cost":{"total_cost_usd":0.25},"rate_limits":` + tc.rateLimits + `}`
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			if err := runClaude(srv.URL, "tok", 1, strings.NewReader(statusLine), io.Discard, logger); err != nil {
+				t.Fatalf("runClaude: %v", err)
+			}
+			if got.Model != "Opus" || got.CostUSD != 0.25 {
+				t.Fatalf("model/cost = %q/%v, want Opus/0.25 (rate_limits must not drop the rest of the statusLine)", got.Model, got.CostUSD)
+			}
+			if got.ClaudeRateLimitsPresent != tc.bodyPresent {
+				t.Fatalf("ClaudeRateLimitsPresent = %v, want %v", got.ClaudeRateLimitsPresent, tc.bodyPresent)
+			}
+			if got.ClaudeFiveHourPresent != tc.fiveHour || got.RateLimit5hPct != tc.fivePct || got.RateLimit5hReset != tc.fiveReset {
+				t.Fatalf("5h = present:%v pct:%v reset:%d, want %v/%v/%d", got.ClaudeFiveHourPresent, got.RateLimit5hPct, got.RateLimit5hReset, tc.fiveHour, tc.fivePct, tc.fiveReset)
+			}
+			if got.ClaudeSevenDayPresent != tc.sevenDay || got.RateLimit7dPct != tc.sevenPct || got.RateLimit7dReset != tc.sevenReset {
+				t.Fatalf("7d = present:%v pct:%v reset:%d, want %v/%v/%d", got.ClaudeSevenDayPresent, got.RateLimit7dPct, got.RateLimit7dReset, tc.sevenDay, tc.sevenPct, tc.sevenReset)
+			}
+		})
+	}
+}
+
 func TestRunClaudeDistinguishesMissingNullAndZeroRateLimits(t *testing.T) {
 	cases := []struct {
 		name            string
