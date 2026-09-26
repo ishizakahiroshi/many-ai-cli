@@ -169,12 +169,12 @@ func (s *Server) handleOneTapApproval(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnauthorized, "invalid_action_token", "invalid action token")
 		return
 	}
+	if !requireMethod(w, r, http.MethodPost) || !s.requireAllowedHubHost(w, r) || !s.requireAllowedRequestOrigin(w, r) {
+		return
+	}
 	claim, err := s.oneTapApprovals.verify(token)
 	if err != nil {
 		s.writeOneTapApprovalError(w, err)
-		return
-	}
-	if !requireMethod(w, r, http.MethodPost) || !s.requireAllowedHubHost(w, r) || !s.requireAllowedRequestOrigin(w, r) {
 		return
 	}
 	if err := s.applyOneTapApproval(claim); err != nil {

@@ -220,3 +220,33 @@ func TestApprovalActionReservationBlocksSecondSendBeforeCommit(t *testing.T) {
 		t.Fatal("first approval action did not commit")
 	}
 }
+
+func TestOneTapApprovalGetDoesNotConsumeNonce(t *testing.T) {
+	s := newTestServer()
+	now := time.Unix(1_700_000_000, 0)
+	s.oneTapApprovals = newTestOneTapApprovalManager(t, now)
+	ses := installBatchApproval(t, s, 15, "codex", t.TempDir(), "git status")
+
+	token, err := s.oneTapApprovals.issue(15, ses.Sig, ses.Sig, 1, oneTapApprove)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. GET リクエスト（リンク先プレビューや誤クリック）を送信 -> 405 Method Not Allowed
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/approval-action/"+token, nil)
+	reqGet.Host = "127.0.0.1:47777"
+	wGet := httptest.NewRecorder()
+	s.handleOneTapApproval(wGet, reqGet)
+	if wGet.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want %d; body=%s", wGet.Code, http.StatusMethodNotAllowed, wGet.Body.String())
+	}
+
+	// 2. その後、正規の POST リクエストを送信 -> 成功するはず（Nonce が消費されていないこと）
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/approval-action/"+token, nil)
+	reqPost.Host = "127.0.0.1:47777"
+	wPost := httptest.NewRecorder()
+	s.handleOneTapApproval(wPost, reqPost)
+	if wPost.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want %d (action must not be consumed by prior GET); body=%s", wPost.Code, http.StatusOK, wPost.Body.String())
+	}
+}

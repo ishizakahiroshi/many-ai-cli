@@ -387,3 +387,35 @@ func TestProfileJSONRoundTrip(t *testing.T) {
 		t.Errorf("JSON round-trip mismatch:\n in=%+v\nout=%+v", in, out)
 	}
 }
+
+func TestValidateSSHRejectsHyphenAndControlCWD(t *testing.T) {
+	base := Profile{
+		Name:    "test-ssh",
+		Type:    ProfileTypeSSH,
+		Mode:    SSHModeServe,
+		Host:    "198.51.100.10",
+		User:    "user",
+		HubPort: 47777,
+	}
+
+	// 正常な CWD
+	okProf := base
+	okProf.CWD = "/srv/project"
+	if err := Validate(&ProfilesFile{Profiles: []Profile{okProf}}); err != nil {
+		t.Fatalf("expected valid CWD to pass, got: %v", err)
+	}
+
+	// ハイフン始まりの CWD は拒否されるべき (e.g. cd -)
+	hyphenProf := base
+	hyphenProf.CWD = "-P"
+	if err := Validate(&ProfilesFile{Profiles: []Profile{hyphenProf}}); err == nil || !strings.Contains(err.Error(), "must not start with '-'") {
+		t.Fatalf("expected hyphen CWD to fail, got: %v", err)
+	}
+
+	// 制御文字を含む CWD は拒否されるべき
+	ctrlProf := base
+	ctrlProf.CWD = "/srv/app\nwhoami"
+	if err := Validate(&ProfilesFile{Profiles: []Profile{ctrlProf}}); err == nil || !strings.Contains(err.Error(), "control characters") {
+		t.Fatalf("expected control char CWD to fail, got: %v", err)
+	}
+}
