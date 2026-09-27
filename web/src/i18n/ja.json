@@ -402,6 +402,8 @@
 	"card_board_update_pending_tooltip": "新しい board 更新があります",
   "settings_notify_sound_toggle": "通知音",
   "settings_notify_sound_type": "音源",
+  "settings_notify_sound_volume": "通知音量",
+  "settings_notify_sound_volume_desc": "このブラウザの通知音だけを調整します（0: 無音、100: 最大）。PC・端末の音量は変わりません。",
   "settings_notify_sound_default": "デフォルト (beep)",
   "settings_notify_sound_custom": "カスタム",
   "settings_notify_sound_file": "ファイル",

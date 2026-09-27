@@ -938,6 +938,14 @@
               </label>
             </div>
           </div>
+          <div class="settings-row" id="notify-sound-volume-row">
+            <label class="settings-label" for="notify-sound-volume" data-i18n="settings_notify_sound_volume">通知音量</label>
+            <div class="notify-volume-control">
+              <input type="range" id="notify-sound-volume" min="0" max="100" step="1" value="100" aria-describedby="notify-sound-volume-desc">
+              <output id="notify-sound-volume-value" for="notify-sound-volume">100</output>
+            </div>
+          </div>
+          <div class="settings-note" id="notify-sound-volume-desc" data-i18n="settings_notify_sound_volume_desc">このブラウザの通知音だけを調整します（0: 無音、100: 最大）。PC・端末の音量は変わりません。</div>
           <div class="settings-row" id="notify-sound-type-row">
             <span class="settings-label" data-i18n="settings_notify_sound_type">音源</span>
             <select id="notify-sound-type" class="settings-select">

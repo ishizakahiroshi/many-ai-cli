@@ -10,6 +10,11 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+### Added
+- **Notification sound has a 0–100 volume slider**, independent of system volume.
+  It applies to the default beep, custom sounds and test playback. Zero mutes
+  the sound; 100 preserves the previous level. The setting is saved per browser.
+
 ## [0.9.0] - 2026-09-27
 
 ### Added

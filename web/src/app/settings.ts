@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
+import { getNotificationVolume, setNotificationVolume, STORAGE_NOTIFY_SOUND_VOLUME_KEY } from './notification-volume.js';
 import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
 import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
@@ -312,13 +313,17 @@ export function _getAudioCtx() {
 
 export function playNotificationSound() {
   if (localStorage.getItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY) !== '1') return;
+  const volume = getNotificationVolume() / 100;
+  if (volume === 0) return;
   const type = localStorage.getItem(STORAGE_NOTIFY_SOUND_TYPE_KEY) || 'default';
   if (type === 'custom') {
-    const tk = token;
     const customUrl = '/api/user-prefs/notify-sound-custom';
-    if (customUrl) {
-      try { new Audio(customUrl).play().catch(() => {}); return; } catch (_) {}
-    }
+    try {
+      const audio = new Audio(customUrl);
+      audio.volume = volume;
+      audio.play().catch(() => {});
+      return;
+    } catch (_) {}
   }
   try {
     const ctx = _getAudioCtx();
@@ -328,8 +333,8 @@ export function playNotificationSound() {
     gain.connect(ctx.destination);
     osc.type = 'sine';
     osc.frequency.setValueAtTime(880, ctx.currentTime);
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.3 * volume, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001 * volume, ctx.currentTime + 0.3);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.3);
   } catch (_) {}
@@ -2010,7 +2015,23 @@ initSettingsInformationArchitecture();
   const soundBrowseBtn  = document.getElementById('notify-sound-browse-btn');
   const soundFilenameEl = document.getElementById('notify-sound-filename');
   const soundTestBtn    = document.getElementById('notify-sound-test-btn');
+  const soundVolumeEl = document.getElementById('notify-sound-volume') as HTMLInputElement;
+  const soundVolumeValue = document.getElementById('notify-sound-volume-value') as HTMLOutputElement;
   if (!soundEnabledEl) return;
+
+  function updateVolumeDisplay() {
+    const volume = getNotificationVolume();
+    soundVolumeEl.value = String(volume);
+    soundVolumeValue.value = String(volume);
+  }
+  soundVolumeEl.addEventListener('input', () => {
+    setNotificationVolume(soundVolumeEl.valueAsNumber);
+    soundVolumeValue.value = soundVolumeEl.value;
+  });
+  window.addEventListener('storage', (event) => {
+    if (event.key === STORAGE_NOTIFY_SOUND_VOLUME_KEY || event.key === null) updateVolumeDisplay();
+  });
+  updateVolumeDisplay();
 
   function updateSoundVisibility() {
     soundTypeRow.hidden    = !soundEnabledEl.checked;

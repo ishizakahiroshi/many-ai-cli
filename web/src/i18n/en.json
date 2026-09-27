@@ -402,6 +402,8 @@
 	"card_board_update_pending_tooltip": "A new board update is waiting",
   "settings_notify_sound_toggle": "Notification Sound",
   "settings_notify_sound_type": "Sound source",
+  "settings_notify_sound_volume": "Sound volume",
+  "settings_notify_sound_volume_desc": "Adjust only this browser's notification sound (0: muted, 100: maximum). System volume stays unchanged.",
   "settings_notify_sound_default": "Default (beep)",
   "settings_notify_sound_custom": "Custom",
   "settings_notify_sound_file": "File",

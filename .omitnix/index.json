@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "18f15a1b0a6fc0398edc85514f296a2872b3dcec",
+    "commit": "29e42513daea392b5ae05a2a0893045978234215",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1060,
-    "analyzed": 829,
+    "discovered": 1061,
+    "analyzed": 830,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 199,
@@ -23176,6 +23176,36 @@
         "summary": {
           "state": "value",
           "value": "multi-scope.ts — multi タブ（複数ペイン）の「範囲」の純関数。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/notification-volume.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Device-local: speakers and listening levels differ between browsers/devices."
         },
         "authentication": {
           "state": "not_configured"

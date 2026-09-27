@@ -402,6 +402,8 @@
   "card_board_update_pending_tooltip": "Có cập nhật board mới đang chờ",
   "settings_notify_sound_toggle": "Âm thanh thông báo",
   "settings_notify_sound_type": "Nguồn âm",
+  "settings_notify_sound_volume": "Âm lượng thông báo",
+  "settings_notify_sound_volume_desc": "Chỉ điều chỉnh âm thanh thông báo của trình duyệt này (0: tắt tiếng, 100: tối đa). Âm lượng hệ thống không thay đổi.",
   "settings_notify_sound_default": "Mặc định (beep)",
   "settings_notify_sound_custom": "Tùy chỉnh",
   "settings_notify_sound_file": "File",
