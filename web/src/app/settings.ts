@@ -2656,6 +2656,8 @@ export async function loadSlashCmdSources() {
   const codexEl  = document.getElementById('slash-src-codex');
   const copilotEl = document.getElementById('slash-src-copilot');
   const cursorAgentEl = document.getElementById('slash-src-cursor-agent');
+  const openCodeEl = document.getElementById('slash-src-opencode');
+  const grokEl = document.getElementById('slash-src-grok');
   const commandCodeEl = document.getElementById('slash-src-command-code');
   if (!claudeEl || !codexEl || !copilotEl) return;
   try {
@@ -2666,6 +2668,8 @@ export async function loadSlashCmdSources() {
     codexEl.value  = data.codex  || '';
     copilotEl.value = data.copilot || '';
     if (cursorAgentEl) cursorAgentEl.value = data['cursor-agent'] || '';
+    if (openCodeEl) openCodeEl.value = data.opencode || '';
+    if (grokEl) grokEl.value = data.grok || '';
     if (commandCodeEl) commandCodeEl.value = data['command-code'] || '';
   } catch (_) {}
 }
@@ -2679,6 +2683,8 @@ export async function loadSlashCmdSources() {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      opencode: (document.getElementById('slash-src-opencode')?.value || '').trim(),
+      grok: (document.getElementById('slash-src-grok')?.value || '').trim(),
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
@@ -3790,7 +3796,11 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
   },
 
   'slash-src': () => {
-    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent', 'slash-src-command-code'];
+    const ids = [
+      'slash-src-claude', 'slash-src-codex', 'slash-src-copilot',
+      'slash-src-cursor-agent', 'slash-src-opencode', 'slash-src-grok',
+      'slash-src-command-code',
+    ];
     let custom = 0;
     for (const id of ids) {
       if (_summaryVal(id).trim()) custom++;

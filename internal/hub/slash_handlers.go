@@ -19,10 +19,8 @@ func (s *Server) invalidateSlashCache(provider string) {
 	s.slashCmdMu.Unlock()
 }
 
-// slashCmdSourcesPatch keeps omitted provider fields intact. The settings UI
-// predates the opencode/grok fields, so decoding directly into the complete
-// struct would turn those omitted fields into empty strings and overwrite
-// user-configured sources.
+// slashCmdSourcesPatch keeps omitted provider fields intact so partial or older
+// clients cannot overwrite user-configured sources with empty strings.
 type slashCmdSourcesPatch struct {
 	Claude      *string `json:"claude"`
 	Codex       *string `json:"codex"`

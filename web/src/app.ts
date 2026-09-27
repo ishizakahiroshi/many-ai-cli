@@ -2243,6 +2243,8 @@ inputEl.addEventListener('blur', (e) => {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      opencode: (document.getElementById('slash-src-opencode')?.value || '').trim(),
+      grok: (document.getElementById('slash-src-grok')?.value || '').trim(),
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
@@ -2376,11 +2378,15 @@ inputEl.addEventListener('blur', (e) => {
     const slashCodexEl = document.getElementById('slash-src-codex');
     const slashCopilotEl = document.getElementById('slash-src-copilot');
     const slashCursorAgentEl = document.getElementById('slash-src-cursor-agent');
+    const slashOpenCodeEl = document.getElementById('slash-src-opencode');
+    const slashGrokEl = document.getElementById('slash-src-grok');
     const slashCommandCodeEl = document.getElementById('slash-src-command-code');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
     if (slashCopilotEl) slashCopilotEl.value = '';
     if (slashCursorAgentEl) slashCursorAgentEl.value = '';
+    if (slashOpenCodeEl) slashOpenCodeEl.value = '';
+    if (slashGrokEl) slashGrokEl.value = '';
     if (slashCommandCodeEl) slashCommandCodeEl.value = '';
     loadUsageLinkSettings();
 
