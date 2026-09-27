@@ -1,6 +1,9 @@
 package hub
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -104,7 +107,19 @@ func (s *Server) handleUserPrefsGet(w http.ResponseWriter, _ *http.Request) {
 		effective := s.doneSummaryNotifyEnabled()
 		prefs.DoneSummaryNotify.Enabled = &effective
 	}
+	w.Header().Set("X-Template-Version", userPrefsTemplateVersion(prefs.Templates))
 	writeJSON(w, prefs)
+}
+
+// The version covers only shared templates; changing another preference must
+// neither invalidate an editor nor permit its stale list to replace this one.
+func userPrefsTemplateVersion(templates []config.UserPrefsTemplate) string {
+	if templates == nil {
+		templates = []config.UserPrefsTemplate{}
+	}
+	body, _ := json.Marshal(templates)
+	digest := sha256.Sum256(body)
+	return hex.EncodeToString(digest[:])
 }
 
 // sanitizeAvatarPref は永続化前に Avatar フィールドを正規化する。
@@ -135,16 +150,33 @@ func (s *Server) handleUserPrefsPut(w http.ResponseWriter, r *http.Request) {
 	prefs.Display.CustomThemes = config.SanitizeCustomThemes(prefs.Display.CustomThemes)
 	prefs.Display.Theme = config.SanitizeDisplayTheme(prefs.Display.Theme, prefs.Display.CustomThemes)
 	s.cfgMu.Lock()
-	s.cfg.UserPrefs = prefs
-	s.cfgMu.Unlock()
-	if err := s.persistConfig(); err != nil {
+	switch r.Header.Get("X-Template-Write") {
+	case "preserve":
+		prefs.Templates = s.cfg.UserPrefs.Clone().Templates
+	case "compare":
+		if r.Header.Get("X-Template-Version") != userPrefsTemplateVersion(s.cfg.UserPrefs.Templates) {
+			s.cfgMu.Unlock()
+			writeJSONError(w, http.StatusConflict, "template_conflict", "shared templates changed on another device")
+			return
+		}
+	}
+	// Compare/preserve, persistence, and publication form one transaction. A
+	// failed save must not advance the shared-template version in memory, and
+	// a second editor must not be admitted against an uncommitted version.
+	// This endpoint deliberately holds cfgMu through the atomic config save;
+	// its response is the exact snapshot this request committed.
+	next := s.cfg.Clone()
+	next.UserPrefs = prefs
+	if err := config.Save(next); err != nil {
+		s.cfgMu.Unlock()
 		s.logger.Warn("save config failed", "err", err)
 		writeJSONError(w, http.StatusInternalServerError, "save_failed", errorDetail("save failed", err))
 		return
 	}
-	s.cfgMu.Lock()
-	saved := s.cfg.UserPrefs.Clone()
+	s.cfg.UserPrefs = next.UserPrefs.Clone()
+	saved := next.UserPrefs.Clone()
 	s.cfgMu.Unlock()
+	w.Header().Set("X-Template-Version", userPrefsTemplateVersion(saved.Templates))
 	writeJSON(w, saved)
 }
 

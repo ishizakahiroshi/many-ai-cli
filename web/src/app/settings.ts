@@ -36,6 +36,8 @@ import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.
 import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
 import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
 import { saveProjectView } from './project-view-store.js';
+import { DeviceSessionViews, readViewPreference, resolveReadingMode, saveViewPreference, type ViewDevice, type ViewPreferenceStorage } from './session-view-preferences.js';
+import { captureTerminalView, restoreTerminalView, terminalViewFollows } from './session-view-position.js';
 import { detectSupport } from '../vendor/vtype-core/index.js';
 import type { NVIDIANIMSettingsStatus } from '../types/proto.js';
 import { invalidateSpawnModelGroups } from './spawn-model-groups.js';
@@ -2723,7 +2725,11 @@ export async function loadSlashCmdSources() {
 
 // ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
 // セッション毎の表示モード (D13: in-memory, リロードで初期化)
-export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git' | 'review'
+export const sessionViewMode = new DeviceSessionViews(viewDevice); // sid -> view, scoped to this device class
+function viewDevice(): ViewDevice { return window.innerWidth <= 720 ? 'mobile' : 'desktop'; }
+function viewStorage(): ViewPreferenceStorage | null {
+  try { return window.localStorage; } catch (_) { return null; }
+}
 // Files/Git/Review の遅延ロード状態 (sid -> Set<'files'|'git'|'review'>)
 export const sessionLazyLoaded = new Map();
 
@@ -2762,13 +2768,9 @@ function defaultViewModeForViewport(): string {
 
 export function getSessionViewMode(sid) {
   if (sid === null || sid === undefined) return defaultViewModeForViewport();
-  // C5: セッション未登録 (新規 spawn / リロード後の初回) は lock 値を初期モードとして適用
-  if (!sessionViewMode.has(sid)) {
-    const lock = getDisplayLockedMode();
-    if (lock && LOCKABLE_MODES.has(lock)) return lock;
-    return defaultViewModeForViewport();
-  }
-  return sessionViewMode.get(sid) || defaultViewModeForViewport();
+  const device = viewDevice();
+  return sessionViewMode.get(sid) ||
+    resolveReadingMode(readViewPreference(viewStorage(), device), getDisplayLockedMode(), device);
 }
 
 export function isTabLazyLoaded(sid, name) {
@@ -2925,6 +2927,16 @@ export function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
   name = normalizeResponsiveTabName(name);
 
+  // Capture before hiding either view. Chat owns its own position through this event.
+  const previousArea = document.getElementById('display-area');
+  if (previousArea && !previousArea.hidden && previousArea.dataset.viewSessionId === String(activeSessionId) &&
+      (previousArea.classList.contains('mode-terminal') || previousArea.classList.contains('mode-split'))) {
+    captureTerminalView(terminals.get(activeSessionId));
+  }
+  window.dispatchEvent(new CustomEvent('session-view-mode-changing', {
+    detail: { sid: sid ?? activeSessionId, name },
+  }));
+
   // Grok 会話履歴 / 過去ログの読み取り専用オーバーレイはターミナル領域に重なる。
   // タブ切替（同じターミナルタブの再クリック含む）で閉じ、閉じるボタンを挟まない。
   dismissTerminalReadOverlays();
@@ -3058,6 +3070,7 @@ export function setActiveTab(sid, name) {
     }
   }
   area.hidden = false;
+  area.dataset.viewSessionId = String(targetSid);
 
   area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
@@ -3081,7 +3094,14 @@ export function setActiveTab(sid, name) {
   // xterm のリサイズ (D6): terminal/split に切り替えたときは refit
   if (name === 'terminal' || name === 'split') {
     if (typeof refitActiveTerminalAfterLayout === 'function') {
-      refitActiveTerminalAfterLayout(true);
+      const entry = terminals.get(targetSid);
+      refitActiveTerminalAfterLayout(terminalViewFollows(entry));
+      // Runs after the existing layout fit; no polling or delayed overwrite of user scroll.
+      requestAnimationFrame(() => {
+        if (activeSessionId === targetSid && (area.classList.contains('mode-terminal') || area.classList.contains('mode-split'))) {
+          restoreTerminalView(entry);
+        }
+      });
     }
   }
 
@@ -3149,16 +3169,28 @@ export function switchToTerminalView() {
     btn.addEventListener('click', () => {
       const name = btn.dataset.tab;
       if (!VALID_TAB_NAMES.has(name)) return;
+      saveViewPreference(viewStorage(), viewDevice(), name);
       setActiveTab(activeSessionId, name);
       // 箱ごとの記憶（C4）。**保存は利用者の操作からだけ**なので setActiveTab の中では
       // なくここで呼ぶ。setActiveTab は復元・承認の自動移動・幅の変化からも呼ばれる。
-      rememberTabForOpenProject(name);
+      // Reading mode is device-local. Other project tabs keep their existing shared memory.
+      if (name !== 'terminal' && name !== 'chat') rememberTabForOpenProject(name);
       // C5: lock 中に lock 値以外へ切替えたら、セッションごと 5 分クールダウンでトースト
       if (typeof maybeFireLockedModeToast === 'function') {
         maybeFireLockedModeToast(activeSessionId, name);
       }
     });
   });
+  // Keep both reading choices named even where other tabs collapse to icons.
+  for (const mode of ['chat', 'terminal']) {
+    const button = bar.querySelector<HTMLButtonElement>(`.view-tab[data-tab="${mode}"]`);
+    if (!button) continue;
+    const hint = document.createElement('span');
+    hint.className = 'mobile-reading-mode-label';
+    hint.dataset.i18n = mode === 'chat' ? 'mobile_view_mode_chat_hint' : 'mobile_view_mode_cli_hint';
+    hint.textContent = t(hint.dataset.i18n);
+    button.appendChild(hint);
+  }
   // C5: 初期 🔒 反映 (起動時に lock 値が設定済みなら該当タブへ付与)
   if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
 })();
@@ -3170,6 +3202,14 @@ export function applyActiveSessionViewMode() {
   refreshLazyTabClasses(activeSessionId);
   setActiveTab(activeSessionId, mode);
 }
+
+window.matchMedia?.('(max-width: 720px)').addEventListener('change', () => {
+  const area = document.getElementById('display-area');
+  if (!area || area.hidden) return;
+  if (['terminal', 'chat', 'split'].some(mode => area.classList.contains('mode-' + mode))) {
+    applyActiveSessionViewMode();
+  }
+});
 
 window.addEventListener('resize', () => {
   if (window.innerWidth >= RESPONSIVE_WIDE_MODE_MIN) return;

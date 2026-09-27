@@ -296,13 +296,12 @@ body.pane-resizing .xterm { pointer-events: none; }
   }
 }
 
+.mobile-reading-mode-label { display: none; }
 @media (max-width: 720px) {
-  /* C6: モック決定事項（論点5）— Files / Git / Chat タブはスマホに出さない。
-     マルチ / 分割は max-width:1000px 側で既に非表示のため、ここでは 3 タブのみ隠す。 */
+  /* Reading mode remains a visible choice on mobile; development-only tabs stay compact. */
   .view-tab[data-tab="files"],
   .view-tab[data-tab="git"],
-  .view-tab[data-tab="review"],
-  .view-tab[data-tab="chat"] {
+  .view-tab[data-tab="review"] {
     display: none !important;
   }
 
@@ -338,6 +337,13 @@ body.pane-resizing .xterm { pointer-events: none; }
     max-width: 8ch;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  #unified-tab-bar .view-tab[data-tab="chat"],
+  #unified-tab-bar .view-tab[data-tab="terminal"] { min-height: 44px; }
+  #unified-tab-bar .view-tab[data-tab="chat"] > span:not(.mobile-reading-mode-label):not(.badge),
+  #unified-tab-bar .view-tab[data-tab="terminal"] > span:not(.mobile-reading-mode-label):not(.badge) { display: none; }
+  #unified-tab-bar .view-tab > .mobile-reading-mode-label {
+    display: inline; max-width: none; overflow: visible; font-size: 12px;
   }
 }
 /* C5: 表示モード固定 (soft lock) — 🔒 を疑似要素で付与 */

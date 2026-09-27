@@ -87,9 +87,12 @@ self.addEventListener('notificationclick', (event) => {
         // Fall through to the Hub UI; offline delivery must not loop retries.
       }
     }
+    const runID = notificationRoutineRun(data.url || '');
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of windows) {
-      client.postMessage({ type: 'many-ai-cli-open-session', session_id: sessionId });
+      client.postMessage(runID
+        ? { type: 'many-ai-cli-open-routine', run_id: runID }
+        : { type: 'many-ai-cli-open-session', session_id: sessionId });
       return client.focus();
     }
     const url = await notificationURL(data.url || '', sessionId);
@@ -115,6 +118,15 @@ function parsePushPayload(event) {
   }
 }
 
+function notificationRoutineRun(url: string): string | null {
+  try {
+    const target = new URL(url || '/', self.location.origin);
+    if (target.origin !== self.location.origin) return null;
+    const id = target.searchParams.get('routine_run');
+    return id && /^[a-zA-Z0-9_-]{1,100}$/.test(id) ? id : null;
+  } catch (_) { return null; }
+}
+
 async function notificationURL(url, sessionId) {
   const base = url || '/';
   let target;
@@ -129,15 +141,17 @@ async function notificationURL(url, sessionId) {
     target = new URL('/', self.location.origin);
   }
   // 既にトークン付き URL（自オリジン）なら、そのトークンを尊重してそのまま使う。
+  if (notificationRoutineRun(target.href)) target.searchParams.delete('session_id');
   if (target.searchParams.has('token')) {
-    if (sessionId > 0 && !target.searchParams.has('session_id')) {
+    if (sessionId > 0 && !notificationRoutineRun(target.href) && !target.searchParams.has('session_id')) {
       target.searchParams.set('session_id', String(sessionId));
     }
     return target.href;
   }
   const token = await readHubToken();
   if (token) target.searchParams.set('token', token);
-  if (sessionId > 0) target.searchParams.set('session_id', String(sessionId));
+  if (notificationRoutineRun(target.href)) target.searchParams.delete('session_id');
+  else if (sessionId > 0) target.searchParams.set('session_id', String(sessionId));
   return target.href;
 }
 

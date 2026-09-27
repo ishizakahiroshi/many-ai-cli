@@ -8,7 +8,7 @@ import { showPathPopup } from './path-links.js';
 import { TERMINAL_SCROLLBACK_LINES, markTerminalManualScrollIntent, sendResize, updateScrollLockBtn } from './terminal.js';
 import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
-import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, updateRenderedChatMessage } from './transcript-message.js';
+import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, transcriptMessagePresentation, transcriptReadPosition, transcriptRestoreTop, updateRenderedChatMessage, type TranscriptReadPosition } from './transcript-message.js';
 import { hasProviderCapability } from './provider-store.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
@@ -157,6 +157,7 @@ export function pushAgentChatMessage(sid, msg) {
     transcript: true,
     transcript_key: key,
     transcript_message_id: identity,
+    presentation: msg.presentation || '',
     thinking: Array.isArray(msg.thinking) ? msg.thinking.slice() : [],
     tools: Array.isArray(msg.tools) ? msg.tools.slice() : [],
   };
@@ -390,6 +391,7 @@ export function onChatHistorySessionRemoved(sid) {
   // Hub 再起動後などに同じ live ID が別セッションへ再利用された場合でも
   // SQLite からの履歴復元が「復元済み」と誤判定されないよう印を消す
   chatHistoryStoreRestored.delete(sid);
+  chatReadPositions.delete(String(sid));
   if (_chatPaneMountedSid === sid) {
     _chatPaneMountedSid = null;
     _chatPaneRenderedMessageIds = new Set();
@@ -522,6 +524,29 @@ export function clearBuffer(session) {
 
 export let _chatPaneMountedSid = null;
 export let _chatPaneRenderedMessageIds: Set<string> = new Set();
+const chatReadPositions = new Map<string, TranscriptReadPosition>();
+let chatScrollGeneration = 0;
+const observedChatTimelines = new WeakSet<HTMLElement>();
+
+function rememberChatReadPosition(timeline = getChatTimelineEl()) {
+  if (!timeline?.dataset.sid || timeline.clientHeight === 0) return;
+  chatReadPositions.set(timeline.dataset.sid, transcriptReadPosition(timeline.scrollTop, timeline.scrollHeight, timeline.clientHeight));
+}
+
+function observeChatReading(timeline: HTMLElement) {
+  if (observedChatTimelines.has(timeline)) return;
+  observedChatTimelines.add(timeline);
+  timeline.addEventListener('scroll', () => rememberChatReadPosition(timeline), { passive: true });
+  // A queued tail-follow must yield immediately when the reader starts moving.
+  for (const event of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+    timeline.addEventListener(event, () => { chatScrollGeneration++; }, { passive: true });
+  }
+}
+
+function restoreChatReadPosition(timeline: HTMLElement) {
+  if (timeline.clientHeight === 0) return;
+  timeline.scrollTop = transcriptRestoreTop(chatReadPositions.get(timeline.dataset.sid), timeline.scrollHeight, timeline.clientHeight);
+}
 
 export function getChatPaneEl() {
   return document.getElementById('chat-pane');
@@ -530,7 +555,7 @@ export function getChatPaneEl() {
 export function getChatTimelineEl() {
   const pane = getChatPaneEl();
   if (!pane) return null;
-  return pane.querySelector('.chat-timeline');
+  return pane.querySelector<HTMLElement>('.chat-timeline');
 }
 
 export function chatPaneAtBottom(timeline) {
@@ -547,9 +572,12 @@ export function scrollChatPaneToBottom(timeline) {
 export function scrollChatPaneToBottomSoon(opts: any = {}) {
   const passes = Math.max(1, Number(opts.passes) || 1);
   const startedAt = opts.startedAt || Date.now();
+  const timeline = getChatTimelineEl();
+  const sid = timeline?.dataset.sid;
+  const generation = chatScrollGeneration;
   const run = (n) => {
-    const timeline = getChatTimelineEl();
-    if (timeline) scrollChatPaneToBottom(timeline);
+    if (!timeline || timeline !== getChatTimelineEl() || timeline.dataset.sid !== sid || timeline.clientHeight === 0 || generation !== chatScrollGeneration) return;
+    scrollChatPaneToBottom(timeline);
     if (n + 1 >= passes) return;
     const elapsed = Date.now() - startedAt;
     const delay = n === 0 ? 16 : Math.min(120, 24 + n * 32);
@@ -745,22 +773,7 @@ export function stripToolCallLines(text) {
 
 function renderTranscriptDetails(meta) {
   const fragment = document.createDocumentFragment();
-  const thinking = Array.isArray(meta?.thinking) ? meta.thinking.filter(Boolean) : [];
   const tools = Array.isArray(meta?.tools) ? meta.tools : [];
-  if (thinking.length > 0) {
-    const details = document.createElement('details');
-    details.className = 'chat-transcript-section chat-transcript-thinking';
-    const summary = document.createElement('summary');
-    summary.textContent = `Thinking (${thinking.length})`;
-    details.appendChild(summary);
-    for (const item of thinking) {
-      const block = document.createElement('div');
-      block.className = 'chat-transcript-thinking-item';
-      block.appendChild(renderInlineText(String(item)));
-      details.appendChild(block);
-    }
-    fragment.appendChild(details);
-  }
   if (tools.length > 0) {
     const details = document.createElement('details');
     details.className = 'chat-transcript-section chat-transcript-tools';
@@ -785,6 +798,8 @@ export function renderMessageBubble(sid, msg) {
   const provider = (sess && sess.provider) || 'claude';
   const role = msg.role || 'system';
   const kind = msg.kind || 'text';
+  const presentation = transcriptMessagePresentation(msg, provider);
+  if (presentation === 'hidden') return null;
 
   const wrapEl = document.createElement('div');
   wrapEl.className = 'msg ' + role;
@@ -936,7 +951,17 @@ export function renderMessageBubble(sid, msg) {
     const raw = msg.normalizedText || msg.rawText || '';
     const transcript = msg.meta?.transcript === true;
     const cleanText = transcript ? raw : stripToolCallLines(raw);
-    if (cleanText) content.appendChild(renderInlineText(cleanText));
+    if (cleanText && (presentation === 'progress' || presentation === 'unclassified')) {
+      const details = document.createElement('details');
+      details.className = 'chat-transcript-section chat-transcript-record';
+      const summary = document.createElement('summary');
+      summary.textContent = presentation === 'progress'
+        ? ti18n('chat_progress_record', '作業の進捗を確認')
+        : ti18n('chat_unclassified_record', '未分類の記録 — 回答が含まれる場合があります');
+      details.appendChild(summary);
+      details.appendChild(renderInlineText(cleanText));
+      content.appendChild(details);
+    } else if (cleanText) content.appendChild(renderInlineText(cleanText));
     bubble.appendChild(content);
     if (transcript) {
       bubble.appendChild(renderTranscriptDetails(msg.meta));
@@ -1048,7 +1073,7 @@ export function updateChatPaneEmptyState(sid) {
   let count = 0;
   try {
     const msgs = (typeof getMessages === 'function') ? getMessages(sid) : [];
-    count = Array.isArray(msgs) ? msgs.length : 0;
+    count = Array.isArray(msgs) ? msgs.filter(msg => transcriptMessagePresentation(msg, sessions.get(sid)?.provider || '') !== 'hidden').length : 0;
   } catch (_) {}
   pane.classList.toggle('has-messages', count > 0);
 }
@@ -1059,6 +1084,9 @@ export function mountChatPaneForSession(sid) {
   const pane = getChatPaneEl();
   const timeline = getChatTimelineEl();
   if (!pane || !timeline) return;
+  rememberChatReadPosition(timeline);
+  chatScrollGeneration++;
+  observeChatReading(timeline);
   // タイムラインを空にして再構築
   while (timeline.firstChild) timeline.removeChild(timeline.firstChild);
   timeline.dataset.sid = sid != null ? String(sid) : '';
@@ -1077,8 +1105,10 @@ export function mountChatPaneForSession(sid) {
   try { msgs = getMessages(sid) || []; } catch (_) {}
   const frag = document.createDocumentFragment();
   for (const m of msgs) {
+    const rendered = renderMessageBubble(sid, m);
+    if (!rendered) continue;
     _chatPaneRenderedMessageIds.add(String(m.id));
-    frag.appendChild(renderMessageBubble(sid, m));
+    frag.appendChild(rendered);
   }
   timeline.appendChild(frag);
   updateChatPaneEmptyState(sid);
@@ -1086,8 +1116,9 @@ export function mountChatPaneForSession(sid) {
   if (typeof window !== 'undefined' && typeof window._chatC4OnRemount === 'function') {
     try { window._chatC4OnRemount(sid); } catch (_) {}
   }
-  // 末尾追従
-  scrollChatPaneToBottomSoon({ passes: 2 });
+  restoreChatReadPosition(timeline);
+  const position = chatReadPositions.get(String(sid));
+  if (!position || position.following) scrollChatPaneToBottomSoon({ passes: 2 });
 }
 
 // display-area が chat / split 表示中かどうか（appendMessage の mount 欠落保険用）
@@ -1133,6 +1164,10 @@ export function appendMessage(sid, msg) {
 // monkey patch を廃止し、settings.js の setActiveTab() が DOM mode 確定後に発火する
 // 'session-view-mode-changed' event を購読して mount する方式に変更。
 if (typeof window !== 'undefined') {
+  window.addEventListener('session-view-mode-changing', () => {
+    rememberChatReadPosition();
+    chatScrollGeneration++;
+  });
   window.addEventListener('session-view-mode-changed', (ev) => {
     const { sid, name } = (ev && ev.detail) || {};
     if (sid === null || sid === undefined) return;
@@ -1143,9 +1178,8 @@ if (typeof window !== 'undefined') {
       if (_chatPaneMountedSid !== sid) {
         mountChatPaneForSession(sid);
       } else {
-        // 念のためスクロール末尾追従
         const tl = getChatTimelineEl();
-        if (tl) requestAnimationFrame(() => scrollChatPaneToBottom(tl));
+        if (tl) restoreChatReadPosition(tl);
       }
     } catch (e) {
       console.warn('[mountChatPaneForSession] failed:', e);

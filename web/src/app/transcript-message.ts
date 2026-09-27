@@ -7,7 +7,7 @@ export function transcriptMessageIdentity(msg: any): string {
 
 export function transcriptMessageKey(msg: any): string {
   return JSON.stringify([
-    msg?.role || '', msg?.kind || '', msg?.ts || '', msg?.text || '',
+    msg?.role || '', msg?.kind || '', msg?.presentation || '', msg?.ts || '', msg?.text || '',
     Array.isArray(msg?.thinking) ? msg.thinking : [],
     Array.isArray(msg?.tools) ? msg.tools : [],
   ]);
@@ -33,19 +33,54 @@ export function evaluateTranscriptMessage(text: string, role: string, kind: stri
 }
 
 export function shouldRefreshChatDerivedState(action: string): boolean {
-  return action === 'appended' || action === 'updated';
+  return action === 'appended' || action === 'updated' || action === 'removed';
+}
+
+export type TranscriptReadPosition = { top: number; following: boolean };
+
+export function transcriptReadPosition(top: number, height: number, viewport: number): TranscriptReadPosition {
+  return { top, following: height - top - viewport < 60 };
+}
+
+export function transcriptRestoreTop(position: TranscriptReadPosition | undefined, height: number, viewport: number): number {
+  const max = Math.max(0, height - viewport);
+  return !position || position.following ? max : Math.max(0, Math.min(position.top, max));
+}
+
+// Thought bodies never enter the chat DOM. Codex legacy text has no reliable
+// final/progress discriminator, while Anthropic text blocks remain useful
+// readable answers without inventing a phase requirement for those providers.
+export function transcriptMessagePresentation(msg: any, provider = ''): 'hidden' | 'answer' | 'progress' | 'unclassified' | 'tool' {
+  if (msg?.role !== 'ai' || msg?.meta?.transcript !== true) return 'answer';
+  if (msg.kind === 'thinking' || msg.kind === 'sidechain' || msg.meta.presentation === 'hidden') return 'hidden';
+  const text = String(msg.normalizedText || msg.rawText || '');
+  if (!text && Array.isArray(msg.meta.tools) && msg.meta.tools.length) return 'tool';
+  if (!text) return 'hidden';
+  if (msg.meta.presentation === 'progress') return 'progress';
+  if (msg.meta.presentation === 'answer') return 'answer';
+  if (msg.meta.presentation === 'unclassified' || provider === 'codex') return 'unclassified';
+  return 'answer';
 }
 
 // Apply the subscriber-side DOM transition for an already rendered message.
 // Keeping this small and DOM-adapter based makes the exact update-in-place
 // contract testable without booting the full browser application.
-export function updateRenderedChatMessage(timeline: any, renderedIds: Set<string>, msg: any, render: () => any): 'updated' | 'appended' | 'skipped' | 'ignored' {
+export function updateRenderedChatMessage(timeline: any, renderedIds: Set<string>, msg: any, render: () => any): 'updated' | 'appended' | 'removed' | 'skipped' | 'ignored' {
   if (!timeline || !msg || !renderedIds || typeof render !== 'function') return 'ignored';
   const id = String(msg.id);
   const children = Array.from(timeline.children || []);
   const existing = children.find((child: any) => String(child?.dataset?.msgId || '') === id) as any;
+  const replacement = render();
+  if (!replacement) {
+    renderedIds.delete(id);
+    if (existing) {
+      if (typeof existing.remove === 'function') existing.remove();
+      else existing.parentNode?.removeChild(existing);
+      return 'removed';
+    }
+    return 'skipped';
+  }
   if (existing) {
-    const replacement = render();
     if (typeof existing.replaceWith === 'function') {
       existing.replaceWith(replacement);
     } else if (existing.parentNode && typeof existing.parentNode.replaceChild === 'function') {
@@ -57,6 +92,6 @@ export function updateRenderedChatMessage(timeline: any, renderedIds: Set<string
   }
   if (renderedIds.has(id)) return 'skipped';
   renderedIds.add(id);
-  timeline.appendChild(render());
+  timeline.appendChild(replacement);
   return 'appended';
 }

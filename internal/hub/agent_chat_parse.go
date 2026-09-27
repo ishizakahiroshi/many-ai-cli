@@ -37,15 +37,16 @@ const (
 // agentChatMessage is the provider-neutral representation sent to the browser.
 // It is deliberately smaller than either provider's native event schema.
 type agentChatMessage struct {
-	Role        string          `json:"role"`
-	Kind        string          `json:"kind,omitempty"`
-	Text        string          `json:"text,omitempty"`
-	Thinking    []string        `json:"thinking,omitempty"`
-	Tools       []agentChatTool `json:"tools,omitempty"`
-	TS          string          `json:"ts,omitempty"`
-	MessageID   string          `json:"message_id,omitempty"`
-	sourceStart int64
-	sourceEnd   int64
+	Role         string          `json:"role"`
+	Kind         string          `json:"kind,omitempty"`
+	Presentation string          `json:"presentation,omitempty"`
+	Text         string          `json:"text,omitempty"`
+	Thinking     []string        `json:"thinking,omitempty"`
+	Tools        []agentChatTool `json:"tools,omitempty"`
+	TS           string          `json:"ts,omitempty"`
+	MessageID    string          `json:"message_id,omitempty"`
+	sourceStart  int64
+	sourceEnd    int64
 }
 
 type agentChatTool struct {
@@ -1102,6 +1103,8 @@ type codexRolloutLine struct {
 
 type codexPayload struct {
 	Type                                   string                            `json:"type"`
+	Phase                                  string                            `json:"phase"`
+	Channel                                string                            `json:"channel"`
 	Role                                   string                            `json:"role"`
 	Text                                   string                            `json:"text"`
 	Message                                string                            `json:"message"`
@@ -1198,12 +1201,13 @@ func parseCodexResponseItem(state *agentChatParseState, payload codexPayload, ts
 			kind = "thinking"
 		}
 		appendCodexMessage(state, agentChatMessage{
-			Role:     role,
-			Kind:     kind,
-			Text:     maskAgentChatText(text),
-			Thinking: thinking,
-			Tools:    tools,
-			TS:       ts,
+			Role:         role,
+			Kind:         kind,
+			Presentation: codexMessagePresentation(payload, role),
+			Text:         maskAgentChatText(text),
+			Thinking:     thinking,
+			Tools:        tools,
+			TS:           ts,
 		})
 	case "reasoning":
 		thinking := extractCodexSummary(payload.Summary)
@@ -1284,7 +1288,7 @@ func parseCodexEventMessage(state *agentChatParseState, payload codexPayload, ts
 			text = payload.Text
 		}
 		if strings.TrimSpace(text) != "" {
-			appendCodexMessage(state, agentChatMessage{Role: "assistant", Kind: "text", Text: maskAgentChatText(text), TS: ts})
+			appendCodexMessage(state, agentChatMessage{Role: "assistant", Kind: "text", Presentation: codexMessagePresentation(payload, "assistant"), Text: maskAgentChatText(text), TS: ts})
 		}
 	case "agent_reasoning":
 		text := payload.Message
@@ -1297,6 +1301,24 @@ func parseCodexEventMessage(state *agentChatParseState, payload codexPayload, ts
 	case "task_complete":
 		recordCodexTaskCompletion(state, payload, ts)
 	}
+}
+
+// Classify only explicit provider metadata. Older records remain readable as
+// unclassified work records; their wording is not evidence of a final answer.
+func codexMessagePresentation(payload codexPayload, role string) string {
+	if role != "assistant" {
+		return ""
+	}
+	if payload.Channel == "analysis" || payload.Phase == "analysis" {
+		return "hidden"
+	}
+	if payload.Phase == "commentary" || payload.Channel == "commentary" {
+		return "progress"
+	}
+	if payload.Phase == "final_answer" || payload.Channel == "final" {
+		return "answer"
+	}
+	return "unclassified"
 }
 
 func recordCodexTaskCompletion(state *agentChatParseState, payload codexPayload, ts string) {

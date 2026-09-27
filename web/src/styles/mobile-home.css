@@ -735,14 +735,10 @@
   }
 
   /* ── A3: 簡易ターミナルビュー ── */
-  /* xterm.js のフル描画は狭い画面で読みづらいため、個別セッション + mobile 幅では
-     #terminal-area-wrapper を hidden にして #mobile-terminal-lite（チャットトランスクリプト表示）を出す。
-     xterm.js 自身は document に attach されたまま生きているので承認検出・PTY 受信は続く。 */
-  body.mobile-has-session:not(.mobile-home-view) #terminal-area-wrapper {
-    display: none !important;
-  }
+  /* CLI/chat now use the same explicit tabs as desktop. The legacy text projection
+     remains available to its detail-log action but must not replace the live CLI. */
   body.mobile-has-session:not(.mobile-home-view) #mobile-terminal-lite {
-    display: flex;
+    display: none;
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;

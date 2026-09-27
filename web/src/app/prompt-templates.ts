@@ -1,5 +1,5 @@
 import { t } from '../i18n.js';
-import { STORAGE_TEMPLATES_KEY, STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, setUserPref } from './user-prefs.js';
+import { STORAGE_TEMPLATES_KEY, STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, setUserPref, refreshSharedPromptTemplates, setSharedTemplateEditing, sharedTemplatesHaveConflict, resolveSharedTemplateConflict } from './user-prefs.js';
 import { activeSessionId, sessions } from './state.js';
 import { showToast } from './util.js';
 
@@ -428,6 +428,7 @@ function renderUndoRow(list: HTMLElement): void {
 
 function renderPalette(): void {
   if (draggingRow) return; // ドラッグ中に作り直すと掴みが外れる
+  setSharedTemplateEditing(editingBody !== null || adding);
   const panel = document.getElementById('prompt-template-palette');
   const list = document.getElementById('prompt-template-list');
   const search = document.getElementById('prompt-template-search') as HTMLInputElement | null;
@@ -481,6 +482,50 @@ function closePalette(panel: HTMLElement): void {
   adding = false;
   addDraft = '';
   undoState = null;
+  setSharedTemplateEditing(false);
+}
+
+function renderSyncConflict(): void {
+  const panel = document.getElementById('prompt-template-palette');
+  if (!panel) return;
+  let notice = document.getElementById('prompt-template-conflict');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'prompt-template-conflict';
+    notice.setAttribute('role', 'status');
+    panel.prepend(notice);
+  }
+  notice.hidden = !sharedTemplatesHaveConflict();
+  if (notice.hidden) return;
+  notice.replaceChildren();
+  const explanation = document.createElement('p');
+  explanation.textContent = text('template_sync_conflict', '別端末で一覧が更新されました。この端末の変更は保存されずに残っています。');
+  notice.append(explanation);
+  for (const keepLocal of [false, true]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = keepLocal
+      ? text('template_sync_keep_local', 'この端末の一覧で共有側を置き換える')
+      : text('template_sync_reload', 'この端末の変更を破棄して共有側を読む');
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      // Only this explicit discard action may replace an open editor's draft.
+      if (!keepLocal) setSharedTemplateEditing(false);
+      const resolved = await resolveSharedTemplateConflict(keepLocal);
+      if (resolved && !keepLocal) { editingBody = null; editDraft = ''; adding = false; addDraft = ''; }
+      if (resolved) { renderPalette(); renderSyncConflict(); }
+      else {
+        setSharedTemplateEditing(editingBody !== null || adding);
+        button.disabled = false;
+        showToast(text('template_sync_retry_failed', '同期できませんでした。接続を確認して再試行してください。'));
+      }
+    });
+    notice.append(button);
+  }
+}
+
+function refreshPaletteFromServer(): void {
+  if (!editingBody && !adding && !draggingRow) void refreshSharedPromptTemplates();
 }
 
 function syncSendModeToggle(): void {
@@ -523,14 +568,18 @@ function initPalette(): void {
     toggle.setAttribute('aria-expanded', 'true');
     syncSendModeToggle();
     renderPalette();
+    renderSyncConflict();
+    refreshPaletteFromServer();
     search.focus();
   });
   initSendModeToggle();
   search.addEventListener('input', renderPalette);
   document.addEventListener('session:activated', renderPalette);
-  document.addEventListener('user-prefs-mirrored', () => { renderPalette(); window.dispatchEvent(new Event('prompt-templates:changed')); });
+  document.addEventListener('user-prefs-mirrored', () => { if (!editingBody && !adding) renderPalette(); window.dispatchEvent(new Event('prompt-templates:changed')); });
+  document.addEventListener('shared-templates-mirrored', () => { if (!editingBody && !adding) renderPalette(); notifyTemplatesChanged(); });
+  document.addEventListener('shared-templates-conflict', renderSyncConflict);
   document.addEventListener('i18n-ready', renderPalette);
-  window.addEventListener('prompt-templates:changed', renderPalette);
+  window.addEventListener('prompt-templates:changed', () => { if (!editingBody && !adding) renderPalette(); });
   document.addEventListener('click', (event) => {
     const target = event.target;
     if (!panel.hidden && target instanceof Node && !panel.contains(target) && !toggle.contains(target)) closePalette(panel);
@@ -538,7 +587,8 @@ function initPalette(): void {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !panel.hidden) closePalette(panel);
   });
-  window.addEventListener('blur', () => closePalette(panel));
+  window.addEventListener('focus', refreshPaletteFromServer);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshPaletteFromServer(); });
 }
 
 initPalette();

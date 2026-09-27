@@ -790,6 +790,7 @@ func (c *wrapperConn) close() {
 }
 
 type Server struct {
+	routines           *routineManager
 	cfg                *config.Config
 	providers          *provider.Registry
 	providerRegistryMu sync.RWMutex
@@ -1342,6 +1343,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		branchRefreshPending:  map[string][]int{},
 		serverConns:           newServerConnManager(logger),
 	}
+	s.initRoutines()
 	if dir := subscriptionConfigDir(); dir != "" {
 		s.subscriptionUsage.refreshLocal(cfg, dir, time.Now())
 		s.recoverUsageProbes(dir)
@@ -1567,6 +1569,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/user-prefs/notify-sound-custom", s.handleUserPrefsNotifySoundCustom)
 	mux.HandleFunc("/api/user-prefs/avatar", s.handleUserPrefsAvatarUpload)
 	mux.HandleFunc("/api/user-prefs", s.handleUserPrefs)
+	mux.HandleFunc("/api/routines", s.handleRoutines)
+	mux.HandleFunc("/api/routines/", s.handleRoutines)
+	mux.HandleFunc("/api/routine-runs", s.handleRoutineRuns)
+	mux.HandleFunc("/api/routine-runs/", s.handleRoutineRuns)
 	mux.HandleFunc("/api/auto-approval/status", s.handleAutoApprovalStatus)
 	mux.HandleFunc("/api/auto-approval/simulate", s.handleAutoApprovalSimulation)
 	mux.HandleFunc("/api/push/status", s.handlePushStatus)
@@ -1740,6 +1746,7 @@ func (s *Server) Run(ctx context.Context) error {
 		s.injectUsageHooks()
 	}
 	s.safeGo("state_ticker", func() { s.stateTicker(runCtx) })
+	s.safeGo("routines", func() { s.runRoutines(runCtx) })
 	// relay.json（relay_store.go）から前回 run の relay を戻す。board ループの開始前・
 	// かつ Serve より前に同期で行う: wrapper は Hub が上がった直後に reattach して
 	// くるので、その時点で relays map に載っていないと子を再同定できない。
@@ -2616,11 +2623,13 @@ func (s *Server) handleAttachRequest(m proto.Message) (skip bool) {
 // UI broadcast の 5 関数 (addUIWithHistory / removeUI / pingLoop / sendSnapshot /
 // broadcast) は internal/hub/ui_broadcast.go へ移動した。
 
-// persistConfig takes a snapshot of s.cfg under cfgMu and saves it to disk
-// outside the lock to avoid holding cfgMu during file I/O and to prevent
-// concurrent map iteration/write panics in yaml.Marshal.
+// persistConfig serializes snapshot and save with user-preference transactions.
+// Releasing cfgMu before Save would allow an older snapshot to overwrite a
+// shared-template edit which has already been acknowledged to another device.
 func (s *Server) persistConfig() error {
-	return config.Save(s.snapshotCfg())
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	return config.Save(s.cfg.Clone())
 }
 
 func isDigitsOnly(s string) bool {

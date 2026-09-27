@@ -26,6 +26,7 @@ import { openDeriveDialog } from './derive-dialog.js';
 import { openHandoffListDialog } from './handoff.js';
 import { openNextSpawnConfirmationFor, pendingSpawnConfirmationCount } from './spawn-confirm.js';
 import { currentSessionStripTab, renderSessionStrip } from './session-strip.js';
+import { captureTerminalView, restoreTerminalView, terminalViewFollows } from './session-view-position.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -198,6 +199,10 @@ export function activateSessionForMultiPane(id) {
 window.activateSessionForMultiPane = activateSessionForMultiPane;
 
 export function activateSession(id) {
+  const previousArea = document.getElementById('display-area');
+  if (previousArea && !previousArea.hidden && (previousArea.classList.contains('mode-terminal') || previousArea.classList.contains('mode-split'))) {
+    captureTerminalView(terminals.get(activeSessionId));
+  }
   // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 「その親が
   // アクティブになったとき」に確認ダイアログを開く唯一のフック。関数の冒頭で
   // スケジュールしておくことで、この下の早期 return（マルチペイン委譲）を通っても
@@ -281,6 +286,13 @@ export function activateSession(id) {
   }
   if (typeof syncElapsedTimer === 'function') syncElapsedTimer();
   onActiveSessionChanged();
+  // A remembered history viewport must not be replaced by the old force-to-bottom path.
+  const terminalEntry = terminals.get(id);
+  if (!terminalViewFollows(terminalEntry)) {
+    restoreTerminalView(terminalEntry);
+    updateScrollLockBtn();
+    return;
+  }
   const switchStartedAt = Date.now();
   scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt: switchStartedAt });
   requestAnimationFrame(() => {
@@ -803,7 +815,7 @@ function restoreProjectViewFor(key: string): void {
     activateSession(sid);
     // tab が null なら記憶が無い＝今のタブを変えない。既定へ落とすと、multi タブを
     // 開いたまま箱を渡り歩く使い方（C3）が、初めて開く箱で毎回途切れる。
-    if (pick.tab) setActiveTab(sid, pick.tab);
+    if (pick.tab && pick.tab !== 'terminal' && pick.tab !== 'chat') setActiveTab(sid, pick.tab);
   });
   // 記憶が無かったときに保存する「今のタブ」は、帯が持っている現在のタブ名から取る
   // （setActiveTab の全分岐がここを更新している＝画面に出ているタブと必ず一致する）。

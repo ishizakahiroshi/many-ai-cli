@@ -36,6 +36,7 @@ func (s *Server) publishRelayDoneSummary(summary proto.DoneSummary) {
 }
 
 func (s *Server) publishDoneSummaryInternal(summary proto.DoneSummary, captureGit bool) {
+	routineResult := sessionlog.MaskSecrets(summary.Text)
 	summary.Text = truncateDoneSummary(sessionlog.MaskSecrets(summary.Text))
 	if summary.Text == "" {
 		return
@@ -46,6 +47,9 @@ func (s *Server) publishDoneSummaryInternal(summary proto.DoneSummary, captureGi
 	if summary.At == "" {
 		summary.At = time.Now().Format(time.RFC3339)
 	}
+	routineSummary := summary
+	routineSummary.Text = routineResult
+	s.recordRoutineDone(routineSummary)
 	if captureGit {
 		// 次ターン入力が DONE 通知直後に届いても baseline を取りこぼさないよう、
 		// 完了 snapshot を「処理中」と同期的に確定してから UI へ通知する。
@@ -246,6 +250,22 @@ func (s *Server) handleCodexTaskCompletion(id int, completion codexTaskCompletio
 	}
 	title := doneSummaryTitle(ses)
 	s.sessionsMu.Unlock()
+
+	// A saved routine can legitimately only read files. Its provider-owned
+	// completion remains meaningful even without a changed Git turn.
+	if s.activeRoutineSession(id, endedAt) {
+		s.sessionsMu.Lock()
+		if current := s.sessions[id]; current != nil {
+			current.lastDoneNotifyAt = time.Now()
+		}
+		s.sessionsMu.Unlock()
+		if strings.TrimSpace(completion.LastAgentMessage) == "" {
+			s.recordRoutineDone(proto.DoneSummary{SessionID: id, Provider: "codex", Kind: "unknown", At: completion.At})
+			return
+		}
+		s.publishDoneSummary(proto.DoneSummary{SessionID: id, Provider: "codex", Title: title, Text: completion.LastAgentMessage, Kind: "unknown", At: completion.At})
+		return
+	}
 
 	s.captureGitTurnEndWithCallback(id, completion.At, func(turn gitTurnSnapshot) {
 		if turn.Files == 0 {

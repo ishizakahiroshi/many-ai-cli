@@ -383,6 +383,13 @@ export function renderMobileHome() {
   if (!container) return;
 
   bindMhSessionTapRoot(container, 'home', '.mh-monitor-row');
+  let routines = container.querySelector<HTMLButtonElement>('[data-open-routines]');
+  if (!routines) {
+    routines = document.createElement('button');
+    routines.type = 'button'; routines.className = 'routine-button mh-routines-entry';
+    routines.setAttribute('data-open-routines', ''); container.prepend(routines);
+  }
+  routines.textContent = t('routines_title');
   ensureSearchInput(container, 'mobile-home-search', mobileHomeSearch, (value) => {
     mobileHomeSearch = value;
     renderMobileHomeResults();

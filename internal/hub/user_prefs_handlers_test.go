@@ -3,13 +3,16 @@ package hub
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"gopkg.in/yaml.v3"
 	"many-ai-cli/internal/config"
 )
 
@@ -202,6 +205,190 @@ func TestUserPrefsPutRoundTripsProjectViews(t *testing.T) {
 	}
 	if view.SessionID != 7 || view.Tab != "git" {
 		t.Fatalf("ProjectViews entry = %#v, want {SessionID:7 Tab:git}", view)
+	}
+}
+
+func TestUserPrefsTemplateConcurrencyAndEmptyList(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	s := newTestServer()
+	s.cfg.UserPrefs.Templates = []config.UserPrefsTemplate{{Body: "Original synthetic instruction"}}
+	getVersion := func() string {
+		w := httptest.NewRecorder()
+		s.handleUserPrefsGet(w, prefsAuthReq(http.MethodGet, "/api/user-prefs", nil, ""))
+		version := w.Header().Get("X-Template-Version")
+		if len(version) != 64 {
+			t.Fatalf("missing template version: %q", version)
+		}
+		return version
+	}
+	put := func(body, policy, version string) *httptest.ResponseRecorder {
+		req := prefsAuthReq(http.MethodPut, "/api/user-prefs", []byte(body), "application/json")
+		req.Header.Set("X-Template-Write", policy)
+		req.Header.Set("X-Template-Version", version)
+		w := httptest.NewRecorder()
+		s.handleUserPrefsPut(w, req)
+		return w
+	}
+	original := getVersion()
+	updated := put(`{"templates":[{"body":"Updated on desktop"}]}`, "compare", original)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("first edit failed: %d %s", updated.Code, updated.Body.String())
+	}
+	newVersion := getVersion()
+	if newVersion == original || updated.Header().Get("X-Template-Version") != newVersion {
+		t.Fatal("accepted edit did not advance the template version")
+	}
+	// Another device fetched the old list before the first edit. Saving an
+	// unrelated setting must preserve the live list under the server lock.
+	unrelated := put(`{"templates":[{"body":"Stale phone cache"}],"open_project":"/synthetic/project"}`, "preserve", original)
+	if unrelated.Code != http.StatusOK || s.cfg.UserPrefs.Templates[0].Body != "Updated on desktop" || s.cfg.UserPrefs.OpenProject != "/synthetic/project" {
+		t.Fatalf("unrelated save lost shared data or settings: %d %#v", unrelated.Code, s.cfg.UserPrefs)
+	}
+	stale := put(`{"templates":[{"body":"Conflicting phone edit"}]}`, "compare", original)
+	if stale.Code != http.StatusConflict || s.cfg.UserPrefs.Templates[0].Body != "Updated on desktop" {
+		t.Fatalf("stale edit overwrote live templates: %d", stale.Code)
+	}
+	if getVersion() != newVersion {
+		t.Fatal("unrelated/rejected saves changed template version")
+	}
+	empty := put(`{"templates":[]}`, "compare", newVersion)
+	if empty.Code != http.StatusOK || len(s.cfg.UserPrefs.Templates) != 0 {
+		t.Fatalf("clearing the list failed: %d %#v", empty.Code, s.cfg.UserPrefs.Templates)
+	}
+	if getVersion() != userPrefsTemplateVersion(nil) {
+		t.Fatal("empty and omitted lists disagree")
+	}
+	missingVersion := put(`{"templates":[{"body":"No baseline"}]}`, "compare", "")
+	if missingVersion.Code != http.StatusConflict {
+		t.Fatalf("compare without baseline = %d", missingVersion.Code)
+	}
+}
+
+func TestUserPrefsTemplateFailedSaveDoesNotPublishVersion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	s := newTestServer()
+	s.cfg.UserPrefs.Templates = []config.UserPrefsTemplate{{Body: "Original synthetic instruction"}}
+	original := userPrefsTemplateVersion(s.cfg.UserPrefs.Templates)
+	// A directory at the destination makes the atomic rename fail, without
+	// relying on platform-specific read-only bits or replacing global seams.
+	if err := os.MkdirAll(filepath.Join(home, ".many-ai-cli", "config.yaml"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r := prefsAuthReq(http.MethodPut, "/api/user-prefs", []byte(`{"templates":[{"body":"Unsaved edit"}],"open_project":"/unsaved/project"}`), "application/json")
+	r.Header.Set("X-Template-Write", "compare")
+	r.Header.Set("X-Template-Version", original)
+	w := httptest.NewRecorder()
+	s.handleUserPrefsPut(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("save failure status=%d", w.Code)
+	}
+	if userPrefsTemplateVersion(s.cfg.UserPrefs.Templates) != original || s.cfg.UserPrefs.OpenProject != "" {
+		t.Fatal("failed save published uncommitted preferences")
+	}
+	if w.Header().Get("X-Template-Version") != "" {
+		t.Fatal("failed save advertised a committed version")
+	}
+}
+
+func TestUserPrefsTemplateParallelComparePreserveAndResponseVersion(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	s := newTestServer()
+	s.cfg.UserPrefs.Templates = []config.UserPrefsTemplate{{Body: "Original synthetic instruction"}}
+	version := userPrefsTemplateVersion(s.cfg.UserPrefs.Templates)
+	type response struct {
+		compare  bool
+		recorder *httptest.ResponseRecorder
+	}
+	responses := make(chan response, 16)
+	configErrors := make(chan error, 8)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			policy := "preserve"
+			if i%2 == 0 {
+				policy = "compare"
+			}
+			body, _ := json.Marshal(config.UserPrefs{Templates: []config.UserPrefsTemplate{{Body: fmt.Sprintf("Synthetic edit %d", i)}}, OpenProject: fmt.Sprintf("/project/%d", i)})
+			r := prefsAuthReq(http.MethodPut, "/api/user-prefs", body, "application/json")
+			r.Header.Set("X-Template-Write", policy)
+			r.Header.Set("X-Template-Version", version)
+			w := httptest.NewRecorder()
+			<-start
+			s.handleUserPrefsPut(w, r)
+			responses <- response{compare: policy == "compare", recorder: w}
+		}(i)
+	}
+	// Other settings endpoints mutate under cfgMu and call persistConfig after
+	// releasing it. Those saves must not flush an older shared-template snapshot
+	// after a compare/preserve transaction has already acknowledged its change.
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			s.cfgMu.Lock()
+			s.cfg.Input.DeferredEnterMS = 100 + i
+			s.cfgMu.Unlock()
+			configErrors <- s.persistConfig()
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(responses)
+	close(configErrors)
+	for err := range configErrors {
+		if err != nil {
+			t.Fatalf("concurrent config save failed: %v", err)
+		}
+	}
+	winners := 0
+	for item := range responses {
+		w := item.recorder
+		if w.Code == http.StatusConflict && item.compare {
+			continue
+		}
+		if w.Code != http.StatusOK {
+			t.Fatalf("unexpected status=%d body=%s", w.Code, w.Body.String())
+		}
+		if item.compare {
+			winners++
+		}
+		var saved config.UserPrefs
+		if err := json.Unmarshal(w.Body.Bytes(), &saved); err != nil {
+			t.Fatal(err)
+		}
+		if w.Header().Get("X-Template-Version") != userPrefsTemplateVersion(saved.Templates) {
+			t.Fatal("response version describes a different template snapshot")
+		}
+	}
+	if winners != 1 {
+		t.Fatalf("CAS writers admitted=%d, want 1", winners)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".many-ai-cli", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted config.Config
+	if err := yaml.Unmarshal(data, &persisted); err != nil {
+		t.Fatal(err)
+	}
+	if userPrefsTemplateVersion(persisted.UserPrefs.Templates) != userPrefsTemplateVersion(s.cfg.UserPrefs.Templates) {
+		t.Fatal("saved templates differ from the published version")
+	}
+	if persisted.UserPrefs.OpenProject != s.cfg.UserPrefs.OpenProject {
+		t.Fatal("saved preferences differ from the published snapshot")
+	}
+	if persisted.Input.DeferredEnterMS != s.cfg.Input.DeferredEnterMS {
+		t.Fatal("saved non-preference setting differs from the published snapshot")
 	}
 }
 

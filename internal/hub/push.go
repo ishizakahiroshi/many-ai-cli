@@ -511,6 +511,10 @@ func (s *Server) handlePushSubscriptions(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, contextText string) {
+	s.notifyApprovalPushAtURL(id, approvalID, provider, question, contextText, "")
+}
+
+func (s *Server) notifyApprovalPushAtURL(id int, approvalID, provider, question, contextText, targetURL string) {
 	if s.push == nil {
 		return
 	}
@@ -549,6 +553,9 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 	}
 	body = strings.Join(strings.Fields(body), " ")
 	url := approvalPushURL(id)
+	if targetURL != "" {
+		url = targetURL
+	}
 	summary := approval.Summarize(question, contextText)
 	approveToken, rejectToken := "", ""
 	if activeNativeApproval && s.oneTapApprovals != nil {

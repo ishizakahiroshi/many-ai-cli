@@ -24,6 +24,7 @@
 .spawn-web-dir-close,
 .dgl-close,
 .relay-dialog-close,
+.routines-dialog-close,
 .bug-report-close,
 .detail-close,
 .git-commit-close,
@@ -52,6 +53,7 @@
 .spawn-web-dir-close:hover,
 .dgl-close:hover,
 .relay-dialog-close:hover,
+.routines-dialog-close:hover,
 .bug-report-close:hover,
 .detail-close:hover,
 .git-commit-close:hover,
@@ -66,6 +68,7 @@
 .mc-modal-close,
 .dgl-close,
 .relay-dialog-close,
+.routines-dialog-close,
 .handoff-dialog-close,
 .bug-report-close,
 .spawn-web-dir-close { --close-btn-fs: 1rem; }
@@ -103,6 +106,7 @@ body.close-left :is(
      relay ダイアログの ✕ だけが「閉じるボタンを左へ」設定を無視していた。
      ヘッダは display:flex なので、ここへ足すだけで他と同じように左端へ寄る。 */
   .relay-dialog-close,
+.routines-dialog-close,
   .first-run-tour-close,
   .multi-question-banner-close,
   .expand-popup-btns

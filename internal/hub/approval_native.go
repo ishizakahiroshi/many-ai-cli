@@ -190,7 +190,7 @@ func (s *Server) notifyDonePush(summary proto.DoneSummary) {
 	// Web Push currently shares the delivery channel and click target with an
 	// approval notification. C4's service-worker action templates consume the
 	// same title/body shape; no approval token is attached to DONE events.
-	s.notifyApprovalPush(summary.SessionID, fmt.Sprintf("done-%d-%d", summary.SessionID, time.Now().UnixNano()), summary.Provider, summary.Text, "")
+	s.notifyApprovalPushAtURL(summary.SessionID, fmt.Sprintf("done-%d-%d", summary.SessionID, time.Now().UnixNano()), summary.Provider, summary.Text, "", s.routineRunURL(summary.SessionID))
 }
 
 func (s *Server) markNativeApprovalConsumed(m proto.Message) {

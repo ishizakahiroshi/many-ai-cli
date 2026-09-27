@@ -144,6 +144,13 @@ function urlBase64ToUint8Array(base64String) {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (event) => {
     const data = event.data || {};
+    if (data.type === 'many-ai-cli-open-routine') {
+      const runID = typeof data.run_id === 'string' ? data.run_id : '';
+      if (/^[a-zA-Z0-9_-]{1,100}$/.test(runID)) {
+        window.dispatchEvent(new CustomEvent('many-ai-cli:open-routine', { detail: { runID } }));
+      }
+      return;
+    }
     if (data.type !== 'many-ai-cli-open-session') return;
     const sessionId = Number(data.session_id || 0);
     if (!Number.isFinite(sessionId) || sessionId <= 0) return;

@@ -3,6 +3,7 @@ import { showToast, token } from './util.js';
 import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
 import { sanitizeProjectViews } from './project-view-memory.js';
 import { sanitizeCustomThemes } from './theme-tokens.js';
+import { SharedTemplateSync } from './shared-template-sync.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -412,6 +413,7 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
 
 export function _mergeStoredUserPrefs(current: UserPrefsObject): UserPrefsObject {
   for (const [path, [lsKey, _]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+    if (path === 'templates') continue; // Merged separately only for a local edit.
     const raw = localStorage.getItem(lsKey);
     if (raw == null) continue;
     const parsed = _parseStoredUserPref(path, raw);
@@ -423,11 +425,103 @@ export function _mergeStoredUserPrefs(current: UserPrefsObject): UserPrefsObject
 
 // PUT debounce タイマー
 export let _userPrefsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const TEMPLATE_DIRTY_KEY = 'ai_cli_hub_templates_unsaved';
+const TEMPLATE_VERSION_KEY = 'ai_cli_hub_templates_version';
+const TEMPLATE_BASE_KEY = 'ai_cli_hub_templates_edit_base';
+let templateConflict = false;
+let sharedTemplateEditing = false;
+export function setSharedTemplateEditing(active: boolean): void { sharedTemplateEditing = active; }
+const templateSync = new SharedTemplateSync((() => {
+  try { return localStorage.getItem(TEMPLATE_DIRTY_KEY) === '1'; } catch (_) { return false; }
+})());
+
+function persistTemplateDirty(): void {
+  try {
+    if (templateSync.isDirty()) localStorage.setItem(TEMPLATE_DIRTY_KEY, '1');
+    else localStorage.removeItem(TEMPLATE_DIRTY_KEY);
+  } catch (_) {}
+}
+
+function mirrorSharedTemplates(prefs: UserPrefsObject, version: number, serverVersion = ''): boolean {
+  if (sharedTemplateEditing || !templateSync.canMirror(version)) return false;
+  // Go omits an empty list. Absence after a successful GET must clear stale
+  // saved rows too, otherwise deleting the last template never reaches peers.
+  const parsed = _parseStoredUserPref('templates', JSON.stringify(prefs.templates ?? []));
+  if (!parsed.ok) return false;
+  const serialized = JSON.stringify(parsed.value);
+  try {
+    if (serverVersion) localStorage.setItem(TEMPLATE_VERSION_KEY, serverVersion);
+    if (localStorage.getItem(STORAGE_TEMPLATES_KEY) === serialized) return false;
+    localStorage.setItem(STORAGE_TEMPLATES_KEY, serialized);
+  } catch (_) { return false; }
+  document.dispatchEvent(new Event('shared-templates-mirrored'));
+  return true;
+}
+
+let templateRefresh: Promise<boolean> | null = null;
+export function refreshSharedPromptTemplates(): Promise<boolean> {
+  if (templateRefresh) return templateRefresh;
+  if (sharedTemplateEditing) return Promise.resolve(false);
+  if (templateSync.isDirty()) {
+    // Reconnect/focus retries a persisted edit against its original baseline;
+    // it never silently adopts a newer server version after a conflict.
+    if (!templateConflict) _scheduleUserPrefsPut();
+    return Promise.resolve(false);
+  }
+  const version = templateSync.readVersion();
+  templateRefresh = (async () => {
+    try {
+      const response = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+      if (!response.ok) return false;
+      return mirrorSharedTemplates(await response.json(), version, response.headers.get('X-Template-Version') || '');
+    } catch (_) { return false; }
+    finally { templateRefresh = null; }
+  })();
+  return templateRefresh;
+}
+
+export function sharedTemplatesHaveConflict(): boolean { return templateConflict; }
+
+function reportTemplateConflict(): never {
+  templateConflict = true;
+  document.dispatchEvent(new Event('shared-templates-conflict'));
+  const err = new Error('shared templates changed') as UserPrefsHttpError;
+  err.status = 409;
+  throw err;
+}
+
+// Called only by an explicit palette action after a conflict. A normal refresh
+// never discards unsaved local changes or advances their comparison baseline.
+export async function resolveSharedTemplateConflict(keepLocal: boolean): Promise<boolean> {
+  const generation = templateSync.readVersion();
+  try {
+    const response = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    if (!response.ok) return false;
+    const prefs = await response.json();
+    if (generation !== templateSync.readVersion()) return false;
+    const serverVersion = response.headers.get('X-Template-Version') || '';
+    if (keepLocal) {
+      if (!serverVersion) return false;
+      localStorage.setItem(TEMPLATE_BASE_KEY, JSON.stringify({ version: serverVersion }));
+      templateConflict = false;
+      _scheduleUserPrefsPut();
+    } else {
+      templateSync.discard();
+      persistTemplateDirty();
+      localStorage.removeItem(TEMPLATE_BASE_KEY);
+      templateConflict = false;
+      mirrorSharedTemplates(prefs, templateSync.readVersion(), serverVersion);
+    }
+    document.dispatchEvent(new Event('shared-templates-conflict'));
+    return true;
+  } catch (_) { return false; }
+}
 
 export function _userPrefsSaveErrorMessage(err: unknown): string {
   const tfn = typeof window.t === 'function' ? window.t : (key: string) => key;
   const httpErr = err as Partial<UserPrefsHttpError> | null | undefined;
   if (typeof httpErr?.status === 'number') {
+    if (httpErr.status === 409) return tfn('template_sync_conflict');
     if (httpErr.status === 401) return tfn('user_prefs_save_failed_unauthorized');
     if (httpErr.status >= 500) return tfn('user_prefs_save_failed_server', { status: String(httpErr.status) });
     return tfn('user_prefs_save_failed_http', { status: String(httpErr.status) });
@@ -452,12 +546,36 @@ export async function _putUserPrefsNow() {
   const current = await getRes.json();
   // localStorage の最新値を current にマージ
   _mergeStoredUserPrefs(current);
+  const localTemplates = _parseStoredUserPref('templates', localStorage.getItem(STORAGE_TEMPLATES_KEY) || 'null');
+  let compareVersion = '';
+  if (templateSync.isDirty() && !templateConflict) {
+    let base: { version?: string; before?: string } = {};
+    try { base = JSON.parse(localStorage.getItem(TEMPLATE_BASE_KEY) || '{}'); } catch (_) {}
+    compareVersion = base.version || '';
+    if (!compareVersion) {
+      if (base.before !== JSON.stringify(current.templates ?? [])) reportTemplateConflict();
+      compareVersion = getRes.headers.get('X-Template-Version') || '';
+      if (!compareVersion) reportTemplateConflict();
+    }
+  }
+  const templateVersion = templateConflict ? null : templateSync.mergeInto(current, localTemplates.ok ? localTemplates.value : null);
   const putRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Template-Write': templateVersion === null ? 'preserve' : 'compare', 'X-Template-Version': compareVersion },
     body: JSON.stringify(current),
   });
+  if (putRes.status === 409) reportTemplateConflict();
   if (!putRes.ok) throw _userPrefsHttpError('PUT', putRes);
+  const savedVersion = putRes.headers.get('X-Template-Version') || '';
+  if (templateSync.acknowledge(templateVersion)) {
+    persistTemplateDirty();
+    localStorage.removeItem(TEMPLATE_BASE_KEY);
+    if (savedVersion) localStorage.setItem(TEMPLATE_VERSION_KEY, savedVersion);
+  } else if (templateVersion !== null && savedVersion) {
+    // Another local edit arrived during this PUT. Its baseline is our accepted
+    // version, so it can follow without conflicting with our own first write.
+    localStorage.setItem(TEMPLATE_BASE_KEY, JSON.stringify({ version: savedVersion }));
+  }
 }
 
 const _userPrefsPutQueue = createUserPrefsPutQueue(async () => {
@@ -493,6 +611,12 @@ export async function flushUserPrefsPut(): Promise<void> {
 }
 
 export function setUserPref(path: string, value: any): void {
+  if (path === 'templates') {
+    if (!templateSync.isDirty()) {
+      try { localStorage.setItem(TEMPLATE_BASE_KEY, JSON.stringify({ version: localStorage.getItem(TEMPLATE_VERSION_KEY) || '', before: localStorage.getItem(STORAGE_TEMPLATES_KEY) || '[]' })); } catch (_) {}
+    }
+    templateSync.markDirty(); persistTemplateDirty();
+  }
   // 1. localStorage に書く
   const entry = _USER_PREFS_PATH_TO_LS[path];
   if (entry) {
@@ -513,12 +637,14 @@ export function setUserPref(path: string, value: any): void {
 // サーバから user_prefs を取得して localStorage にミラーする（起動時 1 回）
 export async function _mirrorUserPrefsFromServer() {
   const tk = token;
+  const templateVersion = templateSync.readVersion();
   try {
     const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
     if (!res.ok) return null;
     const prefs: UserPrefsObject = await res.json();
     // 各フィールドを localStorage にミラー（既存値を上書き）
     for (const [path, [lsKey, serialize]] of Object.entries(_USER_PREFS_PATH_TO_LS)) {
+      if (path === 'templates') continue;
       const keys = path.split('.');
       let val = prefs;
       for (const k of keys) { if (val == null) break; val = val[k]; }
@@ -530,6 +656,8 @@ export async function _mirrorUserPrefsFromServer() {
         }
       } catch (_) {}
     }
+    // Before first migration, keep the old local list so migration can import it.
+    if (prefs.migrated_from_localstorage || prefs.templates != null) mirrorSharedTemplates(prefs, templateVersion, res.headers.get('X-Template-Version') || '');
     document.dispatchEvent(new CustomEvent('user-prefs-mirrored', { detail: prefs }));
     return prefs;
   } catch (_) {
@@ -558,11 +686,12 @@ export async function migrateLocalstoragePrefsToServer() {
     }
     if (!hasAny) return;
     merged.migrated_from_localstorage = true;
-    await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
+    const migrated = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Template-Write': 'compare', 'X-Template-Version': res.headers.get('X-Template-Version') || '' },
       body: JSON.stringify(merged),
     });
+    if (!migrated.ok) throw _userPrefsHttpError('PUT', migrated);
     console.info('[user-prefs] migrated from localStorage to server');
   } catch (e) {
     console.warn('[user-prefs] migration failed:', e);
@@ -572,7 +701,7 @@ export async function migrateLocalstoragePrefsToServer() {
 // 起動時実行: サーバからミラー → 移行チェック
 (async () => {
   const serverPrefs = await _mirrorUserPrefsFromServer();
-  if (serverPrefs && !serverPrefs.migrated_from_localstorage) {
+  if (serverPrefs && !serverPrefs.migrated_from_localstorage && !templateSync.isDirty()) {
     await migrateLocalstoragePrefsToServer();
   } else if (serverPrefs) {
     // 既に移行済みのユーザー向けバックフィル: 後から user_prefs に追加した
@@ -591,4 +720,5 @@ export async function migrateLocalstoragePrefsToServer() {
       }
     }
   }
+  if (templateSync.isDirty() && !templateConflict) _scheduleUserPrefsPut();
 })();

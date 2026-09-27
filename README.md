@@ -842,6 +842,35 @@ The Hub itself stays on `47777` everywhere; only the phone-side listen port diff
 
 ### Mobile usage notes
 
+#### Shared instructions and routines
+
+The **CLI / Chat** tabs select how to read the same session. Chat hides classified
+thinking and folds progress records; CLI shows the terminal. The choice is kept
+in the browser separately for desktop and mobile. Switching views keeps your
+reading position and does not start another AI session.
+
+Use the prompt-template button beside the input to reuse the same saved
+instructions on a PC or phone connected to the **same Hub**. The list refreshes
+when reopened or when the page regains focus. Unsaved edits stay local; if another
+device changes the list, choose explicitly which version to keep.
+
+Open **Routines** from the sidebar or mobile home. Save an instruction, project
+directory and provider, then review it before **Run now**. A routine uses a new
+session with the existing permission settings. Its history keeps the instruction
+used for that run and any received result; enabled completion notifications open
+that exact run again. “Finished” means an end signal arrived, not that every part
+of the requested work succeeded. When no result is available, open the session
+to inspect it. Saved result text is limited to 256 KiB per run.
+
+Daily and weekday schedules use the selected time zone and require the Hub and
+host to stay running. Missed schedules are skipped, and an active run prevents
+another overlapping run of the same routine. An offline phone cannot start a
+routine; reconnect and retry the action. Push still requires the existing opt-in
+and a supported browser. Routines are shared within one Hub, not across separate
+Hub installations.
+
+#### Connectivity
+
 - **iOS suspends background apps**, so the tunnel drops when Termius is backgrounded for a while. Sessions keep running on the host; reopening Termius reconnects, and the PWA picks up where it left off.
 - **Web Push** (if enabled in Settings and subscribed) can still deliver notifications while the tunnel is down — but opening the Hub from a notification requires the tunnel to be reconnected first.
 - The token regenerates when the Hub restarts; if the browser shows 403, fetch the current token again.

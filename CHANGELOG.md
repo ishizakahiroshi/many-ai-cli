@@ -11,6 +11,14 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Saved routines are shared by the PC and phone connected to the same Hub.**
+  Review an instruction before starting it in a new session, or schedule it
+  daily/on weekdays with an explicit time zone. Run history retains each run's
+  instruction and received result; routine completion notifications reopen that
+  run. Overlapping runs and duplicate submissions are suppressed. Schedules
+  missed while the Hub is unavailable are recorded as skipped.
+- **Mobile sessions offer an explicit CLI / Chat switch.** The choice and reading
+  position are retained separately for desktop and mobile in each browser.
 - **Notification sound has a 0–100 volume slider**, independent of system volume.
   It applies to the default beep, custom sounds and test playback. Zero mutes
   the sound; 100 preserves the previous level. The setting is saved per browser.
@@ -21,6 +29,15 @@ Release artifacts are published at
   and the successor (if one was launched from it) — clicking either jumps
   straight to that session's preview. The model shows as a tooltip on the
   provider name, and search now also matches the branch name.
+
+### Changed
+- **Chat hides classified thinking and collapses progress and unclassified
+  Codex records.** Final answers remain visible; CLI output is still available
+  through the view switch.
+- **Prompt templates are available on phones and refreshed across devices.**
+  Unrelated settings saves preserve the shared list, and concurrent template
+  edits require an explicit conflict resolution instead of silently overwriting
+  the other device's changes.
 
 ### Fixed
 - **Handoff allows continuing with the same CLI**, including Codex-to-Codex.

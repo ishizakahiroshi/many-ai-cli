@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, updateRenderedChatMessage } from './transcript-message.js';
+import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessagePresentation, updateRenderedChatMessage } from './transcript-message.js';
 
 class FakeNode {
   dataset: { msgId: string; role: string; kind: string };
@@ -20,6 +20,11 @@ class FakeNode {
 
 class FakeTimeline {
   children: FakeNode[] = [];
+
+  removeChild(node: FakeNode) {
+    this.children = this.children.filter(child => child !== node);
+    node.parentNode = null;
+  }
 
   appendChild(node: FakeNode) {
     node.parentNode = this;
@@ -49,6 +54,25 @@ function derivedState(timeline: FakeTimeline, query: string, filters: Set<string
   }
   return { visible, hits, marks };
 }
+
+test('hidden reasoning is absent from the timeline and a reclassified update removes the previous bubble', () => {
+  const timeline = new FakeTimeline();
+  const rendered = new Set<string>();
+  const msg = { id: 7, role: 'ai', kind: 'text', rawText: 'Synthetic analysis', meta: { transcript: true, presentation: 'hidden' } };
+  const render = () => transcriptMessagePresentation(msg, 'codex') === 'hidden' ? null : new FakeNode('7', msg.rawText);
+  assert.equal(updateRenderedChatMessage(timeline, rendered, msg, render), 'skipped');
+  assert.equal(timeline.children.length, 0);
+  timeline.appendChild(new FakeNode('7', msg.rawText));
+  rendered.add('7');
+  const action = updateRenderedChatMessage(timeline, rendered, msg, render);
+  assert.equal(action, 'removed');
+  assert.equal(shouldRefreshChatDerivedState(action), true);
+  assert.equal(timeline.children.length, 0);
+  assert.equal(rendered.has('7'), false);
+  msg.meta.presentation = 'answer';
+  assert.equal(updateRenderedChatMessage(timeline, rendered, msg, render), 'appended');
+  assert.equal(timeline.children.length, 1);
+});
 
 test('subscriber update replaces the visible tool bubble without duplicating it', () => {
   const timeline = new FakeTimeline();

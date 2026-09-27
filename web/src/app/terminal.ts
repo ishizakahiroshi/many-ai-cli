@@ -4,6 +4,7 @@ import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { currentXtermTheme } from './theme-tokens.js';
 import { activeSessionId, sessions, terminals } from './state.js';
+import { restoreTerminalView, terminalViewFollows } from './session-view-position.js';
 import { isApprovalPending } from './approval-store.js';
 import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
 import { resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup } from './path-links.js';
@@ -521,8 +522,8 @@ export function attachTerminal(id) {
     // DOM 再配置で WebGL canvas の描画バッファが失われるため、移動前に破棄する
     disableWebglRenderer(t);
     area.innerHTML = '';
-    t.autoScroll = true;
-    updateScrollLockBtn(false);
+    t.autoScroll = terminalViewFollows(t);
+    updateScrollLockBtn(!t.autoScroll);
     // 非アクティブ中の chunks は DOM へ戻す前に反映する。
     // 表示後に flush すると、古い viewport から最新行までスクロールしていく様子が見えてしまう。
     flushPending(id, () => {
@@ -535,6 +536,7 @@ export function attachTerminal(id) {
       const prevCols = t.term.cols;
       const prevRows = t.term.rows;
       fitTerminalPreservingBottom(t, id);
+      restoreTerminalView(t);
       // 寸法が実際に変わった場合のみ送信（不要な SIGWINCH → 再描画 → 空白行挿入を防ぐ）
       if (t.term.cols !== prevCols || t.term.rows !== prevRows) {
         sendResize(id, t.term.cols, t.term.rows, 'attach-fit');

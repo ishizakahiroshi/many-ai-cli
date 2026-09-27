@@ -146,6 +146,49 @@ func TestParseCodexRolloutSeparatesReasoningAndTools(t *testing.T) {
 	}
 }
 
+func TestParseCodexRolloutClassifiesExplicitMessageMetadata(t *testing.T) {
+	cases := []struct {
+		name, phase, channel, want string
+	}{
+		{"final-phase", "final_answer", "", "answer"},
+		{"final-channel", "", "final", "answer"},
+		{"progress-phase", "commentary", "", "progress"},
+		{"progress-channel", "", "commentary", "progress"},
+		{"analysis-channel", "", "analysis", "hidden"},
+		{"analysis-wins-conflict", "final_answer", "analysis", "hidden"},
+		{"legacy", "", "", "unclassified"},
+		{"future-phase", "future_value", "", "unclassified"},
+	}
+	for _, envelope := range []string{"response_item", "event_msg"} {
+		for _, tc := range cases {
+			t.Run(envelope+"/"+tc.name, func(t *testing.T) {
+				payload := map[string]any{"phase": tc.phase, "channel": tc.channel}
+				const body = "Synthetic text stays available; wording does not determine its classification."
+				if envelope == "response_item" {
+					payload["type"] = "message"
+					payload["role"] = "assistant"
+					payload["content"] = []any{map[string]any{"type": "output_text", "text": body}}
+				} else {
+					payload["type"] = "agent_message"
+					payload["message"] = body
+				}
+				path := writeAgentChatFixture(t, map[string]any{"type": envelope, "payload": payload})
+				messages, offset, err := parseCodexRollout(path, 0)
+				if err != nil || len(messages) != 1 {
+					t.Fatalf("messages=%#v err=%v", messages, err)
+				}
+				if messages[0].Presentation != tc.want || messages[0].Text != body {
+					t.Fatalf("classification lost explicit metadata or body: %#v", messages[0])
+				}
+				next, nextOffset, err := parseCodexRollout(path, offset)
+				if err != nil || len(next) != 0 || nextOffset != offset {
+					t.Fatalf("cursor replayed classified record: %#v %d %v", next, nextOffset, err)
+				}
+			})
+		}
+	}
+}
+
 func TestParseCodexRolloutRecordsTaskCompletion(t *testing.T) {
 	path := writeAgentChatFixture(t,
 		map[string]any{
