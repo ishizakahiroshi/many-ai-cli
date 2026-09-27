@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "29e42513daea392b5ae05a2a0893045978234215",
+    "commit": "7acac5071b725d83e9918056a3f9603d9ad88e01",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1061,
+    "discovered": 1062,
     "analyzed": 830,
     "unresolved": 31,
     "unknown": 1,
-    "unclaimed": 199,
+    "unclaimed": 200,
     "skipped_by_config": 0
   },
   "files": [
@@ -19683,6 +19683,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "portfolio/promo-cover.jpg",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.jpg'"
     },
     {
       "path": "resources/README.md",
