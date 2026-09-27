@@ -62,6 +62,18 @@ Terminal pane #1              Terminal pane #2
 
 Gemini CLI は意図的に対象外です。
 
+## NVIDIA NIM trial route（OpenCode 専用）
+
+Hub の設定画面から NVIDIA NIM を OpenCode 専用 provider として有効にできます。推論リクエストは OpenCode から NVIDIA の Chat Completions endpoint（`/v1/chat/completions`）へ直接送られ、Hub は推論を proxy しません。Hub が NVIDIA の `/v1/models` を使うのは、モデルピッカーの一覧取得と Settings の接続試験です。この route は Codex CLI と Claude Code では使えません。
+
+設定は **設定 → NVIDIA NIM** で行います。API key は many-ai-cli のユーザー用保護領域に保存するか、Hub 起動前に `NVIDIA_API_KEY` 環境変数で渡せます。UI は key の有無と取得元だけを表示し、key 自体を返しません。Hub の環境変数で管理する key は UI から置換・削除できません。
+
+NVIDIA API の trial 利用は、別途適用される subscription がない限り、内部評価・テスト向けであり production 利用向けではありません。confidential / controlled / sensitive な情報を送らないでください。Trial Terms では User Content と Generated Content が NVIDIA の製品（AI model を含む）の改善に使われる場合があります。この連携は production の可用性や SLA を保証しません。[NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) を確認してください。
+
+モデルピッカーの一覧には Chat Completions 非対応のモデルが含まれる可能性があります。catalog に載っていることや `/v1/models` 接続試験の成功だけでは、個別モデルの prompt / streaming / tool-use / file edit / shell / resume 互換性を確認できません。特定モデルを使う前に、公開済みで機密情報を含まない検証用リポジトリで確認してください。[NVIDIA LLM API reference](https://docs.api.nvidia.com/nim/re/reference/llm-apis) に Chat Completions endpoint が記載されています。
+
+導入状況一覧（初回画面、および 設定 → AI CLI 連携）では、各 CLI のバージョンを確認し、その場で更新できます。実行するのはボタンを押したときだけで、Hub 起動時や定期実行では走りません。更新は各 provider の「バージョンと更新」設定に書かれたコマンドを実行し、実行前に確認ダイアログで実際のコマンドを見せます。実行中セッションがある CLI は、セッションが終わるまで更新できません。同梱の 7 本は既定の更新コマンドつきですが、Cursor Agent CLI と Command Code だけは既定で更新 OFF です（更新時に再ログインを求められることがあるため）。更新コマンドの変更や、追加した AI での更新の有効化は、設定 → AI CLI 連携 → 編集 → 「バージョンと更新」で行います。この機能が見えるのは Hub 自身が起動した、または `PATH` 上で見つけた CLI だけです。自分でターミナルを開いて動かしている CLI は対象外です。
+
 ---
 
 ## 主な機能
@@ -81,6 +93,7 @@ Gemini CLI は意図的に対象外です。
 - **生ログの参照ショートカット**: セッションの生ログ画面から、フルパスをコピーしたり、保存フォルダを OS のファイルマネージャで開いたりできる
 - **音声入力**: ブラウザ内蔵認識またはローカル Whisper でプロンプトを入力（Windows x64 では Whisper 管理インストール対応）
 - **PWA + opt-in Web Push**: Hub をローカル Web アプリとしてインストールし、Settings で明示的に有効化した場合だけ承認待ち通知を受け取る
+- **作業終了通知**: デスクトップ通知と通知音は、承認待ちだけでなくセッションが作業を終えて入力待ちに戻ったときにも鳴る。セッションカードのベルで個別にミュートでき、Settings で全体を OFF にもできる
 - **承認検出パターン profile**: GitHub から同期する公式 trigger phrase と、ユーザー編集用 custom profile を分離
 - **サーバ側ユーザー設定**: 音声、通知音、お気に入り、セッション順、spawn 既定、アバター設定を `config.yaml` に保存
 - **UI からの新規セッション spawn**（`/api/spawn`）。新規セッションパネルの「最初に渡す指示（任意）」欄に文面を入れておくと、起動直後の CLI へそのまま届く
@@ -95,6 +108,28 @@ Gemini CLI は意図的に対象外です。
 
 親 cwd が git リポジトリのとき、子セッションは既定で `.many-ai-cli/worktrees/<orchestration_id>/<role>` の独立した git worktree で動作します。Hub は子ブランチを自動 merge しません。指揮者またはユーザーが board とブランチを確認したうえで、何を merge するかを決めます。
 
+Claude Code と Codex の子は、最初の指示を起動時の引数で受け取ります。Hub は中身を読めない画面へ打ち込みません。CLI は起動時の確認（フォルダの信頼・更新のお知らせ）のあいだ指示を持っていて、答えが出たあとに自分で始めます。「オーケストレーション」ボタンで起動した指揮者と、最初の指示付きで起動したセッション（引き継ぎなど）も同じです。それ以外の CLI は、入力欄が出てから Hub が打ち込みます。Windows で CLI が `cmd.exe` を通って起動するとき（`cmd.exe` は引数を最初の改行で切ります）と、指示がとても長いときは、`~/.many-ai-cli/tmp` の非公開のファイルに本文を置き、それを指す 1 行を引数にします。このファイルはセッションの終了時に消えます。headless のセッションと同じく、CLI の動作中は、指示をこのマシンのプロセス一覧から読めます。
+
+Claude Code と Codex の子では、spawn 確認ダイアログに **「このフォルダを 〈CLI 名〉 の信頼済みとして登録する」**（既定でチェックあり）が出ます。チェックを入れたまま承認すると、Hub は子を起動する直前に、その CLI が信頼の確認に Yes と答えたときに書くのと同じファイル・同じ対象・同じ形で信頼を記録します。Claude Code は `.claude.json` の `projects` に `hasTrustDialogAccepted: true` の項目を、Codex は `config.toml` に `trust_level = "trusted"` の `[projects.'<フォルダ>']` 表を書きます（subscription profile で動く子は profile 側の設定へ書きます）。これで子は確認を出さずに始まります。記録する対象は CLI と同じく、子のフォルダが属するリポジトリ（git worktree なら元のリポジトリ）で、git の外ならそのフォルダです。そのため、リポジトリの下のフォルダで子を承認すると、リポジトリ全体が信頼済みになります。CLI がそのフォルダの判定に使う項目を既に持っているときと、Codex で、そのフォルダ・リポジトリ・それより上のどれかのフォルダが「信頼しない」と記録されているとき（大文字小文字が違っても）は、何も書きません。書き換えるのは、Claude Code のまだ誰も答えていない項目（`hasTrustDialogAccepted: false`。Claude Code が新しい項目に入れる既定値）だけで、`true` にします。記録する対象がホームフォルダかドライブの根になるときと、子のフォルダがネットワークパス（UNC）のときは、登録しません。これを指定できるのはダイアログでのあなたの承認だけで、AI の spawn 要求からは指定できません。書き込みに失敗しても子は起動し、子のセッションで確認が出ます。チェックを外したときと、ダイアログが出ない起動では、子は信頼の確認で待ちます。待っていることは board（指揮者がいれば指揮者にも）へ 1 回だけ知らせ（信頼の確認以外の起動画面で待つときも同じです）、子のセッションで答えればすぐ指示が始まります。それまで Hub は子へ何も打ち込みません。`many-ai-cli orchestrate send` は打ち込まずにエラーを返し、待っている時間は子の timeout に数えません。
+
+子の権限は 3 段あり、起動要求の `permission_preset`（および spawn 確認ダイアログ）で選びます。`attended` は Hub が何も足さないので、子の承認プロンプトは Hub の承認パネルへ来てあなたが答えます。`bounded` は聞きませんが、許可した操作しか通しません（Claude は `--permission-mode dontAsk` + `--allowedTools`、Codex は `--ask-for-approval never --sandbox workspace-write`、Copilot は `--allow-tool` の列挙（Copilot には自動拒否が無いので、列挙外の tool は従来どおり確認プロンプトになり、それは承認パネルへ届きます）、OpenCode は `--auto` + そのセッションの `opencode.json` に書く deny 規則）。`full` は全許可です。`bounded` の内蔵許可一覧は、読み取り・編集・`go test` / `go vet` / `gofmt` / `bun run check`・`git add` / `git commit` までで、`git push` / `git reset` / `git clean` / `rm` は意図的に入れていません（`orchestration.bounded_allowed_tools` に provider ごとの一覧を書けば変更できます）。無人の子（指揮者の `orchestrate spawn` と relay の子）は、要求に段の指定が無ければ `orchestration.child_permission_default` に従います。この既定は今のところ `full` で、`bounded` にすると無人の子が範囲を限った段で動きます。Grok と Cursor Agent には範囲を限って無人で動かす設定が無いため、`bounded` を選んでも全許可で起動し、確認ダイアログにその旨が出ます。
+
+セッションは端末を持たずに動かすこともできます。`execution_mode` は `interactive`（PTY 上で CLI の TUI を起動する＝既定）、`headless`（CLI 自身の非対話モード。`claude -p` / `grok -p` / `cursor-agent -p` / `opencode run` / `copilot -p` / `command-code -p`）、`auto`（誰も見ていない起動で、その CLI が対応していれば headless、そうでなければ対話）の 3 つです。headless のセッションは最初の指示を起動時に受け取り、入力欄を持たず（CLI が起動直後に stdin を閉じるため）、プロセスの終了で完了します（終了コード 0 が完了、それ以外は失敗）。止めるときはカードを閉じます（プロセスツリーごと終了します）。**非対話モードを持たない CLI へ `headless` を明示した起動はエラー**で、黙って対話へ倒して「誰も打たないまま待ち続けるセッション」を作ることはしません。**Codex は対象外です**（`codex exec` は無人の Codex の子に必ず付く承認フラグを受け付けないため、定義を書いても必ず起動に失敗します）。print モードを持つ他の CLI は、ビルドし直さずに `custom_providers:` の `headless:` を書くだけで無人の worker にできます。
+
+```yaml
+custom_providers:
+  - id: my-cli
+    command: my-cli
+    headless:
+      args: ["--print", "--output-format", "text"]  # print モードを選ぶフラグ
+      format: text        # "text" = 出力をそのまま見せ、終了コードで結果を決める
+      prompt_via: arg     # "arg"（args の直後の位置引数）か "stdin"
+```
+
+モデル・effort・権限のフラグはここには書きません。対話の起動とまったく同じコードが後ろへ足すので、2 つのモードで食い違いません。
+
+子は画面からも立てられます。AI セッションのカードにある 🌱 ボタンで派生ダイアログが開くので、種別に「子」を選び、役割・CLI・subscription profile・モデル・effort・実行モード・権限の段を選んで、最初の指示を直してから起動します。この経路で立てた子には**確認ダイアログが出ません**（ボタンを押したことがそのまま承認です）。権限は `attended` なので、子の承認プロンプトは自分で立てた普通のセッションと同じく Hub の承認パネルへ来ます。深さと本数の上限は指揮者からの spawn とまったく同じに効きます。ダイアログにはその子が実際に持つ権限が出るので、CLI や段を切り替えると何が変わるかを起動前に読めます。**「この役割では次回もこの段を使う」**にチェックを入れると、選んだ段がその役割に記憶されます。次に同じ役割を選んだときは派生ダイアログがその段で開き、AI がその役割の子を要求したときは確認ダイアログがその段で開きます。記憶を書けるのはこのチェックボックスだけで（AI の spawn 要求からは書けません）、外せばその役割の記憶は消えます。同じダイアログのもう 1 つの種別「引き継ぎ」は[セッション引き継ぎ記録（handoff）](#セッション引き継ぎ記録handoff)節にあります。
+
 既知の制約: 意図的に軽量な仕組みです。board の変更は 2 秒ポーリングで検知され、通知は `orchestration.board_notify_mode` に従います（既定 `queue-until-idle`、バッジのみは `soft-notify`、即時 Enter 付き inject は `interrupt`）。子セッションは自走のため既定で全許可バイパスします（`orchestration.child_full_bypass`、既定 `true`）。具体的には codex の子が `--sandbox danger-full-access --ask-for-approval never` で、それ以外は各 CLI の全許可指定に変換されて起動します。指揮者からの spawn は人間の確認を待ちます（`orchestration.spawn_confirm_mode`、既定 `on`）が、relay の子は設計上この確認を通りません。`child_full_bypass` を `false` にすると高リスク権限の自動確認は避けられますが、relay の子は答える人のいない承認プロンプトで止まります。完了判定は子が `## DONE <role> session=<child_id>` を書き込むことに依存し、job DAG・retry キュー・自動 merge はありません。
 
 ### Orchestration relay loop
@@ -103,13 +138,15 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 
 入口は 2 つです。
 
-- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model]` と `--review provider[/model]` を渡す。`--strong provider[/model]` は任意）。
+- 指揮者 CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md`（role mapping が無いときは `--impl provider[/model][@effort]` と `--review provider[/model][@effort]` を渡す。`--strong provider[/model][@effort]` は任意）。`@effort` は子の思考の深さで省略可。`--execution-mode` と `--permission`（権限の段）は全 role 共通で 1 つ。子 1 つだけを起こす `many-ai-cli orchestrate spawn` には `--effort` / `--execution-mode` / `--permission` がある。受理値は `--help` が正典。
 - `orchestrate` のサブコマンドは `spawn` / `send` / `relay` の 3 つ。名前を間違えると使える名前を並べて返す。
-- Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。
+- Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。役割表で CLI・モデル・subscription profile・権限の段を役割ごとに選べ、次の relay まで記憶される。
 
 既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、`orchestration.max_children_per_parent` が上限です（既定値 4、通常の relay なら 2 本分）。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
 
 通常は cheap な implementation model と、任意の strong implementation model の二段構えです。既定では review に 2 回続けて失敗した C、または plan の C に `[strong]` を付けた C を、空き枠があれば strong role へ渡します。2 本を同時に strong へ上げる想定なら上限 6 以上を用意してください。`--same-tree` は明示的な例外で、子が利用者の working tree を直接編集するため、同じ tree を別の AI や利用者が並行編集してはいけません。
+
+relay の役割も headless で回せます。この経路は「1 指示 = 1 プロセス」で、Hub がその指示を初期プロンプトに持つ worker を立て、プロセスの終了がその指示の完了を意味し、次の指示はまた新しい worker を立てます。`## DONE <role>` 行は必須ではなくなり（終了が代わりになります）、review の `verdict:` 行は relay が判断に使うので今までどおり必要です。対話の worker が起動時に 1 度だけ受け取っていた常設の前提は、指示のたびに一緒に渡します。役割が実行モードを指定しないときの既定は `orchestration.relay_execution_mode`（`auto` / `interactive` / `headless`、未設定＝対話）で、1 回だけ変えるなら `--execution-mode` です。非対話モードが無い CLI の役割は relay の開始時に弾かれ、黙って対話で立つことはありません。Hub を再起動すると headless の worker には再接続できないので、その relay は `hub_restart` で止まります（再開可能な停止理由なので、resume すると新しい worker が git の履歴から続きを引き継ぎます）。
 
 停止理由は round 上限、timeout、verdict / review file の欠落、blocked verdict、子の終了、Stop ボタンです。Hub 再起動後は `relay.json` から状態を復元し、再開可能な停止理由なら resume できます。完了・停止は relay 通知になります。作業ファイルは `~/.many-ai-cli/orchestration/<orchestration_id>/` 配下の `board.md`、`child-<id>.md`、`review-c<k>-r<r>.md`、`relay.json` です。これは一般的な job DAG ではなく、1 つの plan の C を順番に処理する軽量な sequential runner です。
 - **統合ランチャー（Windows / Linux / macOS）**: `many-ai-cli-launcher` で接続プロファイルから Hub へ接続し既定ブラウザで操作。SSH `serve` / `tunnel` プロファイルは全 OS、WSL プロファイルは Windows で WSL 内に Hub を起動
@@ -128,7 +165,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 
 **残量**はその掛け算の内訳であって、単独の機能ではありません。Usage メニューにプロファイルが並び、Claude（5h / 7d）/ Codex / Grok は数字が出ます。Copilot / Cursor / OpenCode はベンダーページへのリンクのままです。とくに Cursor Agent CLI は残量を返すローカルファイルもコマンドも無く（Free tier で確認済み）、検知できません。数字はメニューを開いたときに読み、定期ポーリングはしません。Claude は走行中の報告が無いとき、1 ターンの probe で取りにいきます。
 
-**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<id>` を作り、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・プラン名・有効フラグだけです。
+**仕組み**: 対応 CLI はどれも、設定ディレクトリを環境変数で選びます。`many-ai-cli` は profile ごとに `~/.many-ai-cli/subscriptions/<provider>/<dir>` を作り（フォルダ名は ID と別の `p1` `p2` … の短い名前。CLI によってはこの中に長さ制限のあるソケットのパスを作るため。これより前に足した profile は ID のままのフォルダを使い続けます）、セッション起動時にその変数を渡すだけです。ログインは公式 CLI が行い、認証情報はそのディレクトリの中で公式 CLI が持ちます。`many-ai-cli` は token を読みも書きも解析も保存もしません。`config.yaml` に入るのは profile の ID・表示名・フォルダ名・プラン名・有効フラグと、後述の手書き専用の項目（`profile_dir` / `settings_sync` / `profile_owned_keys` / `default_wins_keys`）だけです。
 
 | プロバイダー | 使う環境変数 | 対応 |
 |---|---|---|
@@ -151,12 +188,28 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 
 **普段の設定は自動で持ち込みます**: 分かれると困るものは、`many-ai-cli` が profile を用意するときに既定のディレクトリから運び入れます。Claude なら `CLAUDE.md` / `settings.json`（承認設定・hooks を含む）/ `skills` / `commands`、Codex と Grok なら `AGENTS.md` / `config.toml`（承認ポリシー・信頼済みフォルダを含む）/ `prompts` などです。
 
-- **既にあるものは絶対に上書きしません。** profile 側で変えた値はそのまま残り、足りないものだけが足されます
+- **設定ファイルは既定側と同期します**（Claude の `settings.json` と、Codex / Grok の `config.toml`）。セッションのために profile を用意するたびに、利用者が 1 か所で管理するポリシーの鍵を既定側の値で揃えます（Claude なら hooks・permissions・`env`・`enableArtifact` などの機能スイッチ・`skillOverrides`・`enabledPlugins`、Codex / Grok なら承認ポリシー・サンドボックス・MCP サーバー・機能フラグ）。既定側に足した鍵や変えた値は次の起動で profile に届き、既定側から消した hook は profile でも動かなくなります。各 CLI が自分で書く鍵は profile のものとして残します（Claude は `theme` / `effortLevel` / `autoMode` / `modelSettings` / `tui` と `/config` の切替、Codex は `projects` / `tui` / `notice` / `windows` / `model` / `model_reasoning_effort` / `hooks`、Grok は `cli` / `ui`）。profile にしか無い鍵にも触らず、両者が同じなら書き込みません。plugin の有効・無効を全 profile で揃えたいときは既定側で切り替えてください。profile の中で `claude plugin disable` しても次の起動で既定の値に戻り、それまでは `many-ai-cli doctor` が食い違いとして知らせます
+- **profile 側の `config.toml` は、同期で何か変わるとコメントが消えます。** 行単位で書き足すのではなく、読み込んで書き戻す方式なので、profile 側のコピーは鍵がソート順になりコメントが落ちます。変わるものが無ければ書き込まないので、既定側と一致している profile はコメントも並び順もそのままです。利用者の `~/.codex/config.toml` / `~/.grok/config.toml` は読むだけで、書き換えません
+- **同期を profile ごとに切ったり、鍵の割り当てを変えたりできます。** `~/.many-ai-cli/config.yaml` の 3 項目で決めます。いずれも**手書き専用**で、Hub の画面からは設定しません。設定画面で profile の名前を変えても、有効・無効を切り替えても、書いた内容はそのまま残ります。`settings_sync: false` にすると、その profile だけ従来どおりの扱い（`settings.json` が無ければ 1 回だけ運び入れ、あれば触らない）に戻ります。`profile_owned_keys` はその profile が自分で持つ鍵を足すもので（実例は `enabledPlugins`。plugin の組み合わせを profile ごとに変えたいとき）、`default_wins_keys` は逆に既定側へ揃える鍵を指定します（実例は `theme`。全 profile で見た目を揃えたいとき）。何も書かなければ上記の標準の規則どおりです。この 3 項目を使っている profile には `many-ai-cli doctor` が 1 行足します（鍵の名前だけで、値は出しません）
+
+  ```yaml
+  subscriptions:
+    claude:
+      - id: work
+        name: 仕事用
+        profile_owned_keys: [enabledPlugins]
+        default_wins_keys: [theme]
+      - id: personal
+        name: 個人用
+        settings_sync: false
+  ```
+
+- **それ以外の運び入れは従来どおりです**（`.claude.json` の 2 キー、Grok の `trusted_folders.toml`）: 既にあるものは絶対に上書きしません。profile 側で変えた値はそのまま残り、足りないものだけが足されます
 - **フォルダはリンク**（Windows では junction）で繋ぐので、あとからスキルを 1 つ足せば全 profile に届きます。ファイルはコピーです（CLI 自身が書き換えるため、リンクにすると profile の編集が既定側へ逆流します）
 - **ただし rule ファイルだけは例外です**: 既定側の `CLAUDE.md`（Codex / Grok は `AGENTS.md`）自体が symlink のときは、profile 側もコピーではなく同じ実体へのリンクにします。既定側を編集すれば再 seed なしで全 profile に届きます。リンクを張れない環境（Windows で開発者モード未設定など）ではコピーへ自動でフォールバックし、`many-ai-cli doctor` が知らせます。profile ごとに rule を変えたい場合はリンクを消して実ファイルに置き換えれば、そのまま上書きされずに残ります
 - **認証ファイルは運びません。** `.credentials.json` や `auth.json` は対象外です。Claude の `.claude.json` はアカウント識別と好みが同居しているため、ファイルごとではなく名指しした 2 キー（ブラウザ操作の既定）だけを移します <!-- secrets-scan: allow .credentials.json -->
-- 書き込み先は `~/.many-ai-cli/subscriptions/` の中だけで、あなたの `~/.claude` / `~/.codex` / `~/.grok` は読むだけです。`many-ai-cli uninstall` で全部消えます
-- あとから既定側を変えた分は自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教えます
+- 書き込み先は `~/.many-ai-cli/subscriptions/` の中だけで、あなたの `~/.claude` / `~/.codex` / `~/.grok` は読むだけです。`many-ai-cli uninstall` で全部消えます。例外は子セッションのフォルダの信頼だけです（[軽量オーケストレーション](#軽量オーケストレーション)）。「このフォルダを 〈CLI 名〉 の信頼済みとして登録する」にチェックを入れて子を承認すると、その CLI 自身の設定ファイル（既定のログインなら `~/.claude.json` か `~/.codex/config.toml`、profile ならその profile 側のファイル）に 1 項目書きます。既定のログインのファイルに書いた項目は `many-ai-cli uninstall` では消えません（書き込みの途中で止まって `.claude.json` の隣に残った一時ファイルは、Hub の次の起動で回収します）
+- 上記の設定ファイル以外は、あとから既定側を変えた分を自動では追いません。`many-ai-cli doctor` が「既定にあって profile に無いもの」を教え、同期する設定ファイルについては既定と食い違う鍵の名前を教えます（値は出しません）
 
 **ブラウザ連携も設定ディレクトリに付いてきます**: Claude in Chrome は有効化の状態を設定ディレクトリの中に持ちます。この「既定で有効にするか」の設定は上記の持ち込みの対象なので新しい profile にも引き継がれますが、実際にブラウザと繋がるかは別の話です。有効化のときに書かれる native messaging host の登録は Windows ユーザー単位で 1 枠しかなく、Chrome の全ブラウザプロファイルと Edge がそれを共有します。そのため最後に有効化した設定ディレクトリだけがブラウザと繋がり、別の profile で有効化すると枠が増えるのではなく移動します。加えて、ブラウザ拡張がセッションと同じ Claude アカウントでログインしている必要があります。結果として、ブラウザを持てる設定ディレクトリは同時に 1 つだけで、2 アカウントの並行利用はできません。`many-ai-cli` は環境変数を設定するだけで、これらの状態を読み書きしません。
 
@@ -175,7 +228,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 | Go | 1.25 以上（ビルド時） |
 | OS | Windows 10/11、macOS、Linux |
 | ブラウザ | Chrome / Edge / Firefox / Safari |
-| AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI（使う provider は別途インストール済みであること） |
+| AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI、opencode、Command Code（使う provider は別途インストール済みであること） |
 
 ### プラットフォーム検証状況
 
@@ -328,7 +381,7 @@ sha256sum -c SHA256SUMS.txt
 
    **Windows** ではデスクトップに **「MANY-AI-CLI」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
 2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
-3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
+3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok / command-code）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
 止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
@@ -516,7 +569,7 @@ many-ai-cli-launcher.exe --ui             # 常に選択画面を表示
 - パスワード・鍵のパスフレーズは保存しません。鍵認証が必要です（`-o BatchMode=yes` で対話を禁止）
 - `token_command` で取得したトークンは現在のセッション中のみ使用し、`launcher-profiles.yaml` には書き込みません
 
-プロファイルの全フィールドと接続フローの詳細は [docs/v0.3.x-many-ai-cli-design.md — §13](docs/v0.3.x-many-ai-cli-design.md) を参照してください。
+プロファイルの全フィールドは [internal/launcher/profile.go](internal/launcher/profile.go) の `Profile` 構造体、接続フローは [internal/launcher/connect.go](internal/launcher/connect.go) を参照してください。
 
 #### Windows がランチャーをブロックする場合: ローカル `.exe` なしでリモートサーバーに接続
 
@@ -904,7 +957,7 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
   - 状態サマリチップ `[実行中][承認待ち][スタンバイ]`（承認待ち > 0 のときは点滅）と、プロバイダ別接続数 `Claude:N / Codex:N`
   - 右端: `⏻`（Hub 停止）、`設定`（言語・テーマ・タイムアウト等の設定パネル）
 - **左サイドバー（セッション一覧）**
-  - 上部: `+ 新しいセッション` ボタン（クリックで spawn ダイアログを開く）
+  - 上部: `+ 新しいセッション` ボタン（クリックで spawn ダイアログを開く）。provider 一覧の末尾 **AI CLIを追加** は **設定 → AI CLI連携** と同じ追加ダイアログを開く
   - 起動 cwd 直下の **プロジェクトフォルダ単位**でグルーピング表示。フォルダ名横にもセッション数チップと Files 導線
   - 各セッションカード: `📌`（最上部の「Pinned」グループへ固定）／ `×`（閉じる）／ プロバイダ色のドット ＋ 番号 ＋ 状態バッジ（実行中 / スタンバイ / 待機中 / 完了 / エラー / 切断）／ Git ブランチバッジ（取得できる場合）／ 最終応答時刻 ／ 直近の出力プレビュー
   - カード右クリックで Git ビューを開く、Files タブを開く、セッションをアクティブ化、セッションIDコピーが可能
@@ -913,12 +966,14 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
   - 上部バー: アクティブセッションのプロバイダ・cwd、`↑最上部へ`（PTY バッファの先頭にスクロール）
   - 中央: xterm.js でリアルタイム描画される PTY 出力
   - 下部: 入力欄（複数行可）、添付・送信・スラッシュコマンドピッカー（`/clear`, `/model`, `/`）、auto mode 切替ヒント `shift+tab`
-- **タブ**: Terminal / チャット / 分割 / マルチ / Files / Git を同じメイン領域で切り替え。Files / Git は遅延ロードされ、Hub 再起動後の復元にも対応
+- **タブ**: Terminal / チャット / 分割 / マルチ / Files / Git / Review を同じメイン領域で切り替え。Files / Git / Review は遅延ロードされ、Hub 再起動後の復元にも対応
 - **チャット / 分割**: ライブ PTY ストリームからユーザー入力、AI 出力、承認、添付を会話形式に整形。分割表示ではターミナルと履歴を並べて確認可能
 - **マルチタブ**: 複数セッションをグリッドで表示し、フォーカス中ペインへ入力・リサイズ・承認 UI を連動
 - **承認アクションバー**: 承認待ちが発生すると入力欄の上に表示。単一質問はボタン、複数質問は縦積みの選択肢と「Submit all」でまとめて送信
+- **アクションバーを畳む**: `✕` でアクションバーを入力欄のすぐ上の 1 行の帯に畳み、帯を押すと開く。畳んでいる間はキー入力が端末へ送られ、承認は保留のまま。ただし、高リスクの承認を畳んでいる間の空の Enter（入力欄が空のままの送信ボタンも）だけは送らず、帯を開くよう案内する
 - **Files タブ**: 左にファイルツリー、右に Markdown / コードプレビュー。パスコピー、OS で開く、移動、リネームなどをコンテキストメニューから実行可能
 - **Git タブ**: 読み取り専用の commit 履歴、ref 切替、commit 詳細、変更ファイル、diff プレビュー、コピー操作を提供。`Commit all` は Review 後にローカル commit のみ実行し、push はしない
+- **Review タブ**: 作業ツリーまたは AI の 1 ターン単位で per-file diff を表示し、Git タブと同じ `Commit all` / push を提供。Files タブの + メニューやチャットのターンの「Review」リンクからも開け、どの入口からでも同じタブが開く。セッションの cwd が git リポジトリでない場合は diff の代わりに案内文を表示する
 - **ターミナル直接入力との同期**: ターミナル側で `y` / `n` 等を直接タイプして承認を解決した場合、アクションバーは自動で消えます
 - **ファイル / 画像添付**: ペースト・D&D で添付エリアに置くと、送信時にローカルファイル化して PTY に inject されます
 - **ステータスバー（最下部）**: アクティブセッションのトークン・コスト・コンテキスト使用率などを 1 行で常時表示します。詳細は下記「ステータスバー（最下部）」を参照（設定パネルで表示 ON/OFF を切替可能）
@@ -932,7 +987,8 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 - **ターミナル入力**: 入力欄に直接タイプして `Enter` で送信します。改行は `Shift+Enter`。
 - **ファイル / 画像添付**: ファイルを添付エリアにペースト（`Ctrl+V`）または D&D すると、ローカルファイルパスの参照がセッションへ inject されます。
 - **音声入力**: 🎤 ボタンをクリックまたは `Alt+V` で音声入力を開始 / 停止します。エンジン選択や詳細は [音声入力](#音声入力) セクションを参照してください。
-- **Spawn**: **+ 新しいセッション** をクリックすると、ブラウザから新しい AI CLI セッションを起動します。
+- **Spawn**: **+ 新しいセッション** をクリックすると、ブラウザから新しい AI CLI セッションを起動します。一覧にない CLI は、provider 一覧の末尾 **AI CLIを追加** か **設定 → AI CLI連携** から、表示名と実行ファイルだけで登録できます。検証や保存に失敗しても入力は残ります。新規セッションから保存した場合は、追加した CLI が選ばれた状態に戻ります。行の **複製** から、既存の CLI をひな形にして新しい CLI を追加できます（コピーの表示名には「(コピー)」が付きます）。
+- **組み込み provider の編集・無効化**: **設定 → AI CLI連携** の一覧行から編集・無効化 / 有効化できます。編集内容は組み込み定義自体を書き換えず、その上に override として保存されます。組み込み定義に値がある項目は、今のところ空にして保存できません（引数の一覧を空にする、文字の欄を空にする、など）。保存は拒否され、編集画面に項目名が出るので、元の値を残すか別の値を入れてください。保存のたびに新しい revision と自動バックアップが作られるため、誤編集やファイル破損で最後の正常な状態を失いません。行の **履歴** から revision とバックアップの一覧・整合性検証・復元ができ、同じ操作は UI が使えないときも `many-ai-cli provider backup list|verify|restore` と `many-ai-cli provider reset --distributed` から行えます。設定ファイル自体が壊れた場合は、履歴に「この CLI の設定ファイルが壊れています。壊れたファイルは保全済みです。戻す先を選んでください。」という通知と復元候補が表示されます。UI が使えないときは `many-ai-cli provider recover <provider-id> [revision|--list]` から復旧できます。
 
 ### ステータスバー（最下部）
 
@@ -976,6 +1032,9 @@ set-option -g default-command "MANY_AI_CLI_AUTO=1 bash -c 'eval \"$(many-ai-cli 
 | `Ctrl+C` | PTY に SIGINT を送信（テキスト選択中はコピー） |
 | `Ctrl+D` | PTY に EOF を送信 |
 | `Ctrl+O` | Claude Code の折りたたみ内容を展開 |
+| `Ctrl+K` | コマンドパレットを開く（コマンド実行・セッション横断検索） |
+| `Alt+1..9` | 対応する番号のセッションへ切り替え |
+| `?` | キーボードショートカット一覧を開く |
 
 ---
 
@@ -1093,8 +1152,8 @@ token: ""                   # 空 = 起動時にランダム生成（再起動�
 
 | カテゴリ | 例 | 保存先 |
 |---|---|---|
-| **D1: UI 表示状態**（端末ごとが自然） | テーマ、フォントサイズ、言語、サイドバー幅 | ブラウザの **localStorage** |
-| **D2: ユーザー機能設定**（端末 / ポート間で共有） | 音声、トリガー、通知音、承認の自動切替、クイックコマンド、利用リンク、お気に入り、セッション順、spawn 既定値 | `~/.many-ai-cli/config.yaml` の `user_prefs:`（`GET/PUT /api/user-prefs` で読み書き） |
+| **D1: UI 表示状態**（端末ごとが自然） | サイドバー幅 | ブラウザの **localStorage** |
+| **D2: ユーザー機能設定**（端末 / ポート間で共有） | テーマ（自分で足したテーマを含む）、フォントサイズ、言語、音声、トリガー、通知音、承認の自動切替、クイックコマンド、利用リンク、お気に入り、セッション順、spawn 既定値 | `~/.many-ai-cli/config.yaml` の `user_prefs:`（`GET/PUT /api/user-prefs` で読み書き） |
 | **D3: サーバ運用設定** | hub ポート、ログ設定、承認の有効 / 無効、スラッシュコマンドソース、承認パターンソース、token | `~/.many-ai-cli/config.yaml`（直接編集または専用の設定 UI） |
 
 `user_prefs:`（D2）はブラウザの localStorage ではなくサーバ側に保存されるため、ポート変更（例: WSL ランチャーが 47777 から 47877 へ移る）でも維持されます。
@@ -1103,7 +1162,7 @@ token: ""                   # 空 = 起動時にランダム生成（再起動�
 
 初回ロード時、ブラウザはサーバから D2 の値をミラーします。以降の変更は localStorage（キャッシュ）とサーバの両方へ同時に書き込まれます。既存の localStorage 値は初回に自動でサーバへ反映されます。
 
-承認検出パターンは provider ごとに `official` / `custom` プロファイルを持ちます。`official` は GitHub 上の `resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から起動時に取得・キャッシュされ、`custom` はユーザー編集用です。
+承認検出パターンは provider ごとに `official` / `custom` プロファイルを持ちます。`official` は GitHub 上の `resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` から起動時に取得・キャッシュされ、`custom` はユーザー編集用です。
 
 カスタム通知音は `~/.many-ai-cli/notify_sound_custom.bin` にバイナリファイルとして保存され、MIME タイプは `user_prefs.notify_sound.custom_mime` に記録されます。
 
@@ -1163,7 +1222,7 @@ wrapper の Hub への WebSocket が切れたとき、wrapper は **Hub の HTTP
 ## アーキテクチャ
 
 ```
-AI CLI (claude / codex / copilot / cursor-agent / grok)
+AI CLI (claude / codex / copilot / cursor-agent / opencode / grok / command-code)
     └─ many-ai-cli wrap  <── PTY ラッパー
            │ WebSocket
     ┌──────▼──────┐
@@ -1268,11 +1327,25 @@ Claude Code はこの設定に一度も触れていない場合、**端末幅が
 
 ### Claude Workflow journal のメタ情報
 
-Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。subagent の transcript は読みません。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
+Claude セッションで Workflow を検出すると、Hub はローカルの `~/.claude/projects/` 配下にある `journal.jsonl` をポーリングします（`workflow.journal_enabled: true` が既定）。集計に必要なイベントの `type` と `agentId` だけをデコードし、`result` 本文は保持・ログ出力・転送・永続化しません。この journal 機能自体は subagent の transcript を読みません（transcript を読むサブエージェントの木は後述の別機能です）。journal 由来の状態はメモリ内だけに保持され、外部へ送信されません。無効化する場合は `workflow.journal_enabled: false` にすると、端末表示だけを使う劣化動作へ切り替わります。
 
 メインセッションの transcript から Workflow の taskId が解決できた場合、Hub は Claude Code の Workflow タスク出力ファイル（`%TEMP%/claude/<munge(cwd)>/<セッションUUID>/tasks/<taskId>.output` 等）も、そのワークフローが動いている間ポーリングします（`workflow.task_detail_enabled: true` が既定）。読み取るのは `workflowProgress` フィールドのみで、各エージェントのラベル・状態・直近のツール操作・要約プレビューを Workflow モーダルに表示します。script の戻り値本文（`result`）や `log()` 出力（`logs`）はどの構造体にもデコードされず、読みません。この詳細情報はダッシュボードのモーダルにのみ表示され、ログ出力・永続化・外部送信は行いません。無効化する場合は `workflow.task_detail_enabled: false` にしてください。無効時、または taskId が解決できない場合は、従来どおり集計バー/件数表示にフォールバックします。
 
 Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_completion_notify.enabled: true`）。payload に含むのはセッション名と `N/M agents` のような集計件数だけで、journal の result 本文や agent ID は含みません。
+
+### サブエージェントの木
+
+上記の Workflow journal とは別に、Hub は Workflow ポップアップの中に、subagent（Agent ツール / `spawn_agent` / `subagents`）の活動を「親の指示 → 子 → 孫」の木として表示できます。有効化されているセッションが対象で（`workflow.subagent_tree_enabled: true` が既定）、現時点で対応しているのは Claude Code・Codex・Grok です。
+
+Claude セッションでは、Hub はそのセッションの `subagents/` ディレクトリ配下にある子自身の `agent-<id>.meta.json` と `agent-<id>.jsonl` を読みます（親の PTY 出力は読みません）。ここから子の短い名前・種別・親/祖父の ID・深さを得て、各子の transcript は先頭と末尾だけを上限付きで読み、直近のツール呼び出しを取ります（ファイル全体は読みません）。完了したかどうかは、子の transcript の最後の行から推測するのではなく、親 transcript 自身が持つ tool-result と task-notification の記録から決めます。Workflow ツールの子（`agentType: "workflow-subagent"`）はここでは除外し、既存の Workflow journal 表示の側に残します。
+
+Codex セッションでは、生成された子は `CODEX_HOME/sessions/YYYY/MM/DD/` 配下に自分専用の rollout ファイルを持ちます。Hub はその日のディレクトリにある各 rollout の先頭行だけを読み（ファイル全体は読みません）、子のニックネーム/役割・親の thread id・深さを得ます。親と各子自身の rollout は、Claude の読み取りと同じ上限付きで先頭・末尾だけを読み、完了判定（`SubAgentActivity` の `item_completed` 記録）と直近のツール呼び出しを取ります。一度スキャンした過去日のディレクトリは以後スキャンし直さず、当日のディレクトリだけを変化があったときに再スキャンします。
+
+Grok セッションでは、生成された子は親自身のセッションファイルと同じ場所に `subagents/<id>/` ディレクトリを持ちますが、そこに入るのは（子が終わったときの）`meta.json` と `output.json` だけで、`events.jsonl` はそこには存在しません。Hub は親自身の `updates.jsonl`（上限付き、ファイル全体は読みません）から `subagent_spawned` / `subagent_finished` の出入りを取り、`subagent_spawned` を見た時点から `subagent_finished` または `subagents/<id>/meta.json` で確定するまでの間、その子を走行中として扱います（この間、その poll で新しい情報が無くても走行中のまま保ちます）。直近のツール呼び出しを出す場合は、`subagents/<id>/` 配下のファイルではなく、そのイベント自身が持つ `child_session_id` が指す**兄弟の**セッションディレクトリの `events.jsonl` から取ります。Grok の subagent は公式に 1 段までしか入れ子にならないため、ここに出る子はすべてセッション直下の子です。この読み取りを有効にしても、チャット欄自身の transcript の読み元は変わりません。
+
+読まない・送らないものは、プロンプト本文・ツールの結果・子自身の返答です。唯一の例外は「今何をしているか」の短い要約で、Claude ではツール呼び出しの入力のうち許可した鍵（`command` / `pattern` / `path` / `file_path`）の値だけを、Codex では `exec` ツール呼び出しのシェルコマンド文字列を使います。Grok では要約は出しません — Grok 自身のツール活動の記録にはツール名しか無く、要約できる引数・対象の項目がありません。どちらも 100 文字に切り詰め、それ以外の入力の鍵やツール呼び出しの形（Codex のエージェント間通信用 `send_message` / `wait` 等）はデコードする前に捨てるため要約には出ません。Workflow journal と同じく、このデータはそのセッションのダッシュボードのポップアップにのみ表示され（そのセッション自身の WebSocket 経由）、ログ出力・永続化・外部送信は一切行いません。無効化する場合は `workflow.subagent_tree_enabled: false` にしてください。
+
+自分で追加した provider の定義でも、`adapters.subagents` に `subagent:claude-v1` のような実装済みの鍵を書けば、同じ読み取りを使えます。ただし、その CLI が実際に subagent の記録を同じ形・同じ置き場所で書いている場合に限ります。鍵は読み取り方を選ぶだけで、別の記録形式へ変換するものではありません。
 
 ### ローカル instruction file への書き込み
 
@@ -1284,18 +1357,34 @@ Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_co
 
 記録はホームディレクトリ配下の `~/.many-ai-cli/handoff/s<id>.jsonl`（ディレクトリ `0700` / ファイル `0600`）に置かれ、リポジトリの中には置きません。記録が有効かどうかに関わらず、`handoff.retention_days`（既定 14 日）より古いファイルは Hub の定期処理で削除されます。`handoff.enabled: false` で書き込み自体を止められます。`many-ai-cli doctor` はこのディレクトリのファイル件数と最古ファイルの経過日数を報告します。
 
-引き継ぎの起動は必ず人が押した操作から始まり、自動では 1 本も立ちません。入口は 2 つあります。1 つはセッションの残量が `handoff.notify_remaining_percent`（既定 10%）を下回ったときに画面の隅に出る通知、もう 1 つはサイドバーの「引き継ぎ一覧」ボタン（↪）です。一覧はライブなセッション状態ではなく看板ディレクトリを直接読むため、セッションが既に終了していても、Hub を再起動した後でも同じように開けます。どちらの入口からでも、Hub はその看板から 1 画面ぶんの markdown（素性・直近の完了・直近の変更・「次の一手」があればそれ）を組み、**どこへも送る前に画面へ表示**します。そこから起動を選ぶと、その markdown を最初の指示として持たせた新しいセッションを**別の provider**（元と同じ provider の別 subscription profile は選べません）で 1 本立てます。新しいセッション自身の看板には、どのセッションを引き継いだかが記録されます。画面上で親子関係が作られるわけではありません。
+引き継ぎの起動は必ず人が押した操作から始まり、自動では 1 本も立ちません。入口は 3 つあります。セッションの残量が `handoff.notify_remaining_percent`（既定 10%）を下回ったときに画面の隅に出る通知、サイドバーの「引き継ぎ一覧」ボタン（↪）、そしてセッションカードの 🌱 ボタンです。一覧はライブなセッション状態ではなく看板ディレクトリを直接読むため、セッションが既に終了していても、Hub を再起動した後でも同じように開けます。3 つとも派生ダイアログを種別「引き継ぎ」で開きます。Hub はその看板から 1 画面ぶんの markdown（素性・直近の完了・直近の変更・「次の一手」があればそれ）を組んで編集できる欄へ入れるので、**どこへも送る前に画面に出ています**。起動を押すと、その文面を最初の指示として持たせた新しいセッションを**別の provider**（元と同じ provider の別 subscription profile は選べません）で 1 本立てます。モデル・effort・実行モード・権限の段も同じダイアログで選べます。
+
+看板に載るのは「何をしたか」までで、会話そのものは入りません。それを補うために後継へ渡せるものが 2 つあり、記録に入るのは**パスだけ**です。前任の会話ログは引き続き後継のツールだけが開きます。引き継ぎメモは、派生ダイアログで利用者が明示的に押した場合に限り、既存の読み取り専用 Markdown プレビューで表示できます。この操作で読めるのは選択中の看板に記録されたメモだけで、メモ本文が `Record` や引き継ぎ markdown にコピーされることはありません。
+
+1 つ目は**前任の会話ログ**です。Claude と Codex は自分の会話を手元の JSONL に書いており、Hub はその置き場を知っています（subscription profile ごとに分かれている場合もそのまま解決します）。看板にはそのパスだけが記録され、引き継ぎの文面に「前任の会話ログ」の節として、パスと読み方（末尾から最後の指示と最後の発言を読む、大きければ末尾 200 行と `grep` で足りる）が入ります。**この経路は前任が既に止まっていても効きます** — 上限に当たって動かなくなった Claude の続きを Codex に渡したい、という場面がこれで埋まります。会話ログの場所が分からない provider では、この節は出ません。
+
+2 つ目は**引き継ぎメモ**です。残量の通知に出る「引き継ぎメモを書かせる」を押すと、Hub がまだ動いている前任に「`~/.many-ai-cli/handoff/s<id>.note.md` に、次の一手・未検証の前提・開いている論点・触っていた md のパスを書いてください」と 1 回だけ頼みます。書けたという合図を受け取り、ファイルが実際にあることを確かめてから、そのパスを看板へ記録します（60 秒返事が無ければ諦めて、書かれなかったことを画面に出します）。メモも看板と同じ 14 日で消えます。この依頼は前任のトークンを使うので、既定では**押したときだけ**動きます（`handoff.note_on_threshold`: `ask` = 既定 / `auto` = 通知と同時に自動で頼む / `off` = ボタンを出さない）。前任が既に止まっていれば、頼む相手がいないので使えません（そのときは 1 つ目の会話ログが残ります）。
+
+派生ダイアログには看板に記録されたメモごとに**Markdownで表示**ボタンがあり、前任の会話ログはこれまで通りパスだけが表示されます。Markdown ビューアがメモを読むのはボタンを押した時だけです。前任の会話ログを Hub が表示したり読んだりすることはありません。
+
+編集した引き継ぎ文面は、同じダイアログの**看板に保存**で「起動」と別に保存できます。`~/.many-ai-cli/handoff/s<id>.manual.note.md` という AI 作成メモとは別のファイルを作り、看板にはパスだけを記録します。セッションを起動せず、AI トークンも使いません。AI 作成メモと手動保存メモの両方が看板に残り、どちらも設定された保持期間（既定 14 日）に従います。
+
+新しいセッション自身の看板には、どのセッションを引き継いだかが記録され、それがカードにも出ます。後継のカードには前任への `↪ #N` チップ、まだ動いている前任のカードには `後継 #M` チップが付き、↪ 一覧の行にも後継の番号が出ます。チップを押すとそのセッションへ切り替わります（終了済みなら ↪ 一覧が開きます）。リンクは表示だけで、**画面上で親子関係が作られるわけではありません**（後継は子ではなく対等な新しい親です）。
 
 ### 外部への通信について
 
 `many-ai-cli` 自体はローカル動作を前提としていますが、以下の外部 HTTPS 通信が発生し得ます。
 
-- **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
-- **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
+- **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,opencode,grok,command-code}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
+- **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
+- **CLI のインストール手順リンクの取得（Hub 本体の通信）**: 初回画面や **設定 → AI CLI 連携** で導入状況一覧を出すとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json`（各 CLI の公式インストール手順へのリンク）を取得し、24 時間キャッシュします。取得できないときは、リンク無しで一覧を出します。
+- **AI Usage Links の既定リンクの取得（Hub 本体の通信）**: ダッシュボードの画面を読み込むと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json`（Usage メニューに出す、各ベンダーの使用量ページへの既定のリンク）を取得し、24 時間キャッシュします。取得元 URL は変更できず、止める設定もありません。取得できないときは Hub に組み込んだリンクを使います。
+- **モデル候補の一覧の取得（Hub 本体の通信）**: 新規セッションの画面・派生ダイアログ・spawn 確認ダイアログが初めてモデル候補を出すときと、モデル欄の横の ↻ を押したとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json`（Claude Code・Codex・Copilot のモデル候補と、Cursor Agent・Grok の予備の候補）を取得し、24 時間キャッシュします。取得元 URL は `config.yaml` の `models_source` で変更できます。取得できないときはこれらの候補が空になり、モデル名は手で入力できます。
+- **NVIDIA NIM のモデルカタログと接続試験（Hub 本体の通信 / opt-in のみ）**: NVIDIA NIM を設定している場合（上記の [NVIDIA NIM trial route](#nvidia-nim-trial-routeopencode-専用) 参照）、Hub は NVIDIA の `/v1/models` endpoint を呼び、モデルピッカーの一覧取得と設定画面の接続試験に使います。推論そのものは proxy されず、OpenCode から NVIDIA の Chat Completions endpoint へ直接送られます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
 - **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。ローカル処理にしたい場合は `127.0.0.1` / `localhost` のローカルサーバだけを指定してください。外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。「音声入力」節の注意書きも参照。
 - **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。
-- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI 自身は、それぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）と HTTPS で直接通信します。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
+- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode / Command Code 自身は、それぞれのバックエンドと HTTPS で直接通信します。公式 5 CLI はそれぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）、opencode と Command Code は設定したモデルプロバイダー（opencode は NVIDIA NIM を含む。上記参照）です。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
 
 ### ⚠️ wrap 対象 CLI のデータ保持について
 
@@ -1310,6 +1399,8 @@ Workflow 完了時の Web Push は別の opt-in です（`user_prefs.workflow_co
 | **GitHub Copilot CLI**（GitHub: Product Specific Terms 2026/3 版） | **使われる**（プロンプトは保持され private モデルの fine-tune に利用） | 規約上の明示的な opt-out は不明（最新規約を要確認） | 明示なし |
 | **Cursor Agent CLI**（Cursor） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 | **Grok Build CLI**（xAI） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
+| **opencode**（コミュニティ CLI。設定したバックエンド次第。NVIDIA NIM を含む） | 設定したバックエンド次第 | 設定したバックエンド次第 | 設定したバックエンド次第 |
+| **Command Code** | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 
 ### ⚠️ 規約変更リスクについて
 

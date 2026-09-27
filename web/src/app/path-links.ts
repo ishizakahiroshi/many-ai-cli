@@ -3,6 +3,24 @@ import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
 import { sessions } from './state.js';
 import { FilesTabManager, FilesPreview } from './files-view.js';
+import {
+  findPathCandidates,
+  isAbsolutePath,
+  trimTerminalPathCandidate,
+} from './path-detect.js';
+
+export {
+  ABS_UNIX_PATH_RE,
+  ABS_WIN_PATH_RE,
+  REL_PATH_RE,
+  findPathCandidates,
+  isAbsolutePath,
+  isLikelyRelPath,
+  isTerminalPathStartBoundary,
+  stripTerminalLineSuffix,
+  trimTerminalPathCandidate,
+  trimWindowsPathCandidate,
+} from './path-detect.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -84,11 +102,12 @@ export function getPathOpenItem(filePath, sessionId) {
   return { icon: '🚀', key: 'link_open_default', action: () => callOpenApi('/api/open-default-file', filePath, 'link_open_default_error', sessionId) };
 }
 
-export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file', extraItems: any[] = []) {
+export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 'file', extraItems: any[] = [], pathContext: any = {}) {
   cancelPathPopupHideTimer();
   const popup = getOrCreatePathPopup();
   popup.innerHTML = '';
   popup.hidden = false;
+  const context = pathContext && typeof pathContext === 'object' ? pathContext : {};
 
   const items = [];
   const isDir = pathType === 'dir';
@@ -100,10 +119,11 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
       key: 'link_open_any_ai_cli',
       action: () => {
         const ses = sessions.get(sessionId);
-        const cwd = ses?.cwd;
-        if (!cwd) { showToast(t('link_open_error')); return; }
-        const projectKey = cwd.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || cwd;
-        FilesTabManager.openFilesTabAtFile(sessionId, projectKey, cwd, cwd, filePath);
+        const sessionCwd = ses?.cwd || '';
+        const filesRoot = context.filesRoot || sessionCwd;
+        if (!filesRoot) { showToast(t('link_open_error')); return; }
+        const projectKey = context.projectKey || basenameForPath(filesRoot) || filesRoot;
+        FilesTabManager.openFilesTabAtFile(sessionId, projectKey, filesRoot, filesRoot, filePath);
       },
     });
     items.push({
@@ -129,8 +149,9 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
     }},
     { icon: '📋', key: 'link_copy_rel_path', action: (anchor) => {
       const ses = sessions.get(sessionId);
-      const cwd = ses?.cwd || '';
-      const rel = cwd ? computeRelPath(cwd, filePath) : filePath;
+      const sessionCwd = ses?.cwd || '';
+      const relativeBase = context.relativeBase || sessionCwd;
+      const rel = relativeBase ? computeRelPath(relativeBase, filePath) : filePath;
       return copyPathText(rel, anchor).catch(() => {});
     }},
   );
@@ -150,7 +171,7 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
 }
 
 // renderPathPopupItems は items 配列をボタン化して popup に並べ、画面端からはみ出さない
-// よう位置調整する。showPathPopup / showFileActionsPopup で共有する。
+// よう位置調整する。showPathPopup から利用する。
 export function renderPathPopupItems(popup, items, clientX, clientY) {
   for (const item of items) {
     const btn = document.createElement('button');
@@ -178,25 +199,6 @@ export function renderPathPopupItems(popup, items, clientX, clientY) {
   popup.style.top = Math.max(4, top) + 'px';
 }
 
-// showFileActionsPopup は Git タブのファイル行向けの軽量ポップアップ。
-// CLI 画面の右クリックメニュー（showPathPopup）と同じ部品を流用しつつ、項目を
-// 「🗔 モーダルで開く」「🚀 既定のアプリで開く」の 2 つだけに絞る。
-// プレビュー不能な拡張子のときはモーダル項目を出さず既定アプリのみにする。
-export function showFileActionsPopup(filePath, clientX, clientY, sessionId) {
-  cancelPathPopupHideTimer();
-  const popup = getOrCreatePathPopup();
-  popup.innerHTML = '';
-  popup.hidden = false;
-
-  const items = [];
-  if (isAnyAiCliPreviewable(filePath)) {
-    items.push({ icon: '🗔', key: 'link_open_modal', action: () => openFileModal(filePath, sessionId) });
-  }
-  items.push(getPathOpenItem(filePath, sessionId));
-
-  renderPathPopupItems(popup, items, clientX, clientY);
-}
-
 // ---- ファイルプレビューモーダル（FilesPreview をツリー無しで単体表示）----
 
 export let fileModalEl = null;
@@ -213,9 +215,9 @@ export function closeFileModal() {
   }
 }
 
-export function openFileModal(filePath, sessionId) {
+export function openFileModal(filePath, sessionId, cwdOverride = '') {
   const ses = sessions.get(sessionId);
-  const cwd = ses?.cwd;
+  const cwd = ses?.cwd || cwdOverride || dirnameForPath(filePath);
   if (!cwd) { showToast(t('link_open_error')); return; }
   closeFileModal(); // 二重起動防止
 
@@ -365,34 +367,6 @@ export function computeRelPath(from, to) {
   return rel || '.';
 }
 
-export function trimTerminalPathCandidate(path) {
-  let text = String(path || '').trim().replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
-  // 拡張子の直後に全角/日本語が続く場合はそこで切る（相対パス・Unix 絶対パスにも適用）。
-  // Windows 絶対パスは下の trimWindowsPathCandidate で同等処理を行う。
-  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
-  if (/^[A-Za-z]:[\\/]/.test(text)) text = trimWindowsPathCandidate(text);
-  text = stripTerminalLineSuffix(text);
-  return text;
-}
-
-export function trimWindowsPathCandidate(path) {
-  let text = String(path || '');
-  text = text.replace(/([\\/])\s+.*$/, '$1');
-  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
-  text = text.replace(/\s+[぀-ヿ㐀-鿿＀-￯].*$/u, '');
-  text = text.replace(/\s+[A-Za-z]$/, '');
-  return text.replace(/(?:\s*[,;:'"<>\])}]+)+$/, '');
-}
-
-export function stripTerminalLineSuffix(path) {
-  const text = String(path || '');
-  return text.replace(/([^\s:]):\d+(?::\d+)?$/, '$1');
-}
-
-export function isAbsolutePath(path) {
-  return /^[A-Za-z]:[\\/]/.test(path) || path.startsWith('/');
-}
-
 export function joinPath(base, rel) {
   if (!base || !rel) return rel || base || '';
   const sep = base.includes('\\') ? '\\' : '/';
@@ -421,58 +395,6 @@ export function resolveTerminalPathCandidate(path, sessionId) {
   const cwd = sessions.get(sessionId)?.cwd || '';
   if (!cwd) return cleaned;
   return joinPath(cwd, cleaned);
-}
-
-// Windows drive paths can appear with either backslashes or forward slashes
-// in terminal output, e.g. D:\dev\app.go or C:/Users/me/.claude/CLAUDE.md.
-export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(])+)/g;
-// 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
-// Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
-export const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
-export const REL_PATH_RE = /(^|[\s([{"'`])((?:\.{1,2}[\\/]|[A-Za-z0-9_.-]+[\\/])(?:[^\s\x00-\x1f"'<>`|(]+[\\/])*[^\s\x00-\x1f"'<>`|(]+)/g;
-
-// `Y/N` / `1/2` / `bash/zsh` 等を誤検出しないための post-filter。
-// 受理条件: `./` `../` 始まり、またはセパレータ 2 個以上、または末尾拡張子あり。
-export function isLikelyRelPath(path) {
-  if (!path) return false;
-  if (/^\.{1,2}[\\/]/.test(path)) return true;
-  const sepCount = (path.match(/[\\/]/g) || []).length;
-  if (sepCount >= 2) return true;
-  if (/\.[a-zA-Z0-9]{1,15}$/.test(path)) return true;
-  return false;
-}
-
-export function isTerminalPathStartBoundary(text, start) {
-  if (start <= 0) return true;
-  return /[\s([{"'`]/.test(text[start - 1] || '');
-}
-
-export function findPathCandidates(text) {
-  const candidates = [];
-  for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(text, m.index)) continue;
-      const pathStr = trimTerminalPathCandidate(m[1]);
-      if (pathStr.length >= 3) candidates.push({ start: m.index, end: m.index + pathStr.length, text: pathStr });
-    }
-  }
-  REL_PATH_RE.lastIndex = 0;
-  let m;
-  while ((m = REL_PATH_RE.exec(text)) !== null) {
-    const pathStr = trimTerminalPathCandidate(m[2]);
-    if (pathStr.length < 3) continue;
-    if (!isLikelyRelPath(pathStr)) continue;
-    candidates.push({ start: m.index + m[1].length, end: m.index + m[1].length + pathStr.length, text: pathStr });
-  }
-  candidates.sort((a, b) => a.start - b.start || b.end - a.end);
-  const out = [];
-  for (const c of candidates) {
-    if (out.some(x => c.start < x.end && c.end > x.start)) continue;
-    out.push(c);
-  }
-  return out;
 }
 
 export function appendLinkedText(container, text, sessionId) {

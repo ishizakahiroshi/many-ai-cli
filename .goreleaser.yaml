@@ -18,6 +18,8 @@ project_name: many-ai-cli
 # こちらのコマンドと引数も揃えること（ずれると snapshot だけ壊れる）。
 before:
   hooks:
+    # 調査用計測は全件 purge 必須。CI は --skip=before のため workflow 側でも同じ検査を実行する。
+    - node scripts/check-instrumentation.mjs --release
     # `bun --cwd web run build` は goreleaser hook 内で no-op になり（web/dist が
     # 空のまま go build され `//go:embed all:dist` が失敗）、before.hooks は
     # map 形式(dir:)も非対応。Release workflow は ubuntu 上で走るため sh -c で

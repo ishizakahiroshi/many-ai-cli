@@ -227,7 +227,7 @@ func TestClassifyApprovalMarkerBlockRejectsCorruptForms(t *testing.T) {
 	}
 }
 
-// 抑止しても approvalMarkerSig を書き換えないこと。書き換えると、破損ブロックの直後に
+// 抑止しても保留中の記録を書き換えないこと。書き換えると、破損ブロックの直後に
 // 届いた正常なブロックが dedupe で潰れて承認が二度と出なくなる。
 func TestMaybeBroadcastApprovalMarkerSuppressesCorruptWithoutConsumingSig(t *testing.T) {
 	s := newTestServer()
@@ -243,8 +243,8 @@ func TestMaybeBroadcastApprovalMarkerSuppressesCorruptWithoutConsumingSig(t *tes
 	if s.maybeBroadcastApprovalMarker(1, corrupt, ses.lastOutputAt) {
 		t.Fatal("corrupt marker was broadcast")
 	}
-	if ses.approvalMarkerSig != "" {
-		t.Fatalf("approvalMarkerSig was consumed by a corrupt block: %q", ses.approvalMarkerSig)
+	if ses.pendingApproval != nil {
+		t.Fatalf("pending record was consumed by a corrupt block: %+v", *ses.pendingApproval)
 	}
 
 	healthy := &approvalMarkerBlock{Block: markerBlock(
@@ -257,7 +257,7 @@ func TestMaybeBroadcastApprovalMarkerSuppressesCorruptWithoutConsumingSig(t *tes
 	if !s.maybeBroadcastApprovalMarker(1, healthy, ses.lastOutputAt) {
 		t.Fatal("healthy marker was not broadcast after a corrupt one")
 	}
-	if ses.approvalMarkerSig != healthy.Sig {
-		t.Fatalf("approvalMarkerSig = %q, want %q", ses.approvalMarkerSig, healthy.Sig)
+	if got := markerRecordSig(ses); got != healthy.Sig {
+		t.Fatalf("marker record sig = %q, want %q", got, healthy.Sig)
 	}
 }

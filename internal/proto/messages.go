@@ -19,11 +19,15 @@ type Message struct {
 	Role      string `json:"role,omitempty"`
 	SessionID int    `json:"session_id,omitempty"`
 	Provider  string `json:"provider,omitempty"`
-	Display   string `json:"display_name,omitempty"`
-	CWD       string `json:"cwd,omitempty"`
-	Branch    string `json:"branch,omitempty"`
-	ProjectID string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（hub/project_id.go）
-	PID       int    `json:"pid,omitempty"`
+	// ProviderRevision identifies the effective definition snapshot used for a
+	// session. It is informational and never carries command or environment
+	// values.
+	ProviderRevision string `json:"provider_revision,omitempty"`
+	Display          string `json:"display_name,omitempty"`
+	CWD              string `json:"cwd,omitempty"`
+	Branch           string `json:"branch,omitempty"`
+	ProjectID        string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（hub/project_id.go）
+	PID              int    `json:"pid,omitempty"`
 	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
 	// acknowledge the frame after the bytes have been written to the PTY.
 	InputSeq int64  `json:"input_seq,omitempty"`
@@ -40,7 +44,14 @@ type Message struct {
 	// Activity carries all four flags atomically, including false transitions.
 	Activity         *SessionActivity  `json:"activity,omitempty"`
 	WorkflowProgress *WorkflowProgress `json:"workflow_progress,omitempty"`
-	ExitCode         int               `json:"exit_code,omitempty"`
+	// SubagentTree is the "parent instruction → child → grandchild" tree of
+	// currently-visible subagent activity (Claude Agent tool / Codex
+	// spawn_agent / Grok subagents), sent as its own message
+	// (Type: "subagent_tree") to a single session's own WS only
+	// (docs/local/plan_subagent-tree-popup.md 方針 3・6). It never authorizes
+	// anything and is independent of WorkflowProgress's Done/Total/Settled.
+	SubagentTree *SubagentTree `json:"subagent_tree,omitempty"`
+	ExitCode     int           `json:"exit_code,omitempty"`
 	// Signal carries the POSIX signal name (e.g. "killed", "terminated") when
 	// session_end's process was terminated by a signal rather than exiting
 	// normally with a non-zero code. Unix-only; always empty on Windows.
@@ -108,40 +119,51 @@ type Message struct {
 	// （docs/local/archive/v0.5.x/bugfix_statusline-settings-skip_2026-07-10.md）。
 	TokenStatusbar bool `json:"token_statusbar"`
 
-	// session_hint で UI 側から送る「承認 UI が可視」フラグ。
-	ApprovalVisible bool `json:"approval_visible,omitempty"`
-
-	// approval_detected / approval_cleared / approval_consumed:
-	// Go 側 VT バッファから検出した native approval prompt の通知と、
-	// UI 側で回答済みになった prompt の再検出抑止に使う。
+	// approval_consumed（UI → Hub）: 画面から回答した記録の sig と同一性。Hub は記録を閉じる。
+	// approval_resync（UI → Hub）: SessionID だけを持つ問い直し。Hub は端末ミラーから候補を
+	// 評価し直し、そのセッションの今の記録を問い直した画面にだけ approval_state で送る。
+	// 承認そのもの（開く・閉じる）は下の ApprovalState / ApprovalSnapshot で届く。
 	//
 	// approval_marker_suppressed:
 	// 構造が壊れた [MANY-AI-CLI] ブロックを配信せず捨てたことの告知。
 	// Reason に classifyApprovalMarkerBlock の分類（marker_leak / option_start /
-	// duplicate_option / box_rule）が入る。Block は壊れているため送らない。
-	ApprovalSig      string           `json:"approval_sig,omitempty"`
-	ApprovalKind     string           `json:"approval_kind,omitempty"`
-	ApprovalSource   string           `json:"approval_source,omitempty"`
-	ApprovalQuestion string           `json:"approval_question,omitempty"`
-	ApprovalContext  string           `json:"approval_context,omitempty"`
-	ApprovalOptions  []ApprovalOption `json:"approval_options,omitempty"`
-	ApprovalSummary  *ApprovalSummary `json:"approval_summary,omitempty"`
+	// duplicate_option / box_rule）が入る。壊れたブロック本文は送らない。
+	ApprovalSig     string           `json:"approval_sig,omitempty"`
+	ApprovalSource  string           `json:"approval_source,omitempty"`
+	ApprovalSummary *ApprovalSummary `json:"approval_summary,omitempty"`
 	// ApprovalCandidateKey is a stable, presentation-independent identity for
 	// one approval candidate. It deliberately excludes mutable context such as
 	// status lines, borders, and option labels that can change during TUI reflow.
 	ApprovalCandidateKey string `json:"approval_candidate_key,omitempty"`
-	// ApprovalCandidateShape is sent only when replay needs to restore the
-	// browser's answered-candidate suppression after a UI reconnect. It is the
-	// normalized, label-free shape behind ApprovalCandidateKey.
+	// ApprovalCandidateShape is the normalized, label-free shape behind
+	// ApprovalCandidateKey. On reattach_replay_done it, ApprovalConsumed and
+	// ApprovalConsumedEpoch still describe the answered candidate, but the
+	// current UI does not read them there: since the approval-display
+	// single-source change (2026-09-23) the Hub keeps answered-candidate
+	// suppression and the UI draws only ApprovalState / ApprovalSnapshot.
+	// They remain for tabs still running older JS until reload; do not build
+	// new UI behaviour on them.
 	ApprovalCandidateShape string `json:"approval_candidate_shape,omitempty"`
 	ApprovalConsumed       bool   `json:"approval_consumed,omitempty"`
 	ApprovalConsumedEpoch  uint64 `json:"approval_consumed_epoch,omitempty"`
 	// DoneSummary is emitted when an AI task reaches a terminal-looking state.
 	// It is display-only and never authorizes an action.
 	DoneSummary *DoneSummary `json:"done_summary,omitempty"`
-	Block       string       `json:"block,omitempty"` // approval_marker: VT tail から抽出した [MANY-AI-CLI] ブロック全文
 	SentText    string       `json:"sent_text,omitempty"`
 	DetectedAt  string       `json:"detected_at,omitempty"`
+
+	// ApprovalState carries one open or close of a session's pending approval
+	// record (Type: "approval_state"). The Hub holds at most one record per
+	// session (internal/hub/approval_record.go is the rule's source of truth);
+	// the UI draws that record and nothing else. ApprovalState.Version only
+	// orders changes within one session; it is not approval identity
+	// (candidateKey + sourceEpoch remains the only one).
+	ApprovalState *ApprovalState `json:"approval_state,omitempty"`
+	// ApprovalSnapshot carries every live session's pending approval record in
+	// one frame (Type: "approval_snapshot"). It is sent only to a UI that has
+	// just connected; sessions without a record appear with Record == nil so the
+	// UI can replace its whole store and keep nothing from a previous connection.
+	ApprovalSnapshot []ApprovalSessionState `json:"approval_snapshot,omitempty"`
 
 	// LastOutputAt: PTY 出力が最後に届いた時刻（ISO 8601 / RFC 3339）。
 	// session_update で standby/waiting 遷移時に付与し、UI カードに「最終応答時刻」として表示する。
@@ -176,12 +198,41 @@ type Message struct {
 	// UI へ届けるための session 側の経路。空文字では既存値を消さない。
 	Effort string `json:"effort,omitempty"`
 
+	// ExecutionMode / PermissionPreset: 起動要求に添えられた実行モードと権限段
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// Hub → UI の表示専用で、空文字は「指定なし」。省略した起動では送られない。
+	ExecutionMode    string `json:"execution_mode,omitempty"`
+	PermissionPreset string `json:"permission_preset,omitempty"`
+
+	// PermissionMode: register で wrapper が申告する「この起動で実際に CLI へ
+	// 付けた権限モード」。Model / Effort / ExecutionMode と同じ規律で、**要求値
+	// ではなく起動したプロセスの申告**だけが入る。写像が無くフラグを 1 つも
+	// 足さなかった起動では空のままで、UI は何も出さない（「不明」を出さない）。
+	//
+	// 値は各 CLI の --permission-mode 相当の語彙（"plan" / "acceptEdits" /
+	// "dontAsk" / "auto" / "bypassPermissions" / config.PermissionModeBounded）。
+	// PermissionPreset（attended / bounded / full）とは語彙が違うので相乗りさせ
+	// ない。段は起動「要求」の語彙で、New Session フォームが選べる plan や
+	// acceptEdits は段では表せない。
+	//
+	// **起動時の値であって、セッション中の切り替えは含まない。** claude の
+	// statusLine payload に権限モードは無いので（実測: Claude Code v2.1.278 /
+	// docs/local/reference/reference_usage-display.md）、ライブ値を観測する経路は
+	// どの provider にも存在しない。UI の文言は必ず「起動時」と言う。
+	PermissionMode string `json:"permission_mode,omitempty"`
+
 	// Route: spawn 時に明示された接続経路（"anthropic" / "openai" / "ollama"）。
 	// env preset 注入に使う。未指定なら model 名から推定する。
 	Route string `json:"route,omitempty"`
 
 	// Lightweight orchestration metadata.
-	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	ParentSessionID int `json:"parent_session_id,omitempty"`
+	// HandoffFrom is the predecessor session this one was launched to continue
+	// (子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4).
+	// It is **not** a parent/child relationship: a successor is an equal new
+	// parent, and the UI draws only a one-way link from it back to the
+	// predecessor. 0 for an ordinary launch.
+	HandoffFrom        int    `json:"handoff_from,omitempty"`
 	Auto               bool   `json:"auto,omitempty"`
 	Depth              int    `json:"depth,omitempty"`
 	OrchestrationID    string `json:"orchestration_id,omitempty"`
@@ -209,14 +260,34 @@ type Message struct {
 	// was first requested. Carried on both spawn_confirmation_requested (for
 	// the elapsed-time display) and its resend on UI connect.
 	SpawnRequestedAtMs int64 `json:"spawn_requested_at_ms,omitempty"`
-	// SpawnChildApproval carries, per provider, the approval settings the child
-	// would actually start with — what the human is granting by approving. It
-	// is keyed by provider because the dialog lets the approver change the
-	// provider before deciding, so the UI picks the entry for whatever is
-	// selected at that moment. Display only: the Hub does not read it back.
-	// Sent on spawn_confirmation_requested and on its resend to a (re)connecting
-	// UI (pending_spawn-confirm-permission-disclosure.md).
-	SpawnChildApproval map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
+	// RememberPermission is the initial state of the confirmation dialog's
+	// "use this tier for this role next time" checkbox: true when the Hub
+	// already holds a remembered tier for this role
+	// (user_prefs.spawn.role_permission). Sent on
+	// spawn_confirmation_requested and on its resend to a (re)connecting UI.
+	// It says nothing about which tier that is — the tier itself travels in
+	// PermissionPreset, pre-filled from the same memory for a conductor's
+	// request (子 plan plan_derived-session-launch_c2_permission-tiers.md 内部 C6).
+	RememberPermission bool `json:"remember_permission,omitempty"`
+	// SpawnChildApproval carries the approval settings the child would actually
+	// start with — what the human is granting by approving. It is keyed
+	// provider → permission tier, because the dialog lets the approver change
+	// both before deciding, so the UI picks the entry for whatever pair is
+	// selected at that moment without asking the Hub again. The inner key is
+	// "" for the request as it stands, plus "attended" / "bounded" / "full".
+	// Display only: the Hub does not read it back. Sent on
+	// spawn_confirmation_requested and on its resend to a (re)connecting UI
+	// (pending_spawn-confirm-permission-disclosure.md, 子 plan
+	// plan_derived-session-launch_c2_permission-tiers.md 内部 C3).
+	SpawnChildApproval map[string]map[string]ChildApproval `json:"spawn_child_approval,omitempty"`
+	// TrustGrantProviders lists the providers for which the confirmation
+	// dialog offers "register this folder as trusted by the CLI" — the ones
+	// internal/clitrust can write trust for. It is a list rather than a flag
+	// because the approver can switch the provider in the dialog, and the UI
+	// shows or hides the checkbox for whatever is selected without asking the
+	// Hub again. Sent on spawn_confirmation_requested and on its resend to a
+	// (re)connecting UI (子 plan plan_child-launch-prompt-and-trust_c3_spawn-confirm-trust.md).
+	TrustGrantProviders []string `json:"trust_grant_providers,omitempty"`
 	// spawn_confirmation_closed: Hub → UI. Tells every browser that a spawn
 	// confirmation is no longer open, so any dialog showing it can close.
 	// Reason is one of exactly five values (C2,
@@ -341,6 +412,13 @@ type Message struct {
 	RemainingPct                float64 `json:"remaining_pct,omitempty"`
 	ReasoningOut                int     `json:"reasoning_output_tokens,omitempty"`
 
+	// handoff_note: Hub → UI。残量の帯から依頼した引き継ぎメモの結果
+	// （子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+	// NoteOK=false は「60 秒内にマーカーが来なかった / 書かれたはずのファイルが
+	// 無い」で、その場合 NotePath は空。**メモの中身は載らない**（載せる欄も無い）。
+	NoteOK   bool   `json:"note_ok,omitempty"`
+	NotePath string `json:"note_path,omitempty"`
+
 	// binary_stale: Hub → UI。稼働中 Hub の実行ファイルがディスク上で差し替わった
 	// （= 再ビルドが反映されていない）状態かどうか。状態が変化した瞬間だけ配信する。
 	// ポインタなのは false を確実に届けるため: omitempty で false が消えると
@@ -438,6 +516,52 @@ type WfAgentDetail struct {
 	LastToolSummary string `json:"last_tool_summary,omitempty"` // truncated, see C2 budget
 	PromptPreview   string `json:"prompt_preview,omitempty"`    // truncated
 	ResultPreview   string `json:"result_preview,omitempty"`    // truncated
+}
+
+// SubagentTree is the Hub-authoritative "parent instruction → child →
+// grandchild" tree for one session's currently-visible subagent activity
+// (docs/local/plan_subagent-tree-popup.md). Provider names the
+// adapters.subagents reader key that produced Nodes (親 plan 方針 2), which is
+// not necessarily the session's own Provider id. Omitted counts nodes dropped
+// by the per-poll node cap (oldest completed dropped first, 子 plan
+// plan_subagent-tree-popup_c2_hub-core-claude.md 内部 C2); UpdatedAt is when
+// this snapshot was built (epoch ms). Like WorkflowProgress, this is
+// read-only display data and never authorizes an action.
+type SubagentTree struct {
+	Provider  string         `json:"provider,omitempty"`
+	Nodes     []SubagentNode `json:"nodes,omitempty"`
+	Omitted   int            `json:"omitted,omitempty"`
+	UpdatedAt int64          `json:"updated_at,omitempty"` // epoch ms
+}
+
+// SubagentNode is one child (or grandchild) in a SubagentTree. Like
+// WfAgentDetail, every field here is a display-only summary:
+// LastToolSummary may only hold a truncated value taken from an allow-listed
+// input key (command / pattern / path / file_path — see 親 plan 方針 3),
+// never the prompt text, the tool's result, or the child's reply. Do not add
+// a field that could hold prompt text, result text, or a reply body;
+// TestSubagentNodeFieldsAreTheAllowlist (messages_test.go) enforces this
+// allowlist the same way internal/handoff/handoff_test.go does for Record.
+type SubagentNode struct {
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id,omitempty"` // 空 = 最上位（親の直接の子）
+	Depth    int    `json:"depth"`               // 1 = 最上位の子, 2 = 孫, ...
+	// Label is the short name the parent gave the child (Claude: meta の
+	// description, Codex: agent_nickname / agent_role). Never the prompt itself.
+	Label     string `json:"label,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// State is one of: running | done | failed | unknown.
+	State          string `json:"state"`
+	StartedAt      int64  `json:"started_at,omitempty"`       // epoch ms
+	LastActivityAt int64  `json:"last_activity_at,omitempty"` // epoch ms
+	FinishedAt     int64  `json:"finished_at,omitempty"`      // epoch ms
+	// ToolCalls is left unset (not 0) when the reader could not count every
+	// call for this child yet (e.g. only the tail budget was read on the
+	// first poll) — 0 would misleadingly claim "no tool calls yet".
+	ToolCalls       int    `json:"tool_calls,omitempty"`
+	LastToolName    string `json:"last_tool_name,omitempty"`
+	LastToolSummary string `json:"last_tool_summary,omitempty"` // truncated allow-listed value only
 }
 
 // SessionMeta is user-editable, server-persisted identification metadata for a
@@ -550,6 +674,59 @@ type ApprovalOption struct {
 	PreserveOrder bool   `json:"preserve_order,omitempty"`
 }
 
+// ApprovalRecord is a session's pending approval as the Hub holds it.
+// Origin is native | marker and Source is go_vt | transcript. Marker records
+// carry only the raw Block (the browser keeps the single marker parser);
+// native records carry the Go-parsed Question / Context / Options / Summary.
+// Sig is a reference for matching the ledger row and the browser's answer; it
+// is not identity.
+type ApprovalRecord struct {
+	CandidateKey   string           `json:"candidate_key"`
+	CandidateShape string           `json:"candidate_shape,omitempty"`
+	SourceEpoch    uint64           `json:"source_epoch"`
+	Sig            string           `json:"sig,omitempty"`
+	Origin         string           `json:"origin"`
+	Source         string           `json:"source,omitempty"`
+	Kind           string           `json:"kind,omitempty"`
+	Block          string           `json:"block,omitempty"`
+	Question       string           `json:"question,omitempty"`
+	Context        string           `json:"context,omitempty"`
+	Options        []ApprovalOption `json:"options,omitempty"`
+	Summary        *ApprovalSummary `json:"summary,omitempty"`
+	DetectedAt     string           `json:"detected_at,omitempty"`
+}
+
+// ApprovalRecordClose identifies a record that closed and why. Reason is one
+// of answered | answered_terminal | superseded | vanished | session_end |
+// history_reset.
+type ApprovalRecordClose struct {
+	CandidateKey string `json:"candidate_key"`
+	SourceEpoch  uint64 `json:"source_epoch"`
+	Sig          string `json:"sig,omitempty"`
+	Origin       string `json:"origin,omitempty"`
+	Reason       string `json:"reason"`
+}
+
+// ApprovalState is one change to one session's record: exactly one of Open or
+// Close is set. Version increases by one for every open and every close of that
+// session, so a UI can drop a frame older than the state it already has (frames
+// are broadcast after the Hub releases its lock and can arrive out of order).
+// The one exception is the reply to approval_resync, sent only to the asking UI:
+// it carries the current Version and Open, and both are empty when the session
+// has no record ("no record at this version"). It does not bump Version.
+type ApprovalState struct {
+	Version uint64               `json:"version"`
+	Open    *ApprovalRecord      `json:"open,omitempty"`
+	Close   *ApprovalRecordClose `json:"close,omitempty"`
+}
+
+// ApprovalSessionState is one session's entry in an approval_snapshot.
+type ApprovalSessionState struct {
+	SessionID int             `json:"session_id"`
+	Version   uint64          `json:"version"`
+	Record    *ApprovalRecord `json:"record,omitempty"`
+}
+
 // ChildApproval is one provider's effective approval configuration for an
 // orchestration child, as carried by Message.SpawnChildApproval. Empty fields
 // mean the Hub fills nothing in for that provider and the child starts with its
@@ -558,7 +735,22 @@ type ChildApproval struct {
 	PermissionMode string `json:"permission_mode,omitempty"`
 	Sandbox        string `json:"sandbox,omitempty"`
 	AskForApproval string `json:"ask_for_approval,omitempty"`
+	// AllowedTools is the bounded tier's allowlist — the tool names and command
+	// patterns the child may use without asking. Empty for the other tiers.
+	AllowedTools []string `json:"allowed_tools,omitempty"`
 	// RiskConfirmed reports that the child skips the high-risk confirmation the
 	// same settings would trigger on a normal /api/spawn request.
 	RiskConfirmed bool `json:"risk_confirmed,omitempty"`
+	// Tier is the permission tier these settings came from: "attended" (the Hub
+	// adds nothing and approvals reach the approval panel), "bounded" (no
+	// prompts, but only the allowlisted actions) or "full" (today's default,
+	// approval bypass).
+	Tier string `json:"tier,omitempty"`
+	// FallbackFrom names a tier that was asked for but does not exist for this
+	// provider, so Tier is what it fell through to. Only "bounded" today
+	// (grok / cursor-agent have no way to run unattended without granting
+	// everything). The dialog turns it into a visible notice rather than
+	// letting a narrowed request silently become full access
+	// (親 plan 不変条件 5).
+	FallbackFrom string `json:"fallback_from,omitempty"`
 }

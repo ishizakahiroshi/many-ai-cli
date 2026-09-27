@@ -105,7 +105,18 @@ func Resolve(cfg *config.Config, configDir, provider, profileID string) (*Resolv
 // 出すだけでよい。**seed の失敗は error にしない**: 設定が工場出荷状態でも
 // セッションは動くので、持ち込めなかったことで起動を止める理由が無い。
 // error を返すのは従来どおりディレクトリ自体を用意できなかったときだけ。
+//
+// 同期の規則は標準のまま。config.yaml に同期の設定を手書きした profile は
+// EnsureProfileDirFor を通す。
 func EnsureProfileDir(provider, dir string) (SeedResult, error) {
+	return EnsureProfileDirFor(provider, dir, config.SubscriptionProfile{})
+}
+
+// EnsureProfileDirFor は EnsureProfileDir に、その profile が config.yaml へ手書き
+// した同期の設定（settings_sync / profile_owned_keys / default_wins_keys）を効かせた
+// もの。ゼロ値の SubscriptionProfile は標準の規則そのものなので、config.yaml を
+// 触っていない利用者にとって両者は同じ呼び出しになる。
+func EnsureProfileDirFor(provider, dir string, p config.SubscriptionProfile) (SeedResult, error) {
 	if dir == "" {
 		return SeedResult{}, errors.New("profile dir is empty")
 	}
@@ -122,7 +133,7 @@ func EnsureProfileDir(provider, dir string) (SeedResult, error) {
 	// seed より先に行う: 持ち込んだファイルが作成時点で継承 ACE を受けるため、
 	// 個別に権限を締め直す必要が無くなる。
 	_ = securefile.EnsurePrivateDir(dir)
-	return SeedProfileDir(provider, dir), nil
+	return SeedProfileDirFor(provider, dir, p), nil
 }
 
 // Entry は UI へ返す profile 1 件。**secret を含まない。**

@@ -274,6 +274,7 @@ func validateSSH(p Profile, idx int) error {
 		{"user", check.User},
 		{"binary", check.Binary},
 		{"identity_file", check.IdentityFile},
+		{"cwd", check.CWD},
 	} {
 		if strings.HasPrefix(f.val, "-") {
 			return fmt.Errorf("profile[%d] %q: %s must not start with '-' (got %q)", idx, p.Name, f.name, f.val)
@@ -285,6 +286,9 @@ func validateSSH(p Profile, idx int) error {
 	}
 	if strings.IndexFunc(check.User, isSpaceOrControl) >= 0 {
 		return fmt.Errorf("profile[%d] %q: user must not contain whitespace or control characters", idx, p.Name)
+	}
+	if strings.IndexFunc(check.CWD, isControlChar) >= 0 {
+		return fmt.Errorf("profile[%d] %q: cwd must not contain control characters", idx, p.Name)
 	}
 
 	// Resolve default mode.

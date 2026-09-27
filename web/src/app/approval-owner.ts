@@ -2,7 +2,7 @@
 //
 // #action-bar は全セッション共有の DOM が 1 個だけで、描画時に
 // dataset.approvalSessionId へ描画元のセッション番号が焼かれる（approval.ts の
-// showActionBar）。「いま出ているパネルは誰のものか」を問う場所は 2 つある。
+// パネル描画）。「いま出ているパネルは誰のものか」を問う場所は 2 つある。
 //
 //   1. セッション切替時 — 切替先のものでなければ捨てる
 //   2. 再描画要否の判定 — 所有者が違うなら描き直す
@@ -58,9 +58,9 @@ export function actionBarNeedsRepaint(bar: MaybeBar, id: unknown): boolean {
 /**
  * bar の DOM と所有者マークだけを捨てる。
  *
- * 承認状態（approvalVisibleCache / approvalRawOptionsCache / Hub への
- * session_hint）には触らない。切替元の承認はまだ未回答で、戻ったときに
- * 出し直す必要があるため。承認状態ごと落とすのは hideActionBar の仕事。
+ * 承認状態（Hub の記録の写しと、一括回答の選択・自由入力などの操作途中の状態）には
+ * 触らない。切替元の承認はまだ未回答で、戻ったときにそのまま描き直す必要があるため。
+ * 操作途中の状態まで捨てるのは hideActionBar の仕事。
  */
 export function releaseActionBarOwnership(bar: MaybeBar): void {
   if (!bar) return;

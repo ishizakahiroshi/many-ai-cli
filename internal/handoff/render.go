@@ -34,6 +34,8 @@ func RenderMarkdown(sessionID int, records []Record) string {
 	var start, end *Record
 	var dones, gitTurns, intents []Record
 	workDoc := ""
+	transcript := ""
+	note := ""
 	for i := range records {
 		r := records[i]
 		switch r.Kind {
@@ -53,6 +55,16 @@ func RenderMarkdown(sessionID int, records []Record) string {
 		if strings.TrimSpace(r.WorkDoc) != "" {
 			workDoc = r.WorkDoc
 		}
+		// Transcript / Note are read from whatever record carries them (a
+		// session_start, a session_end, or a later transcript/note line),
+		// newest wins. Which kind recorded the path is a Hub-side detail the
+		// successor has no use for.
+		if strings.TrimSpace(r.Transcript) != "" {
+			transcript = r.Transcript
+		}
+		if strings.TrimSpace(r.Note) != "" {
+			note = r.Note
+		}
 	}
 	if sessionID == 0 && start != nil {
 		sessionID = start.SessionID
@@ -64,6 +76,26 @@ func RenderMarkdown(sessionID int, records []Record) string {
 	b.WriteString("## セッションの素性\n")
 	writeIdentitySection(&b, start, end)
 	b.WriteString("\n")
+
+	// 引き継ぎメモ / 前任の会話ログ は「この md の外にある、もっと濃い記録」への
+	// 案内。無いときは節ごと出さない（記録なしと書く欄ではなく、そもそも渡せる
+	// ものが無いだけなので、読む側の注意をそこへ向ける必要がない）。
+	if note != "" {
+		b.WriteString("## 引き継ぎメモ\n")
+		fmt.Fprintf(&b, "- %s\n", note)
+		b.WriteString("前任が止まる前に書いた引き継ぎメモ。**本書より先にこれを読む**" +
+			"（次の一手・未検証の前提・開いている論点が、この md より詳しく書かれている）。\n")
+		b.WriteString("\n")
+	}
+	if transcript != "" {
+		b.WriteString("## 前任の会話ログ\n")
+		fmt.Fprintf(&b, "- %s\n", transcript)
+		b.WriteString("このファイルは前任の会話ログ（JSONL）。まず末尾から、最後のユーザーの指示と" +
+			"最後の assistant の発言（作業の要約・次のステップがあればそれ）を読み、次に本書の" +
+			"「次の一手」と突き合わせてから作業に入る。ファイルが大きいときは末尾 200 行と " +
+			"`grep` で足りる。\n")
+		b.WriteString("\n")
+	}
 
 	b.WriteString("## 作業中の md\n")
 	if workDoc != "" {

@@ -1,4 +1,7 @@
 // ESM entry point (generated). Imports modules in original load order for side effects.
+// boot-guard は必ず最初に import する（最初に評価され、ほかのモジュールの評価中の例外を受け取る）。
+// 最後の文の markAppEntryEvaluated() と合わせて scripts/check-web-module-init.mjs が CI で確かめる。
+import { markAppEntryEvaluated } from './app/boot-guard.js';
 import './i18n.js';
 import './app/util.js';
 import './app/user-prefs.js';
@@ -19,6 +22,7 @@ import './app/session-swipe.js';
 import './app/chat-history.js';
 import './app/attachments.js';
 import './app/spawn-panel.js';
+import './app/provider-manager.js';
 import './app/voice.js';
 import './app/voice-whisper.js';
 import './app/git-view.js';
@@ -37,6 +41,7 @@ import { initRemoteAuth } from './app/remote-auth.js';
 import { initActionBarResize } from './app/action-bar-resize.js';
 import { initApprovalDock } from './app/approval-dock.js';
 import { initSessionSearchPalette } from './app/session-search-palette.js';
+import { initShortcutHelp } from './app/shortcut-help.js';
 import { initFirstRunTour } from './app/first-run-tour.js';
 import { initHistoryLite } from './app/history-lite.js';
 import { initMobileShortNudge } from './app/mobile-short-nudge.js';
@@ -44,7 +49,10 @@ import { initMobileApprovalOnly } from './app/mobile-approval-only.js';
 import { initBugReportModal } from './app/bug-report-modal.js';
 import { initSubscriptions } from './app/subscriptions.js';
 import { initTabBarOrder } from './app/tab-bar-order.js';
+import { initInputToolsOrder } from './app/input-tools-order.js';
 import { initUiSide } from './app/ui-side.js';
+import { initSessionStrip } from './app/session-strip.js';
+import { initJevOptIn } from './app/jev-opt-in.js';
 // ステータスバー初期化（/api/user-prefs から enabled を読む）
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
@@ -68,6 +76,7 @@ initActionBarResize();
 // 質問エリアの下端を入力欄・添付欄の帯まで下げる（デスクトップのみ・ターミナルを覆わない）
 initApprovalDock();
 initSessionSearchPalette();
+initShortcutHelp();
 initFirstRunTour();
 initHistoryLite();
 initMobileShortNudge();
@@ -77,5 +86,13 @@ initBugReportModal();
 initSubscriptions();
 // 統合タブバーのタブをドラッグ&ドロップで並べ替え（順序は localStorage 保存）
 initTabBarOrder();
+// 入力欄の下段ボタン列をドラッグ&ドロップで並べ替え（順序は localStorage 保存）
+initInputToolsOrder();
 // 操作系（カード列 / 入力欄ツール / ✕）の左右位置（localStorage 保存）
 initUiSide();
+// 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
+initSessionStrip();
+initJevOptIn();
+// ここまで評価が届いたら初期化は完了。これより後に文を足さない（足した文の例外は、
+// 「画面を読み込めませんでした」の表示に乗らない）。
+markAppEntryEvaluated();

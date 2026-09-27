@@ -33,6 +33,7 @@ func TestUsageSourceForKnownProviders(t *testing.T) {
 		{"copilot", UsageSourceNone, false, true},
 		{"cursor-agent", UsageSourceNone, false, true},
 		{"opencode", UsageSourceNone, false, true},
+		{"command-code", UsageSourceNone, false, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.provider, func(t *testing.T) {
@@ -73,7 +74,7 @@ func TestHandoffTargetProvidersExcludesSource(t *testing.T) {
 			t.Fatalf("HandoffTargetProviders must exclude the source provider: %v", got)
 		}
 	}
-	want := map[string]bool{"codex": true, "grok": true, "copilot": true, "cursor-agent": true, "opencode": true}
+	want := map[string]bool{"codex": true, "grok": true, "copilot": true, "cursor-agent": true, "opencode": true, "command-code": true}
 	for _, p := range got {
 		delete(want, p)
 	}

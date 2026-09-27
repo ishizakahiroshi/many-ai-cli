@@ -1,14 +1,18 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:0af73d8414239ac0521070022c2fc5f8f7ecb86e1495bc1bd96b8d464cadd00b",
+  "pageVersion": "sha256:23640f4efa9046f0160392359da23f4d789609f1e7c0b1e787f7bf7ad24991f3",
   "claims": [
     {
       "id": "claim_f9927a7ba225471e942c3fe59ccffc8f",
-      "statement": "approvalMarkerSourceIsTranscriptLocked determines a session's single approval-marker source: claude/codex sessions with a resolved, currently-readable agent-chat transcript path read the marker from that transcript, while every other session (and any transcript session before the path resolves) reads it from the Hub's VT terminal mirror; only one source applies per session at a time.",
+      "statement": "approvalMarkerSourceIsTranscriptLocked determines a session's single approval-marker source: sessions whose provider's ApprovalMarker column is native (claude/codex) and whose agent-chat transcript path has resolved and is still readable take the marker from that transcript, while every other session (and any such session before the path resolves) reads it from the Hub's VT terminal mirror; only one source applies per session at a time.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/approval_marker_transcript.go#L9-L64",
-          "version": "repo-lines-v1:sha256:c14a1add3aa57fa4a0a50e1b6df4c40fdb3be568327b9f752a9ab9f7d2d97d42:eyJzZWxlY3RlZExpbmVDb3VudCI6NTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViYjgzMTY0NmQ1NTQyYTdlMDdmNWJmYmRlZGJiZDAwNzM1OGY0ZDAyMTc2N2UyY2E5OWU3ZjBlMDdjOTIzNmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0ZjIzOWE1ZmYwMTE3OWQ4Y2YyNTI4ZDIwMjhjODdkMzY2Y2RmZjYxNzI4ZGU2ZmE0ZjI3ZWM0ODQzOGU0ZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2YWViNDVkN2M4OGFmOGE2Mzk5ZmNiNjk3ODg2MTUyN2EyODg2NTZkNDI4YTM1N2Y4YmViYzMwMmQ5M2E1YWYifQ"
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L18-L71",
+          "version": "repo-lines-v1:sha256:aa7c5bd53aec5863dd3bc36db3165b08f3fddbbe808888d4400a2ed6335b1a20:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwOGQyNzk0Mjg4NWNiZTZkM2UyMzJlNjUyMzA0MDc4YzA2YTMzMGEzY2U3MDQzNTgyNWMwNDE1MDkzMDM5MjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkYjg2MGI4Y2U1NWE4ZjE4ZTgzZTU0OTkwMDM5MjQxMDJmMGNlMTY1MjM5NDI4YjkyMDlmNTRhYTU5ODZhZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2YWViNDVkN2M4OGFmOGE2Mzk5ZmNiNjk3ODg2MTUyN2EyODg2NTZkNDI4YTM1N2Y4YmViYzMwMmQ5M2E1YWYifQ"
+        },
+        {
+          "resource": "repo://internal/hub/provider_feature_source.go#L76-L99",
+          "version": "repo-lines-v1:sha256:802aeaa10e36add8cce6c7341f9184899f00cbc7d5158acdb6afeb304bf1730e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJmM2YyOTI2ZDIzNTY2NzMyYThhMWEzMjMyNTQ1ZmFhZWVlMGU5N2NkZWNjOTUyYjM5YmIxNDU3ODBmZmVkNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMwZDBhMzNjZWZkNmVhZDIzNzkwYjIyMGM0ZGQ0ZDRmY2NhNGQxNTZjMTkwYzQ4ODk5YTBmYWJjNzFhMDBhYjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI0ZTIwNWZjMDAxNTgyOTIxOWVhYTFhN2IzNDg5NTI1NjNlYTkwOTJjM2MxNjgzZWU5MmMyM2JhY2Q1ODM4NGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhYzY4ZDMwMTYyN2U0ZjAwMmYyZjZiMjA3NTgwM2Y5NzY0NWQyNDcwMzIxNWUyNjc3YWZiNGMyZDliZGNjMjQifQ"
         }
       ]
     },
@@ -41,8 +45,8 @@
           "version": "repo-lines-v1:sha256:9d5110f935eb36ca5953067bd660e3eed716bd6a4e601578d93eb5059a873dea:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTI5NzI0M2YwNzczMDlkM2Y0MDJkNTdmOGE2YjYxMzg2YWI5ZmY2NTZhNDI2OGQyYzA2MmVhZWVmNzY2NDAxZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDNlOWYxMDAxMmY0OWM5NTk3Y2E5MWNlMGM2NTkxMGFiYzdmNzA1OWFmZGUyNzkxYzk1YTI5MzQzZjExNWU2MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2I4NmNjZTlmZGU5ZTRiNDkzNGRiY2NiMGJiZjY5NzY4YWJjODg2NmE0MGU1Mjg1OTc3MTY2MWNmNDViZmQ0YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGMyOTBjZjcwODE4MWEzNzc4MGI0NzBjMjJmYzExNmUwMjFlZWUxYzUyZTE3YmFiYjRlZjhjYWNjYWQ4NDgxYyJ9"
         },
         {
-          "resource": "repo://internal/hub/approval_marker_transcript.go#L43-L64",
-          "version": "repo-lines-v1:sha256:32564acfbf76cd44387454a982e4420f1c41eac4d99749ecef09fdc419448c14:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1MjBjMThhOWY3NWYwOWZkZDRiYmM3MDUyMjVjZjQ1OWQ0NGU3NGI4NzgzOGVlNmMwNGI4ODI4MDRjMTVkMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhZGUzZDE5OWEyYzhlMzllN2JhZGJlNjgzMzQ5NGFhYjg1YmY4ZThhNmE2Y2I5NDA2OTI1MzZhYWFmNmI1NzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ2YWViNDVkN2M4OGFmOGE2Mzk5ZmNiNjk3ODg2MTUyN2EyODg2NTZkNDI4YTM1N2Y4YmViYzMwMmQ5M2E1YWYifQ"
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L43-L60",
+          "version": "repo-lines-v1:sha256:945404deda5a037aa9fd8e2674c2b9915f430b9ff0f6442224ce130522f7069a:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA1MjBjMThhOWY3NWYwOWZkZDRiYmM3MDUyMjVjZjQ1OWQ0NGU3NGI4NzgzOGVlNmMwNGI4ODI4MDRjMTVkMWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4YTAyMmM5MzQxYTZjY2RiOThiNzQ5NjVjNzE1YWYzNjlhYTQwYWZhMjkxMDgwNDllMDhhOGQ5ZmJlODA0ZDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhZGUzZDE5OWEyYzhlMzllN2JhZGJlNjgzMzQ5NGFhYjg1YmY4ZThhNmE2Y2I5NDA2OTI1MzZhYWFmNmI1NzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZlMzE2M2QzMTk0Y2M0MjAzZDc1NTU1ODIzNTUwMTYxZTQ0NTAzNTk4ZTI4NTJiNWVjODljZDM3NmRkM2ViMjUifQ"
         }
       ]
     },
@@ -111,8 +115,8 @@
       "statement": "internal/autoapproval's Rule type is deliberately narrow, with its package doc noting there is no deny override for a hard-blocked command, meaning a user-authored rule can only narrow what gets auto-approved and can never re-permit something the Hub already refuses to auto-approve.",
       "evidence": [
         {
-          "resource": "repo://internal/autoapproval/policy.go#L24-L25",
-          "version": "repo-lines-v1:sha256:e37f7cf8e824b84c88ced6aad40c9afd0903bfe0d9654d306029d84e9c98acb1:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODJjNDFiYmVlYzU2NTUwMzA0ZTM3MjMyNGYyZGViMjNmYzI0MDc0M2MxMzhhYmE5OTQ3NWVlNjI4OTNhODhkNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmI3MTNhNzBjZDMxNzhkNWNmYzBjYTk2YWMzM2E5MTYyNmJiNmI5MzE0YzI2YTlmMjY0Mjg2NDRiNzQ4NDhmNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDQwNTE5YTQ4YTU4MmRiNzE0YzAwMzIwMzI4OThkYjNhNmM0YzA0ZjcxMjdjMzM3NTQ1NTBhYmVhNGU5MzBkZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzZhYjY4YzlmNDRhYjk1ZjY4MTI5NThhODhjNDlkYzUzOTAzZDEyMjBiNWM4NzMzOTdlOWM5NjE2NDVmMDc4ZiJ9"
+          "resource": "repo://internal/autoapproval/policy.go#L23-L30",
+          "version": "repo-lines-v1:sha256:9e579a68ff2f2035b30337b0eeec9a624bd8324814d1b420855a91dbd602d44c:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGEzNDk0OTVkZTk4ZTEyZjM4YjQxODliYTgwZDE2YTFkOGVhNjVjMjkyYTA1MWExOTg2NmRlNzRlMTI4ZGVlMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTIyZmFhNTM1YmQyZWEzZDUyZTc0MWVkNDU0NDM1YjdmZTQ5ZTgzNTg2ZTk0M2Q5OGQ4MmJiZmIyNGQxZjVjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmJiYWYzYTEwMjc0ODk2OTA5ZDc5YzdjZTNjZjAxMTI4MWYxYmQ0OTg2YWUyYzA5NDdmNDM4NTY2NDk1ZTlhZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTk0MTliNWNkNzIzYWVhYTg5M2E2YjQ5Yjk5NDA4NzAzZDJlNWNmNzNiNDU1YzgzMWYyNjM1NTVlNzc0ODc2YiJ9"
         }
       ]
     },
@@ -133,10 +137,28 @@
           "version": "repo-lines-v1:sha256:fb6e4bc7b3b09deb9d319a790e8d58975f9b71b29848e94f50923884cbad356f:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTU0N2ExMmFmNzU3Y2EzOTNkOTgxNTI4NzI4MjJiNjdjNjhjOWQ4OWI4NzQ0ZTE3NmMyM2YzZTBmNTJjYzIyMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjA1MjNjMGI3NDllYzkxZmExZjZhN2I1ZTBiOWNhOWEzOTJiMzM0NmE0MGI5YTkxMGVhMjk1NzYzNWE1MzZmYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjFjMmFiYjFmYWE3MWQwNTZhZWMyMzZkM2MyMDI0NjE0Y2Y0ZGJjMDY0NWNmOTg5NjgwYzZjZTc3NzgzMzJkMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzNiZjM3NjE3MDkxODNkYmE3YzQzMWEyMDI3YjI3YjcwMTIzYjkzZDFhZTczZGFlODE0MmUzOGI4YTBhMTg2OSJ9"
         }
       ]
+    },
+    {
+      "id": "claim_494b788f7d8244cf937e10f92c358650",
+      "statement": "The approval-marker source is chosen from the ApprovalMarker column of provider_feature_source.go rather than from chat-transcript readability (StructuredTranscript), so command-code, which has a native structured transcript for chat, still takes its approval marker from the VT mirror.",
+      "evidence": [
+        {
+          "resource": "repo://internal/hub/approval_marker_transcript.go#L62-L67",
+          "version": "repo-lines-v1:sha256:e7df7832d18cf81c0441f1e2089710f6faf9c401793b48843eed1d85e63676e6:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzhhMmRmMWE4ODJjOTI4ZjRkNGNmOTg4ZmU5Mjc1MjA0OWI0ZGQyNDNhMTc4NWE4MmY5ZWY4OGNkY2M2Mjc2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTMwYWEwMjViYzkzZDBiZmYwYTRhMDc4OGYxZDEwMzE2MjI4M2I5YWZhMWRmZjQ4NDM5OWE2NzgwMDc0MjAwMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTAzYjAwNGI1NTBiYjNkZjdmYzJjYzMwZDAxZDgwY2U4MjRkOGE2NjMxZTZlODhjMmEyZDI2NWE1MWQyMjQ0YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjcyMTIwNGU3MTYxM2RkODIxOGI3N2MyOTYyNTFjM2JlMjBmZGY2N2U5NjVkYWRjMjQ3MjQ1Nzc1NTFiNDhjMSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/provider_feature_source.go#L129-L136",
+          "version": "repo-lines-v1:sha256:0e4530de2d507d810975163ba229733b534f761fa173160bebe562b323a846a5:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTRhMzRhMTVkNGQxN2M4OWFlMzAwNzMwZjEzODgxZWNkMDA3MjdjMWQyNTEwYzg4ZmUyNjE2ODAzNDQ5YjNkYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOTUyZWVmZDBlOWU3YWFhMWNhNDJhOWYzNzc3MjU4MDUzZjg0N2FiZWNlN2QwZmFkNmM1ZjEzMmYyYjUxMDEyZCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://internal/hub/provider_feature_source.go#L99-L99",
+          "version": "repo-lines-v1:sha256:c0d0a33cefd6ead23790b220c4dd4d4fcca4d156c190c48899a0fabc71a00ab8:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzBkMGEzM2NlZmQ2ZWFkMjM3OTBiMjIwYzRkZDRkNGZjY2E0ZDE1NmMxOTBjNDg4OTlhMGZhYmM3MWEwMGFiOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzBkMGEzM2NlZmQ2ZWFkMjM3OTBiMjIwYzRkZDRkNGZjY2E0ZDE1NmMxOTBjNDg4OTlhMGZhYmM3MWEwMGFiOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDZjM2NjZGVjMzQyNGY4ODg1MDlkMDUzZDhhZDA1MTFjNTFlMzgyNTdiOGIyNGUzYTU3MTdhODE5ZGNlMGYwMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWFjNjhkMzAxNjI3ZTRmMDAyZjJmNmIyMDc1ODAzZjk3NjQ1ZDI0NzAzMjE1ZTI2NzdhZmI0YzJkOWJkY2MyNCJ9"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

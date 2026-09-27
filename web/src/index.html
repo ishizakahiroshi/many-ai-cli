@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/styles/mobile-home.css">
   <link rel="stylesheet" href="/styles/first-run-tour.css">
+  <link rel="stylesheet" href="/styles/session-strip.css">
 </head>
 <body>
   <header>
@@ -197,8 +198,8 @@
     <div class="settings-body">
       <div class="settings-ia-toolbar" role="search">
         <div class="settings-ia-level" role="group" aria-label="Settings level">
-          <button type="button" class="settings-ia-level-btn active" data-settings-level="basic">かんたん</button>
-          <button type="button" class="settings-ia-level-btn" data-settings-level="all">すべて</button>
+          <button type="button" class="settings-ia-level-btn active" data-settings-level="basic" data-i18n="settings_level_basic">かんたん</button>
+          <button type="button" class="settings-ia-level-btn" data-settings-level="all" data-i18n="settings_level_all">すべて</button>
         </div>
         <label class="settings-ia-search-label" for="settings-search-input">設定を検索</label>
         <input id="settings-search-input" class="settings-ia-search" type="search" placeholder="項目名・現在値・説明を検索" autocomplete="off">
@@ -217,10 +218,72 @@
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_theme">Theme</span>
-            <select id="theme-select" class="settings-select">
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <span class="settings-row-actions">
+              <select id="theme-select" class="settings-select">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+              <button type="button" id="theme-add-btn" class="settings-inline-btn" data-i18n="settings_theme_add">追加</button>
+            </span>
+          </div>
+          <div class="settings-note" id="theme-hint" data-i18n="settings_theme_hint">Light と Dark は出荷の色です。自分のテーマを足すと色味と濃淡を動かせます。</div>
+          <div id="custom-theme-editor" hidden>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_name">名前</span>
+              <input type="text" id="custom-theme-name" class="settings-input-text" maxlength="16" autocomplete="off">
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_hue">色味</span> <span id="custom-theme-hue-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="custom-theme-hue" min="0" max="359" value="220" aria-label="hue">
+                <div id="custom-theme-hue-bar" class="theme-hue-bar"></div>
+              </div>
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_contrast">濃淡</span> <span id="custom-theme-contrast-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="custom-theme-contrast" min="0" max="100" value="50" aria-label="contrast">
+                <div class="theme-slider-meta"><span data-i18n="settings_theme_contrast_weak">弱い</span><span data-i18n="settings_theme_contrast_strong">強い</span></div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_this">このテーマ</span>
+              <button type="button" id="theme-delete-btn" class="settings-inline-btn settings-inline-btn-danger" data-i18n="settings_theme_delete">削除</button>
+            </div>
+          </div>
+          <div id="custom-theme-add" hidden>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_name">名前</span>
+              <input type="text" id="new-theme-name" class="settings-input-text" maxlength="16" autocomplete="off" data-i18n-placeholder="settings_theme_name_placeholder" placeholder="例: 濃い">
+            </div>
+            <div class="settings-row">
+              <span class="settings-label" data-i18n="settings_theme_base">土台</span>
+              <select id="new-theme-base" class="settings-select">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_hue">色味</span> <span id="new-theme-hue-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="new-theme-hue" min="0" max="359" value="220">
+                <div id="new-theme-hue-bar" class="theme-hue-bar"></div>
+              </div>
+            </div>
+            <div class="settings-row settings-row--theme-knob">
+              <span class="settings-label"><span data-i18n="settings_theme_contrast">濃淡</span> <span id="new-theme-contrast-label" class="theme-knob-value"></span></span>
+              <div class="theme-slider">
+                <input type="range" id="new-theme-contrast" min="0" max="100" value="50">
+                <div class="theme-slider-meta"><span data-i18n="settings_theme_contrast_weak">弱い</span><span data-i18n="settings_theme_contrast_strong">強い</span></div>
+              </div>
+            </div>
+            <div class="settings-row">
+              <span class="settings-label"></span>
+              <span class="settings-row-actions">
+                <button type="button" id="theme-save-btn" class="settings-inline-btn" data-i18n="settings_theme_save">この名前で追加</button>
+                <button type="button" id="theme-cancel-btn" class="settings-inline-btn" data-i18n="settings_theme_cancel">やめる</button>
+              </span>
+            </div>
           </div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_fontsize">Font size</span>
@@ -245,6 +308,11 @@
             <button type="button" id="tab-order-reset-btn" class="settings-inline-btn" data-i18n="settings_tab_order_reset">既定に戻す</button>
           </div>
           <div class="settings-note" data-i18n="settings_tab_order_desc">タブバーのタブはドラッグで並べ替えできます。使わないタブは右端へ寄せてください。並び順はこのブラウザにのみ保存されます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_input_tools_order_label">入力欄ボタンの並び順</span>
+            <button type="button" id="input-tools-order-reset-btn" class="settings-inline-btn" data-i18n="settings_input_tools_order_reset">既定に戻す</button>
+          </div>
+          <div class="settings-note" data-i18n="settings_input_tools_order_desc">入力欄の下のボタン（停止・マイク・クイックコマンド等）はドラッグで並べ替えできます（PC のみ）。並び順はこのブラウザにのみ保存されます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_provider_order_label">新規セッションの並び順</span>
             <button type="button" id="provider-order-reset-btn" class="settings-inline-btn" data-i18n="settings_provider_order_reset">既定に戻す</button>
@@ -404,6 +472,58 @@
           <div id="subs-list" class="subs-list"></div>
           <div id="subs-error" class="settings-note settings-note-warn" hidden></div>
           <div class="settings-note" data-i18n="settings_subscriptions_isolation_note">A profile switches the CLI's whole config directory, so per-profile sessions do not see the global memory file, skills, or past conversations of your default profile.</div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="ai-providers" data-settings-level="basic">
+        <summary class="settings-section-title"><span data-i18n="settings_ai_providers">AI CLI integrations</span><span class="settings-section-current" data-section="ai-providers"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_ai_providers_desc">Manage built-in and user-added command line providers. Basic registration needs only a display name and executable.</div>
+          <div class="settings-note" data-i18n="settings_ai_providers_distribution">Official catalog import stays off until signing keys are configured. Downloaded definitions are never applied automatically.</div>
+          <div id="cli-maintenance-panel" class="cli-maint-panel"></div>
+          <div id="cli-maintenance-missing"></div>
+          <div id="provider-manager-list" class="provider-manager-list" aria-live="polite"></div>
+          <div class="settings-row-actions provider-manager-toolbar">
+            <button id="provider-add-btn" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_add">Add AI CLI</button>
+            <span id="provider-manager-status" class="settings-note" aria-live="polite"></span>
+          </div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="nvidia-nim">
+        <summary class="settings-section-title"><span data-i18n="settings_nim_title">NVIDIA NIM for OpenCode</span><span class="settings-section-current" data-section="nvidia-nim"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_nim_desc">NVIDIA NIM is available only through OpenCode's Chat Completions compatible provider.</div>
+          <div class="settings-note settings-note-warn" data-i18n="settings_nim_trial_notice">Hosted trial terms may limit use to internal evaluation, development, and testing. Do not send production, confidential, or sensitive data. NVIDIA may use prompts and outputs to improve its products and models.</div>
+          <div class="settings-note settings-note-warn" data-i18n="settings_nim_model_compatibility">The NVIDIA /v1/models catalog may include models that do not support Chat Completions. Coding-agent and tool-use compatibility is not guaranteed.</div>
+          <label class="settings-row"><input id="nvidia-nim-enabled" type="checkbox"><span data-i18n="settings_nim_enable">Enable NVIDIA NIM for OpenCode</span></label>
+          <div class="settings-row">
+            <label class="settings-label" for="nvidia-nim-api-key" data-i18n="settings_nim_api_key">NVIDIA API key</label>
+            <input id="nvidia-nim-api-key" class="settings-input-url" type="password" autocomplete="new-password" data-i18n-placeholder="settings_nim_api_key_placeholder" placeholder="Enter a key to save or replace it">
+          </div>
+          <div class="settings-note" id="nvidia-nim-key-state" role="status" aria-live="polite" data-i18n="settings_nim_key_loading">Checking key status…</div>
+          <div class="settings-note" id="nvidia-nim-env-note" data-i18n="settings_nim_env_managed" hidden>NVIDIA_API_KEY is managed by the Hub environment. Change it there; the Settings page cannot replace or delete it.</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_nim_endpoint">Endpoint</span>
+            <code>https://integrate.api.nvidia.com/v1</code>
+          </div>
+          <div class="settings-row-actions">
+            <button id="nvidia-nim-save" class="settings-inline-btn" type="button" data-i18n="settings_nim_save">Save settings</button>
+            <button id="nvidia-nim-test" class="settings-inline-btn" type="button" data-i18n="settings_nim_test">Test connection</button>
+            <button id="nvidia-nim-delete-key" class="settings-inline-btn danger" type="button" data-i18n="settings_nim_delete_key">Delete saved key</button>
+          </div>
+          <div class="settings-note" id="nvidia-nim-test-result" role="status" aria-live="polite" hidden></div>
+        </div>
+      </details>
+      <details class="settings-section" data-section="jev" data-settings-level="basic">
+        <summary class="settings-section-title"><span data-i18n="settings_jev_title">Jev evaluation (optional)</span><span class="settings-section-current" data-section="jev"></span></summary>
+        <div class="settings-section-body">
+          <div class="settings-note" data-i18n="settings_jev_desc">Evaluate text with TypeSafe Jev on request. The result is for display only and does not change AI selection.</div>
+          <div class="settings-note" data-i18n="settings_jev_key">Set TYPESAFE_API_KEY in the Hub process environment. The key stays on the Hub.</div>
+          <label class="settings-row jev-opt-in-row"><input id="jev-opt-in" type="checkbox"><span data-i18n="settings_jev_opt_in">Enable manual Jev evaluation on this browser</span></label>
+          <label class="settings-label" for="jev-text" data-i18n="settings_jev_text_label">Text to evaluate</label>
+          <textarea id="jev-text" class="jev-text" maxlength="4096" rows="4" data-i18n-placeholder="settings_jev_placeholder" placeholder="Enter only the text you want to send"></textarea>
+          <div class="settings-note settings-note-warn" data-i18n="settings_jev_notice">Pressing Evaluate sends the text above to TypeSafe and may incur usage charges. Do not enter secrets.</div>
+          <div class="settings-row-actions"><button id="jev-evaluate" class="settings-inline-btn" type="button" disabled data-i18n="settings_jev_evaluate">Evaluate with Jev</button></div>
+          <div id="jev-result" class="settings-note" role="status" aria-live="polite"></div>
         </div>
       </details>
       <details class="settings-section" data-section="remote-auth">
@@ -735,7 +855,17 @@
               </label>
             </div>
           </div>
-          <div class="settings-note" data-i18n="settings_desktop_notifications_desc">承認待ちを OS 通知で知らせます。タブ表示中の現在セッションでは抑制されます。</div>
+          <div class="settings-note" data-i18n="settings_desktop_notifications_desc">承認待ちと、作業が終わって入力待ちになったことを OS 通知で知らせます。タブ表示中の現在セッションでは抑制されます。</div>
+          <div class="settings-row">
+            <span class="settings-label" data-i18n="settings_turn_end_notify">作業が終わったときも通知する</span>
+            <div class="settings-row-actions">
+              <label class="approval-toggle">
+                <input type="checkbox" id="turn-end-notify-enabled">
+                <span class="approval-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="settings-note" data-i18n="settings_turn_end_notify_desc">セッションが動いていた後、入力待ちに戻ったときも音と OS 通知で知らせます。セッションごとにカードのベルで個別に切れます。</div>
           <div class="settings-row">
             <span class="settings-label" data-i18n="settings_push_notifications">プッシュ通知</span>
             <div class="settings-row-actions">
@@ -1000,6 +1130,14 @@
             <input type="text" id="slash-src-cursor-agent" class="settings-input-url" placeholder="Default official source">
           </div>
           <div class="settings-row">
+            <span class="settings-label">OpenCode</span>
+            <input type="text" id="slash-src-opencode" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">Grok Build</span>
+            <input type="text" id="slash-src-grok" class="settings-input-url" placeholder="Default official source">
+          </div>
+          <div class="settings-row">
             <span class="settings-label">Command Code</span>
             <input type="text" id="slash-src-command-code" class="settings-input-url" placeholder="Default official source">
           </div>
@@ -1013,6 +1151,90 @@
         <button class="settings-link-btn" id="first-run-tour-btn" data-i18n="first_run_tour_settings_btn">60 秒ツアー</button>
         <button class="settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
         <button class="settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
+      </div>
+    </div>
+  </div>
+  <div id="provider-enrollment-overlay" class="provider-enrollment-overlay aac-wheel-overlay" hidden>
+    <form id="provider-enrollment-form" class="provider-enrollment-form" role="dialog" aria-modal="true" aria-labelledby="provider-enrollment-title">
+      <div class="provider-enrollment-header">
+        <h2 id="provider-enrollment-title" data-i18n="settings_ai_providers_title_add">Add AI CLI</h2>
+        <button id="provider-enrollment-close" class="provider-enrollment-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="provider-enrollment-id" data-i18n="settings_ai_providers_id">ID</label>
+        <input id="provider-enrollment-id" class="settings-input-text" autocomplete="off" required>
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="provider-enrollment-label" data-i18n="settings_ai_providers_label">Display name</label>
+        <input id="provider-enrollment-label" class="settings-input-text" autocomplete="off" required>
+      </div>
+      <div class="settings-row">
+        <label class="settings-label" for="provider-enrollment-executable" data-i18n="settings_ai_providers_executable">Executable or path</label>
+        <input id="provider-enrollment-executable" class="settings-input-text" autocomplete="off" required>
+      </div>
+      <div class="provider-enrollment-update">
+        <h3 data-i18n="settings_ai_providers_update_heading">Version and update</h3>
+        <div class="settings-note" data-i18n="settings_ai_providers_update_precedence_hint">These fields take precedence over update in the advanced JSON below, the same way the executable field above does.</div>
+        <div class="settings-row">
+          <span class="settings-label" data-i18n="settings_ai_providers_update_enabled">Show the update button in the list</span>
+          <label class="approval-toggle">
+            <input type="checkbox" id="provider-enrollment-update-enabled">
+            <span class="approval-toggle-slider"></span>
+          </label>
+        </div>
+        <div id="provider-enrollment-update-login-note" class="settings-note" data-i18n="settings_ai_providers_update_login_note" hidden>Updating may ask you to log in.</div>
+        <div id="provider-enrollment-update-args-required-note" class="settings-note" data-i18n="settings_ai_providers_update_args_required" hidden>Enter an update command to turn this on.</div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-version-args" data-i18n="settings_ai_providers_update_version_args">Version check arguments</label>
+          <input id="provider-enrollment-update-version-args" class="settings-input-text" autocomplete="off">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-executable" data-i18n="settings_ai_providers_update_executable">Executable for update</label>
+          <input id="provider-enrollment-update-executable" class="settings-input-text" autocomplete="off">
+        </div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-args" data-i18n="settings_ai_providers_update_args">Update arguments</label>
+          <input id="provider-enrollment-update-args" class="settings-input-text" autocomplete="off">
+        </div>
+        <div class="settings-note" data-i18n="settings_ai_providers_update_args_hint">One line, space-separated. An argument containing whitespace needs the advanced JSON editor below.</div>
+        <div class="settings-row">
+          <label class="settings-label" for="provider-enrollment-update-timeout" data-i18n="settings_ai_providers_update_timeout">Timeout (seconds)</label>
+          <input id="provider-enrollment-update-timeout" class="settings-input-text" type="number" min="0" max="3600" step="1" autocomplete="off">
+        </div>
+        <div class="settings-note" data-i18n="settings_ai_providers_update_timeout_hint">Blank uses the default (300 seconds). 0-3600.</div>
+        <div id="provider-enrollment-update-status" class="settings-note" aria-live="polite" hidden></div>
+      </div>
+      <details class="settings-row provider-enrollment-advanced">
+        <summary data-i18n="settings_ai_providers_advanced_toggle">Advanced (JSON)</summary>
+        <label class="settings-label" for="provider-enrollment-advanced" data-i18n="settings_ai_providers_advanced_label">Full definition (JSON)</label>
+        <textarea id="provider-enrollment-advanced" class="settings-input-text provider-enrollment-advanced-textarea" rows="10" spellcheck="false"></textarea>
+        <span class="settings-note" data-i18n="settings_ai_providers_advanced_hint">Optional. Advanced fields are preserved; a non-empty executable above takes precedence over launch.executable in JSON.</span>
+      </details>
+      <div class="settings-row-actions">
+        <button id="provider-enrollment-validate" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_validate">Validate</button>
+        <button id="provider-enrollment-save" class="settings-inline-btn" type="submit" data-i18n="settings_ai_providers_save">Save provider</button>
+        <button id="provider-enrollment-cancel" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_cancel">Cancel</button>
+      </div>
+      <div id="provider-enrollment-result" class="settings-note" aria-live="polite" tabindex="-1"></div>
+    </form>
+  </div>
+  <div id="provider-history-overlay" class="provider-enrollment-overlay aac-wheel-overlay" hidden>
+    <div id="provider-history-panel" class="provider-enrollment-form provider-history-panel" role="dialog" aria-modal="true" aria-labelledby="provider-history-title" tabindex="-1">
+      <div class="provider-enrollment-header">
+        <h2 id="provider-history-title" data-i18n="settings_ai_providers_history_title">History</h2>
+        <button id="provider-history-close" class="provider-enrollment-close" type="button" aria-label="Close">✕</button>
+      </div>
+      <div id="provider-history-status" class="settings-note" aria-live="polite"></div>
+      <div class="settings-row-actions">
+        <button id="provider-history-reset" class="settings-inline-btn danger" type="button" data-i18n="settings_ai_providers_history_reset">Reset to distributed default</button>
+      </div>
+      <div class="provider-history-section">
+        <h3 data-i18n="settings_ai_providers_history_revisions">Revisions</h3>
+        <div id="provider-history-revisions" class="provider-history-list"></div>
+      </div>
+      <div class="provider-history-section">
+        <h3 data-i18n="settings_ai_providers_history_backups">Backups</h3>
+        <div id="provider-history-backups" class="provider-history-list"></div>
       </div>
     </div>
   </div>
@@ -1172,6 +1394,7 @@
                     aria-controls="spawn-claude-note" aria-expanded="false"
                     aria-label="What does this provider option do?">?</button>
           </div>
+          <p id="spawn-cli-missing-note" class="settings-note spawn-cli-missing-note" hidden></p>
           <div class="spawn-cwd-row">
             <div class="cwd-combobox">
               <input type="text" id="spawn-cwd" class="spawn-input" data-i18n-placeholder="spawn_cwd_placeholder" autocomplete="off">
@@ -1204,6 +1427,14 @@
                0〜1 件のときは行ごと隠し、送信 JSON も従来と同一に保つ。 -->
           <div class="spawn-subscription-row" id="spawn-subscription-row" hidden>
             <select id="spawn-subscription" class="spawn-select"></select>
+          </div>
+
+          <!-- effort: /api/info の effort_levels に写像がある provider でのみ出す。
+               無い provider では行ごと隠し、送信 JSON も従来と同一に保つ
+               （docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5）。
+               option は spawn-panel.ts が provider ごとに組む（subscription と同じ作法）。 -->
+          <div class="spawn-subscription-row" id="spawn-effort-row" hidden>
+            <select id="spawn-effort" class="spawn-select"></select>
           </div>
 
           <!-- Claude-only: /model picker. Permission select is shared with grok / copilot / cursor-agent / command-code. -->
@@ -1245,6 +1476,8 @@
           <div id="spawn-copilot-note" class="settings-note" data-i18n="spawn_copilot_note" hidden>Uses the installed GitHub Copilot CLI. Authentication and permissions are managed by Copilot.</div>
           <div id="spawn-cursor-agent-note" class="settings-note" data-i18n="spawn_cursor_agent_note" hidden>Uses the installed Cursor Agent CLI. Authentication and permissions are managed by Cursor.</div>
           <div id="spawn-opencode-note" class="settings-note" data-i18n="spawn_opencode_note" hidden>Uses the installed OpenCode CLI. Run `opencode auth login` before starting. Free-tier models may take 1–2 minutes to respond.</div>
+          <div id="spawn-nvidia-nim-note" class="settings-note settings-note-warn" data-i18n="spawn_nim_trial_notice" hidden>NVIDIA NIM is a hosted trial service. Use only for internal evaluation, development, and testing; do not send production, confidential, or sensitive data. NVIDIA may use prompts and outputs to improve its products and models.</div>
+          <div id="spawn-nvidia-nim-compat-note" class="settings-note settings-note-warn" data-i18n="spawn_nim_model_compatibility" hidden>The NVIDIA /v1/models catalog may include models that do not support Chat Completions. Coding-agent and tool-use compatibility is not guaranteed.</div>
           <div id="spawn-grok-note" class="settings-note" data-i18n="spawn_grok_note" hidden>Uses the installed Grok Build CLI (xAI). Requires a SuperGrok or X Premium+ subscription — the base X Premium plan cannot use it. Sign-in and quota stay in Grok.</div>
           <div id="spawn-command-code-note" class="settings-note" data-i18n="spawn_command_code_note" hidden>Uses the installed Command Code CLI. Authentication and permissions are managed by Command Code. Permission mode is passed only when you choose it here.</div>
           <div id="spawn-shell-note" class="settings-note" data-i18n="spawn_shell_note" hidden>Opens the OS default shell (pwsh / bash). No AI-specific options apply.</div>
@@ -1415,6 +1648,7 @@
                 <th data-i18n="spawn_role_table_cli">CLI</th>
                 <th data-i18n="spawn_role_table_model">Model</th>
                 <th data-i18n="spawn_role_table_subscription">Subscription</th>
+                <th data-i18n="spawn_role_table_permission">Permission tier</th>
               </tr>
             </thead>
             <tbody id="relay-role-table-body"></tbody>
@@ -1469,6 +1703,7 @@
       <button class="view-tab" data-tab="split" type="button"><span>⇿</span> <span data-i18n="tab_split">分割</span></button>
       <button class="view-tab lazy" data-tab="files" type="button" data-i18n-tooltip="tab_files_lazy_tooltip"><span>📁</span> <span data-i18n="tab_files">Files</span></button>
       <button class="view-tab lazy" data-tab="git" type="button" data-i18n-tooltip="tab_git_lazy_tooltip"><span>⎇</span> <span data-i18n="tab_git">Git</span></button>
+      <button class="view-tab lazy" data-tab="review" type="button" data-i18n-tooltip="tab_review_lazy_tooltip"><span>±</span> <span data-i18n="tab_review">Review</span></button>
       <button class="view-tab" data-tab="orchestration" type="button" data-i18n-tooltip="orchestration_tooltip" aria-label="Orchestration"><svg class="orchestration-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="5" r="2.4"></circle><circle cx="5" cy="19" r="2.4"></circle><circle cx="19" cy="19" r="2.4"></circle><path d="M12 7.4V12M12 12L6.6 17M12 12L17.4 17"></path></svg></button>
         <button class="view-tab" data-tab="approval" type="button" id="approval-tab-btn"><span>⚡</span> <span data-i18n="tab_approval">承認</span><span id="approval-tab-badge" hidden>0</span></button>
         <button class="view-tab" data-tab="history" type="button" id="history-tab-btn"><span>◷</span> <span>履歴</span></button>
@@ -1485,6 +1720,20 @@
         <!-- JS で 2/4/6/9/12/18 プリセットボタン生成 -->
       </div>
     </div>
+    <!-- セッション帯（いま開いている箱のセッションを 1 段に並べる）。
+         #display-stack の中には入れない。あちらは #action-bar を absolute で重ねる
+         ための位置基準なので、中へ足すと承認バーの重なり方が変わる。
+         帯は常設で、高さが変わるのは利用者が掴み帯をドラッグしたときだけなので、
+         承認バーと違ってフローに置いてよい（そのドラッグ中だけ PTY リサイズを抑える。
+         session-strip.ts を参照）。中身は session-strip.ts が描く。 -->
+    <div id="session-strip" hidden>
+      <button id="session-strip-project" class="session-strip-project" type="button" hidden></button>
+      <div id="session-strip-items" class="session-strip-items"></div>
+      <!-- multi タブのときはセッション一覧の代わりにここへ範囲トグルを出す。
+           段を 2 本に分けない＝タブを往復しても端末の高さが動かない。 -->
+      <div id="session-strip-scope" class="session-strip-scope" hidden></div>
+      <div id="session-strip-grip" class="session-strip-grip" aria-hidden="true"></div>
+    </div>
     <!-- 承認バー（#action-bar）を absolute で重ねるための位置基準。
          バーをフローに置くと表示・高さ変更のたびに #terminal-area が縮み、
          pty_resize が飛んで TUI が再描画 → 同じ本文が scrollback へ積み上がる。 -->
@@ -1499,9 +1748,9 @@
         <div id="terminal-readonly-badge"><span data-i18n="terminal_output">Terminal Output</span><span id="terminal-shell-info"></span></div>
         <button id="scroll-to-top-btn" data-i18n-tooltip="scroll_to_top_tooltip" data-i18n="scroll_to_top" hidden>↑ up</button>
         <button id="scroll-to-bottom-btn" data-i18n-tooltip="scroll_to_bottom_tooltip" data-i18n="scroll_to_bottom" hidden>↓ down</button>
-        <!-- 承認ポップアップ 再表示/消す（↓ down の左の余白に常時表示） -->
+        <!-- 承認ポップアップを 1 行の帯に畳む（↓ down の下。パネルが開いている間だけ出す。
+             出し入れは approval.ts の syncApprovalRecallBar） -->
         <div id="approval-recall-bar" hidden>
-          <button id="approval-reshow-btn" type="button" data-i18n-tooltip="approval_reshow_tooltip" data-i18n="approval_reshow">↻ 承認</button>
           <button id="approval-dismiss-btn" type="button" data-i18n-tooltip="approval_dismiss_tooltip" data-i18n="approval_dismiss">✕ 承認</button>
         </div>
       </div>
@@ -1537,6 +1786,9 @@
     <!-- D7/D8: 共有 action-bar (display-area 外, ターミナルへ重ねて表示) -->
     <div id="action-bar"></div>
     </div><!-- /#display-stack -->
+    <!-- 畳んだ承認の 1 行の帯（✕ で畳み、押すと開く）。入力欄も端末の最終行も覆わないよう、
+         バナーと同じくフローに置く。中身は approval.ts の syncFoldedBand が描く。 -->
+    <div id="approval-fold-band" hidden></div>
     <div id="multi-question-banner" hidden data-i18n="multi_question_banner"></div>
     <div id="stale-binary-banner" hidden></div>
     <div id="approval-suppressed-banner" hidden></div>
@@ -1571,10 +1823,12 @@
           <button id="voice-confirm-btn" class="voice-action-btn voice-confirm-btn" data-i18n-tooltip="voice_confirm_tooltip">✓</button>
         </div>
         <!-- ライブ進捗ピル（旧 #terminal-area 内 absolute から入力欄直上へ移設）。
-             CLI のステータス更新を抽出して表示し、稼働中はスピナーが回る。更新が途切れると
+             CLI のステータス更新を抽出して表示し、稼働中は状態記号が回る。更新が途切れると
              グレーの待機表示(idle)へ変わるが枠は消さず常時残す＝「何も送られていない＝終わってる」
-             を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。 -->
-        <div id="terminal-live-status" hidden><span class="live-spinner" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
+             を一目で判別できる（terminal.ts の setSessionLiveStatus / renderLiveStatusDom）。
+             先頭の記号は独自のスピナーではなく、セッション帯（タブ）・サイドバーのカードと
+             同じ SVG（session-list.ts の stateIconSvgHtml）を terminal.ts が流し込む。 -->
+        <div id="terminal-live-status" hidden><span class="live-status-state" aria-hidden="true"></span><span class="live-status-text"></span><span class="live-compact-bar" aria-hidden="true" hidden></span></div>
         <div id="mobile-nudge-panel" aria-label="Short instructions">
           <div id="mobile-nudge-chips" aria-label="Quick instructions"></div>
           <button id="mobile-nudge-voice-btn" type="button" aria-label="Hold to speak">押して話す</button>
@@ -1689,12 +1943,6 @@
               <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-unicode11" target="_blank" rel="noopener noreferrer">
                 <p class="about-oss-name">xterm-addon-unicode11 0.9.0</p>
                 <p class="about-oss-desc" data-i18n="about_oss_unicode_desc">MIT License. Used for Unicode 11 character width support.</p>
-              </a>
-            </li>
-            <li class="about-oss-item">
-              <a class="about-oss-link" href="https://github.com/xtermjs/xterm.js/tree/6.0.0/addons/addon-web-links" target="_blank" rel="noopener noreferrer">
-                <p class="about-oss-name">xterm-addon-web-links 0.12.0</p>
-                <p class="about-oss-desc" data-i18n="about_oss_links_desc">MIT License. Used for URL link detection in terminal.</p>
               </a>
             </li>
             <li class="about-oss-item">
@@ -1874,7 +2122,6 @@
   <script src="/vendor/xterm.min.js"></script>
   <script src="/vendor/xterm-addon-fit.min.js"></script>
   <script src="/vendor/xterm-addon-unicode11.min.js"></script>
-  <script src="/vendor/xterm-addon-web-links.min.js"></script>
   <script src="/vendor/xterm-addon-webgl.min.js"></script>
   <script src="/vendor/marked.min.js"></script>
   <script src="/vendor/purify.min.js"></script>

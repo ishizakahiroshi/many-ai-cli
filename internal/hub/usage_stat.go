@@ -306,6 +306,20 @@ type sessionUsageRequest struct {
 	TranscriptPath string `json:"transcript_path"`
 }
 
+// clampRateLimitUsedPct は 5h / 7d 枠の使用率%を 0–100 に収める。範囲外を 0 へ
+// 丸める clampPct と違い、100 超は 100（使い切り）に飽和させる。0 は「まだ使って
+// いない」という有効な値なので、上限超過の値を 0 に丸めると残量 100% に化け、
+// 上限に達したセッションの残量表示と引き継ぎ帯が黙る。NaN だけは値が無いので 0。
+func clampRateLimitUsedPct(v float64) float64 {
+	if v != v /* NaN */ || v < 0 {
+		return 0
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
+}
+
 // handleSessionUsage は POST /api/session-usage を処理する。
 // token 認証必須。メモリ保持のみで、ディスクへは書き込まない（セキュリティ要件）。
 func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
@@ -386,8 +400,8 @@ func (s *Server) handleSessionUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		return v
 	}
-	rl5hPct := clampPct(req.RateLimit5hPct)
-	rl7dPct := clampPct(req.RateLimit7dPct)
+	rl5hPct := clampRateLimitUsedPct(req.RateLimit5hPct)
+	rl7dPct := clampRateLimitUsedPct(req.RateLimit7dPct)
 	clampEpoch := func(v int64) int64 {
 		if v < 0 {
 			return 0

@@ -1,24 +1,28 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:4a37b660cc111348e4c40ee3fbc768a96234d51024816ca4876d54c2eeaf6e0c",
+  "pageVersion": "sha256:c28927d1b143ea14470a60735d5c1f6ca36ca35786f8ba9eafb5e6c2da428554",
   "claims": [
     {
       "id": "claim_10116c5bfe2946509c842014e8e6f27c",
       "statement": "filesScopeRestricted confines read-scope only for a logically remote caller (Tailscale serve, a trusted_networks peer, a phone); a direct-loopback caller's Files API reads are not confined to cwd/git root, because a direct-loopback connection is treated as equivalent to the OS user themself, who can already read any file via Explorer or through the wrapped AI CLI's own OS-level permissions, and POST /api/spawn already accepts provider=\"shell\" with only drive-root/home-directory rejected, so confining only Hub reads would not be a real boundary for that caller.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/files_scope.go#L1-L28",
-          "version": "repo-lines-v1:sha256:4c5ad023a6424f34c384896cc8958d5630019d9194d984f324c0add44573ac8d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkwZGZlYjZlMmYxM2NmMDFiNzEzNjk3NDE2OWVmZWVmMzI3N2E4MTE3ZDhlMzgxMmM0MTE3MTRhMTBlYmFhZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY1N2I0YTMyYzVkMzBjMTM3NGQ5MWU5ZDZjM2QxZWU3N2U1OWUwMzFkZjY2MjMzNGNkZTlkZWI0OWM2OWQwODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY4NzBiNDJkMjBkMWVjZjIwMWI5OTkzZDZhYzZlMjNhYTQ5MjU1Nzg3YWEzZTE3M2E0YjBkNTFjZGUxYmZiMDcifQ"
+          "resource": "repo://internal/hub/files_scope.go#L10-L30",
+          "version": "repo-lines-v1:sha256:59af4ab5cb3f260242858729fc3ffa7dc8f9826b3cb30944a7d7b82d79f1fb03:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwZWMyYWM4NmFmMzU2NGM2NDEyYjQyNDE4MzYyODEyNGNmYzI2YzUxNWRjYzU0M2YzODQyZTYxNTQzNjYzMzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3YWY3YjZjNmMzODQxZTE4Y2RjMmUxMWE3MTQ3OWM1NzRkZjgxOWRkZjVkM2JlZGQzMTk1NThkYzk5YTUwY2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjY2NWZiZjc1NWEzOTlhYjk4ZmJkMTQ1MmM4NDAyYmRjNGEwNjU2YWMzOTAxOTQ0YjdmMTMwMTBhY2UwOTJiZTAifQ"
         }
       ]
     },
     {
       "id": "claim_c24c6b9deeef47119f6f036fa54617c9",
-      "statement": "Write operations (files-save/files-create/mkdir/move/rename/delete) never use filesScopeRestricted and stay confined to cwd/git-root regardless of connection kind, because the risk there is accidental corruption outside the user's own repository rather than a confidentiality boundary; secretReadDeniedExtensions (.pem, .key) and secretReadDeniedBasenames are blocked outright even within the allowed-roots read path.",
+      "statement": "Write operations (files-save/files-create/mkdir/move/rename/delete) never use filesScopeRestricted and stay confined to cwd/git-root regardless of connection kind, because the risk there is accidental corruption outside the user's own repository rather than a confidentiality boundary; on the read side, paths under the allowed roots are always permitted and the secret denylist (secretReadDeniedExtensions such as .pem/.key, secretReadDeniedBasenames) is applied only to reads that fall outside those roots, before the loopback-vs-remote decision.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/files_scope.go#L26-L48",
-          "version": "repo-lines-v1:sha256:5f49bbdf609f73977d6f571d3e923bd94f8f66c670bb64018ec3e044f657c3a3:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkODVmMzIzYTdjMDJlMzRjMTVkZTY3YjA4MDc4ZDI2OWZjZWMzNGU5M2NiOTViYjliYWNkNDg0ZTYyMmI4MWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZhOGJkNDJhOTQ0MzA5YzU5ODhlZjU2OGQ2YTVjZGE0ZDQ4ZDY2YWJjODEwMGRhMDdkMzk1MzdlN2JlMmQ2M2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjgyMDVhOTcwOWU4Njg2YTYzMGVkZWQyYWE2M2UwMWZjZWRmM2QwYzVkZDg4YTBhZDM4YjBjY2QwMGMzNWFhNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhMTBiYWVlNzdjMmRkZTU0Y2ZkNzdmYjI4YzQ0NGMyNjBjMDQ4N2E0ZmIxOTI0YTRkOWU1NzRiYzYzYTVjYjcifQ"
+          "resource": "repo://internal/hub/files_content.go#L115-L165",
+          "version": "repo-lines-v1:sha256:e7c7722265872463c421697e3a56bf519da4b40bfd2337e4125ec72cf4d497fa:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNmNGViOWE4Y2M0MWQ5OWI4Nzg0NjA0ZTI0YjFjZjJmMzJlZDFmYWE5NWU1NTRmMThkZWUyOTllYjA2ZGY3YWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzZDE0YWIwYWE1MWYxMzBmMWU3NmUyMGJhMjBlNGQ3MzdkYjA2MjZlNTY2ZjhiNTBhOGIwYzk0MGExNjk3OTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQzMjRiN2Q2NGE5YmIwMjIzMGI3MjJiNDE3Yzc0NTQzNDZhNTk2ODNiMmQ4MGY4ZTIxMDkwNmJkYTkwYjc4ZWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFjODkwNjVjNGQ0OTgzODVjODBhNmFkZTg5MDZlOTFiODI2MzE0MzkwZDY4N2Y1YjFlYjU3OGJlYjFhYjY1MTkifQ"
+        },
+        {
+          "resource": "repo://internal/hub/files_scope.go#L26-L60",
+          "version": "repo-lines-v1:sha256:d62874ede213eea6824f59ab90df188ac6e31834dde490e2dbd42c06d2834f53:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRhMTkwMzBlMGU3YTUzMzdhOGQ5NGNjYjExNjMyOWQ0ZDhjM2YyMmUzYjY3NGIxODdlMDg5NGFkNzcxY2RkODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRiMzgzZTczMTBlY2I0MzI2NGNjMDI3MmEyYmQ1YzNjNWUyZGJiZDJhMzAyOWE1YTBhOTRlOTJmZDBlOGRlNTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRjMDBlNzdmNDVmZmM0MTlkNTkxOWQwZDZjZDA1MDllZTYxMWQ2YWQ3ZWMwNTMyNzY0NTUyOTUxNTFjZWZlOTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMyN2FiNjIwZDBjYWRmNjg3NjliYzliN2ZjODFhMTZlMDUxZjY0MzQ4OGFmMjAwNjRmOTY4NWVkNDQ0ZTM3MDEifQ"
         }
       ]
     },
@@ -77,6 +81,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

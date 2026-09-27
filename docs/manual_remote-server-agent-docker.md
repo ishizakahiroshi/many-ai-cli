@@ -130,7 +130,7 @@ ssh SSH_TARGET 'bash -lc "docker exec aac-USER_TAG sh -c \"grep ^token: /home/ub
 
 verify: `token: ...` が取れる。**token はログ・チャットに残さない**（launcher は接続のたびに `token_command` で取り直すので、ここで控えた値はファイルに保存しない）。
 
-> **モバイル接続（📱）の経路**: コンテナ内 Hub には `tailscale` CLI が無いため `tailscale serve` は使えない。スマホから繋ぐ場合は **SSH トンネル / launcher 経由**（モバイル接続ウィザードは degrade して SSH トンネルへ誘導する）。詳細は [local/plan_mobile-connect-flow-redesign.md](local/plan_mobile-connect-flow-redesign.md)。
+> **モバイル接続（📱）の経路**: コンテナ内 Hub には `tailscale` CLI が無いため `tailscale serve` は使えない。スマホから繋ぐ場合は **SSH トンネル / launcher 経由**（モバイル接続ウィザードは degrade して SSH トンネルへ誘導する）。詳細は `docs/local/archive/v0.3.2/plan_mobile-connect-flow-redesign.md`。
 > **token モデルの差異**: launcher は接続のたびに `token_command` で token を取り直し**ファイルに保存しない**。一方モバイル接続（📱）は token を QR でスマホ端末に**永続化**する（紛失対策は別プラン `plan_remote-auth-hardening-future.md` の領分）。モバイル接続をリモート Hub 上で使う場合も当該 Hub 自身の token を読むため、上記の `token_command` 運用と矛盾しない。
 
 ### 手元 launcher プロファイルの作成（C6）

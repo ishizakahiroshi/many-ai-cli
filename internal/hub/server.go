@@ -26,9 +26,11 @@ import (
 	"golang.org/x/net/websocket"
 	"many-ai-cli/internal/attach"
 	"many-ai-cli/internal/autoapproval"
+	"many-ai-cli/internal/clitrust"
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/notify"
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/sessionstore"
 	"many-ai-cli/internal/wrapper"
@@ -39,7 +41,7 @@ import (
 // /workflows 等でバックグラウンドエージェントが動いている間は進捗ツリーの再描画が
 // 数秒おきのバースト出力になるため、500ms では running↔standby が点滅する。
 // 3s に延長してヒステリシスを持たせる（standby→running は markRunning で即時のまま。
-// 承認検出 waiting は approvalVisible フラグで idleAfter を待たず即時遷移するため影響なし）。
+// 承認の waiting は保留中の承認の記録が開いた時点で即時遷移するため影響なし）。
 // tickerInterval: 状態評価 ticker の間隔。
 // maxPTYBuf: UI 再接続時リプレイ用の PTY バッファ上限（セッションごと）。
 // uiPingInterval: UI WebSocket keepalive ping の送信間隔。
@@ -61,17 +63,19 @@ const (
 	nativeApprovalBlankLineLimit = 2
 	vtResizeDebounce             = 200 * time.Millisecond
 	approvalConsumedTTL          = 10 * time.Second
-	// approvalVisibleLease: session_hint(approval_visible=true) の有効期限。
-	// UI は承認可視中 5s 間隔（approval-ui.js の APPROVAL_HINT_REASSERT_MS）で
-	// 再主張するため、リース 15s = 再主張 3 回分。リロード desync・複数クライアント・
-	// H9 復元固着など false ヒントが失われるどの経路でも最大 15s で自動回復する。
-	// ただし Hub 自身の go_vt detector が native prompt を見ている間
-	// （nativeApprovalSig != ""）はリース切れでもクリアしない。
-	approvalVisibleLease = 15 * time.Second
-	wsMaxPayloadBytes    = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
+	wsMaxPayloadBytes            = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
 
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"
+
+	// altScreenEnterSeq は代替画面バッファ（DECSET 1049）へ入る CSI シーケンス。
+	// UI 接続時の replay バイト列を組み立てるとき、セッションが代替画面中なら
+	// 窓（maxPTYBuf / replayTailForNonActive）を切り出した後の先頭へこれを前置する
+	// （ui_broadcast.go addUIWithHistoryAtEpoch）。ptyBuf の窓には代替画面へ入った
+	// 瞬間の 1049h 自体が含まれないことがあり、含まれないままだとブラウザの xterm が
+	// 通常画面のままだと思い込み、上へスクロールできなくなる
+	// （docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+	altScreenEnterSeq = "\x1b[?1049h"
 
 	// 確定 \r（bracketed-paste 本文の submit）の送出タイミング。固定遅延ではなく
 	// 「PTY 出力が一定時間静止した」ことを待ってから 1 回だけ撃つ。値と理由は
@@ -100,24 +104,47 @@ const (
 )
 
 // SessionActivity が状態の正本で、State は互換表示用の派生値である。
-// approval_visible は UI が xterm.js バッファをスキャンして session_hint で伝える。
+// 承認待ち（AwaitingApproval / AwaitingUser）は pendingApproval の有無だけから決める。
 type session struct {
-	ID                 int    `json:"id"`
-	Provider           string `json:"provider"`
-	Display            string `json:"display_name"`
-	CWD                string `json:"cwd"`
-	Branch             string `json:"branch,omitempty"`
-	ProjectID          string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
-	Label              string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
-	Pinned             bool   `json:"pinned,omitempty"`
-	Color              string `json:"color,omitempty"`
-	Note               string `json:"note,omitempty"`
-	AutoTitle          string `json:"auto_title,omitempty"`
-	Model              string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
-	Effort             string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
-	Route              string `json:"route,omitempty"`  // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
-	Shell              string `json:"shell,omitempty"`
-	ParentSessionID    int    `json:"parent_session_id,omitempty"`
+	ID               int    `json:"id"`
+	Provider         string `json:"provider"`
+	ProviderRevision string `json:"provider_revision,omitempty"`
+	Display          string `json:"display_name"`
+	CWD              string `json:"cwd"`
+	Branch           string `json:"branch,omitempty"`
+	ProjectID        string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
+	Label            string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
+	Pinned           bool   `json:"pinned,omitempty"`
+	Color            string `json:"color,omitempty"`
+	Note             string `json:"note,omitempty"`
+	AutoTitle        string `json:"auto_title,omitempty"`
+	Model            string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
+	Effort           string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
+	// ExecutionMode は wrapper が申告した実行モード。空（＝大半のセッション）は
+	// 対話（PTY）で、"headless" は非対話 runner で走っているセッション
+	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+	// **要求値ではなく実際に起動したプロセスの申告**を持つ（Model / Effort と同じ規律）。
+	ExecutionMode string `json:"execution_mode,omitempty"`
+	// PermissionMode は wrapper が申告した「起動時に実際に付けた権限モード」
+	// （"plan" / "acceptEdits" / "dontAsk" / "auto" / "bypassPermissions" /
+	// "bounded"）。空は「権限のフラグを 1 つも付けていない」で、UI は何も出さない
+	// （「不明」を出さない）。**要求値ではなく申告値**（Model / Effort /
+	// ExecutionMode と同じ規律）。
+	//
+	// **起動時の 1 点の値で、セッション中の切り替えは追えない。** Hub には
+	// ライブの権限モードを観測する経路が無い（claude の statusLine payload にも
+	// 含まれない。実測は docs/local/reference/reference_usage-display.md）ので、
+	// 推定して埋めることはしない。
+	PermissionMode  string `json:"permission_mode,omitempty"`
+	Route           string `json:"route,omitempty"` // 接続経路（"ollama" 等）; UI で Ollama バックエンドの識別に使用
+	Shell           string `json:"shell,omitempty"`
+	ParentSessionID int    `json:"parent_session_id,omitempty"`
+	// HandoffFrom は「このセッションが続きを引き受けた前任」の ID（0 = 通常起動）。
+	// 看板 jsonl の session_start にも同じ値が入るが、UI のカードへ出すには
+	// セッション本体にも要る（子 plan:
+	// docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
+	// **親子関係ではない**。後継は対等な新しい親で、画面のリンクは一方向の表示だけ。
+	HandoffFrom        int    `json:"handoff_from,omitempty"`
 	Role               string `json:"role,omitempty"`
 	Auto               bool   `json:"auto,omitempty"`
 	Depth              int    `json:"depth,omitempty"`
@@ -165,10 +192,8 @@ type session struct {
 	SubscriptionLogin bool `json:"-"`
 
 	// JSON 外: 状態評価用
-	lastOutputAt      time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
-	approvalVisible   bool
-	approvalVisibleAt time.Time // approvalVisible=true を最後に受信した時刻（approvalVisibleLease 判定用）
-	branchCheckedAt   time.Time
+	lastOutputAt    time.Time // idleAfter 計算用。LastOutputAt と同期して更新する
+	branchCheckedAt time.Time
 
 	// JSON 外: transcript 停滞検知（transcript_stall.go）。
 	// パス解決はディレクトリ走査を伴うので一度当たったらキャッシュし、以後は stat だけ回す。
@@ -176,6 +201,7 @@ type session struct {
 	transcriptResolvedAt time.Time // 最後にパス解決を試みた時刻（未解決時の再試行間隔用）
 	transcriptStatAt     time.Time // 最後に stat した時刻
 	transcriptSize       int64     // 直近に観測したサイズ
+	transcriptSubagentAt time.Time // サブエージェントディレクトリ直下の最新 mtime（該当 provider のみ。無ければゼロ値）
 
 	// JSON 外: 初期プロンプト注入ゲート。orchestration セッション（conductor / 子）の
 	// spawn 直後〜injectInitialPrompt 完了までユーザー入力を pendingInput へ保留する。
@@ -206,6 +232,13 @@ type session struct {
 
 	// JSON 外: Go 側 native approval 検出用 VT バッファ。
 	vt *vtBuffer
+	// JSON 外: このセッションが現在、代替画面バッファ（ESC[?1049h）にいるか。
+	// vt.Write が CSI 1049 h/l をパースした結果（vt.AltScreen()）をここへ同期する。
+	// 同期は ptyBuf を更新する箇所（wrapperMessageLoop の pty_data 処理・reattach の
+	// セッション再構築）と同じ sessionsMu ロックの内側で行う。UI 接続時の replay 先頭へ
+	// ESC[?1049h を前置するかどうかの判定に使う（ui_broadcast.go addUIWithHistoryAtEpoch。
+	// docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+	altScreen bool
 	// JSON 外: Provider が登録時点で custom_providers に実在した id だったか。
 	// 零値 false は「custom ではない」という安全側の既定値になる ―― 大半の
 	// session{} リテラル（テスト含む65箇所超）はこのフィールドを一切知らない
@@ -236,20 +269,21 @@ type session struct {
 	approvalConsumedCandidateShape string
 	approvalConsumedEpoch          uint64
 	vtResizeDebounceUntil          time.Time
-	nativeApprovalSig              string
-	nativeApprovalCandidateKey     string
-	nativeApprovalCandidateShape   string
-	nativeApprovalSourceEpoch      uint64
-	nativeApprovalTailSig          string
-	nativeApprovalScanQueued       bool
-	nativeApprovalClearMisses      int
-	crossSessionMessageScreenSig   string
-	nativeApprovalConsumed         string
-	nativeApprovalConsumedAt       time.Time
-	approvalMarkerSig              string
-	approvalMarkerCandidateKey     string
-	approvalMarkerCandidateShape   string
-	approvalMarkerSourceEpoch      uint64
+	// 保留中の承認の記録。1 セッション 1 件で、規則の正本は approval_record.go の冒頭。
+	pendingApproval *approvalRecord
+	// トランスクリプトの最後の assistant メッセージから読んだ、マーカー無しの文章の質問。
+	// 出力が落ち着いたら記録として開く候補で、まだ保留中ではない（approval_text_question.go の
+	// 「出力が落ち着いてから開く」節）。
+	textQuestionAtIdle *textQuestion
+	// approvalStateVersion は記録を開閉するたびに 1 進む版番号。画面が逆順に届いた
+	// approval_state を捨てるための並び順で、承認の同一性ではない。reattach で引き継ぐ。
+	approvalStateVersion         uint64
+	nativeApprovalTailSig        string
+	nativeApprovalScanQueued     bool
+	nativeApprovalClearMisses    int
+	crossSessionMessageScreenSig string
+	nativeApprovalConsumed       string
+	nativeApprovalConsumedAt     time.Time
 	// 構造が壊れていて配信を抑止した直近のマーカー sig。同一ブロックが
 	// PTY チャンクごとに再抽出されるため、ログを 1 ブロック 1 回に絞る用途のみ。
 	approvalMarkerSuppressedSig string
@@ -312,6 +346,37 @@ type session struct {
 	taskDetailFileState       workflowTaskDetailFileState
 	taskDetailProgress        *proto.WorkflowProgress
 
+	// JSON 外: サブエージェントの木（子 plan
+	// plan_subagent-tree-popup_c2_hub-core-claude.md 内部 C3）。ターン開始時刻
+	// subagentTurnStartedAt は、直近に組んだ木の走行中(running)ノード数が 0 の
+	// ときのユーザー入力でだけ進む（親 plan 方針4; input_gate.go の
+	// ensureApprovalSourceEpochLocked 直後で更新）。ポーリングは
+	// workflow_task_detail.go と同じ自己連鎖タイマー（3秒間隔・generation ガード、
+	// internal/hub/subagent_tree.go）。subagentReaderState は選ばれた
+	// subagent:* reader が読み取りオフセット等を持ち越す opaque な値
+	// （具象型は reader ごとに異なる。subagentReader 契約のドキュメントを参照）。
+	// subagentBroadcastSignature は意図的に reattach 時に引き継がない
+	// （reattach_state.go）。subagentParentPath / subagentParentPathAttemptedAt
+	// は親の記録のパス解決結果のキャッシュ（親 plan C10・R6）: 解決済みで実在する
+	// 間は runSubagentTreePoll が subagentParentPathResolver を呼び直さない。
+	// reattach では意図的に引き継がない（reattach_state.go には無い）ので、
+	// reattach 直後の最初の poll は必ず一度だけ解決し直す。
+	subagentTurnStartedAt         time.Time
+	subagentReaderState           any
+	subagentTree                  *proto.SubagentTree
+	subagentRunningCount          int
+	subagentBroadcastSignature    string
+	subagentTimer                 *time.Timer
+	subagentGeneration            uint64
+	subagentParentPath            string
+	subagentParentPathAttemptedAt time.Time
+	// subagentParentPathFor is the resolver input subagentParentPath was
+	// resolved from. When the session's identifying fields change (e.g. a new
+	// AgentSessionID after /clear, or NativeLogPath set by Codex's Stop hook),
+	// the cached path is dropped and re-resolved immediately, instead of
+	// reading the old transcript for as long as that file still exists.
+	subagentParentPathFor subagentParentInfo
+
 	// JSON 外: provider-owned structured transcript tail. The path, byte cursor,
 	// and bounded ephemeral parser state are retained only for the live poll;
 	// transcript content is broadcast and never stored in many-ai-cli history.
@@ -326,6 +391,11 @@ type session struct {
 	// 承認マーカーの供給元をトランスクリプトへ固定したまま戻れなくなるのを防ぐ
 	// 退避路で使う（approval_marker_transcript.go）。
 	agentChatMissStreak int
+	// codexThreadCheckedAt / codexThreadAmbiguous は Codex の会話の切り替えへの
+	// 追従で使う（codex_thread_follow.go）。Ambiguous の間は、乗り換え先を 1 本に
+	// 絞れないので承認マーカーの供給元を VT ミラーへ戻す。
+	codexThreadCheckedAt time.Time
+	codexThreadAmbiguous bool
 
 	// JSON 外: wrapper に最後に送った PTY サイズ（同サイズの resize を skip して不要な SIGWINCH を防ぐ）
 	lastCols      int
@@ -374,6 +444,17 @@ type session struct {
 	turnSummaryTurn     int             // 対象の gitTurns 番号（Record.Turn へ載せる）
 	turnSummaryBuf      strings.Builder // ANSI 除去済み出力の蓄積（マーカー抽出用・上限つき）
 
+	// JSON 外: 引き継ぎメモ依頼（残量の帯の 2 つ目のボタン）の待ち受け状態。
+	// turnSummaryAwait 一式と同型（子 plan:
+	// docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。
+	// handoffNoteSeq は打ち切りタイマーの世代。成功直後に次の依頼が始まったとき、
+	// 前の依頼のタイマーがそれを取り消さないようにするためだけに要る。
+	handoffNoteAwait    bool
+	handoffNoteDeadline time.Time
+	handoffNotePath     string
+	handoffNoteSeq      uint64
+	handoffNoteBuf      strings.Builder
+
 	// JSON 外: 起動バナーからの初期モデル検出用。
 	// Model が空のセッションのみ対象。検出成功 or 累計バイト超過で打ち切る。
 	initialModelScanBytes int
@@ -384,8 +465,9 @@ type session struct {
 	LogPath   string `json:"log_path,omitempty"`
 	JSONLPath string `json:"jsonl_path,omitempty"`
 	// NativeLogPath is the raw transcript written by the provider itself (not
-	// many-ai-cli's optional PTY session log). Currently Codex reports this via
-	// its Stop hook; other providers resolve it from their local store on demand.
+	// many-ai-cli's optional PTY session log). For Codex it is set when the Hub
+	// follows a switch to a new conversation (codex_thread_follow.go) or when the
+	// Stop hook reports it; other providers resolve it from their local store on demand.
 	NativeLogPath  string             `json:"-"`
 	AgentSessionID string             `json:"-"`
 	History        *sessionlog.Writer `json:"-"`
@@ -708,14 +790,19 @@ func (c *wrapperConn) close() {
 }
 
 type Server struct {
-	cfg       *config.Config
-	logger    *slog.Logger
-	httpSrv   *http.Server
-	devMode   bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
-	hubCWD    string // serve 起動時の os.Getwd() を保存
-	version   string // main.version (ldflags 経由) を保持し /api/info で返す
-	gitCommit string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
-	buildTime string // main.buildTime (ldflags 経由・任意)。/api/info で返す
+	cfg                *config.Config
+	providers          *provider.Registry
+	providerRegistryMu sync.RWMutex
+	providerStore      provider.Store
+	historyStore       *provider.HistoryStore
+	distributionStore  *provider.DistributionStore
+	logger             *slog.Logger
+	httpSrv            *http.Server
+	devMode            bool   // --dev: web/ をファイルシステムから直接サーブ（再コンパイル不要）
+	hubCWD             string // serve 起動時の os.Getwd() を保存
+	version            string // main.version (ldflags 経由) を保持し /api/info で返す
+	gitCommit          string // main.gitCommit (ldflags 経由・任意)。/api/info で返す
+	buildTime          string // main.buildTime (ldflags 経由・任意)。/api/info で返す
 	// binGuard は「稼働中 Hub が起動時のバイナリのままか」を判定する。
 	// /api/info が binary_sha256 と binary_stale を申告するのに使い、
 	// wrapper・launcher・status・UI はこのフラグを読むだけで stale を扱える。
@@ -800,17 +887,48 @@ type Server struct {
 	netHintEnvKind string
 
 	usageLinkCache      *ttlCache[UsageLinkDefaults]
+	installLinkCache    *ttlCache[InstallLinkDefaults]
 	subscriptionUsageMu sync.Mutex
 	subscriptionUsage   *subscriptionUsageStore
 	usageProbe          *usageProbeManager
+	// cliVersions holds the single most recent "バージョン確認" result plus the
+	// in-flight run (if any). It is memory-only by design (経緯: 2026-09-23
+	// 決まったこと表「直近の結果は保存しない」), so a Hub restart clears it.
+	cliVersions *cliVersionState
+
+	// updatingCLIProviders is the "更新中" provider set (子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1). Guarded by
+	// sessionsMu, not a dedicated mutex, so the running-sessions check and
+	// the mark happen inside one critical section — see beginProviderUpdate.
+	updatingCLIProviders map[string]struct{}
+
+	// cliUpdateJobsMu guards the bounded in-memory history of "更新" jobs
+	// (cliUpdateJobHistoryLimit most recent). A Hub restart clears it, same
+	// as cliVersions.
+	cliUpdateJobsMu  sync.Mutex
+	cliUpdateJobs    []*cliUpdateJob
+	cliUpdateJobByID map[string]*cliUpdateJob
+
+	// hubCtx is Run's cancel-on-shutdown context, so background work an HTTP
+	// handler starts (the update job runner) actually stops at Hub shutdown.
+	// nil until Run begins serving; hubContext() falls back to
+	// context.Background() for tests that build *Server without calling Run.
+	hubCtxMu sync.Mutex
+	hubCtx   context.Context
 
 	modelsCache       *modelsCache
 	modelsRemoteCache *ttlCache[modelsDefaults]
-	sessionStore      *sessionstore.Store
-	push              *pushManager
-	notifyMgr         *notify.Manager
-	oneTapApprovals   *oneTapApprovalManager
-	orchestration     *orchestrationManager
+	// nvidiaNIMTester is overridden only by Hub tests; production uses the
+	// bounded, fixed-endpoint NVIDIA /v1/models probe.
+	nvidiaNIMTester func(string) error
+	sessionStore    *sessionstore.Store
+	push            *pushManager
+	notifyMgr       *notify.Manager
+	oneTapApprovals *oneTapApprovalManager
+	orchestration   *orchestrationManager
+	// approvalTriggerPhrases は承認パターンファイルの手がかり語（approval_trigger_phrases.go）。
+	// 未読み込み（nil）のときは既定の手がかり語だけで検出する。
+	approvalTriggerPhrases atomic.Pointer[approvalTriggerPhraseSet]
 	// orchestrationAdmissionMu serializes the session snapshot with child-slot
 	// reservations. Preparation and wrapper startup happen after this lock is
 	// released; only admission and reservation-map mutations use it.
@@ -882,6 +1000,19 @@ type Server struct {
 	bugReportSaveMarkdown func(string) (string, error)
 	bugReportLogPreviewMu sync.Mutex
 	bugReportLogPreviews  map[string]bugReportLogPreview
+
+	// folderTrustGrant / wrapExecutable は子の起動まわりの外部境界（テストで
+	// 差し替え）。nil なら clitrust.Grant / os.Executable。folderTrustGrant は
+	// 利用者の CLI の設定ファイルへ書くので、テストでは必ず差し替える。
+	folderTrustGrant func(clitrust.Target) (clitrust.Result, error)
+	wrapExecutable   func() (string, error)
+	// launchArgUsable はこの端末で子の最初の指示を起動引数で渡せるか（テストで
+	// 差し替え）。nil なら wrapper.LaunchPromptArgUsable。
+	launchArgUsable func(provider string) (bool, string)
+	// startSpawnCmd は /api/spawn が組んだ wrapper の起動（テストで差し替え）。
+	// nil なら cmd.Start。テストはプロセスを立てずに、組み上がった引数と
+	// --prompt-file の中身を見る。
+	startSpawnCmd func(cmd *exec.Cmd) error
 }
 
 type branchRefreshRequest struct {
@@ -1129,8 +1260,55 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	for _, warning := range cfg.Warnings() {
 		logger.Warn("config warning", "warning", warning)
 	}
+	var providerStore provider.Store
+	var historyStore *provider.HistoryStore
+	var distributionStore *provider.DistributionStore
+	providers, providerDiagnostics, providerErr := buildProviderRegistry(cfg)
+	if dir, dirErr := config.Dir(); dirErr == nil {
+		if store, storeErr := provider.NewFileStore(filepath.Join(dir, "providers.d")); storeErr == nil {
+			providerStore = store
+			if history, historyErr := provider.NewHistoryStore(filepath.Join(dir, "provider-overrides"), filepath.Join(dir, "backups", "providers")); historyErr == nil {
+				historyStore = history
+			}
+			if dist, distErr := provider.NewDistributionStore(filepath.Join(dir, "provider-distributions")); distErr == nil {
+				distributionStore = dist
+			}
+			var userDefinitions []provider.Definition
+			var storeDiagnostics []provider.Diagnostic
+			if loaded, diagnostics, loadErr := store.Load(); loadErr == nil {
+				userDefinitions = loaded
+				storeDiagnostics = diagnostics
+			} else {
+				storeDiagnostics = append(storeDiagnostics, provider.Diagnostic{Code: "provider_store_load", Severity: provider.SeverityError, Field: "providers.d", Message: "user provider definitions could not be loaded"})
+			}
+			var overrides []provider.Definition
+			var historyDiagnostics []provider.Diagnostic
+			if historyStore != nil {
+				overrides, historyDiagnostics, _ = historyStore.LoadOverrides()
+			}
+			// Accepted distributions are independent of providers.d. A broken
+			// custom definition must not silently discard a previously accepted
+			// catalog for the entire Hub process lifetime.
+			acceptedDefinitions, distributionDiagnostics := loadAcceptedDistributionDefinitions(distributionStore)
+			providers, providerDiagnostics, providerErr = buildProviderRegistryLayers(cfg, userDefinitions, overrides, acceptedDefinitions)
+			providerDiagnostics = append(providerDiagnostics, storeDiagnostics...)
+			providerDiagnostics = append(providerDiagnostics, historyDiagnostics...)
+			providerDiagnostics = append(providerDiagnostics, distributionDiagnostics...)
+		}
+	}
+	if providerErr != nil {
+		logger.Warn("provider registry unavailable", "err", providerErr)
+	} else {
+		for _, diagnostic := range providerDiagnostics {
+			logger.Warn("provider registry diagnostic", "code", diagnostic.Code, "field", diagnostic.Field, "message", diagnostic.Message)
+		}
+	}
 	s := &Server{
 		cfg:                   cfg,
+		providers:             providers,
+		providerStore:         providerStore,
+		historyStore:          historyStore,
+		distributionStore:     distributionStore,
 		logger:                logger,
 		devMode:               devMode,
 		hubCWD:                hubCWD,
@@ -1150,8 +1328,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		approvalRuleTargets:   map[string]approvalRuleTarget{},
 		autoApprovalHistory:   make([]autoApprovalCandidate, 0, 100),
 		usageLinkCache:        newUsageLinkCache(),
+		installLinkCache:      newInstallLinkCache(),
 		subscriptionUsage:     newSubscriptionUsageStore(),
 		usageProbe:            newUsageProbeManager(),
+		cliVersions:           newCLIVersionState(),
+		updatingCLIProviders:  map[string]struct{}{},
+		cliUpdateJobByID:      map[string]*cliUpdateJob{},
 		modelsCache:           &modelsCache{},
 		modelsRemoteCache:     newModelsRemoteCache(),
 		orchestration:         newOrchestrationManager(),
@@ -1245,6 +1427,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	if err := SyncApprovalPatterns(cfg.ApprovalProfiles); err != nil {
 		logger.Warn("sync approval patterns failed", "err", err)
 	}
+	s.reloadApprovalTriggerPhrases()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
 	mux.Handle("/app-entry.js", staticHandler)
@@ -1270,6 +1453,10 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		Handler:   s.handleWS,
 	})
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/jev/evaluate", s.handleJevEvaluate)
+	mux.HandleFunc("/api/providers", s.handleProviders)
+	mux.HandleFunc("/api/providers/", s.handleProviderRoute)
+	mux.HandleFunc("/api/provider-distributions/", s.handleProviderDistributions)
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)
@@ -1332,6 +1519,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/notify-config", s.handleNotifyConfig)
 	mux.HandleFunc("/api/notify-test", s.handleNotifyTest)
 	mux.HandleFunc("/api/notify-generate-topic", s.handleNotifyGenerateTopic)
+	mux.HandleFunc("/api/nvidia-nim", s.handleNVIDIANIMSettings)
+	mux.HandleFunc("/api/nvidia-nim/key", s.handleNVIDIANIMKeyDelete)
+	mux.HandleFunc("/api/nvidia-nim/test", s.handleNVIDIANIMTest)
 	mux.HandleFunc("/api/encoding-check", s.handleEncodingCheck)
 	mux.HandleFunc("/api/approval/status", s.handleApprovalStatus)
 	mux.HandleFunc("/api/approval/enable", s.handleApprovalEnable)
@@ -1343,6 +1533,11 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/slash-cmd-sources", s.handleSlashCmdSources)
 	mux.HandleFunc("/api/slash-commands", s.handleSlashCommands)
 	mux.HandleFunc("/api/usage-link-defaults", s.handleUsageLinkDefaults)
+	mux.HandleFunc("/api/install-link-defaults", s.handleInstallLinkDefaults)
+	mux.HandleFunc("/api/cli-versions", s.handleCLIVersions)
+	mux.HandleFunc("/api/cli-updates", s.handleCLIUpdatesCreate)
+	mux.HandleFunc("/api/cli-updates/", s.handleCLIUpdatesItem)
+	mux.HandleFunc("/api/cli-update-eligibility", s.handleCLIUpdateEligibility)
 	mux.HandleFunc("/api/models", s.handleModels)
 	mux.HandleFunc("/api/approval-patterns", s.handleApprovalPatterns)
 	mux.HandleFunc("/api/approval-patterns/", s.handleApprovalPatternsItem)
@@ -1456,6 +1651,9 @@ func (s *Server) Run(ctx context.Context) error {
 	s.stopMu.Lock()
 	s.stopFunc = cancel
 	s.stopMu.Unlock()
+	s.hubCtxMu.Lock()
+	s.hubCtx = runCtx
+	s.hubCtxMu.Unlock()
 
 	pidPath := filepath.Join(os.TempDir(), "many-ai-cli.pid")
 	killStalePid(pidPath)
@@ -1550,8 +1748,10 @@ func (s *Server) Run(ctx context.Context) error {
 	s.safeGo("clean_attachments", s.cleanAttachments)
 	s.safeGo("clean_spawn_logs", s.cleanSpawnLogs)
 	s.safeGo("clean_session_logs", s.cleanSessionLogs)
+	s.safeGo("clean_cli_update_logs", s.cleanCliUpdateLogs)
 	s.safeGo("clean_orchestration_artifacts", s.cleanOrchestrationArtifacts)
 	s.safeGo("clean_handoff", s.cleanHandoff)
+	s.safeGo("reclaim_leftover_files", s.reclaimLeftoverFiles)
 	s.safeGo("maintenance_loop", func() { s.maintenanceLoop(runCtx) })
 	s.safeGo("recover_transcripts", s.recoverTranscripts)
 	s.safeGo("approval_patterns_remote_sync", func() { s.approvalPatternsRemoteSync(runCtx) })
@@ -1993,10 +2193,10 @@ func (s *Server) uiLoopAtEpoch(conn *websocket.Conn, authEpoch uint64) {
 			})
 		case "ui_active_session":
 			uc.runIfAuthorized(func() { s.claimResizeOwnership(conn, m.SessionID, m.Cols, m.Rows) })
-		case "session_hint":
-			uc.runIfAuthorized(func() { s.handleHint(m) })
 		case "approval_consumed":
 			uc.runIfAuthorized(func() { s.handleConsumed(m) })
+		case "approval_resync":
+			uc.runIfAuthorized(func() { s.handleApprovalResync(uc, m.SessionID) })
 		case "session_history_reset":
 			reset := false
 			uc.runIfAuthorized(func() { reset = s.handleHistoryReset(m) })
@@ -2144,32 +2344,6 @@ func (s *Server) claimResizeOwnershipLocked(conn *websocket.Conn, sessionID, col
 // notifyInputDeferred) と定数 (maxPendingInputPerSession / initialInjectGateMaxAge)
 // は C4 追加分割で internal/hub/input_gate.go へ移動した。
 
-// handleHint は session_hint メッセージを処理し、待機軸と派生 State を即時更新する。
-func (s *Server) handleHint(m proto.Message) {
-	s.sessionsMu.Lock()
-	ses := s.sessions[m.SessionID]
-	var update proto.Message
-	if ses != nil {
-		ses.approvalVisible = m.ApprovalVisible
-		if m.ApprovalVisible {
-			ses.approvalVisibleAt = time.Now()
-		} else {
-			ses.approvalVisibleAt = time.Time{}
-		}
-		if !isTerminalSessionState(ses.State) {
-			ses.Activity.AwaitingApproval = ses.approvalVisible
-			ses.Activity.AwaitingUser = ses.approvalVisible
-			ses.Activity.Normalize()
-			ses.State = ses.Activity.DisplayState()
-			update = sessionUpdateMessage(ses)
-		}
-	}
-	s.sessionsMu.Unlock()
-	if update.SessionID != 0 {
-		s.broadcast(update)
-	}
-}
-
 // handleConsumed は approval_consumed メッセージを処理する。
 func (s *Server) handleConsumed(m proto.Message) {
 	s.markNativeApprovalConsumed(m)
@@ -2181,6 +2355,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 	s.sessionsMu.Lock()
 	ids := make([]int, 0, 1)
 	updates := make([]proto.Message, 0, 1)
+	var closures []*approvalRecordClosure
 	resetOne := func(id int, ses *session) {
 		if ses == nil {
 			return
@@ -2191,7 +2366,9 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		if ses.vt != nil {
 			ses.vt.Reset()
 		}
-		ses.nativeApprovalSig = ""
+		// 台帳の行は ClearSessionHistory が消すので、記録は閉じるだけでよい。
+		closures = append(closures, closeApprovalRecordLocked(ses, id, approvalCloseHistoryReset, time.Now()))
+		ses.textQuestionAtIdle = nil
 		ses.nativeApprovalTailSig = ""
 		ses.nativeApprovalScanQueued = false
 		ses.nativeApprovalClearMisses = 0
@@ -2205,13 +2382,6 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		if ses.approvalSourceEpoch == 0 {
 			ses.approvalSourceEpoch = 1
 		}
-		ses.approvalMarkerSig = ""
-		ses.nativeApprovalCandidateKey = ""
-		ses.nativeApprovalCandidateShape = ""
-		ses.nativeApprovalSourceEpoch = 0
-		ses.approvalMarkerCandidateKey = ""
-		ses.approvalMarkerCandidateShape = ""
-		ses.approvalMarkerSourceEpoch = 0
 		ses.approvalMarkerSuppressedSig = ""
 		ses.approvalMarkerSuppressedAt = time.Time{}
 		ids = append(ids, id)
@@ -2225,6 +2395,7 @@ func (s *Server) handleHistoryReset(m proto.Message) (skip bool) {
 		}
 	}
 	s.sessionsMu.Unlock()
+	s.finishApprovalRecordClosures(closures...)
 	for _, id := range ids {
 		if s.sessionStore != nil {
 			if err := s.sessionStore.ClearSessionHistory(id); err != nil {
@@ -2287,9 +2458,17 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	var endedWorktreeCleanup string
 	var endedUsageProbe bool
 	var endedGitTurnIndexDir string
+	var approvalClosure *approvalRecordClosure
 	if exists {
 		ses := s.sessions[m.SessionID]
+		// dismiss では wrapper 切断の後始末が走らない（wrapperCleanupAlreadyDismissedLocked）
+		// ので、保留中の承認はここで閉じる。
+		approvalClosure = closeApprovalRecordLocked(ses, m.SessionID, approvalCloseSessionEnd, time.Now())
+		// セッション自体を消すので「保留中」を下ろす session_update は要らない
+		// （画面は session_dismissed でカードごと消す）。
+		approvalClosure.dropActivity()
 		s.stopAgentChatTailLocked(ses)
+		s.stopSubagentTreePollLocked(ses)
 		historyToClose = ses.History
 		jsonlPathForTranscript = ses.JSONLPath
 		endedProvider = ses.Provider
@@ -2308,6 +2487,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 		ses.resendInput = nil
 	}
 	s.sessionsMu.Unlock()
+	s.finishApprovalRecordClosures(approvalClosure)
 	removeGitTurnIndexDir(endedGitTurnIndexDir)
 	// The hasPendingSpawnConfirmation guard above already refused this dismiss
 	// for any parent that had a confirmation pending when the request arrived,
@@ -2374,6 +2554,7 @@ func (s *Server) handleDismiss(m proto.Message) (skip bool) {
 	if !endedUsageProbe {
 		s.broadcast(proto.Message{Type: "session_removed", SessionID: m.SessionID})
 	}
+	s.completeOrchestrationChildOnSessionEnd(m.SessionID, "dismissed")
 	return false
 }
 
@@ -2425,7 +2606,7 @@ func (s *Server) handleAttachRequest(m proto.Message) (skip bool) {
 
 // markRunning は PTY 出力受信時に呼ばれ、状態を running に更新して
 // lastOutputAt を現在時刻に進める。状態遷移があった場合のみ broadcast する。
-// approvalVisible=true の間は running への強制遷移を行わない（カーソルブリンク等の
+// 保留中の承認の記録がある間は running への強制遷移を行わない（カーソルブリンク等の
 // 継続的な PTY データで "待機中" 判定が阻害されるのを防ぐ）。
 // アイドル状態機械の 5 関数 (markRunning / stateTicker / evaluateIdle /
 // startIdleTimerLocked / stopIdleTimerLocked) は C4 追加分割で

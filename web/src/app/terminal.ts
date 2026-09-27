@@ -2,12 +2,26 @@
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
-import { activeSessionId, approvalCandidateDebugKey, approvalCandidateIdentity, approvalRawOptionsCache, approvalSourceCache, approvalVisibleCache, sessions, terminals } from './state.js';
+import { currentXtermTheme } from './theme-tokens.js';
+import { activeSessionId, sessions, terminals } from './state.js';
+import { isApprovalPending } from './approval-store.js';
 import { autoExpand, inputEl, sendQuickCommand, sendText, updateInputClearButton } from '../app.js';
-import { ABS_UNIX_PATH_RE, ABS_WIN_PATH_RE, REL_PATH_RE, isLikelyRelPath, isTerminalPathStartBoundary, resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup, trimTerminalPathCandidate } from './path-links.js';
+import { resolveTerminalPathCandidate, scheduleHidePathPopup, showPathPopup } from './path-links.js';
+import {
+  ABS_UNIX_PATH_RE,
+  ABS_WIN_PATH_RE,
+  REL_PATH_RE,
+  expandLogicalPathLine,
+  isLikelyRelPath,
+  isTerminalPathStartBoundary,
+  trimTerminalPathCandidate,
+  type PathWrapRow,
+} from './path-detect.js';
+import { findUrlCandidates, looksLikeLinkWrapContinuation } from './url-detect.js';
+import { showUrlPopup } from './url-links.js';
 import { ws } from './ws-client.js';
-import { isSelectMenuActive, isShellProvider, scheduleApprovalCheck } from './approval.js';
-import { probe } from '../debug/probe.js';
+import { isShellProvider } from './approval.js';
+import { probe, probeSpan } from '../debug/probe.js';
 import { handleCrunchLinkClick } from './expand-popup.js';
 import { addPromptTemplate } from './prompt-templates.js';
 import { resetHistoryViewerForSessionChange, updateHistoryHint } from './history-viewer.js';
@@ -18,7 +32,7 @@ import { filterBareCarriageReturnPure } from './cr-erase-filter.js';
 import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scanMouseModePure, type WheelEncoding } from './mouse-mode-tracker.js';
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
-import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestEdge, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
 import {
   resolveTerminalHistoryStrategy,
   terminalHistoryCapabilitiesForProvider,
@@ -28,6 +42,10 @@ import {
   type TerminalScreenSnapshot,
 } from './terminal-history-strategy.js';
 import { formatLongprocDuration, longprocBadgeClass, longprocStatus } from './longproc.js';
+// 帯の状態記号は独自に作らず、サイドバーのカード・セッション帯（タブ）と同じものを借りる。
+// 同じセッションの同じ状態が画面内で 2 通りの形・色に見えないようにするため、意味づけの
+// 正本（stateActivityDecoration）と形の正本（stateIconSvgHtml）はどちらも session-list.ts。
+import { stateActivityDecoration, stateIconSvgHtml } from './session-list.js';
 export { hubMarkerBytePatterns, hubMarkerEndBytes, hubDoneMarkerOpen, hubDoneMarkerClose, bytesStartWith } from './hub-marker-filter.js';
 
 // Claude Code の折りたたみマーカー: "… +23 lines (ctrl+o to expand)"。
@@ -44,8 +62,9 @@ const CRUNCH_LINK_RE = /(?:[…\.]{1,3}\s*\+\d+\s*lines?\s*)?\(ctrl\+o to expand
 // 長時間セッションで過去ターンが押し出される苦情を受けて 10000 行へ拡大。
 // それ以前の出力は過去ログビューア（history-viewer.ts）で生ログから遡る。
 export const TERMINAL_SCROLLBACK_LINES = 10000;
-// 非アクティブセッションの未描画 PTY chunk は末尾だけ保持し、
-// 長時間放置後のセッション切替で UI スレッドを詰まらせない。
+// 非アクティブセッションの未描画 PTY chunk をこの量まで溜め、超えたら非表示のまま
+// xterm へ書き込む。長時間放置後のセッション切替で一括 write が肥大化して UI を
+// 詰まらせないための上限で、超過分を捨てる上限ではない（捨てると差分描画の TUI が壊れる）。
 export const TERMINAL_PENDING_MAX_BYTES = 100 * 1024;
 export const TERMINAL_WRITE_FLUSH_WATCHDOG_MS = 5000;
 // resize（SIGWINCH）直後は TUI（Codex 等）がトランスクリプト全体を再描画する。
@@ -112,10 +131,6 @@ function sendSelectionDirect(text, opts: any = {}) {
   if (!cleaned) return;
   const sessionId = opts.sessionId ?? activeSessionId;
   if (sessionId == null) return;
-  if (isSelectMenuActive(sessionId)) {
-    showToast(ti18n('toast_select_menu_active'), opts.anchor);
-    return;
-  }
   if (isShellProvider(sessions.get(sessionId)?.provider) && !window.confirm(ti18n('term_ctx_send_confirm_shell'))) return;
   sendQuickCommand(sessionId, cleaned);
   showToast(ti18n('term_ctx_sent'), opts.anchor);
@@ -146,6 +161,18 @@ function isModalOverlayOpen() {
   return false;
 }
 
+// 端末 1 行の高さ（文字サイズに対する倍率）。xterm の lineHeight オプションがこれ。
+// セッション帯（session-strip.ts）の既定の高さもこの値から導く＝端末と帯で別々の
+// 固定 px を持たない。
+export const TERMINAL_LINE_HEIGHT = 1.35;
+
+export function refreshTerminalThemes(): void {
+  const theme = currentXtermTheme();
+  terminals.forEach((entry) => {
+    entry.term.options.theme = theme;
+  });
+}
+
 export function ensureTerminal(id) {
   if (terminals.has(id)) return;
   const provider = sessions.get(id)?.provider;
@@ -160,7 +187,7 @@ export function ensureTerminal(id) {
     fontSize: FONTSIZE_MAP[localStorage.getItem(STORAGE_FONTSIZE_KEY)] || 13,
     // 一部フォントで大文字上端がクリップされるため、行高を少し広げて回避する。
     // さらに Claude Code TUI の進捗バー（1行ぶんの高さで描かれる黒帯）が細く見える問題の緩和も兼ねる。
-    lineHeight: 1.35,
+    lineHeight: TERMINAL_LINE_HEIGHT,
     windowsPty: { backend: 'conpty' },
     // cursor を背景色と同色にしてブロックカーソルを不可視化する。
     // 'transparent' はブラウザ実装によって輪郭線だけ □ として描画されることがある。
@@ -168,14 +195,21 @@ export function ensureTerminal(id) {
     // 色を theme から取り、未指定なら「前景色の不透明度 20%」が既定になる（暗背景ではほぼ見えない）。
     // 5.x 世代まで terminal.css が .xterm-viewport::-webkit-scrollbar で描いていた紫を theme 側で再現する。
     // 常時表示（Auto のフェードアウト抑止）は terminal.css の .scrollbar.invisible 上書きが担当。
-    theme: {
-      background: '#0d1117', cursor: '#0d1117', cursorAccent: '#e6edf3',
-      scrollbarSliderBackground: '#4f5bd5',
-      scrollbarSliderHoverBackground: '#6b74ff',
-      scrollbarSliderActiveBackground: '#8b92ff',
-    },
+    theme: currentXtermTheme(),
     disableStdin: true,
     allowProposedApi: true,
+    // CLI が OSC 8 のハイパーリンクで出した URL も、画面上の URL と同じメニューで開く
+    //（未指定だと xterm 既定の window.confirm が出る）。http(s) 以外は xterm が渡してこない。
+    linkHandler: {
+      activate(event, uri) {
+        event.preventDefault();
+        event.stopPropagation();
+        showUrlPopup(uri, event.clientX, event.clientY);
+      },
+      leave() {
+        scheduleHidePathPopup();
+      },
+    },
   });
   term.attachCustomKeyEventHandler((event) => {
     if (event.type !== 'keydown') return true;
@@ -208,133 +242,173 @@ export function ensureTerminal(id) {
   });
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
-  if (typeof WebLinksAddon !== 'undefined') {
-    const webLinks = new WebLinksAddon.WebLinksAddon((event, uri) => {
-      event.preventDefault();
-      window.open(uri, '_blank', 'noopener,noreferrer');
-    });
-    term.loadAddon(webLinks);
-  }
+  // URL・パス・折りたたみマーカーのリンクは、この 1 つの provider で検出する。
+  // URL は以前 xterm-addon-web-links に任せていたが、あちらは xterm が自動で折り返した行しか
+  // つながず（CLI が改行を入れて割った URL は途中までしかリンクにならない）、URL の直後に続く
+  // 日本語までリンクに含めていた。判定は url-detect.ts に寄せてある。
   term.registerLinkProvider({
     provideLinks(y, callback) {
-      const buf = term.buffer.active;
-      const thisLine = buf.getLine(y - 1);
-      if (!thisLine) { callback([]); return; }
+      const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'terminal.links' }));
+      try {
+        const buf = term.buffer.active;
+        const thisLine = buf.getLine(y - 1);
+        if (!thisLine) { callback([]); return; }
 
-      // wrapped 継続行の場合、先頭物理行まで遡って論理行全体を処理する
-      let startY = y;
-      let startLine = thisLine;
-      if (thisLine.isWrapped) {
-        let cur = y - 1;
-        while (cur > 0) {
-          const candidate = buf.getLine(cur - 1);
-          if (!candidate) break;
-          if (!candidate.isWrapped) { startY = cur; startLine = candidate; break; }
-          cur--;
-        }
-        if (startY === y) { callback([]); return; }
-      }
-
-      // 論理行を構成する物理行（先頭行 + 後続の wrapped 継続行）を収集する
-      const buildCellMap = (line) => {
-        const cm = [];
-        for (let x = 0; x < line.length; x++) {
-          const cell = line.getCell(x);
-          if (cell && cell.getWidth() !== 0) cm.push(x);
-        }
-        return cm;
-      };
-      const physRows = [{ y1: startY, text: startLine.translateToString(true), cellMap: buildCellMap(startLine) }];
-      let peek = startY; // getLine は 0-based。peek=startY は 1-based の startY+1 行目
-      while (true) {
-        const next = buf.getLine(peek);
-        if (!next || !next.isWrapped) break;
-        physRows.push({ y1: peek + 1, text: next.translateToString(true), cellMap: buildCellMap(next) });
-        peek++;
-      }
-
-      // 行テキストを結合し、各行の開始オフセットを記録する
-      const rowOffsets = [];
-      let off = 0;
-      for (const r of physRows) { rowOffsets.push(off); off += r.text.length; }
-      const combined = physRows.map(r => r.text).join('');
-
-      // combined 上の charIndex → xterm の { x (1-based), y (1-based) }
-      const ciToXY = (ci) => {
-        let ri = physRows.length - 1;
-        for (let i = 0; i < physRows.length - 1; i++) {
-          if (ci < rowOffsets[i + 1]) { ri = i; break; }
-        }
-        const r = physRows[ri];
-        const charInRow = ci - rowOffsets[ri];
-        return { x: (r.cellMap[charInRow] ?? charInRow) + 1, y: r.y1 };
-      };
-
-      const links = [];
-      const occupiedRanges = [];
-      const overlapsExistingLink = (start, end) => occupiedRanges.some(r => start <= r.end && end >= r.start);
-      const addPathLink = (rawPath, startCI) => {
-        const pathStr = trimTerminalPathCandidate(rawPath);
-        if (pathStr.length < 3) return;
-        const endCI = startCI + pathStr.length - 1;
-        if (overlapsExistingLink(startCI, endCI)) return;
-        occupiedRanges.push({ start: startCI, end: endCI });
-        const capturedPath = resolveTerminalPathCandidate(pathStr, id);
-        const startPos = ciToXY(startCI);
-        const endPos = ciToXY(endCI);
-        links.push({
-          range: { start: startPos, end: endPos },
-          text: pathStr,
-          hover() {
-            // ホバーではポップアップを開かない（クリック起動のみ）。
-            // xterm のリンク下線表示は維持される。
-          },
-          leave() {
-            scheduleHidePathPopup();
-          },
-          activate(_event, _text) {
-            _event.preventDefault();
-            _event.stopPropagation();
-            showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
+        const buildCellMap = (line) => {
+          const cm = [];
+          for (let x = 0; x < line.length; x++) {
+            const cell = line.getCell(x);
+            if (cell && cell.getWidth() !== 0) cm.push(x);
           }
-        });
-      };
+          return cm;
+        };
+        const contentWidthOf = (line) => {
+          let width = 0;
+          for (let x = 0; x < line.length; x++) {
+            const cell = line.getCell(x);
+            if (!cell || cell.getWidth() === 0) continue;
+            if (typeof cell.getCode === 'function' && cell.getCode() === 0) continue;
+            width = x + cell.getWidth();
+          }
+          return width;
+        };
+        const getRow = (index: number): PathWrapRow | null => {
+          if (index < 0) return null;
+          const line = buf.getLine(index);
+          if (!line) return null;
+          return {
+            text: line.translateToString(true),
+            isWrapped: !!line.isWrapped,
+            contentWidth: contentWidthOf(line),
+          };
+        };
+        // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス・URL の分断も結合する
+        const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols, looksLikeLinkWrapContinuation);
 
-      for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
-        re.lastIndex = 0;
-        let m;
-        while ((m = re.exec(combined)) !== null) {
-          if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(combined, m.index)) continue;
-          addPathLink(m[1], m.index);
+        const physRows = [];
+        for (let i = start; i <= end; i++) {
+          const line = buf.getLine(i);
+          if (!line) break;
+          const isWrapped = !!line.isWrapped;
+          let text = line.translateToString(true);
+          let cellMap = buildCellMap(line);
+          // ハードラップ継続行の行頭インデントはパスの一部ではない
+          if (i > start && !isWrapped) {
+            const lead = (text.match(/^[ \t]*/) || [''])[0].length;
+            if (lead > 0) {
+              text = text.slice(lead);
+              cellMap = cellMap.slice(lead);
+            }
+          }
+          physRows.push({ y1: i + 1, text, cellMap });
         }
-      }
-      let m;
-      REL_PATH_RE.lastIndex = 0;
-      while ((m = REL_PATH_RE.exec(combined)) !== null) {
-        const rawPath = m[2];
-        const trimmed = trimTerminalPathCandidate(rawPath);
-        if (!isLikelyRelPath(trimmed)) continue;
-        addPathLink(rawPath, m.index + m[1].length);
-      }
-      // 折りたたみマーカーをクリック可能にする（ctrl+o キャプチャ → ポップアップ表示）
-      CRUNCH_LINK_RE.lastIndex = 0;
-      let cm;
-      while ((cm = CRUNCH_LINK_RE.exec(combined)) !== null) {
-        const startCI = cm.index;
-        const endCI = cm.index + cm[0].length - 1;
-        if (overlapsExistingLink(startCI, endCI)) continue;
-        occupiedRanges.push({ start: startCI, end: endCI });
-        links.push({
-          range: { start: ciToXY(startCI), end: ciToXY(endCI) },
-          text: cm[0],
-          hover() {},
-          leave() {},
-          activate(event) {
-            handleCrunchLinkClick(id, event.clientX, event.clientY);
-          },
-        });
-      }
-      callback(links);
+        if (physRows.length === 0) { callback([]); return; }
+
+        // 行テキストを結合し、各行の開始オフセットを記録する
+        const rowOffsets = [];
+        let off = 0;
+        for (const r of physRows) { rowOffsets.push(off); off += r.text.length; }
+        const combined = physRows.map(r => r.text).join('');
+
+        // combined 上の charIndex → xterm の { x (1-based), y (1-based) }
+        const ciToXY = (ci) => {
+          let ri = physRows.length - 1;
+          for (let i = 0; i < physRows.length - 1; i++) {
+            if (ci < rowOffsets[i + 1]) { ri = i; break; }
+          }
+          const r = physRows[ri];
+          const charInRow = ci - rowOffsets[ri];
+          return { x: (r.cellMap[charInRow] ?? charInRow) + 1, y: r.y1 };
+        };
+
+        const links = [];
+        const occupiedRanges = [];
+        const overlapsExistingLink = (start, end) => occupiedRanges.some(r => start <= r.end && end >= r.start);
+        const addPathLink = (rawPath, startCI) => {
+          const pathStr = trimTerminalPathCandidate(rawPath);
+          if (pathStr.length < 3) return;
+          const endCI = startCI + pathStr.length - 1;
+          if (overlapsExistingLink(startCI, endCI)) return;
+          occupiedRanges.push({ start: startCI, end: endCI });
+          const capturedPath = resolveTerminalPathCandidate(pathStr, id);
+          const startPos = ciToXY(startCI);
+          const endPos = ciToXY(endCI);
+          links.push({
+            range: { start: startPos, end: endPos },
+            text: pathStr,
+            hover() {
+              // ホバーではポップアップを開かない（クリック起動のみ）。
+              // xterm のリンク下線表示は維持される。
+            },
+            leave() {
+              scheduleHidePathPopup();
+            },
+            activate(_event, _text) {
+              _event.preventDefault();
+              _event.stopPropagation();
+              showPathPopup(capturedPath, _event.clientX, _event.clientY, id);
+            }
+          });
+        };
+
+        // URL を先に取る。パスの判定は URL の中にも当たる（「https://…」の「s://…」を Windows の
+        // ドライブパスとみなす）ので、URL の範囲を先に埋めて重なるパスを捨てさせる。
+        for (const c of findUrlCandidates(combined)) {
+          const startCI = c.start;
+          const endCI = c.end - 1;
+          if (overlapsExistingLink(startCI, endCI)) continue;
+          occupiedRanges.push({ start: startCI, end: endCI });
+          const url = c.url;
+          links.push({
+            range: { start: ciToXY(startCI), end: ciToXY(endCI) },
+            text: url,
+            hover() {},
+            leave() {
+              scheduleHidePathPopup();
+            },
+            activate(event) {
+              event.preventDefault();
+              event.stopPropagation();
+              showUrlPopup(url, event.clientX, event.clientY);
+            },
+          });
+        }
+        for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(combined)) !== null) {
+            if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(combined, m.index)) continue;
+            addPathLink(m[1], m.index);
+          }
+        }
+        let m;
+        REL_PATH_RE.lastIndex = 0;
+        while ((m = REL_PATH_RE.exec(combined)) !== null) {
+          const rawPath = m[2];
+          const trimmed = trimTerminalPathCandidate(rawPath);
+          if (!isLikelyRelPath(trimmed)) continue;
+          addPathLink(rawPath, m.index + m[1].length);
+        }
+        // 折りたたみマーカーをクリック可能にする（ctrl+o キャプチャ → ポップアップ表示）
+        CRUNCH_LINK_RE.lastIndex = 0;
+        let cm;
+        while ((cm = CRUNCH_LINK_RE.exec(combined)) !== null) {
+          const startCI = cm.index;
+          const endCI = cm.index + cm[0].length - 1;
+          if (overlapsExistingLink(startCI, endCI)) continue;
+          occupiedRanges.push({ start: startCI, end: endCI });
+          links.push({
+            range: { start: ciToXY(startCI), end: ciToXY(endCI) },
+            text: cm[0],
+            hover() {},
+            leave() {},
+            activate(event) {
+              handleCrunchLinkClick(id, event.clientX, event.clientY);
+            },
+          });
+        }
+        callback(links);
+      } finally { finishProbe?.(); }
     }
   });
   if (typeof Unicode11Addon !== 'undefined') {
@@ -381,7 +455,6 @@ export function ensureTerminal(id) {
     pendingFlushWatchdog: null,
     layoutGeneration: 0,
     pendingFlushCallbacks: [],
-    pendingTextTail: '',
     textDecoder: new TextDecoder('utf-8'),
     markerFilterCarry: new Uint8Array(0),
     inMarkerBlock: false,
@@ -410,14 +483,20 @@ export function ensureTerminal(id) {
   });
 }
 
+// ターミナル領域に重ねる読み取り専用オーバーレイを閉じる。
+// セッション切替だけでなく、統合タブバー（ターミナル / Git / 履歴 等）の切替でも
+// 呼ぶ。閉じるボタンを押さないとタブへ戻れない状態を作らない。
+export function dismissTerminalReadOverlays() {
+  resetHistoryViewerForSessionChange();
+  resetGrokChatViewerForSessionChange();
+}
+
 export function attachTerminal(id) {
   const area = document.getElementById('terminal-area');
   if (!area) return;
   const t = terminals.get(id);
   if (!t) return;
-  // セッション切替・タブ復帰時は過去ログビューアを閉じる（別セッションの誤表示防止）
-  resetHistoryViewerForSessionChange();
-  resetGrokChatViewerForSessionChange();
+  dismissTerminalReadOverlays();
   // 切替先セッションの最新ライブ進捗を反映（無ければ hidden に戻す）
   syncLiveStatusDomForActive();
   if (t.container) {
@@ -608,6 +687,12 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
       termEl.addEventListener('pointerdown', () => {
         markTerminalManualScrollIntent();
       });
+      // xterm はスライダーへ pointer capture するため、枠外へのドラッグもここを通る。
+      // 押してから 400ms 以上経った移動を自動スクロールと誤認しないよう、移動でも更新する。
+      // bubble では xterm の移動処理 → onScroll の後になるので capture で先に記録する。
+      termEl.addEventListener('pointermove', (e) => {
+        if (e.buttons !== 0) markTerminalManualScrollIntent();
+      }, { capture: true });
     }
     // attachCustomWheelEventHandler が無い xterm ビルド向けのフォールバック。
     // capture 段階で遮断することで、xterm 内部のホイールリスナーと
@@ -732,10 +817,11 @@ export function queuePendingTerminalChunk(id, bytes) {
     }
     return;
   }
-  while (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES && t.pendingChunks.length > 1) {
-    t.pendingTotalBytes -= t.pendingChunks[0].length;
-    t.pendingChunks.shift();
-  }
+  // 上限を超えても先頭を捨てず、非表示のまま xterm へ書き込んで溜まり分を空にする。
+  // Grok のように「変わったセルだけ」を書き直す TUI は、途中のバイトが欠けると
+  // 一度も書き直されないセルが空白のまま残り、切替後も直らない
+  // （docs/local/bugfix_grok-inactive-terminal-garbled_2026-09-22.md）。
+  if (t.pendingTotalBytes > TERMINAL_PENDING_MAX_BYTES) flushPending(id);
 }
 
 // resize（SIGWINCH）送信・受信直後の出力バーストを一括描画するバッチを開始する。
@@ -783,7 +869,6 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
   t.pendingTotalBytes = 0;
   if (chunks.length === 0) {
     if (t.autoScroll) { t.term.scrollToBottom(); syncViewportScrollbarToBottom(t); }
-    scheduleApprovalCheck(id);
     runPendingFlushCallbacks(t);
     return;
   }
@@ -811,7 +896,6 @@ export function flushPending(id, onDrained: (() => void) | null = null) {
       return;
     }
     if (latest.autoScroll) { latest.term.scrollToBottom(); syncViewportScrollbarToBottom(latest); }
-    scheduleApprovalCheck(id);
     runPendingFlushCallbacks(latest);
   };
   t.pendingFlushWatchdog = setTimeout(finish, TERMINAL_WRITE_FLUSH_WATCHDOG_MS);
@@ -880,7 +964,8 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
   const wasAtBottom = isTerminalAtBottom(t) || t.autoScroll;
   const geoPrevCols = t.term.cols;
   const geoPrevRows = t.term.rows;
-  t.fitAddon.fit();
+  const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'terminal.fit' }));
+  try { t.fitAddon.fit(); } finally { finishProbe?.(); }
   try {
     probe('geo.fit', () => ({
       sessionId: id,
@@ -911,6 +996,22 @@ export function fitTerminalPreservingBottom(t, id, forceVisualFit = false) {
 // forceVisualFit=true で「見た目のフィット」だけ強制し、ポップアップを縮めた瞬間に
 // CLI 最新行が空いた領域へ降りてくるようにする（ユーザーが手動スクロールせずに済む）。
 export function followActionBarResize(): void {
+  if (activeSessionId === null) return;
+  const t = terminals.get(activeSessionId);
+  if (!canFitTerminal(t)) return;
+  t.autoScroll = true;
+  fitTerminalPreservingBottom(t, activeSessionId, true);
+}
+
+// セッション帯（#session-strip）の高さドラッグに追従して、アクティブセッションの
+// xterm を現在の表示領域へ再フィットする。followActionBarResize と同型だが、呼び元も
+// 意味も別なので 1 本ずつ持つ（既存関数を書き換えない）。
+//
+// ドラッグ中は session-strip.ts が suppressPtyResizeForInputLayout を短く張り直して
+// いるので isPtyResizeSuppressed() は true。forceVisualFit=true で「見た目のフィット」
+// だけを行い、SIGWINCH は送らない。実寸の確定は pointerup の
+// syncPtySizeToViewportAfterLayout が 1 回だけ行う。
+export function followSessionStripResize(): void {
   if (activeSessionId === null) return;
   const t = terminals.get(activeSessionId);
   if (!canFitTerminal(t)) return;
@@ -1304,7 +1405,7 @@ export function resumeTerminalBottomFollow(id, opts: any = {}) {
 
 export function revealApprovalPromptForSession(id) {
   if (id === null || id === undefined) return;
-  if (!approvalVisibleCache.get(id) && !(approvalRawOptionsCache.get(id)?.length > 0)) return;
+  if (!isApprovalPending(id)) return;
   const startedAt = Date.now();
   scrollTerminalToBottomSoon(id, { force: true, passes: 4, startedAt });
   refitAndStickTerminalToBottomSoon(id, { force: true, passes: 4, startedAt });
@@ -1363,9 +1464,8 @@ export function updateScrollLockBtn(_locked?: boolean) {
   const hasSession = activeSessionId !== null && terminals.has(activeSessionId);
   if (topBtn) topBtn.hidden = !hasSession;
   if (bottomBtn) bottomBtn.hidden = !hasSession;
-  // 承認ポップアップ 再表示/消す ボタンもセッション表示中は常時表示する。
-  const recallBar = document.getElementById('approval-recall-bar');
-  if (recallBar) recallBar.hidden = !hasSession;
+  // 端末右下の「✕ 承認」（#approval-recall-bar）は、承認パネルが開いている間だけ出す。
+  // 出し入れは approval.ts の syncApprovalRecallBar が持つ。
 }
 
 document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
@@ -1374,10 +1474,8 @@ document.getElementById('scroll-to-top-btn')?.addEventListener('click', () => {
   if (!t) return;
   markTerminalManualScrollIntent();
   if (canPageAltBuffer(activeSessionId, t)) {
-    // レール位置は近似（alt-scroll-rail.ts 冒頭のコメント参照）なので、requestNotches が
-    // 「動く必要が無い」と正直に false を返しても CLI 側にはまだ余地があるかもしれない。
-    // その場合は 1 回だけ直接送ってから同じ分岐に合流させる（無反応に見せない）。
-    if (!stepNotches(activeSessionId, 12)) {
+    // 画面が動かなくなるまで送り続けて最上部へ行く。レールが無い場合だけ 1 ノッチ直接送る。
+    if (!requestEdge(activeSessionId, 'top')) {
       scrollAltBufferPage(activeSessionId, t, -1);
     }
     t.autoScroll = false;
@@ -1401,7 +1499,7 @@ document.getElementById('scroll-to-bottom-btn')?.addEventListener('click', () =>
   const t = terminals.get(activeSessionId);
   if (!t) return;
   if (canPageAltBuffer(activeSessionId, t)) {
-    if (!stepNotches(activeSessionId, -12)) {
+    if (!requestEdge(activeSessionId, 'bottom')) {
       scrollAltBufferPage(activeSessionId, t, 1);
     }
     t.autoScroll = true;
@@ -1633,7 +1731,7 @@ const LIVE_STATUS_HIDE_MS = 1500;
 // のような断片しか出ず無効化していた（bugfix_live-status-spinner-fragments_2026-06-12.md）。
 // 現在は列アドレス（CUP/CUF）でセッションごとの 1 行へ部分更新を適用する再構成方式に
 // 置き換え、断片バグが構造的に再発しないため有効化。くるくる自体は Web 側の CSS
-// アニメーション（.live-spinner）で描くので再構成精度に関係なく必ず回る。
+// アニメーション（.live-status-state.running）で描くので再構成精度に関係なく必ず回る。
 // 再無効化したい場合は false に戻す（退路として残す）。
 const LIVE_STATUS_ENABLED = true;
 // 待機中に出す完了サマリーの上限。Hub 側で 320 文字に切られて届くが、帯は 1 行なので
@@ -1923,18 +2021,42 @@ function liveStatusViewFor(sid) {
   }
 }
 
-// ライブ進捗窓の描画。mode: 'active'（青・スピナー回転）/ 'waiting'（アンバー・承認待ち）/
-// 'idle'（グレー・スピナー停止・状態ラベル／枠は残す）/ 'done'（直前ターンの完了サマリー）/
+// 帯の先頭に出す状態記号。形も意味づけもセッション帯（タブ）・サイドバーのカードと
+// 共有する（session-list.ts の stateActivityDecoration / stateIconSvgHtml）＝帯だけが
+// 別の記号で状態を描くと、同じセッションがタブと帯で違う状態に見える。
+// ここが決めるのは「どの記号を、どのクラスで出すか」だけで、色と動きは CSS
+// （terminal.css の .live-status-state）が持つ。
+function liveStatusIconView(mode: string): { iconKind: string; classes: string[] } {
+  // フレーム流入中・compact 中は、セッション状態がまだ running へ切り替わっていなくても
+  // 回る輪にする。帯は「動いているか止まったか」を見る場所なので、ここだけは
+  // セッション状態より流入の有無を優先する（記号を静止させない）。
+  // ここはフレームごとに通るので、この場合は付帯状態の判定まで走らせない。
+  if (mode === 'active') return { iconKind: 'ring', classes: ['live-status-state', 'running'] };
+  const ses = activeSessionId !== null ? sessions.get(activeSessionId) : null;
+  if (!ses) return { iconKind: 'dot', classes: ['live-status-state'] };
+  const activity = stateActivityDecoration(ses);
+  const classes = ['live-status-state'];
+  if ((ses.state as string) === 'running') classes.push('running');
+  // 付帯状態（承認待ち・入力待ち・子起動の確認待ち・workflow）は帯もタブと同じクラス名で
+  // 出す。色の対応表は CSS 側に 1 つだけ置く。
+  if (activity.className) classes.push(activity.className);
+  return { iconKind: activity.iconKind, classes };
+}
+
+// ライブ進捗窓の描画。mode: 'active'（実行中・記号が回る）/ 'waiting'（アンバー・承認待ち）/
+// 'idle'（グレー・記号は静止・状態ラベル／枠は残す）/ 'done'（直前ターンの完了サマリー）/
 // 'hidden'（アクティブセッション無し時のみ）。
 function renderLiveStatusDom(mode, text) {
   const el = document.getElementById('terminal-live-status');
   if (!el) return;
   const textEl = el.querySelector('.live-status-text') as HTMLElement | null;
   const barEl = el.querySelector('.live-compact-bar') as HTMLElement | null;
+  const iconEl = el.querySelector('.live-status-state') as HTMLElement | null;
   if (!LIVE_STATUS_ENABLED || mode === 'hidden') {
     el.hidden = true;
     el.classList.remove('idle', 'waiting', 'done', ...DONE_KIND_CLASSES);
     if (textEl) textEl.textContent = '';
+    if (iconEl) { iconEl.className = 'live-status-state'; iconEl.innerHTML = ''; delete iconEl.dataset.iconKind; }
     if (barEl) barEl.hidden = true;
     syncLiveStatusLongproc();
     return;
@@ -1955,6 +2077,17 @@ function renderLiveStatusDom(mode, text) {
     ? `done-${doneSummaryKindSuffix(getDoneSummary(activeSessionId)?.kind)}`
     : '';
   for (const cls of DONE_KIND_CLASSES) el.classList.toggle(cls, cls === doneKind);
+  if (iconEl) {
+    // 1Hz で呼ばれるので、変わっていないときは DOM に触らない（SVG を毎秒作り直すと
+    // running の回転アニメーションが先頭へ巻き戻って、記号が止まって見える）。
+    const view = liveStatusIconView(mode);
+    const cls = view.classes.join(' ');
+    if (iconEl.className !== cls) iconEl.className = cls;
+    if (iconEl.dataset.iconKind !== view.iconKind) {
+      iconEl.dataset.iconKind = view.iconKind;
+      iconEl.innerHTML = stateIconSvgHtml(view.iconKind);
+    }
+  }
   if (barEl) barEl.hidden = (compactSec == null);
   if (textEl && textEl.textContent !== text) textEl.textContent = text || '';
   syncLiveStatusLongproc();
@@ -2138,10 +2271,6 @@ export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIden
       return;
     }
     probeSendOutcome(sessionId, cols, rows, reason, 'sent');
-    const approvalOptions = approvalRawOptionsCache.get(sessionId);
-    const approvalIdentity = resizeIdentity || (Array.isArray(approvalOptions) && approvalOptions.length > 0
-      ? approvalCandidateIdentity(sessionId, approvalOptions, approvalSourceCache.get(sessionId)?.source === 'go_vt' ? 'native' : 'marker')
-      : null);
     ws.send(JSON.stringify({ type: 'pty_resize', session_id: sessionId, cols, rows }));
     lastSentPtySize.set(sessionId, size);
     // SIGWINCH を受けた TUI（Codex 等）はトランスクリプト全体を再描画する。

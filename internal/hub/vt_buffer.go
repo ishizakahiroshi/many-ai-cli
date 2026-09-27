@@ -62,6 +62,19 @@ type vtBuffer struct {
 	// stringSeqSkipBytes は inOSC/inStringSeq スキップ中に読み飛ばしたバイト数。
 	// maxStringSeqSkipBytes を超えたら未終端シーケンスとみなしてスキップを打ち切る（AUDIT-9）。
 	stringSeqSkipBytes int
+
+	// altScreen は CSI ?1049h/l（代替画面バッファ）の直近状態。h で true、l で false。
+	// これは画面の中身ではなく「CLI がどちらの画面にいるか」なので、Reset() でも保持する
+	// （Reset() 本体のコメント参照）。呼び出し元（session.altScreen）はこの値を Write() の
+	// 後に読んで同期する（AltScreen 参照）。
+	altScreen bool
+}
+
+// AltScreen はこのミラーが現在、代替画面バッファ（ESC[?1049h）にいるとパースしたかを返す。
+// UI 再接続時の replay 先頭へ ESC[?1049h を前置するかどうかの判定に使う
+// （docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+func (b *vtBuffer) AltScreen() bool {
+	return b.altScreen
 }
 
 // isStringSequenceIntroducer は ESC の次のバイトが文字列シーケンス（OSC/DCS/SOS/PM/APC）を
@@ -93,7 +106,12 @@ func newVTBuffer(cols, rows int) *vtBuffer {
 
 func (b *vtBuffer) Reset() {
 	cols, rows := b.cols, b.rows
+	// altScreen は画面の中身（cells/scrollback）とは別の事実 — CLI が代替画面バッファに
+	// いるかどうかは、履歴ミラーを丸ごと作り直しても変わらない（session_history_reset は
+	// 見た目の履歴を捨てるだけで、CLI 側へは 1 バイトも送っていない）。保存し直す。
+	altScreen := b.altScreen
 	*b = *newVTBuffer(cols, rows)
+	b.altScreen = altScreen
 }
 
 func (b *vtBuffer) Resize(cols, rows int) {
@@ -495,6 +513,9 @@ func (b *vtBuffer) processEscape(seq string) {
 		b.row, b.col = b.savedRow, b.savedCol
 	case 'h', 'l':
 		if private && len(params) > 0 && params[0] == 1049 {
+			// 代替画面バッファへの出入りを記録する。UI 再接続時の replay に
+			// この状態を前置するために使う（AltScreen / server.go session.altScreen）。
+			b.altScreen = final == 'h'
 			b.clearAll()
 			b.row, b.col = 0, 0
 			b.wrapPending = false

@@ -120,8 +120,8 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 		if snap.CWD == "" || root == "" {
 			return agentLogLocation{Reason: "Codex home directory is unavailable"}
 		}
-		// Stop hook から得た path は当該 session に直接ひも付くため、時刻による
-		// fallback より先に使う。同一 cwd で複数 session が同時起動しても混同しない。
+		// 会話の切り替えへの追従（codex_thread_follow.go）か Stop hook から得た path は
+		// 当該 session に直接ひも付くため、時刻による fallback より先に使う。
 		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
 			return agentLogLocation{Available: true, Path: snap.NativeLogPath, Label: "Codex rollout transcript"}
 		}
@@ -172,6 +172,25 @@ func (s *Server) agentLogForSession(id int) agentLogLocation {
 			return agentLogLocation{Available: true, Path: path, Label: "Cursor Agent CLI chat"}
 		}
 		return agentLogLocation{Reason: "Cursor Agent chat history not found yet"}
+	case "command-code":
+		if snap.HomeDir == "" || snap.CWD == "" {
+			return agentLogLocation{Reason: "Command Code project directory is unavailable"}
+		}
+		dir := commandCodeProjectDir(snap.HomeDir, snap.CWD)
+		if snap.AgentSessionID != "" {
+			if path, ok := commandCodeTranscriptPath(dir, snap.AgentSessionID); ok {
+				return agentLogLocation{Available: true, Path: path, Label: "Command Code session transcript"}
+			}
+		}
+		if startedAt, err := time.Parse(time.RFC3339, snap.StartedAt); err == nil {
+			if path, ok := findCommandCodeTranscript(snap.HomeDir, snap.CWD, startedAt); ok {
+				return agentLogLocation{Available: true, Path: path, Label: "Command Code session transcript"}
+			}
+		}
+		if dir != "" && isExistingDir(dir) {
+			return agentLogLocation{Available: true, Path: dir, Label: "Command Code project transcripts"}
+		}
+		return agentLogLocation{Reason: "Command Code transcript not found yet"}
 	case "opencode":
 		// opencode は全セッションを単一 SQLite に集約しており、cwd/開始時刻での
 		// 個別セッション特定はできない。DB の中身は一切パースしない設計を保つため、
@@ -214,11 +233,15 @@ const codexRolloutMatchWindow = 10 * time.Minute
 const codexRolloutAmbiguityWindow = time.Second
 
 // codexSessionMeta は rollout JSONL 先頭行（type: "session_meta"）の抜粋。
+// ThreadSource / ParentThreadID は、利用者が始めた会話と、Codex が同じ cwd で
+// 起こすサブエージェントの会話を見分けるために読む（codex_thread_follow.go）。
 type codexSessionMeta struct {
 	Type    string `json:"type"`
 	Payload struct {
-		CWD       string `json:"cwd"`
-		Timestamp string `json:"timestamp"`
+		CWD            string `json:"cwd"`
+		Timestamp      string `json:"timestamp"`
+		ThreadSource   string `json:"thread_source,omitempty"`
+		ParentThreadID string `json:"parent_thread_id,omitempty"`
 	} `json:"payload"`
 }
 
@@ -397,14 +420,23 @@ func findCursorChatDir(cursorHome, cwd string, startedAt time.Time) (string, boo
 }
 
 func codexTranscriptPathAllowed(ses *session, path string) bool {
-	root := strings.TrimSpace(ses.CodexHome)
-	if root == "" {
-		root = filepath.Join(ses.HomeDir, ".codex")
-	}
+	root := codexHomeForSession(ses)
 	if root == "" {
 		return false
 	}
 	return isAncestorOrEqual(filepath.Join(root, "sessions"), path)
+}
+
+// codexHomeForSession はセッションの Codex が実際に使っている CODEX_HOME を返す。
+// 複数サブスクリプションでは契約ごとのディレクトリ、それ以外は ~/.codex。
+func codexHomeForSession(ses *session) string {
+	if root := strings.TrimSpace(ses.CodexHome); root != "" {
+		return root
+	}
+	if strings.TrimSpace(ses.HomeDir) == "" {
+		return ""
+	}
+	return filepath.Join(ses.HomeDir, ".codex")
 }
 
 func claudeProjectDirName(cwd string) string {
@@ -521,4 +553,130 @@ func isExistingDir(path string) bool {
 func isExistingFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// commandCodeProjectSlug は Command Code 本体（@sindresorhus/slugify）と同じ
+// 作業ディレクトリのフォルダ名。実測: D:\tmp\cc-capture\workspace →
+// d-tmp-cc-capture-workspace。パス以外の Unicode 翻字は追わない。
+func commandCodeProjectSlug(cwd string) string {
+	s := strings.ToLower(strings.TrimSpace(cwd))
+	if s == "" {
+		return "root"
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "root"
+	}
+	return out
+}
+
+func commandCodeProjectDir(home, cwd string) string {
+	slug := commandCodeProjectSlug(cwd)
+	if home == "" || slug == "" {
+		return ""
+	}
+	return filepath.Join(home, ".commandcode", "projects", slug)
+}
+
+func commandCodeTranscriptPath(projectDir, sessionID string) (string, bool) {
+	if projectDir == "" || !isUUIDv4Like(sessionID) {
+		return "", false
+	}
+	path := filepath.Join(projectDir, sessionID+".jsonl")
+	if !isExistingFile(path) {
+		return "", false
+	}
+	return path, true
+}
+
+type commandCodeSessionHeader struct {
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	Timestamp string `json:"timestamp"`
+	CWD       string `json:"cwd"`
+}
+
+// findCommandCodeTranscript は cwd + 開始時刻の近傍で
+// ~/.commandcode/projects/<slug>/<id>.jsonl を特定する。
+// 読むのは JSONL 先頭行の session ヘッダだけ。会話本文は読まない。
+func findCommandCodeTranscript(home, cwd string, startedAt time.Time) (string, bool) {
+	dir := commandCodeProjectDir(home, cwd)
+	if dir == "" {
+		return "", false
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	bestDelta := codexRolloutMatchWindow
+	bestPath := ""
+	secondDelta := time.Duration(0)
+	hasSecond := false
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".jsonl") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		hdr, ok := readCommandCodeSessionHeader(path)
+		if !ok || hdr.Type != "session" || !grokPathsEquivalent(hdr.CWD, cwd) {
+			continue
+		}
+		ts, err := time.Parse(time.RFC3339Nano, hdr.Timestamp)
+		if err != nil {
+			ts, err = time.Parse(time.RFC3339, hdr.Timestamp)
+			if err != nil {
+				continue
+			}
+		}
+		d := ts.Sub(startedAt).Abs()
+		if d > codexRolloutMatchWindow {
+			continue
+		}
+		if bestPath == "" || d < bestDelta {
+			if bestPath != "" {
+				secondDelta = bestDelta
+				hasSecond = true
+			}
+			bestDelta = d
+			bestPath = path
+		} else if !hasSecond || d < secondDelta {
+			secondDelta = d
+			hasSecond = true
+		}
+	}
+	if bestPath == "" || (hasSecond && secondDelta-bestDelta < codexRolloutAmbiguityWindow) {
+		return "", false
+	}
+	return bestPath, true
+}
+
+func readCommandCodeSessionHeader(path string) (commandCodeSessionHeader, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return commandCodeSessionHeader{}, false
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	if !sc.Scan() {
+		return commandCodeSessionHeader{}, false
+	}
+	var hdr commandCodeSessionHeader
+	if err := json.Unmarshal(sc.Bytes(), &hdr); err != nil {
+		return commandCodeSessionHeader{}, false
+	}
+	return hdr, true
 }

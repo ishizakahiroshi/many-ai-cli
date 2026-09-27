@@ -1,25 +1,52 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, showToast, token } from './util.js';
-import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, STORAGE_SPAWN_PROVIDER_ORDER_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
+import { apiFetch, escapeHtml, showToast, token } from './util.js';
+import { CWD_HISTORY_MAX, STORAGE_CWD_HISTORY_KEY, STORAGE_CWD_FAVORITES_KEY, STORAGE_SPAWN_KEY, flushUserPrefsPut, setUserPref } from './user-prefs.js';
 import { set_pendingAutoSwitch, sessions } from './state.js';
 import { providerIconHtml } from './session-list.js';
 import { appConfirm, appConfirmOllamaEncoding } from './settings.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
+import { hasProviderCapability, loadProviderSummaries } from './provider-store.js';
+import { commandMissingIds, isAiLaunchProvider, spawnLaunchBlockReason } from './cli-availability.js';
+import { reconcileSpawnProviderOptions } from './spawn-provider-options.js';
 import { ORCHESTRATION_CLI_OPTIONS, ORCHESTRATION_ROLE_DEFS } from './orchestration-roles.js';
 import { DEFAULT_APPROVAL_FORM_SETTINGS, hasProviderBooleanSetting, isApprovalSettingsMemoryEnabled, mergeApprovalSettings, mergeProviderBooleanSetting, restoreApprovalSettings, restoreProviderBooleanSetting, type ProviderBooleanSettingName } from './spawn-approval-memory.js';
 import { compareCwdByBasename, filterCwdSubdirItems, joinCwdChild, splitCwdPath, splitCwdTypeahead } from './cwd-path.js';
+import { effortForSpawnBody, effortLevelsFor, resolveSpawnEffortSelection, setLaunchOptionChoices } from './spawn-confirm-store.js';
+import {
+  fillModelDatalist,
+  getCachedSpawnModelGroups,
+  getSpawnModelGroupCacheGeneration,
+  getModelGroupsForProvider,
+  groupHasModel,
+  isModelCompatibleWithProvider,
+  loadSpawnModelGroups,
+} from './spawn-model-groups.js';
+import { PROVIDER_ORDER_CHANGED_EVENT, clearProviderOrder, saveProviderOrder, sortByProviderOrder } from './provider-order.js';
 
 export { compareCwdByBasename, sortCwdSubdirItems, splitCwdPath } from './cwd-path.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
-let resetSpawnProviderOrderImpl: (() => void) | null = null;
-
-/** 新規セッションの provider 並び順を index.html の既定順へ戻す。 */
+/**
+ * 新規セッションの provider 並び順を index.html の既定順へ戻す。初回画面の導入状況一覧も
+ * 同じ順番を使うので、PROVIDER_ORDER_CHANGED_EVENT で両方が描き直る。
+ */
 export function resetSpawnProviderOrder(): void {
-  try { localStorage.removeItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY); } catch (_) { /* noop */ }
-  resetSpawnProviderOrderImpl?.();
+  clearProviderOrder();
+}
+
+// C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレットの「新しいセッション」
+// コマンド用。IIFE 内で定義される実体を、開いた後にここへ差し込む。
+let _openSpawnPanelIfClosedImpl: (() => void) | null = null;
+
+/**
+ * 新規セッションパネルを開く。既に開いていれば何もしない。
+ * `#new-session-btn` の click は開いている時にトグルで閉じてしまうため、パレットの
+ * コマンドからはこちらを使う。
+ */
+export function openSpawnPanelIfClosed(): void {
+  _openSpawnPanelIfClosedImpl?.();
 }
 
 // ---- 新規セッション spawn panel ----
@@ -41,12 +68,16 @@ export function resetSpawnProviderOrder(): void {
   const spawnProviderTriggerIcon = document.getElementById('spawn-provider-trigger-icon');
   const spawnProviderList = document.getElementById('spawn-provider-list');
   const spawnProviderNoteHelp = document.getElementById('spawn-provider-note-help');
+  const spawnCliMissingNote = document.getElementById('spawn-cli-missing-note');
+  let commandMissingProviderIds = new Set<string>();
   const spawnRememberApprovalSettings = document.getElementById('spawn-remember-approval-settings') as HTMLInputElement | null;
   const spawnRememberApprovalLabel = document.getElementById('spawn-remember-approval-label');
   const spawnCodexModelBtn = document.getElementById('spawn-codex-model-btn');
   const spawnClaudeModelBtn = document.getElementById('spawn-claude-model-btn');
   const spawnOpenCodeOpts = document.getElementById('spawn-opencode-opts');
   const spawnOpenCodeFullAllow = document.getElementById('spawn-opencode-full-allow') as HTMLInputElement | null;
+  const spawnNVIDIANIMNote = document.getElementById('spawn-nvidia-nim-note');
+  const spawnNVIDIANIMCompatNote = document.getElementById('spawn-nvidia-nim-compat-note');
   const spawnPermissionOpts = document.getElementById('spawn-permission-opts');
   const spawnPermissionMode = document.getElementById('spawn-permission-mode') as HTMLSelectElement | null;
   const spawnIsolateWorktree = document.getElementById('spawn-isolate-worktree') as HTMLInputElement | null;
@@ -132,7 +163,6 @@ export function resetSpawnProviderOrder(): void {
     const tooltip = t('spawn_remember_approval_tooltip');
     if (spawnRememberApprovalLabel) {
       spawnRememberApprovalLabel.dataset.tooltip = tooltip;
-      spawnRememberApprovalLabel.title = tooltip;
     }
     spawnRememberApprovalSettings?.setAttribute('aria-label', tooltip);
   }
@@ -201,6 +231,69 @@ export function resetSpawnProviderOrder(): void {
     }
     spawnSubscriptionRow.hidden = false;
   }
+
+  // ---- effort（起動要求の共通 3 項目のうち、画面から選べるのは effort だけ）----
+  // 子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C5。
+  // 写像がある provider（/api/info の effort_levels にキーがある provider）でだけ欄を
+  // 出す。隠れている間は送信 JSON に effort キー自体が現れないので、写像が無い
+  // provider の起動は従来と 1 バイトも変わらない。
+  // 記憶は subscription と同じ `effort_<provider>` のフラットなキーで往復させる。
+  const EFFORT_PREF_PREFIX = 'effort_';
+  const spawnEffortRow = document.getElementById('spawn-effort-row');
+  const spawnEffortSelect = document.getElementById('spawn-effort') as HTMLSelectElement | null;
+
+  function savedEffortFor(provider: string): string {
+    const defaults = readSpawnDefaults();
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return '';
+    const v = defaults[EFFORT_PREF_PREFIX + provider];
+    return typeof v === 'string' ? v : '';
+  }
+
+  // provider が変わるたびに候補を組み直す。provider 切替・フォーム再表示では保存値を
+  // 優先し、候補一覧だけ更新するときは現在の選択を保つ。
+  function syncEffortField(provider: string, restoreRemembered = false): void {
+    if (!spawnEffortRow || !spawnEffortSelect) return;
+    const levels = effortLevelsFor(provider);
+    if (levels.length === 0) {
+      spawnEffortRow.hidden = true;
+      spawnEffortSelect.innerHTML = '';
+      return;
+    }
+    const saved = savedEffortFor(provider);
+    const current = spawnEffortSelect.value;
+    const options = [`<option value="">${escapeHtml(t('spawn_effort_unset'))}</option>`];
+    for (const level of levels) {
+      options.push(`<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`);
+    }
+    spawnEffortSelect.innerHTML = options.join('');
+    spawnEffortSelect.value = resolveSpawnEffortSelection(
+      levels,
+      current,
+      saved,
+      restoreRemembered,
+    );
+    spawnEffortRow.hidden = false;
+  }
+
+  function selectedEffort(): string {
+    if (!spawnEffortRow || spawnEffortRow.hidden || !spawnEffortSelect) return '';
+    return spawnEffortSelect.value || '';
+  }
+
+  // 選んだ時点で覚える（subscription と同じ理由: 選び直してから起動をやめても
+  // 次に開いたときの初期値になる）。記憶 OFF のあいだは保存しない。
+  async function persistEffortSelection(): Promise<void> {
+    if (!spawnEffortRow || spawnEffortRow.hidden || !spawnEffortSelect) return;
+    const defaults = readSpawnDefaults();
+    if (!isApprovalSettingsMemoryEnabled(defaults)) return;
+    const provider = (spawnProviderEl as HTMLSelectElement).value;
+    const next = { ...defaults, [EFFORT_PREF_PREFIX + provider]: spawnEffortSelect.value || '' };
+    setUserPref('spawn.defaults', next);
+    await flushUserPrefsPut();
+  }
+  spawnEffortSelect?.addEventListener('change', () => {
+    void persistEffortSelection();
+  });
 
   function selectedSubscriptionID(): string {
     if (!spawnSubscriptionRow || spawnSubscriptionRow.hidden || !spawnSubscriptionSelect) return '';
@@ -415,10 +508,7 @@ export function resetSpawnProviderOrder(): void {
     spawnDetachedPreset.addEventListener('change', () => updateDetachedPreview());
   }
 
-  // /api/models から取得した groups の最新キャッシュ。
-  // populateModelDatalist と resolveRoute で共有する。
-  let spawnModelGroups = null;
-  // model id → route の即時参照 Map。
+  // model id → route の即時参照 Map。groups 本体は spawn-model-groups.ts のキャッシュ。
   const spawnModelRouteMap = new Map();
   let spawnModelFetchInFlight = null;
   let spawnProviderOpen = false;
@@ -437,47 +527,6 @@ export function resetSpawnProviderOrder(): void {
     }
   }
 
-  function getModelGroupsForProvider(provider) {
-    if (!Array.isArray(spawnModelGroups)) return [];
-    if (provider === 'copilot') {
-      return spawnModelGroups.filter(g => g && g.provider === 'copilot' && Array.isArray(g.models));
-    }
-    if (provider === 'cursor-agent') {
-      return spawnModelGroups.filter(g => g && g.provider === 'cursor-agent' && Array.isArray(g.models));
-    }
-    if (provider === 'grok') {
-      return spawnModelGroups.filter(g => g && g.provider === 'grok' && Array.isArray(g.models));
-    }
-    const groups = spawnModelGroups.filter(g => g && Array.isArray(g.models) && (!g.provider || g.provider === provider));
-    groups.sort((a, b) => {
-      const rank = (g) => {
-        if (g.provider === provider) return 0;
-        if (g.label === 'Ollama Cloud') return 1;
-        if (g.label === 'Ollama Local') return 2;
-        if (g.label === 'LM Studio') return 3;
-        return 4;
-      };
-      return rank(a) - rank(b);
-    });
-    return groups;
-  }
-
-  function groupHasModel(group, model) {
-    return !!group?.models?.some(m => m && m.id === model);
-  }
-
-  function isModelCompatibleWithProvider(provider, model) {
-    const m = (model || '').trim();
-    if (!m || !Array.isArray(spawnModelGroups)) return true;
-    let known = false;
-    for (const g of spawnModelGroups) {
-      if (!groupHasModel(g, m)) continue;
-      known = true;
-      if (!g.provider || g.provider === provider) return true;
-    }
-    return !known;
-  }
-
   function clearModelSelectionState() {
     codexModelSelection = null;
     claudeModelSelection = null;
@@ -490,10 +539,11 @@ export function resetSpawnProviderOrder(): void {
   function setSpawnModelValue(value) {
     spawnModelInput.value = value || '';
     syncModelClearButton();
+    syncNVIDIANIMNotice();
   }
 
   function clearIncompatibleModelForProvider(provider) {
-    if (!isModelCompatibleWithProvider(provider, spawnModelInput.value)) {
+    if (!isModelCompatibleWithProvider(getCachedSpawnModelGroups(), provider, spawnModelInput.value)) {
       setSpawnModelValue('');
       clearModelSelectionState();
     }
@@ -512,25 +562,13 @@ export function resetSpawnProviderOrder(): void {
   }
 
   function populateModelDatalist() {
-    if (!spawnModelDatalist) return;
-    spawnModelDatalist.innerHTML = '';
-    if (!Array.isArray(spawnModelGroups)) return;
-    const currentProvider = spawnProviderEl.value;
-    // 並び順: 同 provider 専用 → Ollama Cloud → Ollama Local。
-    // 他 provider 専用は非表示。Ollama 系は provider="" で両 provider に表示する。
-    for (const g of getModelGroupsForProvider(currentProvider)) {
-      for (const m of g.models) {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        // <option label> はブラウザ実装差があるため、フォールバックとして
-        // text content にも同じ表記を入れる。
-        const label = `[${g.label}] ${m.label || m.id}`;
-        opt.setAttribute('label', label);
-        opt.textContent = label;
-        opt.dataset.route = g.route || '';
-        spawnModelDatalist.appendChild(opt);
-      }
-    }
+    fillModelDatalist(
+      spawnModelDatalist as HTMLDataListElement | null,
+      getCachedSpawnModelGroups(),
+      spawnProviderEl.value,
+      { hosted: t('spawn_model_badge_hosted'), trial: t('spawn_model_badge_trial') },
+    );
+    syncNVIDIANIMNotice();
   }
 
   function resolveRoute(provider, model) {
@@ -545,38 +583,52 @@ export function resetSpawnProviderOrder(): void {
     if (provider === 'grok') {
       return '';
     }
-    for (const g of getModelGroupsForProvider(provider)) {
+    for (const g of getModelGroupsForProvider(getCachedSpawnModelGroups(), provider)) {
       if (groupHasModel(g, m)) return g.route || '';
     }
-    if (spawnModelRouteMap.has(m) && isModelCompatibleWithProvider(provider, m)) return spawnModelRouteMap.get(m);
+    if (spawnModelRouteMap.has(m) && isModelCompatibleWithProvider(getCachedSpawnModelGroups(), provider, m)) return spawnModelRouteMap.get(m);
     if (m.includes(':cloud')) return 'ollama';
     if (provider === 'claude') return 'anthropic';
     if (provider === 'codex')  return 'openai';
     return '';
   }
 
+  function syncNVIDIANIMNotice() {
+    const selectedNIMRoute = spawnProviderEl.value === 'opencode' &&
+      resolveRoute(spawnProviderEl.value, spawnModelInput.value) === 'nvidia-nim';
+    if (spawnNVIDIANIMNote) spawnNVIDIANIMNote.hidden = !selectedNIMRoute;
+    if (spawnNVIDIANIMCompatNote) spawnNVIDIANIMCompatNote.hidden = !selectedNIMRoute;
+  }
+
   async function fetchModelGroups(force) {
     if (spawnModelFetchInFlight) return spawnModelFetchInFlight;
-    const method = force ? 'POST' : 'GET';
-    const url = `/api/models?token=${token}`;
-    const p = (async () => {
+    const generation = getSpawnModelGroupCacheGeneration();
+    let p;
+    p = (async () => {
       try {
-        const res = await fetch(url, { method });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const data = await res.json();
-        spawnModelGroups = Array.isArray(data.groups) ? data.groups : [];
-        rebuildModelRouteMap(spawnModelGroups);
+        const groups = await loadSpawnModelGroups(token, force);
+        if (generation !== getSpawnModelGroupCacheGeneration()) {
+          return { groups: getCachedSpawnModelGroups() || [] };
+        }
+        rebuildModelRouteMap(groups);
         populateModelDatalist();
         clearIncompatibleModelForProvider(spawnProviderEl.value);
         clearOllamaModelDefault();
-        return data;
+        return { groups };
       } finally {
-        spawnModelFetchInFlight = null;
+        if (spawnModelFetchInFlight === p) spawnModelFetchInFlight = null;
       }
     })();
     spawnModelFetchInFlight = p;
     return p;
   }
+
+  document.addEventListener('spawn-model-groups-invalidated', () => {
+    spawnModelFetchInFlight = null;
+    rebuildModelRouteMap([]);
+    populateModelDatalist();
+    if (newSessionPanel && !newSessionPanel.hidden) void fetchModelGroups(false);
+  });
 
   if (spawnModelRefreshBtn) {
     spawnModelRefreshBtn.addEventListener('click', async () => {
@@ -591,28 +643,12 @@ export function resetSpawnProviderOrder(): void {
     });
   }
 
-  function loadSpawnProviderOrder(): string[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.filter((value): value is string => typeof value === 'string');
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function saveSpawnProviderOrder(values: string[]): void {
-    try { localStorage.setItem(STORAGE_SPAWN_PROVIDER_ORDER_KEY, JSON.stringify(values)); } catch (_) { /* private mode 等は無視 */ }
-  }
-
   function persistCurrentSpawnProviderOrder(): void {
     if (!spawnProviderList) return;
     const values = Array.from(spawnProviderList.querySelectorAll<HTMLElement>('.spawn-provider-option'))
       .map((item) => item.dataset.value)
       .filter((value): value is string => !!value);
-    saveSpawnProviderOrder(values);
+    saveProviderOrder(values);
   }
 
   function clearSpawnProviderDropMarks(): void {
@@ -626,20 +662,8 @@ export function resetSpawnProviderOrder(): void {
       const label = (opt.textContent || opt.label || opt.value).trim() || opt.value;
       return { value: opt.value, label };
     });
-    const known = new Map(defaults.map((option) => [option.value, option]));
-    const ordered = [];
-    const seen = new Set<string>();
-    for (const value of loadSpawnProviderOrder()) {
-      const option = known.get(value);
-      if (option && !seen.has(value)) {
-        ordered.push(option);
-        seen.add(value);
-      }
-    }
-    for (const option of defaults) {
-      if (!seen.has(option.value)) ordered.push(option);
-    }
-    return ordered.map((option, index) => ({ ...option, id: `spawn-provider-option-${index}` }));
+    return sortByProviderOrder(defaults, (option) => option.value)
+      .map((option, index) => ({ ...option, id: `spawn-provider-option-${index}` }));
   }
 
   function getSelectedSpawnProviderIndex() {
@@ -667,11 +691,16 @@ export function resetSpawnProviderOrder(): void {
     spawnProviderList.innerHTML = options.map((opt, index) => {
       const selected = opt.value === selectedValue;
       const active = spawnProviderOpen && index === spawnProviderActiveIndex;
+      const missing = commandMissingProviderIds.has(opt.value) && isAiLaunchProvider(opt.value);
+      const missingBadge = missing
+        ? `<span class="spawn-provider-option-missing">${escapeHtml(t('spawn_cli_missing_badge'))}</span>`
+        : '';
       return (
-        `<li id="${opt.id}" class="spawn-provider-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}" ` +
+        `<li id="${opt.id}" class="spawn-provider-option${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${missing ? ' is-missing' : ''}" ` +
         `role="option" aria-selected="${selected ? 'true' : 'false'}" data-value="${escapeHtml(opt.value)}" draggable="true" tabindex="-1">` +
         `<span class="spawn-provider-option-icon" aria-hidden="true">${providerIconHtml(opt.value, 14)}</span>` +
         `<span class="spawn-provider-option-label">${escapeHtml(opt.label)}</span>` +
+        missingBadge +
         `<span class="spawn-provider-option-check" aria-hidden="true">${selected ? '✓' : ''}</span>` +
         `</li>`
       );
@@ -692,10 +721,11 @@ export function resetSpawnProviderOrder(): void {
     renderSpawnProviderOptions();
   }
 
-  resetSpawnProviderOrderImpl = () => {
+  // 並び順は初回画面の導入状況一覧からも変わる（と「既定に戻す」）。どちらでも描き直す。
+  document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, () => {
     spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
     updateSpawnProviderIcon();
-  };
+  });
 
   // custom_providers:（config.yaml の玄人設定。Hub UI に追加・編集の導線は無い）を
   // spawn の選択肢へ混ぜる。/api/info が返した一覧をネイティブ <select> の <option>
@@ -710,35 +740,129 @@ export function resetSpawnProviderOrder(): void {
   // 既知 provider だけを許可するため、subscription 欄は selectableProfiles が未知 id に
   // 対して自然に空を返すため、どちらも custom provider では追加対応なしで元々隠れる）。
   const injectedCustomProviderIds = new Set<string>();
+  const registryBuiltinProviderIds = new Set(['claude', 'codex', 'copilot', 'cursor-agent', 'opencode', 'grok', 'command-code']);
+  let providerOptionsGeneration = 0;
+  const addProviderOptionValue = '__add-ai-provider__';
+  function addProviderOptionLabel(): string {
+    const label = t('settings_ai_providers_add_option');
+    return label === 'settings_ai_providers_add_option' ? '＋ Add AI CLI…' : label;
+  }
   function isCustomProviderValue(p: string): boolean {
     return injectedCustomProviderIds.has(p);
   }
   async function injectCustomProviderOptions(): Promise<void> {
     if (!spawnProviderEl) return;
+    const generation = ++providerOptionsGeneration;
     try {
-      const res = await fetch(`/api/info?token=${token}`);
+      const res = await apiFetch('/api/info');
+      if (generation !== providerOptionsGeneration) return;
       if (!res.ok) return;
       const info = await res.json();
-      const list = Array.isArray(info?.custom_providers) ? info.custom_providers : [];
-      if (list.length === 0) return;
+      if (generation !== providerOptionsGeneration) return;
+      // 同じ応答から起動要求の共通 3 項目の候補値も取り込む（追加の fetch をしない）。
+      setLaunchOptionChoices(info);
+      syncEffortField((spawnProviderEl as HTMLSelectElement).value);
+      const providerResponse = await loadProviderSummaries({ includeDisabled: true });
+      if (generation !== providerOptionsGeneration) return;
+      const list = providerResponse
+        ? providerResponse.providers
+          .filter((entry) => !registryBuiltinProviderIds.has(entry.id))
+          .map((entry) => ({ id: entry.id, label: entry.display_name }))
+        : (Array.isArray(info?.custom_providers) ? info.custom_providers : []);
       const select = spawnProviderEl as HTMLSelectElement;
       const existing = new Set(Array.from(select.options).map((opt) => opt.value));
-      let added = false;
-      for (const entry of list) {
-        const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
-        if (!id || existing.has(id)) continue; // built-in や重複と衝突する id は表示しない
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = typeof entry?.label === 'string' && entry.label ? entry.label : id;
-        select.appendChild(opt);
-        existing.add(id);
-        injectedCustomProviderIds.add(id);
-        added = true;
+      let changed = false;
+
+      // reconcileSpawnProviderOptions は削除直後に注入済みの <option> が残るのを
+      // 防ぐための純粋な差分計算（see spawn-provider-options.ts）。以前はここが
+      // 「追加するだけ」だったので、Provider Manager で custom provider を削除
+      // しても、この関数が何かのきっかけで再実行されるまで select には消えた
+      // はずの選択肢が残っていた。削除の突き合わせは providerResponse（provider
+      // API の一覧）が取れた時だけ行う（reconcileRemovals）。/api/info の legacy
+      // custom_providers フォールバック（オフライン等で providerResponse が
+      // null のとき）を正とみなして削除すると、一時的な取得失敗のたびに選択肢
+      // が消えかねない。
+      const freshEntries = list
+        .map((entry: { id?: unknown; label?: unknown }) => ({
+          id: typeof entry?.id === 'string' ? entry.id.trim() : '',
+          label: typeof entry?.label === 'string' && entry.label ? entry.label : (typeof entry?.id === 'string' ? entry.id : ''),
+        }))
+        .filter((entry: { id: string }) => entry.id.length > 0);
+      const diff = reconcileSpawnProviderOptions({
+        injectedIds: Array.from(injectedCustomProviderIds),
+        freshEntries,
+        existingOptionValues: Array.from(existing),
+        selectedValue: select.value,
+        reconcileRemovals: !!providerResponse,
+      });
+
+      for (const id of diff.toRemove) {
+        const stale = Array.from(select.options).find((opt) => opt.value === id);
+        if (stale) stale.remove();
+        injectedCustomProviderIds.delete(id);
+        existing.delete(id);
+        changed = true;
       }
-      if (added) {
+      if (diff.resetSelection) {
+        // 消えた選択肢が選択中だった分は、実際にユーザーが選び直したのと
+        // 同じ経路（change イベント）で安全な既定値へ戻す。
+        select.value = 'claude';
+        select.dispatchEvent(new Event('change'));
+      }
+
+      for (const entry of diff.toAdd) {
+        const opt = document.createElement('option');
+        opt.value = entry.id;
+        opt.textContent = entry.label;
+        select.appendChild(opt);
+        existing.add(entry.id);
+        injectedCustomProviderIds.add(entry.id);
+        changed = true;
+      }
+      if (providerResponse) {
+        for (const entry of providerResponse.providers) {
+          const option = Array.from(select.options).find((candidate) => candidate.value === entry.id);
+          if (!option) continue;
+          if (injectedCustomProviderIds.has(entry.id) && option.textContent !== entry.display_name) {
+            option.textContent = entry.display_name || entry.id;
+            changed = true;
+          }
+          const disabled = entry.enabled === false;
+          if (option.disabled !== disabled) {
+            option.disabled = disabled;
+            changed = true;
+          }
+          if (disabled && select.value === entry.id) {
+            const fallback = Array.from(select.options).find((candidate) => (
+              !candidate.disabled && candidate.value !== addProviderOptionValue
+            ));
+            select.value = fallback?.value || '';
+            select.dispatchEvent(new Event('change'));
+          }
+        }
+      }
+      if (!existing.has(addProviderOptionValue)) {
+        const addOption = document.createElement('option');
+        addOption.value = addProviderOptionValue;
+        addOption.textContent = addProviderOptionLabel();
+        select.appendChild(addOption);
+        existing.add(addProviderOptionValue);
+        changed = true;
+      } else {
+        const addOption = select.querySelector(`option[value="${addProviderOptionValue}"]`);
+        if (addOption) addOption.textContent = addProviderOptionLabel();
+      }
+      if (providerResponse) {
+        commandMissingProviderIds = commandMissingIds(providerResponse.diagnostics);
+      }
+      if (changed) {
         updateSpawnProviderIcon();
         syncSpawnProviderFields(spawnProviderEl.value);
+      } else {
+        updateSpawnProviderIcon();
       }
+      updateCliMissingNote();
+      updateSpawnLaunchButton();
     } catch (_) { /* オフライン等: 追加されないだけで既存の選択肢はそのまま動く */ }
   }
   void injectCustomProviderOptions();
@@ -795,6 +919,7 @@ export function resetSpawnProviderOrder(): void {
   function openSpawnProviderList() {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
     spawnProviderOpen = true;
+    document.body.classList.add('spawn-provider-list-open');
     spawnProviderActiveIndex = getSelectedSpawnProviderIndex();
     spawnProviderList.hidden = false;
     spawnProviderTrigger.setAttribute('aria-expanded', 'true');
@@ -810,6 +935,7 @@ export function resetSpawnProviderOrder(): void {
   function closeSpawnProviderList(focusTrigger = false) {
     if (!spawnProviderList || !spawnProviderTrigger || !spawnProviderCombobox) return;
     spawnProviderOpen = false;
+    document.body.classList.remove('spawn-provider-list-open');
     window.removeEventListener('resize', repositionSpawnProviderList);
     window.removeEventListener('scroll', repositionSpawnProviderList, true);
     spawnProviderList.hidden = true;
@@ -968,7 +1094,8 @@ export function resetSpawnProviderOrder(): void {
   });
 
   function providerHasPermissionSelect(p: string): boolean {
-    return p === 'claude' || p === 'grok' || p === 'copilot' || p === 'cursor-agent' || p === 'command-code';
+    if (!hasProviderCapability(p, 'permissions')) return false;
+    return p !== 'codex' && p !== 'opencode';
   }
 
   function permissionAutoLabel(p: string): string {
@@ -1032,6 +1159,7 @@ export function resetSpawnProviderOrder(): void {
     }
     spawnProviderInlineHelp.setNote(selectedNote);
     syncPermissionModeOptions(p);
+    syncEffortField(p);
   }
 
   function applySpawnApprovalSettings(provider: string, defaults: Record<string, unknown>): void {
@@ -1052,22 +1180,50 @@ export function resetSpawnProviderOrder(): void {
     }
   }
 
+  let lastSpawnProviderValue = spawnProviderEl.value || 'claude';
   spawnProviderEl.addEventListener('change', () => {
     updateSpawnProviderIcon();
     const p = spawnProviderEl.value;
+    if (p === addProviderOptionValue) {
+      spawnProviderEl.value = lastSpawnProviderValue || 'claude';
+      document.dispatchEvent(new CustomEvent('provider-enrollment-open'));
+      updateSpawnProviderIcon();
+      return;
+    }
+    lastSpawnProviderValue = p;
     syncSpawnProviderFields(p);
     if (p !== 'codex')  codexModelSelection  = null;
     if (p !== 'claude') claudeModelSelection = null;
     populateModelDatalist();
     clearIncompatibleModelForProvider(p);
+    syncNVIDIANIMNotice();
     // C2 (plan_spawn-form-per-provider-memory.md): 許可設定・worktree・委譲・
     // サブスクリプションの記憶を、切り替えた先の provider のぶんへ差し替える。
     restoreProviderMemory(p);
     updateDetachedPreview();
+    updateCliMissingNote();
+    updateSpawnLaunchButton();
   });
   updateSpawnProviderIcon();
   document.addEventListener('i18n-ready', () => {
     syncPermissionModeOptions(spawnProviderEl.value);
+    void injectCustomProviderOptions();
+  });
+  document.addEventListener('provider-enrollment-saved', (event: Event) => {
+    const id = String((event as CustomEvent).detail?.id || '');
+    void injectCustomProviderOptions().then(() => {
+      if (!id) return;
+      spawnProviderEl.value = id;
+      lastSpawnProviderValue = id;
+      updateSpawnProviderIcon();
+      syncSpawnProviderFields(id);
+    });
+  });
+  // custom provider の削除も一覧の突き合わせをやり直す。除去自体は
+  // injectCustomProviderOptions 内の freshIds 突き合わせが行う（このリスナーは
+  // それを起動するだけ）。
+  document.addEventListener('provider-enrollment-deleted', () => {
+    void injectCustomProviderOptions();
   });
 
   // フォーカス時に入力値を一時クリアして datalist の全候補を表示し、
@@ -1078,11 +1234,13 @@ export function resetSpawnProviderOrder(): void {
     _savedModelValue = spawnModelInput.value;
     _modelInputDirty = false;
     spawnModelInput.value = '';
+    syncNVIDIANIMNotice();
   });
   spawnModelInput.addEventListener('input', () => {
     _modelInputDirty = true;
     clearModelSelectionState();
     syncModelClearButton();
+    syncNVIDIANIMNotice();
   });
   spawnModelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1146,6 +1304,7 @@ export function resetSpawnProviderOrder(): void {
   function restoreProviderMemory(provider: string): void {
     const defaults = readSpawnDefaults();
     applySpawnApprovalSettings(provider, defaults);
+    syncEffortField(provider, true);
     if (spawnIsolateWorktree) {
       spawnIsolateWorktree.checked = restoreProviderBooleanSetting('isolate_worktree', provider, defaults);
       syncIsolateWorktreeNote();
@@ -1863,21 +2022,39 @@ export function resetSpawnProviderOrder(): void {
     if (!v) {
       spawnCwdInput.classList.remove('is-missing');
       spawnCwdInput.removeAttribute('title');
-      spawnLaunchBtn.disabled = true;
-      spawnLaunchBtn.removeAttribute('title');
-      return;
-    }
-    if (isPathMissing(v)) {
+    } else if (isPathMissing(v)) {
       spawnCwdInput.classList.add('is-missing');
       spawnCwdInput.title = t('spawn_cwd_missing', { path: v });
-      spawnLaunchBtn.disabled = true;
-      spawnLaunchBtn.title = t('spawn_cwd_missing_btn');
     } else {
       spawnCwdInput.classList.remove('is-missing');
       spawnCwdInput.removeAttribute('title');
-      spawnLaunchBtn.disabled = false;
-      spawnLaunchBtn.removeAttribute('title');
     }
+    updateSpawnLaunchButton();
+  }
+
+  function updateCliMissingNote() {
+    if (!spawnCliMissingNote) return;
+    const providerId = spawnProviderEl.value;
+    const missing = commandMissingProviderIds.has(providerId) && isAiLaunchProvider(providerId);
+    spawnCliMissingNote.hidden = !missing;
+    spawnCliMissingNote.textContent = missing
+      ? t('spawn_cli_missing_note', { command: providerId })
+      : '';
+  }
+
+  function updateSpawnLaunchButton() {
+    if (!spawnLaunchBtn) return;
+    const cwd = spawnCwdInput.value.trim();
+    const block = spawnLaunchBlockReason({
+      cwd,
+      cwdMissing: isPathMissing(cwd),
+      providerId: spawnProviderEl.value,
+      commandMissing: commandMissingProviderIds.has(spawnProviderEl.value),
+    });
+    spawnLaunchBtn.disabled = block !== null;
+    if (block === 'cwd-missing') spawnLaunchBtn.title = t('spawn_cwd_missing_btn');
+    else if (block === 'cli-missing') spawnLaunchBtn.title = t('spawn_cli_missing_btn');
+    else spawnLaunchBtn.removeAttribute('title');
   }
 
   async function refreshCwdInputStatus() {
@@ -1917,7 +2094,7 @@ export function resetSpawnProviderOrder(): void {
     const hasSavedCwd = loadSpawnSettings();
     if (!hasSavedCwd) {
       try {
-        const res = await fetch(`/api/info?token=${token}`);
+        const res = await apiFetch('/api/info');
         if (res.ok) spawnCwdInput.value = (await res.json()).cwd || '';
       } catch (_) {}
     }
@@ -1927,13 +2104,21 @@ export function resetSpawnProviderOrder(): void {
     refreshCwdInputStatus();
     // モデル一覧を初回または stale なら裏で取得して datalist を埋める。
     // 失敗しても UI 起動はブロックしない（手入力で従来通り）。
-    if (!spawnModelGroups) {
+    if (!getCachedSpawnModelGroups()) {
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
       clearOllamaModelDefault();
     }
   }
+
+  // C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレット用の「開いていれば
+  // 何もしない」実体。openSpawnPanelForMode はトグルで閉じてしまうため、ここでは
+  // hidden を見てから開くときだけ呼ぶ。
+  _openSpawnPanelIfClosedImpl = () => {
+    if (!newSessionPanel.hidden) return;
+    void openSpawnPanelForMode(false);
+  };
 
   newSessionBtn.addEventListener('click', () => { openSpawnPanelForMode(false); });
   // C1: plan_orchestration-spawn-ui-exposure.md — 通常の起動フォームを共用しつつ、
@@ -1952,7 +2137,7 @@ export function resetSpawnProviderOrder(): void {
       spawnCwdInput.value = cwd;
     } else if (!spawnCwdInput.value) {
       try {
-        const res = await fetch(`/api/info?token=${token}`);
+        const res = await apiFetch('/api/info');
         if (res.ok) spawnCwdInput.value = (await res.json()).cwd || '';
       } catch (_) {}
     }
@@ -1967,7 +2152,7 @@ export function resetSpawnProviderOrder(): void {
     spawnCwdInput.focus();
     // ドロップダウン開く前に全ルートをバックグラウンドで pre-scan してキャッシュを充填する。
     { const favs = loadCwdFavorites(); prescanRoots(deriveRootsFromFavorites(favs)); }
-    if (!spawnModelGroups) {
+    if (!getCachedSpawnModelGroups()) {
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
@@ -2185,7 +2370,7 @@ export function resetSpawnProviderOrder(): void {
     let start = String(startPath || spawnCwdInput.value || '').trim();
     if (!start || !/[/\\]/.test(start) && !/^[A-Za-z]:/.test(start)) {
       try {
-        const res = await fetch(`/api/info?token=${token}`);
+        const res = await apiFetch('/api/info');
         if (res.ok) {
           const info = await res.json();
           if (info?.cwd) start = String(info.cwd);
@@ -2206,7 +2391,7 @@ export function resetSpawnProviderOrder(): void {
   async function shouldPreferWebDirBrowser(): Promise<boolean> {
     // Remote Hub: native OS dialogs open on the server host, never in the user's browser.
     try {
-      const res = await fetch(`/api/info?token=${token}`);
+      const res = await apiFetch('/api/info');
       if (res.ok) {
         const info = await res.json();
         if (info?.env_kind === 'remote') return true;
@@ -2570,15 +2755,25 @@ export function resetSpawnProviderOrder(): void {
   async function spawnSession() {
     const provider = document.getElementById('spawn-provider').value;
     const cwd = spawnCwdInput.value.trim();
+    const blocked = spawnLaunchBlockReason({
+      cwd,
+      cwdMissing: isPathMissing(cwd),
+      providerId: provider,
+      commandMissing: commandMissingProviderIds.has(provider),
+    });
+    if (blocked) {
+      updateSpawnLaunchButton();
+      return;
+    }
     spawnLaunchBtn.disabled = true;
     try {
       const model = spawnModelInput.value.trim();
       const label = document.getElementById('spawn-label').value.trim();
-      if (model && !isModelCompatibleWithProvider(provider, model)) {
+      if (model && !isModelCompatibleWithProvider(getCachedSpawnModelGroups(), provider, model)) {
         setSpawnModelValue('');
         clearModelSelectionState();
         showToast(t('spawn_model_provider_mismatch'));
-        spawnLaunchBtn.disabled = false;
+        updateSpawnLaunchButton();
         return;
       }
       const route = resolveRoute(provider, model);
@@ -2593,7 +2788,7 @@ export function resetSpawnProviderOrder(): void {
             if (encData.is_windows && encData.is_powershell && !encData.is_utf8) {
               const choice = await appConfirmOllamaEncoding();
               if (choice === null) {
-                spawnLaunchBtn.disabled = false;
+                updateSpawnLaunchButton();
                 return;
               }
               utf8Session = (choice === 'utf8');
@@ -2629,6 +2824,9 @@ export function resetSpawnProviderOrder(): void {
       // 「Default CLI login」を選んだときはキーごと送らない（従来リクエストと同一）。
       const subscriptionID = selectedSubscriptionID();
       if (subscriptionID) bodyObj.subscription_profile_id = subscriptionID;
+      // 欄が隠れている（写像が無い provider）か「指定なし」ならキーごと送らない。
+      const effortLevel = skipsAIFields ? '' : effortForSpawnBody(provider, selectedEffort());
+      if (effortLevel) bodyObj.effort = effortLevel;
       if (provider === 'claude') {
         const picked = claudeModelSelection;
         const permMode = document.getElementById('spawn-permission-mode').value;
@@ -2645,7 +2843,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
         }
@@ -2666,7 +2864,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
         }
@@ -2690,7 +2888,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
         }
@@ -2710,7 +2908,7 @@ export function resetSpawnProviderOrder(): void {
             kind: 'danger',
           });
           if (!riskConfirmed) {
-            spawnLaunchBtn.disabled = false;
+            updateSpawnLaunchButton();
             return;
           }
           bodyObj.risk_confirmed = true;
@@ -2839,7 +3037,7 @@ export function resetSpawnProviderOrder(): void {
     } catch (e) {
       alert(t('spawn_failed') + e.message);
     } finally {
-      spawnLaunchBtn.disabled = false;
+      updateSpawnLaunchButton();
     }
   }
 })();

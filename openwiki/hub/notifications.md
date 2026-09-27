@@ -15,7 +15,7 @@ sources:
     resource: repo://internal/hub/push.go
   - id: openwiki-source-a2e03051b566e646c5cd8cff
     resource: repo://internal/notify/notify.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
 ---
 
 ## In-UI visibility is not opt-in; external delivery is

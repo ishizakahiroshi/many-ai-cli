@@ -10,7 +10,460 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-27
+
+### Added
+- **The slash-command source URLs for OpenCode and Grok Build can be overridden
+  in Settings.** The "Slash command sources" section now lists both providers
+  next to the existing five, with their default URLs pre-filled; loading,
+  saving, reset and the settings summary cover them like the others.
+- **Debug builds can capture dashboard stalls during voice input.** A separate
+  worker records bounded processing checkpoints and suspected heartbeat gaps to
+  a rotating local `ui-freeze.jsonl`, without speech or terminal text. This is
+  diagnostic instrumentation; the reported voice-input freeze remains unconfirmed.
+  Release checks require all temporary logging, tracing and monitoring
+  instrumentation to be purged before publishing.
+- **NVIDIA NIM is available as an optional OpenCode-only route.** The Hub
+  stores the key without returning it, lists NVIDIA models and tests the key
+  through `/v1/models`, while OpenCode connects directly to NVIDIA's Chat
+  Completions API. Trial limitations and per-model compatibility caveats are
+  documented; no production SLA is promised. This route has not yet been
+  exercised against the live NVIDIA API with a real key or a real OpenCode
+  session; only unit tests and a static mock render have run.
+- **You can now save an edited handoff prompt to the board without starting a
+  successor session or spending AI tokens.** The derive dialog keeps AI-written
+  and manually saved memos as separate files, lists both paths, and opens a
+  recorded memo in the existing read-only Markdown preview when requested.
+- **`http://` / `https://` URLs are now clickable wherever the dashboard shows
+  text, and every click behaves the same way.** Plain-text and source files in
+  the file preview (the "Open in modal" window and the Files tab), code blocks
+  in Markdown previews, and the expanded "+N lines" popup now turn URLs into
+  links, alongside the terminal, the Chat history and the Grok history that
+  already did. Clicking a URL no longer opens it straight away: a small menu,
+  the same one file paths use, shows the full address with **Open in browser**
+  and **Copy URL**, so you see where a link goes before leaving the dashboard.
+  This replaces the browser's confirmation dialog in the Chat and Grok
+  histories, and the one-click opening in the terminal and Markdown previews;
+  links the CLI prints as OSC 8 hyperlinks use the same menu. Outside the
+  terminal, middle-click and right-click on a link still do what the browser
+  normally does. URL detection is
+  now shared by every view: a URL ends before Japanese text or full-width
+  punctuation that follows it without a space (`https://example.com。…`),
+  trailing punctuation and unmatched closing brackets are left out, while
+  brackets inside the URL (`…/wiki/Foo_(bar)`) are kept. In the terminal, a
+  long URL that the CLI split over several lines with its own line breaks is
+  joined back into one link. The terminal no longer loads the bundled
+  `xterm-addon-web-links`, which has been removed. URLs containing
+  non-ASCII characters in the path are linked only up to the first such
+  character.
+- **The child-session approval dialog can now register the working folder as
+  trusted by the child's CLI (Claude Code / Codex).** When the checkbox
+  "Register this folder as trusted in <CLI>" is on (the default) and you
+  approve, the Hub records trust right before the child starts, so the child
+  skips its "do you trust this folder?" prompt and starts on its instructions.
+  It writes the entry the CLI itself writes when you answer Yes, for the same
+  folder: the repository the working folder belongs to (the main repository
+  for a git worktree), or the folder itself outside git — so approving a
+  child in a subfolder trusts the whole repository, just as answering Yes in
+  the child would. That is `projects.<folder>.hasTrustDialogAccepted` in the
+  child's `.claude.json`, or a `[projects.'<folder>']` table with
+  `trust_level = "trusted"` appended to the child's Codex `config.toml`.
+  Nothing is written when the CLI already has an entry that decides the
+  folder, or, for Codex, when the folder, its repository or any folder above
+  them is marked untrusted, whatever the letter case. The one entry that is
+  changed is a Claude Code entry nobody has answered yet
+  (`hasTrustDialogAccepted: false`, the value Claude Code starts every entry
+  with): it is set to `true` and its other fields are kept. When the
+  repository would be your home folder or a drive root, or the working folder
+  is a network (UNC) path, nothing is registered and the child asks on its
+  own screen. A conductor AI cannot turn this on through its spawn request;
+  only the person approving can. The result is recorded on the orchestration
+  board. Relay children and sessions started from the dashboard do not use it.
+- **The row of buttons under the input box can be reordered by dragging, the
+  same way tabs can.** The send/stop button, mic, palette, quick commands,
+  `/ ▾`, and ⌫ move with a drag on desktop browsers (this does not work on
+  touch devices). The order is stored per browser and survives a reload.
+  Flipping sides with ⇄ mirrors the saved order left-to-right. Settings →
+  General → "Input bar button order" can restore the default order.
+- **The first-run screen now starts with installing a CLI, and shows which AI
+  CLIs this PC already has.** The getting-started steps are now four:
+  *Install a CLI* comes first, ahead of starting a session, answering
+  approvals and watching sessions in parallel. *Installed on this PC* lists
+  each enabled AI CLI with a check mark when the Hub finds it on `PATH`, or
+  *Not installed* with a link to the vendor's own install instructions. When
+  no AI CLI is found at all, the screen instead lists the command names to
+  install (click one to copy it), links them the same way, and has an *I
+  installed it — check again* button; New Session likewise marks a CLI that
+  is not on `PATH` as *Not found* and will not start it. The links come from
+  `resources/install-links/defaults.json` in this repository, fetched by the
+  Hub and cached for 24 hours, so a moved page can be fixed without a new
+  release; if they cannot be fetched, the list is still shown, just without
+  the links. When the screen is wide enough, the steps and the list sit side
+  by side; when it is narrow, the steps fold into a *How to use ▸* button
+  above the list.
+- **The "install status" list — on the first-run screen and in Settings → AI
+  CLI integrations — now shows a provider icon per row, and can check CLI
+  versions and update them from the Hub.** A **Check versions** button runs
+  each CLI's `--version` on demand (never automatically), and shows the
+  result and the executable's last-modified date per row. **Update** (per
+  row) and **Update all** run together by default and open a confirmation
+  dialog first, showing the exact command that will run. Results come back as
+  a summary — updated / already latest / failed — plus a per-row reason for
+  any failure, a **Retry the failed ones** button that reruns only the failed
+  CLIs one at a time, and a **Log** button per run. The bundled 7 providers
+  ship with default update commands; Cursor Agent CLI and Command Code
+  default to update *off*, since updating can prompt for a re-login the Hub
+  cannot answer. Any provider's update command can be changed, or turned on
+  for a CLI you added yourself, in Settings → AI CLI integrations → edit →
+  *Version and update* (the bundled providers' "restore defaults" resets this
+  section along with the rest of that provider). A CLI with a running session
+  cannot be updated until the session ends, and starting a new session with a
+  CLI is blocked while it is being updated. Update output is written under
+  `~/.many-ai-cli/logs/cli-updates/` and swept by the same retention as
+  session logs. Codex's own `codex update` self-updates npm- and
+  Homebrew-managed installs, but not a VS Code extension-bundled `codex` or a
+  Windows Scoop install; Cursor's `cursor-agent` command still works as
+  Cursor's own backward-compatible alias for its current `agent` command.
+- **You can commit and push straight from the Review tab.** The header now has
+  the same Commit all and push buttons as the Git tab, and Commit all opens the
+  very same dialog — including Generate and Ask AI — so there is no second set
+  of rules to learn. Push still asks for confirmation separately and is never
+  run by Commit all.
+- **Session cards now show the permission mode a session was started with**,
+  for example `At launch: Plan`. The value is what the wrapper actually passed
+  to the CLI, so a session started without a permission mode shows nothing
+  rather than "unknown". It is the value at launch and not a live one: Claude
+  Code's status line payload carries no permission field, so a change made
+  inside the CLI afterwards is not reflected here.
+- **Optional manual Jev evaluation in Settings.** Enable it in this browser,
+  enter only text you choose to send, and press Evaluate. The Hub uses your
+  `TYPESAFE_API_KEY` environment variable; TypeSafe usage may be billed.
+  Results are displayed only and never alter AI selection or approvals.
+- **You can add an AI CLI from the Hub UI.** Open Settings → AI CLI
+  integrations, or pick *Add AI CLI* at the end of the New Session provider
+  list. The dialog asks for a display name and executable, then Validate and
+  Save. A failed check or save keeps what you typed and says why, such as
+  which field is invalid. After a save from New
+  Session, the new CLI is selected so you can start it without reopening
+  Settings. JSON editing is not required. Each provider row also has a
+  **Duplicate** button that opens the add form with that row as a starting
+  point; the copy is named "<name> (copy)" and gets the id `<id>-copy`.
+- **Provider settings now keep a local history and automatic backups.** A
+  failed save or a damaged file does not delete the last good revision; the
+  broken copy is quarantined. When a save, restore or backup fails because of
+  the files themselves rather than what you entered, the message is a short
+  fixed sentence and the details, which include file paths, go to `hub.log`.
+  You can restore from history in Settings or with `provider backup list`,
+  `provider backup verify`, `provider backup
+  restore`, `provider reset --distributed`, and `provider recover`. If a
+  provider's own settings file is damaged, History says so and offers what to
+  restore to, such as the last readable version of your own settings; without
+  the UI, use `many-ai-cli provider recover <provider-id> [revision|--list]`.
+  Editing a built-in provider saves your changes on top of its built-in
+  definition. For now, a field that definition fills in cannot be saved
+  empty — the save is refused and the edit dialog names the fields — and
+  removing a field you changed from *Advanced (JSON)* counts as emptying it;
+  to get the built-in values back, use History → *Reset to distributed
+  default*, which resets the whole provider.
+- **Official AI CLI catalog import is prepared but stays off.** Hub can
+  compare a signed catalog with your overrides and roll back an accepted
+  pointer, but it will not download or activate a remote catalog until
+  signing keys are configured. A downloaded definition is never applied
+  automatically.
+- **Git file rows now open the same properties menu as Files**, including open,
+  copy, rename, and download actions.
+- **Command Code permission screens now show as Hub approval cards.** You can
+  allow or deny folder trust, file edits, and tool runs from the dashboard
+  instead of using the terminal's arrow keys. Commands that do not ask, such as
+  git status, still do not get a card.
+- **The Chat tab now shows Command Code conversations**, including what it read,
+  the commands it ran, and their results — the same view Claude Code and Codex
+  sessions already had, read from Command Code's own session file instead of
+  scraped from the terminal. Approval cards keep coming from the terminal, since
+  Command Code's permission screens are never written to that file. The raw
+  log button (📄) above the input box now finds that file for a Command Code
+  session too, so you can copy its path or open its folder.
+- **Sent history now shows long messages as six-line previews** with a control
+  on each message to show the full text or collapse it again. Short messages
+  remain fully visible, and copying always includes the complete message.
+- **A strip above the terminal now lists the sessions of the project you have
+  open**, so you can move between the sessions of one repository without going
+  back to the sidebar. Each entry shows the session's state, its `#number`, its
+  CLI and its branch; a long branch name is shortened in the middle rather than
+  at the end, so two relay children on `feature/…-alpha` and `feature/…-bravo`
+  stay apart, and hovering shows the whole name. Sessions outside a git
+  repository simply show no branch. The strip steps aside on the approval and
+  orchestration tabs, on the multi tab it carries the scope toggle below
+  instead of the session list, and it does not appear on a phone.
+  **Its height follows your terminal font size**, and you can drag the edge
+  between the strip and the terminal to change it — double-click that edge to
+  go back to the font-proportional default. The height you drag to is
+  remembered in that browser only.
+- **The multi tab can now show only the sessions of the project you have
+  open.** Two buttons above the grid switch between *This project only* — which
+  names the open project, so you can see which one it means — and *All*, which
+  is the default and the behaviour you had before. If more sessions match than
+  the grid has panes, the count that did not fit is shown beside the buttons.
+  The choice is remembered in that browser only, and *This project only* cannot
+  be picked until a project is open. Changing the scope never rewrites the pane
+  order you dragged into place: sessions hidden by the scope keep their spot, so
+  going back to *All* gives you the same arrangement as before.
+- **Each project now remembers the session and the tab you last had open**, and
+  reloading the page brings back the project you were last in. Going to another
+  project and coming back puts you where you left off instead of at the first
+  session. The memory is kept on the Hub, so a second browser or another
+  computer opens the same project, session and tab. If the session you were on
+  has ended, the project opens at its first session instead — no error, no blank
+  screen — and that becomes what is remembered. Nothing is remembered until you
+  open a project, and a project that no longer has any sessions is simply not
+  reopened. The strip height and the multi-tab scope stay per-browser as before.
+- **A session can now be started with a reasoning effort, an execution mode and
+  a permission tier.** The three travel together through every launch path —
+  `POST /api/spawn`, `orchestrate spawn`, `orchestrate relay` and the relay's
+  own children. The New Session form gets an effort field; the spawn
+  confirmation dialog shows all three, so whoever approves a child can see and
+  change them (or clear them) before it starts. Effort maps to each CLI's own flag (`claude --effort`,
+  `codex -c model_reasoning_effort`, `opencode --variant`); providers with no
+  such flag (Copilot, Cursor Agent, Grok, Command Code, and any custom
+  provider) simply do not show the field, and a request that names one of them
+  with an effort is rejected rather than silently ignored. On the CLI it is
+  `--effort` / `--execution-mode` / `--permission` for `orchestrate spawn`, and
+  `--impl provider[/model][@effort]` (same for `--review` / `--strong`) plus
+  role-wide `--execution-mode` and `--permission` for `orchestrate relay`; the
+  relay dialog gained a permission tier per role, next to its CLI, model and
+  subscription columns, and remembers it like every other field there. The
+  effort you pick is remembered per provider in the New Session form and per
+  role for children. **A permission tier is remembered only when you ask for
+  it**: the spawn confirmation dialog and the derive dialog carry a "use this
+  tier for this role next time" checkbox under the tier select, and that
+  checkbox is the only thing that writes `user_prefs.spawn.role_permission` —
+  an AI conductor's own request cannot, and unticking it forgets that role
+  again. What it is remembered for is the next child of that role an AI asks
+  for: the confirmation dialog opens with the remembered tier already selected,
+  so what you approve is what you chose last time.
+  (What `execution_mode` does is the headless entry below.) Leaving all three
+  out changes nothing — every existing call starts exactly the session it did
+  before.
+
+- **A 🌱 button on every AI session card starts a new session derived from that
+  one.** Two kinds: a **handoff**, a successor that continues the same work in a
+  different CLI (what the ↪ handoff board already did), and a **child**, a
+  worker with a role that reports back to this session (what until now only an
+  AI conductor's `orchestrate spawn` could start). One dialog for both, with the
+  CLI, subscription profile, model, effort, execution mode and permission tier
+  in the same place, plus the permissions the new session will actually start
+  with — the same disclosure the spawn confirmation dialog shows. The text that
+  gets sent is always visible and editable before you press Start: a handoff
+  starts from the predecessor's handoff board, a child from its role name.
+  **A child you start from the screen does not raise a spawn confirmation** —
+  you pressing the button is the approval — and it runs at the attended tier, so
+  its approvals arrive in the Hub's approval panel like any session you started
+  yourself. The depth and child-count limits still apply. The handoff board's
+  own launch form (the low-quota banner and the ↪ list) now opens this same
+  dialog, so there is one place a session gets started from another. Handoff
+  targets are unchanged: a different CLI only, never another subscription
+  profile of the same one.
+
+- **A handoff can now carry the predecessor's conversation log and a memo it
+  wrote — as paths, never as content.** Claude and Codex keep their own
+  transcript on your disk; the Hub records where (per subscription profile) on
+  the handoff board, and the handoff text now names that file and how to read
+  it. **This works after the predecessor has stopped**, which is the case the
+  board alone could never cover: a Claude session that hit its limit can be
+  continued in Codex from its own conversation. Separately, the low-quota notice
+  gains an "ask it to write a handoff memo" button: the still-running session is
+  asked once to write `~/.many-ai-cli/handoff/s<id>.note.md` (next step,
+  unverified assumptions, open questions, the md it had open), and the Hub
+  records that path once the file is there — `handoff.note_on_threshold` chooses
+  `ask` (default, you press the button), `auto` or `off`, because writing it
+  spends the predecessor's own tokens. Both paths appear in the derive dialog
+  before you press Start, and the memo is swept by the same 14-day retention as
+  the board. Nothing from inside either file passes through the Hub: the
+  successor opens them with its own tools.
+
+- **Sessions linked by a handoff now show it.** The successor's card carries a
+  `↪ #N` chip pointing back at its predecessor, a live predecessor's card
+  carries a `Successor #M` chip, and the ↪ list marks the rows that were handed
+  off. Clicking a chip switches to that session, or opens the ↪ list when that
+  session has already ended. This is a display link only — a successor is an
+  equal new parent, not a child, and nothing about grouping or the
+  orchestration tree changes.
+
+- **A session can now run in the CLI's own non-interactive mode instead of on a
+  terminal.** `execution_mode` takes `interactive` (a PTY and a TUI, what every
+  session is today), `headless` (the provider's own print mode — `claude -p`,
+  `grok -p`, `cursor-agent -p`, `opencode run`, `copilot -p`, `command-code -p`
+  — with no PTY, the instruction handed over at startup, and the process's exit
+  deciding the outcome: exit 0 completed, anything else failed), or `auto`,
+  which picks headless when nobody is watching the session and the CLI can do
+  it, and interactive otherwise. Asking for `headless` where the CLI has no
+  such mode is refused outright — never quietly downgraded to an interactive
+  session that then sits waiting for someone to type. Codex is deliberately
+  not headless-capable yet: `codex exec` rejects the approval flag every
+  unattended Codex child is started with, so a headless Codex launch would only
+  fail to parse. A headless session appears in the list like any other, with a
+  `Headless` chip, its output streaming into the terminal pane; the input box is
+  disabled there, because the CLI closed its input when it started. Stop one by
+  closing its card, which ends the whole process tree. **Any CLI with a print
+  mode can be added without a new build** — give its `custom_providers:` entry a
+  `headless:` block with the flags that select that mode and `format: text`, and
+  it becomes usable as an unattended worker. **The relay can run this way too**,
+  and there each instruction is one process: the Hub starts a worker with the
+  instruction as its prompt, the process exit says that instruction is finished,
+  and the next one starts a new worker (a `## DONE` line is no longer required,
+  though the reviewer's `verdict:` line still is). A Hub restart cannot
+  reattach to such a worker, so a headless relay stops with `hub_restart` and
+  can be resumed, which starts a fresh worker and continues from the git
+  history. **The default is unchanged: everything stays interactive.** Set
+  `orchestration.child_execution_mode` for `orchestrate spawn`'s children and
+  `orchestration.relay_execution_mode` for relay roles (each `auto` /
+  `interactive` / `headless`), or pass `--execution-mode` per launch.
+- **Desktop notification and sound can now also fire when a session finishes a
+  run and goes back to idle, not only when it needs approval.** A short run
+  (under 20 seconds) does not ring one. A new **"Notify when a run finishes"**
+  toggle in Settings → Notify/Sound (on by default) sits on top of the
+  existing desktop-notification and sound switches, and a bell button on each
+  session card mutes this per session — that mute lives in the browser only
+  and is forgotten on a Hub restart.
+- **Review now has its own tab in the top bar**, next to Git, instead of only
+  being reachable from Files' + menu or a chat turn's "Review" link. Like
+  Files and Git it loads lazily on first click. Opening it from any of the
+  three entry points shows the same Review pane and highlights the same tab.
+  A session whose folder is not a git repository shows a plain explanation
+  instead of a diff.
+- **`Ctrl+K` is now a command palette, not just cross-session search.** Above
+  the search results it now lists commands — jump to the next pending
+  approval or the next idle session, start a new session, open Review, Files,
+  or Git for the current session, jump to Settings → Notify or Approval, or
+  show the keyboard shortcut list — and `↑`/`↓` + `Enter` move through both
+  the commands and the search results below them. Typing filters both by
+  label and by keyword (English and Japanese). A command that does not apply
+  right now, such as no pending approvals, stays visible but greyed out with
+  a reason instead of disappearing. **`?` opens a list of every keyboard
+  shortcut**, including `Ctrl+K` and `Alt+1..9`; it does nothing while typing
+  in a text field or while another overlay is open.
+- **The Workflow popup can now show a live tree of subagents**, not just
+  Workflow's own phases and agents. A chip appears above the input box even
+  without a Workflow running — for example "Subagents (1 running · 2 done ·
+  13m)" — and opening it lists each child indented under the instruction that
+  spawned it, with its current tool and target, how long it has been running,
+  and how many seconds since it last did anything. Finished children stay in
+  the list, dimmed, instead of disappearing, until the next turn starts a
+  fresh batch. So far this reads Claude Code's `Agent` tool.
+- **The Workflow popup's subagent tree (above) now also reads Codex's spawned
+  agents** (`spawn_agent`), not just Claude Code's. A Codex child shows the
+  same nickname, current tool, and running/done/failed state as a Claude
+  child, in the same tree.
+- **The Workflow popup's subagent tree (above) now also reads Grok Build's
+  spawned agents** (`subagents`), not just Claude Code's and Codex's. A Grok
+  child shows the same current tool and running/done/failed state as a
+  Claude or Codex child, in the same tree.
+- **You can add your own colour themes.** Settings → General → Theme has an
+  **Add** button next to Light and Dark: give the theme a name (up to 16
+  characters), pick Light or Dark as its base, and set its *Tint* and
+  *Contrast*. The terminal's colours follow the theme too. Up to 20 themes can
+  be kept; while one of them is selected, the same place lets you adjust it
+  or **Delete** it. They are saved with your
+  other display settings on the Hub (`display.custom_themes`), which checks
+  each theme's name and ranges before storing it.
+- **The handoff list can now be searched, and running sessions sort above
+  finished ones.** Type a number, the CLI name shown on screen, or part of
+  the folder path to filter, case-insensitively; within each group, entries
+  stay ordered by session number, newest first. The text shown when nothing
+  matches your search is different from the text shown when there are no
+  handoffs recorded at all.
+
 ### Changed
+- CLI update rows now use the same rotating ring as running sessions while an
+  update is queued or running, in both the initial screen and AI CLI settings.
+- **After updating, reload any dashboard tab that was open before the update.**
+  The Hub now tells the page about approvals in a new form that the previous
+  version's page does not read, so a tab left open across the update does not
+  show the approval panel for approvals the Hub opens. Reloading the tab loads
+  the new page.
+- **Claude Code and Codex sessions now get their first instruction as a launch
+  argument instead of having it typed into their screen.** This covers
+  orchestration children, a conductor started with the Orchestration button
+  (its role guide), and a session started with a first instruction (for example
+  a handoff). The CLI keeps the instruction through its own startup questions
+  (folder trust, update notices) and starts on it once they are answered, so
+  nothing the Hub types can land on the wrong screen. Your input is no longer
+  held while such a session starts, so you can answer those questions right
+  away. For a child, the Hub counts the instruction as received when it first
+  appears in the CLI's own transcript. Until the child has taken it — while
+  the CLI is still starting or sits on a startup screen — the Hub types
+  nothing into it: `orchestrate send` returns an error (`409
+  child_not_ready`) instead, and the relay's reminder is not typed either. A
+  child waiting on a startup screen before its input box, folder trust or any
+  other, is reported once to the conductor and the board, and is not counted
+  as timed out, so `orchestration.timeout_respawn` does not start a second
+  child on the same work. A conductor started with an instruction still
+  receives only its role guide, as before.
+  On Windows, when the CLI is started through `cmd.exe` (which cuts an argument
+  at its first newline) or the instruction is very long, the argument is a
+  one-line pointer to a private file under `~/.many-ai-cli/tmp` that is removed
+  when the session ends. Other CLIs keep the typed route. As with headless
+  children, the instruction can be read from the machine's process list while
+  the session runs.
+- **The approval patterns you add in `~/.many-ai-cli/approval-patterns/` now
+  drive the Hub's detection of CLI approval prompts.** They used to apply only
+  in an open browser tab. The Hub rereads them at startup and whenever the
+  settings screen or an official update rewrites the files.
+- **✕ on the approval panel now folds it into a one-line strip instead of
+  hiding it.** The strip sits just above the input bar and shows that an
+  approval is waiting along with the start of the question; click it (or focus
+  it and press Enter) to open the panel again. While the panel is folded, your
+  keys go to the terminal, so you can read what the panel was covering or
+  answer the CLI directly. The one exception is an empty send (Enter or the
+  send button with nothing typed) while a high-risk approval is folded: it is
+  held back, and a toast asks you to open the strip and answer in the panel.
+  The approval stays pending, and the same approval
+  stays folded when you reload the page (each browser tab keeps its own). The
+  ✕ on the multi-question notice, the "✕ Approval" button at the bottom right
+  of the terminal, and closing the mobile approval sheet all fold the same way.
+- **Voice input now runs on the shared `vtype-core` engine.** The speech
+  recognition and Whisper recording code moved out of many-ai-cli into
+  `vtype-core`, the library behind the vtype browser extension, and is bundled
+  with the Hub as before. The voice button, the voice bar, Alt+V, Esc, the
+  voice diagnostics and the Whisper settings are meant to look and work as
+  before. The wake word stays disabled, as it already was.
+- **Clicking a project header in the sidebar now opens that project instead of
+  folding it away.** The click puts you in the project's first session, and the
+  open project is marked with a tinted header row and a line down its left edge;
+  folding and unfolding moved to the ▼ arrow beside the name, which you can now
+  also reach with Tab and press with Enter or Space. A project with no sessions
+  is not something you can open: its name is dimmed and the pointer stays an
+  arrow. The ⊞ ☆ ✕ buttons and dragging a project to reorder it work exactly as
+  before.
+
+- **Child sessions no longer have only one permission setting to choose from.**
+  Until now a child spawned by an AI conductor or by the relay was simply given
+  full access — `--permission-mode bypassPermissions`, or for Codex
+  `--sandbox danger-full-access` — because a child that stops at an approval
+  prompt nobody is watching is a child that never finishes. There are now three
+  tiers. **Attended** adds nothing at all, so the child's approvals arrive in
+  the Hub's approval panel and you answer them, the same as a session you
+  started yourself. **Bounded** asks nothing but allows only what is on a list:
+  Claude runs with `--permission-mode dontAsk` plus an `--allowedTools`
+  allowlist, Codex with `--ask-for-approval never --sandbox workspace-write`,
+  Copilot with an `--allow-tool` list (Copilot has no auto-deny, so a tool
+  outside the list still prompts and that prompt reaches the approval panel),
+  and OpenCode with `--auto` plus deny rules in `opencode.json`. **Full access** is what children get today. The
+  built-in bounded allowlist lets a child read, edit, run `go test` / `go vet` /
+  `gofmt` / `bun run check`, and record its work with `git add` / `git commit`;
+  `git push`, `git reset`, `git clean` and `rm` are deliberately left out, so a
+  child that reaches for one is blocked and says so instead of doing it. Adjust
+  it with `orchestration.bounded_allowed_tools` (per provider) in
+  `config.yaml`. The spawn confirmation dialog now has the tier as a field, and
+  the permissions it shows change as you switch tier or CLI, so what you read
+  before approving is what the child starts with. Grok and Cursor Agent have no
+  way to run unattended without granting everything, so choosing bounded for
+  them starts a full-access child and the dialog says so rather than letting a
+  narrowed request quietly become full access. **The default is unchanged**: an
+  unattended child still gets full access. Set
+  `orchestration.child_permission_default: bounded` to move unattended children
+  (the conductor's and the relay's) to the bounded tier.
+
 - The running-session indicator in the session list now spins instead of pulsing.
   The old dot only grew from about 6px to 9px on a 1.4s cycle, which was too
   small a change to notice at a glance on a dark card. It now reuses the
@@ -20,6 +473,39 @@ Release artifacts are published at
   sit before the `#N` session number instead of after it, so it lands at the
   same horizontal position on every card regardless of how many digits the
   number has — easier to scan down a long list for what's still running.
+
+- **The live status line above the terminal and the Workflow chip and popup
+  now use the same state icons as the session cards and the session strip.**
+  They used to draw their own round spinner and text marks (✓ ✗ ○), so one
+  session in one state could look like two different things on the same
+  screen. Running is the dashed ring, waiting for approval the flag, waiting
+  for input the keyboard, idle the circle, and a finished or failed Workflow
+  agent a check or a cross. The live status line now also shows when a
+  session is waiting for approval or input, not only whether it is running.
+  The icon keeps turning even when the OS asks to reduce motion, because the
+  turning is what tells running from idle.
+
+- **The provider order you drag into place in New Session is now shared with
+  the first-run screen's install status list and with AI Usage Links.** You
+  can drag the installed rows in the install status list too, and the other
+  screens follow; reordering there leaves Shell and *Add AI CLI* where they
+  were in New Session. The order is still stored in this browser only, and
+  Settings → *New session provider order* → *Reset to default* puts all three
+  back. Touch devices cannot reorder providers, and the install status rows
+  cannot be dragged while an update is running.
+
+- **Model suggestions for Cursor Agent and Grok now come from the installed
+  CLI first.** The Hub asks `cursor-agent --list-models` or `grok models`,
+  keeps the answer for 10 minutes (3 minutes after a failure), and falls back
+  to the shared list in `resources/models/defaults.json` when the CLI cannot
+  answer. That shared list, which Claude Code's, Codex's and Copilot's
+  suggestions come from, was also brought up to date.
+
+- **When the dashboard fails partway through starting up, it now says so
+  instead of staying on "Loading..." forever.** A bar across the top says the
+  page failed to load and has a **Reload** button; the error itself goes to
+  the browser console, not the page. Until now nothing on the page said what
+  had happened.
 
 - **The ✕ close buttons across panels and dialogs now look and behave the same.**
   Eleven of them had drifted apart into their own stylesheets — sizes from
@@ -36,7 +522,334 @@ Release artifacts are published at
   corrected before you start it. Pressing Start is still the approval by itself
   — no extra confirmation step was added.
 
+- **A subscription profile's `settings.json` is now kept in step with your
+  default settings at launch instead of being copied once.** Hooks,
+  permissions and the feature switches are the ones you maintain in your own
+  `~/.claude/settings.json`, so a switch you add there now reaches the profiles
+  you created months ago; until now the copy was taken when the profile was
+  first prepared and never looked at again, and nothing on screen said the two
+  had drifted apart. What the CLI writes for itself stays with the profile —
+  the theme, the effort level, the chosen model and the auto mode body are read
+  from the profile and left alone — and a key only the profile has is kept.
+  Nothing is written when the two already agree.
+
+- **`many-ai-cli doctor` now says when a subscription profile's settings
+  disagree with your default ones**, naming the settings involved: the ones your
+  default configuration has and the profile does not, and the ones both have
+  with different values. Only the names — never a value or a file path — so the
+  report stays safe to paste anywhere. What the CLI writes for itself, such as
+  the theme or the chosen model, is not reported, and the row clears itself the
+  next time you start a session with that profile, which is when the two are
+  brought back into step.
+
+- **A subscription profile can now opt out of that sync, or change which
+  settings it owns.** Three keys in `config.yaml` decide it per profile:
+  `settings_sync: false` puts one profile back on the old rule — carried in once
+  if it has nothing, never touched again — while `profile_owned_keys` adds
+  settings the profile keeps for itself (`enabledPlugins`, when the plugin set is
+  meant to differ per profile) and `default_wins_keys` hands one back to your
+  default file (`theme`, when every profile should look the same). They are
+  hand-written only: the Hub UI never sets them, and renaming a profile or
+  turning it off from Settings leaves them as you wrote them. A profile that
+  writes none of them behaves exactly as before, and `many-ai-cli doctor` says
+  in one line which settings a profile that uses them has taken over — names
+  only, never values.
+
+- **Codex's and Grok's `config.toml` are now kept in step with your default
+  ones too**, under the same rules as Claude's `settings.json`: the approval
+  policy, the sandbox mode, the MCP servers and the feature flags come from
+  your own file at every launch, while what each CLI writes for itself stays
+  with the profile — `projects`, `tui`, `notice`, `windows`, `model`,
+  `model_reasoning_effort` and `hooks` for Codex, `cli` and `ui` for Grok.
+  Grok's `trusted_folders.toml` is still carried in once and never touched
+  again. One thing to know before you upgrade: a profile's `config.toml` is
+  parsed and written back rather than patched, so the first pass that changes
+  something drops that copy's comments and sorts its keys. Your own
+  `~/.codex/config.toml` and `~/.grok/config.toml` are only ever read. This
+  adds one dependency, `github.com/pelletier/go-toml/v2` (MIT), recorded in
+  `THIRD_PARTY_NOTICES.md`.
+- **The bundled slash-command references catch up with the latest Claude
+  Code, GitHub Copilot CLI and Command Code.** Claude Code gains
+  `/artifacts`, `/auto-mode-setup`, `/design`, `/output-style`,
+  `/skill-doctor`, `/theme` and `/version`; GitHub Copilot CLI gains
+  `/collect-debug-logs`, `/computer`, `/move`, `/vim` and `/worktree`; and
+  Command Code gains `/loop`. Nine more names found in Command Code were left
+  out because no registration for them could be found; typing them by hand
+  works as before (`resources/slash-commands/`).
+
+### Removed
+
+- **The "↻ Approval" button at the bottom right of the terminal.** It redrew an
+  approval the browser had failed to show; the dashboard now always draws the
+  Hub's record, so there is nothing left to redraw. To reopen an approval you
+  folded with ✕, click its strip. The "✕ Approval" button there now shows only
+  while the approval panel is open, and "↻ Re-detect" on the notice about an
+  unreadable approval block now asks the Hub to read the terminal screen again.
+
+### Fixed
+
+- **Session cards keep two rows when a completion summary appears or clears.**
+  The summary uses the remaining space in the second row, with ellipsis and a
+  full-text tooltip, while the context gauge, child toggle and branch remain
+  outside the shrinking text area.
+- **Terminal path detection no longer stalls on long runs of closing punctuation
+  inside a filename.** Suffix trimming now scans once instead of using a nested
+  regular expression with exponential backtracking.
+- **Codex 0.157.0 and later start again in a subscription profile on Windows.**
+  That release creates a socket under the profile folder, and Windows refuses
+  socket paths longer than 108 bytes, so a profile whose id came from a long
+  display name failed with `path must be shorter than SUN_LEN`. Profile folders
+  now have their own short name (`p1`, `p2`, …, stored as `dir` in
+  `config.yaml`), kept apart from the id and display name. Profiles added
+  earlier keep their id as the folder name; to move one, stop the Hub, rename
+  the folder, add a matching `dir:` line, and recreate the junction
+  `packages/app-server-daemon/current` inside it (Codex leaves it pointing at
+  the old path, and the next launch fails with `daemon executable not found`).
+  Two profiles pointing at the same folder are now reported as a configuration
+  warning.
+- **Codex questions and approval panels no longer go missing after you start a
+  new conversation inside the same Codex session (for example with `/new`).**
+  Codex writes the new conversation to a new rollout file, but the Hub found the
+  file only by the session's start time and kept reading the first one. That old
+  file was still readable, so the Hub never fell back to reading the terminal
+  screen, and the question was lost without a trace. The Hub now notices the
+  newer conversation in the same folder and switches to it, without relying on
+  Codex hooks. It ignores Codex's own subagent conversations. If another Codex
+  session is running in the same folder with the same account, the Hub cannot
+  tell whose conversation it is, so it reads approvals from the terminal screen
+  instead and logs a warning.
+- **A child session started in a folder the CLI had not trusted yet is no longer
+  quit (Claude Code) or trusted on your behalf (Codex) by the Hub.** When the
+  CLI opened with its "do you trust this folder?" question, the Hub could not
+  read it, waited 45 seconds for the input box, and then typed the child's first
+  instruction and Enter into the question. Claude Code 2.1.281 lists "No, exit"
+  first, so that Enter quit the child; Codex v0.156.1 lists "Trust and continue"
+  first, so it trusted the folder without asking you. The Hub now recognises
+  these questions (and Claude's external CLAUDE.md import question), types
+  nothing into them, and tells the conductor and the board that the child is
+  waiting for you to answer in the child session. This guards the CLIs that
+  still have their first instruction typed in; Claude Code and Codex now get it
+  as a launch argument (see Changed), and the approval dialog can register the
+  folder as trusted up front (see Added). The hidden usage probe also picks the
+  trust option by its text instead of pressing Enter.
+- **The toast shown while the Hub holds your input for a session that is
+  still receiving its first instruction no longer says "wrapper not
+  connected".** The wrapper was connected; the Hub was holding your keys until
+  the first instruction had been sent. The toast now says so, and the "wrapper
+  not connected" wording is kept for the case it describes.
+- **The approval panel now shows up as soon as you switch to a session, reload
+  the page, or reconnect.** An approval that arrived while you were looking at
+  another session could stay invisible after you switched to it — the panel was
+  blank or missing, and ↻ Approval did not bring it back. The browser used to
+  rebuild approvals from terminal text and retry on timers. The Hub now keeps
+  each session's pending approval as a single record, sends the current records
+  to a browser when it connects and every change after that, and the dashboard
+  only draws those records.
+- **"Pending" and approval notifications (Web Push, ntfy / webhook) no longer
+  need an open dashboard.** Approval-marker questions, Claude's AskUserQuestion
+  picker, `(Y:1/N:0)` questions without a marker, `Q1:`-style sequential
+  questions, and the older numbered "which option" questions used to be picked
+  up only by an open browser tab reading the terminal, so with no tab open the
+  session never showed Pending and nothing was sent. The Hub now detects all of
+  them itself. The questions without a marker are shown once the AI has stopped
+  writing, so a numbered list in the middle of its work is no longer taken for
+  a question. With Claude Code and Codex, such a question is also withdrawn if
+  the AI carries on without waiting for your answer.
+- **A CLI's own approval prompt notifies once instead of possibly twice.**
+- **A question you have already answered no longer comes back as Pending in
+  Grok, Copilot, Cursor Agent, OpenCode and Command Code sessions.** These
+  sessions read questions from the terminal, and an answered question stays on
+  screen. When the CLI showed its own approval prompt afterwards, or the Hub
+  was restarted, the Hub could forget that the question on screen had been
+  answered and show it again with a new notification. It now keeps the answer
+  across the CLI's approval prompt and, after a restart, looks it up in the
+  session's approval history. A question you had not answered still comes back
+  after a restart.
+- **⊟ (compact text) on the approval panel now also works for batch approvals
+  and multi-question prompts.** It used to shorten only the panel's label and
+  buttons, so a batch approval kept its full height and a single question kept
+  its full text. Now the preamble, the question tabs, the question text, the
+  selected answer's details and the command summary each shrink to one line
+  too; ⊞ shows the full text again.
+- **Git errors now say why the command failed.** When a pre-commit hook refuses
+  a commit, the dialog used to show only `git command failed`, because any
+  output containing a path was dropped wholesale — and hook output almost
+  always contains paths, so the reason was lost every single time. The Hub now
+  redacts just the absolute paths and remote URLs and keeps the rest, so you
+  can read what the hook said and what to do about it. Repository-relative
+  paths stay visible. Long output is cut to twelve lines with a pointer to the
+  Hub log. This applies to every Git action, not only Commit all.
+- **A session running subagents is no longer reported as stalled.** Claude Code
+  writes a subagent's output to its own file rather than to the session
+  transcript, so a session that spent half an hour on a subagent was working
+  normally while the dashboard showed the "not progressing" warning — measured
+  at 33 minutes of silence in the session transcript for one subagent run. The
+  Hub now counts activity in the session's `subagents` directory as progress.
+  The warning is unchanged for sessions that really are stuck.
+- **Selecting a session card in another project now updates the open project and
+  its session strip while keeping the session you selected active.**
+- **Low-quota handoff notices now identify the limiting usage window and its
+  remaining percentage**, such as `Weekly limit: 7% remaining`, instead of
+  leaving you to guess whether the 5-hour or weekly allowance triggered it.
+- **A subscription's usage past its limit no longer reads as 0% used, and its
+  handoff banner no longer stays silent.** The Hub rounded a 5h/7d usage
+  percentage above 100 down to 0, which a fully-used session then displayed as
+  untouched; the value is now clamped to 100. The handoff banner used to fire
+  once per session, so a 5-hour banner could suppress the 7-day banner when
+  its own threshold was crossed later; the "already notified" record is now
+  kept per session-and-window instead. This has been checked with synthetic
+  input only; the real `statusLine` value a CLI reports once past its limit
+  has not been observed.
+- Terminal scrollbar drags now remain manual scrolls when the pointer is held
+  before moving, preventing bottom-follow from pinning the thumb to the bottom
+  while the displayed text moves elsewhere.
+- **Right-clicking a backtick-wrapped Windows path now offers Open in
+  modal again** (and Open in MANY-AI-CLI, which uses the same check).
+  Footer paths such as `` `D:\src\…\file.ts` `` were detected with the
+  closing backtick still attached, so the dashboard treated a previewable
+  `.ts` / `.md` file as an unknown type and hid those two items. Quotes
+  were already stripped; backticks now stop the Windows path match the
+  same way Unix and relative paths already did (`web/src/app/path-detect.ts`).
+- **A file path that a CLI wraps onto the next line is once again one
+  clickable link.** Grok (and other TUIs) insert a real newline when a long
+  Windows path hits the terminal width, so the dashboard used to treat
+  `…2026-` and `09-12.md` as two different files. Clicking either fragment
+  could not open the preview or the default app. Soft wraps that xterm itself
+  makes were already joined; the same join now covers the CLI's own line
+  breaks when the next line is clearly the rest of the path
+  (`web/src/app/path-detect.ts`, `terminal.ts`).
+- **You can leave Grok conversation history without pressing Close.** Opening
+  Terminal, Git, History, or another tab now dismisses the read-only overlay,
+  including a second click on the already-active Terminal tab. Close and
+  Escape still work. The older PTY history overlay follows the same rule
+  (`web/src/app/settings.ts`, `terminal.ts`, `grok-chat-viewer.ts`,
+  `history-viewer.ts`).
+- **The session strip's running-state icon now uses the same green as the
+  sidebar card**, so an active session is not a muted default colour on the
+  strip and a green badge in the list.
+- **The derive dialog (and the spawn confirmation dialog) now lists models
+  for the CLI you picked, not the CLI last selected in New Session.**
+  The model field had been sharing New Session's datalist, so handing off a
+  Codex session to Claude Code while the New Session form was on Grok showed
+  Grok models. Each dialog now has its own list, rebuilt when you change CLI,
+  and a model that belongs to another CLI is cleared instead of being sent.
+- **Reloading the dashboard could leave a Claude Code or opencode terminal
+  pane unable to scroll up, with no scrollbar and no pseudo scroll rail.**
+  The Hub replayed only the raw PTY bytes still inside its per-session ring
+  buffer; the `ESC[?1049h` that put the CLI into the alternate screen buffer
+  is sent once near session start and had long since fallen out of that
+  window, so a freshly reconnected browser rendered the replay as the normal
+  screen buffer while the CLI itself stayed on the alternate one. The Hub now
+  tracks each session's alternate-screen state as it parses PTY output and
+  prepends `ESC[?1049h` to the replay whenever a session is currently on the
+  alternate screen, after the replay window is cut so it does not get counted
+  against the window itself (`internal/hub/vt_buffer.go`,
+  `internal/hub/server.go`, `internal/hub/ui_broadcast.go`).
+- **Opening the provider selector now hides the Remember help tooltip while the
+  list is open**, so it cannot cover the available options.
+- **Sent history stays tied to the session that opened it.** A delayed history
+  restore can no longer replace another session's open list, and the modal
+  title identifies its session.
+- **The Workflow chip no longer appears for a Claude Code session that never
+  ran a Workflow.** Claude Code's own "Dynamic workflows" tip text contains
+  the word "workflow", and the persistent agent-status lines under the input
+  box (for example a running subagent) matched the same agent-row pattern the
+  Workflow parser uses, together producing a chip with a garbled name and a
+  bogus completion count. The tip line and the lines below the input box's
+  own boundary are no longer read as Workflow output
+  (`web/src/app/workflow-progress.ts`, `internal/hub/workflow_scan.go`).
+- **Opening a section in Settings no longer switches the view back to the
+  basic level.** With the switch at the top of Settings on *All*, clicking a
+  section heading such as Token/Cost Statusbar — or any control inside a
+  section that the basic level also shows — switched the view to basic and
+  saved that, so every all-only section disappeared until you switched back.
+  This had been the case since the *Basic* / *All* switch arrived in 0.5.0.
+- **A session that has been running in the background no longer opens as a
+  nearly blank screen with scattered fragments.** The dashboard kept only the
+  last 100 KB of a background session's output and dropped the rest. A CLI
+  that redraws only the parts of the screen that changed — Grok Build, which
+  fills 100 KB in about 25 seconds — was then left with most of its screen
+  never drawn, and switching away and back did not repair it. Background
+  output is no longer dropped: once that much has piled up, it is written to
+  the hidden terminal straight away (`web/src/app/terminal.ts`).
+- **↑ up / ↓ down now go all the way to the start or the end of a Claude Code
+  (or other alternate-screen) session's history.** Each press used to send 12
+  scroll steps, which often stopped short. They now keep scrolling until the
+  screen stops moving — in the main pane, the multi tab and the pop-out grid —
+  and a mouse wheel or drag takes over at once.
+- **Command Code is now offered as a handoff successor.** It was missing from
+  the list of CLIs a session could be handed off to, although it is one of
+  the built-in providers.
+- **A card's child-session toggle (▶ N) is no longer pushed out of sight by
+  the completion summary.** The summary shared the card's second row and
+  pushed the toggle, the context gauge, the role and the branch off the right
+  edge, so a folded parent had no way to show its children. The summary now
+  has a row of its own, and longer text in the second row is shortened with
+  an ellipsis instead.
+- **The Usage menu no longer keeps showing an older Codex remaining
+  percentage after a newer one is available.** The value the Hub received
+  from a running session always won over a newer reading from Codex's own
+  session file. The most recent observation now wins, and a Codex reply
+  without rate-limit data no longer clears the last known value.
+- **Cross-session search (`Ctrl+K`) now follows the dashboard language.** Its
+  filters, paging buttons, status lines and messages were written in Japanese
+  only.
+- **The *Basic* / *All* switch at the top of Settings and the 📄 Raw log
+  button now follow the dashboard language.** The switch
+  showed its labels in Japanese on the English and Vietnamese screens since
+  it arrived in 0.5.0. The Raw log button, its tooltip and the popup it opens
+  had no translations in any language, so since 0.5.1 they showed internal
+  key names such as `agent_log_button` instead of text.
+- **The handoff list dialog now closes with the same ✕ button every other
+  dialog in the app uses**, in its header, with the same hover and
+  keyboard-focus behavior; Escape and clicking outside the dialog still work
+  too. It previously ended in a bottom "Cancel" button that no other dialog
+  has.
+- **Codex's Sent history no longer shows the AGENTS/environment context that
+  gets silently prepended to your first message.** Recent Codex rollouts
+  label the origin of each content block; the Hub now keeps only the
+  user-authored blocks in that view. Older rollouts, which carry no such
+  labeling, are read as before.
+- **An orchestration child closed from the dashboard before it finished is no
+  longer reported to its parent as complete.** Dismissing a child's session
+  removed it from the Hub's live session list, so the usual idle-progress
+  check could no longer see it, and once its timeout passed the child was
+  told to the conductor and the board as "completed without a DONE marker."
+  A dismissed child now gets its own message instead — closed by the user,
+  its work possibly unfinished.
+- **Clicking an approval's rationale/context text to expand it now actually
+  shows the full text.** In the compact display it kept the one-line ellipsis
+  even while expanded; in a full-height right column the expanded text could
+  grow past the panel's own edge and get clipped. The expanded block no
+  longer shrinks, and now wraps onto multiple lines in compact mode too.
+
 ### Security
+- The derive dialog's permission preview now follows execution mode. Choosing
+  headless with the tier left at "unset" used to show the attended row (Hub
+  adds nothing) while the Hub started the child at the unattended default
+  (`orchestration.child_permission_default`, unset = full). The dialog now
+  looks up that default from `/api/info`. Leaving the tier empty still omits
+  `permission_preset` from the request, so D-12's default is unchanged.
+- Git Review no longer follows untracked symlinks when synthesizing a diff. An
+  untracked symlink in the work tree that pointed outside the repository
+  (including secret-like files) could have its target contents sent to the
+  browser. The Hub now `Lstat`s first and returns a placeholder without opening
+  the target.
+- Spawn-child no longer treats client JSON `origin:"ui"` as enough to skip the
+  confirmation dialog (F-AI-03). The Hub keeps UI origin only when the request
+  also carries same-origin browser Fetch Metadata (`Sec-Fetch-Site: same-origin`
+  and an allowed `Origin`). A spoofed `origin:"ui"` without those headers is
+  treated as a conductor start and still requires confirmation. This is a
+  backstop against copying the UI JSON; a client that also sends those headers
+  can still claim UI origin.
+- Derive-dialog `/api/info` now uses cookie-primary `apiFetch` instead of
+  `/api/info?token=` (F-WEB-06), matching the handoff F-WEB-05 hygiene.
+- Remaining `/api/info?token=` fetches in spawn-panel, settings, files-view,
+  approval, and mobile-connect now use cookie-primary `apiFetch` as well.
+- Provider Registry UI (`provider-store.ts`) and the relay dialog now use
+  cookie-primary `apiFetch` instead of `?token=` (F-WEB-07). Many other
+  endpoint fetches still put `?token=` on the URL, and Hub launch URLs still
+  use `?token=` (D-11). This is not the last leftover.
 - `notifyBoardSession` now strips control bytes from board notices before they
   reach a conductor PTY. It was the one board notify path that skipped
   `sanitizeInjectText` while `notifyBoardEvent` applied it, and the two queues
@@ -46,8 +859,7 @@ Release artifacts are published at
   relay children would stall unattended).
 - Handoff UI fetches (`/api/handoff`, `/api/handoff/:id`, `/api/spawn`) drop
   `?token=` and rely on the cookie-primary `apiFetch` path, matching the avatar
-  URL hygiene fix (F-WEB-05). These were the last three places in the web UI
-  still putting the Hub token in a request URL.
+  URL hygiene fix (F-WEB-05). Other `?token=` fetches in the web UI remain.
 - **The Claude Code bundled in the Docker image is updated to 2.1.163.** 2.1.162
   carried two advisories: a sandbox escape through git worktree path confusion
   that allowed unsandboxed code execution, and out-of-band data exfiltration via
@@ -57,6 +869,41 @@ Release artifacts are published at
   are unaffected. The pin is kept in step across all four places that carry it
   (`deploy/docker/provider-cli/package.json` and its lockfile,
   `deploy/docker/Dockerfile`, and `scripts/check-docker-build-inputs.mjs`).
+- **An AI CLI definition can no longer carry shell syntax in its executable or
+  arguments.** Besides `;`, `` ` ``, `$(` and `${`, the Windows shell
+  characters `&`, `|`, `<`, `>`, `^` and `%` are now refused in the
+  executable, the launch, model, effort and headless arguments, and the update
+  command. An AI CLI you add or edit in Settings with one of them cannot be
+  saved, and a hand-written `custom_providers:` entry in `config.yaml` whose
+  `command` uses one is marked with an error in Settings → AI CLI
+  integrations until the character is taken out. `SECURITY.md` now says how
+  to report a vulnerability.
+- **Leftover per-launch temp files are now cleaned up once at Hub startup,
+  not only the next time the same slot is written to.** A killed session
+  could leave behind a `.claude.json` temporary copy — the default login's,
+  the Hub's own env copy, or a subscription profile's, each including its
+  `oauthAccount` — or a `~/.many-ai-cli/tmp/prompt-*.md` / `launch-*.md`
+  instruction file. A file still in use (fresh, or its wrapper still alive —
+  a wrapper reattaching after a Hub restart is not mistaken for an orphan) is
+  left alone. The scan now walks the containing folder instead of using a
+  glob, so a filename containing `[` is no longer skipped; a failed sweep
+  only logs a kind and a count and never blocks startup.
+- A one-tap approval link now has its method, Host and Origin checked before
+  its token is verified, instead of after — an audit-found ordering gap
+  where a forged link's claim data could be read before the request's origin
+  was. An `Origin` header with no port is now treated as port 80 when
+  compared against the Hub's own port.
+- Command risk classification now also catches process substitution
+  (`<(...)`, zsh's `=(...)`), `find`'s write-adjacent listing flags (`-fls`,
+  `-fprint`, `-fprint0`, `-fprintf`), `git ... --output`, and a Windows path
+  immediately followed by a shell connector or redirect (such as
+  `C:\&calc.exe` or `C:\>out`) as Mid risk rather than read-only; a backslash
+  right after whitespace still escapes the next character.
+- An SSH launcher profile's working directory is now validated like its
+  other fields, rejecting one that starts with `-` or contains a control
+  character. Claude Code's per-session temporary settings file has its file
+  permissions restricted to the current user immediately after it is
+  written.
 
 ## [0.8.0] - 2026-09-09
 
@@ -2535,7 +3382,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.6.0

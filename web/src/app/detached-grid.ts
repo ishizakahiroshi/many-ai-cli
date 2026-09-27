@@ -13,7 +13,7 @@ import {
   releaseHiddenWebglRenderers,
   scrollAltBufferPage,
 } from './terminal.js';
-import { ensureAltScrollRail, stepNotches } from './alt-scroll-rail-view.js';
+import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { sessions } from './state.js';
 import type { SessionSnapshot } from '../types/proto.js';
 
@@ -346,7 +346,7 @@ export class DetachedGridManager {
     if (!t || !t.term) return;
     if (edge === 'top') {
       if (canPageAltBuffer(sessionId, t)) {
-        if (!stepNotches(sessionId, 12)) {
+        if (!requestEdge(sessionId, 'top')) {
           scrollAltBufferPage(sessionId, t, -1);
         }
         t.autoScroll = false;
@@ -356,7 +356,7 @@ export class DetachedGridManager {
       t.term.scrollToTop();
     } else {
       if (canPageAltBuffer(sessionId, t)) {
-        if (!stepNotches(sessionId, -12)) {
+        if (!requestEdge(sessionId, 'bottom')) {
           scrollAltBufferPage(sessionId, t, 1);
         }
         t.autoScroll = true;
@@ -721,6 +721,10 @@ export function initDetachedGridMode(): DetachedGridManager | null {
     'mobile-keyboard-panel',
     'about-panel',
     'model-picker-overlay',
+    // 別窓 Grid は箱を開く操作を持たない（unified-tab-bar ごと隠す）ので、
+    // セッション帯と範囲トグルも出さない。style.display を直接落とすため、
+    // session-strip.ts が後から hidden を外しても出てこない。
+    'session-strip',
   ];
   hideIds.forEach(id => {
     const el = document.getElementById(id);

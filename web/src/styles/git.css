@@ -846,6 +846,15 @@
   color: var(--danger);
   border: 1px solid color-mix(in srgb, var(--danger) 42%, transparent);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
+  /* pre-commit hook の拒否理由は複数行で来る（secrets-scan / omitnix 等）。
+     既定の white-space だと改行が空白へ潰れて 1 本の長い行になり読めない。
+     長いパスで横へはみ出さないよう overflow-wrap を、ボタンを画面外へ押し出さない
+     よう max-height を併せて指定する。サーバー側でも行数・バイト数を切っている
+     （internal/hub/git_common.go の gitErrMaxOutputLines / gitErrMaxOutputBytes）。 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 9.5em;
+  overflow-y: auto;
 }
 .git-commit-actions {
   display: flex;

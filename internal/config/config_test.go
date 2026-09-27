@@ -18,6 +18,21 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestNVIDIANIMConfigDefaultsDisabledAndContainsNoCredentialField(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if cfg.NVIDIANIM.Enabled {
+		t.Fatal("NVIDIA NIM must default to disabled")
+	}
+	cfg.NVIDIANIM.Enabled = true
+	out, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), "api_key") || strings.Contains(string(out), "NVIDIA_API_KEY") {
+		t.Fatalf("config JSON must not contain a credential field: %s", out)
+	}
+}
+
 // TestNormalizeHandoffIntentModeDefaultsUnknownValues is the C3 completion
 // criterion for the config half of 案 3 (docs/local/plan_session-handoff-board_c3_intent-layer.md
 // 内部 C3): an empty or unrecognized value falls back to done-only, and the
@@ -46,6 +61,42 @@ func TestHandoffConfigTurnSummaryEnabled(t *testing.T) {
 	}
 	if (HandoffConfig{IntentMode: "bogus"}).TurnSummaryEnabled() {
 		t.Fatal("an unknown intent_mode must not enable turn-summary")
+	}
+}
+
+// TestHandoffNoteOnThresholdDefaultsAndWarns is the 内部 C2 completion criterion
+// for the config half (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md):
+// an unset or misspelled value behaves as ask (the memo is never written
+// without someone pressing the button), and a misspelling is reported instead
+// of silently doing nothing.
+func TestHandoffNoteOnThresholdDefaultsAndWarns(t *testing.T) {
+	cases := map[string]string{
+		"":     HandoffNoteOnThresholdAsk,
+		"ask":  HandoffNoteOnThresholdAsk,
+		"auto": HandoffNoteOnThresholdAuto,
+		"off":  HandoffNoteOnThresholdOff,
+		"AUTO": HandoffNoteOnThresholdAsk, // IntentMode と同じ厳密一致
+		"none": HandoffNoteOnThresholdAsk,
+	}
+	for in, want := range cases {
+		if got := (HandoffConfig{NoteOnThreshold: in}).NoteOnThresholdOrDefault(); got != want {
+			t.Errorf("NoteOnThresholdOrDefault(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	cfg := &Config{}
+	cfg.Handoff.NoteOnThreshold = "auto"
+	if got := cfg.handoffWarnings(); len(got) != 0 {
+		t.Fatalf("handoffWarnings() for a valid value = %v, want none", got)
+	}
+	cfg.Handoff.NoteOnThreshold = "none"
+	warnings := cfg.handoffWarnings()
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "handoff.note_on_threshold") {
+		t.Fatalf("handoffWarnings() = %v, want one warning naming handoff.note_on_threshold", warnings)
+	}
+	// 値そのものは書き換えない（利用者が書いた綴りが残っているから警告できる）。
+	if cfg.Handoff.NoteOnThreshold != "none" {
+		t.Fatalf("note_on_threshold was rewritten to %q; it must stay as written", cfg.Handoff.NoteOnThreshold)
 	}
 }
 
@@ -83,6 +134,28 @@ func TestWorkflowJournalDefaultsOnAndCanBeDisabled(t *testing.T) {
 	}
 	if cfg.UserPrefs.WorkflowCompletionNotify.Enabled {
 		t.Fatal("workflow completion Push must remain opt-in")
+	}
+}
+
+func TestSubagentTreeEnabledDefaultsOnAndCanBeDisabled(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	if !cfg.Workflow.SubagentTreeEnabled {
+		t.Fatal("defaultConfig().Workflow.SubagentTreeEnabled = false, want true")
+	}
+	// An existing config file that predates this feature (no
+	// subagent_tree_enabled key, only some other workflow key) must still
+	// default to true after merging onto the pre-populated struct.
+	if err := yaml.Unmarshal([]byte("workflow:\n  journal_enabled: false\n"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Workflow.SubagentTreeEnabled {
+		t.Fatal("loading an existing config without subagent_tree_enabled must keep the default true")
+	}
+	if err := yaml.Unmarshal([]byte("workflow:\n  subagent_tree_enabled: false\n"), cfg); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Workflow.SubagentTreeEnabled {
+		t.Fatal("explicit workflow.subagent_tree_enabled=false was ignored")
 	}
 }
 
@@ -556,8 +629,8 @@ func TestHubTokenlessAccessRoundTrip(t *testing.T) {
 		t.Fatalf("LoadOrCreate: %v", err)
 	}
 	cfg1.Hub.AllowLoopbackWithoutToken = true
-	cfg1.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
-	cfg1.Hub.AllowedHosts = []string{"10.8.0.1", "hub.example"}
+	cfg1.Hub.TrustedNetworks = []string{"192.0.2.1/32"}
+	cfg1.Hub.AllowedHosts = []string{"192.0.2.1", "hub.example"}
 	if err := Save(cfg1); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -569,10 +642,10 @@ func TestHubTokenlessAccessRoundTrip(t *testing.T) {
 	if !cfg2.Hub.AllowLoopbackWithoutToken {
 		t.Fatal("AllowLoopbackWithoutToken = false, want true")
 	}
-	if got := strings.Join(cfg2.Hub.TrustedNetworks, ","); got != "172.19.0.1/32" {
+	if got := strings.Join(cfg2.Hub.TrustedNetworks, ","); got != "192.0.2.1/32" {
 		t.Fatalf("TrustedNetworks = %q", got)
 	}
-	if got := strings.Join(cfg2.Hub.AllowedHosts, ","); got != "10.8.0.1,hub.example" {
+	if got := strings.Join(cfg2.Hub.AllowedHosts, ","); got != "192.0.2.1,hub.example" {
 		t.Fatalf("AllowedHosts = %q", got)
 	}
 }
@@ -586,7 +659,7 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrCreate: %v", err)
 	}
-	cfg1.Ollama.BaseURL = "http://192.168.11.50:11434"
+	cfg1.Ollama.BaseURL = "http://127.0.0.1:11434"
 	cfg1.Ollama.AllowPrivateHosts = true
 	if err := Save(cfg1); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -596,7 +669,7 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadOrCreate second: %v", err)
 	}
-	if cfg2.Ollama.BaseURL != "http://192.168.11.50:11434" {
+	if cfg2.Ollama.BaseURL != "http://127.0.0.1:11434" {
 		t.Fatalf("Ollama.BaseURL = %q", cfg2.Ollama.BaseURL)
 	}
 	if !cfg2.Ollama.AllowPrivateHosts {
@@ -628,8 +701,8 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		name string
 		set  func(*Config)
 	}{
-		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://10.0.0.20:11434" }},
-		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://192.168.1.20:1234" }},
+		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://127.0.0.1:11434" }},
+		{"lm_studio", func(cfg *Config) { cfg.LMStudio.BaseURL = "http://127.0.0.1:1234" }},
 		{"ollama", func(cfg *Config) { cfg.Ollama.BaseURL = "http://localhost:11434" }},
 	} {
 		cfg := defaultConfig(t.TempDir())
@@ -649,11 +722,11 @@ func TestOllamaBaseURLRoundTripAndValidation(t *testing.T) {
 		set  func(*Config)
 	}{
 		{"ollama", func(cfg *Config) {
-			cfg.Ollama.BaseURL = "http://10.0.0.20:11434"
+			cfg.Ollama.BaseURL = "http://127.0.0.1:11434"
 			cfg.Ollama.AllowPrivateHosts = true
 		}},
 		{"lm_studio", func(cfg *Config) {
-			cfg.LMStudio.BaseURL = "http://192.168.1.20:1234"
+			cfg.LMStudio.BaseURL = "http://127.0.0.1:1234"
 			cfg.LMStudio.AllowPrivateHosts = true
 		}},
 	} {
@@ -691,7 +764,7 @@ func TestConfigValidationAcceptsNarrowTrustedNetworks(t *testing.T) {
 }
 
 func TestConfigValidationRejectsInvalidAllowedHosts(t *testing.T) {
-	for _, host := range []string{"", "*", "10.8.0.1:47801", "http://10.8.0.1", "bad/host"} {
+	for _, host := range []string{"", "*", "192.0.2.1:47801", "http://192.0.2.1", "bad/host"} {
 		cfg := defaultConfig(t.TempDir())
 		cfg.Hub.AllowedHosts = []string{host}
 		if err := cfg.Validate(); err == nil {
@@ -724,20 +797,22 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	cfg := &Config{}
 	cfg.Spawn.LastModel = map[string]string{"legacy": "a"}
 	cfg.UserPrefs.ProjectFavorites = []string{"one"}
-	cfg.UserPrefs.CwdHistory = []string{"D:/dev/one"}
+	cfg.UserPrefs.CwdHistory = []string{"relative/one"}
+	cfg.UserPrefs.ProjectViews = map[string]UserPrefsProjectView{"/src/box-alpha": {SessionID: 7, Tab: "git"}}
 	cfg.UserPrefs.Spawn.Defaults = map[string]string{"claude": "default"}
 	cfg.UserPrefs.Spawn.LastModel = map[string]string{"claude": "sonnet"}
-	cfg.Hub.TrustedNetworks = []string{"172.19.0.1/32"}
-	cfg.Hub.AllowedHosts = []string{"10.8.0.1"}
+	cfg.Hub.TrustedNetworks = []string{"192.0.2.1/32"}
+	cfg.Hub.AllowedHosts = []string{"192.0.2.1"}
 
 	clone := cfg.Clone()
 	cfg.Spawn.LastModel["legacy"] = "b"
 	cfg.UserPrefs.ProjectFavorites[0] = "two"
-	cfg.UserPrefs.CwdHistory[0] = "D:/dev/two"
+	cfg.UserPrefs.CwdHistory[0] = "relative/two"
+	cfg.UserPrefs.ProjectViews["/src/box-alpha"] = UserPrefsProjectView{SessionID: 99, Tab: "chat"}
 	cfg.UserPrefs.Spawn.Defaults["claude"] = "changed"
 	cfg.UserPrefs.Spawn.LastModel["claude"] = "opus"
-	cfg.Hub.TrustedNetworks[0] = "172.19.0.2/32"
-	cfg.Hub.AllowedHosts[0] = "10.8.0.2"
+	cfg.Hub.TrustedNetworks[0] = "192.0.2.1/32"
+	cfg.Hub.AllowedHosts[0] = "192.0.2.1"
 
 	if clone.Spawn.LastModel["legacy"] != "a" {
 		t.Fatalf("legacy spawn map was aliased")
@@ -745,19 +820,22 @@ func TestConfigCloneDeepCopiesUserPrefs(t *testing.T) {
 	if clone.UserPrefs.ProjectFavorites[0] != "one" {
 		t.Fatalf("project favorites slice was aliased")
 	}
-	if clone.UserPrefs.CwdHistory[0] != "D:/dev/one" {
+	if clone.UserPrefs.CwdHistory[0] != "relative/one" {
 		t.Fatalf("cwd history slice was aliased")
 	}
 	if clone.UserPrefs.Spawn.Defaults["claude"] != "default" {
 		t.Fatalf("spawn defaults map was aliased")
 	}
+	if got := clone.UserPrefs.ProjectViews["/src/box-alpha"]; got.SessionID != 7 || got.Tab != "git" {
+		t.Fatalf("project views map was aliased: %#v", got)
+	}
 	if clone.UserPrefs.Spawn.LastModel["claude"] != "sonnet" {
 		t.Fatalf("spawn last model map was aliased")
 	}
-	if clone.Hub.TrustedNetworks[0] != "172.19.0.1/32" {
+	if clone.Hub.TrustedNetworks[0] != "192.0.2.1/32" {
 		t.Fatalf("trusted networks slice was aliased")
 	}
-	if clone.Hub.AllowedHosts[0] != "10.8.0.1" {
+	if clone.Hub.AllowedHosts[0] != "192.0.2.1" {
 		t.Fatalf("allowed hosts slice was aliased")
 	}
 }
@@ -849,5 +927,49 @@ func TestChildFullBypassEnabledDefaultTrue(t *testing.T) {
 	o.ChildFullBypass = &tr
 	if !o.ChildFullBypassEnabled() {
 		t.Fatal("explicit true should enable full bypass")
+	}
+}
+
+func TestSanitizeCustomThemesDropsInvalidAndCaps(t *testing.T) {
+	in := []UserPrefsCustomTheme{
+		{ID: "dark", Name: "nope", Mode: "dark", Hue: 1, Contrast: 1},
+		{ID: "u-ok", Name: "濃い", Mode: "weird", Hue: 400, Contrast: -3},
+		{ID: "u-ok", Name: "dup", Mode: "dark", Hue: 10, Contrast: 10},
+		{ID: "u-empty", Name: "   ", Mode: "dark", Hue: 1, Contrast: 1},
+	}
+	out := SanitizeCustomThemes(in)
+	if len(out) != 1 {
+		t.Fatalf("len = %d, want 1: %#v", len(out), out)
+	}
+	if out[0].ID != "u-ok" || out[0].Name != "濃い" || out[0].Mode != "dark" {
+		t.Fatalf("entry = %#v", out[0])
+	}
+	if out[0].Hue != 359 || out[0].Contrast != 0 {
+		t.Fatalf("clamped hue/contrast = %d/%d", out[0].Hue, out[0].Contrast)
+	}
+	if SanitizeDisplayTheme("u-missing", out) != "light" {
+		t.Fatal("missing custom id should fall back to light")
+	}
+	if SanitizeDisplayTheme("u-ok", out) != "u-ok" {
+		t.Fatal("known custom id should stay")
+	}
+	if SanitizeDisplayTheme("", out) != "" {
+		t.Fatal("empty theme should stay empty")
+	}
+}
+
+func TestUserPrefsCloneDeepCopiesCustomThemes(t *testing.T) {
+	var prefs UserPrefs
+	prefs.Display.CustomThemes = []UserPrefsCustomTheme{
+		{ID: "u-ok", Name: "濃い", Mode: "dark", Hue: 220, Contrast: 80},
+	}
+	clone := prefs.Clone()
+	clone.Display.CustomThemes[0].Name = "changed"
+	clone.Display.CustomThemes = append(clone.Display.CustomThemes, UserPrefsCustomTheme{ID: "u-two", Name: "暖色", Mode: "dark"})
+	if prefs.Display.CustomThemes[0].Name != "濃い" {
+		t.Fatalf("name was aliased: %q", prefs.Display.CustomThemes[0].Name)
+	}
+	if len(prefs.Display.CustomThemes) != 1 {
+		t.Fatalf("len was aliased: %d", len(prefs.Display.CustomThemes))
 	}
 }

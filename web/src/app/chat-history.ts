@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
-import { escapeHtml, openExternalLinkWithConfirmation, showToast, ti18n, token } from './util.js';
+import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { appendTextWithUrlLinks } from './url-links.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
 import { activateSession, providerIconHtml, renderSessionList } from './session-list.js';
@@ -8,6 +9,7 @@ import { TERMINAL_SCROLLBACK_LINES, markTerminalManualScrollIntent, sendResize, 
 import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { chatPane, openLightbox } from './attachments.js';
 import { evaluateTranscriptMessage, shouldRefreshChatDerivedState, transcriptMessageCategory, transcriptMessageIdentity, transcriptMessageKey, updateRenderedChatMessage } from './transcript-message.js';
+import { hasProviderCapability } from './provider-store.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -126,8 +128,19 @@ export function pushMessage(sid, msg) {
   return entry;
 }
 
+// チャット面が /api/agent-chat（CLI 自身の構造化トランスクリプト）を使う provider。
+// Go 側の正本は internal/hub/provider_feature_source.go の StructuredTranscript 列で、
+// この 2 つは同じ一覧でなければならない（片方だけ増えると、チャットが空のまま
+// /api/agent-chat を叩くか、読めるのに session-chat の出力貼り付けを見せる）。
+// Provider Registry の capabilities.transcript を真の供給元として参照する。
+//
+// **承認の供給元の判定にこの関数を使わないこと。** 以前はこの 1 つの一覧が
+// 「トランスクリプトを読めるか」と「承認をトランスクリプトから受け取るか」の
+// 両方を答えていた。command-code はチャットは読めるが確認画面が TUI にしか
+// 出ないので、承認は端末ミラーのまま。承認の供給元は Hub が決める
+// （internal/hub/approval_marker_transcript.go）。画面は Hub の記録を描くだけで供給元を見ない。
 export function isTranscriptBackedProvider(provider) {
-  return provider === 'claude' || provider === 'codex';
+  return hasProviderCapability(provider, 'transcript');
 }
 
 export function isTranscriptBackedSession(sid) {
@@ -447,31 +460,6 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// ─── C4: approvalUiAdapter.setApprovalVisible をラップしてマルチペインバッジを同期 ───
-// approval-ui.js は app.js より後にロードされるため、window.load 後にラップする。
-// これにより setApprovalVisible(id, true/false) が呼ばれるたびにバッジが更新される。
-window.addEventListener('load', function () {
-  const adapter = window.approvalUiAdapter;
-  if (!adapter || typeof adapter.setApprovalVisible !== 'function' || adapter._c4wrapped) return;
-  const orig = adapter.setApprovalVisible;
-  adapter.setApprovalVisible = function (id, visible, options) {
-    const result = orig.call(this, id, visible, options);
-    // マルチペインのバッジを更新（'waiting' または 'running'/'idle' に切り替え）
-    const mgr = window.multiPaneManager;
-    if (mgr && typeof mgr.updateSlotBadge === 'function') {
-      if (visible) {
-        mgr.updateSlotBadge(id, 'waiting');
-      } else {
-        const s = sessions.get(id);
-        const badgeStatus = (s && s.state === 'running') ? 'running' : 'standby';
-        mgr.updateSlotBadge(id, badgeStatus);
-      }
-    }
-    return result;
-  };
-  adapter._c4wrapped = true;
-});
-
 // ─── C2: バッファクリア機能 ──────────────────────────────────
 // マルチモード時の scrollback 上限（localStorage で変更可能）
 export function MULTI_SCROLLBACK() {
@@ -665,9 +653,13 @@ export function renderInlineText(text) {
 }
 
 // プレーンテキストから URL とファイルパスを抽出し、frag に追加する。
+// URL の判定とクリック時の動きは共通部品（url-links.ts）に任せ、ここでは URL 以外の区間のパスだけを扱う。
 export function _appendPlainWithLinks(frag, text) {
   if (!text) return;
-  // URL: http(s)://...
+  appendTextWithUrlLinks(frag, text, _appendPlainWithPaths);
+}
+
+function _appendPlainWithPaths(frag, text) {
   // path 候補:
   //   - 絶対パス Unix: /usr/... (ただしコードブロック外)
   //   - 絶対パス Windows: C:\... or C:/...
@@ -675,9 +667,7 @@ export function _appendPlainWithLinks(frag, text) {
   //   - 拡張子付き相対: foo/bar.ext または bar.ext (拡張子に絞る)
   //
   // 安全側: 末尾の句読点 ,.;:!?) を除外する。
-
-  // 単一の包括 regex
-  const re = /(https?:\/\/[^\s<>"'`)\]]+)|((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`(\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
+  const re = /((?:[a-zA-Z]:[\\/]|[.]{1,2}[\\/]|\/)[^\s<>"'`(\]]+)|([\w][\w\-/\\.]*\.[a-zA-Z]{1,8}\b)/g;
   let last = 0;
   let m;
   while ((m = re.exec(text)) !== null) {
@@ -694,25 +684,11 @@ export function _appendPlainWithLinks(frag, text) {
       last = m.index + m[0].length;
       continue;
     }
-    if (m[1]) {
-      // URL
-      const a = document.createElement('a');
-      a.className = 'url-link';
-      a.href = token;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.title = `External link: ${token}`;
-      a.addEventListener('click', (event) => openExternalLinkWithConfirmation(event, token));
-      a.textContent = token;
-      frag.appendChild(a);
-    } else {
-      // path
-      const span = document.createElement('span');
-      span.className = 'path-link';
-      span.dataset.path = token;
-      span.textContent = token;
-      frag.appendChild(span);
-    }
+    const span = document.createElement('span');
+    span.className = 'path-link';
+    span.dataset.path = token;
+    span.textContent = token;
+    frag.appendChild(span);
     if (trail) frag.appendChild(document.createTextNode(trail));
     last = m.index + m[0].length;
   }

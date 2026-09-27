@@ -306,3 +306,278 @@ func TestHandoffDisabledWritesNothing(t *testing.T) {
 		t.Fatalf("expected no handoff file when disabled, stat err = %v", err)
 	}
 }
+
+// --- 子 plan: plan_derived-session-launch_c4_handoff-routes.md 内部 C1 --------
+
+// newClaudeTranscriptSession registers a live Claude session whose transcript
+// file already exists, and returns its path. Everything here is synthetic: a
+// throwaway CLAUDE_CONFIG_DIR, a fixture cwd string, and a made-up session
+// UUID.
+func newClaudeTranscriptSession(t *testing.T, s *Server, id int) string {
+	t.Helper()
+	const (
+		sid = "123e4567-e89b-42d3-a456-426614174000"
+		cwd = `C:\work\sample-repo`
+	)
+	claudeDir := t.TempDir()
+	path := writeClaudeTranscript(t, filepath.Join(claudeDir, "projects", claudeProjectDirName(cwd)), sid+".jsonl", cwd, "2026-09-12T10:00:00Z")
+	ses := registerTestSession(s, id, "claude")
+	s.sessionsMu.Lock()
+	ses.CWD = cwd
+	ses.StartedAt = "2026-09-12T10:00:00Z"
+	ses.ClaudeDir = claudeDir
+	ses.AgentSessionID = sid
+	s.sessionsMu.Unlock()
+	return path
+}
+
+// TestHandoffSessionStartRecordsTranscriptPath is the 内部 C1 completion
+// criterion on the write side: a Claude session whose transcript is already
+// resolvable at registration records its path, and the rendered md points the
+// successor at it.
+func TestHandoffSessionStartRecordsTranscriptPath(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	const sessionID = 201
+	want := newClaudeTranscriptSession(t, s, sessionID)
+	s.recordHandoffSessionStart(sessionID, "claude", `C:\work\sample-repo`, "main", "opus", "profile-1", 0)
+
+	got := readHandoffRecords(t, sessionID)
+	if len(got) != 1 || got[0].Transcript != want {
+		t.Fatalf("session_start transcript = %+v, want %q", got, want)
+	}
+
+	preview, err := s.handoffPreviewFor(sessionID)
+	if err != nil {
+		t.Fatalf("handoffPreviewFor: %v", err)
+	}
+	if preview.TranscriptPath != want {
+		t.Fatalf("preview.TranscriptPath = %q, want %q", preview.TranscriptPath, want)
+	}
+	if !strings.Contains(preview.Markdown, want) {
+		t.Fatalf("rendered markdown does not carry the transcript path:\n%s", preview.Markdown)
+	}
+}
+
+// TestHandoffPreviewRecordsTranscriptForLiveSession covers the case the whole
+// route exists for: a predecessor that ran out of quota and stopped answering
+// has neither ended nor had a transcript file at registration time, so the path
+// is only discoverable when a person opens the derive dialog for it.
+func TestHandoffPreviewRecordsTranscriptForLiveSession(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	const sessionID = 202
+	// Board first, with no session registered: nothing is resolvable yet.
+	s.recordHandoffSessionStart(sessionID, "claude", `C:\work\sample-repo`, "main", "opus", "", 0)
+	if got := readHandoffRecords(t, sessionID); len(got) != 1 || got[0].Transcript != "" {
+		t.Fatalf("expected a session_start with no transcript, got %+v", got)
+	}
+
+	want := newClaudeTranscriptSession(t, s, sessionID)
+	preview, err := s.handoffPreviewFor(sessionID)
+	if err != nil {
+		t.Fatalf("handoffPreviewFor: %v", err)
+	}
+	if preview.TranscriptPath != want {
+		t.Fatalf("preview.TranscriptPath = %q, want %q", preview.TranscriptPath, want)
+	}
+	records := readHandoffRecords(t, sessionID)
+	if len(records) != 2 || records[1].Kind != handoff.KindTranscript || records[1].Transcript != want {
+		t.Fatalf("expected one transcript record appended, got %+v", records)
+	}
+	// Opening the dialog again must not append a second identical line.
+	if _, err := s.handoffPreviewFor(sessionID); err != nil {
+		t.Fatalf("handoffPreviewFor (second call): %v", err)
+	}
+	if got := readHandoffRecords(t, sessionID); len(got) != 2 {
+		t.Fatalf("expected the transcript line to be recorded once, got %+v", got)
+	}
+}
+
+// TestHandoffPreviewOmitsTranscriptPathThatNoLongerExists fixes the read-side
+// gate: a path recorded days ago whose file the user has since deleted must not
+// be offered to a successor.
+func TestHandoffPreviewOmitsTranscriptPathThatNoLongerExists(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	const sessionID = 203
+	missing := filepath.Join(t.TempDir(), "projects", "gone", "deleted.jsonl")
+	if err := handoff.Append(sessionID, handoff.Record{Kind: handoff.KindSessionStart, Provider: "claude", Transcript: missing}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	preview, err := s.handoffIdentityFor(sessionID)
+	if err != nil {
+		t.Fatalf("handoffIdentityFor: %v", err)
+	}
+	if preview.TranscriptPath != "" {
+		t.Fatalf("preview.TranscriptPath = %q, want empty for a file that is gone", preview.TranscriptPath)
+	}
+}
+
+// TestHandoffPreviewNeverCreatesABoardForASessionWithout covers the guard in
+// ensureHandoffTranscriptRecorded: a live session that has no board (a usage
+// probe, or handoff recording turned on mid-session) must not get one from a
+// read.
+func TestHandoffPreviewNeverCreatesABoardForASessionWithout(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	const sessionID = 204
+	newClaudeTranscriptSession(t, s, sessionID)
+	if _, err := s.handoffPreviewFor(sessionID); err != nil {
+		t.Fatalf("handoffPreviewFor: %v", err)
+	}
+
+	path, err := handoff.PathFor(sessionID)
+	if err != nil {
+		t.Fatalf("PathFor: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected no board to be created by a read, stat err = %v", err)
+	}
+}
+
+// --- 子 plan: plan_derived-session-launch_c4_handoff-routes.md 内部 C2 --------
+
+// startHandoffNoteAwait puts a session into the state requestHandoffNote leaves
+// it in, without going through the PTY injection (which waits on real output
+// settling). The memo path is the one the Hub would have chosen.
+func startHandoffNoteAwait(t *testing.T, s *Server, id int) string {
+	t.Helper()
+	path, err := handoff.NotePathFor(id)
+	if err != nil {
+		t.Fatalf("NotePathFor: %v", err)
+	}
+	ses := registerTestSession(s, id, "claude")
+	s.sessionsMu.Lock()
+	ses.handoffNoteAwait = true
+	ses.handoffNoteDeadline = time.Now().Add(handoffNoteAwaitTimeout)
+	ses.handoffNotePath = path
+	ses.handoffNoteSeq++
+	s.sessionsMu.Unlock()
+	return path
+}
+
+// TestHandoffNotePromptNamesPathAndMarker fixes what the predecessor is asked
+// to do: write to the Hub-chosen path and print the marker pair on one line.
+// A newline in the prompt would be submitted early by some CLIs.
+func TestHandoffNotePromptNamesPathAndMarker(t *testing.T) {
+	const path = `C:\fake-home\.many-ai-cli\handoff\s7.note.md`
+	for _, ja := range []bool{true, false} {
+		prompt := handoffNotePrompt(path, ja)
+		if !strings.Contains(prompt, path) {
+			t.Errorf("prompt (ja=%v) does not name the memo path: %s", ja, prompt)
+		}
+		if !strings.Contains(prompt, handoffNoteMarkerOpen) || !strings.Contains(prompt, handoffNoteMarkerClose) {
+			t.Errorf("prompt (ja=%v) does not name both markers: %s", ja, prompt)
+		}
+		if strings.ContainsAny(prompt, "\r\n") {
+			t.Errorf("prompt (ja=%v) must stay on one line: %q", ja, prompt)
+		}
+	}
+}
+
+// TestHandoffNoteRequestRejectedWhenSessionIsGone covers the case the button is
+// most likely to hit: the predecessor already stopped, so there is nobody left
+// to write the memo. The caller gets a reason, not a silent success.
+func TestHandoffNoteRequestRejectedWhenSessionIsGone(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	if path, reason := s.requestHandoffNote(301); reason != "session_not_writable" || path != "" {
+		t.Fatalf("requestHandoffNote = (%q, %q), want ('', session_not_writable)", path, reason)
+	}
+
+	disabled := false
+	s.cfg.Handoff.Enabled = &disabled
+	if _, reason := s.requestHandoffNote(301); reason != "handoff_disabled" {
+		t.Fatalf("requestHandoffNote with handoff disabled = %q, want handoff_disabled", reason)
+	}
+}
+
+// TestHandoffNoteMarkerRecordsThePathOnlyWhenTheFileExists is the 内部 C2
+// completion criterion on the record side: the marker is the AI's claim, the
+// file's existence is the Hub's own check, and only the path is ever recorded.
+func TestHandoffNoteMarkerRecordsThePathOnlyWhenTheFileExists(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	const sessionID = 302
+	path := startHandoffNoteAwait(t, s, sessionID)
+
+	// The AI claims it wrote the memo, but nothing is there.
+	s.handleHandoffNoteChunk(sessionID, handoffNoteMarkerOpen+" written "+handoffNoteMarkerClose+"\n")
+	if _, err := os.Stat(mustHandoffPath(t, sessionID)); !os.IsNotExist(err) {
+		t.Fatalf("a claim with no file must record nothing, stat err = %v", err)
+	}
+
+	// Now the memo really is there.
+	path2 := startHandoffNoteAwait(t, s, sessionID)
+	if path2 != path {
+		t.Fatalf("memo path changed between requests: %q -> %q", path, path2)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("# 引き継ぎメモ\n- 次の一手: なし\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.handleHandoffNoteChunk(sessionID, handoffNoteMarkerOpen+" written "+handoffNoteMarkerClose+"\n")
+
+	got := readHandoffRecords(t, sessionID)
+	if len(got) != 1 || got[0].Kind != handoff.KindNote || got[0].Note != path {
+		t.Fatalf("records = %+v, want one note record naming %q", got, path)
+	}
+	if got[0].Text != "" {
+		t.Fatalf("the memo's contents must never reach a Record: %+v", got[0])
+	}
+
+	preview, err := s.handoffPreviewFor(sessionID)
+	if err != nil {
+		t.Fatalf("handoffPreviewFor: %v", err)
+	}
+	if preview.NotePath != path {
+		t.Fatalf("preview.NotePath = %q, want %q", preview.NotePath, path)
+	}
+	if !strings.Contains(preview.Markdown, path) {
+		t.Fatalf("rendered markdown does not point at the memo:\n%s", preview.Markdown)
+	}
+}
+
+// TestHandoffNoteAwaitIsGivenUpOnTimeout fixes the cutoff: a predecessor that
+// never answers must not leave the session waiting forever, and the browser is
+// told once that no memo was written.
+func TestHandoffNoteAwaitIsGivenUpOnTimeout(t *testing.T) {
+	withTempHandoffHome(t)
+	s := newTestServer()
+
+	const sessionID = 303
+	startHandoffNoteAwait(t, s, sessionID)
+	s.sessionsMu.Lock()
+	seq := s.sessions[sessionID].handoffNoteSeq
+	s.sessionsMu.Unlock()
+
+	// A timer from an older request must not cancel this one.
+	s.expireHandoffNote(sessionID, seq-1)
+	s.sessionsMu.Lock()
+	stillAwaiting := s.sessions[sessionID].handoffNoteAwait
+	s.sessionsMu.Unlock()
+	if !stillAwaiting {
+		t.Fatal("a stale generation's timer cancelled the current request")
+	}
+
+	s.expireHandoffNote(sessionID, seq)
+	s.sessionsMu.Lock()
+	stillAwaiting = s.sessions[sessionID].handoffNoteAwait
+	s.sessionsMu.Unlock()
+	if stillAwaiting {
+		t.Fatal("expireHandoffNote left the session waiting")
+	}
+	if _, err := os.Stat(mustHandoffPath(t, sessionID)); !os.IsNotExist(err) {
+		t.Fatalf("a timed-out request must record nothing, stat err = %v", err)
+	}
+}

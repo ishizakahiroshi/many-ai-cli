@@ -69,7 +69,9 @@ jobs:
           node-version: 22
 
       - name: Check instrumentation ledger
-        run: node scripts/check-instrumentation.mjs
+        run: |
+          node --test scripts/check-instrumentation.test.mjs
+          node scripts/check-instrumentation.mjs
 
       # AI がファイルを書く経路（heredoc 経由の文字列）でエスケープが 1 段落ちると、
       # 正規表現の単語境界がバックスペース 0x08 として焼き込まれる等の壊れ方をする。
@@ -98,6 +100,12 @@ jobs:
       # 共通クラス化しても付け忘れる余地は残るので、忘れた瞬間にここで落とす。
       - name: Check wheel overlay registration
         run: node scripts/check-wheel-overlays.mjs
+
+      # 承認の表示は Hub の保留中の記録を描くだけ。以前の画面は端末の文字から承認を作り、
+      # 文字照合で閉じ、タイマーと台帳で取り直していて、経路ごとの早期 return が
+      # 「切り替えても描かれない」行き止まりを作った。撤去した関数と state を名前ごと戻させない。
+      - name: Check approval display source
+        run: node scripts/check-approval-display-source.mjs
 
       # CLAUDE.md は全 AI セッションで全文がロードされる唯一のファイル。
       # ルールが破られるたびに本文をここへコピーするのが最短の対処に見えるため、
@@ -300,6 +308,17 @@ jobs:
       - name: Typecheck frontend
         run: bun run check
 
+      # 画面の JS を読み込んだ瞬間の例外（循環 import の中の TDZ）で、画面が「読み込み中...」のまま
+      # 止まる退行を止める。tsc も build も通るので、画面を開くまで気づけない（2c25878・d6ef87b で踏んだ）。
+      # 変換は OS の一時ディレクトリで行い、web/dist には書かない。
+      - name: Check module graph evaluates on load
+        run: node ../scripts/check-web-module-init.mjs
+
+      # web/tests の単体テスト（bun:test）。src を直接 import するのでビルドは要らない。
+      # 下の `bun run test`（dist の fixture を node --test で回す）とは別物で、以前は CI で走っていなかった。
+      - name: Test frontend unit tests (web/tests)
+        run: bun test ./tests/
+
       - name: Build frontend
         run: bun run build
 
@@ -341,7 +360,9 @@ jobs:
         if: github.event_name == 'pull_request'
         working-directory: .
         shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if git diff --name-only "origin/${{ github.base_ref }}"...HEAD | grep -q '^web/package-lock.json$'; then
+          if git diff --name-only "origin/$BASE_REF"...HEAD | grep -q '^web/package-lock.json$'; then
             echo "::warning::web/package-lock.json was modified. web/ は bun のみを使う運用です (web/README.md 参照)。npm install で更新された可能性があります。"
           fi

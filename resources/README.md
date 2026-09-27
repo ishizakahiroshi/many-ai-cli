@@ -1,12 +1,13 @@
 # `resources/` — 実行時配信リソース（リリース不要で更新できるもの）
 
-> 最終更新: 2026-08-19(水) — `CLAUDE.md` から本文を移設（常時ロード分を索引だけにする再編）
+> 最終更新: 2026-09-23(水) 10:08:57 — install-links を追加
 
-このディレクトリの 4 つは **バイナリに焼き込まれず、`main` の raw URL から実行時に fetch される**。URL 定数は `internal/config/config.go` の `Default*Source`。
+このディレクトリの 5 つは **バイナリに焼き込まれず、`main` の raw URL から実行時に fetch される**。URL 定数は `internal/config/config.go` の `Default*Source`。
 
 | ディレクトリ | 中身 | 消費側 |
 |---|---|---|
 | `approval-patterns/` | 承認 trigger phrase | `internal/hub/` の承認検出 |
+| `install-links/` | CLI の公式インストール手順リンク | `internal/hub/install_link_fetch.go` |
 | `models/` | spawn パネルのモデル候補（`defaults.json`） | `internal/hub/models_fetch.go` |
 | `slash-commands/` | スラッシュコマンドピッカー | `internal/hub/slash_cmd_fetch.go` |
 | `usage-links/` | 利用状況リンク | Hub UI |
@@ -22,7 +23,7 @@
 
 `.claude/skills/slash-commands-update` の report / apply / preflight。release の前提チェックから preflight が呼ばれる。
 
-**`models` / `usage-links` / `approval-patterns` には無く、陳腐化しても誰も気づかない。** 2026-08-11、モデル一覧が Claude 5 世代を丸ごと欠いたまま放置されていたのを発見した。provider を増やすとこの追従先が 1 本増える（`CLAUDE.md` の見送り台帳 D-02 が挙げている本当のコスト）。
+`models/defaults.json` の provider catalog key と候補はデータとして管理し、Go の固定フィールドを増やさず decode できる。Picker group の追加や provider 起動・route には built-in 実装も必要になる。OpenCode / Cursor Agent / Grok の CLI 実行と出力解析は Go の allowlist に置く。配信 JSON から任意コマンドを実行しない。Anthropic / OpenAI / Copilot の候補は手動管理で、自動鮮度検査は無い。2026-08-11、モデル一覧が Claude 5 世代を丸ごと欠いたまま放置されていたのを発見した。
 
 ## 本家との差分を根拠に `slash-commands/*.md` から削除しない（2026-08-15 制定）
 
@@ -35,5 +36,4 @@
 
 ## 参照
 
-- 設計書: [`../docs/v0.3.x-many-ai-cli-design.md`](../docs/v0.3.x-many-ai-cli-design.md) の承認パターン / モデル / スラッシュコマンド各節
 - 手順書: [`../docs/manual_slash_commands_update.md`](../docs/manual_slash_commands_update.md)

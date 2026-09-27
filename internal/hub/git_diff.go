@@ -137,6 +137,17 @@ func (s *Server) handleGitDiff(w http.ResponseWriter, r *http.Request) {
 // 読めないファイル（削除競合・権限等）は diff 空・追加 0 行で返す。
 func synthesizeUntrackedDiff(gitRoot, relPath string) (string, int) {
 	abs := filepath.Join(gitRoot, filepath.FromSlash(relPath))
+	rel, err := filepath.Rel(gitRoot, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", 0
+	}
+	info, err := os.Lstat(abs)
+	if err != nil {
+		return "", 0
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return synthesizeUntrackedSymlinkDiff(relPath, abs)
+	}
 	f, err := os.Open(abs)
 	if err != nil {
 		return "", 0
@@ -147,6 +158,21 @@ func synthesizeUntrackedDiff(gitRoot, relPath string) (string, int) {
 		return "", 0
 	}
 	return synthesizeAddDiff(relPath, data)
+}
+
+// synthesizeUntrackedSymlinkDiff は untracked symlink の中身を開かずプレースホルダだけ返す。
+// os.Open はリンク先を辿るので、リポ外の秘密ファイルへ向いたリンクの内容が
+// Review JSON に載ってしまう。Readlink はリンク文字列だけで、ターゲットを読まない。
+func synthesizeUntrackedSymlinkDiff(relPath, abs string) (string, int) {
+	header := "diff --git a/" + relPath + " b/" + relPath + "\n" +
+		"new file mode 120000\n" +
+		"--- /dev/null\n" +
+		"+++ b/" + relPath + "\n"
+	target, err := os.Readlink(abs)
+	if err != nil || target == "" {
+		return header + "Symlink (new)\n", 0
+	}
+	return header + "Symlink -> " + target + "\n", 0
 }
 
 // synthesizeAddDiff は content 全体を「新規ファイル追加」の unified diff にする。

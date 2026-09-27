@@ -3,15 +3,23 @@ type: architecture-overview
 title: System Architecture Overview
 description: The three-process model behind many-ai-cli — wrapped provider CLIs, the local Hub daemon, and the browser Web UI — and how they connect over one WebSocket endpoint.
 tags: [architecture, hub, wrapper, websocket, pty, overview]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
+  - id: openwiki-source-d3247796c73cc3e4c4c4a421
+    resource: repo://internal/doctor/residue.go
   - id: openwiki-source-570ddc1a25c4b21237799d9d
     resource: repo://internal/hub/server.go
+  - id: openwiki-source-1886c841f204522a4918c6bd
+    resource: repo://internal/subscription/adapter.go
+  - id: openwiki-source-66d01afbbf23ea91f5de878d
+    resource: repo://internal/wrapper/approval_rules.go
+  - id: openwiki-source-865d6bab7da537e5ebc63879
+    resource: repo://internal/wrapper/opencode_config.go
   - id: openwiki-source-f8ec2ad8710460e82277e8d4
     resource: repo://internal/wrapper/wrapper.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## The three processes
@@ -22,7 +30,7 @@ generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
 2. **The Hub** — `many-ai-cli serve` (`internal/hub`) is the always-on local daemon: an `net/http` server serving both the embedded Web UI's static assets and an HTTP+WebSocket API, holding the in-memory session registry, and running approval detection, orchestration, notifications, and every other server-side feature. See [Hub HTTP/WebSocket Server and Session Registry](/openwiki/hub/server-and-sessions.md).
 3. **The browser Web UI** — a TypeScript/xterm.js single-page app served by the Hub, connecting back to the same `/ws` endpoint with a UI role to render terminal output, approval prompts, and session state. See [Web Frontend Architecture](/openwiki/frontend/architecture.md).
 
-The wrapped CLI process is unaware of the Hub's existence beyond the wrapper: `many-ai-cli` does not modify or proxy the underlying `claude`/`codex`/etc. binary's own network calls, config files, or credentials — it only owns the PTY around it.
+The wrapped CLI process is unaware of the Hub's existence beyond the wrapper: `many-ai-cli` does not proxy or intercept the underlying `claude`/`codex`/etc. binary's own network calls, and it never reads, writes, or stores that CLI's credentials — a subscription profile is just a separate config directory selected by one environment variable. It does write a small, bounded set of files around the CLI: the approval-rules block (`@~/.many-ai-cli/approval-rules.md` import or a marked block in the CLI's instruction file) and, for opencode, a generated `opencode.json` in the working folder, both of which `many-ai-cli doctor`'s residue check knows how to find if a hard kill leaves them behind.
 
 ## Everything meets at `/ws`
 

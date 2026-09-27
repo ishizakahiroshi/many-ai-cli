@@ -66,6 +66,37 @@ func TestSubmitInputGateDefersToPending(t *testing.T) {
 	}
 }
 
+// TestInputDeferredReasonTellsGateFromWrapper は、入力保留の通知が理由を持つことを確認する。
+// 2026-09-24 の #53 では、初期プロンプトの送信待ちで預かった入力を「wrapper 未接続」と
+// 表示していた。送信待ちなら initial_prompt、wrapper が居ないなら wrapper を載せる。
+func TestInputDeferredReasonTellsGateFromWrapper(t *testing.T) {
+	s := newTestServer()
+	got := captureUIBroadcasts(s)
+	gated := &session{ID: 1, State: "standby", inputMu: new(sync.Mutex),
+		initialInjectPending: true, initialInjectGateAt: time.Now()}
+	noWrapper := &session{ID: 2, State: "standby", inputMu: new(sync.Mutex)}
+	s.sessionsMu.Lock()
+	s.sessions[1] = gated
+	s.sessions[2] = noWrapper
+	s.sessionsMu.Unlock()
+
+	s.submitInput(1, "\x1b[B")
+	s.submitInput(2, "\x1b[B")
+
+	reasons := map[int]string{}
+	for _, m := range got() {
+		if m.Type == "input_deferred" {
+			reasons[m.SessionID] = m.Reason
+		}
+	}
+	if reasons[1] != inputDeferredInitialPrompt {
+		t.Errorf("gated session reason = %q, want %q", reasons[1], inputDeferredInitialPrompt)
+	}
+	if reasons[2] != inputDeferredWrapper {
+		t.Errorf("wrapper-less session reason = %q, want %q", reasons[2], inputDeferredWrapper)
+	}
+}
+
 // TestFlushPendingInputSkipsWhileGated はゲート中の flushPendingInput が
 // キューを消費しない（注入前にユーザー入力が流れない）ことを確認する。
 func TestFlushPendingInputSkipsWhileGated(t *testing.T) {

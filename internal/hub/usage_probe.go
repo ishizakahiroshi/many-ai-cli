@@ -43,6 +43,91 @@ var usageProbeConfirmNeedles = []string{
 	"disableexternalimports",
 }
 
+// usageProbeDialogTargets are the options the probe chooses on those pickers,
+// compared the same way as usageProbeConfirmNeedles. They are the options a
+// plain Enter chose while they were listed first (2026-08-20). Claude Code
+// 2.1.281 lists "No, exit" first on the folder-trust picker (observed
+// 2026-09-24), so Enter alone would now quit the probe's Claude instead — the
+// probe has to find the option by its text and move the cursor there.
+var usageProbeDialogTargets = []string{
+	"yes,itrustthisfolder",
+	"yes,allowexternalimports",
+}
+
+// usageProbeMaxCursorMoves bounds the arrow keys sent for one picker. The
+// pickers have two options; anything past this means the screen is not what
+// the probe thinks it is, and pressing on would be guessing.
+const usageProbeMaxCursorMoves = 6
+
+var errUsageProbeUnknownDialog = errors.New("usage probe: startup picker without a known option to choose")
+
+// usageProbeDialogKey decides the next key for a startup picker on screen:
+// Enter when the cursor already sits on the option the probe wants, otherwise
+// one arrow key towards it. ok is false when the wanted option or the cursor
+// cannot be found — the caller must then send nothing rather than guess.
+func usageProbeDialogKey(lines []string) (key string, ok bool) {
+	target := -1
+	for i, line := range lines {
+		compact := strings.ToLower(collapseWhitespace(line))
+		for _, want := range usageProbeDialogTargets {
+			if strings.Contains(compact, want) {
+				target = i
+				break
+			}
+		}
+		if target >= 0 {
+			break
+		}
+	}
+	if target < 0 {
+		return "", false
+	}
+	cursor := -1
+	for i, line := range lines {
+		if !usageProbeIsCursorLine(line) {
+			continue
+		}
+		if cursor < 0 || absInt(i-target) < absInt(cursor-target) {
+			cursor = i
+		}
+	}
+	if cursor < 0 {
+		return "", false
+	}
+	switch {
+	case cursor == target:
+		return "\r", true
+	case cursor < target:
+		return "\x1b[B", true
+	default:
+		return "\x1b[A", true
+	}
+}
+
+// usageProbeIsCursorLine reports whether a picker row carries the selection
+// cursor (Claude Code draws ❯; › and > are accepted for the same role).
+func usageProbeIsCursorLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, "❯") || strings.HasPrefix(trimmed, "›") || strings.HasPrefix(trimmed, ">")
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+func (s *Server) usageProbeScreenLines(sessionID int) []string {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil || ses.vt == nil {
+		return nil
+	}
+	return ses.vt.Lines()
+}
+
 // usageProbeRecord is deliberately limited to recovery metadata. It contains
 // no credentials, prompt text, account identity, or provider output.
 type usageProbeRecord struct {
@@ -425,15 +510,18 @@ func (s *Server) usageProbeScreenIsConfirmDialog(sessionID int) bool {
 	return usageProbeConfirmDialog(strings.Join(ses.vt.Lines(), ""))
 }
 
-// driveUsageProbeSession dismisses Claude Code startup confirmations with
-// Enter, then sends the one-turn "ok" prompt and waits for rate-limit
-// numbers. An "ok" that lands on a picker is consumed as confirm, so a later
-// dialog resets promptSent and "ok" is sent again on the real prompt.
+// driveUsageProbeSession answers Claude Code startup confirmations by moving
+// the cursor to the option named in usageProbeDialogTargets and confirming it
+// (never a blind Enter: the option order changes between Claude versions),
+// then sends the one-turn "ok" prompt and waits for rate-limit numbers. An
+// "ok" that lands on a picker is consumed as confirm, so a later dialog resets
+// promptSent and "ok" is sent again on the real prompt.
 func (s *Server) driveUsageProbeSession(ctx context.Context, sessionID int) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	promptSent := false
+	cursorMoves := 0
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -453,9 +541,21 @@ func (s *Server) driveUsageProbeSession(ctx context.Context, sessionID int) erro
 			}
 		}
 		if s.usageProbeScreenIsConfirmDialog(sessionID) {
-			s.injectRaw(sessionID, "\r")
-			s.logger.Info("usage probe confirmed startup dialog", "session_id", sessionID)
-			promptSent = false
+			key, ok := usageProbeDialogKey(s.usageProbeScreenLines(sessionID))
+			if !ok || (key != "\r" && cursorMoves >= usageProbeMaxCursorMoves) {
+				// 選ぶ選択肢かカーソルが見つからない（文言や描き方が変わった）。推測で
+				// Enter を押すと別の選択肢（No, exit 等）を選びうるので、何も送らずに諦める。
+				s.logger.Warn("usage probe stopped at an unrecognised startup dialog", "session_id", sessionID, "cursor_moves", cursorMoves)
+				return errUsageProbeUnknownDialog
+			}
+			s.injectRaw(sessionID, key)
+			if key == "\r" {
+				s.logger.Info("usage probe confirmed startup dialog", "session_id", sessionID)
+				promptSent = false
+				cursorMoves = 0
+			} else {
+				cursorMoves++
+			}
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

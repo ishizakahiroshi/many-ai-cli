@@ -1,5 +1,6 @@
 import { t } from '../i18n.js';
-import { approvalVisibleCache, sessions, terminals } from './state.js';
+import { sessions, terminals } from './state.js';
+import { isApprovalPending } from './approval-store.js';
 import { scanBuffer } from './terminal.js';
 
 export type MobileTranscriptRole = 'user' | 'ai';
@@ -196,7 +197,7 @@ export function clearMobileTranscriptSession(sessionId: number): void {
 export function mobileTranscriptStatusText(sessionId: number): string {
   const session = sessions.get(sessionId);
   const state = String(session?.state || 'standby');
-  if (approvalVisibleCache.get(sessionId) || state === 'waiting') {
+  if (isApprovalPending(sessionId) || state === 'waiting') {
     return t('mobile_status_waiting_approval');
   }
   if (state === 'disconnected' || !terminals.get(sessionId)) {

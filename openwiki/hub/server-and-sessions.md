@@ -3,9 +3,6 @@ type: architecture-component
 title: Hub HTTP/WebSocket Server and Session Registry
 description: The Hub's session record and three-axis activity model, the single flat proto.Message struct used for both WebSocket directions, the categorized HTTP API surface, and the allowlisted bug-report collector.
 tags: [hub, session, proto, websocket, api, spawn, bug-report]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-570ddc1a25c4b21237799d9d
     resource: repo://internal/hub/server.go
@@ -15,7 +12,10 @@ sources:
     resource: repo://internal/proto/messages.go
   - id: openwiki-source-37f4cafbe1cb6dd258455038
     resource: repo://internal/report/collect.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## One flat message struct for both WebSocket directions

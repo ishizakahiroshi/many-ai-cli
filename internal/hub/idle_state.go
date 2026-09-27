@@ -39,10 +39,10 @@ func (s *Server) markRunning(id int) {
 		resetTranscriptTrackingLocked(ses, now)
 	}
 	before := ses.Activity
+	// 「保留中」は保留中の承認の記録からだけ出す（approval_record.go の setAwaitingFromApprovalRecordLocked）。
+	awaiting := setAwaitingFromApprovalRecordLocked(ses)
 	ses.Activity.OutputIdle = false
-	ses.Activity.WorkflowActive = !ses.approvalVisible
-	ses.Activity.AwaitingApproval = ses.approvalVisible
-	ses.Activity.AwaitingUser = ses.approvalVisible
+	ses.Activity.WorkflowActive = !awaiting
 	ses.Activity.Normalize()
 	ses.State = ses.Activity.DisplayState()
 	changed := before != ses.Activity || ses.State != "running"
@@ -86,6 +86,9 @@ func (s *Server) stateTicker(ctx context.Context) {
 
 func (s *Server) evaluateIdle() {
 	now := time.Now()
+	// マーカー無しの文章の質問は、出力が落ち着いたこの時点で開く（approval_text_question.go）。
+	// 状態を決める前に開いて、同じ評価で「保留中」にする。
+	s.openTextQuestionsOnOutputIdle(now)
 	s.sessionsMu.Lock()
 	type change struct {
 		id               int
@@ -100,7 +103,6 @@ func (s *Server) evaluateIdle() {
 		activity         SessionActivity
 		lastOutputAt     string
 		transcriptGrewAt string
-		approvalWait     bool
 		fallbackDone     bool
 		orchestrationID  string
 	}
@@ -110,14 +112,6 @@ func (s *Server) evaluateIdle() {
 		if now.Sub(ses.branchCheckedAt) >= branchRefreshAfter {
 			ses.branchCheckedAt = now
 			branchChecks = append(branchChecks, branchRefreshRequest{id: id, cwd: ses.CWD})
-		}
-		// approvalVisible リース切れの自動クリア:
-		// UI からの false ヒントが失われても（リロード desync・複数クライアント等）
-		// 再主張が止まれば waiting 固着から自動回復する。
-		// go_vt detector がまだ native prompt を見ている間は UI 不在でも維持する。
-		if ses.approvalVisible && ses.nativeApprovalSig == "" && now.Sub(ses.approvalVisibleAt) >= approvalVisibleLease {
-			ses.approvalVisible = false
-			ses.approvalVisibleAt = time.Time{}
 		}
 		if isTerminalSessionState(ses.State) {
 			continue
@@ -129,14 +123,15 @@ func (s *Server) evaluateIdle() {
 		if ses.lastOutputAt.IsZero() || now.Sub(ses.lastOutputAt) >= idleAfter {
 			ses.Activity.OutputIdle = true
 		}
-		ses.Activity.AwaitingApproval = ses.approvalVisible
-		ses.Activity.AwaitingUser = ses.approvalVisible
+		// 「保留中」は保留中の承認の記録からだけ出す。以前は画面の申告とその 15 秒のリースで
+		// 決めていたが、記録が開閉のたびに閉じ方ごと知らせるので要らない。
+		setAwaitingFromApprovalRecordLocked(ses)
 		ses.Activity.WorkflowActive = !ses.Activity.OutputIdle && !ses.Activity.AwaitingUser
 		ses.Activity.Normalize()
 		newState := ses.Activity.DisplayState()
 		if before != ses.Activity || newState != ses.State {
 			ses.State = newState
-			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, activity: ses.Activity, lastOutputAt: ses.LastOutputAt, transcriptGrewAt: ses.TranscriptGrewAt, approvalWait: newState == "waiting" && ses.Activity.AwaitingApproval, fallbackDone: newState == "standby", orchestrationID: ses.OrchestrationID})
+			changes = append(changes, change{id: id, provider: ses.Provider, display: ses.Display, cwd: ses.CWD, branch: ses.Branch, label: ses.Label, model: ses.Model, route: ses.Route, state: newState, activity: ses.Activity, lastOutputAt: ses.LastOutputAt, transcriptGrewAt: ses.TranscriptGrewAt, fallbackDone: newState == "standby", orchestrationID: ses.OrchestrationID})
 		}
 	}
 	// State を確定させた後に集める（running になったばかりのセッションも拾うため）。
@@ -147,11 +142,9 @@ func (s *Server) evaluateIdle() {
 		if s.sessionStore != nil {
 			s.sessionStore.UpdateSessionState(c.id, c.state, c.lastOutputAt)
 		}
-		if c.approvalWait {
-			approvalID := fmt.Sprintf("ui-%d-%s", c.id, c.lastOutputAt)
-			s.notifyApprovalPush(c.id, approvalID, c.provider, "", "")
-			s.notifyApprovalOutbound(c.id, approvalID, c.provider, "", "")
-		}
+		// 承認の通知はここから出さない。記録が開いたときに 1 回だけ出す
+		// （approval_native.go / approval_marker.go）。以前はここでも出していて、
+		// ネイティブの承認は検出時と waiting 遷移時の 2 経路から鳴りえた。
 		if c.fallbackDone {
 			s.maybeCreateFallbackDoneSummary(c.id)
 			if c.orchestrationID != "" {

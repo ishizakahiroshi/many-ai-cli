@@ -334,6 +334,27 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+.tsb-sent-text.tsb-sent-text-collapsed {
+  max-height: 9em; /* line-height 1.5 の約6行 */
+  overflow: hidden;
+}
+.tsb-sent-expand {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-top: 2px;
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #7aa2f7;
+  font: inherit;
+  font-size: 0.74rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.tsb-sent-expand:hover { background: #2a2f45; color: #c0caf5; }
+.tsb-sent-expand:focus-visible { outline: 2px solid #7aa2f7; outline-offset: 1px; }
 .tsb-sent-row.tsb-copied { background: rgba(125,207,255,.18); }
 .tsb-sent-attachments {
   display: flex;

@@ -1,0 +1,238 @@
+package clitrust
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/pelletier/go-toml/v2"
+)
+
+// codexDoc is the slice of config.toml this package cares about: only the
+// projects table, and only trust_level within each entry. codex's own
+// config.toml can hold approval_policy, sandbox_mode, mcp_servers, features
+// and more; none of it is modeled here because Grant/Trusted never touch
+// anything else, and appending a table never requires understanding the rest
+// of the file.
+type codexDoc struct {
+	Projects map[string]codexProjectEntry `toml:"projects"`
+}
+
+type codexProjectEntry struct {
+	TrustLevel string `toml:"trust_level"`
+}
+
+// readCodexDoc parses configPath, treating a missing file as an empty
+// document — codex itself starts up fine without config.toml (child plan's
+// C3 作業内容 1), and Grant must behave the same way rather than treating
+// "no config yet" as an error.
+func readCodexDoc(configPath string) (codexDoc, []byte, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return codexDoc{}, nil, nil
+		}
+		return codexDoc{}, nil, err
+	}
+	var doc codexDoc
+	if err := toml.Unmarshal(data, &doc); err != nil {
+		return codexDoc{}, nil, fmt.Errorf("clitrust: could not read %s as TOML: %w", configPath, err)
+	}
+	return doc, data, nil
+}
+
+func codexExistingState(entry codexProjectEntry) string {
+	switch entry.TrustLevel {
+	case "trusted":
+		return "trusted"
+	case "untrusted":
+		return "untrusted"
+	default:
+		return "other"
+	}
+}
+
+// codexGrantMu serializes codexGrant within this process (see codexGrant).
+var codexGrantMu sync.Mutex
+
+func codexTrustedDir(configPath, dir string) (bool, error) {
+	return codexTrusted(configPath, codexPlanFor(dir))
+}
+
+func codexGrantDir(configPath, dir string) (Result, error) {
+	plan := codexPlanFor(dir)
+	if trustTargetTooBroad(plan.target) {
+		return Result{Key: plan.writeKey}, errTrustTargetTooBroad
+	}
+	return codexGrant(configPath, plan)
+}
+
+// codexTrusted reads only, and answers the way codex's own lookup would
+// (codexLookupEntry over plan.lookup). codex does not lock config.toml itself
+// (see codexGrant's doc comment for why Grant also skips locking), so a plain
+// read is consistent with how codex reads the file at every startup.
+func codexTrusted(configPath string, plan codexPlan) (bool, error) {
+	doc, _, err := readCodexDoc(configPath)
+	if err != nil {
+		return false, err
+	}
+	_, entry, ok := codexLookupEntry(doc.Projects, plan.lookup)
+	return ok && entry.TrustLevel == "trusted", nil
+}
+
+// codexGrant is the Grant half of the codex provider: read, check, append
+// (never rewrite), verify.
+//
+// The check has two parts. First, whatever codex's own lookup finds for the
+// folder (the folder's key, then its repository root's, in any letter case on
+// Windows) is codex's decision and is left alone. Second, an "untrusted"
+// entry for the folder, the trust target, or any folder above either of them
+// also stops the write: appending a trusted key there would let a folder the
+// user once refused be trusted through the approval screen's default
+// checkbox (v0.9 release review, C4-A F4; the user's answer Q4a).
+//
+// No lock is taken here — a deliberate difference from claudeGrant, recorded
+// in the child plan's 判断ログ: codex reads config.toml at startup and writes
+// it only when the user answers a prompt (trust, model change, ...), so the
+// window where a concurrent write could race this append is small.
+//
+// The append is a real O_APPEND write of the new table only. The bytes already
+// in the file are never rewritten, so even a Hub killed mid-write can at worst
+// leave a torn table at the end — never a truncated config. Rewriting the whole
+// file instead would open a window where the user's MCP servers, model and
+// other settings exist only in this process's memory.
+//
+// Grants in this process run one at a time (codexGrantMu). Two grants of the
+// same key racing each other would both append, making the table a duplicate
+// that no longer parses, and both would then roll back.
+func codexGrant(configPath string, plan codexPlan) (Result, error) {
+	codexGrantMu.Lock()
+	defer codexGrantMu.Unlock()
+	key := plan.writeKey
+	doc, original, err := readCodexDoc(configPath)
+	if err != nil {
+		return Result{Key: key}, err
+	}
+
+	if existingKey, entry, ok := codexLookupEntry(doc.Projects, plan.lookup); ok {
+		return Result{Written: false, Key: existingKey, Existing: codexExistingState(entry)}, nil
+	}
+	if untrustedKey, ok := codexUntrustedAtOrAbove(doc.Projects, plan.guard); ok {
+		return Result{Written: false, Key: untrustedKey, Existing: "untrusted"}, nil
+	}
+	// codexLookupEntry covers every key that lowercases to writeKey on
+	// Windows; the exact key is checked on its own too, because appending a
+	// table that already exists would make the file unreadable on any OS.
+	if entry, ok := doc.Projects[key]; ok {
+		return Result{Written: false, Key: key, Existing: codexExistingState(entry)}, nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		return Result{Key: key}, err
+	}
+	block := codexTrustBlock(key, len(original) == 0)
+	sizeBefore, err := appendCodexBlock(configPath, block)
+	if err != nil {
+		return Result{Key: key}, err
+	}
+
+	verifyDoc, _, verifyErr := readCodexDoc(configPath)
+	if verifyErr == nil {
+		if entry, ok := verifyDoc.Projects[key]; ok && entry.TrustLevel == "trusted" {
+			return Result{Written: true, Key: key}, nil
+		}
+		verifyErr = fmt.Errorf("clitrust: %s does not contain %q as trusted after writing", configPath, key)
+	}
+
+	// 追記後に読めなくなった（または期待した値になっていない）ときは、
+	// 追記した分だけを切り詰めて戻す。ファイルが元々無かった場合
+	// （original == nil）は削除して「無かった」状態に戻す。
+	rollbackCodexAppend(configPath, original == nil, sizeBefore, block)
+	return Result{Key: key}, verifyErr
+}
+
+// rollbackCodexAppend takes back exactly the block codexGrant appended, and
+// only while the file is still "what was there before + that block". If
+// anything else wrote the file after the append (codex itself answering a
+// prompt in another session), the file is left as it is: truncating it then
+// would cut the other writer's bytes, or pad a file that became shorter with
+// NULs up to sizeBefore — a config.toml codex can no longer read.
+func rollbackCodexAppend(configPath string, created bool, sizeBefore int64, block string) {
+	current, err := os.ReadFile(configPath)
+	if err != nil || int64(len(current)) != sizeBefore+int64(len(block)) || !bytes.HasSuffix(current, []byte(block)) {
+		return
+	}
+	if created {
+		_ = os.Remove(configPath)
+		return
+	}
+	_ = os.Truncate(configPath, sizeBefore)
+}
+
+// codexTrustBlock renders the same table codex itself writes when the user
+// answers the trust prompt with "Trust and continue": [projects.'<key>']
+// followed by trust_level = "trusted" (confirmed on Windows — parent plan's
+// T3/T5 trace — and in set_project_trust_level_inner, rust-v0.156.1). The
+// leading blank line separates it from whatever table ends the file; an empty
+// file gets no leading blank line.
+func codexTrustBlock(key string, emptyFile bool) string {
+	block := "[projects." + tomlQuoteKey(key) + "]\ntrust_level = \"trusted\"\n"
+	if emptyFile {
+		return block
+	}
+	return "\n" + block
+}
+
+// tomlQuoteKey quotes key as a TOML key segment. TOML's literal string
+// ('...') is preferred because it needs no escaping and matches what codex
+// itself writes, but a literal string cannot contain a single quote, so a key
+// with one falls back to a basic (double-quoted) string with the minimal
+// escaping TOML requires.
+func tomlQuoteKey(key string) string {
+	if !strings.Contains(key, "'") {
+		return "'" + key + "'"
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range key {
+		switch r {
+		case '"', '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// appendCodexBlock appends block to configPath (creating it with 0600 when
+// missing) and returns the file's size before the append, so a failed verify
+// can cut exactly the appended bytes back off.
+func appendCodexBlock(configPath, block string) (int64, error) {
+	f, err := os.OpenFile(configPath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600)
+	if err != nil {
+		return 0, err
+	}
+	sizeBefore, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		_ = f.Close()
+		return 0, err
+	}
+	if _, err := f.WriteString(block); err != nil {
+		_ = f.Close()
+		_ = os.Truncate(configPath, sizeBefore)
+		return 0, err
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return 0, err
+	}
+	return sizeBefore, f.Close()
+}

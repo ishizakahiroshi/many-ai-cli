@@ -18,6 +18,15 @@
 // field name to the allowlist in handoff_test.go or the guard test will fail
 // on purpose.
 //
+// A path is allowed; what is at the end of it is not. Transcript and Note name
+// files the successor opens with its own tools (親 plan:
+// docs/local/plan_derived-session-launch.md 不変条件 2). The authenticated Hub
+// file preview may display a Note only after an explicit user action; its
+// contents are never copied into a Record or the rendered handoff markdown.
+// Transcript contents remain successor-only. Adding "the first 200 lines of
+// the transcript" as a Record field would be the thing this type exists to
+// prevent.
+//
 // This mirrors internal/subscription/adapter.go and internal/doctor/residue.go:
 // the rule lives next to the code that would break it, not in CLAUDE.md.
 package handoff
@@ -55,6 +64,16 @@ const (
 	KindGitTurn      = "git_turn"
 	KindIntent       = "intent"
 	KindTurnSummary  = "turn_summary"
+	// KindTranscript carries nothing but Transcript: the provider-owned
+	// conversation log's path, recorded once it is resolvable. A live session's
+	// transcript file often does not exist yet at session_start, so this kind
+	// exists for the case that matters most — a predecessor that is stuck (rate
+	// limited) but has not ended, whose path only becomes knowable later
+	// (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C1).
+	KindTranscript = "transcript"
+	// KindNote carries nothing but Note: the path of the handoff memo the
+	// predecessor was asked to write (同 内部 C2).
+	KindNote = "note"
 )
 
 // Record is one line of a session's handoff log
@@ -95,6 +114,18 @@ type Record struct {
 	// put into a Record; it just names another session the same way SessionID
 	// names this one.
 	HandoffFrom int `json:"handoff_from,omitempty"`
+	// Transcript is the absolute path of the provider's own conversation log
+	// (Claude: <CLAUDE_CONFIG_DIR>/projects/<encoded cwd>/<session-id>.jsonl,
+	// Codex: $CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl) — **the path
+	// only**. The successor opens it with its own tools; nothing from inside it
+	// ever reaches a Record (see the package doc). Empty for providers whose
+	// transcript location many-ai-cli cannot resolve.
+	Transcript string `json:"transcript,omitempty"`
+	// Note is the absolute path of an AI-written or manually saved handoff memo
+	// under ~/.many-ai-cli/handoff. The Hub records only the path; the existing
+	// authenticated Markdown preview may read this exact recorded file after an
+	// explicit user action.
+	Note string `json:"note,omitempty"`
 }
 
 const (
@@ -168,6 +199,33 @@ func RenderedPathFor(sessionID int) (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, fmt.Sprintf("s%d_handoff.md", sessionID)), nil
+}
+
+// NotePathFor returns the path the predecessor is asked to write its handoff
+// memo to (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md
+// 内部 C2). It sits in the same directory as the jsonl and the rendered md, for
+// the same reason RenderedPathFor does: one retention sweep reclaims all three.
+//
+// **This package never opens the file.** The AI writes it, the Hub records the
+// path (Record.Note) and hands that path to the successor.
+func NotePathFor(sessionID int) (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, fmt.Sprintf("s%d.note.md", sessionID)), nil
+}
+
+// ManualNotePathFor returns the separate file used when a person saves the
+// edited handoff prompt from the derive dialog. It shares Note's path-only
+// board representation and configurable handoff retention (14 days by
+// default), but never overwrites the file an AI may have written at NotePathFor.
+func ManualNotePathFor(sessionID int) (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, fmt.Sprintf("s%d.manual.note.md", sessionID)), nil
 }
 
 // ReadSession is a small convenience wrapper over PathFor+ReadAll for the
@@ -327,11 +385,15 @@ func PruneOlderThan(cutoff time.Time) error {
 }
 
 // isHandoffFileName reports whether name is a file this package owns inside
-// Dir(): either a session's jsonl log or its rendered markdown preview
-// (RenderedPathFor). Both share the same 14-day retention sweep (子 plan
-// 内部 C1 「C1（器）の保持 14 日と同じ掃除に乗せる」).
+// Dir(): a session's jsonl log, its rendered markdown preview
+// (RenderedPathFor), or an AI-written or manually saved handoff memo. All
+// of them share the configured retention sweep (14 days by default; 子 plan
+// 内部 C1 「C1（器）の保持と同じ掃除に乗せる」: 子 plan
+// docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2).
 func isHandoffFileName(name string) bool {
-	return strings.HasSuffix(name, ".jsonl") || strings.HasSuffix(name, "_handoff.md")
+	return strings.HasSuffix(name, ".jsonl") ||
+		strings.HasSuffix(name, "_handoff.md") ||
+		strings.HasSuffix(name, ".note.md")
 }
 
 // DirStatus summarizes the handoff directory for `many-ai-cli doctor`.

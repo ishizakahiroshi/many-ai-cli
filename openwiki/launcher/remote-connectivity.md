@@ -15,7 +15,7 @@ sources:
     resource: repo://internal/launcher/connector_ssh.go
   - id: openwiki-source-23775c3de52f3ab95a13cb8b
     resource: repo://README.md
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
 ---
 
 ## Two profile types, and SSH's two modes

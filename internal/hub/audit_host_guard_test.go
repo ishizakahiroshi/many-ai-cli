@@ -119,3 +119,23 @@ func TestMethodAllowsStateChange(t *testing.T) {
 		}
 	}
 }
+
+func TestIsAllowedHubOriginRejectsOmittedPortWhenDifferent(t *testing.T) {
+	// Hub が 47777 で動いている場合、ポート省略の http://localhost（port 80）は不一致で拒否されるべき
+	if isAllowedHubOrigin("http://localhost", 47777) {
+		t.Fatal("http://localhost (omitted port = 80) must not be allowed when hub port is 47777")
+	}
+	if isAllowedHubOrigin("http://127.0.0.1", 47777) {
+		t.Fatal("http://127.0.0.1 (omitted port = 80) must not be allowed when hub port is 47777")
+	}
+
+	// 一方、Hub が 80 で動いている場合はポート省略 http://localhost は許可される
+	if !isAllowedHubOrigin("http://localhost", 80) {
+		t.Fatal("http://localhost (omitted port = 80) must be allowed when hub port is 80")
+	}
+
+	// ポート明示（http://localhost:47777）は正常に許可される
+	if !isAllowedHubOrigin("http://localhost:47777", 47777) {
+		t.Fatal("http://localhost:47777 must be allowed when hub port is 47777")
+	}
+}

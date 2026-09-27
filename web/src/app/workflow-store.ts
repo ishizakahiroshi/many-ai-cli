@@ -3,7 +3,7 @@
 // This module is deliberately DOM-free so source-priority and ledger behavior
 // can be covered by the existing Node fixture test suite.
 
-import type { WfPhase, WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
+import type { SubagentTree, WfPhase, WorkflowProgress as HubWorkflowProgress } from '../types/proto.js';
 
 export const WORKFLOW_WS_FRESH_MS = 30_000;
 export const WORKFLOW_LEDGER_LIMIT = 200;
@@ -26,8 +26,18 @@ export interface WorkflowLedgerView {
   otherCount: number;
 }
 
+// サブエージェントの木（子 plan: plan_subagent-tree-popup_c5_web-popup.md 内部
+// C1）。Workflow の進捗とは別フィールドで保持する（親 plan 方針6「既存の
+// Workflow 表示と権威を混ぜない」）。ディスク非永続・セッションが生きている間
+// だけ保持なのは hubEntries と同じ方針。
+export interface SubagentTreeEntry {
+  tree: SubagentTree;
+  receivedAt: number;
+}
+
 const hubEntries = new Map<number, HubWorkflowEntry>();
 const ledgers = new Map<number, WorkflowLedgerState>();
+const subagentTrees = new Map<number, SubagentTreeEntry>();
 
 function cloneHubProgress(progress: HubWorkflowProgress): HubWorkflowProgress {
   return {
@@ -116,13 +126,48 @@ export function getWorkflowLedger(sessionId: number, reportedDone = 0): Workflow
   return { labels: ledger.labels.slice(), otherCount };
 }
 
+function cloneSubagentTree(tree: SubagentTree): SubagentTree {
+  return {
+    ...tree,
+    nodes: (tree.nodes || []).map(n => ({ ...n })),
+  };
+}
+
+/**
+ * 受け取った木を保持する。ノードが 0 件（Hub が「子が居なくなった」を伝える
+ * 空の木・internal/hub/subagent_tree.go の subagentTreeForBroadcastLocked）
+ * のときは保持分を消す（子 plan C1 完了条件「空の木を受け取ると、その
+ * セッションの保持分が消える」）。
+ */
+export function setSubagentTree(
+  sessionId: number,
+  tree: SubagentTree,
+  receivedAt = Date.now(),
+): void {
+  if (!tree || !Array.isArray(tree.nodes) || tree.nodes.length === 0) {
+    subagentTrees.delete(sessionId);
+    return;
+  }
+  subagentTrees.set(sessionId, { tree: cloneSubagentTree(tree), receivedAt });
+}
+
+export function getSubagentTreeEntry(sessionId: number): SubagentTreeEntry | null {
+  return subagentTrees.get(sessionId) || null;
+}
+
+export function removeSubagentTree(sessionId: number): void {
+  subagentTrees.delete(sessionId);
+}
+
 export function removeWorkflowStore(sessionId: number): void {
   hubEntries.delete(sessionId);
   ledgers.delete(sessionId);
+  subagentTrees.delete(sessionId);
 }
 
 // Test-only reset kept exported because fixture tests run in one Node process.
 export function resetWorkflowStoreForTest(): void {
   hubEntries.clear();
   ledgers.clear();
+  subagentTrees.clear();
 }

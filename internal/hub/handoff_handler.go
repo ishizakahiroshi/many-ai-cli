@@ -29,6 +29,7 @@ func (s *Server) handleHandoffList(w http.ResponseWriter, r *http.Request) {
 	s.sessionsMu.Lock()
 	for i := range entries {
 		_, entries[i].Live = s.sessions[entries[i].SessionID]
+		entries[i].NotePaths = nil
 	}
 	s.sessionsMu.Unlock()
 	writeJSON(w, map[string]any{"ok": true, "entries": entries})
@@ -38,11 +39,29 @@ func (s *Server) handleHandoffList(w http.ResponseWriter, r *http.Request) {
 // one session (子 plan 内部 C1). A session with no handoff jsonl on disk
 // (never recorded, or already pruned) answers ok:true, exists:false rather
 // than 404 — "nothing to show" is an ordinary state here, not an error.
+//
+// POST /api/handoff/{id}/note and /manual-note are dispatched from here too
+// rather than through a second mux entry: the mux already owns the whole
+// /api/handoff/ subtree, and registering a second prefix for one verb would
+// split "what this path means" across two files (子 plan 内部 C2).
 func (s *Server) handleHandoffItem(w http.ResponseWriter, r *http.Request) {
+	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/handoff/"), "/")
+	idStr, action, _ := strings.Cut(rest, "/")
+	if action == "note" {
+		s.handleHandoffNoteRequest(w, r, idStr)
+		return
+	}
+	if action == "manual-note" {
+		s.handleHandoffManualNoteSave(w, r, idStr)
+		return
+	}
 	if !s.guard(w, r, http.MethodGet) {
 		return
 	}
-	idStr := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/handoff/"), "/")
+	if action != "" {
+		writeJSONError(w, http.StatusNotFound, "not_found", "unknown handoff action")
+		return
+	}
 	id, err := strconv.Atoi(idStr)
 	if err != nil || id <= 0 {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session id")
@@ -58,4 +77,70 @@ func (s *Server) handleHandoffItem(w http.ResponseWriter, r *http.Request) {
 	s.sessionsMu.Unlock()
 	preview.CandidateProviders = handoffCandidateProviders(preview.Provider)
 	writeJSON(w, preview)
+}
+
+// handleHandoffManualNoteSave handles POST /api/handoff/{id}/manual-note. It
+// saves the edited handoff prompt without starting a provider or consuming AI
+// tokens; the board receives only the note path.
+func (s *Server) handleHandoffManualNoteSave(w http.ResponseWriter, r *http.Request, idStr string) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session id")
+		return
+	}
+	var body struct {
+		Text string `json:"text"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	path, reason := s.saveManualHandoffMemo(id, body.Text)
+	if reason != "" {
+		status := http.StatusInternalServerError
+		switch reason {
+		case "memo_empty", "memo_too_large":
+			status = http.StatusBadRequest
+		case "handoff_record_not_found":
+			status = http.StatusNotFound
+		case "handoff_disabled":
+			status = http.StatusConflict
+		}
+		writeJSONError(w, status, reason, "manual handoff memo could not be saved")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "note_path": path})
+}
+
+// handleHandoffNoteRequest handles POST /api/handoff/{id}/note: ask the session
+// that is still running to write a handoff memo before it stops
+// (子 plan: docs/local/plan_derived-session-launch_c4_handoff-routes.md 内部 C2).
+//
+// It answers as soon as the prompt is injected — writing the memo takes the AI
+// a turn, and the browser must not hold a request open for it. Whether the memo
+// actually appeared arrives later as the WS message "handoff_note"
+// (finishHandoffNote), which is also the only place a failure is reported.
+func (s *Server) handleHandoffNoteRequest(w http.ResponseWriter, r *http.Request, idStr string) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid session id")
+		return
+	}
+	path, reason := s.requestHandoffNote(id)
+	if reason != "" {
+		status := http.StatusConflict
+		if reason == "session_not_writable" {
+			// 前任が既に止まっている / AI provider ではない。「今からは頼めない」
+			// であって Hub の不具合ではないので、理由をそのまま返す。
+			status = http.StatusNotFound
+		}
+		writeJSONError(w, status, reason, "handoff note request rejected")
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "note_path": path})
 }

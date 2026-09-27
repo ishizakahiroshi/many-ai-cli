@@ -1,13 +1,18 @@
 import { t } from '../i18n.js';
 import type { SessionSnapshot } from '../types/proto.js';
 import { sessions } from './state.js';
-import { showToast, token } from './util.js';
+import { apiFetch, showToast } from './util.js';
 import { ORCHESTRATION_CLI_OPTIONS } from './orchestration-roles.js';
 import { loadSubscriptions, onSubscriptionsChanged, selectableProfiles } from './subscriptions.js';
+import { permissionPresetLabel } from './spawn-confirm.js';
+import { PERMISSION_PRESET_SCHEMA, isPermissionPresetAvailable } from './spawn-confirm-store.js';
 
 type RelayMode = 'worktree' | 'same-tree';
 type RelayRoleKey = 'implementation' | 'implementation-strong' | 'review';
-type RelayRoleValue = { provider: string; model: string; subscription?: string };
+// permissionPreset は役割ごとの権限の段（空 = 既定 = orchestration.child_permission_default）。
+// この画面にチェックボックスは無い: 全欄を localStorage へ自動で記憶する既存仕様に乗せる
+// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+type RelayRoleValue = { provider: string; model: string; subscription?: string; permissionPreset?: string };
 
 interface RelayDialogPrefs {
   roles?: Partial<Record<RelayRoleKey, RelayRoleValue>>;
@@ -90,7 +95,15 @@ function savePrefs(): void {
     const provider = row.querySelector<HTMLSelectElement>('.relay-role-cli')?.value || '';
     const model = row.querySelector<HTMLInputElement>('.relay-role-model')?.value.trim() || '';
     const subscription = row.querySelector<HTMLSelectElement>('.relay-role-subscription');
-    if (key && provider) roles[key] = { provider, model, subscription: subscription && !subscription.hidden ? subscription.value : '' };
+    const permission = row.querySelector<HTMLSelectElement>('.relay-role-permission');
+    if (key && provider) {
+      roles[key] = {
+        provider,
+        model,
+        subscription: subscription && !subscription.hidden ? subscription.value : '',
+        permissionPreset: permission?.value || '',
+      };
+    }
   });
   const prefs: RelayDialogPrefs = {
     roles,
@@ -177,7 +190,33 @@ function buildRoleTable(prefs: RelayDialogPrefs): void {
     subscription.setAttribute('aria-label', `${labelCell.textContent || definition.key} subscription`);
     cli.addEventListener('change', () => { refreshSubscription(); });
     subscriptionCell.appendChild(subscription);
-    row.append(labelCell, cliCell, modelCell, subscriptionCell);
+
+    // 権限の段。空（既定）のままなら送らないので、relay の body は今までと一致する。
+    // この build で選べない段は disabled で見せる（欄ごと消すより「まだ選べない」と
+    // 分かる方がよい。確認ダイアログ・派生ダイアログと同じ規則）。
+    const permissionCell = document.createElement('td');
+    const permission = document.createElement('select');
+    permission.className = 'relay-role-permission';
+    const defaultPermission = document.createElement('option');
+    defaultPermission.value = '';
+    defaultPermission.textContent = translated('spawn_confirm_option_unset', 'Not specified');
+    permission.appendChild(defaultPermission);
+    PERMISSION_PRESET_SCHEMA.forEach((preset) => {
+      const option = document.createElement('option');
+      option.value = preset;
+      option.textContent = permissionPresetLabel(preset);
+      option.disabled = !isPermissionPresetAvailable(preset);
+      permission.appendChild(option);
+    });
+    const savedPermission = prefs.roles?.[definition.key]?.permissionPreset || '';
+    if (savedPermission && Array.from(permission.options).some((option) => option.value === savedPermission)) {
+      permission.value = savedPermission;
+    }
+    permission.setAttribute('aria-label', `${labelCell.textContent || definition.key} permission tier`);
+    permission.addEventListener('change', updateFormState);
+    permissionCell.appendChild(permission);
+
+    row.append(labelCell, cliCell, modelCell, subscriptionCell, permissionCell);
     roleTableBody.appendChild(row);
   });
 }
@@ -189,6 +228,7 @@ function selectedRole(key: RelayRoleKey): RelayRoleValue {
     provider: row?.querySelector<HTMLSelectElement>('.relay-role-cli')?.value || '',
     model: row?.querySelector<HTMLInputElement>('.relay-role-model')?.value.trim() || '',
     subscription: (() => { const select = row?.querySelector<HTMLSelectElement>('.relay-role-subscription'); return select && !select.hidden ? select.value : ''; })(),
+    permissionPreset: row?.querySelector<HTMLSelectElement>('.relay-role-permission')?.value || '',
   };
 }
 
@@ -289,8 +329,8 @@ async function loadPlanCandidates(session: SessionSnapshot, generation: number):
   const root = planRootFor(session);
   if (!String(session.cwd || '').trim()) return;
   try {
-    const url = `/api/files-list?root=${encodeURIComponent(root)}&session=${encodeURIComponent(String(session.id))}&token=${encodeURIComponent(token || '')}`;
-    const response = await fetch(url);
+    const url = `/api/files-list?root=${encodeURIComponent(root)}&session=${encodeURIComponent(String(session.id))}`;
+    const response = await apiFetch(url);
     if (!response.ok || generation !== openGeneration) return;
     const data = await response.json();
     const listedRoot = String(data.root || root);
@@ -332,8 +372,8 @@ async function loadCapacity(sessionID: number, generation: number): Promise<void
   try {
     const base = `/api/sessions/${encodeURIComponent(String(sessionID))}`;
     const [childrenResponse, configResponse] = await Promise.all([
-      fetch(`${base}/children?token=${encodeURIComponent(token || '')}`),
-      fetch(`/api/orchestration-config?token=${encodeURIComponent(token || '')}`),
+      apiFetch(`${base}/children`),
+      apiFetch(`/api/orchestration-config`),
     ]);
     if (!childrenResponse.ok || !configResponse.ok) throw new Error('capacity request failed');
     const childrenData = await childrenResponse.json();
@@ -371,6 +411,19 @@ function relayErrorMessage(data: any, status: number): string {
   return detail || error || `HTTP ${status}`;
 }
 
+// 役割 1 件を Hub の JSON へ写す。画面側の camelCase（permissionPreset）は Hub の
+// 欄名（permission_preset）へ変えて送る。段を選んでいない役割ではキーごと落とすので、
+// 段の欄が無かった頃と同じ body になる。
+function roleRequestBody(role: RelayRoleValue): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    provider: role.provider,
+    model: role.model,
+    subscription: role.subscription || '',
+  };
+  if (role.permissionPreset) body.permission_preset = role.permissionPreset;
+  return body;
+}
+
 async function startRelay(): Promise<void> {
   if (currentSessionID === null || !startButton || startButton.disabled || !planInput) return;
   const implementation = selectedRole('implementation');
@@ -381,18 +434,18 @@ async function startRelay(): Promise<void> {
     max_rounds: Number(maxRounds?.value || 3),
     escalate_after: Number(escalateAfter?.value || 2),
     mode: selectedMode(),
-    roles: { implementation, review },
+    roles: { implementation: roleRequestBody(implementation), review: roleRequestBody(review) },
     extra: {
       implementation: extraImpl?.value.trim() || '',
       review: extraReview?.value.trim() || '',
     },
   };
-  if (strong.provider) body.roles['implementation-strong'] = strong;
+  if (strong.provider) body.roles['implementation-strong'] = roleRequestBody(strong);
   savePrefs();
   submitting = true;
   updateFormState();
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(String(currentSessionID))}/relay?token=${encodeURIComponent(token || '')}`, {
+    const response = await apiFetch(`/api/sessions/${encodeURIComponent(String(currentSessionID))}/relay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

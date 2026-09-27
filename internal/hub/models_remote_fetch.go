@@ -8,20 +8,9 @@ import (
 )
 
 // modelsDefaults は GitHub から取得する resources/models/defaults.json のスキーマ。
-// 形式: {"anthropic": [{"id":"...", "label":"..."}, ...], "openai": [...], ...}
-type modelsDefaults struct {
-	Anthropic []Model `json:"anthropic"`
-	OpenAI    []Model `json:"openai"`
-	// Copilot は GitHub Copilot CLI の `--model` に渡す候補。route/env 注入は行わず、
-	// 対応可否は Copilot CLI 側に委ねる（slug が外れても datalist の自由入力で補える）。
-	Copilot []Model `json:"copilot"`
-	// CursorAgent は cursor-agent CLI の `--model` に渡す候補。route/env 注入は行わず、
-	// 対応可否は cursor-agent 側に委ねる（全 ID は `cursor-agent --list-models` 参照、datalist で自由入力可）。
-	CursorAgent []Model `json:"cursor-agent"`
-	// Grok は Grok Build CLI の `--model` に渡す候補。route/env 注入は行わず、
-	// 対応可否は grok 側に委ねる（全 ID は `grok models` 参照、datalist で自由入力可）。
-	Grok []Model `json:"grok"`
-}
+// map にすることで、新しい静的 catalog key を Go の struct へ追加せずに decode できる。
+// picker group の追加や provider 起動・route は別の built-in 実装を必要とする。
+type modelsDefaults map[string][]Model
 
 const (
 	modelsRemoteCacheTTL    = 24 * time.Hour

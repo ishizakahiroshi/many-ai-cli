@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:6fc5801bd523a4cc56e39465c73dbf547195c7a27958ccaf575d97a45b5b87bf",
+  "pageVersion": "sha256:9b3568efb9df7165f3cb59f0a2b2b1ddbc5323b0fa2c83d20b13bd1e37073a50",
   "claims": [
     {
       "id": "claim_674508e03cec4549a35bdee414d792de",
@@ -34,21 +34,21 @@
     },
     {
       "id": "claim_1094e2ce83b442c8a4bc1f6b2e022c42",
-      "statement": "seed.go's package doc states three rules bound what a fresh subscription profile inherits: entries are carried in only additively (never overwriting, renaming, merging, or deleting something already present in the profile), every seed write lands only under ~/.many-ai-cli/subscriptions/ so the user's real ~/.claude/~/.codex/~/.grok are read but never written, and each provider adapter lists exactly which entries to carry by name rather than copying an entire directory wholesale.",
+      "statement": "seed.go's doc states three rules bound what a subscription profile inherits: entries are carried in only additively (never renaming or deleting something already present, with the one named exception that SeedSyncFile re-reads the policy keys of the vendor settings file from the default on every pass while vendor-written state keys stay the profile's), every seed write lands only under ~/.many-ai-cli/subscriptions/ so the user's real ~/.claude/~/.codex/~/.grok are read but never written, and each provider adapter lists exactly which entries to carry by name rather than copying an entire directory wholesale.",
       "evidence": [
         {
-          "resource": "repo://internal/subscription/seed.go#L30-L40",
-          "version": "repo-lines-v1:sha256:6a55a79d0e71e7b779c57cd7eb687c603006f354cbd9b5860457d9e0aed6c706:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjliODhlOGZhYTY5NTk4YjM3MzFkNzYwZjVlYTNjNWFlMzBmNTc2ODM5YTA2ZDdkNzdhODYzZTQwZTRkOGE5ZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhZjFjNmE3OWMzZTNhZTg0MDRiZDM1N2JmMWZlMWRiOWYxNTQ3YWE0Nzk3NmQyODJkN2UxODkwYjkxNWQyY2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwZjE4MzNhNjkyOTY2N2QxMjRlNDMyOTk4ZTVhZWYzZjdjY2U2YjY2NThiZTdjMzliZDFiMzU5NDk4MjJlNjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjJhYmMyZWIwODYyYzAyNWQyNWYwYzA1ZmEwNzA1OWUwNmViNzhhMTYwNzNkNzlmYjMzZmRhNzJlYWE0ZjA1MzkifQ"
+          "resource": "repo://internal/subscription/seed.go#L34-L51",
+          "version": "repo-lines-v1:sha256:5d31087c7f97413c217ef8d4e5962b2c8b16d0e1e5809a0cf3dd7415ab74f1ca:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjExMTQ2NDFjNGMxZWRiZDI3NzYwMDA1MWQ1NTFkN2U2ZWUzOTYyOGQ4Mzc3NjNkMmYwNGEzMGVlYzMxOGExOTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkYWM5ZTQyYjMxOWMxMjZiZmQ4MTg3YjZkNTc2ZTEyOWZiMjhjNjczMDEwNzZiY2JkNDhhNDM3Y2RkMjA5ZGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhYWIwZTA1YTk3YWE4MWNmMDhlMjZjOGVmMDA2NjlmOWE0MGMzZTNjYTA5MWI4MTk3ZTFiMjc3YjY1OTk2ZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzMDlmOTY0YTMxNmNkOGIxNWYyZTBjYTI5NTc4NmQ1NmIxNmQzOGJjY2FmMzFjZmI3ODA2OGM3YzE4NWU0NDAifQ"
         }
       ]
     },
     {
       "id": "claim_be4a8db5fbf94be1be3e4b10ba89f754",
-      "statement": "SeedCopyFile copies a file as-is and is used for files the vendor CLI itself rewrites (settings.json, config.toml), because a symlink there would push the profile's own edits back into the user's default configuration; SeedLinkDir instead links a whole directory (symlink, or a junction on Windows) for content the user maintains in one place, such as skills, slash commands, and prompts, so a later addition reaches every profile without a re-seed.",
+      "statement": "SeedCopyFile copies a file once as-is for files the vendor CLI itself rewrites, because a symlink there would push the profile's own edits back into the user's default configuration; SeedLinkDir instead links a whole directory (symlink, or a junction on Windows) for content the user maintains in one place, such as skills, slash commands, and prompts, so a later addition reaches every profile without a re-seed.",
       "evidence": [
         {
-          "resource": "repo://internal/subscription/seed.go#L52-L59",
-          "version": "repo-lines-v1:sha256:e2164776ea323c4e75fc90ff66a8ee1fcb274a3a688dc78f6102197e6c6bca49:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjc1NzJmODNmYTU0ZjlhYTliNzI3ZjNjYjkyZGI3Njg4ZDAyOGQ1MDllNjVlYjA3OWFiZTRjMzBiMTU5OTdjYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYWNkMGIzNzMxYTdmNWRkZWU3OWQ1MmEzYjc1YWVjNGU1NDQ5MDVhYzI5ODYxNGYwOTc0Njg5MTQyMzY0YTFkOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTMyZTAzNDQ4MWE5NDQzY2JlYTQxOWE2NzM1YTdkM2Q1MmRlNGFiYjg0YThlYjRiNDlmOTUyZjViNzM1NjMxZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDU4YmFhZWVlOTVkYmM1ZDUwMjZhZGZmYTMyYzllY2Q3OThhOThkYmQxYTE1NDQzNmQ2MmUzZjQ4MTIzODcwNSJ9"
+          "resource": "repo://internal/subscription/seed.go#L53-L69",
+          "version": "repo-lines-v1:sha256:5a1a81d7dc986ea17b350b47e44aec5858842e597288ee0bb325b4f685bb496b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA5NGQ5NWUwYjFjNWI3MWYwN2YwNjA5NDFhNTQyOTk5MzBhN2Q4MDFmMDc0NmVlM2YxZDc0YjIxYWY3YWZhMTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3NmI2MGZjOTIyZGNjZmFkOTE4ZDc3NDBkNjNmY2NiMzQzZmNkM2NkYzkyYjQ5NzI3YmIzNzJmNjZkMGJkODciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhZWQzODQyNzI5YzM3NzU3MWUxNzkwZmM1MTAyMjM0ZTFlNGYzZDQxZjBkYjYzZmQ3ZjYzMzU2NmJhYWRjZjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU4ZjUwMDM3ZjY3NTJmYTcxOTI3Zjc5M2JhYTEwNTFhZjZiNmQ3OTE4NDA5YmI4ZWVmN2M2YjYyMmRlZmVhMGQifQ"
         }
       ]
     },
@@ -61,10 +61,36 @@
           "version": "repo-lines-v1:sha256:f22b5fe77425b379d76bfb1688af4154f74f33f97b8e6da0cf7128c2be36a8ff:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk0ZmRiZDFhYmU0OTBkZjU4ZjdkOGMwODFjZmU0NmRhZmUwMDg4YmNiYjk5NTUyMzc3MWJiYmY3M2E0MDBlZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE0NzNiNjhhYWMwNzNiOGMxZTk4MmZhMDgwYjBhZGU0NWM1YmY5YjQyODQ2MzRhZTlhOWJkNmI3OTM4NjE3ZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5OTllYTRiMDFmYTgxYTgyMjY2ZTkzZGQwMDBjN2EzZTIzY2Q4YzBhYjJkZjQ2OTgwYjM2YzQ3MGI0ZGY5ZGMifQ"
         }
       ]
+    },
+    {
+      "id": "claim_ed580fa367a748fbbf20195ac39185a5",
+      "statement": "Claude's settings.json and Codex's and Grok's config.toml are seeded with SeedSyncFile rather than a one-time copy: each pass takes every top-level policy key from the default configuration while the StateKeys the vendor CLI writes itself remain the profile's, and many-ai-cli doctor reports a profile whose synced file has drifted from the default.",
+      "evidence": [
+        {
+          "resource": "repo://internal/doctor/subscriptions.go#L63-L73",
+          "version": "repo-lines-v1:sha256:1bb4fa0fada023ac1533275d7db204f373698dfa3b3d979623388efd65b9193b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1ZmVmZjEyYmNmNzRhZWY5OGYwZTI0N2Q4ZTc3MmU3NzUwZWEyZTFjMzNkY2E3Nzc2NDVmZDc3Njk3YTNlMzMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFjYjFhYTc3MDQ2NmY0MzM0ZWMzNTBkZTA4YTJhYmVlYTk0MWU3ZmY4ZWQ0OWI1ODEzYWYxYzk5ODgxOWFjMDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImM3ZDZkZGUwNmFjYmE0ZWExNjMyYTNiZmUxZjgxMTUyNWYzODQ4ZjZiZWExMDhkYWE3ZTdhM2ExMDc3OTYxM2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJhMmM4YjgwZmEwZWEzNGEwNzQwNWI2ZmIzYjAzNjFhYTFlODNlNjY2ODYzODMyNWE5MTM4YTZkMGVmMWJmNDEifQ"
+        },
+        {
+          "resource": "repo://internal/subscription/claude.go#L146-L146",
+          "version": "repo-lines-v1:sha256:b608d25c55571e62129dee8a0b12716a26438de9957dfc474faf43143320ab8b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwOGQyNWM1NTU3MWU2MjEyOWRlZThhMGIxMjcxNmEyNjQzOGRlOTk1N2RmYzQ3NGZhZjQzMTQzMzIwYWI4YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwOGQyNWM1NTU3MWU2MjEyOWRlZThhMGIxMjcxNmEyNjQzOGRlOTk1N2RmYzQ3NGZhZjQzMTQzMzIwYWI4YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDM4OWE2MGNjMGZmN2E0NWNiMTRhMDVlMzBjYjA5MjI4MjRkNzUzZDFlNzM3MDcxNDcwYmM2Mjc0NjNhODU3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDc2OWZhMzdlYzI2YWIzMDEyZjMyOTJkZjFkZWUwZDA1MjcxNTYyZWY0NmY5MTQwOTRiMGU0ZGI4MWI2MzA1NyJ9"
+        },
+        {
+          "resource": "repo://internal/subscription/codex.go#L138-L138",
+          "version": "repo-lines-v1:sha256:b608d25c55571e62129dee8a0b12716a26438de9957dfc474faf43143320ab8b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwOGQyNWM1NTU3MWU2MjEyOWRlZThhMGIxMjcxNmEyNjQzOGRlOTk1N2RmYzQ3NGZhZjQzMTQzMzIwYWI4YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwOGQyNWM1NTU3MWU2MjEyOWRlZThhMGIxMjcxNmEyNjQzOGRlOTk1N2RmYzQ3NGZhZjQzMTQzMzIwYWI4YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmQwOTk0NzllMDczMWMzY2M1ZTA3YmE5YmYzYmIyODgyNmIwMjRkM2M4MGJkYzNkMjQ0NmI1ZWI1NWIwY2FkYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTNkZDBlMWE3ODIwNWVlYTA1MDNhMDFlYmM0MGYxYzFlOGYwNzcyMmUxZGY0MDM4YjU5NGE0NjNlODMwZjAwMyJ9"
+        },
+        {
+          "resource": "repo://internal/subscription/grok.go#L109-L109",
+          "version": "repo-lines-v1:sha256:b608d25c55571e62129dee8a0b12716a26438de9957dfc474faf43143320ab8b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwOGQyNWM1NTU3MWU2MjEyOWRlZThhMGIxMjcxNmEyNjQzOGRlOTk1N2RmYzQ3NGZhZjQzMTQzMzIwYWI4YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjYwOGQyNWM1NTU3MWU2MjEyOWRlZThhMGIxMjcxNmEyNjQzOGRlOTk1N2RmYzQ3NGZhZjQzMTQzMzIwYWI4YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYmQwOTk0NzllMDczMWMzY2M1ZTA3YmE5YmYzYmIyODgyNmIwMjRkM2M4MGJkYzNkMjQ0NmI1ZWI1NWIwY2FkYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYWY5ODcwZWJiYjA5YTg5MDkwODYyYzM0ZTY0NjFjYWMyNzk5YmRkYzVlZjM5YzY1YWYwOTA1ZTdjN2FiOGZlZCJ9"
+        },
+        {
+          "resource": "repo://internal/subscription/seed.go#L82-L92",
+          "version": "repo-lines-v1:sha256:31687efae6151231246e015df01f15fdbccf9bd8086111e05abdf6bce8364e72:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1NjU5Yzc4NTg3NzFmM2I5N2NmMmQxZmUwODFlNjY2OWVjODVmZWQzMmNjN2U5ZGNmNGE2ZGU0MGIxN2NkZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVlNDJhNDlhODBhZmIzM2I4YTNmYmY0MDE2MjAzZjYwNWE1OGQ2YzlkNDk0OWFkOWEwM2FkMjViYzI3ZTQ3YTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkY2NmMDRmOTZiZTNlYjk0MjNmNjJmODhmODI2ZmI1MTc4YTI3MzU0NzJiMzA3OWVjZDE5MTZkMThjYTU4ZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlZTVlODAzOGY5MjRkNDdmNDljMmQxZDBhMmY2MzNmM2JiM2M0ZWZlNzgyYmVmMDhmMzM0NTY2OTdmM2U2YWQifQ"
+        }
+      ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

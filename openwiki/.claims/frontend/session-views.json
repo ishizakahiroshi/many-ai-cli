@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:4f34a80f71bda4666a951cb2eebe08ca1cf2f08366c3120f0a2d3a2a14524257",
+  "pageVersion": "sha256:0283fe5a295571f97fb57ba2afde15df367bc4a6c893311947d72bd6a1d2a689",
   "claims": [
     {
       "id": "claim_a9e6fe40175741c3b29e742f045eb22e",
       "statement": "sidebar-tree.ts's governing rule is that the sidebar draws exactly one tree whose shape is decided by data alone; user action changes only sibling ordering under the same parent and collapse state, never the tree's shape. Three invariants it fixes: a child always lands under a root ancestor from the same project; no node crosses a container for any reason other than a color filter; and every linear ordering the UI needs (multi-pane slot order, swipe order) is derived from one depth-first traversal of that same tree.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/sidebar-tree.ts#L1-L21",
-          "version": "repo-lines-v1:sha256:9e607b02534b45939dc16b0409d22511f5628a6ea2d6b150687ceae42fcb74f8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgwMjc3ZDRjMmJjNWJhODdlNjZmMzkyNzYwOThhMTQ0YWExMmNlNmNjNGM0Y2Y5N2NjMTMzYTA2OTJhODFhNjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxOTY1ZjQ2MjlkMWNjOWE5OTFjYzAyYTdlZWU0N2JlOTlmN2FkNjllNDEwY2U1ODY1ZGE2ZTgwOGJjYWVhY2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc1Y2JiMzMxZWZmYjY3ZDBkYjQyZTc4MWU4ZGU4YTE4NTY2MjQyMWE3ODhmZTVjYzY1NWE4NjQ4YTViM2QwZjYifQ"
+          "resource": "repo://web/src/app/sidebar-tree.ts#L1-L22",
+          "version": "repo-lines-v1:sha256:a3671bb32a8036546062416bd2c1b60153f599aa26cb05171395b9e511d1a4b2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAwMzZiODZkYmVkYWMzOTc3Zjg4OGU2MzA1OTcxMzA1NWFlYTBlYzczMzdkZWM4MDgyMjAxNjkxYjJlMDRmMDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhMGMyOTJiMThiZGZmOGI3ZTkwNzY0YjE5YWNkNWFkZTAzNDhhNzM4MTI5YTAwZmEwMzUyNDEyZjcwNjU0MGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxYTBlY2RiNTEyMDE0NGZjMzJhYWIxZjlhMzI5OTYxNDVhM2U4Njg3YzMwMDE3ZDllZTdmYjI1YjI3NWUwNTcifQ"
         }
       ]
     },
@@ -17,8 +17,8 @@
       "statement": "sidebar-tree.ts was extracted as a pure, DOM-free module after the sidebar placement logic had grown to four separate inline mechanisms (sessionOrder, groupOrder, projectFavorites, pinned) inside renderSessionList, the last of which rewrote which container a session belonged to rather than just its order, and because the logic lived inline in DOM-building code it could not be unit tested.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/sidebar-tree.ts#L8-L17",
-          "version": "repo-lines-v1:sha256:28d464c14c7de352defbca07b243ea933006a1a4866cd2f80e93c0ce5ead2527:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwZjdiMzZhY2VjMmM1MjU1YzBjMjk1Mzk2ZTFmYTNjNTY2MzA0NWM0NWUyY2RkMjczYzhjYjkyYjBlYWNhMjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYyMWI0NGYyMzFlMWIxZDQ3NTg1MWM5OGYzNzg2YmM5ZDFlMTAzOTQ0YjhkMzg5MjYzODk1MTE0YjZhNmVmZWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcyNjQ2NGE2NzA3ODI3OTRlY2Y2MTZjZDY2MWM0NzZlNjE1MzZiNTIxNjIzNWYxYjUwY2JkYmVjNDI1NTBiYjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0N2FmMGNmNjJjZDllZWE1M2NhZjEzMTU0ZjhkMTllZGFjNTA3MmM1ZmJlYzI4ZGU3MDQ5ZjJmZjJjZDExYTgifQ"
+          "resource": "repo://web/src/app/sidebar-tree.ts#L8-L21",
+          "version": "repo-lines-v1:sha256:ff3026c8d1bdc732addc6062a58c0ab365f7d9a5f9f7e635534ebd727776cc40:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYwOTQ0NjcwYzczYzM0OGVhZGZkOTBiMGIyNmJhZGM0OTk4OGQwNTk2ZTU3MmRmMTIyZTE2NDc3ZmZiMGQ0YjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1ZjE4ZDIwZWI3ZDM0YzFkZjAxOWUyOWYxNWZjODY3ZWI1YjA5MzFhY2Q5MzRmMDg2NjM2MzE2NjcyMDhhZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0NjVmYjAwMWU0ZjM1OTQwMjA4YzI1YWU1ZWViZmIxMTZlMWYxN2NhZjQyYzE1MjAxZTkxMGQ1MGM1OTkwZjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViMzI3YzVhZjE1NzRiNjE3MmE5MjUwZjU2YWVhYTUwZTM5NmMyYzg4ZWYxMDZhYzZlM2MyM2QzMzBlZmM5MTAifQ"
         }
       ]
     },
@@ -27,16 +27,16 @@
       "statement": "MultiPaneManager's GridPicker builds a 6x3 = 18-cell layout-selection grid with preset buttons, and the manager supports dragging a session from one slot to another (via drop-target wiring and slot reordering) plus an independent ResizeObserver-driven terminal fit per slot.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/multi-pane.ts#L11-L33",
-          "version": "repo-lines-v1:sha256:9b4c8d9bc42c67dc1b153770dd3c40e7f2d19213036bbb44a0636f83811893ef:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFhMDdkYjJlYWJlZDgwNjdlODVhMDllNGI0ZDQxOWU0MGNmMzgxMzJhZGIzZjI3OGVkNjg0ZDgyZmVhZWE4NDMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ1MTM5MTdjMWQzMzY4MzhjOTgwNjVhZDY3NWZjYjhiMzlhZWNiZTMxOWZkNWVhZjk0MTAwMTM4ZTlkZTVjMDYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhkMDQ2ZjUyNDdmMDFiZGQ3ZDljNzc3ODhlMTEyYjM4Y2NmMjljOTMyMDBhYjIzYmZkZWMwNTM4NWU4NWE5ZDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ3MzUyOGRmMGE5ZDVjOWYxNzM4ZjE0NDM2NjhiNTRkNDVlMDI0ZWIxNDc3NGQ4MDkxYzM3MTVkOGJhYWVjNjAifQ"
+          "resource": "repo://web/src/app/multi-pane.ts#L38-L78",
+          "version": "repo-lines-v1:sha256:41f48017401a57ee88a948bedee87b6f93d6738b51117c78d9b37d8c2a91877a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEwYjRhYTA5N2Q2NDVkMTg3NmQ2MGQ4NzVlMzZlNDgxMDU4OWVlZmIwZDFkNmM3MjFmZjIwYmE5NTFkY2Y4NzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NjJmYTU3OTcxMGIzZmY1ZTQyYThlMTAwMDJjNWFlN2JmMDUwOTllN2Y0Yzk5NWE2ODVmNTc2YWM3ODc1OTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1YzYxMjRiYTYxYzRkNDg1NGI3MTQ4NjAyMjc5MDQ3ZTg5NmEyODFkOGRkYWYzOGE1OTkxZWIzNzg3YjFmMDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY3ODUxNTBjNzQ4MjVkNTQ2NjhmYjdjY2ExMzgxYzM0NmEzZmVkYWMxNWYyMDExM2ExMWNmMTBhZTllYWUzOTcifQ"
         },
         {
-          "resource": "repo://web/src/app/multi-pane.ts#L531-L575",
-          "version": "repo-lines-v1:sha256:75ace7ddedb8c974f78ce9d7f4e089836de12c1094719a2c9be064f935b6af6c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4NDY0OTgxNDY2ZmQ1MTVlMDA0NzdmYzk0NTYxYjJmYTE5ZTMwZmM1M2I4NGU4ZGZmYzFjMjhmYTkxZmM1NTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQzNTI0MWQ2YjkwNWZhZjNmYTIxOTFkZTZiMTY0NjEzMzQzOWExYWEzNzE4OGM1ZWNjYzhiZjdkMGQzZDE1NzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwMTk5ZmJiMzliMTFkZjMxZDc2MTdhYTEzN2FjZDA5ZGIyOTIzMWE0ZDdlZjY2Yzg2MGY2Y2QyNWQyYzQ4YzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM0ZDk4ZTc2NWEzZGJjYzNkZTFlODA1NjVjNDhkMDYwY2QyZTdhMGY3ZjU1YzI0MWUzYTIyMDkyMzNhMjI1YzcifQ"
+          "resource": "repo://web/src/app/multi-pane.ts#L556-L573",
+          "version": "repo-lines-v1:sha256:2af2ca7846a1e17e36a34c2086ce75c8492ae7f7d2805fa25f4868510f5c7066:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5YmJkNWE1YTQwNDJkODZhODllYjhhNmFjZjkyMWRjYWY3Njc5YTQwYjU3ZjM1ZjkwNWEwZmI3YmMyYmViNDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxMzQ1MTgwMTA1YjBjNjZhNzdkYWQ1MWJiMzc5MDFhMzczMmM5NjU0YmE0ZGUzOTgxZjgxZTE4MTc1MjQ4YmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI4NWFmNGQ4ZjA3YjRjZWNlZTdmZTljNGVmMTQ3ZGMzNzJlNTlkZDZhMDY2NjVlNWEyYTg3NzY5NDVkMWFmYWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjNmIwOWZhOGRhM2NmYTBjYzgzZDQ1MjkxN2Y0NTEwMjcyMDJhNzI1OTU5M2FhMDlmZDcyYTc2MTBlYWZiYTUifQ"
         },
         {
-          "resource": "repo://web/src/app/multi-pane.ts#L727-L736",
-          "version": "repo-lines-v1:sha256:2f5ff916bf93d1b45a3884644ea93e4ba5456567776c7ca63a565c1f3dad14b2:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlmZjUxMTdiNzkxMDZlOWNjZWU2ZWRhMmQ2ZWY5YzIwZDkzZWYxMmY0OTk5YjMxNGM1NDE0OWNiYjc3ZWYwYjciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkMmRlZWJlYTJiZWU1MGM1M2U0ZTRhMzdjY2FjYmVkYzIwOWNjM2M5Y2MxMzc2OWU5YTE5MzJhMWYzZGI0YTciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlZGJiYTBhZTdiMDFlOGNhYmExNWFhMTBmOWE1ZDUyZWE5Y2IwMDU3NDY3ZmRlYjEwY2MwNWI0MmFiZGU3NGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU4MzVkM2E1YzU5OTAyOTBjNjlhZmM2ZmRjZTQ4YzcwNjdmZTA4MjQ1MjRhNmRkZjcyZDk4Yzc5NjNhYjRiYmMifQ"
+          "resource": "repo://web/src/app/multi-pane.ts#L746-L760",
+          "version": "repo-lines-v1:sha256:74509d8225707889510c7a0c94142f3411da9c754d0b4ae4d348f2a7e1b82ef4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZWNiYzBiZjVlZDBkMWY5MmU0OWFhZTEzZGNhYWYyOTJmOThhYjE4NjVjZmRlM2NmMTg1ZWMzNWU3OTI3ZWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM5YWNjN2U1NTc2ZDZjZGQ0NWNhZWVlZjQ4NzE4YmM4Y2QzMDc1ODk5M2M1MmFiN2M1MzkwY2YyOTVlM2VjYjYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiN2M5YjA1MzcxYjgxNTFlY2FmNjY0ZDVkODI5ZTE4YjUwZDQ2N2I3MjNlNmMyNjdjYzNiODNjOTc1ZWNkOGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdiYTU5NTE3OTVlZTNmMWVkNWZmNThmOTgwY2IyZTU1NjdlMmFjOWZmYTQ0OWZmYThiZWI5ZWUwMGVjYWQ3ZDQifQ"
         }
       ]
     },
@@ -45,8 +45,8 @@
       "statement": "detached-grid.ts's own header comment states that session life/death, approval, and completion are managed by the Hub itself, and the module handles only display (xterm attach/resize/focus); it parses its operating parameters (session_ids, layout) directly from the popped-out window's own URL query string rather than from shared app state.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/detached-grid.ts#L1-L38",
-          "version": "repo-lines-v1:sha256:7b205be5be04855a3c2edc5aa6bec7e92aec3431734e1ab1e2393e6018afa18b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzZjJiZDJiMmYxY2RlNThjZWU0MWU5ZmEwMjQ2NzA4YzliMjA1Mjg0NTczZDMxY2FmYmQyNjM1ZTNjOTA0OTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlYjcwMjU3NTkzZGEwNmY2ODJhM2RkZGE1NGE5ZDI2MGQ0ZmM1MTRmNjQ1MjM3ZjVjYTc0YjA4ZjhkYTYxYTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0MGI0ZmUzYzIxNDM5NjMxM2E1NzAzY2UzZTVlMjJhMWYxZDIzNDJjOTFkNDQ4MTFkMTI0MTlkMzM5NGE3MWYifQ"
+          "resource": "repo://web/src/app/detached-grid.ts#L1-L40",
+          "version": "repo-lines-v1:sha256:d8349aea8cbc7cd934a0bd2a231b05de02a53cb6f1a1455e4644f7d98999cf7b:eyJzZWxlY3RlZExpbmVDb3VudCI6NDAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUzZjJiZDJiMmYxY2RlNThjZWU0MWU5ZmEwMjQ2NzA4YzliMjA1Mjg0NTczZDMxY2FmYmQyNjM1ZTNjOTA0OTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQwYjkxMzg0MzViYzc0YzkyOWMxMDljY2EzMmI5ZDM1ZjlmOTdmYTE3NWQ5YzFhNzJmZmU0ZGZmY2NmM2RjMjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE2YTdkN2Y3Y2I2ZTRiMGZhMGMwZDFjMmQ0MmQzNTJhYmM4N2Q2NGM1OWZiOWNiYWU1YWEzOGY2YjhlOWVhMGYifQ"
         }
       ]
     },
@@ -55,8 +55,8 @@
       "statement": "mobile-home.ts and every mobile-specific view are gated behind the same matchMedia('(max-width: 720px)') check and are designed to have zero effect on desktop; mobile-home.ts's own comment states this explicitly.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/mobile-home.ts#L1-L16",
-          "version": "repo-lines-v1:sha256:2878e63dc9ae6038a950ce478d1669f57364f43d367c1e2011c58dc29ca2e561:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkNGIyMGNiYmQ3MzE3YjliNzdiMjE0ZmU5MGNjMjVmOWViODQyNDY2MjliN2ZmY2ZiZjc3MTk5NzMyY2U5YjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyZWUxNjk0YzcxMTgyYmQ4ZDE3YjUwNzI1YTdhZDQ4ZmI0M2M0YzEyMWQ5OTliZDZhMGMxZTc2OGNlMDkyY2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyNmU1NzQzZWM4YjA1YmFlYTcxMjNhNWJiNGZkYTliNWFkNDgzYjAxMTAyYjZjZjFiYzgxYzVhZDA3YmNjYmIifQ"
+          "resource": "repo://web/src/app/mobile-home.ts#L2-L16",
+          "version": "repo-lines-v1:sha256:d0baba9ad5c8a2186e817d5d4e95449c36833a17d67419dd72345e8b76ef07d0:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY5ODFlMDIzOGFmOTY1ZDI0ZTQyOTcyZGViNGYyOTliMjcxMDBmYzM1OTc5ZTkyNmRjN2ViNGVhOTI4ZDI2MzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2YmI3ZWU3YWNhODFhZDdmMmRkY2NkY2RlN2JhNzA5MmFkYWE0MjA0MDQ3NjI2NzYxNzc0Y2E1NWVjMzAyODIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoxLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5NmM0ZmJiY2ZmYzY0YTlkMGU4NzM0ZmVhNWNlZWFhMWMyZWVmYWMwYjMyOTFiOTVhYzMxZjEyN2I5YWMxZTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI5ZGRjNjhlZTMyNjc4NWQxOWE5MzdhNzQ5NDAyMWE2ZGFmMDI1YTA5MTRkMWRkMWIyY2EyMWI5NjIyOTFkZDgifQ"
         }
       ]
     },
@@ -65,8 +65,8 @@
       "statement": "mobile-home.ts captures session row taps on pointerdown (remembering the tapped id) and only commits the action on a window-level pointerup, because a session_update or approval-queue event that rebuilds body.innerHTML mid-gesture can remove the row button from under a finger before the tap completes, and iOS silently drops the resulting click event.",
       "evidence": [
         {
-          "resource": "repo://web/src/app/mobile-home.ts#L26-L30",
-          "version": "repo-lines-v1:sha256:93b1496e8bcfa8a2b97a0550e29b01c1a24cd7ddf2fa811aafe67cc340a75243:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDE0ZjNlYTg3MWY1Y2FjM2YwYzI3NTdkN2RjOGRmNzAzZDY4N2IyMDBmZDAxMGQzZWU1YjhhOWUzZDNjYTkwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDQ2MDA1NjYxMWQ0MmI2OWNkNWI3ZWY5NjRjYWNlYmUyYjVjNjlmMGJkZDc5YTdlOWQ0OTE1MDk0NTY1ZGJjNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGJlYjZhNmM2YmU3YWRmYTRmY2YyNTA3NGM2OWUzOTZiMDI1MWIzZDRmYzg0Zjc3NTk2YjBkYTFkZjkwNWRiZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWNjZDliMmFkNzZjMDZjZTEwZjBkMzdjNDM3Mjc4ZjY0MzlkOWZjMzE3MmJjY2EzNmM5M2YzYmY3YjJhMGQyYSJ9"
+          "resource": "repo://web/src/app/mobile-home.ts#L26-L31",
+          "version": "repo-lines-v1:sha256:54a1c561ff68108d3fa0470b269e1d61a2b27e782bf0e464b5f86cc0ddec77c1:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYjQ5ODM3ZDZkOTJkM2FmZTZjMzk5OWU2NzMyMGU4ZGIyOWMwOTQ4ZmE4YTc3YTIwMjU4ZWJjNjNkOTBjNjA2YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZmODZmNzY0ZTNlZmZkZmNiZDAwNzI3YWRkMThkNzY1NDEzZDA4MDQ2YmRmNWQzYjJlZTExMzg2YTM4NTQ1ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzJkMjYxN2UxZTIwZGIyZjgzNWRkMjcwZTNkZmQ1M2FkYTFlODM1YTIzZTRkM2MyM2ExN2RlOTg4MmRlYzI2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWJmNTU1NTAzNjMzMjA3OGEzMzEwZDBlNWVkNDFkODU0MWQ1OTk5NTIxNzc1MTRhYjliYjI0MWU0NWU1NWNiNSJ9"
         }
       ]
     },
@@ -93,6 +93,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

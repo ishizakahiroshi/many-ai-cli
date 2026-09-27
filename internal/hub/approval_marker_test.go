@@ -145,8 +145,8 @@ func TestMaybeBroadcastApprovalMarkerDedupesSameBlock(t *testing.T) {
 	if !s.maybeBroadcastApprovalMarker(1, marker, ses.lastOutputAt) {
 		t.Fatal("first marker should be accepted")
 	}
-	if ses.approvalMarkerSig != marker.Sig {
-		t.Fatalf("approvalMarkerSig = %q, want %q", ses.approvalMarkerSig, marker.Sig)
+	if got := markerRecordSig(ses); got != marker.Sig {
+		t.Fatalf("marker record sig = %q, want %q", got, marker.Sig)
 	}
 	if s.maybeBroadcastApprovalMarker(1, marker, ses.lastOutputAt) {
 		t.Fatal("same marker should be deduped")

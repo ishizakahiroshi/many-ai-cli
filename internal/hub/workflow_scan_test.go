@@ -62,6 +62,38 @@ func TestWorkflowScanDoneAndBrokenFrames(t *testing.T) {
 	}
 }
 
+// Workflow を使っていないセッションでも、案内文 Tip の "workflow" の語と、入力欄の
+// 下に常時出るエージェント一覧（● main / ◯ …）が組み合わさると誤検出していた
+// （合成データで再現。plan_subagent-tree-popup.md C1）。fixture の Tip 行は実ログの
+// 行頭記号（`⎿`+U+00A0、実測 866/978 件がこの形）を再現している（敵対レビュー指摘 R8）。
+func TestWorkflowScanTipLineAndAgentFooterIsNotDetected(t *testing.T) {
+	if got := parseWorkflowVT(workflowFixture(t, "tip_and_agent_footer.txt")); got != nil {
+		t.Fatalf("tip line + input-area agent footer must not be detected as a workflow: %+v", got)
+	}
+}
+
+// R8: 区切り線（罫線・❯ プロンプト）を一切含めなくても、Tip 行の除外（行頭記号の除去に
+// `⎿`+U+00A0 を含めたこと）だけで誤検出しないことを守る。区切り線頼みだと、区切りが
+// フレームに含まれていない場合に再発する。
+func TestWorkflowScanTipLineWithoutBoundaryIsNotDetected(t *testing.T) {
+	if got := parseWorkflowVT(workflowFixture(t, "tip_no_boundary.txt")); got != nil {
+		t.Fatalf("tip line exclusion alone (no boundary line) must prevent detection: %+v", got)
+	}
+}
+
+// R9: 区切り線の条件は「行全体が横線文字（─━═）と空白だけ」に狭めてある。
+// Workflow ブロック内の枠線（`╭─── Review ───╮` のように角や文字を含む行）は
+// 区切りと誤認せず、本物のツリーを打ち切らないことを守る。
+func TestWorkflowScanBoxedTreeBorderIsNotTreatedAsInputBoundary(t *testing.T) {
+	p := parseWorkflowVT(workflowFixture(t, "boxed_workflow.txt"))
+	if p == nil || !p.Detected || p.Source != "vt-tree" {
+		t.Fatalf("boxed workflow tree must still be detected: %+v", p)
+	}
+	if p.Done != 1 || p.Running != 1 || p.Total != 2 {
+		t.Fatalf("boxed workflow tree counts were cut off by the border line: %+v", p)
+	}
+}
+
 func TestWorkflowScanWaitingOnlyIsDetectedSignal(t *testing.T) {
 	p := parseWorkflowVT([]string{"Waiting for 2 dynamic workflows to finish"})
 	if p == nil || !p.Detected || p.Source != "vt-summary" || p.WaitingDynamic != 2 {

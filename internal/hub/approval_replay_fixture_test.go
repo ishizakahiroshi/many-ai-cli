@@ -132,7 +132,7 @@ func TestApprovalCandidateEpochSuppressesAnsweredReplayButAllowsNewPrompt(t *tes
 	// remain suppressed in the consumed epoch.
 	s.handleNativeApprovalDetection(11, approval("Yes", "status line B"))
 	s.sessionsMu.Lock()
-	if ses.nativeApprovalSig != "" {
+	if nativeRecordSig(ses) != "" {
 		t.Fatalf("answered replay restored native approval: %+v", ses)
 	}
 	markApprovalUserTurnBoundaryLocked(ses)
@@ -142,8 +142,8 @@ func TestApprovalCandidateEpochSuppressesAnsweredReplayButAllowsNewPrompt(t *tes
 	s.handleNativeApprovalDetection(11, approval("Yes", "new prompt"))
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
-	if ses.nativeApprovalSig == "" || ses.nativeApprovalSourceEpoch != 2 {
-		t.Fatalf("new prompt was not allowed in a new epoch: sig=%q epoch=%d", ses.nativeApprovalSig, ses.nativeApprovalSourceEpoch)
+	if nativeRecordSig(ses) == "" || nativeRecordEpoch(ses) != 2 {
+		t.Fatalf("new prompt was not allowed in a new epoch: sig=%q epoch=%d", nativeRecordSig(ses), nativeRecordEpoch(ses))
 	}
 }
 
@@ -166,9 +166,7 @@ func TestDelayedApprovalConsumedDoesNotSuppressNewEpoch(t *testing.T) {
 	// observation.
 	s.sessionsMu.Lock()
 	ses.approvalSourceEpoch = 2
-	ses.nativeApprovalSig = approval.Sig
-	ses.nativeApprovalCandidateKey = candidate
-	ses.nativeApprovalSourceEpoch = 1
+	ses.pendingApproval = testNativeRecord(approval.Sig, candidate, 1)
 	s.sessionsMu.Unlock()
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:            13,
@@ -186,8 +184,8 @@ func TestDelayedApprovalConsumedDoesNotSuppressNewEpoch(t *testing.T) {
 	s.handleNativeApprovalDetection(13, approval)
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
-	if ses.nativeApprovalSourceEpoch != 2 || ses.nativeApprovalCandidateKey != candidate {
-		t.Fatalf("same candidate must be available in the new epoch: key=%q epoch=%d", ses.nativeApprovalCandidateKey, ses.nativeApprovalSourceEpoch)
+	if nativeRecordEpoch(ses) != 2 || nativeRecordKey(ses) != candidate {
+		t.Fatalf("same candidate must be available in the new epoch: key=%q epoch=%d", nativeRecordKey(ses), nativeRecordEpoch(ses))
 	}
 }
 
@@ -214,7 +212,7 @@ func TestApprovalMarkerCandidateReflowAndEpoch(t *testing.T) {
 	if reflow == nil || s.maybeBroadcastApprovalMarker(12, reflow, ses.lastOutputAt) {
 		t.Fatal("marker reflow must not be broadcast twice")
 	}
-	candidate := ses.approvalMarkerCandidateKey
+	candidate := markerRecordKey(ses)
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:            12,
 		ApprovalSig:          first.Sig,
@@ -251,7 +249,7 @@ func TestApprovalBoundaryCarriesConsumedMarkerAcrossEpoch(t *testing.T) {
 	if marker == nil || !s.maybeBroadcastApprovalMarker(14, marker, ses.lastOutputAt) {
 		t.Fatal("marker should be accepted before consumption")
 	}
-	candidate := ses.approvalMarkerCandidateKey
+	candidate := markerRecordKey(ses)
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:            14,
 		ApprovalSig:          marker.Sig,
@@ -292,7 +290,7 @@ func TestApprovalBoundaryCarriesConsumedMarkerWhileVisible(t *testing.T) {
 	if marker == nil || !s.maybeBroadcastApprovalMarker(21, marker, ses.lastOutputAt) {
 		t.Fatal("marker should be accepted before consumption")
 	}
-	candidate := ses.approvalMarkerCandidateKey
+	candidate := markerRecordKey(ses)
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:            21,
 		ApprovalSig:          marker.Sig,
@@ -342,7 +340,7 @@ func TestApprovalBoundaryStopsCarryWhenBlockLeavesScreen(t *testing.T) {
 	s.markNativeApprovalConsumed(proto.Message{
 		SessionID:            22,
 		ApprovalSig:          marker.Sig,
-		ApprovalCandidateKey: ses.approvalMarkerCandidateKey,
+		ApprovalCandidateKey: markerRecordKey(ses),
 		ApprovalSourceEpoch:  1,
 	})
 

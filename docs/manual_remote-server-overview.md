@@ -1,6 +1,6 @@
 # リモート/サーバー利用の入口（何を入れて、どの手順を使うか）
 
-> 最終更新: 2026-06-14(日) 21:01:38
+> 最終更新: 2026-09-21(月) 11:26:00 — UI プロファイル取り込み機能の実装済み反映
 
 many-ai-cli は「自分の PC で AI を動かす人」と「リモートサーバーの AI を使う人」で **入れるものが違う**。このページは「自分は何を入れて、どの設定手順に進めばいいか」を 1 表で示す入口（索引）。個別の設定手順はリンク先の `manual_remote-server-agent-*.md` を参照。
 
@@ -19,7 +19,7 @@ many-ai-cli は「自分の PC で AI を動かす人」と「リモートサー
 | 自分の PC で AI を動かす（リモート無し） | `many-ai-cli`（フル） | A | あり | README「Quick Start」 |
 | 自分の PC でも動かす ＋ リモートにも繋ぐ | `many-ai-cli`（フル）だけ ※Bは内蔵 | A＋B | あり | README「Quick Start」＋下のリモート手順 |
 | リモートの AI だけ・PC 経由・**エージェントで自動設定** | `many-ai-cli-launcher` | B | あり（最小） | [単一サーバー(pnpm)](manual_remote-server-agent-single.md) / [Docker](manual_remote-server-agent-docker.md) |
-| リモートの AI だけ・PC 経由・**UI ボタンで手動取り込み** | `many-ai-cli-launcher` | B | あり（最小） | [plan_server-profile-export-import](local/plan_server-profile-export-import.md)（計画中） |
+| リモートの AI だけ・PC 経由・**UI ボタンで手動取り込み** | `many-ai-cli-launcher` | B | あり（最小） | Hub 接続ダイアログの「リモートから取得」ボタンで SSH-pull |
 | リモートの AI だけ・**スマホ VPN 直結** | 何も入れない（PWA） | C | なし | Hub UI の「📱 モバイル接続」 |
 
 ※「両方使う人」は **フルを1個入れるだけ**。コネクタ B は `serve` に内蔵（`/api/servers`）なので、launcher を別途入れる必要はない。
@@ -44,4 +44,4 @@ many-ai-cli は「自分の PC で AI を動かす人」と「リモートサー
 
 - 仕組み・トラブル対処: [manual_remote-server-ssh-tunnel.md](manual_remote-server-ssh-tunnel.md)
 - launcher 全般（英語・配布物の入手含む）: README「Unified launcher」節
-- エージェント無し派の UI 取り込み（計画）: [local/plan_server-profile-export-import.md](local/plan_server-profile-export-import.md)
+- エージェント無し派の UI 取り込み（SSH-pull）: Hub 接続ダイアログの「リモートから取得」ボタン（詳細は `docs/local/archive/v0.3.2/plan_server-profile-export-import.md` を参照）

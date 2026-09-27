@@ -66,6 +66,19 @@ func (s *Server) addUIWithHistoryAtEpoch(c *websocket.Conn, activeSessionID int,
 		}
 		buf := make([]byte, len(raw))
 		copy(buf, raw)
+		if ses.altScreen {
+			// 代替画面バッファ中は、窓（maxPTYBuf / replayTailForNonActive）を切り出した
+			// "後" に前置する。切り出し前に足すと窓計算に混ざる。ブラウザの xterm は
+			// 再接続のたびに通常画面から始まるため、これを送らないと「CLI は代替画面に
+			// いるのに UI は通常画面だと思っている」食い違いが起き、上へスクロールできなく
+			// なる（docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+			// ESC[?1049l は前置しない: 通常画面が既定なので、代替画面でないときは
+			// 何も足さないのが正しい状態。
+			prefixed := make([]byte, 0, len(altScreenEnterSeq)+len(buf))
+			prefixed = append(prefixed, altScreenEnterSeq...)
+			prefixed = append(prefixed, buf...)
+			buf = prefixed
+		}
 		replayEpoch := ensureReplayEpochLocked(ses)
 		replayEpoch++
 		if replayEpoch == 0 {
@@ -208,6 +221,7 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 	list := make([]*session, 0, len(s.sessions))
 	sessionIDs := make([]int, 0, len(s.sessions))
 	providerByID := make(map[int]string, len(s.sessions))
+	subagentTrees := make(map[int]*proto.SubagentTree, len(s.sessions))
 	for _, ses := range s.sessions {
 		if ses.UsageProbe {
 			continue
@@ -215,6 +229,15 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 		list = append(list, ses)
 		sessionIDs = append(sessionIDs, ses.ID)
 		providerByID[ses.ID] = ses.Provider
+		// 親 plan C10（R3）: 新規接続・再読み込み時のこの初期データに、直近の
+		// サブエージェントの木を入れる。runSubagentTreePoll は木が変化した
+		// ときにしか broadcast しないため、これが無いと「全員完了の後に開き
+		// 直すとチップが出ない」（変化が一度も起きない）。cloneSubagentTree で
+		// 複製し、ロック外へ渡した後にポーリング側が ses.subagentTree を
+		// 書き換えてもこの snapshot 用の値が影響を受けないようにする。
+		if ses.subagentTree != nil {
+			subagentTrees[ses.ID] = cloneSubagentTree(ses.subagentTree)
+		}
 	}
 	// Go の map イテレーションは順序が不定なため、ID 昇順へ決定的にソートしてから送る。
 	// UI 側はまだ sessionOrder に載っていないセッションをこの配列順で並べる（state.ts
@@ -235,6 +258,22 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 		s.logger.Warn("sendSnapshot: UI send failed, removing dead connection", "err", err)
 		s.removeUI(uc.ws)
 		return
+	}
+
+	// 親 plan C10（R3）: 木を保持しているセッションだけ、subagent_tree を
+	// 1 通ずつ送り直す（list と同じ ID 昇順。木を持たないセッションの分は
+	// 送らない — 送るとブラウザ側が「空の木」を初期表示として学習してしまう）。
+	for _, ses := range list {
+		tree, ok := subagentTrees[ses.ID]
+		if !ok {
+			continue
+		}
+		msg := proto.Message{Type: "subagent_tree", SessionID: ses.ID, SubagentTree: tree}
+		if err := uc.sendWithDeadline(msg, time.Now().Add(broadcastWriteTimeout)); err != nil {
+			s.logger.Warn("sendSnapshot: subagent_tree resend failed, removing dead connection", "err", err)
+			s.removeUI(uc.ws)
+			return
+		}
 	}
 
 	// C3: UI 接続時に既存セッションの usageStat をまとめて送る。
@@ -259,6 +298,19 @@ func (s *Server) sendSnapshot(uc *uiConn) {
 			s.removeUI(uc.ws)
 			return
 		}
+	}
+
+	// 保留中の承認の記録を、接続した画面にだけまとめて送る
+	// （docs/local/plan_approval-display-single-source_c2_hub-sync.md の C2）。
+	// 接続時の replay の後の evaluateReplayApproval は、Hub が既に持っている候補を重複抑止で
+	// 何も送らないので、記録から直接送らないと、再読み込み・再接続した画面へ承認が届かない。
+	// この画面は priming 中で、ここまでに配信された approval_state は後ろに積まれて届くが、
+	// その版番号はこのまとめ以下なので画面が捨てる。replay で新しくできた記録は、
+	// 版番号の進んだ approval_state（開く）として後から届く。
+	if err := uc.sendWithDeadline(s.approvalSnapshotMessage(), time.Now().Add(broadcastWriteTimeout)); err != nil {
+		s.logger.Warn("sendSnapshot: approval_snapshot send failed, removing dead connection", "err", err)
+		s.removeUI(uc.ws)
+		return
 	}
 }
 

@@ -169,6 +169,69 @@ func TestFetchUsageLinkDefaultsRejectsNon2xx(t *testing.T) {
 	}
 }
 
+func TestFetchInstallLinkDefaultsRejectsNon2xx(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
+
+	_, err := fetchInstallLinkDefaults(ts.URL)
+	if err == nil {
+		t.Fatal("expected error for 500, got nil")
+	}
+}
+
+func TestFetchInstallLinkDefaultsReadsValidJSON(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"claude":"https://example.com/claude","codex":"https://example.com/codex"}`))
+	}))
+	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
+
+	got, err := fetchInstallLinkDefaults(ts.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got["claude"] != "https://example.com/claude" {
+		t.Fatalf("expected claude URL to be read, got %+v", got)
+	}
+	if got["codex"] != "https://example.com/codex" {
+		t.Fatalf("expected codex URL to be read, got %+v", got)
+	}
+}
+
+func TestSanitizeInstallLinkDefaultsDropsUnsafeURLs(t *testing.T) {
+	fetched := InstallLinkDefaults{
+		"claude":  "https://example.com/claude",
+		"http":    "http://example.com/insecure",
+		"js":      "javascript:alert(1)",
+		"missing": "",
+	}
+	got := sanitizeInstallLinkDefaults(fetched)
+	if len(got) != 1 {
+		t.Fatalf("expected only the https:// entry to survive, got %+v", got)
+	}
+	if got["claude"] != "https://example.com/claude" {
+		t.Fatalf("expected claude URL to survive sanitization, got %+v", got)
+	}
+}
+
+func TestInstallLinkCacheReturnsEmptyMapOnFetchFailure(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+	useExternalHTTPClientForTest(t, ts.Client())
+
+	cache := newInstallLinkCache()
+	got := cache.get(ts.URL)
+	if len(got) != 0 {
+		t.Fatalf("expected empty map on fetch failure, got %+v", got)
+	}
+}
+
 // --- C4: 負キャッシュ ---
 
 func TestModelsRemoteCacheNegativeTTL(t *testing.T) {
@@ -184,7 +247,7 @@ func TestModelsRemoteCacheNegativeTTL(t *testing.T) {
 
 	// 1 回目: fetch 試行 → 失敗
 	got := cache.get(ts.URL)
-	if len(got.Anthropic) != 0 || len(got.OpenAI) != 0 || len(got.Copilot) != 0 || len(got.CursorAgent) != 0 {
+	if len(got["anthropic"]) != 0 || len(got["openai"]) != 0 || len(got["copilot"]) != 0 || len(got["cursor-agent"]) != 0 {
 		t.Fatalf("expected empty models on fetch failure, got %+v", got)
 	}
 	if n := atomic.LoadInt32(&fetchCount); n != 1 {
@@ -230,7 +293,8 @@ func TestModelsRemoteCacheNegativeTTLResetOnSuccess(t *testing.T) {
 			return
 		}
 		d := modelsDefaults{
-			Anthropic: []Model{{ID: "test-model", Label: "Test"}},
+			"anthropic":       []Model{{ID: "test-model", Label: "Test"}},
+			"future-provider": []Model{{ID: "future-model", Label: "Future"}},
 		}
 		b, _ := json.Marshal(d)
 		w.Header().Set("Content-Type", "application/json")
@@ -253,8 +317,11 @@ func TestModelsRemoteCacheNegativeTTLResetOnSuccess(t *testing.T) {
 	fail = false
 	result := cache.get(ts.URL)
 
-	if len(result.Anthropic) == 0 || result.Anthropic[0].ID != "test-model" {
+	if len(result["anthropic"]) == 0 || result["anthropic"][0].ID != "test-model" {
 		t.Fatalf("expected test-model after recovery, got %+v", result)
+	}
+	if len(result["future-provider"]) == 0 || result["future-provider"][0].ID != "future-model" {
+		t.Fatalf("expected generic catalog key to survive JSON decoding, got %+v", result)
 	}
 	// 負キャッシュがクリアされていること
 	cache.mu.Lock()

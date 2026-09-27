@@ -1,8 +1,19 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-08-17(月) 09:57:26 — 3 項目追記（`gofmt -l` が CRLF working tree で使えない / 子プロセス env の実測テスト / `config.yaml` の寛容デコード）
+> 最終更新: 2026-09-27 05:23:16 — 調査用のログ・追跡・監視機能全般を purge で分離し、リリースへ混ぜない方針を明文化
+> 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
 
-`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。設計書: [../docs/v0.3.x-many-ai-cli-design.md](../docs/v0.3.x-many-ai-cli-design.md)
+`many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
+
+## 調査用機能の分離と purge
+
+調査のために仕込むログ収集・追跡・監視・計測機能は、種類や案件を問わずリリースへ混ぜない。実装時から、既存の `debug-purge` で一式を外し、必要なら `debug-restore` で戻せる構造にする。通常の製品機能として提供する運用ログとは区別する。
+
+- 記録点は共有の `probe` を経由し、収集・タイマー・Worker・保存 API・専用 UI・付随テストは専用ファイルへ分離する。専用部分を消した後、共有の記録点は no-op になり、通信・保存・監視を起こさないこと。
+- 調査用 Go は `maidebug`、Web は `web/src/debug/` と `MAI_DEBUG` で同梱を制限する。通常ビルドに入れて設定だけで OFF にする方式は使わない。
+- `instrumentation.json` に専用 `files`、共有 `sharedFiles`、`channels`、`endpoints`、`artifactNeedles`、期限と理由を登録する。収集した内容を削除するだけでは機能の purge にならない。
+- リリース前に全 active 項目を既存の `make debug-purge id=<id>` で1件ずつパージし、登録解除と台帳更新をまとめて行う。手作業でファイルを消す運用へ戻さない。単独の撤去コミットを残す既存ルールに従い、再調査時は `debug-restore` を使う。
+- `node scripts/check-instrumentation.mjs --release` は未パージの項目が1件でもあれば失敗する。期限内・ビルドタグ付きでも例外にしない。通常の検査は調査中の active を許可し、成果物は既存 `check-artifact-clean.mjs` でも照合する。台帳の具体的なルールと機械検査を正本とする。
 
 ## 言語別コーディング規約
 
@@ -93,6 +104,7 @@
 
 - **Go:** `go test ./...` で単体テスト。PTY 関連は OS 別 build tag で分岐したテストファイル（`_unix_test.go` / `_windows_test.go`）
 - **Web:** `bun run check`（TypeScript）+ `bun run test`（approval-parser fixtures）。Hub 起動 → モックラッパー → UI 操作の E2E は未整備のため、フロント大変更後は手動ブラウザ確認が必要。
+  - **AI の確認では `bun run test` も `bun --cwd web test` も使わない。** package の `test` は先頭で `bun run build` を実行して `web/dist` を書き換える（ビルドはユーザーが行う決まり）。ビルドせずに走らせるには、`web` ディレクトリで `bun test ./tests/<name>.test.ts`、fixture なら `bun test ./src/app/<name>-fixtures.ts` を使う（2026-09-23 と 2026-09-24 に同じ取り違えが 2 回）
 - **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
 
 ### `go test ./...` の赤は、切り分けてから自分の変更を疑う

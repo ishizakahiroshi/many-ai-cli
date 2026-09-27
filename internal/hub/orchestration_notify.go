@@ -86,7 +86,7 @@ func orchestrationEventBlockedLocked(ses *session, now time.Time) string {
 	if ses.initialInjectPending || sessionInjectGated(ses, now) {
 		return "initial prompt pending"
 	}
-	if ses.Activity.AwaitingUser || ses.Activity.AwaitingApproval || ses.approvalVisible {
+	if ses.Activity.AwaitingUser || ses.Activity.AwaitingApproval || ses.pendingApproval != nil {
 		return "awaiting user"
 	}
 	if !ses.Activity.IsIdle() {

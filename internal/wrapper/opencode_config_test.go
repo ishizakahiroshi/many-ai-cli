@@ -53,7 +53,7 @@ func TestPrepareOpenCodeConfigCreatesAndRemoves(t *testing.T) {
 	cwd := t.TempDir()
 	cfgPath := filepath.Join(cwd, "opencode.json")
 
-	cleanup, err := prepareOpenCodeConfig(cwd, "ask", quietLogger())
+	cleanup, err := prepareOpenCodeConfig(cwd, "ask", nil, quietLogger())
 	if err != nil {
 		t.Fatalf("prepareOpenCodeConfig: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestPrepareOpenCodeConfigRestoresExisting(t *testing.T) {
 		t.Fatalf("seed config: %v", err)
 	}
 
-	cleanup, err := prepareOpenCodeConfig(cwd, "allow", quietLogger())
+	cleanup, err := prepareOpenCodeConfig(cwd, "allow", nil, quietLogger())
 	if err != nil {
 		t.Fatalf("prepareOpenCodeConfig: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestPrepareOpenCodeConfigPreservesConcurrentEdit(t *testing.T) {
 		t.Fatalf("seed config: %v", err)
 	}
 
-	cleanup, err := prepareOpenCodeConfig(cwd, "allow", quietLogger())
+	cleanup, err := prepareOpenCodeConfig(cwd, "allow", nil, quietLogger())
 	if err != nil {
 		t.Fatalf("prepareOpenCodeConfig: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestPrepareOpenCodeConfigRecoversOrphan(t *testing.T) {
 	lockPath := cfgPath + ".many-ai-cli.lock"
 
 	// 1st セッション: 設定を作るところまでは通るが cleanup は呼ばない（kill 相当）。
-	if _, err := prepareOpenCodeConfig(cwd, "allow", quietLogger()); err != nil {
+	if _, err := prepareOpenCodeConfig(cwd, "allow", nil, quietLogger()); err != nil {
 		t.Fatalf("first prepareOpenCodeConfig: %v", err)
 	}
 	// ロックの保持 PID を「終了済みプロセス」に差し替えて死んだセッションを再現する。
@@ -158,7 +158,7 @@ func TestPrepareOpenCodeConfigRecoversOrphan(t *testing.T) {
 	}
 
 	// 2nd セッション: 置き去りを回収してから "ask" を書く。
-	cleanup, err := prepareOpenCodeConfig(cwd, "ask", quietLogger())
+	cleanup, err := prepareOpenCodeConfig(cwd, "ask", nil, quietLogger())
 	if err != nil {
 		t.Fatalf("second prepareOpenCodeConfig: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestPrepareOpenCodeConfigSkipsWhenLockedByLiveSession(t *testing.T) {
 		t.Fatalf("seed lock: %v", err)
 	}
 
-	if _, err := prepareOpenCodeConfig(cwd, "ask", quietLogger()); err == nil {
+	if _, err := prepareOpenCodeConfig(cwd, "ask", nil, quietLogger()); err == nil {
 		t.Fatal("prepareOpenCodeConfig should fail while another live session holds the lock")
 	}
 	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {

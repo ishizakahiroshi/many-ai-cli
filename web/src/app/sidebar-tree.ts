@@ -126,6 +126,24 @@ export function projectKeyForSession(session: SessionSnapshot, all: Iterable<Ses
 }
 
 /**
+ * 明示的にセッションカードを選んだとき、開いている箱を切り替える必要があればそのキーを返す。
+ * multi 表示中のカード選択はペインのフォーカス移動なので、開いている箱は変えない。
+ */
+export function projectBoxKeyAfterSessionCardSelection(
+  sessionID: number,
+  openProjectKey: string | null,
+  multiViewOpen: boolean,
+  sessions: Iterable<SessionSnapshot>,
+): string | null {
+  if (multiViewOpen) return null;
+  const all = Array.from(sessions).filter(Boolean);
+  const selected = all.find(session => session.id === sessionID);
+  if (!selected) return null;
+  const selectedProjectKey = projectKeyForSession(selected, all);
+  return selectedProjectKey === openProjectKey ? null : selectedProjectKey;
+}
+
+/**
  * サイドバーに描く木を組み立てる。
  *
  * 所属（どのプロジェクトに入るか）はルート祖先から決まるので、worktree で動いている

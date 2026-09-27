@@ -56,13 +56,25 @@ Each pane can run any supported provider — `claude`, `codex`, `copilot`, `curs
 | Cursor Agent CLI | `cursor-agent` | official CLI; sign in first |
 | Grok Build CLI | `grok` | xAI's official terminal coding agent; sign in first (requires a **SuperGrok** or **X Premium+** subscription — base X Premium does not include it) |
 | opencode | `opencode` | community CLI; sign in first. Instead of pattern-scraping approval prompts, the Hub writes `opencode.json` (`permission: ask` for interactive sessions, `permission: allow` for orchestration children) into the session cwd and restores the original file on session end |
-| Command Code | `command-code` | **terminal and spawn supported; approval integration pending fixture validation.** The session runs and the approval-mode select maps onto its own flags, but the approval detector has not been validated against captures of the real prompt yet — answer approvals in the terminal if the action bar does not pick them up. Multiple subscriptions are not supported. The OS aliases `cmd` / `cmdc` are not used as the subcommand, because `cmd` collides with the Windows shell |
+| Command Code | `command-code` | **terminal, spawn, approval cards and the Chat tab are implemented; the end-to-end flow has not been confirmed in a live session yet.** The session runs, the approval-mode select maps onto its own flags, the approval detector's trigger phrases come from a capture of the real permission screens (Command Code 1.53.0), and the Chat tab is read from Command Code's own session file. None of that has been watched working on a running Hub, so answer approvals in the terminal if the action bar does not pick them up. Multiple subscriptions are not supported. The OS aliases `cmd` / `cmdc` are not used as the subcommand, because `cmd` collides with the Windows shell |
 
 **Ollama** is not a separate wrapper. Run Ollama models *through* the `claude` or `codex` wrapper — pick **Ollama Cloud / Ollama Local** in the spawn form's model picker, and the Hub points the Anthropic/OpenAI-compatible endpoint at Ollama (see "Model picker with Ollama routing" in Features).
 
 Gemini CLI is intentionally out of scope.
 
+## NVIDIA NIM trial route (OpenCode only)
+
+The Hub can add NVIDIA NIM as an optional OpenCode provider. OpenCode sends inference requests directly to NVIDIA's Chat Completions endpoint (`/v1/chat/completions`); the Hub does not proxy inference. The Hub uses NVIDIA's `/v1/models` endpoint only to populate the model picker and to run the Settings connection check. This route is not available for Codex CLI or Claude Code.
+
+Configure it in **Settings → NVIDIA NIM**. The API key can be saved in the user's protected many-ai-cli secret storage or supplied to the Hub as `NVIDIA_API_KEY`. The UI shows only whether a key is configured and its source; it never returns the key. A key managed by the Hub environment cannot be replaced or removed from the UI.
+
+NVIDIA API trial access is for internal testing and evaluation, not production use unless a separate applicable subscription permits it. Do not send confidential, controlled, or sensitive information. NVIDIA's trial terms say user and generated content may be used to improve NVIDIA products, including AI models. This integration makes no production availability or SLA promise. See the [NVIDIA API Trial Terms](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
+
+The model picker reflects NVIDIA's catalog, which can include models that do not support Chat Completions. Catalog presence and a successful `/v1/models` check do not establish prompt, streaming, tool-use, file-edit, shell, or resume compatibility. Verify a specific model with a public, non-sensitive test repository before relying on it. The [NVIDIA LLM API reference](https://docs.api.nvidia.com/nim/re/reference/llm-apis) documents the Chat Completions endpoint.
+
 Want to run a CLI `many-ai-cli` does not wrap out of the box — including one it deliberately excludes here? You can register it yourself; see [Custom providers](#custom-providers-power-users) below.
+
+The install-status list (first-run screen, and Settings → AI CLI integrations) can check each CLI's version and update it from the Hub — on demand only, never on startup or on a schedule. Update runs the command from that provider's own "Version and update" settings, showing you the exact command in a confirmation dialog first; a CLI with a running session cannot be updated until the session ends. The bundled 7 providers ship with a default update command, except Cursor Agent CLI and Command Code, which default to update *off* because updating can ask you to log in again. Change any provider's update command, or turn it on for a CLI you added yourself, in Settings → AI CLI integrations → edit → *Version and update*. This only ever sees a CLI the Hub itself launched or found on `PATH` — a copy running in a terminal window you opened yourself is invisible to it.
 
 ---
 
@@ -83,6 +95,7 @@ Want to run a CLI `many-ai-cli` does not wrap out of the box — including one i
 - **Raw-log shortcuts** — from a session's raw transcript, copy its full path or open the containing folder in the system file manager
 - **Voice input** — dictate prompts through Browser recognition or local Whisper, with Windows x64 managed Whisper install
 - **PWA + opt-in Web Push** — install the Hub as a local web app and receive approval notifications after explicitly enabling push in Settings
+- **Finished-run notifications** — desktop notification and sound also fire when a session finishes a run and goes back to idle, not only for approvals; mute it per session with the bell on its card, or turn it off entirely in Settings
 - **Approval pattern profiles** — keep official remote-synced trigger phrases separate from local custom edits
 - **Server-side user preferences** — keep voice, notification, favorites, session order, spawn defaults, and avatar settings in `config.yaml`
 - **Spawn new sessions** from the UI (`/api/spawn`), optionally with an initial instruction typed into the new-session panel so the CLI starts with a task already in hand
@@ -97,6 +110,28 @@ Want to run a CLI `many-ai-cli` does not wrap out of the box — including one i
 
 By default, child sessions run in separate git worktrees under `.many-ai-cli/worktrees/<orchestration_id>/<role>` when the parent cwd is a git repository. The Hub does not auto-merge child branches; the conductor or user decides what to merge after reviewing the board and branch.
 
+Claude Code and Codex children are handed their first instruction as a launch argument, so the Hub never types into a screen it cannot read: the CLI keeps the instruction through its own startup questions (folder trust, update notices) and starts on it once they are answered. A conductor started with the Orchestration button, and a session started with a first instruction (for example a handoff), get theirs the same way. Other CLIs have it typed in once their input box appears. On Windows, when the CLI is started through `cmd.exe` (which cuts an argument at its first newline) or the instruction is very long, the argument is a one-line pointer to a private file under `~/.many-ai-cli/tmp` that is removed when the session ends. As with headless sessions, the instruction can be read from the machine's process list while the CLI runs.
+
+For a Claude Code or Codex child, the spawn confirmation dialog also shows **Register this folder as trusted in** *the CLI*, ticked by default. Approve with it ticked and, right before the child starts, the Hub records trust in the same file, for the same folder and in the same form the CLI itself writes when you answer yes to its trust question — a `projects` entry with `hasTrustDialogAccepted: true` in Claude Code's `.claude.json`, or a `[projects.'<folder>']` table with `trust_level = "trusted"` in Codex's `config.toml` (the subscription profile's copy when the child runs under one) — so the child starts without asking. Like the CLI, it records the repository the child's folder belongs to (the main repository for a git worktree), or the folder itself outside git, so approving a child in a subfolder trusts the whole repository. Nothing is written when the CLI already has an entry that decides the folder, or, for Codex, when the folder, its repository or any folder above them is marked untrusted (whatever the letter case); the one entry that is changed is a Claude Code entry nobody has answered yet (`hasTrustDialogAccepted: false`, the value Claude Code starts every entry with), which is set to `true`. Nothing is registered when the repository would be your home folder or a drive root, or when the folder is a network (UNC) path. Only your approval in the dialog can ask for this, never an AI's spawn request, and if the write fails the child starts anyway and asks in its own session. With the box unticked, or when no dialog is shown, the child waits on its trust question; the board (and the conductor, when there is one) is told once that it is waiting for you — on this or any other startup screen — and the instruction starts as soon as you answer in the child session. Until then the Hub types nothing into the child: `many-ai-cli orchestrate send` returns an error instead, and the wait does not count toward the child's timeout.
+
+A child's permissions come in three tiers, chosen with `permission_preset` on the launch request (and in the spawn confirmation dialog). `attended` adds nothing, so the child's approval prompts arrive in the Hub's approval panel for you to answer. `bounded` asks nothing but allows only what is on a list — Claude runs with `--permission-mode dontAsk` plus `--allowedTools`, Codex with `--ask-for-approval never --sandbox workspace-write`, Copilot with an `--allow-tool` list (Copilot has no auto-deny, so a tool outside the list still prompts and that prompt reaches the approval panel), OpenCode with `--auto` plus deny rules written into `opencode.json` for the session. `full` is full access. The built-in bounded allowlist covers reading, editing, `go test` / `go vet` / `gofmt` / `bun run check`, and `git add` / `git commit`; `git push`, `git reset`, `git clean` and `rm` are left out on purpose, and `orchestration.bounded_allowed_tools` (a per-provider list) changes it. An unattended child — a conductor's `orchestrate spawn`, or a relay child — takes `orchestration.child_permission_default` when the request names no tier; that default is `full` today, and setting it to `bounded` moves unattended children to the narrowed tier. Grok and Cursor Agent have no way to run unattended without granting everything, so asking for `bounded` there starts a full-access child and the confirmation dialog says so.
+
+A session can also run without a terminal at all. `execution_mode` takes `interactive` (a PTY and the CLI's own TUI — what every session is by default), `headless` (the CLI's own non-interactive mode: `claude -p`, `grok -p`, `cursor-agent -p`, `opencode run`, `copilot -p`, `command-code -p`), or `auto`, which picks headless when nobody is watching the session and the CLI supports it, and interactive otherwise. A headless session gets its instruction at startup instead of typed into a prompt, has no input box (the CLI closed its input when it started), and finishes when the process exits — exit code 0 is completed, anything else failed. Stop one by closing its card, which ends the whole process tree. Asking for `headless` on a CLI that has no such mode is an error, never a quiet downgrade to an interactive session that would then wait for someone to type. **Codex is not headless-capable here**: `codex exec` rejects the approval flag every unattended Codex child is started with, so a definition for it would only build a command line that fails to parse. Any other CLI with a print mode can be added without a new build — give its `custom_providers:` entry a `headless:` block:
+
+```yaml
+custom_providers:
+  - id: my-cli
+    command: my-cli
+    headless:
+      args: ["--print", "--output-format", "text"]  # the flags that select its print mode
+      format: text        # "text" = show its output, let the exit code decide the outcome
+      prompt_via: arg     # "arg" (first positional, right after args) or "stdin"
+```
+
+Model, effort and permission flags are never written into that block: they are appended by the same code an interactive launch uses, so the two modes cannot drift apart.
+
+You can also start a child yourself: every AI session card has a 🌱 button that opens the derive dialog. Pick **child**, choose the role, CLI, subscription profile, model, effort, execution mode and permission tier, edit the first instruction, and press Start. A child started this way raises **no spawn confirmation** — pressing the button is the approval — and runs at the `attended` tier, so its approval prompts arrive in the Hub's approval panel like any session you started yourself. The depth and child-count limits apply exactly as they do to a conductor's spawn. The dialog shows the permissions the child will actually start with, so switching CLI or tier shows you what changes before you commit. Tick **use this tier for this role next time** to keep the tier you picked for that role: the derive dialog opens with it selected the next time you pick that role, and so does the spawn confirmation dialog the next time an AI asks for a child of it. Only that checkbox writes the memory — an AI's own spawn request cannot — and unticking it forgets the role again. The same dialog's other kind, **handoff**, is described under [Session handoff records](#session-handoff-records).
+
 Known limits: this is intentionally lightweight. Board changes are detected by 2-second polling; delivery follows `orchestration.board_notify_mode` (`queue-until-idle` by default, `soft-notify` for badge-only, `interrupt` for immediate Enter-backed inject). Child sessions default to full permission bypass for unattended work (`orchestration.child_full_bypass`, default `true`): codex children start with `--sandbox danger-full-access --ask-for-approval never`, and the others start in their own CLI's bypass-permissions equivalent. A conductor's spawn still waits for a human confirmation (`orchestration.spawn_confirm_mode`, default `on`); relay children skip that confirmation by design. Setting `child_full_bypass` to `false` stops the auto-confirmation of high-risk permissions, but relay children then stall on approval prompts with nobody there to answer them. Completion depends on the child writing `## DONE <role> session=<child_id>`, and there is no job DAG, retry queue, or automatic merge.
 
 ### Orchestration relay loop
@@ -105,12 +140,14 @@ The relay loop runs one plan through implementation → review → fix, one C at
 
 There are two entry points:
 
-- Conductor CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md` (pass `--impl provider[/model]` and `--review provider[/model]` when no role mapping is configured; `--strong provider[/model]` is optional).
-- Hub UI: open the relay dialog from a conductor session card or the orchestration dashboard.
+- Conductor CLI: `many-ai-cli orchestrate relay --plan docs/local/plan_example.md` (pass `--impl provider[/model][@effort]` and `--review provider[/model][@effort]` when no role mapping is configured; `--strong provider[/model][@effort]` is optional). The `@effort` part is the child's reasoning effort and is optional; `--execution-mode` sets one mode for every role and `--permission` sets one permission tier for every role. `many-ai-cli orchestrate spawn` takes `--effort` / `--execution-mode` / `--permission` for a single child. `--help` is the authority on the accepted values.
+- Hub UI: open the relay dialog from a conductor session card or the orchestration dashboard. Its role table sets the CLI, model, subscription profile and permission tier per role, and remembers them for the next relay.
 
 The default is a dedicated git worktree on branch `many-ai-cli/relay/<orchestration_id>`. Each C is committed there; Hub never auto-merges it, so review the branch and merge it into your own branch when you are ready. Multiple relays can run from one parent, subject to `orchestration.max_children_per_parent` (default 4, enough for two ordinary relays). If two relays edit the same file, resolve that conflict when merging.
 
 The normal two-tier path uses a cheap implementation model and an optional stronger implementation model. After two failed review rounds by default, or when a plan C is marked `[strong]`, Hub can hand that C to the strong role if a child slot is available; use a limit of 6 or more when planning to run two such relays concurrently. `--same-tree` is an explicit escape hatch: the children edit the user's working tree directly, so no other AI or user should edit that tree in parallel.
+
+Relay roles can run headless too, and there the shape is one process per instruction: the Hub starts a worker with that instruction as its prompt, the process exiting says the instruction is finished, and the next instruction starts a new worker. A `## DONE <role>` line is no longer required on that route (the exit replaces it), while the reviewer's `verdict:` line still is, because that is the decision the relay acts on. The standing context an interactive worker was told once at spawn travels with each instruction instead. `orchestration.relay_execution_mode` (`auto` / `interactive` / `headless`, unset = interactive) is the default for roles that name no mode, and `--execution-mode` overrides it for one run; a role whose CLI has no headless mode is refused when the relay starts rather than quietly run interactively. A Hub restart cannot reattach to a headless worker, so such a relay stops with `hub_restart` — a resumable reason, so resuming it starts a fresh worker that continues from the git history.
 
 A relay stops for a round limit, timeout, missing verdict or review file, blocked verdict, child exit, or the Stop button. Its `relay.json` state is restored after a Hub restart and can be resumed when the stop reason is resumable. Completion and stopping produce a relay notification. The working files live under `~/.many-ai-cli/orchestration/<orchestration_id>/` (`board.md`, `child-<id>.md`, `review-c<k>-r<r>.md`, and `relay.json`). This remains a lightweight sequential runner, not a general job DAG: one plan's C entries are processed in order.
 - **Unified launcher (Windows / Linux / macOS)** — `many-ai-cli-launcher` connects to a Hub via saved profiles and opens your default browser: SSH `serve` / `tunnel` profiles work on every OS, and WSL profiles start a Hub inside WSL on Windows
@@ -129,7 +166,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 
 **Remaining quota** is the breakdown of that stack, not a separate product. The Usage menu lists each profile and, for Claude (5h / 7d), Codex, and Grok, the remaining figure. Copilot, Cursor, and OpenCode stay as links to the vendor page — Cursor Agent CLI in particular has no local file or command that reports remaining quota (checked on the Free tier), so it cannot be detected. Numbers are read when you open the menu, not on a timer; Claude may run a one-turn probe if nothing is already reporting.
 
-**How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<id>` and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, plan label, and enabled flag.
+**How it works.** Every supported CLI selects its configuration directory from an environment variable. `many-ai-cli` creates one directory per profile under `~/.many-ai-cli/subscriptions/<provider>/<dir>` (a short `p1`, `p2`, … name kept apart from the id, because some CLIs build length-limited socket paths inside it; profiles added before this keep their id as the folder name) and sets that variable when it launches the session. The official CLI does its own login and owns the credential inside that directory. `many-ai-cli` never reads, writes, parses, or stores the token, and `config.yaml` holds nothing but the profile's id, display name, folder name, plan label, enabled flag and the hand-written options described below (`profile_dir`, `settings_sync`, `profile_owned_keys`, `default_wins_keys`).
 
 | Provider | Variable used | Status |
 |---|---|---|
@@ -139,7 +176,7 @@ This is **not an API key router**. It does not pool metered API keys to make req
 | opencode | `XDG_DATA_HOME` | supported — see the note below |
 | GitHub Copilot CLI | — | **not supported**: the token lives in the OS credential store, so `COPILOT_HOME` moves the config but not the login |
 | Cursor Agent CLI | — | **not supported**: the token lives in `~/.cursor/cli-config.json` and no environment variable relocates it |
-| Command Code | — | **not supported**: no profile directory is wired up, so it has no remaining-quota reading either |
+| Command Code | — | **not supported**: no profile directory is wired up. Remaining quota is not read either, and that is independent of the profile question — its own files record per-message token counts and cost, but no limit, remaining amount, or reset time exists to read (measured 2026-09-20) |
 
 **Using it**
 
@@ -152,12 +189,28 @@ This is **not an API key router**. It does not pool metered API keys to make req
 
 **Your everyday configuration is carried in for you.** When `many-ai-cli` prepares a profile it copies the parts you would otherwise lose from your default directory — for Claude that is `CLAUDE.md`, `settings.json` (including your approval allowlist and hooks), `skills` and `commands`; for Codex and Grok, `AGENTS.md`, `config.toml` (including the approval policy and trusted folders) and `prompts`.
 
-- **Nothing that already exists in a profile is ever overwritten.** A value you changed inside a profile stays; only what is missing gets added.
+- **Your settings files are kept in step with your default ones** — Claude's `settings.json`, and Codex's and Grok's `config.toml`. Each time a profile is prepared for a session, the policy you maintain in one place — hooks, permissions, `env` and feature switches such as `enableArtifact`, `skillOverrides`, `enabledPlugins` for Claude; the approval policy, sandbox mode, MCP servers and feature flags for Codex and Grok — is taken from your default file: a key you add or change there reaches the profile at its next launch, and a hook you delete stops running there too. What each CLI writes for itself stays the profile's: for Claude `theme`, `effortLevel`, `autoMode`, `modelSettings`, `tui` and the other `/config` toggles; for Codex `projects`, `tui`, `notice`, `windows`, `model`, `model_reasoning_effort` and `hooks`; for Grok `cli` and `ui`. A key that exists only in the profile is left alone, and nothing is written when the two already agree. To turn a plugin on or off for every profile, do it in your default directory; a `claude plugin disable` run inside a profile is undone at its next launch, and `many-ai-cli doctor` shows the disagreement until then.
+- **A profile's `config.toml` loses its comments whenever the sync changes something.** The file is parsed and written back rather than patched line by line, so the profile's copy comes out with its keys in sorted order and its comments gone. A pass that changes nothing writes nothing, so a profile that already agrees with your default keeps both. Your own `~/.codex/config.toml` and `~/.grok/config.toml` are only ever read — their comments and ordering are never touched.
+- **A profile can opt out of that sync, or change which keys it owns.** Three settings in `~/.many-ai-cli/config.yaml` decide this per profile, and they are hand-written only: the Hub UI never sets them, and renaming a profile or switching it off from Settings leaves them exactly as you wrote them. `settings_sync: false` puts one profile back on the old rule — its `settings.json` is carried in once if it has none, and never touched again. `profile_owned_keys` adds keys that profile keeps for itself (`enabledPlugins` is the usual one, when the plugin set is meant to differ per profile), and `default_wins_keys` hands a key back to your default file (`theme`, when every profile should look the same). Write nothing and the standard rules above apply. `many-ai-cli doctor` adds one line for a profile that uses any of them, naming the keys and never their values.
+
+  ```yaml
+  subscriptions:
+    claude:
+      - id: work
+        name: Work
+        profile_owned_keys: [enabledPlugins]
+        default_wins_keys: [theme]
+      - id: personal
+        name: Personal
+        settings_sync: false
+  ```
+
+- **Everything else that is copied keeps the old rule** — the two `.claude.json` keys, Grok's `trusted_folders.toml`: nothing that already exists in a profile is ever overwritten. A value you changed inside a profile stays; only what is missing gets added.
 - **Directories are linked** (a junction on Windows), so a skill you add later reaches every profile at once. Files are copied, because the CLI rewrites them and a link would push a profile's edits back into your default directory.
 - **Rule files are the one exception**: if your default `CLAUDE.md` (or `AGENTS.md` for Codex/Grok) is itself a symlink, a profile gets a symlink to the same resolved target instead of a copy, so editing the original reaches every profile with no re-seed. If the link cannot be made (Windows without Developer Mode), it falls back to a copy and `many-ai-cli doctor` says so. Replace the link with a regular file if you want that profile's rules to diverge from the default — it is never overwritten.
 - **Credentials are never carried.** `.credentials.json` and `auth.json` are excluded. Claude's `.claude.json` mixes account identity with preferences, so two named keys are copied rather than the file. <!-- secrets-scan: allow .credentials.json -->
-- Writes land only under `~/.many-ai-cli/subscriptions/`; your `~/.claude`, `~/.codex` and `~/.grok` are read and never written, and `many-ai-cli uninstall` removes everything this creates.
-- Later changes to your default directory are not followed automatically. `many-ai-cli doctor` reports what your default has that a profile does not.
+- Writes land only under `~/.many-ai-cli/subscriptions/`; your `~/.claude`, `~/.codex` and `~/.grok` are read and never written, and `many-ai-cli uninstall` removes everything this creates. The one exception is folder trust for a child session (see [Light orchestration](#light-orchestration)): approving a child with **Register this folder as trusted** ticked adds one entry to that CLI's own file — `~/.claude.json` or `~/.codex/config.toml` for the default login, the profile's own copy under a profile — and `many-ai-cli uninstall` does not remove it from the default login's file (a temp file an interrupted write leaves beside `.claude.json` is removed the next time the Hub starts).
+- Apart from those settings files, later changes to your default directory are not followed automatically. `many-ai-cli doctor` reports what your default has that a profile does not, and for the synced settings files it names the keys that differ from your default — never their values.
 
 **Browser integration follows the directory too.** Claude in Chrome keeps its enabled state inside the configuration directory. That "enabled by default" preference is one of the things carried into a new profile, but actually reaching the browser is a separate matter. The native-messaging registration it writes is a single per-user slot shared by every Chrome profile and by Edge, so whichever configuration directory enabled it last is the one the browser talks to, and enabling from another profile moves the slot rather than adding one. The browser extension also has to be signed in to the same Claude account as the session. In practice one configuration directory owns the browser at a time; two accounts cannot drive it in parallel. `many-ai-cli` sets the environment variable and nothing else — it neither writes nor reads any of this state.
 
@@ -171,7 +224,11 @@ If you never open this section, nothing changes: sessions launch with the enviro
 
 ## Custom providers (power users)
 
-Beyond the [seven built-in CLIs](#supported-providers), you can register your own AI CLI as a spawn option by hand-editing `custom_providers:` in `config.yaml`. There is no "Add provider" button anywhere in the Hub UI — writing `config.yaml` yourself is the only way in, and the only way to change or remove an entry too. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection.
+Beyond the [seven built-in CLIs](#supported-providers), you can register your own AI CLI from the Hub UI. Open **Settings → AI CLI integrations**, or choose **Add AI CLI** at the end of the **+ New Session** provider list. Enter a display name and executable, press Validate, then Save. If validation or save fails, the dialog keeps your input so you can correct it. After a save from New Session, the new CLI is selected. JSON editing is not required. Each provider row also has a **Duplicate** action that adds a new CLI using that row as a starting point; the copy's name gets an " (copy)" suffix.
+
+Editing a built-in provider (or disabling/re-enabling it) saves your change as an override on top of the built-in definition; the built-in definition itself is never modified. A field that the built-in definition fills in can't currently be saved empty — for example an empty argument list or an empty text field. The save is refused and the edit dialog names the fields, so you can keep the value or enter a different one. Each save creates a new revision and an automatic backup, so a bad edit or a corrupted file never loses the last good state. Open **History** on a provider row to see revisions and backups, verify a backup's integrity, or restore from it; the same actions are available without the UI via `many-ai-cli provider backup list|verify|restore` and `many-ai-cli provider reset --distributed`. If a provider's config file itself is corrupted, History shows a recovery notice — "This CLI's config file is broken. The broken file has been preserved. Choose what to restore to." — with candidates such as the last readable version of your own config; when the UI isn't reachable, use `many-ai-cli provider recover <provider-id> [revision|--list]`.
+
+Power users can still hand-edit `custom_providers:` in `config.yaml`. Once added, a custom provider spawns and attaches through the PTY exactly like a built-in one, including being counted for approval detection. Official catalog import is prepared in the Hub but stays off until signing keys are configured; a downloaded definition is never applied automatically.
 
 ```yaml
 custom_providers:
@@ -209,7 +266,7 @@ If `command`'s executable is not on PATH, the session ends the same way a missin
 | Go | 1.25+ (build time) |
 | OS | Windows 10/11, macOS, Linux |
 | Browser | Chrome / Edge / Firefox / Safari |
-| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI (install the providers you intend to use separately) |
+| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code (install the providers you intend to use separately) |
 
 ### Platform verification
 
@@ -374,7 +431,7 @@ Whichever install path you used, the next steps are the same.
 
    On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop, which starts a tray icon, and puts the same shortcut in your **Startup folder** so the tray is there after you sign in. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
 2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
-3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
+3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok / command-code). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
 To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
@@ -561,7 +618,7 @@ The launcher does not change the Hub's security model:
 - Passwords and key passphrases are never saved; key-based authentication is required (`-o BatchMode=yes`)
 - The token retrieved by `token_command` is used only for the current session and is not written to `launcher-profiles.yaml`
 
-For the full profile schema and connection flow details, see [docs/v0.3.x-many-ai-cli-design.md — §13](docs/v0.3.x-many-ai-cli-design.md).
+For the full profile schema, see the `Profile` struct in [internal/launcher/profile.go](internal/launcher/profile.go); the connection flow is in [internal/launcher/connect.go](internal/launcher/connect.go).
 
 #### If Windows blocks the launcher: remote-server access without local `.exe`
 
@@ -949,7 +1006,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`.
   - Right edge: `⏻` (stop the Hub) and `Settings` (language, theme, timeouts, log dir, etc.).
 - **Left sidebar (session list)**
-  - Top: `+ New Session` button (opens the spawn dialog).
+  - Top: `+ New Session` button (opens the spawn dialog). The provider list ends with **Add AI CLI**, which opens the same dialog as **Settings → AI CLI integrations**.
   - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
   - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
@@ -958,12 +1015,14 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
   - Bottom: multi-line input box, attach / send buttons, slash-command picker (`/clear`, `/model`, `/`), and the auto-mode toggle hint `shift+tab`.
-- **Tabs**: Terminal, Chat, Split, Multi, Files, and Git tabs share the main area. Files and Git tabs are loaded lazily and can be restored after restart.
+- **Tabs**: Terminal, Chat, Split, Multi, Files, Git, and Review tabs share the main area. Files, Git, and Review tabs are loaded lazily and can be restored after restart.
 - **Chat / Split**: chat view extracts user turns, AI output, approvals, and attachments from the live PTY stream. Split view keeps chat history beside the terminal.
 - **Multi tab**: shows several sessions in a grid and routes focus, input, resize, and approval UI to the active pane.
 - **Approval action bar**: appears above the input when an approval is pending. Single prompts use buttons; multi-question prompts render stacked choices with "Submit all".
+- **Fold the action bar**: `✕` folds the action bar into a one-line strip just above the input; click the strip to open it again. While it is folded, your keys go to the terminal, and the approval stays pending. The one exception is an empty Enter (or the send button with an empty input) while a high-risk approval is folded: it is not sent, and a toast asks you to open the strip.
 - **Files tab**: left tree + right preview for project files. Markdown/code can be previewed, paths can be copied, and file move/rename actions are available from the context menu.
 - **Git tab**: read-only commit log, ref selector, commit detail, changed files, diff preview, copy actions, and a guarded Commit all modal for local commits.
+- **Review tab**: per-file diff of the working tree or a single AI turn, with the same Commit all / push actions as the Git tab. Also reachable from the Files tab's + menu and from a chat turn's "Review" link — all three open the same tab. Shows a plain message instead of a diff when the session's folder is not a git repository.
 - **Sync with terminal input**: if you resolve the prompt by typing `y` / `n` directly in the terminal, the action bar disappears automatically.
 - **File and image attach**: paste or drag-and-drop into the attach area; the file is materialized locally and a path reference is injected into the PTY on send.
 - **Status bar (bottom)**: a single always-on line showing the active session's tokens, cost, context usage, and more. See [Status bar (bottom)](#status-bar-bottom) below (toggle visibility from the settings panel).
@@ -1021,6 +1080,9 @@ A single always-on line at the bottom of the screen shows the status of one acti
 | `Ctrl+C` | Send SIGINT to PTY (or copy selected text) |
 | `Ctrl+D` | Send EOF to PTY |
 | `Ctrl+O` | Expand Claude Code folded content |
+| `Ctrl+K` | Open the command palette (run commands, cross-session search) |
+| `Alt+1..9` | Switch to the matching numbered session |
+| `?` | Open the keyboard shortcut list |
 
 ---
 
@@ -1139,8 +1201,8 @@ Settings are split into three categories:
 
 | Category | Examples | Storage |
 |---|---|---|
-| **D1: UI display state** (per-device is natural) | theme, font size, language, sidebar width | Browser **localStorage** |
-| **D2: User feature settings** (shared across devices / ports) | voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.many-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
+| **D1: UI display state** (per-device is natural) | sidebar width | Browser **localStorage** |
+| **D2: User feature settings** (shared across devices / ports) | theme (including your own custom themes), font size, language, voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.many-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
 | **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.many-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
 
 `user_prefs:` (D2) survives port changes (e.g. the WSL launcher shifting from 47777 to 47877) because it is stored server-side rather than in per-origin localStorage.
@@ -1149,7 +1211,7 @@ Voice engine selection is the exception: `off` / `browser` / `whisper` stays in 
 
 On first load the browser mirrors D2 values from the server. Subsequent changes are written to both localStorage (as a cache) and the server simultaneously. Any existing localStorage values are pushed to the server automatically on first run.
 
-Approval detection patterns have an `official` / `custom` profile per provider. `official` is fetched and cached at startup from `resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` on GitHub; `custom` is for your own edits.
+Approval detection patterns have an `official` / `custom` profile per provider. `official` is fetched and cached at startup from `resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` on GitHub; `custom` is for your own edits.
 
 Custom notification sounds are stored as a binary file at `~/.many-ai-cli/notify_sound_custom.bin`, with the MIME type recorded in `user_prefs.notify_sound.custom_mime`.
 
@@ -1209,7 +1271,7 @@ For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `many-a
 ## Architecture
 
 ```
-AI CLI (claude / codex / copilot / cursor-agent / grok)
+AI CLI (claude / codex / copilot / cursor-agent / opencode / grok / command-code)
     └─ many-ai-cli wrap  <── PTY wrapper
            │ WebSocket
     ┌──────▼──────┐
@@ -1314,11 +1376,25 @@ To close it, send `/diff` in that session (the same command brings it back). Mak
 
 ### Claude workflow journal metadata
 
-For Claude sessions, the Hub polls local `journal.jsonl` files under `~/.claude/projects/` while a workflow is detected (`workflow.journal_enabled: true` by default). It decodes only the event `type` and `agentId` needed for aggregate started/completed counts. The `result` body is not retained, logged, forwarded, or persisted, and the Hub does not read subagent transcript files. Journal-derived state stays in memory and remains local. Set `workflow.journal_enabled: false` to disable this reader and use terminal-display detection only.
+For Claude sessions, the Hub polls local `journal.jsonl` files under `~/.claude/projects/` while a workflow is detected (`workflow.journal_enabled: true` by default). It decodes only the event `type` and `agentId` needed for aggregate started/completed counts. The `result` body is not retained, logged, forwarded, or persisted, and this journal reader does not read subagent transcript files (the subagent tree, described below, is a separate feature that does). Journal-derived state stays in memory and remains local. Set `workflow.journal_enabled: false` to disable this reader and use terminal-display detection only.
 
 When a `Workflow` task ID can be resolved from the main session transcript, the Hub also polls the Claude Code Workflow task output file (`%TEMP%/claude/<munged-cwd>/<session-uuid>/tasks/<taskId>.output` on Windows; the OS temp directory on other platforms) while the workflow is active (`workflow.task_detail_enabled: true` by default). It decodes only the `workflowProgress` field to show each agent's label, state, most recent tool action, and a short result preview in the workflow modal. The script's return value (`result`) and `log()` output (`logs`) are never decoded into any struct and are not read. This detail is shown only in the dashboard modal — it is not logged, persisted, or sent externally. Set `workflow.task_detail_enabled: false` to disable this reader; when disabled, or when the task ID cannot be resolved, the modal falls back to the aggregate bar/count display.
 
 Workflow-completion Web Push is a separate opt-in (`user_prefs.workflow_completion_notify.enabled: true`). Its payload contains only the session name and aggregate count such as `N/M agents`; it does not contain journal result text or agent IDs.
+
+### Subagent tree
+
+Separately from the Workflow journal above, the Hub can also show a "parent instruction → child → grandchild" tree of subagent (Agent-tool / `spawn_agent` / `subagents`) activity in the Workflow popup, for sessions where this is enabled (`workflow.subagent_tree_enabled: true` by default). Today this covers Claude Code, Codex, and Grok.
+
+For a Claude session, the Hub reads the child's own `agent-<id>.meta.json` and `agent-<id>.jsonl` files under the session's `subagents/` directory (never the parent's PTY output) to learn each child's short name, type, parent/grandparent id, and depth, and reads only the head and tail of each child transcript (bounded, not the whole file) to find its most recent tool call. Completion is decided from the parent transcript's own tool-result and task-notification records, not by guessing from the child's last line. Workflow-tool children (`agentType: "workflow-subagent"`) are excluded here — they stay in the existing Workflow journal display above.
+
+For a Codex session, a spawned child writes its own separate rollout file under `CODEX_HOME/sessions/YYYY/MM/DD/`. The Hub reads only the first line of each rollout in that day's directory (never the whole file) to learn a child's nickname/role, its parent's thread id, and its depth, and separately reads a bounded head/tail of the parent's and each child's own rollout — never more than the same budget the Claude reader uses — to resolve completion (`SubAgentActivity` `item_completed` records) and the child's most recent tool call. Only past day directories that have never been scanned before are skipped on later polls; today's directory is re-scanned when it changes.
+
+For a Grok session, a spawned child gets its own `subagents/<id>/` directory next to the parent's own session files, but that directory only ever holds `meta.json` (once the child finishes) and `output.json` — never an `events.jsonl`. The Hub reads the parent's own `updates.jsonl` (bounded, never the whole file) for `subagent_spawned`/`subagent_finished` lifecycle events; a child is "running" from the moment its `subagent_spawned` event is seen until a `subagent_finished` event or `subagents/<id>/meta.json` resolves it, and it stays running across polls even when nothing new appears in that window. The child's own most recent tool call, if shown at all, comes from `events.jsonl` in the *sibling* session directory the event's own `child_session_id` names — not from a file under `subagents/<id>/`. Grok subagents nest one level deep only, so every node here is a direct child of the session. Enabling this reader does not change where the chat tab's own transcript comes from.
+
+What is never read or sent: prompt text, tool results, and the child's own reply. The one exception is a short "what is it doing" summary: for Claude, built only from an allow-listed subset of a tool call's own input (`command` / `pattern` / `path` / `file_path`); for Codex, the shell command string of an `exec` tool call; for Grok, nothing — its own tool-activity events carry a tool name only, with no argument or target field to summarize. Either is truncated to 100 characters, and any other input key or tool call shape (e.g. Codex's inter-agent `send_message`/`wait` calls) is discarded before it is even decoded, so it never reaches a summary. As with the Workflow journal, this data is shown only in the dashboard popup for that session (over the session's own WebSocket) and is never logged, persisted, or sent anywhere else. Set `workflow.subagent_tree_enabled: false` to disable this reader entirely.
+
+If you add a custom provider definition, you can opt it into this same reader by setting its `adapters.subagents` to an already-implemented key such as `subagent:claude-v1` — but only when that CLI actually writes its subagent records in the same shape and location Claude Code does; the key selects a reader, it does not translate a different record format.
 
 ### Local instruction file writes
 
@@ -1330,18 +1406,34 @@ When **Approval Buttons** is enabled, `many-ai-cli` writes only its marked appro
 
 Records live at `~/.many-ai-cli/handoff/s<id>.jsonl` under your home directory (directory `0700` / file `0600`), never inside a repository, and are removed after `handoff.retention_days` (default 14 days) by the Hub's regular maintenance sweep regardless of whether recording is enabled. Set `handoff.enabled: false` to stop new writes entirely. `many-ai-cli doctor` reports the directory's file count and oldest file age.
 
-Handing a session off is always something you press, never something that happens on its own. Two ways to start it: a corner notice appears once a session's remaining quota drops below `handoff.notify_remaining_percent` (default 10%), and the "handoff list" button (↪) in the sidebar opens every recorded session — including ones that already ended, or that predate the current Hub process, since the list reads the on-disk board directly instead of the live session state. Either way, the Hub renders that session's board into a one-screen markdown (identity, recent completions, recent changes, any "next step" note) and shows it to you before it goes anywhere. Choosing to start from there launches a brand-new session on a **different** provider — never the same provider's other subscription profile — using that markdown as its initial instruction. The new session's own board records which session it continues; the two sessions are not linked in the UI beyond that.
+Handing a session off is always something you press, never something that happens on its own. Three ways to start it: a corner notice appears once a session's remaining quota drops below `handoff.notify_remaining_percent` (default 10%), the "handoff list" button (↪) in the sidebar opens every recorded session — including ones that already ended, or that predate the current Hub process, since the list reads the on-disk board directly instead of the live session state — and the 🌱 button on a session card opens the same thing for that session. All three open the derive dialog with **handoff** selected. The Hub renders the session's board into a one-screen markdown (identity, recent completions, recent changes, any "next step" note) and puts it in an editable field, so it is on screen before it goes anywhere. Pressing Start launches a brand-new session on a **different** provider — never the same provider's other subscription profile — using that text as its initial instruction, alongside the model, effort, execution mode and permission tier you chose in the same dialog.
+
+The board records what a session did, not what it said. Two things can be handed over alongside it to fill that gap, and the records contain **only their paths**. The predecessor's conversation log remains successor-only. A handoff memo can also be opened by an explicit action in the derive dialog, using the existing read-only Markdown preview; that request reads only a memo path already recorded on the selected board. Memo contents are never copied into a `Record` or the rendered handoff markdown.
+
+The first is the **predecessor's conversation log**. Claude and Codex each keep their own transcript on your disk, and the Hub knows where (including when a subscription profile puts it somewhere else). Only that path is recorded on the board, and the handoff text gains a "predecessor's conversation log" section naming it and how to read it: start from the end — the last instruction and the last thing the assistant said — and reach for the last 200 lines plus `grep` if the file is large. **This route works even when the predecessor has already stopped**, which is the whole point: a Claude session that ran out of quota can still be continued in Codex. Providers whose transcript location `many-ai-cli` cannot resolve simply get no such section.
+
+The second is a **handoff memo**. The low-quota notice carries an "ask it to write a handoff memo" button; pressing it asks the still-running session, once, to write `~/.many-ai-cli/handoff/s<id>.note.md` covering its next step, unverified assumptions, open questions, and the path of any plan/bugfix md it had open. The Hub waits for the session to signal it is done, checks the file really exists, and records that path on the board (after 60 seconds with no signal it gives up and says so on screen). The memo is swept by the same 14-day retention as the board. Because writing it spends the predecessor's own tokens, it only happens when you press the button by default — `handoff.note_on_threshold` is `ask` (default), `auto` (ask for it as soon as the notice appears) or `off` (no button at all). A predecessor that has already stopped cannot write one; that is what the conversation log above is for.
+
+The derive dialog shows each recorded memo with a **View Markdown** button, and shows the conversation-log path as before. The Markdown viewer reads a memo only when you press that button; it does not display or read the predecessor's conversation log.
+
+The edited handoff prompt can be saved from the same dialog with **Save to board**, independently of Start. This makes a separate `~/.many-ai-cli/handoff/s<id>.manual.note.md` file, records only its path, and does not start a session or spend AI tokens. The AI-written memo remains available alongside it. Both memo files follow the configured handoff retention (14 days by default).
+
+The new session's own board records which session it continues, and the two cards show it: the successor carries a `↪ #N` chip back to its predecessor, a still-running predecessor carries a `Successor #M` chip, and the ↪ list marks the rows that were handed off. Clicking a chip switches to that session (or opens the ↪ list if it has ended). The link is display only — a successor is an equal new parent, not a child of the session it continues.
 
 ### Outbound network traffic
 
 `many-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
-- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
-- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,grok,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
+- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,opencode,grok,command-code}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
+- **CLI install links (Hub itself)** — When the first-run screen or **Settings → AI CLI integrations** shows the install status list, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json` (links to each CLI's official install instructions) and caches it for 24 hours. If the fetch fails, the list is shown without links.
+- **AI Usage Links defaults (Hub itself)** — When the dashboard page loads, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json` (the default link to each vendor's usage page in the Usage menu) and caches it for 24 hours. The source URL cannot be changed or turned off; if the fetch fails, the links built into the Hub are used.
+- **Model suggestions (Hub itself)** — When New Session, the derive dialog or the spawn confirmation dialog first needs model suggestions, and when you press ↻ next to the model field, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json` (the models suggested for Claude Code, Codex and Copilot, and the fallback list for Cursor Agent and Grok) and caches it for 24 hours. `models_source` in `config.yaml` changes the source URL; if the fetch fails, those suggestions are left empty and you can still type a model name.
+- **NVIDIA NIM model catalog and connection check (Hub itself, opt-in only)** — When NVIDIA NIM is configured (see [NVIDIA NIM trial route](#nvidia-nim-trial-route-opencode-only) above), the Hub calls NVIDIA's `/v1/models` endpoint to populate the model picker and to run the Settings connection check. Inference itself is not proxied — OpenCode sends it directly to NVIDIA's Chat Completions endpoint.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Approval payloads include the session ID/name, provider, and a short approval-question/context excerpt; workflow-completion payloads contain only the session name and aggregate agent count. They do **not** include the Hub URL token, journal result text, or agent IDs. VAPID keys and subscriptions are stored locally in `~/.many-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
 - **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. Whisper mode sends audio to the Hub and then to the configured Whisper server. Keep `voice.whisper.server_url` on `127.0.0.1` / `localhost` for local-only processing; external API URLs would send audio to that external service. See also the privacy note in the voice input section.
 - **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.many-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
-- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor, xAI) over HTTPS. `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
+- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code) talk directly to their own backends over HTTPS — Anthropic, OpenAI, GitHub, Cursor, and xAI for the five official CLIs, and whichever model provider opencode or Command Code is configured to use (including NVIDIA NIM for opencode, see above). `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
 
@@ -1356,6 +1448,8 @@ The table below summarizes each vendor's stance as of 2026. Always verify the cu
 | **GitHub Copilot CLI** (GitHub: Product Specific Terms, March 2026) | **Yes** — prompts are retained and used to fine-tune your private model | No explicit opt-out documented (verify current terms) | Not specified |
 | **Cursor Agent CLI** (Cursor) | Verify current terms | Verify current terms | Verify current terms |
 | **Grok Build CLI** (xAI) | Verify current terms | Verify current terms | Verify current terms |
+| **opencode** (community CLI; routes to whichever backend you configure, including NVIDIA NIM) | Depends on the configured backend | Depends on the configured backend | Depends on the configured backend |
+| **Command Code** | Verify current terms | Verify current terms | Verify current terms |
 
 ### ⚠️ Terms-of-service change risk
 

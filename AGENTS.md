@@ -33,3 +33,13 @@ This repository has a generated `openwiki/` evidence index. It is optional just-
 The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
 
 <!-- OPENWIKI:END -->
+
+## ファイル索引・テーブル逆引き（探す前に読む）
+
+**どのファイルが何をして、どのテーブルを読み書きするかを聞かれたら、grep で探し回る前に
+`.omitnix/index.json` を読む。** 全ファイルの索引とテーブルからの逆引きが入っている。
+
+- **解析できなかったファイルも名前と理由付きで載っている。** 「索引に無い」と「読めなかった」を
+  取り違えない。参照 0 件は「未使用」ではない
+- `generated.commit` が現在の HEAD と違えば、索引はその commit 時点のもの。
+  **古いまま断定せず、古いことを添えて答えるか `omitnix` で作り直す**

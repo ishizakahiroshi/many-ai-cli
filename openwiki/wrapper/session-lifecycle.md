@@ -3,9 +3,6 @@ type: architecture-component
 title: PTY Wrapper and Session Lifecycle
 description: How internal/wrapper starts a provider CLI in a real OS PTY, the idempotent input-sequence protocol that prevents a resend from double-submitting a prompt, and the reconnect-grace state machine that keeps a session alive through a Hub crash or restart.
 tags: [wrapper, pty, conpty, reconnect-grace, zombie-protection, input-sequence]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-44e824033e031f67a11c4a91
     resource: repo://internal/wrapper/pty_unix.go
@@ -13,7 +10,10 @@ sources:
     resource: repo://internal/wrapper/pty_windows.go
   - id: openwiki-source-f8ec2ad8710460e82277e8d4
     resource: repo://internal/wrapper/wrapper.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Two PTY backends, one interface

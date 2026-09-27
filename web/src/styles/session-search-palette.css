@@ -52,3 +52,16 @@
   .session-search-filters select { min-width: 45%; }
   .session-search-result-time { display: none; }
 }
+
+/* C3: コマンドパレット区画（結果の上に描く）。 */
+.command-palette-commands { display: flex; flex-direction: column; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.command-palette-commands[hidden] { display: none; }
+.command-palette-command { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 10px; text-align: left; color: var(--text); background: transparent; border: 0; border-radius: var(--radius-sm); cursor: pointer; font: inherit; }
+.command-palette-command:hover, .command-palette-command.is-selected { background: var(--accent-soft); outline: none; }
+.command-palette-command--disabled { color: var(--muted); cursor: default; }
+.command-palette-command--disabled:hover, .command-palette-command--disabled.is-selected { background: var(--bg-soft); }
+.command-palette-command-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.command-palette-command-reason { flex: 0 0 auto; color: var(--muted); font-size: .74rem; white-space: nowrap; }
+
+/* C3: ↑↓ で選ばれている行（コマンド・検索結果の両方に効く）。 */
+.session-search-result.is-selected { background: var(--accent-soft); outline: none; }

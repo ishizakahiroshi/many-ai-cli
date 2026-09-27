@@ -301,6 +301,7 @@ body.pane-resizing .xterm { pointer-events: none; }
      マルチ / 分割は max-width:1000px 側で既に非表示のため、ここでは 3 タブのみ隠す。 */
   .view-tab[data-tab="files"],
   .view-tab[data-tab="git"],
+  .view-tab[data-tab="review"],
   .view-tab[data-tab="chat"] {
     display: none !important;
   }
@@ -411,6 +412,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 #display-area.mode-split    { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 #display-area.mode-files    { grid-template-columns: minmax(0, 1fr); }
 #display-area.mode-git      { grid-template-columns: minmax(0, 1fr); }
+#display-area.mode-review   { grid-template-columns: minmax(0, 1fr); }
 #display-area.mode-history  { grid-template-columns: minmax(0, 1fr); }
 #display-area.mode-orchestration { grid-template-columns: minmax(0, 1fr); }
 
@@ -427,6 +429,7 @@ body.pane-resizing .xterm { pointer-events: none; }
 #display-area.mode-split    > #chat-pane        { display: flex; height: 100%; }
 #display-area.mode-files    > #files-pane       { display: flex; }
 #display-area.mode-git      > #files-pane        { display: flex; }
+#display-area.mode-review   > #files-pane        { display: flex; }
 #display-area.mode-history  > #history-pane      { display: flex; }
 #display-area.mode-orchestration > #orchestration-dashboard-pane { display: flex; }
 

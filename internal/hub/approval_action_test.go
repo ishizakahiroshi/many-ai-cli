@@ -40,7 +40,7 @@ func TestOneTapApprovalEndpointRejectsHighRiskApprove(t *testing.T) {
 	if pending == nil || pending.Summary.Risk != "high" {
 		t.Fatalf("pending approval = %#v, want high risk", pending)
 	}
-	ses.nativeApprovalSig = pending.Sig
+	ses.pendingApproval = testNativeRecord(pending.Sig, "", 0)
 	token, err := s.oneTapApprovals.issue(9, pending.Sig, pending.Sig, 1, oneTapApprove)
 	if err != nil {
 		t.Fatal(err)
@@ -129,7 +129,7 @@ func TestApplyOneTapApprovalRevertsOnSendFailure(t *testing.T) {
 	if pending == nil {
 		t.Fatal("pending approval = nil")
 	}
-	ses.nativeApprovalSig = pending.Sig
+	ses.pendingApproval = testNativeRecord(pending.Sig, "", 0)
 	token, err := s.oneTapApprovals.issue(12, pending.Sig, pending.Sig, 1, oneTapReject)
 	if err != nil {
 		t.Fatal(err)
@@ -143,8 +143,8 @@ func TestApplyOneTapApprovalRevertsOnSendFailure(t *testing.T) {
 	if !errors.Is(err, errOneTapNoInput) {
 		t.Fatalf("applyOneTapApproval error = %v, want errOneTapNoInput", err)
 	}
-	if ses.nativeApprovalSig != pending.Sig {
-		t.Fatalf("nativeApprovalSig = %q, want %q after send failure", ses.nativeApprovalSig, pending.Sig)
+	if got := nativeRecordSig(ses); got != pending.Sig {
+		t.Fatalf("native record sig = %q, want %q after send failure", got, pending.Sig)
 	}
 	if err := s.oneTapApprovals.consume(claim); err != nil {
 		t.Fatalf("consume after send failure = %v, want token to remain retryable", err)
@@ -158,15 +158,12 @@ func TestApprovalActionDoesNotClearReplacementPrompt(t *testing.T) {
 	current := s.sessions[13]
 	key := approvalCandidateKeyWithContext(current.Provider, ses.Kind, ses.Question, ses.Context, ses.Options)
 	epoch := ensureApprovalSourceEpochLocked(current)
-	current.nativeApprovalCandidateKey = key
-	current.nativeApprovalSourceEpoch = epoch
+	current.pendingApproval = testNativeRecord(ses.Sig, key, epoch)
 	wc := s.wrappers[13]
 	wc.sendFunc = func(any) error {
 		// A fresh prompt can arrive while the wire send is completing. The
 		// commit must not clear that replacement prompt.
-		current.nativeApprovalSig = "replacement-sig"
-		current.nativeApprovalCandidateKey = "replacement-key"
-		current.nativeApprovalSourceEpoch = epoch + 1
+		current.pendingApproval = testNativeRecord("replacement-sig", "replacement-key", epoch+1)
 		return nil
 	}
 	s.sessionsMu.Unlock()
@@ -181,8 +178,8 @@ func TestApprovalActionDoesNotClearReplacementPrompt(t *testing.T) {
 	if s.commitNativeApprovalAction(result) {
 		t.Fatal("replacement prompt was committed as the old approval")
 	}
-	if current.nativeApprovalSig != "replacement-sig" || current.nativeApprovalCandidateKey != "replacement-key" {
-		t.Fatalf("replacement prompt changed after failed commit: sig=%q key=%q", current.nativeApprovalSig, current.nativeApprovalCandidateKey)
+	if nativeRecordSig(current) != "replacement-sig" || nativeRecordKey(current) != "replacement-key" {
+		t.Fatalf("replacement prompt changed after failed commit: sig=%q key=%q", nativeRecordSig(current), nativeRecordKey(current))
 	}
 }
 
@@ -191,8 +188,8 @@ func TestApprovalActionReservationBlocksSecondSendBeforeCommit(t *testing.T) {
 	ses := installBatchApproval(t, s, 14, "codex", t.TempDir(), "git status")
 	s.sessionsMu.Lock()
 	current := s.sessions[14]
-	key := current.nativeApprovalCandidateKey
-	epoch := current.nativeApprovalSourceEpoch
+	key := nativeRecordKey(current)
+	epoch := nativeRecordEpoch(current)
 	wc := s.wrappers[14]
 	var sends atomic.Int32
 	wc.sendFunc = func(any) error {
@@ -221,5 +218,35 @@ func TestApprovalActionReservationBlocksSecondSendBeforeCommit(t *testing.T) {
 	}
 	if !s.commitNativeApprovalAction(first) {
 		t.Fatal("first approval action did not commit")
+	}
+}
+
+func TestOneTapApprovalGetDoesNotConsumeNonce(t *testing.T) {
+	s := newTestServer()
+	now := time.Unix(1_700_000_000, 0)
+	s.oneTapApprovals = newTestOneTapApprovalManager(t, now)
+	ses := installBatchApproval(t, s, 15, "codex", t.TempDir(), "git status")
+
+	token, err := s.oneTapApprovals.issue(15, ses.Sig, ses.Sig, 1, oneTapApprove)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. GET リクエスト（リンク先プレビューや誤クリック）を送信 -> 405 Method Not Allowed
+	reqGet := httptest.NewRequest(http.MethodGet, "/api/approval-action/"+token, nil)
+	reqGet.Host = "127.0.0.1:47777"
+	wGet := httptest.NewRecorder()
+	s.handleOneTapApproval(wGet, reqGet)
+	if wGet.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want %d; body=%s", wGet.Code, http.StatusMethodNotAllowed, wGet.Body.String())
+	}
+
+	// 2. その後、正規の POST リクエストを送信 -> 成功するはず（Nonce が消費されていないこと）
+	reqPost := httptest.NewRequest(http.MethodPost, "/api/approval-action/"+token, nil)
+	reqPost.Host = "127.0.0.1:47777"
+	wPost := httptest.NewRecorder()
+	s.handleOneTapApproval(wPost, reqPost)
+	if wPost.Code != http.StatusOK {
+		t.Fatalf("POST status = %d, want %d (action must not be consumed by prior GET); body=%s", wPost.Code, http.StatusOK, wPost.Body.String())
 	}
 }

@@ -1,6 +1,6 @@
 # Hyper-V ゲストからホスト Windows のローカルLLM（Ollama / LM Studio）を使う手順
 
-> 最終更新: 2026-06-19(金) 23:03:50
+> 最終更新: 2026-09-21(月) 11:26:00 — プライベートホスト接続時の allow_private_hosts 設定要件を追記
 
 ## 概要
 
@@ -163,12 +163,14 @@ TcpTestSucceeded : True
 ### many-ai-cli の接続先を設定する
 
 ゲスト Windows 側の `~/.many-ai-cli/config.yaml` に、ホストの Ollama base URL を設定する。`/v1` や `/api/tags` は付けない。
+プライベート IP（`192.168.x.x` や `172.20.x.x`）を指定する場合は、SSRF 防御機構を通過させるために `allow_private_hosts: true` が必須となる。
 
 外部スイッチの場合:
 
 ```yaml
 ollama:
   base_url: "http://192.168.11.50:11434"
+  allow_private_hosts: true
 ```
 
 Default Switch の場合:
@@ -176,6 +178,7 @@ Default Switch の場合:
 ```yaml
 ollama:
   base_url: "http://172.20.224.1:11434"
+  allow_private_hosts: true
 ```
 
 この設定により、Hub の `/api/models` は `<base_url>/api/tags` を取得し、Ollama route で spawn したセッションには次の env が注入される。
@@ -225,11 +228,12 @@ Invoke-RestMethod http://<hostIP>:1234/v1/models
 
 ### many-ai-cli の接続先設定
 
-config.yaml に `lm_studio.base_url` を設定する。`/v1` は付けない（many-ai-cli 側で付与）。
+config.yaml に `lm_studio.base_url` と `lm_studio.allow_private_hosts: true` を設定する。`/v1` は付けない（many-ai-cli 側で付与）。
 
 ```yaml
 lm_studio:
   base_url: "http://<hostIP>:1234"
+  allow_private_hosts: true
 ```
 
 ### モデルの context window に注意

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/subscription"
 )
 
@@ -94,6 +95,306 @@ func TestSubscriptionSeedCheckIgnoresProvidersWithNothingToCarry(t *testing.T) {
 		Provider: "opencode", ID: "work", ProfileDir: profileDir, Exists: true,
 	}); check != nil {
 		t.Fatalf("opencode reported drift: %+v", check)
+	}
+}
+
+// settingsWithDefaultHook / settingsWithProfileHook are two settings.json
+// bodies that differ in one policy key (hooks) and one state key (theme). The
+// values are deliberately distinctive strings so that
+// TestSubscriptionSyncDriftCheckNamesNoPathsOrValues can prove none of them
+// reach the report.
+const (
+	settingsWithDefaultHook = `{
+  "autoMemoryEnabled": false,
+  "hooks": {"Stop": [{"command": "run-default-hook"}]},
+  "theme": "default-theme"
+}`
+	settingsWithProfileHook = `{
+  "hooks": {"Stop": [{"command": "run-profile-hook"}]},
+  "theme": "profile-theme"
+}`
+)
+
+// A profile keeps working while its settings quietly diverge from the user's
+// default: the file is there, it parses, it just no longer says what the user
+// says. Naming the keys is the only thing that makes that visible before the
+// next launch re-syncs them.
+func TestSubscriptionSyncDriftCheckReportsDivergedKeys(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".claude", "settings.json"), settingsWithDefaultHook)
+	profileDir := filepath.Join(t.TempDir(), "claude", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "settings.json"), settingsWithProfileHook)
+
+	check := subscriptionSyncDriftCheck("claude", "claude / work", subscription.Entry{
+		Provider: "claude", ID: "work", ProfileDir: profileDir, Exists: true,
+	}, config.SubscriptionProfile{})
+	if check == nil {
+		t.Fatal("a profile whose settings disagree with the default produced no row")
+	}
+	if check.Level != Warn {
+		t.Errorf("level = %v, want %v", check.Level, Warn)
+	}
+	// The key the default has and the profile does not.
+	if !strings.Contains(check.Message, "autoMemoryEnabled") {
+		t.Errorf("message does not name the key only the default has: %q", check.Message)
+	}
+	// The key both have with different values.
+	if !strings.Contains(check.Message, "hooks") {
+		t.Errorf("message does not name the key whose value differs: %q", check.Message)
+	}
+	if check.Fix == "" {
+		t.Error("a warning with no fix leaves the user with nowhere to go")
+	}
+}
+
+// Codex and Grok keep their settings in TOML, and their profiles drift the same
+// way Claude's do. The row has to name the keys there too — and still name only
+// the keys, since a config.toml holds the MCP servers and their environment.
+func TestSubscriptionSyncDriftCheckReportsDivergedKeysInTOML(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.CodexHomeEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".codex", "config.toml"),
+		"approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n\n[tui]\nmodel_availability_nux = false\n")
+	profileDir := filepath.Join(t.TempDir(), "codex", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "config.toml"),
+		"approval_policy = \"never\"\n\n[tui]\nmodel_availability_nux = true\n")
+
+	check := subscriptionSyncDriftCheck("codex", "codex / work", subscription.Entry{
+		Provider: "codex", ID: "work", ProfileDir: profileDir, Exists: true,
+	}, config.SubscriptionProfile{})
+	if check == nil {
+		t.Fatal("a Codex profile whose config.toml disagrees with the default produced no row")
+	}
+	if check.Level != Warn {
+		t.Errorf("level = %v, want %v", check.Level, Warn)
+	}
+	// The key the default has and the profile does not.
+	if !strings.Contains(check.Message, "sandbox_mode") {
+		t.Errorf("message does not name the key only the default has: %q", check.Message)
+	}
+	// The key both have with different values.
+	if !strings.Contains(check.Message, "approval_policy") {
+		t.Errorf("message does not name the key whose value differs: %q", check.Message)
+	}
+	// tui is Codex's own table and differs on purpose, so it is not drift.
+	if strings.Contains(check.Message, "tui") {
+		t.Errorf("message names a table the profile owns: %q", check.Message)
+	}
+	if check.Fix == "" {
+		t.Error("a warning with no fix leaves the user with nowhere to go")
+	}
+	reported := check.Message + "\n" + check.Fix
+	for _, leaked := range []string{home, profileDir, "on-request", "never", "workspace-write"} {
+		if strings.Contains(reported, leaked) {
+			t.Errorf("report leaks %q:\nmessage: %q\nfix: %q", leaked, check.Message, check.Fix)
+		}
+	}
+}
+
+// An unused feature must not add lines to the report, and neither must a
+// profile that agrees with the default or one that has nothing to compare yet.
+func TestSubscriptionSyncDriftCheckStaysQuietWhenSettingsAgree(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".claude", "settings.json"), settingsWithDefaultHook)
+
+	// (a) the profile holds exactly what the default holds.
+	sameProfile := filepath.Join(t.TempDir(), "claude", "same")
+	writeSeedFile(t, filepath.Join(sameProfile, "settings.json"), settingsWithDefaultHook)
+	if check := subscriptionSyncDriftCheck("claude", "claude / same", subscription.Entry{
+		Provider: "claude", ID: "same", ProfileDir: sameProfile, Exists: true,
+	}, config.SubscriptionProfile{}); check != nil {
+		t.Fatalf("settings that already agree were reported as drift: %+v", check)
+	}
+
+	// (b) a key only the profile has is the profile's own and is never taken
+	// away by the sync, so it is not drift either.
+	extraProfile := filepath.Join(t.TempDir(), "claude", "extra")
+	writeSeedFile(t, filepath.Join(extraProfile, "settings.json"), `{
+  "autoMemoryEnabled": false,
+  "hooks": {"Stop": [{"command": "run-default-hook"}]},
+  "theme": "default-theme",
+  "somethingOnlyThisProfileHas": true
+}`)
+	if check := subscriptionSyncDriftCheck("claude", "claude / extra", subscription.Entry{
+		Provider: "claude", ID: "extra", ProfileDir: extraProfile, Exists: true,
+	}, config.SubscriptionProfile{}); check != nil {
+		t.Fatalf("a key only the profile has was reported as drift: %+v", check)
+	}
+
+	// (c) the profile has no copy of the file yet — that gap is
+	// subscriptionSeedCheck's row, and repeating it here would double the noise.
+	emptyProfile := filepath.Join(t.TempDir(), "claude", "empty")
+	if err := os.MkdirAll(emptyProfile, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if check := subscriptionSyncDriftCheck("claude", "claude / empty", subscription.Entry{
+		Provider: "claude", ID: "empty", ProfileDir: emptyProfile, Exists: true,
+	}, config.SubscriptionProfile{}); check != nil {
+		t.Fatalf("a profile with no settings file yet must stay quiet here: %+v", check)
+	}
+}
+
+// The theme, the chosen model and the generated auto-mode body are written by
+// the CLI inside the profile and are supposed to differ. Reporting them would
+// tell the user to "fix" the one thing the design deliberately leaves alone.
+func TestSubscriptionSyncDriftCheckIgnoresProfileOwnedStateKeys(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".claude", "settings.json"), `{
+  "hooks": {"Stop": [{"command": "run-default-hook"}]},
+  "theme": "default-theme",
+  "modelSettings": {"model": "the-default-model"}
+}`)
+	profileDir := filepath.Join(t.TempDir(), "claude", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "settings.json"), `{
+  "hooks": {"Stop": [{"command": "run-default-hook"}]},
+  "theme": "profile-theme",
+  "modelSettings": {"model": "the-model-this-profile-picked"}
+}`)
+
+	if check := subscriptionSyncDriftCheck("claude", "claude / work", subscription.Entry{
+		Provider: "claude", ID: "work", ProfileDir: profileDir, Exists: true,
+	}, config.SubscriptionProfile{}); check != nil {
+		t.Fatalf("keys the profile owns were reported as drift: %+v", check)
+	}
+}
+
+// doctor output is pasted into issues and chats. The keys are names the user
+// chose; the values behind them are hooks, environment and permissions, and the
+// paths say where that person keeps their configuration.
+func TestSubscriptionSyncDriftCheckNamesNoPathsOrValues(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".claude", "settings.json"), settingsWithDefaultHook)
+	profileDir := filepath.Join(t.TempDir(), "claude", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "settings.json"), settingsWithProfileHook)
+
+	check := subscriptionSyncDriftCheck("claude", "claude / work", subscription.Entry{
+		Provider: "claude", ID: "work", ProfileDir: profileDir, Exists: true,
+	}, config.SubscriptionProfile{})
+	if check == nil {
+		t.Fatal("expected a drift row to inspect")
+	}
+	reported := check.Message + "\n" + check.Fix
+	for _, leaked := range []string{
+		home,
+		profileDir,
+		"run-default-hook",
+		"run-profile-hook",
+		"default-theme",
+		"profile-theme",
+	} {
+		if strings.Contains(reported, leaked) {
+			t.Errorf("report leaks %q:\nmessage: %q\nfix: %q", leaked, check.Message, check.Fix)
+		}
+	}
+}
+
+// A profile that turned the sync off is not out of step with anything: nothing
+// is going to move at its next launch. Reporting drift there would send the user
+// to fix a difference they wrote down on purpose.
+func TestSubscriptionSyncDriftCheckStaysQuietWhenTheProfileTurnedSyncOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".claude", "settings.json"), settingsWithDefaultHook)
+	profileDir := filepath.Join(t.TempDir(), "claude", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "settings.json"), settingsWithProfileHook)
+	entry := subscription.Entry{Provider: "claude", ID: "work", ProfileDir: profileDir, Exists: true}
+
+	// Positive control: the same two files are drift for a profile that
+	// configured nothing, so the silence below comes from the setting.
+	if check := subscriptionSyncDriftCheck("claude", "claude / work", entry, config.SubscriptionProfile{}); check == nil {
+		t.Fatal("the same pair of files must still be drift for a profile with no sync settings")
+	}
+
+	off := false
+	unsynced := config.SubscriptionProfile{ID: "work", SettingsSync: &off}
+	if check := subscriptionSyncDriftCheck("claude", "claude / work", entry, unsynced); check != nil {
+		t.Fatalf("a profile that is not synced was reported as out of step: %+v", check)
+	}
+
+	// Silence alone is indistinguishable from "these two agree", so the profile
+	// still gets one line saying why it is not being compared.
+	info := subscriptionSyncOverrideCheck("claude / work", unsynced)
+	if info == nil {
+		t.Fatal("a profile with the sync turned off produced no row at all")
+	}
+	if info.Level != OK {
+		t.Errorf("level = %v, want %v: this is a setting the user wrote, not a problem", info.Level, OK)
+	}
+	if !strings.Contains(info.Message, "off") {
+		t.Errorf("message does not say the sync is off: %q", info.Message)
+	}
+
+	// A profile that never touched these settings must not gain a row.
+	if info := subscriptionSyncOverrideCheck("claude / work", config.SubscriptionProfile{ID: "work"}); info != nil {
+		t.Fatalf("a profile with no sync settings gained a row: %+v", info)
+	}
+}
+
+// A key the profile claimed with profile_owned_keys is the profile's, exactly as
+// the adapter's built-in state keys are. Counting it as drift would report the
+// one difference the user configured on purpose, every single run.
+func TestSubscriptionSyncDriftCheckIgnoresKeysClaimedInConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(subscription.ClaudeConfigDirEnv, "")
+
+	writeSeedFile(t, filepath.Join(home, ".claude", "settings.json"), `{
+  "hooks": {"Stop": [{"command": "run-default-hook"}]},
+  "enabledPlugins": {"demo@marketplace": true}
+}`)
+	profileDir := filepath.Join(t.TempDir(), "claude", "work")
+	writeSeedFile(t, filepath.Join(profileDir, "settings.json"), `{
+  "hooks": {"Stop": [{"command": "run-default-hook"}]},
+  "enabledPlugins": {"demo@marketplace": false}
+}`)
+	entry := subscription.Entry{Provider: "claude", ID: "work", ProfileDir: profileDir, Exists: true}
+
+	// Positive control: by default enabledPlugins is policy, so it is drift.
+	check := subscriptionSyncDriftCheck("claude", "claude / work", entry, config.SubscriptionProfile{})
+	if check == nil || !strings.Contains(check.Message, "enabledPlugins") {
+		t.Fatalf("enabledPlugins must be drift for a profile with no sync settings, got %+v", check)
+	}
+
+	owner := config.SubscriptionProfile{ID: "work", ProfileOwnedKeys: []string{"enabledPlugins"}}
+	if check := subscriptionSyncDriftCheck("claude", "claude / work", entry, owner); check != nil {
+		t.Fatalf("a key the profile claimed was reported as drift: %+v", check)
+	}
+
+	info := subscriptionSyncOverrideCheck("claude / work", owner)
+	if info == nil {
+		t.Fatal("a profile that claimed a key produced no row saying which")
+	}
+	if !strings.Contains(info.Message, "enabledPlugins") {
+		t.Errorf("message does not name the claimed key: %q", info.Message)
+	}
+	// Names only. What the key holds is the user's own configuration.
+	for _, leaked := range []string{"demo@marketplace", "true", "false", profileDir, home} {
+		if strings.Contains(info.Message+info.Fix, leaked) {
+			t.Errorf("the row leaks %q: %q / %q", leaked, info.Message, info.Fix)
+		}
 	}
 }
 

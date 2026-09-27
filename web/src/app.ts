@@ -1,13 +1,14 @@
+import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { cleanCopiedText, showToast, token } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
-import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, answeredApprovalCandidates, answeredApprovalShapeKeys, batchFreeText, recordAnsweredApprovalCandidate, replayAnsweredApprovalTokens, approvalAutoSwitchQueue, approvalRawOptionsCache, approvalSig, approvalSourceCache, approvalSourceEpochCache, approvalReplayState, approvalSuppressUntil, approvalSwitchCandidates, approvalVisibleCache, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, multiQuestionDismissedCache, multiQuestionLatchAt, multiQuestionVisibleCache, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals } from './app/state.js';
+import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, batchFreeText, approvalAutoSwitchQueue, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, forgetAllAnsweredApprovals, forgetAnsweredApprovals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
-import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
+import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
 import { pendingSessionIds } from './app/approval-queue-tab.js';
@@ -16,7 +17,9 @@ import { scheduleResidueSweep, cancelResidueSweep } from './app/residue-sweep.js
 import { onUiSideChange, toggleUiSide, toolsOnLeft } from './app/ui-side.js';
 import { cancelExpandCapture } from './app/expand-popup.js';
 import { clearMobileTranscriptSession, recordMobileTranscriptUserSubmission } from './app/mobile-transcript.js';
-import { approvalCheckTimers, approvalSuppressRescanTimers, cancelApprovalHintConfirm, cancelApprovalLedgerRestore, clearSequentialChoiceState, detectApproval, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isSelectMenuActive, isShellProvider, maybeSendDirectApprovalConsumed, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { clearSequentialChoiceState, getActionBarButtons, handleBatchNumberKey, handleMultiSelectNumberKey, handleOpenCodeApprovalNumberKey, hideActionBar, isAIProvider, isBatchActionBarVisible, isMultiSelectActionBarVisible, isShellProvider, moveBatchFocus, moveMultiSelectFocus, openBatchConfirm, sendMultiSelectChoices, setActionBarFocus, shouldSkipClearPrefix, toggleMultiSelectFocused } from './app/approval.js';
+import { isAskUserQuestionPending, noteApprovalAnsweredByTyping } from './app/approval.js';
+import { emptySubmitHitsFoldedHighRiskApproval, forgetApprovalSession } from './app/approval-store.js';
 import { chatHistoryCommitOutput, isTranscriptBackedSession, mountChatPaneForSession, onChatHistorySessionRemoved, pushMessage, resetAllChatHistory, resetChatHistoryForSession, scrollChatPaneToBottomSoon } from './app/chat-history.js';
 import { attachThumbnails, flushPendingAttach, pendingAttachFiles, updateAttachClearBtn, MAX_ATTACH_BYTES } from './app/attachments.js';
 import { FilesTabManager } from './app/files-view.js';
@@ -102,22 +105,25 @@ window.addEventListener('many-ai-cli:insert-template', (event: Event) => {
 });
 
 export function autoExpand(opts: any = {}) {
-  const t = activeSessionId === null ? null : terminals.get(activeSessionId);
-  const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
-  if (opts.suppressPtyResize) {
-    suppressPtyResizeForInputLayout();
-  }
-  inputEl.style.height = 'auto';
-  if (inputEl.value === '') {
-    // 空のときは高さを CSS の min-height に任せる。Chrome は placeholder の折り返しも
-    // scrollHeight に含めるため、狭い画面で placeholder が 2 行に折り返すと
-    // 未入力なのにバーが 2 行分に育ってしまう。
-    inputEl.style.height = '';
-  } else {
-    inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
-  }
-  updateInputClearButton();
-  refitActiveTerminalAfterLayout(shouldStickToBottom);
+  const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'input.layout', size: inputEl.value.length }));
+  try {
+    const t = activeSessionId === null ? null : terminals.get(activeSessionId);
+    const shouldStickToBottom = !!(t && (t.autoScroll || isTerminalAtBottom(t)));
+    if (opts.suppressPtyResize) {
+      suppressPtyResizeForInputLayout();
+    }
+    inputEl.style.height = 'auto';
+    if (inputEl.value === '') {
+      // 空のときは高さを CSS の min-height に任せる。Chrome は placeholder の折り返しも
+      // scrollHeight に含めるため、狭い画面で placeholder が 2 行に折り返すと
+      // 未入力なのにバーが 2 行分に育ってしまう。
+      inputEl.style.height = '';
+    } else {
+      inputEl.style.height = Math.min(inputEl.scrollHeight, Math.floor(window.innerHeight * 0.3)) + 'px';
+    }
+    updateInputClearButton();
+    refitActiveTerminalAfterLayout(shouldStickToBottom);
+  } finally { finishProbe?.(); }
 }
 
 export function updateInputClearButton() {
@@ -130,6 +136,14 @@ export function isActiveSessionRunning() {
   if (activeSessionId === null) return false;
   const s = sessions.get(activeSessionId);
   return !!s && s.state === 'running';
+}
+
+// そのセッションが provider の非対話モードで動いているか。値は wrapper の申告が正本
+// （対話セッションは空を送る）なので、ここでは比較するだけ。
+export function isSessionHeadless(sessionId: number | null): boolean {
+  if (sessionId === null || sessionId === undefined) return false;
+  const s = sessions.get(sessionId);
+  return !!s && s.execution_mode === 'headless';
 }
 
 // 停止ボタン（■）が PTY へ送る中断キーを provider 別に返す。
@@ -160,17 +174,25 @@ export function updateInputAffordance() {
   // 競合しないよう、running 状態を見て JS から明示的に上書きする。
   // B1a: 実行中でなく・スマホ幅で・初回ヒント未表示なら、音声入力ヒントを出す（Q12 決定）。
   const stopViaCtrlC = stopKeyForActiveSession() === '\x03';
-  if (running) {
+  // headless は打ち込む先が無いので、欄ごと無効にして理由を placeholder と tooltip に
+  // 出す（子 plan 内部 C6）。実行中の停止導線（■）もここでは意味を持たない: 止めるのは
+  // カードの × で、wrapper が runner を取り消す。
+  const headless = isSessionHeadless(activeSessionId);
+  if (headless) {
+    inputEl.placeholder = t('input_placeholder_headless');
+  } else if (running) {
     inputEl.placeholder = t(stopViaCtrlC ? 'input_placeholder_running_ctrlc' : 'input_placeholder_running');
   } else if (shouldShowMobileVoiceHintPlaceholder()) {
     inputEl.placeholder = t('mobile_voice_hint_placeholder');
   } else {
     inputEl.placeholder = t('input_placeholder');
   }
+  inputEl.disabled = headless;
+  inputEl.title = headless ? t('input_placeholder_headless') : '';
   // C2: 実行中でも入力欄にテキスト/チップ/ファイルがあれば ➤（送信）のまま。
   // 入力が空の場合のみ ■（停止）に切替える。ペースト・ファイル添付直後に送信できずもっさりする問題を解消。
   const hasContent = inputEl.value.length > 0 || pastedTexts.length > 0 || pendingAttachFiles.length > 0;
-  const showStop = running && !hasContent;
+  const showStop = running && !hasContent && !headless;
   const sendBtn = document.getElementById('send-btn');
   if (sendBtn) {
     sendBtn.textContent = showStop ? '■' : '➤';
@@ -434,10 +456,28 @@ export function sendSubmittedBody(sessionId, bodyText, opts: any = {}) {
   return true;
 }
 
+// 送ると本文が空になるか（doSend と同じく、自動送信のトリガーフレーズは除いて見る）。
+// 空白だけの本文も、送れば最後に確定の '\r' が届く（buildBodySubmitPart の遅延 Enter）ので空に数える。
+function isEmptySubmit() {
+  if (pendingAttachFiles.length > 0) return false;
+  let text = buildSendText();
+  const phrase = getActiveTriggerPhrase();
+  if (phrase && textEndsWithTriggerPhrase(text, phrase)) text = stripTrailingTriggerPhrase(text, phrase);
+  return text.trim() === '';
+}
+
 export async function doSend(sessionId) {
   // 直前の doSend（Enter/音声/ボタン）と async 中の再入を抑止
   if (Date.now() - lastDoSendAt < DOUBLE_SEND_GUARD_MS) return;
   if (doSendInFlight.has(sessionId)) return;
+  // 畳んだ高リスクの承認があるときの空の送信は '\r' だけになり、CLI で選ばれている項目
+  // （多くは Yes）を長押しも確認も無しに確定させる。送らずに帯を開くよう案内する
+  // （approval-store.ts の emptySubmitHitsFoldedHighRiskApproval）。Enter・送信ボタン・
+  // IME の確定後・音声の自動送信・テンプレートの即送信は、どれもここを通る。
+  if (isEmptySubmit() && emptySubmitHitsFoldedHighRiskApproval(sessionId)) {
+    showToast(t('toast_folded_high_risk_empty_submit'), undefined, 4500);
+    return;
+  }
   // 後続の単行送信が deferred-enter 予約をキャンセルしないと、遅延 \r / ペースト本体が
   // 次メッセージの後ろに注入される。送信確定の直前に必ず消す。
   cancelDeferredEnter(sessionId, 'do_send');
@@ -445,14 +485,6 @@ export async function doSend(sessionId) {
   // Ollama route セッションで /model 始まりはブロック（spawn 時固定 env と不整合のため）
   if (isOllamaModelCommandBlocked(sessionId, buildSendText())) {
     showToast(t('toast_model_blocked_on_ollama'));
-    return;
-  }
-  // 選択メニュー（claude /model 等・承認ではないカーソル駆動 TUI）表示中は、
-  // チャット入力欄からの素通し注入（末尾 \r）を保留する。注入すると \r が
-  // 現在カーソル選択中の項目を誤確定してしまうため。入力テキストは消さず、
-  // ユーザーは下の action-bar ボタンか端末ペインで選択を解決する。
-  if (isSelectMenuActive(sessionId)) {
-    showToast(t('toast_select_menu_active'));
     return;
   }
   // 非接続時は長文ペーストを添付へ移したり、入力 state を変更したりする前に止める。
@@ -489,6 +521,13 @@ export async function doSend(sessionId) {
     rawText = rawText.replace(/\r\n?/g, '\n');
     // 候補メニュー確定で付く末尾空白を落とす（付いたままだと内側 CLI がコマンドとして扱わない）。
     rawText = trimTrailingSpaceForSlashCommand(rawText);
+    // 添付のアップロードが全部失敗すると、送るものが確定の '\r' だけになる。入口の判定
+    // （isEmptySubmit）は添付があるので通しているので、畳んだ高リスクの承認があれば
+    // ここでもう一度止める。
+    if (rawText.trim() === '' && injectPrefix === '' && emptySubmitHitsFoldedHighRiskApproval(sessionId)) {
+      showToast(t('toast_folded_high_risk_empty_submit'), undefined, 4500);
+      return false;
+    }
     // ペースト包み・確定 \r 分離の判定は buildBodySubmitPart に共通化（クイックコマンドと共用）。
     // ブラケットペーストはテキスト部分のみに適用し、injectPrefix は前置する。
     let textPart;
@@ -515,23 +554,9 @@ export async function doSend(sessionId) {
     if (!sendSubmittedText(sessionId, textToSend)) return false;
     clearInput();
     hideSlashMenu();
-    // 送信したら次のプロンプトは別物の可能性があるため dismiss フラグ・multiQ ラッチをクリア
-    multiQuestionDismissedCache.delete(sessionId);
-    multiQuestionLatchAt.delete(sessionId);
-    // テキスト送信で承認ポップアップをバイパスした場合、Ink 再描画による
-    // 同一選択肢の再検出・再表示を防ぐため消費済み署名を保存する
-    const prevOpts = approvalRawOptionsCache.get(sessionId);
-    if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
-    if (typeof maybeSendDirectApprovalConsumed === 'function') {
-      maybeSendDirectApprovalConsumed(sessionId, rawText, textToSend);
-    }
-    hideActionBar(sessionId);
-    // PTY エコーバックによる誤再表示を抑制（sendChoice と同様）
-    approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-    setTimeout(() => {
-      detectApproval(sessionId);
-      maybeAutoSwitchToNextApproval();
-    }, 2050);
+    // 承認パネルを使わずに入力欄から答えた場合も、描いていた記録は回答済みにしてパネルを閉じる
+    // （Hub の記録が閉じるまで同じ承認を描き直さない）。
+    noteApprovalAnsweredByTyping(sessionId, rawText, textToSend);
     // chatHistory: ユーザー送信は AI ターンの境界。
     // まず蓄積中の AI 出力チャンクを即 commit してから user 入力を push する。
     chatHistoryCommitOutput(sessionId);
@@ -970,7 +995,7 @@ inputEl.addEventListener('keydown', (e) => {
   // 複数質問検出中・入力欄が空・修飾なしのスペースに限り PTY へ転送する。
   if (e.key === ' ' && inputEl.value === '' && !e.isComposing &&
       !e.ctrlKey && !e.metaKey && !e.altKey &&
-      multiQuestionVisibleCache.get(activeSessionId)) {
+      isAskUserQuestionPending(activeSessionId)) {
     sendText(activeSessionId, ' ');
     e.preventDefault(); return;
   }
@@ -1473,19 +1498,10 @@ export function sendQuickCommand(sessionId, cmd) {
 }
 
 function doSendQuickCommand(sessionId, cmd) {
-  // doSend / sendChoice と同様に承認 UI 状態を Hub と同期する。
-  // /clear 等で画面がリセットされた後も approvalVisibleCache=true が残ると、
-  // セッションカードの "Pending" バッジが消えなくなる。
-  const prevOpts = approvalRawOptionsCache.get(sessionId);
-  // 本文送信が失敗した場合は承認 UI と消費済み state を保持する。
+  // 本文送信が失敗した場合は承認 UI と回答済みの印を変えない。
   if (!sendSubmittedBody(sessionId, cmd)) return false;
-  if (prevOpts) recordAnsweredApprovalCandidate(sessionId, prevOpts);
-  hideActionBar(sessionId);
-  approvalSuppressUntil.set(sessionId, Date.now() + 2000);
-  setTimeout(() => {
-    detectApproval(sessionId);
-    maybeAutoSwitchToNextApproval();
-  }, 2050);
+  // doSend と同じく、描いていた記録は回答済みにしてパネルを閉じる。
+  noteApprovalAnsweredByTyping(sessionId, cmd, cmd);
   // 残骸への連結対策の \x15 前置は廃止（doSend と同じく residue-sweep.ts の事後掃除へ移行）。
   // 本文の送り方（ペースト包み・確定 \r 分離）も doSend と同じ共通経路に従う。
   focusInputForTerminalKeys();
@@ -1529,6 +1545,15 @@ export function sendSubmittedText(sessionId, text, opts: any = {}) {
 }
 
 export function sendText(sessionId, text) {
+  // headless のセッションは provider 自身の非対話モードで動いていて、stdin は起動
+  // 直後に閉じている。打った文字には届く先が無いので、ここで止める。止めるのは送信
+  // 経路のこの 1 箇所だけで、入力欄の無効化（updateInputAffordance）はその見た目側
+  // ——「打てるのに何も起きない」を作らないため（子 plan:
+  // docs/local/plan_child_execution_modes_headless.md 内部 C6）。
+  if (isSessionHeadless(sessionId)) {
+    showToast(t('toast_input_headless_blocked'), undefined, 4500);
+    return false;
+  }
   if (!isWebSocketSendReady()) {
     notifySendFailure();
     return false;
@@ -1590,7 +1615,6 @@ export function resetTerminalHistoryForSession(id) {
   if (!t) return;
   t.pendingChunks = [];
   t.pendingTotalBytes = 0;
-  t.pendingTextTail = '';
   t.markerFilterCarry = new Uint8Array(0);
   t.screenClearSeqCarry = new Uint8Array(0);
   t.autoScroll = true;
@@ -1604,21 +1628,10 @@ export function resetAllLocalSessionHistory() {
     s.last_message = '';
   });
   terminals.forEach((_t, id) => resetTerminalHistoryForSession(id));
-  approvalVisibleCache.clear();
-  multiQuestionVisibleCache.clear();
-  multiQuestionDismissedCache.clear();
-  multiQuestionLatchAt.clear();
   sequentialChoiceCache.clear();
-  approvalRawOptionsCache.clear();
-  approvalSourceCache.clear();
-  approvalSourceEpochCache.clear();
-  approvalReplayState.clear();
-  answeredApprovalCandidates.clear();
-  answeredApprovalShapeKeys.clear();
-  replayAnsweredApprovalTokens.clear();
-  approvalSwitchCandidates.clear();
+  // sessions は再接続の onclose で既に空なので、セッションごとではなく全部を捨てる。
+  forgetAllAnsweredApprovals();
   batchSelections.clear();
-  approvalSuppressUntil.clear();
   approvalAutoSwitchQueue.length = 0;
   resetAllChatHistory();
   hideActionBar(undefined);
@@ -1637,23 +1650,9 @@ export function resetLocalSessionHistory(id) {
     s.last_message = '';
   }
   resetTerminalHistoryForSession(id);
-  approvalVisibleCache.delete(id);
-  if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
-    setMultiQuestionBannerVisible(false);
-  }
-  multiQuestionDismissedCache.delete(id);
-  multiQuestionLatchAt.delete(id);
   clearSequentialChoiceState(id);
-  approvalRawOptionsCache.delete(id);
-  approvalSourceCache.delete(id);
-  approvalSourceEpochCache.delete(id);
-  approvalReplayState.delete(id);
-  answeredApprovalCandidates.delete(id);
-  answeredApprovalShapeKeys.delete(id);
-  replayAnsweredApprovalTokens.delete(id);
-  approvalSwitchCandidates.delete(id);
+  forgetAnsweredApprovals(id);
   batchSelections.delete(id);
-  approvalSuppressUntil.delete(id);
   removeApprovalAutoSwitchTarget(id);
   resetChatHistoryForSession(id);
   if (id === activeSessionId) {
@@ -1672,9 +1671,6 @@ export function clearSessionTimerEntry(timerMap, id) {
 }
 
 export function cleanupRemovedSessionState(id) {
-  try { clearSessionTimerEntry(approvalCheckTimers, id); } catch (_) {}
-  try { clearSessionTimerEntry(approvalSuppressRescanTimers, id); } catch (_) {}
-  try { cancelApprovalLedgerRestore(id); } catch (_) {}
   try { cancelDeferredEnter(id, 'session_removed'); } catch (_) {}
   try { cancelResidueSweep(id); } catch (_) {}
   try { cancelExpandCapture(id); } catch (_) {}
@@ -1719,25 +1715,12 @@ export function removeLocalSession(id) {
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
   try { disposeAltScrollRail(id); } catch (_) {}
-  approvalVisibleCache.delete(id);
-  if (multiQuestionVisibleCache.delete(id) && id === activeSessionId) {
-    setMultiQuestionBannerVisible(false);
-  }
-  multiQuestionDismissedCache.delete(id);
-  multiQuestionLatchAt.delete(id);
   removeApprovalAutoSwitchTarget(id);
-  approvalRawOptionsCache.delete(id);
-  approvalSourceCache.delete(id);
-  approvalSourceEpochCache.delete(id);
-  approvalReplayState.delete(id);
-  answeredApprovalCandidates.delete(id);
-  answeredApprovalShapeKeys.delete(id);
-  replayAnsweredApprovalTokens.delete(id);
+  forgetApprovalSession(id);
+  forgetAnsweredApprovals(id);
   batchSelections.delete(id);
   batchFreeText.delete(id);
   clearSequentialChoiceState(id);
-  cancelApprovalHintConfirm(id);
-  approvalSuppressUntil.delete(id);
   cleanupSessionInputState(id);
   onChatHistorySessionRemoved(id);
   if (activeSessionId === id) {
@@ -2260,6 +2243,8 @@ inputEl.addEventListener('blur', (e) => {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      opencode: (document.getElementById('slash-src-opencode')?.value || '').trim(),
+      grok: (document.getElementById('slash-src-grok')?.value || '').trim(),
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
@@ -2281,6 +2266,7 @@ inputEl.addEventListener('blur', (e) => {
   };
 
   window.__settingsResetAll = async () => {
+    setUserPref('display.custom_themes', []);
     applyTheme('light');
     applyFontSize('medium');
     applyLang('ja');
@@ -2392,11 +2378,15 @@ inputEl.addEventListener('blur', (e) => {
     const slashCodexEl = document.getElementById('slash-src-codex');
     const slashCopilotEl = document.getElementById('slash-src-copilot');
     const slashCursorAgentEl = document.getElementById('slash-src-cursor-agent');
+    const slashOpenCodeEl = document.getElementById('slash-src-opencode');
+    const slashGrokEl = document.getElementById('slash-src-grok');
     const slashCommandCodeEl = document.getElementById('slash-src-command-code');
     if (slashClaudeEl) slashClaudeEl.value = '';
     if (slashCodexEl) slashCodexEl.value = '';
     if (slashCopilotEl) slashCopilotEl.value = '';
     if (slashCursorAgentEl) slashCursorAgentEl.value = '';
+    if (slashOpenCodeEl) slashOpenCodeEl.value = '';
+    if (slashGrokEl) slashGrokEl.value = '';
     if (slashCommandCodeEl) slashCommandCodeEl.value = '';
     loadUsageLinkSettings();
 
@@ -2471,6 +2461,7 @@ inputEl.addEventListener('blur', (e) => {
       loadUsageLinkSettings();
       attachTokenStatusbarToggle();
       attachDoneSummaryNotifyToggle();
+      attachTurnEndNotifyToggle();
       void loadDeferredEnterConfig();
     }
   });

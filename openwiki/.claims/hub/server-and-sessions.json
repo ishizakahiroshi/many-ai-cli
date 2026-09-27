@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:6fd66f76b10e3e9d6af59d30fe575d2400a0d0f34ab65126cf50922266420a3b",
+  "pageVersion": "sha256:cf4f08d06d351820fc2b04366eb9964e4eb1dcf72bbf54ad9ba454d4849cbddf",
   "claims": [
     {
       "id": "claim_694feee160304a34a30de9c4e1a9e29a",
       "statement": "internal/proto.Message is a single flat struct used for every /ws message in both directions (UI-to-Hub and wrapper-to-Hub), disambiguated at runtime by its Type/Role fields rather than by separate typed message structs per direction, with most fields marked omitempty so a given instance only carries the fields relevant to its Type.",
       "evidence": [
         {
-          "resource": "repo://internal/proto/messages.go#L17-L47",
-          "version": "repo-lines-v1:sha256:24b66621eb1562005610a19791aa5f29fe3fcd92511f3983509109a15cca0910:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZTJmNjcwMzBlYTk3NTA2ZjZlNWUxZjZlMGFlYThjNTVlODY5NmVjMDM3ZGE2M2U3ZDk1ZjI2MDJiNWYyOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJjYTNmMzg4ZDQyMWZjYjVjM2VmNWYyM2U5YjRmZGRmM2I1YmEzYWY4ZGQxMjBmZDliNDQyYmQwNjE2OGExZWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiZjI5YThkM2RiZDI1NTI0NDZjNzkxZjAzNDBjYmM2NmUyN2M5MTRlN2FhOTUyMmVjOTJhNDVhNzNkMTBhMzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjNzg2YzkyMGY4ZTVjYzZjMTZmMmFlODIwMDJkNTA4ZWY1NjYyZTQxZTI4YWZhMTdmMzYzNWFiNTM3YzE0NzAifQ"
+          "resource": "repo://internal/proto/messages.go#L13-L60",
+          "version": "repo-lines-v1:sha256:5c8115b771ebd909dca233904dae5dc2731c3c7e3f9e1af4c0c5695f5d541958:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjODk2ZGU2ZDM5ZmNhMDVlOTExODc3MTRlYzQyOGU2MjI3ZmI1MTljN2JjZDU2ZTNiOGJiYTY1N2FlNGQ5MmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4NTY2ZjEwNTFhZTE0NzA4OTc1MTIzMWExYjcwMWIzOGI1OTdhOTcyNTI5ODAxMjU5YTFmNjEwMDZhZjRhNGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkwMDcyZmZmNzM4OGY0YjRhNzdmNDk1N2E0NDM0MjliMThkYmJkMWVhYjFjMjcwYzE2M2MwZTdjMDIxOTEyMWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU2OTcxYzEyZThlYzA5OGFiZWNjN2I5MDRlOTYwNWJkMjlkOTkwZTM2YWViNWFjMGRiOTgwZGM1YmU2Y2IyMjkifQ"
         }
       ]
     },
@@ -17,8 +17,8 @@
       "statement": "proto.Message carries an Activity *SessionActivity pointer specifically because it can carry all four activity booleans (OutputIdle, WorkflowActive, AwaitingUser, AwaitingApproval) atomically including a false transition, which the individual omitempty flat booleans cannot distinguish from an unset/omitted field.",
       "evidence": [
         {
-          "resource": "repo://internal/proto/messages.go#L33-L41",
-          "version": "repo-lines-v1:sha256:6f0b7a178b028bfccb0b129cbd5515671c311d16e5c2e20cff4d88fd4071486c:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTQ5MmUzNmQzMzAyY2Q0NDI4YjA1MjE2YTFjMzkzMmE3ZDc5NzhhMGRiNzlmZWEwYWMxOWQxYzJjYWExZjk3ZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmUxMDNjZGVjODg3MjVjNmFkZjE5ZDliM2RjMjhlOTU5ODM5OWZiNWZmZDUwOWFlNDVhYWMyNTVjNmQwZjIzOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmM5OGJkYzUzZGY4NmI0N2Q4Yjg0ZjUwZTJlYjllYzJiZWJlNTMxMjg2YzU1MmZiYzI3YTE1ZTE2ZDNhYjRjYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2MwOTY0ZTQ1ZWVhN2E4ZDBkNjM3ODljM2M4NzBiNDJhNGY4NzIwNjBlMzc3ZTJhNGIxYzg5MDA3MjBkNGRhMSJ9"
+          "resource": "repo://internal/proto/messages.go#L37-L45",
+          "version": "repo-lines-v1:sha256:acdbc5fab1c02ba818c2a04dce994324cbfe09cd3a036f05bda44e8e231124c0:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMThjMDI4MTg0NDA3MmQ4YzdjNDRiZTlhYmJhOWQwMTBjY2Q1OTM4N2YyYzY4MjgxNjc5YWU2ZGM5MWM4MGQzOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGM1YjA5MDI2MjMzNmM2MjU4ZGE2ZDBhNzFhMjYzNGY4NTAzOGJiYjdhNzA3YjU3YzI0NTE4ZDgwNTE0YTgxMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMDI1ZDAwYzM3MjFiOTI5MTYwYTE2ODVjOThmNTQzM2U0MDFjZTMxY2FkMmYwN2Q5YmEwN2VkMDdkMGRlZTI3YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNGU2NzBjZWFjNTEwYmY1M2IzOGRkNmJiMTU3YjBmZjUxYzMzZDU4MDMyNjdhYzI3Y2MyNGM0YWFhYTkyOGQ3ZiJ9"
         }
       ]
     },
@@ -37,8 +37,8 @@
       "statement": "The Hub's session struct's ProjectID field records the root of the actual repository the session's CWD belongs to (not the raw cwd itself), and its own comment states the UI sidebar's project containers are built from this value.",
       "evidence": [
         {
-          "resource": "repo://internal/hub/server.go#L110-L110",
-          "version": "repo-lines-v1:sha256:cea90190a248c8d092cd44a34cc5290e07b06b0bfa6a2c1ddb22c4ae98a8f87e:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VhOTAxOTBhMjQ4YzhkMDkyY2Q0NGEzNGNjNTI5MGUwN2IwNmIwYmZhNmEyYzFkZGIyMmM0YWU5OGE4Zjg3ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VhOTAxOTBhMjQ4YzhkMDkyY2Q0NGEzNGNjNTI5MGUwN2IwNmIwYmZhNmEyYzFkZGIyMmM0YWU5OGE4Zjg3ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmM3YmJlNTkyM2YwNjc5NjJhYmI5NjU1YjgwODIyMGFiNGVhMGUzNjY4ZmExZDA1MzkxY2ZlZGNlNzUxMTQ3ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWZmNjk5NzUxZjY4NjBlMTdkM2UxNTVhYzc0Yzk3MDUzNTgyYjczM2NlYTMyMTVjZTU1NTg1NmNmYmRkMGI4YyJ9"
+          "resource": "repo://internal/hub/server.go#L121-L121",
+          "version": "repo-lines-v1:sha256:66a69d35aba5c36d7a9def3931c6e431edd7e923c40445553ea56f24573b7b64:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjZhNjlkMzVhYmE1YzM2ZDdhOWRlZjM5MzFjNmU0MzFlZGQ3ZTkyM2M0MDQ0NTU1M2VhNTZmMjQ1NzNiN2I2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjZhNjlkMzVhYmE1YzM2ZDdhOWRlZjM5MzFjNmU0MzFlZGQ3ZTkyM2M0MDQ0NTU1M2VhNTZmMjQ1NzNiN2I2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOWRhOTBlNjE5MGI4MDRjMWNlMjJmYzM2ZjU3ZGUzZjIwZTRjNTVjMDYxMjg1N2FkOTY1YjA0NzNjNDlmMDAzMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmJlZmY0M2YwNGU2M2RjMThjZTllYmU3MDczZTNkZWQ4MzdkZWExZmI0YWU1MTU3ZmY2Mzc3ODE2NTBhMTU1MCJ9"
         }
       ]
     },
@@ -65,6 +65,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

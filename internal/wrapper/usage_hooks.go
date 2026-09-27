@@ -230,6 +230,10 @@ func WriteClaudeSessionSettings(p UsageHookParams, opts ClaudeSettingsOptions) (
 		_ = os.Remove(path)
 		return "", nil, fmt.Errorf("close claude session settings: %w", err)
 	}
+	if err := securefile.RestrictFile(path); err != nil {
+		_ = os.Remove(path)
+		return "", nil, fmt.Errorf("restrict claude session settings permissions: %w", err)
+	}
 	cleanup = func() { _ = os.Remove(path) }
 	return path, cleanup, nil
 }

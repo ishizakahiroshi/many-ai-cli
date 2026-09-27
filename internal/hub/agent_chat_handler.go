@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"many-ai-cli/internal/proto"
+	"many-ai-cli/internal/provider"
 )
 
 const (
@@ -19,10 +20,6 @@ const (
 	// トランスクリプトへの書き込みが同時ではないため（実測は同じ秒だが順序の保証は無い）。
 	agentChatKickDelay = 80 * time.Millisecond
 )
-
-func isAgentChatProvider(provider string) bool {
-	return provider == "claude" || provider == "codex"
-}
 
 // handleAgentChat reads provider-owned structured transcripts without writing
 // their contents to the many-ai-cli session store.
@@ -56,7 +53,7 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sessionsMu.Unlock()
 
-	if !isAgentChatProvider(snap.Provider) {
+	if !providerHasStructuredTranscript(snap.Provider) {
 		writeJSON(w, map[string]any{
 			"ok":          true,
 			"available":   false,
@@ -117,11 +114,10 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 	state := newAgentChatParseStateWithPage(limit, agentChatBatchBytesMax, -1)
 	var messages []agentChatMessage
 	pageOffset := cursor
-	switch snap.Provider {
-	case "claude":
-		messages, pageOffset, err = parseClaudeTranscriptTailPage(path, state, cursor)
-	case "codex":
-		messages, pageOffset, err = parseCodexRolloutTailPage(path, state, cursor)
+	// provider ごとの分岐は agentChatRecordParserFor の 1 箇所だけ。
+	// ここに switch を戻すと、provider を増やしたときに直す場所が 3 つに戻る。
+	if parse := agentChatRecordParserFor(snap.Provider); parse != nil {
+		messages, pageOffset, err = parseAgentChatTailPage(path, state, cursor, parse)
 	}
 	nextCursor := pageOffset
 	if err != nil {
@@ -148,6 +144,11 @@ func (s *Server) handleAgentChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
+	if adapter, ok := provider.LookupHistoryAdapter("history:" + snap.Provider + "-v1"); ok {
+		if !adapter.Parser().CanParse() {
+			return "", false
+		}
+	}
 	switch snap.Provider {
 	case "claude":
 		root := strings.TrimSpace(snap.ClaudeDir)
@@ -176,13 +177,31 @@ func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
 		if snap.CWD == "" || root == "" {
 			return "", false
 		}
-		// NativeLogPath は Stop hook が当該 session へ直接設定した exact path。
-		// 秒精度の開始時刻を使う fallback より必ず優先する。
+		// NativeLogPath は会話の切り替えへの追従（codex_thread_follow.go）か Stop hook が
+		// 当該 session へ直接設定した exact path。秒精度の開始時刻を使う fallback より必ず優先する。
 		if snap.NativeLogPath != "" && isExistingFile(snap.NativeLogPath) {
 			return snap.NativeLogPath, true
 		}
 		if startedAt, err := time.Parse(time.RFC3339, snap.StartedAt); err == nil {
 			if path, ok := findCodexRolloutLog(root, snap.CWD, startedAt); ok {
+				return path, true
+			}
+		}
+	case "command-code":
+		// 「CLI 自身のログを開く」ボタン（agent_log_handler.go）と同じ解決を使う。
+		// セッション ID が分かっていればそれを正とし、分からない間だけ cwd と
+		// 開始時刻の近傍から探す。**ディレクトリは返さない**（ボタン側は最後の
+		// 手段として project ディレクトリを返すが、パーサはファイルしか読めない）。
+		if strings.TrimSpace(snap.HomeDir) == "" || snap.CWD == "" {
+			return "", false
+		}
+		if snap.AgentSessionID != "" {
+			if path, ok := commandCodeTranscriptPath(commandCodeProjectDir(snap.HomeDir, snap.CWD), snap.AgentSessionID); ok {
+				return path, true
+			}
+		}
+		if startedAt, err := time.Parse(time.RFC3339, snap.StartedAt); err == nil {
+			if path, ok := findCommandCodeTranscript(snap.HomeDir, snap.CWD, startedAt); ok {
 				return path, true
 			}
 		}
@@ -193,7 +212,7 @@ func agentChatTranscriptPathForSnapshot(snap agentLogSession) (string, bool) {
 func (s *Server) startAgentChatTail(id int) {
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || !isAgentChatProvider(ses.Provider) || ses.agentChatRunning {
+	if ses == nil || !providerHasStructuredTranscript(ses.Provider) || ses.agentChatRunning {
 		s.sessionsMu.Unlock()
 		return
 	}
@@ -307,6 +326,12 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 	s.sessionsMu.Unlock()
 
 	snap := s.agentChatSnapshot(id)
+	// Codex が同じプロセスの中で新しい会話へ切り替えていたら、そちらへ乗り換える
+	// （codex_thread_follow.go）。乗り換えは NativeLogPath に入るので、取り直した
+	// snapshot で下の解決がそのまま新しい rollout を選ぶ。
+	if provider == "codex" && previousPath != "" && s.followCodexThreadSwitch(id, previousPath, time.Now()) {
+		snap = s.agentChatSnapshot(id)
+	}
 	path, pathOK := agentChatTranscriptPathForSnapshot(snap)
 	if pathOK && path != previousPath {
 		previousOffset = 0
@@ -326,11 +351,8 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 			// from a bounded tail page so pending tool IDs are rebuilt without
 			// sharing the old poll's mutable maps or reading from byte zero.
 			budget := s.agentChatTailPageBudget()
-			switch provider {
-			case "claude":
-				messages, _, err = parseClaudeTranscriptTailPageWithBudget(path, parseState, -1, budget)
-			case "codex":
-				messages, _, err = parseCodexRolloutTailPageWithBudget(path, parseState, -1, budget)
+			if parse := agentChatRecordParserFor(provider); parse != nil {
+				messages, _, err = parseAgentChatTailPageWithBudget(path, parseState, -1, budget, parse)
 			}
 			if parseState.lastRead.DecodeCommitted {
 				// The tail parser owns the snapshot boundary. Do not replace it
@@ -345,13 +367,8 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 				newOffset = previousOffset
 				parseState = nil
 			}
-		} else {
-			switch provider {
-			case "claude":
-				messages, newOffset, err = parseClaudeTranscriptWithState(path, previousOffset, parseState)
-			case "codex":
-				messages, newOffset, err = parseCodexRolloutWithState(path, previousOffset, parseState)
-			}
+		} else if parse := agentChatRecordParserFor(provider); parse != nil {
+			messages, newOffset, err = parseAgentChatTranscriptWithState(path, previousOffset, parseState, parse)
 		}
 	}
 	if provider == "codex" && pathOK && parseState != nil {
@@ -375,6 +392,9 @@ func (s *Server) pollAgentChat(id int, generation uint64) {
 		transcriptPath = path
 	}
 	s.scanTranscriptApprovalMarkers(id, provider, transcriptPath, messages, stateWasReset, time.Now())
+	// 起動引数で最初の指示を渡した子は、トランスクリプトに最初の user メッセージが
+	// 現れた時点を「指示が受け取られた」とする（打ち込んでいないのでエコーが無い）。
+	s.noteLaunchPromptAccepted(id, messages, time.Now())
 
 	for _, message := range messages {
 		if !s.broadcastAgentChatIfCurrent(id, generation, proto.Message{

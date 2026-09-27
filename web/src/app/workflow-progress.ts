@@ -96,8 +96,14 @@ const FAILED_GLYPHS = '✗✘';
 const PENDING_GLYPHS = '○◌◯';
 
 // 行頭のツリー描画・インデント記号（除去対象）。`▸`/`▹`/`‣` はグループ box の見出し記号でもあり、
-// 除去後の残りをフェーズ見出しとして扱う。
-const TREE_PREFIX_RE = /^[\s│├└─╰╭╮╯┃┣┗┏┓┛┃┆┊▕▏▸▹‣•·]+/;
+// 除去後の残りをフェーズ見出しとして扱う。`⎿`（U+23BF）と U+00A0 は Claude Code の Tip 行
+// （案内文）の行頭記号（実測 67/67 件が `⎿` + U+00A0 で始まる）。これが無いと Tip 行除外
+// （TIP_LINE_RE）が一致せず効かない（敵対レビュー指摘 R8）。U+00A0 は \s に含まれる
+// （ECMAScript 仕様）ため実質重複だが、Go 版（\s が ASCII のみ）との対比のため明示する。
+// regex リテラル中に U+00A0 を直接書くと通常の半角スペースと見分けが付かず事故のもとに
+// なるため、charCode 経由の文字列として組み立てる（INPUT_BOUNDARY_RE も同様）。
+const NBSP_CHAR = String.fromCharCode(0xa0);
+const TREE_PREFIX_RE = new RegExp('^[\\s' + NBSP_CHAR + '│├└─╰╭╮╯┃┣┗┏┓┛┃┆┊▕▏▸▹‣•·⎿]+');
 
 const ANSI_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 
@@ -140,8 +146,21 @@ function matchAgentRow(stripped: string): WfAgent | null {
   return { label, state, glyph: first };
 }
 
+// 入力欄の区切り（罫線や ❯ プロンプト）。この行から下は常時表示の UI 領域で
+// Workflow の出力ではないため、見出し発見後の走査をここで打ち切る（誤検出防止）。
+// 罫線側は「行全体が横線文字（─━═）と空白だけ」の行に限定する（敵対レビュー指摘 R9）。
+// 以前は `[─━═]{3,}` を行のどこかに含むだけで打ち切っていたため、Workflow のブロック内の
+// 枠線（`╭─── Review ───╮` のように角や文字を含む行）まで区切りと誤認して本物のツリーを
+// 打ち切る恐れがあった。❯ プロンプト行は今までどおり行のどこかに含むだけで区切りとする
+// （実ログでは区切り線の直後に必ず ❯ 行が続き、そちらが安全網になるため）。
+const INPUT_BOUNDARY_RE = new RegExp('^[\\s' + NBSP_CHAR + '─━═]*[─━═]{3,}[\\s' + NBSP_CHAR + '─━═]*$|❯');
+
+// "Tip: …" は Claude Code の案内文で、"workflow" の語を含むことがあるが見出しではない。
+const TIP_LINE_RE = /^tip[:：]/i;
+
 // Workflow 見出し行か（⚙ か "workflow" を含む）。name 抽出も兼ねる。
 function matchHeader(stripped: string): { name: string } | null {
+  if (TIP_LINE_RE.test(stripped.trim())) return null;
   const hasGear = stripped.includes('⚙');
   const hasWord = /\bworkflow\b/i.test(stripped);
   if (!hasGear && !hasWord) return null;
@@ -256,6 +275,8 @@ export function parseWorkflowProgress(lines: string[]): WorkflowProgress {
   let summaryRaw = '';
 
   for (let i = 0; i < block.length; i++) {
+    // 見出し行より下で入力欄の区切りに達したら打ち切る（下は常時表示の UI）。
+    if (i > 0 && INPUT_BOUNDARY_RE.test(block[i])) break;
     const stripped = stripTree(block[i]);
     if (!stripped) continue;
 

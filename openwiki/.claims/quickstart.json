@@ -1,24 +1,24 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:49531da637d1825dad31892680db2174d578fa9ea60017c5506645b8a8952415",
+  "pageVersion": "sha256:1707d24c2d55e3025c5695999dd0cd0bb7a83bdf4ff6b69f7d2f3fdc9cdb3583",
   "claims": [
     {
       "id": "claim_ee095f1fbcba4ca4bdff72e0b0f406b2",
-      "statement": "many-ai-cli's Go module is declared as \"many-ai-cli\" and it wraps six AI coding CLI providers (claude, codex, copilot, cursor-agent, opencode, grok) as its supported built-in provider set.",
+      "statement": "many-ai-cli's Go module is declared as \"many-ai-cli\" and its built-in provider set is seven AI coding CLIs: claude, codex, copilot, cursor-agent, opencode, grok, and command-code.",
       "evidence": [
         {
-          "resource": "repo://go.mod#L1-L1",
-          "version": "repo-lines-v1:sha256:fe482b434f053f63bc8e824beb368e82e79cbd286d39be42bd3c5b5bfea36118:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmU0ODJiNDM0ZjA1M2Y2M2JjOGU4MjRiZWIzNjhlODJlNzljYmQyODZkMzliZTQyYmQzYzViNWJmZWEzNjExOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmU0ODJiNDM0ZjA1M2Y2M2JjOGU4MjRiZWIzNjhlODJlNzljYmQyODZkMzliZTQyYmQzYzViNWJmZWEzNjExOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmIzNTZjMjkyZDIzYjdlMWVkYzFhNjFmMzE5OTk2Zjg0ODFhNjk3ZDY2YjZiMTljNDA5OWUwNDZkZDc2ZmRhOSJ9"
+          "resource": "repo://go.mod#L1-L2",
+          "version": "repo-lines-v1:sha256:f29699c2679d41e6870aba21017c2ead7509a15639b93c7b8153e42157f21d74:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2FlNDBkNDhmMmNmNjZjNmQ4Y2YwNDY5NTUxZDc1ODQyZjZhZGM1MjQ0OGUzNGViZTFiNjAzNzA2ZmRlY2JlNiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmQwNGQyMjY5ZGM5MWNiNjIzZmJkMTI3OWYzMTk3YzcwMDIyMmYyOTVlNjNhMTM0Zjk4ZTc0MDVmZjA2OGZkZCJ9"
         },
         {
-          "resource": "repo://internal/config/custom_provider.go#L22-L24",
-          "version": "repo-lines-v1:sha256:89f2053c887300aea63e4302e20ab4b30441e25b258b500e5cad90237e5d9c6f:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMzE4MmRkMGY3YjkyYWQ5OWNkNTZlNmNiMGRjYzk0N2I1YzBkYWFiNDMyOTZkOTI0MTdhNjU5NTYxYWUxZTE3MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjY1YzY0OTEyMDhiNDliZGFjNTQ5N2MyY2IzOTkwMGQ5NWViNWZiZWNkYjk0YTUwZGQ3MzM5ZmY1NmM5NmZiMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2IwNWQ4YjMwOWM5ZDllZGU1MTVlNjg0ZjQ3ZWY5ZTI4MmI2Y2RlYzYzMjI4YjFiYzkxZTI5NGViYTRlZWY2OCJ9"
+          "resource": "repo://internal/config/custom_provider.go#L14-L24",
+          "version": "repo-lines-v1:sha256:1a94ed3dce82428a77ff5082e019b6b250c907b29d347c683db7fce4ed295612:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlNjRmMmQ1MjJkNTNjYmI2NjE0Zjg2ODdiOThiZTVmYzU4YTA4ZTYxYjM2NmUzN2U4ZjBlMjdiZTRjMjZiMDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUyMmZhYTUzNWJkMmVhM2Q1MmU3NDFlZDQ1NDQzNWI3ZmU0OWU4MzU4NmU5NDNkOThkODJiYmZiMjRkMWY1YzUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhOTRkNjhjYjAyYWU3Mjg1ZmEwNWQ0ODNmYTg2M2FiZjg0ZDMyMTg1NzdlZDc3MDIzMDBiYWQ5MTFkZjY5NDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFkMzRjZTM1MzYxY2NhMTQxYjEzODkzOTFlYWI1MTZlZTlmY2ZmYzFjMmE2OTIxN2MyNWY4ODRkYTA3MTRkNTUifQ"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

@@ -3,9 +3,6 @@ type: architecture-component
 title: Approval Detection and Marker System
 description: How the Hub detects an AI CLI's approval prompt across providers — transcript vs terminal-mirror marker sources, the single candidateKey+sourceEpoch identity rule, pattern-profile trigger phrases, and the separate opt-in auto-approval policy layer.
 tags: [approval, hub, marker, candidate-key, transcript, vt-mirror, autoapproval, risk-tier]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-ebe81a9b81f3ddb0fe384827
     resource: repo://internal/approval/summary.go
@@ -21,12 +18,17 @@ sources:
     resource: repo://internal/hub/approval_marker.go
   - id: openwiki-source-f56250d3883911b64abc3676
     resource: repo://internal/hub/auto_approval.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+  - id: openwiki-source-d70a162805fa0331015d6ad6
+    resource: repo://internal/hub/provider_feature_source.go
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Two marker sources, one per session
 
-The Hub extracts the `[MANY-AI-CLI]...[/MANY-AI-CLI]` approval marker block a wrapped CLI writes into its own output through one of two sources, and — critically — only ever one source per session at a time: for `claude`/`codex` (the providers with a readable agent-chat transcript file), the Hub reads the marker straight out of that transcript; every other provider's marker comes from the Hub's own VT (terminal) mirror of the PTY output. `approvalMarkerSourceIsTranscriptLocked` is the single switch deciding which applies to a given session.
+The Hub extracts the `[MANY-AI-CLI]...[/MANY-AI-CLI]` approval marker block a wrapped CLI writes into its own output through one of two sources, and — critically — only ever one source per session at a time: for `claude`/`codex`, the Hub reads the marker straight out of the CLI's agent-chat transcript; every other provider's marker comes from the Hub's own VT (terminal) mirror of the PTY output. The choice comes from the `ApprovalMarker` column of the per-provider table in `provider_feature_source.go`, deliberately **not** from whether the chat view can read a transcript (`StructuredTranscript`) — `command-code` has a structured transcript for chat yet still takes its marker from the VT mirror, so widening what the chat view reads can never silently move a provider's approval source. `approvalMarkerSourceIsTranscriptLocked` is the single switch deciding which applies to a given session.
 
 This split exists because of a concrete failure mode (`docs/local/bugfix_approval-marker-block-overflows-screen_2026-08-29.md`): the approval marker is really an AI-to-Hub message, but reading it out of "what the terminal displays" makes its capacity a function of the window's height. Claude Code repaints its alternate screen at absolute coordinates via Ink, so an answer that overflows the visible screen is not scrolled — it is simply never drawn at all, and the Hub's VT mirror's scrollback only retains lines that were actually pushed out by a `newLine()`, so an overflowing block was unrecoverable from either the live screen or scrollback. The same content exists, complete and independent of terminal size, in the CLI's own transcript file, written in the same second the terminal drew the closing marker.
 

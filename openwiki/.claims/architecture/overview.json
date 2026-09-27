@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:9dc35390d789b6d3a163a0eef70203cc1a6209ca35fef31f6d976bc272223a4f",
+  "pageVersion": "sha256:c303e465d0b39c09b1087ac5a54d16e16dca1a9c872af02998a4aa1c3bce990b",
   "claims": [
     {
       "id": "claim_c40b8337230943bea1f39a5dbb15a9ee",
@@ -44,17 +44,39 @@
     },
     {
       "id": "claim_26d9dea358b14215988836b672fed862",
-      "statement": "A wrapped provider CLI process communicates with the Hub only through the wrapper's own WebSocket connection to /ws; many-ai-cli does not modify, proxy, or intercept the wrapped CLI's own network calls, config files, or credentials.",
+      "statement": "A wrapped provider CLI process communicates with the Hub only through the wrapper's own WebSocket connection to /ws; many-ai-cli does not proxy or intercept the wrapped CLI's network calls and never reads, writes, or stores its credentials, selecting a subscription profile only by pointing a config-directory environment variable at a separate directory.",
       "evidence": [
         {
-          "resource": "repo://internal/wrapper/wrapper.go#L894-L935",
-          "version": "repo-lines-v1:sha256:fd18ee80ad1a41f67770f758085a33f26e884f881bc0d69fd6658e59f505a9f7:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhNWYxZDgzYTExNWIzNWY1NjFjZGU1MTNhY2E5ODQxMzY2M2RlOWFiZjQwYWFiOGNiNGE0NWQzYWIyNzk5MWUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQwZmE2OGQwNDI3ZGM5YTZjYzRjZTBhM2E0YTM0MTcyMDUwYTUyYzkxYWM1NWE0YTI5YTU3ZDE1Y2YxN2IwOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIwYWRiMjZjMGUzMmJjMWQ3N2FkM2ViZGM2OWRmNTQzOWM1NWRkMTk5M2NmYTVjMWE4ZTdiZTUzZTM1NDAzYzQifQ"
+          "resource": "repo://internal/subscription/adapter.go#L1-L20",
+          "version": "repo-lines-v1:sha256:9005b68ec71858e3aafc5a9eee32631631660c96f1e5598f18eda4839bfcb5a8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzYjlhN2VkOTljOGQyZTBiNDk5ZGJkZjViOWE1MmI5ZTE3ZGExY2ZiOThkNGE2MjAzYzczYzA1NTg1M2E3Y2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU0YzY0OWM0NmNjYjMxNjMxODc1MzcwMzE4NzdjNDMwNWVhZTI2YWFkYjRhNmRlNDBiZDY1OWQ3ZDkxZmNhY2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3ZGM1MmUzNTljNjNkMDA0ZjQ0ZjYxY2E5Zjk3MjcwNGI0Y2ZkZjMzZDFlYTFjNzk2NDI1NDdjOGJjZWEwODEifQ"
+        },
+        {
+          "resource": "repo://internal/wrapper/wrapper.go#L1857-L1867",
+          "version": "repo-lines-v1:sha256:c6c4e4efc5cd49c8bc66ccecdb333e91c31797381de7e531d56aeb03c1460374:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVkNGNlM2JiZjk5MzVkOTllNDhlMzExZDRiMGEzODU3NmUyNjU5MTQzZGEyODc5NjhkYjdkMzI0MTNhMjQ3ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3Y2RhODJkYTYwNjIzOGUwNWU2MjM5OTU2OWM1ZWUwMzk5MzQxOTY0OGFlNWQ0M2EyYmY4Y2Q2MzQ3ZjgyNjMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwMGU3NmQ1MzJkOWEwOTJjMmY0MGVlOWMxY2JjZDk0ZGZiNmJiNjdiYjI5ZjExODVjMjIwMmNjZWU0ZmFiYTgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE3NzE5YzdkZTFkZTI1ODFhZmE4ZTc3Y2U4MDRlZDM0NzA4NTA4MThlOTdmZjZjZWI5NjBmMWI1NWRhNDZhOWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_0bd9abcbe6854b2a9d65c9b7b69187e7",
+      "statement": "The wrapper does write a bounded set of files around the wrapped CLI (the approval-rules import line or marked block in the CLI's instruction file, and a generated opencode.json for opencode), and doctor's residue check exists specifically to find such leftovers when a hard kill skips the restore path.",
+      "evidence": [
+        {
+          "resource": "repo://internal/doctor/residue.go#L7-L14",
+          "version": "repo-lines-v1:sha256:ae3dafb7f84679f73b08e1e014215687be9d4b4bff0f2898cfe2ba2451391bb0:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjI5NTBmMmI3NWNmMzFmN2I2M2ZmMTcwNDY5MGNlMTdjZjE2ZDYwODllNjZhZTYxNWEwZTQ5MGM4YzRhYWNlNCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmM5NmNkNTlkZjdmZTViMWI4OGZiMmIxYzY5M2Q3OWIwNjZkMjJhM2FlYWNjOTk0YzY3NzZlZDFiYTM1YjZhZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTExZDY1Y2UxOGIyYzI1MWUzYzAzZGNlYzA5NzdmNWM2MWZkODdhOTFmZGZmMmI4MzgyOGNkM2JiYmMyOGExYSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWJmNWJhNzMwYjIxYmE2NDRhNzhiZTZlYTYwYjdmMDA4NjBmMTE3MTkzZjdhYjdlODYxOWRmYTFkYWU1MzlhNSJ9"
+        },
+        {
+          "resource": "repo://internal/wrapper/approval_rules.go#L14-L16",
+          "version": "repo-lines-v1:sha256:de2484c57db95dafb8da905fa52ea4968da904f37dbb4d1077432e6cb3652d51:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTFiNDMxNDgwYjk2ZjQyNTVkOGQ4MDk1YjM0YzMwMDM3MDJlZTM5ZDAzN2Y5YWE0YTZmZWQ3NDVjY2I1ZTJlYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTFkNmU1ZDY5MDgzZGFmODM4MmM3NWQwMDM2MTFlZjIzM2YwY2EzNGE0NDY0ZjI5NmE4OWIxYzdjMDFjYzNhMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmE5ZWY1ODlkMWYxODk2YjA3MTUyZThlZTg2ZjZmZDQ1M2Y0YTJmYzc0NzkxNWQ2MGRmNzcyOThkZDNmY2M2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYjI3Yzc5ZWUwNzU1Y2M2YjJkZTEzOTViNzgxYjAwN2VjNmQxMTgyN2FlMjNhZGRmNTAyODM1NGEzZmYzOGE2MCJ9"
+        },
+        {
+          "resource": "repo://internal/wrapper/opencode_config.go#L21-L25",
+          "version": "repo-lines-v1:sha256:89c6144b00fcf5ed1ff445355cf8212f6a32520ad720b116ce1544b05e4f6ccf:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjg2YzM1MjcwNTAzNWRlZDFlOWNhMDcxYjIxNjk4ZGVlY2VkNWYxYzJjM2ZkNDRlZTNmOWM1YjcwNTQ5MDhhMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODg0NDY1ZGJkYmMyMjQ1NTIwZWU2YjE0YTY3MjJlNTk3MGRjNGEzODI3OGEzZTcxZDQ2NDRiY2Y3OTJlN2Y0NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzcwNjlhZjdjNjRkZTc0YmQxMTUyNmYxYzM3ODBhNTdkMWE1MmRkNzVkYzA5YTNlMTg2ZGQwOWQwY2Y0YjZlNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMDQ0MGJlNjAwNmUxYTAyMGE1NzMzNGM1ZTIxNmYzNjFiNjFhOTlkMDY3YzBiY2Y5OWM4NmFiNzZmMThiMzE3YyJ9"
         }
       ]
     }
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

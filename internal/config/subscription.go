@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -42,14 +43,76 @@ type SubscriptionProfile struct {
 	// Enabled はポインタ。nil（未設定）は有効として扱う。明示的な false を
 	// omitempty で落とさないための三値表現（UserPrefsTokenStatusbar と同じ理由）。
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	// ProfileDir は既定位置（~/.many-ai-cli/subscriptions/<provider>/<id>）以外へ
+	// Dir は many-ai-cli が管理するフォルダ名（~/.many-ai-cli/subscriptions/<provider>/<dir>）。
+	// 空なら ID をそのままフォルダ名に使う（Dir を持たない既存 profile の置き場所は変えない）。
+	//
+	// ID と分けたのは、フォルダ名の長さが vendor CLI の都合で縛られるため。codex-cli
+	// 0.157.0 は起動時に $CODEX_HOME/app-server-control/app-server-control.sock を作り、
+	// Windows の AF_UNIX はパスが 108 バイト（終端込み）を超えると接続できない
+	// （2026-09-26 に "path must be shorter than SUN_LEN" で起動不能になった）。
+	// 表示名から作る ID は長くなりうるので、Hub が追加する profile には短い Dir を振る。
+	//
+	// ProfileDir と違い、ここは subscriptions ツリーの中なので many-ai-cli の持ち物として
+	// 扱う（delete_credentials で消してよい）。
+	//
+	// 既存の profile のフォルダを移すときは、Codex が packages/app-server-daemon/current に
+	// 作る junction が旧パスを指したまま残る。移した先で作り直さないと、次の起動が
+	// "daemon executable not found" で落ちる（CHANGELOG の 0.157.0 の項目を参照）。
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+	// ProfileDir は既定位置（~/.many-ai-cli/subscriptions/<provider>/<dir>）以外へ
 	// 実体を置きたいときだけ手で書く上書き。API からは設定できない。
 	ProfileDir string `yaml:"profile_dir,omitempty" json:"profile_dir,omitempty"`
+
+	// 以下 3 項目は起動時同期（settings.json を既定設定と揃える動作）の profile ごとの
+	// 上書き。**ProfileDir と同じく手書き専用で、Hub UI / API からは設定しない。**
+	// 標準は「既定が正典・CLI が書く鍵は profile のもの」で、それで足りない利用者
+	// （profile ごとに plugin の組み合わせを変える、profile の設定をわざと既定から
+	// 離している）のための逃げ道として config.yaml にだけ口を開ける。API 側は
+	// 名前・有効フラグ・plan を書き換えるときもこの 3 項目に触れないので、画面から
+	// の操作で手書きの取り決めが消えることはない。
+
+	// SettingsSync は起動時同期を行うかどうか。nil（未設定）と true は同期する。
+	// false にすると、その profile の同期対象ファイルは「無ければコピー・あれば
+	// 触らない」という従来どおりの持ち込みに戻る。
+	//
+	// ポインタなのは Enabled と同じ理由（明示的な false を omitempty で落とさない）。
+	SettingsSync *bool `yaml:"settings_sync,omitempty" json:"settings_sync,omitempty"`
+	// ProfileOwnedKeys は、この profile が自分で持つ設定鍵を adapter の一覧へ足す。
+	// 足した鍵は既定側の値で上書きされず、doctor も食い違いとして数えない。
+	// plugin の組み合わせを profile ごとに変えたい場合の `enabledPlugins` が実例。
+	ProfileOwnedKeys []string `yaml:"profile_owned_keys,omitempty" json:"profile_owned_keys,omitempty"`
+	// DefaultWinsKeys は逆に、adapter が profile の持ち物として扱っている鍵を既定側が
+	// 勝つ側へ戻す。全 profile で `theme` を既定に揃えたい場合が実例。同じ鍵を両方へ
+	// 書いたときは DefaultWinsKeys が勝つ（「既定に揃える」と明示した側を優先する）。
+	DefaultWinsKeys []string `yaml:"default_wins_keys,omitempty" json:"default_wins_keys,omitempty"`
+}
+
+// DirName は subscriptions/<provider>/ の下で使うフォルダ名を返す。Dir が空なら ID。
+// 検証はしないので、パスに使う前に ValidateSubscriptionDirName を通すこと。
+func (p SubscriptionProfile) DirName() string {
+	if dir := NormalizeSubscriptionID(p.Dir); dir != "" {
+		return dir
+	}
+	return NormalizeSubscriptionID(p.ID)
 }
 
 // IsEnabled は Enabled が nil（未設定）または true のとき true を返す。
 func (p SubscriptionProfile) IsEnabled() bool {
 	return p.Enabled == nil || *p.Enabled
+}
+
+// IsSettingsSyncEnabled は SettingsSync が nil（未設定）または true のとき true を返す。
+func (p SubscriptionProfile) IsSettingsSyncEnabled() bool {
+	return p.SettingsSync == nil || *p.SettingsSync
+}
+
+// HasSyncOverrides は同期の既定から外れる設定が 1 つでも書かれているかを返す。
+//
+// `many-ai-cli doctor` はこれが true の profile にだけ 1 行足す。既定のままの利用者に
+// とって、この機能は存在しないのと同じでなければならない（使っていない機能で診断出力
+// が伸びると、本当に見るべき行が埋もれる）。
+func (p SubscriptionProfile) HasSyncOverrides() bool {
+	return p.SettingsSync != nil || len(p.ProfileOwnedKeys) > 0 || len(p.DefaultWinsKeys) > 0
 }
 
 // SubscriptionProfiles は provider 名 → profile 一覧。map なので、未知の provider
@@ -76,7 +139,17 @@ func (s *SubscriptionProfiles) UnmarshalYAML(value *yaml.Node) error {
 	for provider, node := range raw {
 		var list []SubscriptionProfile
 		if err := node.Decode(&list); err != nil {
-			continue
+			// yaml.v3 は項目単位の型違いを *yaml.TypeError にまとめて返し、解釈でき
+			// た項目はそのまま out へ入れる（要素ごと解釈できなかったものは列から
+			// 落ちる）。1 項目の型違いで profile を丸ごと捨てると、`profile_owned_keys`
+			// を書き間違えただけでその profile が一覧から消え、spawn 画面で選べなく
+			// なる＝別のアカウントで起動することになる。型違いだけは許容して、解釈
+			// できた項目を残す。それ以外のエラー（列そのものが map や scalar）は
+			// 従来どおり provider ごと捨てる。
+			var typeErr *yaml.TypeError
+			if !errors.As(err, &typeErr) {
+				continue
+			}
 		}
 		kept := make([]SubscriptionProfile, 0, len(list))
 		for _, p := range list {
@@ -112,6 +185,12 @@ func (s SubscriptionProfiles) Clone() SubscriptionProfiles {
 				v := *list[i].Enabled
 				copied[i].Enabled = &v
 			}
+			if list[i].SettingsSync != nil {
+				v := *list[i].SettingsSync
+				copied[i].SettingsSync = &v
+			}
+			copied[i].ProfileOwnedKeys = slices.Clone(list[i].ProfileOwnedKeys)
+			copied[i].DefaultWinsKeys = slices.Clone(list[i].DefaultWinsKeys)
 		}
 		out[provider] = copied
 	}
@@ -156,6 +235,22 @@ func ValidateSubscriptionID(id string) error {
 	}
 	if id == SubscriptionAutoID {
 		return fmt.Errorf("subscription id %q is reserved for automatic selection", id)
+	}
+	return nil
+}
+
+// ValidateSubscriptionDirName はフォルダ名をパス要素として信用してよいか検証する。
+// 文字種は ID と同じ規則（大小の扱いが OS で違う問題も同じ）。"auto" は ID の予約語で
+// あってフォルダ名としては害が無いので、ここでは拒まない。
+func ValidateSubscriptionDirName(name string) error {
+	if name == "" {
+		return fmt.Errorf("subscription dir is required")
+	}
+	if len(name) > MaxSubscriptionIDLen {
+		return fmt.Errorf("subscription dir is longer than %d characters", MaxSubscriptionIDLen)
+	}
+	if !subscriptionIDRe.MatchString(name) || strings.Contains(name, "..") {
+		return fmt.Errorf("subscription dir %q may only contain lowercase letters, digits, dot, underscore and hyphen, and must start with a letter or digit", name)
 	}
 	return nil
 }
@@ -208,8 +303,12 @@ func ResolveSubscriptionProfileDir(dir, provider string, p SubscriptionProfile) 
 		}
 		return filepath.Clean(expanded), nil
 	}
+	name := p.DirName()
+	if err := ValidateSubscriptionDirName(name); err != nil {
+		return "", err
+	}
 	base := filepath.Join(SubscriptionsRoot(dir), provider)
-	resolved := filepath.Clean(filepath.Join(base, id))
+	resolved := filepath.Clean(filepath.Join(base, name))
 	if !pathWithin(base, resolved) {
 		return "", fmt.Errorf("subscription profile dir for %q escapes %s", id, base)
 	}
@@ -264,6 +363,9 @@ func (cfg *Config) subscriptionWarnings() []string {
 			continue
 		}
 		seen := map[string]bool{}
+		// dirOwner はフォルダ名 → それを使う profile ID。2 件が同じフォルダを指すと
+		// 認証と設定を共有してしまい、profile を分けた意味が無くなる。
+		dirOwner := map[string]string{}
 		for _, p := range cfg.Subscriptions[provider] {
 			id := NormalizeSubscriptionID(p.ID)
 			if err := ValidateSubscriptionID(id); err != nil {
@@ -279,7 +381,18 @@ func (cfg *Config) subscriptionWarnings() []string {
 				if expanded, err := expandSubscriptionHome(custom); err != nil || !filepath.IsAbs(expanded) {
 					warnings = append(warnings, fmt.Sprintf("subscriptions.%s.%s: profile_dir %q must be an absolute path; this profile cannot be selected", provider, id, custom))
 				}
+				continue
 			}
+			name := p.DirName()
+			if err := ValidateSubscriptionDirName(name); err != nil {
+				warnings = append(warnings, fmt.Sprintf("subscriptions.%s.%s: %v; this profile cannot be selected", provider, id, err))
+				continue
+			}
+			if owner, taken := dirOwner[name]; taken {
+				warnings = append(warnings, fmt.Sprintf("subscriptions.%s.%s: folder %q is already used by profile %q; both profiles share one login", provider, id, name, owner))
+				continue
+			}
+			dirOwner[name] = id
 		}
 	}
 	return warnings

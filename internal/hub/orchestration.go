@@ -16,9 +16,12 @@ import (
 	"time"
 	"unicode"
 
+	"many-ai-cli/internal/clitrust"
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/headless"
 	"many-ai-cli/internal/proto"
 	"many-ai-cli/internal/sessionlog"
+	"many-ai-cli/internal/wrapper"
 )
 
 const orchestrationPollInterval = 2 * time.Second
@@ -121,6 +124,12 @@ type orchestrationRoleAssignment struct {
 	// profile ID（"auto" も可）。空文字は「role 別の指定なし」を意味し、
 	// resolveChildSubscription が親継承・グローバル既定へフォールバックする。
 	Subscription string `json:"subscription,omitempty"`
+	// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// 省略時は役割ごとの指定なしで、従来の役割設定と 1 バイトも変わらない。
+	Effort           string `json:"effort,omitempty"`
+	ExecutionMode    string `json:"execution_mode,omitempty"`
+	PermissionPreset string `json:"permission_preset,omitempty"`
 }
 
 type pendingChild struct {
@@ -141,7 +150,8 @@ type pendingChild struct {
 	// orchestration sessions, just without the board/role framing text
 	// buildConductorInitialPrompt / buildChildInitialPrompt add. Already
 	// sanitized and length-capped by sanitizeSpawnInitialPrompt before it
-	// lands here.
+	// lands here. Empty when the instruction was handed over at launch instead
+	// (PromptAtLaunch), so it is never delivered twice.
 	InitialPrompt string
 	// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3): the
 	// predecessor session's ID when this /api/spawn request is starting a
@@ -151,6 +161,13 @@ type pendingChild struct {
 	// creates a UI parent/child relationship (the successor is a new peer
 	// session, not this one's child).
 	HandoffFrom int
+	// PromptAtLaunch: このセッションは最初の指示を起動時に受け取った（子は headless
+	// か、対話で起動引数を受け取れる CLI。childLaunchPrompt が決める。画面から起動した
+	// conductor・指示付きのセッションは screenSpawnLaunchPrompt が決める）。wrapperLoop
+	// は登録時に打ち込まず（registrationInjectPrompt）、入力保留（initialInjectPending）
+	// も掛けない — 掛けると、解く人（注入の後始末）がいないまま 90 秒、利用者の入力
+	// （信頼確認への回答も）が届かない。
+	PromptAtLaunch bool
 }
 
 type orchestrationBoard struct {
@@ -217,6 +234,16 @@ type orchestrationChild struct {
 	// StandbySince: standby が続き始めた時刻。running へ戻ったらゼロへ戻す
 	// (markRunning)。ゼロ値は「現在 standby ではない、または一度も standby になっていない」。
 	StandbySince time.Time
+	// PromptViaLaunchArg: 対話の子で、最初の指示を起動引数で渡した（打ち込んでいない）。
+	// PromptDeliveredAt は起動の時刻では入れず、CLI のトランスクリプトに最初の利用者の
+	// 発言が現れた時刻で入れる。起動の時刻で入れると、信頼確認で利用者を待っている子が
+	// standby の猶予で起動失敗と見なされる（子 plan
+	// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C4）。
+	PromptViaLaunchArg bool
+	// StartupWaitNotified: 起動引数で指示を渡した子が起動画面（信頼確認に限らない）で
+	// 利用者を待っていることを、親と board へ知らせ済み。1 つの子につき 1 回だけ知らせる
+	// ためのラッチ。
+	StartupWaitNotified bool
 }
 
 type boardDoneEvent struct {
@@ -261,6 +288,39 @@ type spawnChildRequest struct {
 	// `orchestrate relay -same-tree` と同じ語）。
 	// C3 (plan_spawn-orchestration-backlog-closeout_c2_spawn-args.md)。
 	SameTree *bool `json:"same_tree"`
+	// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1）。
+	// relay の役割（orchestrationRoleAssignment）からも同じ 3 項目が入る。
+	// 省略時（空文字）は 3 項目を知らない呼び出し元と 1 バイトも変わらない。
+	Effort           string `json:"effort"`
+	ExecutionMode    string `json:"execution_mode"`
+	PermissionPreset string `json:"permission_preset"`
+	// Origin は起動の出所。"" = conductor（AI の `orchestrate spawn`）と relay、
+	// "ui" = 画面から人が起動。権限の既定を「誰が見ているか」で決めるために
+	// resolveChildPermission が読む（子 plan C2 内部 C1）。
+	// **確認ダイアログの省略と未知値の 400 は親 C3 の担当**で、この C では
+	// 段の解決にしか使わない。
+	Origin string `json:"origin"`
+	// RememberPermission は「この役割では次回もこの段を使う」のチェックボックス。
+	// 3 値で受ける: nil = 欄を送ってこない = 記憶を触らない / true = PermissionPreset を
+	// その役割の記憶にする（空文字 = 指定なし = 記憶を消す）/ false = 記憶を消す。
+	//
+	// **`Origin` が `ui` でない要求のこの欄は handleSpawnChild が捨てる。** 記憶は
+	// 利用者の設定で、AI（conductor）の起動要求が書き換えてよいものではない
+	// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+	RememberPermission *bool `json:"remember_permission"`
+	// AllowedTools は段 2（bounded）で provider へ渡す許可 tool の一覧。
+	// json:"-" は意図的: これは要求の項目ではなく、表と config から Hub が
+	// 解決する内部の値で、外から任意の値をコマンドラインへ運ばせない
+	// （値の出所は orchestration.bounded_allowed_tools と内蔵既定だけ）。
+	AllowedTools []string `json:"-"`
+	// GrantFolderTrust は承認画面の「このフォルダを信頼済みとして登録する」。
+	// true なら起動の直前に、子の CLI の設定へフォルダの信頼を 1 項目書く
+	// （internal/clitrust。子 plan: plan_child-launch-prompt-and-trust_c3_spawn-confirm-trust.md）。
+	// **承認画面の決定からだけ入る。** json:"-" なので AI（conductor）の起動要求の
+	// 本文に書いても入らない — 利用者の CLI の設定へ書くかどうかは、画面を見ている
+	// 人だけが決める。
+	GrantFolderTrust bool `json:"-"`
 }
 
 // pendingSpawnConfirmation is a spawn confirmation the Hub is holding while
@@ -318,6 +378,40 @@ type spawnConfirmationResponse struct {
 	Approved       bool   `json:"approved"`
 	Provider       string `json:"provider"`
 	Model          string `json:"model"`
+	// Effort / ExecutionMode / PermissionPreset は承認者が決めた起動要求の共通
+	// 3 項目（子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// provider / model と違い 3 値で受ける: 欄を送ってこない（nil）は「要求どおり」、
+	// 送ってきた値はダイアログが見せていた実効値そのもので、空文字は「指定なし」へ
+	// 戻す。空文字を「触らなかった」と読むと、写像の無い provider へ差し替えて欄が
+	// 隠れたときに要求時の effort が残り、検証で弾かれて承認できなくなる。
+	Effort           *string `json:"effort"`
+	ExecutionMode    *string `json:"execution_mode"`
+	PermissionPreset *string `json:"permission_preset"`
+	// RememberPermission は段の select の直下にあるチェックボックスの状態。
+	// nil = 欄を送ってこない（このダイアログを知らない UI・拒否のとき）= 記憶を
+	// 触らない / true = 決めた段をその役割の記憶にする / false = 記憶を消す。
+	// 承認した人が見ていた段がそのまま記憶になるので、決定の適用より後で読む。
+	RememberPermission *bool `json:"remember_permission"`
+	// GrantFolderTrust は「このフォルダを信頼済みとして登録する」のチェックボックスの
+	// 状態。画面は、選んだ provider が trust_grant_providers にあってチェックボックスを
+	// 出したときだけ送る。nil（送ってこない・拒否のとき）と false は同じく「書かない」。
+	GrantFolderTrust *bool `json:"grant_folder_trust"`
+}
+
+// spawnConfirmationDecision は承認ダイアログで人が決めた差し替え値。Provider / Model は
+// 空文字が「欄を触らなかった」で要求値が残る。3 項目は nil が「欄を送ってこなかった」
+// で要求値が残り、非 nil はダイアログの実効値（空文字は指定なし）。項目を増やしても
+// 呼び出し側の引数が増えないよう、1 つの構造体で持つ。
+type spawnConfirmationDecision struct {
+	Provider         string
+	Model            string
+	Effort           *string
+	ExecutionMode    *string
+	PermissionPreset *string
+	// RememberPermission は 3 値のまま要求へ写す（spawnChildRequest 側の doc 参照）。
+	RememberPermission *bool
+	// GrantFolderTrust は true のときだけ要求の GrantFolderTrust を立てる。
+	GrantFolderTrust *bool
 }
 
 // sendChildRequest は POST /api/sessions/:id/send-child のリクエスト。
@@ -723,6 +817,26 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 		writeJSONError(w, http.StatusConflict, "already_decided", "spawn confirmation has already been decided")
 		return
 	}
+	// 承認者の決定を要求へ重ねた実効値を、差し替え後の provider で検証する。ここで
+	// 弾けばダイアログへ 400 が返り、決定は未確定のまま残るのでやり直せる（黙って
+	// 無視しない）。検証を通った launch がそのまま起動に使われる（再合成しない）。
+	launch := applySpawnConfirmationDecision(pending.Body, spawnConfirmationDecision{
+		Provider:           strings.TrimSpace(body.Provider),
+		Model:              strings.TrimSpace(body.Model),
+		Effort:             body.Effort,
+		ExecutionMode:      body.ExecutionMode,
+		PermissionPreset:   body.PermissionPreset,
+		RememberPermission: body.RememberPermission,
+		GrantFolderTrust:   body.GrantFolderTrust,
+	})
+	if body.Approved {
+		if err := validateLaunchRequestOptions(launch.Provider, &launch.Effort, &launch.ExecutionMode, &launch.PermissionPreset); err != nil {
+			s.orchestration.mu.Unlock()
+			s.orchestrationAdmissionMu.Unlock()
+			writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+			return
+		}
+	}
 	pending.Decided = true
 	delete(s.orchestration.spawnConfirmations, body.ConfirmationID)
 	if !body.Approved {
@@ -732,11 +846,9 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 	s.orchestrationAdmissionMu.Unlock()
 
 	writeJSON(w, map[string]bool{"ok": true})
-	decidedProvider := strings.TrimSpace(body.Provider)
-	decidedModel := strings.TrimSpace(body.Model)
 	approved := body.Approved
 	s.safeGo("spawn_confirmation_decided", func() {
-		s.resolveSpawnConfirmationDecision(pending, approved, decidedProvider, decidedModel)
+		s.resolveSpawnConfirmationDecision(pending, approved, launch)
 	})
 }
 
@@ -749,7 +861,11 @@ func (s *Server) handleSpawnConfirmation(w http.ResponseWriter, r *http.Request,
 // pending.Outcome — the original HTTP handler may or may not still be
 // listening — and always broadcasts spawn_confirmation_closed so every
 // connected browser closes its dialog.
-func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmation, approved bool, decidedProvider, decidedModel string) {
+//
+// body is the launch request after the approver's decision was applied and
+// validated by handleSpawnConfirmation; a refusal ignores it and works from
+// pending.Body.
+func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmation, approved bool, body spawnChildRequest) {
 	if !approved {
 		s.releaseSpawnConfirmationAdmission(pending)
 		if parent, _, _ := s.orchestrationParentState(pending.ParentID); parent != nil {
@@ -766,12 +882,9 @@ func (s *Server) resolveSpawnConfirmationDecision(pending *pendingSpawnConfirmat
 	}
 	defer s.releaseOrchestrationChildren(pending.AdmissionID)
 
-	body := pending.Body
-	if decidedProvider != "" {
-		body.Provider = decidedProvider
-	}
-	if decidedModel != "" {
-		body.Model = decidedModel
+	if note := launchOptionChangeNote(pending.Body, body); note != "" {
+		s.logger.Warn("orchestration spawn-child confirmation changed launch options",
+			"parent_session_id", pending.ParentID, "role", pending.Role, "change", note)
 	}
 	var providerChangeNote string
 	if note := providerConfirmationChangeNote(pending.Body.Provider, body.Provider); note != "" {
@@ -919,6 +1032,65 @@ func (e *spawnPreparationError) Error() string { return e.detail }
 
 // resolveChildRole validates and normalizes the role before it participates
 // in board paths, labels, or child prompts.
+// launchOriginValid reports whether spawnChildRequest.Origin names an origin
+// this Hub knows. The values live in internal/hub/child_permission.go
+// (launchOriginConductor / launchOriginUI) because that is where origin decides
+// something: the default permission tier.
+//
+// An unknown non-empty value is a 400 rather than a silent fall-through to the
+// conductor origin. Folding it in would mean a typo — or a value a newer client
+// invented — quietly resolving to "unattended, and therefore the configured
+// unattended default" while the caller believed it had asked for something
+// else (親 plan 不変条件 5: the tier a child starts at is never decided by a
+// value nobody read).
+func launchOriginValid(origin string) bool {
+	switch strings.TrimSpace(origin) {
+	case launchOriginConductor, launchOriginUI:
+		return true
+	default:
+		return false
+	}
+}
+
+// uiOriginBoundByRequest reports whether this HTTP request may keep a client
+// claim of origin "ui". The JSON field alone is not enough (F-AI-03): any Hub
+// token holder can POST origin:"ui" and skip spawn confirmation. Only a
+// same-origin browser fetch — Sec-Fetch-Site: same-origin plus an allowed
+// Origin header — binds the claim to the Hub web UI. curl, CLI tools, and
+// conductor children typically send neither, so a spoofed "ui" is rewritten
+// to the conductor origin before confirm-skip / remember_permission run.
+func (s *Server) uiOriginBoundByRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if strings.ToLower(strings.TrimSpace(r.Header.Get("Sec-Fetch-Site"))) != "same-origin" {
+		return false
+	}
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return false
+	}
+	s.cfgMu.Lock()
+	allowedHosts := append([]string(nil), s.cfg.Hub.AllowedHosts...)
+	s.cfgMu.Unlock()
+	return isAllowedHubOrigin(origin, s.currentHubPort(), allowedHosts...)
+}
+
+// bindSpawnOrigin keeps client-asserted "ui" only when uiOriginBoundByRequest
+// says the request is from the Hub UI. Otherwise the value is cleared to the
+// conductor origin so confirm-skip and remember_permission cannot be claimed
+// by JSON alone.
+func (s *Server) bindSpawnOrigin(r *http.Request, origin string) string {
+	origin = strings.TrimSpace(origin)
+	if origin != launchOriginUI {
+		return origin
+	}
+	if s.uiOriginBoundByRequest(r) {
+		return launchOriginUI
+	}
+	return launchOriginConductor
+}
+
 func resolveChildRole(body *spawnChildRequest) error {
 	if strings.TrimSpace(body.Role) == "" {
 		return fmt.Errorf("role is required")
@@ -1002,6 +1174,11 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	)
 	label := fmt.Sprintf("orch-%s-%s-%d", safeToken(prep.orchestrationID), body.Role, time.Now().UnixNano())
 	spawnedAt := time.Now()
+	// 最初の指示の渡し方は 3 通りで、どの子も必ずどれか 1 つだけを通る
+	// （childLaunchPrompt がその「1 つだけ」を決める唯一の場所）。登録時の入力保留を
+	// 掛けるかどうかがこの結果で決まるので、pending へ積む前に決める。
+	viaArg := s.promptViaLaunchArg(body.Provider, body.ExecutionMode)
+	launchPrompt, injectAfterStart := childLaunchPrompt(body.ExecutionMode, viaArg, body.InitialPrompt, prep.boardPath, body.Role, prep.branch)
 	meta := pendingChild{
 		ParentSessionID: parentID,
 		Role:            body.Role,
@@ -1011,6 +1188,7 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 		BoardPath:       prep.boardPath,
 		WorktreeBranch:  prep.branch,
 		SpawnedAt:       spawnedAt,
+		PromptAtLaunch:  !injectAfterStart,
 	}
 	s.orchestration.mu.Lock()
 	s.orchestration.pending[label] = meta
@@ -1027,6 +1205,15 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	if subscriptionID == "" {
 		subscriptionID = s.resolveChildSubscription(parent, body.Provider, body.Role)
 	}
+	// 承認画面で「このフォルダを信頼済みとして登録する」が選ばれた子だけ、起動の
+	// 直前に書く。書く場所は startWrapProcess（子の env がそこで確定する）。
+	var folderTrust func(env []string, dir string)
+	if body.GrantFolderTrust && clitrust.Supported(body.Provider) {
+		role, provider, boardPath := body.Role, body.Provider, prep.boardPath
+		folderTrust = func(env []string, dir string) {
+			s.grantChildFolderTrust(role, provider, env, dir, boardPath)
+		}
+	}
 	childID, err := s.spawnWrappedSession(spawnWrappedSpec{
 		Provider:              body.Provider,
 		CWD:                   prep.childCWD,
@@ -1037,8 +1224,14 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 		PermissionMode:        body.PermissionMode,
 		Sandbox:               body.Sandbox,
 		AskForApproval:        body.AskForApproval,
+		AllowedTools:          body.AllowedTools,
 		Route:                 body.Route,
+		Effort:                body.Effort,
+		ExecutionMode:         body.ExecutionMode,
+		PermissionPreset:      body.PermissionPreset,
+		InitialPrompt:         launchPrompt,
 		SubscriptionProfileID: subscriptionID,
+		FolderTrust:           folderTrust,
 	}, 20*time.Second)
 	if err != nil {
 		s.orchestration.mu.Lock()
@@ -1048,16 +1241,58 @@ func (s *Server) dispatchSpawn(parentID int, parent *session, body spawnChildReq
 	}
 	s.registerBoardSession(prep.orchestrationID, prep.boardPath, parentID, "conductor")
 	s.registerBoardChild(prep.orchestrationID, prep.boardPath, childID, parentID, body.Role, spawnedAt)
+	if viaArg {
+		s.markChildPromptViaLaunchArg(prep.orchestrationID, childID)
+	}
 	s.setChildRestartData(prep.orchestrationID, childID, spawnWrappedSpec{
 		Provider: body.Provider, CWD: prep.childCWD, Model: body.Model, ModelSelection: body.ModelSelection,
 		RiskConfirmed: body.RiskConfirmed, PermissionMode: body.PermissionMode, Sandbox: body.Sandbox,
-		AskForApproval: body.AskForApproval, Route: body.Route,
+		AskForApproval: body.AskForApproval, AllowedTools: body.AllowedTools, Route: body.Route,
+		Effort: body.Effort, ExecutionMode: body.ExecutionMode, PermissionPreset: body.PermissionPreset,
 		SubscriptionProfileID: subscriptionID,
 	}, body.InitialPrompt, prep.branch, 0)
-	prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
-	notice := injectNotice{ParentID: parentID, BoardPath: prep.boardPath, Role: body.Role}
-	s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPromptNotify(childID, prompt, notice) })
+	if injectAfterStart {
+		prompt := buildChildInitialPrompt(body.InitialPrompt, prep.boardPath, body.Role, prep.branch, childID)
+		notice := injectNotice{ParentID: parentID, BoardPath: prep.boardPath, Role: body.Role}
+		s.safeGo("inject_initial_prompt_child", func() { s.injectInitialPromptNotify(childID, prompt, notice) })
+	}
 	return childSpawnResult{ID: childID, BoardPath: prep.boardPath, CWD: prep.childCWD, WorktreeBranch: prep.branch}, nil
+}
+
+// grantChildFolderTrust は承認画面で選ばれた「このフォルダを信頼済みとして登録する」を
+// 行い、結果を board と hub.log に 1 行ずつ残す。board は conductor も読むので、
+// 信頼が入らなかったときに子の画面で何が起きるかまで書く。失敗しても何も返さない
+// （起動は続ける・親 plan の不変条件 4。確認画面が出れば C1 の安全網が止める）。
+func (s *Server) grantChildFolderTrust(role, provider string, env []string, dir, boardPath string) {
+	grant := s.folderTrustGrant
+	if grant == nil {
+		grant = clitrust.Grant
+	}
+	result, err := grant(clitrust.Target{Provider: provider, Env: env, Dir: dir})
+	_ = s.appendBoardSection(boardPath, "hub", folderTrustBoardLine(role, provider, result, err)+"\n")
+	if err != nil {
+		s.logger.Warn("orchestration child folder trust failed",
+			"role", role, "provider", provider, "config_path", result.ConfigPath, "err", err)
+		return
+	}
+	s.logger.Info("orchestration child folder trust",
+		"role", role, "provider", provider, "written", result.Written,
+		"existing", result.Existing, "config_path", result.ConfigPath)
+}
+
+// folderTrustBoardLine は grantChildFolderTrust の結果を board の 1 行にする。
+func folderTrustBoardLine(role, provider string, result clitrust.Result, err error) string {
+	head := fmt.Sprintf("folder trust: role=%s provider=%s", role, provider)
+	switch {
+	case err != nil:
+		return fmt.Sprintf("%s result=failed file=%s reason=%s — the child may stop on its trust prompt; answer it in the child session", head, result.ConfigPath, err)
+	case result.Written:
+		return fmt.Sprintf("%s result=registered key=%s file=%s", head, result.Key, result.ConfigPath)
+	case result.Existing == "trusted":
+		return fmt.Sprintf("%s result=already_trusted key=%s file=%s", head, result.Key, result.ConfigPath)
+	default:
+		return fmt.Sprintf("%s result=left_as_is existing=%s key=%s file=%s — an earlier answer is kept as recorded; the child may stop on its trust prompt", head, result.Existing, result.Key, result.ConfigPath)
+	}
 }
 
 // spawnHTTPError is the structured failure shape performSpawn returns. The
@@ -1104,8 +1339,19 @@ func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, prov
 	if parent == nil {
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
 	}
-	cfg := s.snapshotCfg().Orchestration
-	applyChildApprovalDefaults(&body, cfg.ChildFullBypassEnabled())
+	fullCfg := s.snapshotCfg()
+	cfg := fullCfg.Orchestration
+	// 実行モードもここで 1 度だけ解決する。**権限の段より先**でなければならない:
+	// 段の既定は実行モードを見る（headless の子は人が押しても無人）ので、
+	// 順序が逆だと確認ダイアログが見せた段と実際の段がずれる
+	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+	if err := applyChildExecutionMode(&body, fullCfg); err != nil {
+		return childSpawnResult{}, &spawnHTTPError{status: http.StatusBadRequest, code: "bad_request", detail: err.Error()}
+	}
+	// 権限の段はここで 1 度だけ解決する。確認ダイアログを通った起動では、承認者が
+	// 差し替えた permission_preset が既に body に入っているので、この 1 箇所で
+	// 最終の body を見れば足りる（再解決を足さない）。
+	applyChildPermission(&body, cfg)
 	if parent.Depth >= cfg.MaxDepth {
 		s.notifyOrchestrationError(parentID, "depth", "max orchestration depth reached")
 		return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: "max orchestration depth reached"}
@@ -1161,6 +1407,14 @@ func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, prov
 	if strings.TrimSpace(requestedProvider) == "" {
 		s.rememberRoleProvider(body.Role, body.Provider)
 	}
+	// effort も同じ場所で覚える。provider の記憶と違い、明示指定でも覚える:
+	// effort は「今回はこれ」ではなく役割ごとの好みとして繰り返し使われる値で、
+	// 承認ダイアログで直した値が次回の初期表示になる方が手数が減る。
+	s.rememberRoleEffort(body.Role, body.Provider, body.Effort)
+	// 権限の段は「次回もこの段を使う」を人が明示したときだけ覚える。effort と違い
+	// 自動では覚えない: 段は今回だけ上げたいことがあり、その 1 回を次回の既定にすると
+	// 黙って権限が広がったままになる（子 plan 内部 C6 の設計 1）。
+	s.applyRolePermissionMemory(body)
 	return result, nil
 }
 
@@ -1172,6 +1426,26 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	// Origin は起動の出所（"" = conductor / relay、"ui" = 画面から人が起動）。
+	// 未知の非空値は 400 で弾く。origin は権限の既定の段を決める入力なので、
+	// 知らない値を黙って conductor 扱い（＝無人・既定は全許可）へ倒すと、
+	// 誰も見ていないのに段が上がったことが誰にも伝わらない
+	// （子 plan: docs/local/plan_derived-session-launch_c3_derive-launch.md 内部 C1）。
+	//
+	// Client JSON の origin:"ui" は確認スキップの根拠にしない（F-AI-03）。
+	// 画面から来たことだけを Sec-Fetch-Site + Origin でサーバ側に結び、
+	// 結びつかない "ui" は conductor 扱いへ落とす。
+	body.Origin = strings.TrimSpace(body.Origin)
+	if !launchOriginValid(body.Origin) {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid origin")
+		return
+	}
+	body.Origin = s.bindSpawnOrigin(r, body.Origin)
+	// 「次回もこの段を使う」は人のチェックボックスだけが立てられる。conductor
+	// （AI）の起動要求が持ってきた欄は 400 にせず黙って捨てる: 起動そのものは
+	// 正しい要求なので断る理由が無く、断らない代わりに記憶へは一切届かせない
+	// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C6）。
+	body.RememberPermission = rememberPermissionForOrigin(body.Origin, body.RememberPermission)
 	if err := resolveChildRole(&body); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
 		return
@@ -1186,7 +1460,7 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 	s.logger.Info("orchestration spawn-child requested",
 		"parent_session_id", parentID, "role", body.Role,
 		"requested_provider", requestedProvider, "requested_model", requestedModel,
-		"requested_cwd", requestedCWD, "force", body.Force)
+		"requested_cwd", requestedCWD, "force", body.Force, "origin", body.Origin)
 
 	parent, _, _ := s.orchestrationParentState(parentID)
 	if parent == nil {
@@ -1218,7 +1492,16 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model value")
 		return
 	}
-	if s.spawnConfirmationRequired(body.Provider) {
+	// 起動要求の共通 3 項目。provider が解決した後に検証する（effort の受理値は
+	// provider ごとに違うため）。3 項目を送らない呼び出しではここは必ず通る。
+	if err := validateLaunchRequestOptions(body.Provider, &body.Effort, &body.ExecutionMode, &body.PermissionPreset); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	// 画面から人が起動した子は確認ダイアログを出さない。押した本人が承認者なので、
+	// 同じ人に二度目の承認を求めるだけになる（親 plan D5）。飛ばすのは確認だけで、
+	// 深さ・本数の上限は performSpawn 側の検査をそのまま通る。
+	if body.Origin != launchOriginUI && s.spawnConfirmationRequired(body.Provider) {
 		pending, registerErr := s.registerSpawnConfirmation(parent, requestedProvider, body)
 		if registerErr != nil {
 			writeJSONError(w, registerErr.status, registerErr.code, registerErr.detail)
@@ -1261,36 +1544,21 @@ func (s *Server) handleSpawnChild(w http.ResponseWriter, r *http.Request, parent
 }
 
 // applyChildApprovalDefaults は orchestration 子セッションの承認モード既定値を埋める。
-// fullBypass が true（既定）のとき、呼び出し側が指定しない場合はプロバイダごとの
-// 全許可（承認バイパス相当）と RiskConfirmed=true を埋める。子は自走が前提で、
-// 承認プロンプトを人間が張り付いて処理する運用は自走目的と矛盾するため。危険操作の
-// 抑制は承認ではなく worktree 隔離と board の禁止事項で行う
-// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）。
-// fullBypass が false（orchestration.child_full_bypass: false）のときは既定を埋めず、
-// 呼び出し側の明示値のみを使う（高リスク権限の自動確認を避ける安全側パス）。
+// 中身は internal/hub/child_permission.go の表（applyChildPermission）へ移した。
+// 残っているのはその 2 引数版で、**既定を 1 バイトも変えていないことの証明**として
+// 既存テスト（orchestration_child_defaults_test.go の 6 本）が固定している形
+// （子 plan: docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C1）。
+// 本番経路は cfg 全体を渡す applyChildPermission を呼ぶ（child_permission_default を
+// 読むため）。
+//
+// fullBypass が true（既定）なら段 3（全許可）、false（orchestration.child_full_bypass:
+// false）なら何も埋めず呼び出し側の明示値のみを使う。子は自走が前提で、承認プロンプトを
+// 人間が張り付いて処理する運用は自走目的と矛盾する、という元の判断
+// （docs/local/bugfix_orchestration-codex-child-spawn-failures_2026-07-04.md）は
+// 段 2 の導入後も「無人の子は聞かない」として生きている。変わったのは「聞かない＝
+// 何でも許す」だった部分だけ。
 func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
-	if !fullBypass {
-		return
-	}
-	switch body.Provider {
-	case "shell":
-		return
-	case "codex":
-		if body.AskForApproval == "" {
-			body.AskForApproval = "never"
-		}
-		if body.Sandbox == "" {
-			body.Sandbox = "danger-full-access"
-		}
-	default:
-		// claude / grok は --permission-mode をネイティブサポート。
-		// copilot / cursor-agent / opencode は wrapper 側で各 CLI の全許可指定
-		// （--allow-all / --force / opencode.json permission "*":"allow"）に変換される。
-		if body.PermissionMode == "" {
-			body.PermissionMode = "bypassPermissions"
-		}
-	}
-	body.RiskConfirmed = true
+	applyChildPermission(body, orchestrationCfgForBypass(fullBypass))
 }
 
 // childApprovalPreview reports, per provider, the approval settings the child in
@@ -1300,13 +1568,27 @@ func applyChildApprovalDefaults(body *spawnChildRequest, fullBypass bool) {
 // with --sandbox danger-full-access
 // (docs/local/bugfix_spawn-confirm-permission-disclosure_2026-09-08.md).
 //
-// It runs applyChildApprovalDefaults itself rather than restating the mapping, so
-// the dialog cannot drift from what the spawn actually does. Every provider is
-// computed from the same body because the dialog lets the approver switch
-// provider before deciding, and resolveSpawnConfirmationDecision then replaces
-// Provider/Model and nothing else — so a field the caller set explicitly stays
-// set across that switch, exactly as these entries show.
+// It resolves through the same table the spawn uses (applyChildPermission)
+// rather than restating the mapping, so the dialog cannot drift from what the
+// spawn actually does. Every provider is computed from the same body because
+// the dialog lets the approver switch provider before deciding, and
+// applySpawnConfirmationDecision replaces only the fields the approver actually
+// changed (provider / model / effort / execution mode / permission preset) — so
+// a field the caller set explicitly stays set across that switch, exactly as
+// these entries show.
+//
+// This two-argument form is what the tests pinning today's defaults call; the
+// dialog itself is sent childApprovalPreviewTiers, which covers the tier select
+// as well.
 func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]proto.ChildApproval {
+	return childApprovalPreviewWithConfig(body, &config.Config{Orchestration: orchestrationCfgForBypass(fullBypass)})
+}
+
+func childApprovalPreviewWithConfig(body spawnChildRequest, full *config.Config) map[string]proto.ChildApproval {
+	cfg := config.OrchestrationConfig{}
+	if full != nil {
+		cfg = full.Orchestration
+	}
 	providers := orchestrationProviders
 	if p := strings.TrimSpace(body.Provider); p != "" && !validOrchestrationProvider(p) {
 		// The dialog keeps an unknown requested provider as a selectable option,
@@ -1317,12 +1599,52 @@ func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]pr
 	for _, provider := range providers {
 		b := body
 		b.Provider = provider
-		applyChildApprovalDefaults(&b, fullBypass)
+		// 同じ順序で解決する（実行モード → 権限の段）。ここで手を抜くと、
+		// ダイアログが「段 1」と見せた provider が実際には無人の段で起動する。
+		// 非対応 provider への明示 headless はここではエラーにせず、要求された
+		// まま段を見せる（起動そのものは performSpawn が 400 で止める）。
+		if err := applyChildExecutionMode(&b, full); err != nil {
+			b.ExecutionMode = config.NormalizeExecutionMode(body.ExecutionMode)
+		}
+		applyChildPermission(&b, cfg)
+		resolved := resolveChildPermission(provider, b.PermissionPreset, b.ExecutionMode, b.Origin, cfg)
 		out[provider] = proto.ChildApproval{
 			PermissionMode: b.PermissionMode,
 			Sandbox:        b.Sandbox,
 			AskForApproval: b.AskForApproval,
+			AllowedTools:   b.AllowedTools,
 			RiskConfirmed:  b.RiskConfirmed,
+			Tier:           resolved.Tier,
+			FallbackFrom:   resolved.FallbackFrom,
+		}
+	}
+	return out
+}
+
+// childApprovalPreviewTiers is what the confirmation dialog gets: provider →
+// tier → the effective settings. The empty tier key is the request as it
+// stands (whatever permission_preset it carries, or none), and the three named
+// keys are what the approver would get by picking that tier in the dialog.
+//
+// It is computed up front, for every combination, because the dialog has two
+// selects that change the answer — provider and tier — and making it ask the
+// Hub again on every change would leave the disclosure lagging the selection
+// (and unavailable at all while the connection is down). The cost is one small
+// map; the property being protected is that what the approver reads is what the
+// child starts with (bugfix_spawn-confirm-permission-disclosure_2026-09-08.md).
+func childApprovalPreviewTiers(body spawnChildRequest, cfg *config.Config) map[string]map[string]proto.ChildApproval {
+	tiers := append([]string{config.PermissionPresetUnset}, config.KnownPermissionPresets()...)
+	out := map[string]map[string]proto.ChildApproval{}
+	for _, tier := range tiers {
+		b := body
+		if tier != config.PermissionPresetUnset {
+			b.PermissionPreset = tier
+		}
+		for provider, approval := range childApprovalPreviewWithConfig(b, cfg) {
+			if out[provider] == nil {
+				out[provider] = map[string]proto.ChildApproval{}
+			}
+			out[provider][tier] = approval
 		}
 	}
 	return out
@@ -1333,12 +1655,39 @@ func childApprovalPreview(body spawnChildRequest, fullBypass bool) map[string]pr
 // place is what stops the resend from quietly lacking a field the fresh request
 // has — the approval preview was added here for exactly that reason.
 func (s *Server) spawnConfirmationRequestedMessage(p *pendingSpawnConfirmation) proto.Message {
+	s.cfgMu.Lock()
+	rememberPermission := s.cfg.UserPrefs.Spawn.RolePermission[p.Body.Role] != ""
+	s.cfgMu.Unlock()
 	return proto.Message{
 		Type: "spawn_confirmation_requested", SpawnConfirmationID: p.ID,
 		SessionID: p.ParentID, Role: p.Body.Role, Provider: p.Body.Provider, Model: p.Body.Model,
-		CWD: p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
-		SpawnChildApproval: childApprovalPreview(p.Body, s.snapshotCfg().Orchestration.ChildFullBypassEnabled()),
+		// 要求された起動要求の共通 3 項目。承認者はダイアログでこれを見て、
+		// 必要なら差し替えてから決める（子 plan:
+		// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C4）。
+		Effort: p.Body.Effort, ExecutionMode: p.Body.ExecutionMode, PermissionPreset: p.Body.PermissionPreset,
+		// チェックボックスの初期状態。その役割の記憶があれば ON で開く（人が前に
+		// 「次回もこの段」と決めたのだから、承認するたびに入れ直させない）。
+		RememberPermission: rememberPermission,
+		CWD:                p.Body.CWD, InitialPrompt: p.Body.InitialPrompt, SpawnRequestedAtMs: p.RequestedAt.UnixMilli(),
+		SpawnChildApproval: childApprovalPreviewTiers(p.Body, s.snapshotCfg()),
+		// 「このフォルダを信頼済みとして登録する」を出してよい provider の一覧。
+		// 承認者が provider を差し替えても画面だけで出し分けられるよう、一覧で渡す。
+		TrustGrantProviders: trustGrantProviders(),
 	}
+}
+
+// trustGrantProviders は、orchestration の子になれる provider のうち
+// internal/clitrust が信頼を書ける provider の一覧を、orchestrationProviders の
+// 並び順で返す。どれを書けるかは clitrust の表だけが知っている（ここに名前を
+// 並べない）。
+func trustGrantProviders() []string {
+	out := make([]string, 0, 2)
+	for _, p := range orchestrationProviders {
+		if clitrust.Supported(p) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // isTerminalSessionState は再起動・追加指示の対象にしない終端状態。
@@ -1414,6 +1763,14 @@ func (s *Server) handleSendChild(w http.ResponseWriter, r *http.Request, parentI
 	child := s.liveChildForRole(parentID, body.Role)
 	if child == nil {
 		writeJSONError(w, http.StatusNotFound, "no_live_child", fmt.Sprintf("no live child for role %q; use `many-ai-cli orchestrate spawn --role %s \"<prompt>\"`", body.Role, body.Role))
+		return
+	}
+	// 起動引数で指示を渡した子がまだそれを受け取っていない（起動中か起動画面で待っている）
+	// 間は打ち込まない。文字と Enter が起動画面の既定の選択肢を選び、子が終わりうる（#53）。
+	// board にも記録せず、打ち込まなかったことと理由を送った側（conductor）へ返す
+	// （子 plan plan_v0.9-release-readiness_c10_answer-fixes.md C2 (b)）。
+	if s.launchInstructionNotTaken(child.ID) {
+		writeJSONError(w, http.StatusConflict, "child_not_ready", launchInstructionNotTakenDetail(child.Role, child.ID))
 		return
 	}
 	// body.Text は conductor 経由でユーザー由来のフリーテキストが入るため、
@@ -1581,6 +1938,275 @@ func (s *Server) markChildPromptDelivered(sessionID int, at time.Time) {
 	}
 }
 
+// markChildPromptViaLaunchArg records that this interactive child was handed
+// its first instruction as a launch argument, so its delivery is observed in
+// the CLI's transcript rather than stamped at launch (子 plan
+// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C4).
+func (s *Server) markChildPromptViaLaunchArg(boardID string, sessionID int) {
+	s.orchestration.mu.Lock()
+	defer s.orchestration.mu.Unlock()
+	if board := s.orchestration.boards[boardID]; board != nil {
+		if child := board.Children[sessionID]; child != nil {
+			child.PromptViaLaunchArg = true
+		}
+	}
+}
+
+// noteLaunchPromptAccepted records delivery for a child that was handed its
+// first instruction as a launch argument. Nothing was typed, so there is no
+// echo to observe; what shows the CLI has taken the instruction is its own
+// transcript gaining a user message. It is called with every batch the
+// transcript poll reads (pollAgentChat), including the first one after the
+// path resolves (a "prime" batch), which is exactly when the instruction
+// tends to appear.
+//
+// Stamping delivery at launch instead would be wrong: a child still waiting on
+// its folder-trust prompt is standby, and childStartupFailedLocked would call
+// it a failed startup after the grace period while it is only waiting for a
+// person.
+func (s *Server) noteLaunchPromptAccepted(sessionID int, messages []agentChatMessage, at time.Time) {
+	hasUser := false
+	for _, m := range messages {
+		if m.Role == "user" {
+			hasUser = true
+			break
+		}
+	}
+	if !hasUser {
+		return
+	}
+	accepted := false
+	s.orchestration.mu.Lock()
+	for _, board := range s.orchestration.boards {
+		if child := board.Children[sessionID]; child != nil {
+			if child.PromptViaLaunchArg && child.PromptDeliveredAt.IsZero() {
+				child.PromptDeliveredAt = at
+				accepted = true
+			}
+			break
+		}
+	}
+	s.orchestration.mu.Unlock()
+	if accepted && s.logger != nil {
+		s.logger.Info("orchestration child accepted its launch instruction", "session_id", sessionID)
+	}
+}
+
+// launchArgStartupQuiet is how long the screen of a launch-argument child must
+// have been still before Hub reads it as a startup screen waiting for a person.
+// Claude Code 2.1.281's folder-trust screen drew once and then stayed silent
+// for 44 s, until the Hub typed into it (the session log of #53, 2026-09-24);
+// a CLI that has taken its instruction keeps drawing while it works. 10 s is
+// above the longest silence measured inside a normal Claude start (8 s, see
+// orchestrationInjectQuiet).
+const launchArgStartupQuiet = 10 * time.Second
+
+// launchArgStartupScreen judges, from the state of the screen, whether a child
+// that was handed its first instruction as a launch argument — and whose
+// transcript does not show it taken yet — is waiting on a startup screen of its
+// CLI (folder trust, external imports, an update menu, or one Hub has no words
+// for). screen is collapsed (collapseWhitespace). 子 plan
+// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (a)(c).
+//
+// It goes by the state of the screen, not by its words. What separates "the
+// CLI is still in front of its input box" from "the CLI took the instruction"
+// is whether the input box is on screen (providerComposerSignals). Once it is,
+// any startup-screen wording on screen is the instruction itself, shown in the
+// transcript: an instruction that quotes the folder-trust question must not be
+// read as that question. A screen that is still moving is a CLI at work, not a
+// screen waiting for an answer.
+//
+// waiting is true for a drawn screen without the input box that has been still
+// for launchArgStartupQuiet, when either a registered startup screen is showing
+// (providerBlockingSignals; blocker names it) or the CLI has had
+// orchestrationComposerMaxWait since spawn to reach its input box and has not
+// (blocker is ""). A provider with no composer signal is never judged.
+func launchArgStartupScreen(provider, screen string, spawnedAt, lastOutput, now time.Time) (waiting bool, blocker string) {
+	composer := providerComposerSignals[provider]
+	if len(composer) == 0 || screen == "" || containsAnySignal(screen, composer) {
+		return false, ""
+	}
+	if now.Sub(lastOutput) < launchArgStartupQuiet {
+		return false, ""
+	}
+	for _, sig := range providerBlockingSignals[provider] {
+		if strings.Contains(screen, sig) {
+			return true, sig
+		}
+	}
+	if now.Sub(spawnedAt) < orchestrationComposerMaxWait {
+		return false, ""
+	}
+	return true, ""
+}
+
+// launchArgStartupWaits returns the children of boardID that were handed their
+// first instruction as a launch argument, have neither taken it (transcript)
+// nor written their progress file, and are waiting on a startup screen
+// (launchArgStartupScreen). The value is the registered signal on screen, ""
+// for a screen Hub does not recognise.
+//
+// Locks follow checkOrchestrationChildTimers' rule — short, never nested: the
+// candidates are read under orchestration.mu, their screens under sessionsMu.
+func (s *Server) launchArgStartupWaits(boardID string, now time.Time) map[int]string {
+	type candidate struct {
+		id        int
+		spawnedAt time.Time
+	}
+	var candidates []candidate
+	s.orchestration.mu.Lock()
+	if b := s.orchestration.boards[boardID]; b != nil {
+		for id, child := range b.Children {
+			if !child.PromptViaLaunchArg || !child.PromptDeliveredAt.IsZero() || !child.FileMod.IsZero() ||
+				child.Done || b.Done[id] || b.StartupFailed[id] {
+				continue
+			}
+			candidates = append(candidates, candidate{id: id, spawnedAt: child.SpawnedAt})
+		}
+	}
+	s.orchestration.mu.Unlock()
+	if len(candidates) == 0 {
+		return nil
+	}
+	waits := map[int]string{}
+	s.sessionsMu.Lock()
+	for _, c := range candidates {
+		ses := s.sessions[c.id]
+		if ses == nil || ses.vt == nil {
+			continue
+		}
+		screen := collapseWhitespace(strings.Join(ses.vt.Lines(), ""))
+		if waiting, blocker := launchArgStartupScreen(ses.Provider, screen, c.spawnedAt, ses.lastOutputAt, now); waiting {
+			waits[c.id] = blocker
+		}
+	}
+	s.sessionsMu.Unlock()
+	return waits
+}
+
+// launchInstructionNotTaken reports whether sessionID is a child that was
+// handed its first instruction as a launch argument and, as far as Hub can
+// tell, has not taken it yet: its transcript shows no user message, it has
+// never written its progress file, and its input box is not on screen. Such a
+// child is still starting or sitting on a startup screen of its CLI, and
+// whatever Hub types lands on that screen — an Enter picks the screen's default,
+// which on Claude Code 2.1.281's folder-trust screen is "No, exit" (#53). 子 plan
+// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (b).
+//
+// Unlike launchArgStartupScreen this does not wait for the screen to settle:
+// typing into a CLI that is still starting is the same accident a moment
+// earlier. Once the input box is on screen the child is typeable, even before
+// the transcript poll has seen the instruction.
+func (s *Server) launchInstructionNotTaken(sessionID int) bool {
+	pending := false
+	s.orchestration.mu.Lock()
+	for _, b := range s.orchestration.boards {
+		if child := b.Children[sessionID]; child != nil {
+			pending = child.PromptViaLaunchArg && child.PromptDeliveredAt.IsZero() && child.FileMod.IsZero() &&
+				!child.Done && !b.Done[sessionID]
+			break
+		}
+	}
+	s.orchestration.mu.Unlock()
+	if !pending {
+		return false
+	}
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[sessionID]
+	if ses == nil {
+		return false
+	}
+	screen := ""
+	if ses.vt != nil {
+		screen = collapseWhitespace(strings.Join(ses.vt.Lines(), ""))
+	}
+	return !containsAnySignal(screen, providerComposerSignals[ses.Provider])
+}
+
+// launchInstructionNotTakenDetail is what the sender is told when Hub held
+// text back from such a child (orchestrate send; the relay's reminder goes on
+// the board instead).
+func launchInstructionNotTakenDetail(role string, childID int) string {
+	return fmt.Sprintf("child role=%s id=%d has not taken its launch instructions yet (it is still starting or waiting on a startup screen such as folder trust); nothing was typed. "+
+		"The instructions it was spawned with start by themselves once the user answers that screen in the child session; send this again after the child has started working",
+		role, childID)
+}
+
+// folderTrustWaitMessage is the one notice for a launch-argument child that
+// is waiting on its folder-trust prompt. Unlike the typed route's failure
+// (composerBlockedDetail), nothing needs to be sent again: the instruction is
+// already with the CLI and starts as soon as the prompt is answered.
+func folderTrustWaitMessage(role string, childID int, blocker string) string {
+	return fmt.Sprintf("child waiting on its folder-trust prompt: role=%s id=%d (%s). "+
+		"The instructions were handed over at launch and start as soon as the user opens the child session and chooses Yes (Codex: Trust and continue); do not send them again",
+		role, childID, blocker)
+}
+
+// startupScreenWaitMessage is the notice for a launch-argument child waiting on
+// any other startup screen: one Hub knows by its words (blocker), or one it
+// does not (blocker is "").
+func startupScreenWaitMessage(role string, childID int, blocker string) string {
+	screen := blocker
+	if screen == "" {
+		screen = "a screen Hub does not recognise; the input box has not appeared"
+	}
+	return fmt.Sprintf("child waiting on a startup screen before taking its instructions: role=%s id=%d (%s). "+
+		"The instructions were handed over at launch and start as soon as the user opens the child session and answers that screen; do not send them again",
+		role, childID, screen)
+}
+
+// noticeChildrenWaitingOnStartupScreen tells the parent and the board, once per
+// child, that a launch-argument child is sitting on a startup screen before it
+// has taken its instruction (子 plan
+// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C4; any
+// startup screen, not only folder trust: plan_v0.9-release-readiness_c10_answer-fixes.md
+// C2 (a)). waits is launchArgStartupWaits for the same tick.
+//
+// Locks follow checkOrchestrationChildTimers' rule — short, never nested: the
+// latch is set under orchestration.mu before anything is sent.
+func (s *Server) noticeChildrenWaitingOnStartupScreen(boardID string, waits map[int]string) {
+	if len(waits) == 0 {
+		return
+	}
+	type candidate struct {
+		id, parentID int
+		role         string
+		blocker      string
+	}
+	var candidates []candidate
+	boardPath := ""
+	s.orchestration.mu.Lock()
+	if b := s.orchestration.boards[boardID]; b != nil {
+		boardPath = b.Path
+		for id, blocker := range waits {
+			child := b.Children[id]
+			if child == nil || child.StartupWaitNotified || b.TimedOut[id] {
+				continue
+			}
+			child.StartupWaitNotified = true
+			candidates = append(candidates, candidate{id: id, parentID: child.ParentID, role: child.Role, blocker: blocker})
+		}
+	}
+	s.orchestration.mu.Unlock()
+
+	for _, c := range candidates {
+		msg := startupScreenWaitMessage(c.role, c.id, c.blocker)
+		if folderTrustBlockingSignals[c.blocker] {
+			msg = folderTrustWaitMessage(c.role, c.id, c.blocker)
+		}
+		if s.relayOwns(boardID) {
+			// notifyBoardEvent は relay の board では何もしない（relay が自分の経路で
+			// 親へ知らせる）。relay と同じ経路で知らせ、board には自分で残す。
+			_ = s.appendBoardSection(boardPath, "hub", msg+"\n")
+			s.relayDep().notifyParent(boardID, c.parentID, "\n[orchestration] "+msg+"\n")
+			continue
+		}
+		// board への記録（event pending: …）も notifyBoardEvent が残す。
+		s.notifyBoardEvent(boardID, c.parentID, "\n[orchestration] "+msg+"\n")
+	}
+}
+
 // markChildPromptFailed records that a child's initial prompt delivery
 // failed. reportInjectFailure has already told the parent/board by the time
 // this is called (composerBlocked or attempts exhausted); this only marks
@@ -1634,7 +2260,14 @@ func (s *Server) resetChildStandbySince(boardID string, sessionID int) {
 
 // childProgressPath は子専用進捗ファイルのパス（board と同じディレクトリ）。
 func childProgressPath(boardPath string, sessionID int) string {
-	return filepath.Join(filepath.Dir(boardPath), fmt.Sprintf("child-%d.md", sessionID))
+	return childProgressPathFor(boardPath, strconv.Itoa(sessionID))
+}
+
+// childProgressPathFor takes the id already rendered as text, so a headless
+// prompt can name the file with a placeholder the wrapper expands after
+// register (buildHeadlessChildInitialPrompt).
+func childProgressPathFor(boardPath, id string) string {
+	return filepath.Join(filepath.Dir(boardPath), "child-"+id+".md")
 }
 
 func newOrchestrationBoard(id, path string) *orchestrationBoard {
@@ -2143,14 +2776,14 @@ func uniqueChildSessionForRole(b *orchestrationBoard, role string) int {
 // judgment (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md)
 // from already-read values, taking no locks itself. Callers that already hold
 // orchestration.mu (checkOrchestrationChildTimers) can call this directly
-// with a pre-fetched approvalVisible; childStartupFailed below is the
+// with a pre-fetched awaitingApproval; childStartupFailed below is the
 // standalone, locking entry point for everyone else (tests included).
 //
 // True only when BOTH hold: the initial prompt's delivery was confirmed and
 // the child has never written its progress file (child.FileMod.IsZero()),
 // AND the session has been standby (no PTY output) for at least
 // cfg.ChildStartupGraceSeconds while not waiting on an approval prompt.
-func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, now time.Time, cfg config.OrchestrationConfig) bool {
+func childStartupFailedLocked(child *orchestrationChild, awaitingApproval bool, now time.Time, cfg config.OrchestrationConfig) bool {
 	if !cfg.ChildStartupFailEnabled() {
 		return false
 	}
@@ -2163,7 +2796,7 @@ func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, n
 		// 一度でも進捗ファイルを書いた子は働いている。timeout の担当。
 		return false
 	}
-	if approvalVisible {
+	if awaitingApproval {
 		// 承認待ちの間は grace のカウントを進めない。
 		return false
 	}
@@ -2186,7 +2819,7 @@ func childStartupFailedLocked(child *orchestrationChild, approvalVisible bool, n
 func (s *Server) childStartupFailed(sessionID int, now time.Time, cfg config.OrchestrationConfig) bool {
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
-	approvalVisible := ses != nil && ses.approvalVisible
+	awaitingApproval := ses != nil && ses.pendingApproval != nil
 	s.sessionsMu.Unlock()
 
 	s.orchestration.mu.Lock()
@@ -2199,7 +2832,7 @@ func (s *Server) childStartupFailed(sessionID int, now time.Time, cfg config.Orc
 		if board.StartupFailed[sessionID] {
 			return false
 		}
-		return childStartupFailedLocked(child, approvalVisible, now, cfg)
+		return childStartupFailedLocked(child, awaitingApproval, now, cfg)
 	}
 	return false
 }
@@ -2222,19 +2855,22 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 	if owns && s.relayTerminal(boardID) {
 		return
 	}
+	// 起動引数で指示を渡した子のうち、まだ受け取らずに起動画面で利用者を待っているもの。
+	// 下の timeout に数えず、最後に親と board へ知らせる（同じ判定を 1 回だけ行う）。
+	startupWaits := s.launchArgStartupWaits(boardID, now)
 	boardPath := ""
 	// PTY 出力時刻のスナップショット。board 記帳が止まっていても PTY 出力が動いている子は
 	// 作業中（plan 読込・実装・レビュー等）とみなし idle warning を出さない。board 記帳時刻
 	// だけの判定は実測で偽陽性を連発した（plan_orchestration-conductor-improvements.md C1）。
-	// approvalVisible も同じ理由で事前取得する（承認待ちを起動失敗の grace に含めないため。
+	// 保留中の承認の有無も同じ理由で事前取得する（承認待ちを起動失敗の grace に含めないため。
 	// plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md D2）。
 	// sessionsMu → orchestration.mu の順に短く取り、入れ子にしない。
 	lastOutputs := map[int]time.Time{}
-	approvalVisible := map[int]bool{}
+	awaitingApproval := map[int]bool{}
 	s.sessionsMu.Lock()
 	for id, ses := range s.sessions {
 		lastOutputs[id] = ses.lastOutputAt
-		approvalVisible[id] = ses.approvalVisible
+		awaitingApproval[id] = ses.pendingApproval != nil
 	}
 	s.sessionsMu.Unlock()
 	s.orchestration.mu.Lock()
@@ -2245,11 +2881,18 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 			if child.Done || b.Done[id] || b.TimedOut[id] || b.StartupFailed[id] {
 				continue
 			}
-			if childStartupFailedLocked(child, approvalVisible[id], now, cfg) {
+			if childStartupFailedLocked(child, awaitingApproval[id], now, cfg) {
 				notices = append(notices, notice{parentID: child.ParentID, childID: id, role: child.Role, kind: "startup_failed"})
 				continue
 			}
-			if cfg.ChildTimeoutSeconds > 0 {
+			// A child still in front of a startup screen (folder trust and the like)
+			// is waiting for a person, not stuck: it already holds its instruction
+			// and starts once the screen is answered. Counting it as timed out makes
+			// it unsendable while it lives on, and with TimeoutRespawn starts a 2nd
+			// body on the same instruction in the same folder (子 plan
+			// plan_v0.9-release-readiness_c10_answer-fixes.md C2 (c)).
+			_, onStartupScreen := startupWaits[id]
+			if cfg.ChildTimeoutSeconds > 0 && !onStartupScreen {
 				// Measure the timeout from the child's last activity, not its
 				// spawn time. A child still actively writing to the board or
 				// emitting PTY output past ChildTimeoutSeconds is healthy and must
@@ -2317,6 +2960,7 @@ func (s *Server) checkOrchestrationChildTimers(boardID string, now time.Time, cf
 			s.notifyBoardEvent(boardID, n.parentID, fmt.Sprintf("\n[orchestration] idle warning role=%s id=%d no board update and no PTY output for %ds\n", n.role, n.childID, n.threshold))
 		}
 	}
+	s.noticeChildrenWaitingOnStartupScreen(boardID, startupWaits)
 }
 
 // childStartupFailureScreenTail collects the last few non-empty screen lines
@@ -2434,11 +3078,24 @@ func (s *Server) completeOrchestrationChildOnSessionEnd(sessionID int, state str
 	if boardID == "" {
 		return
 	}
-	_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child completed without DONE marker: role=%s session=%d state=%s (session_end)\n", role, sessionID, state))
+	// A child closed from the dashboard (session_dismiss) did not finish its
+	// work. Saying "complete" would let the conductor carry on as if the work
+	// were done, so the dismissal gets its own wording
+	// (bugfix_orchestrate-closed-child-idle-warning_2026-09-25.md).
+	dismissed := state == "dismissed"
+	if dismissed {
+		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child dismissed from the dashboard: role=%s session=%d (closed by the user; its work may be unfinished)\n", role, sessionID))
+	} else {
+		_ = s.appendBoardSection(boardPath, "hub", fmt.Sprintf("child completed without DONE marker: role=%s session=%d state=%s (session_end)\n", role, sessionID, state))
+	}
 	if s.relayOwns(boardID) {
 		// The relay stops itself (stopped(child_exited)) and notifies the parent
 		// through its own finish path (D-6).
 		s.relayOnChildExit(boardID, sessionID, state)
+		return
+	}
+	if dismissed {
+		s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child dismissed role=%s id=%d (closed from the dashboard by the user; treat its work as unfinished)\n", role, sessionID))
 		return
 	}
 	s.notifyBoardEvent(boardID, parentID, fmt.Sprintf("\n[orchestration] child complete via session_end role=%s id=%d state=%s\n", role, sessionID, state))
@@ -2477,7 +3134,12 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 			return
 		}
 		defer s.releaseOrchestrationChildren(admissionID)
-		meta := pendingChild{ParentSessionID: child.ParentID, Role: child.Role, Auto: true, Depth: 1, OrchestrationID: boardID, BoardPath: board.Path, WorktreeBranch: child.WorktreeBranch, SpawnedAt: time.Now()}
+		// 再起動も最初の起動と同じ childLaunchPrompt を通す（渡し方を 2 か所で決めない）。
+		// 再起動用の spec は InitialPrompt を持たないので、ここで入れ直す。
+		viaArg := s.promptViaLaunchArg(spec.Provider, spec.ExecutionMode)
+		launchPrompt, injectAfterStart := childLaunchPrompt(spec.ExecutionMode, viaArg, child.InitialPrompt, board.Path, child.Role, child.WorktreeBranch)
+		spec.InitialPrompt = launchPrompt
+		meta := pendingChild{ParentSessionID: child.ParentID, Role: child.Role, Auto: true, Depth: 1, OrchestrationID: boardID, BoardPath: board.Path, WorktreeBranch: child.WorktreeBranch, SpawnedAt: time.Now(), PromptAtLaunch: !injectAfterStart}
 		s.orchestration.mu.Lock()
 		s.orchestration.pending[label] = meta
 		s.orchestration.mu.Unlock()
@@ -2491,11 +3153,16 @@ func (s *Server) respawnTimedOutChild(boardID string, sessionID, maxRetries int)
 		}
 		s.consumeOrchestrationChildren(admissionID, 1)
 		s.registerBoardChild(boardID, board.Path, newID, child.ParentID, child.Role, time.Now())
+		if viaArg {
+			s.markChildPromptViaLaunchArg(boardID, newID)
+		}
 		s.setChildRestartData(boardID, newID, child.RestartSpec, child.InitialPrompt, child.WorktreeBranch, child.TimeoutRetries+1)
 		_ = s.appendBoardSection(board.Path, "hub", fmt.Sprintf("timeout retry spawned: role=%s old_session=%d session=%d\n", child.Role, sessionID, newID))
-		s.injectInitialPromptNotify(newID,
-			buildChildInitialPrompt(child.InitialPrompt, board.Path, child.Role, child.WorktreeBranch, newID),
-			injectNotice{ParentID: child.ParentID, BoardPath: board.Path, Role: child.Role})
+		if injectAfterStart {
+			s.injectInitialPromptNotify(newID,
+				buildChildInitialPrompt(child.InitialPrompt, board.Path, child.Role, child.WorktreeBranch, newID),
+				injectNotice{ParentID: child.ParentID, BoardPath: board.Path, Role: child.Role})
+		}
 	})
 }
 
@@ -2676,6 +3343,8 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		ProjectID:            ses.ProjectID,
 		Label:                ses.Label,
 		Model:                ses.Model,
+		ExecutionMode:        ses.ExecutionMode,
+		PermissionMode:       ses.PermissionMode,
 		Route:                ses.Route,
 		State:                ses.State,
 		OutputIdle:           ses.Activity.OutputIdle,
@@ -2687,6 +3356,7 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		LastOutputAt:         ses.LastOutputAt,
 		StartedAt:            ses.StartedAt,
 		ParentSessionID:      ses.ParentSessionID,
+		HandoffFrom:          ses.HandoffFrom,
 		Role:                 ses.Role,
 		Auto:                 ses.Auto,
 		Depth:                ses.Depth,
@@ -2812,14 +3482,36 @@ var providerComposerSignals = map[string][]string{
 // これが画面にある間は注入しない。**注入すると抜けられなくなる**ため、待つか諦めるかしかない。
 var providerBlockingSignals = map[string][]string{
 	"codex": {
-		"Doyoutrustthecontentsofthisdirectory", // ディレクトリ信頼の確認
+		"Doyoutrustthecontentsofthisdirectory", // ディレクトリ信頼の確認（旧版）
 		"Updateavailable!",                     // 自己更新メニュー
 		"Pressentertocontinue",                 // 上記 2 つの共通フッター
+		// codex v0.156.1 のディレクトリ信頼の確認（2026-09-24 実測: #51 / 検証 #60）。
+		// 旧版の文言に当たらず、Enter が既定の「1. Trust and continue」を選んで、
+		// 利用者の代わりにフォルダを信頼済みにしていた。この表は board 通知の保留判定
+		// （orchestration_notify.go）でも起動後の画面に当てるので、本文に紛れにくい
+		// 質問文だけを登録し、選択肢の文言（1. Trust and continue）は登録しない。
+		"Trustthisfolder?Codexcanread",
 	},
-	// claude: 未登録。保持している claude 生ログ 87 本にモーダルで止まった画面が 1 つも
-	// 無く、文言を実測で確かめられない（2026-09-07）。モーダル中は footer が描かれないので
-	// ready 側の合図が出ず、composerUnknown として従来の静止待ちへ落ちる。実際に止まった
-	// 画面を観測したら、その文言をここへ足す。
+	// claude: 2026-09-24 に Claude Code 2.1.281 の起動時の確認で止まった画面を観測した
+	// （#53。logs/sessions/claude_2026-09-24_093837_Temp_s53.jsonl）。未登録の間は
+	// composerUnknown → 静止待ちへ落ち、フォルダ信頼の確認へ本文と Enter を打ち込んでいた。
+	// 2.1.281 はこの確認の既定が「No, exit」なので、その Enter で子が終了した。
+	// 外部読み込みの確認は 2026-08-20 の使用量プローブで観測した文言（usage_probe.go）。
+	"claude": {
+		"Isthisaprojectyoucreatedoroneyoutrust?", // フォルダ信頼の確認
+		"Yes,Itrustthisfolder",                   // 同・選択肢（並び順が版で変わる）
+		"AllowexternalCLAUDE.mdfileimports?",     // 外部 CLAUDE.md の読み込み確認
+	},
+}
+
+// folderTrustBlockingSignals は providerBlockingSignals のうち「フォルダを信頼するか」の
+// 確認を表すもの。この確認で止まった子は、利用者が子の画面で答えれば進めるので、
+// 親への知らせにその手順を添える（reportInjectFailure の文言）。
+var folderTrustBlockingSignals = map[string]bool{
+	"Doyoutrustthecontentsofthisdirectory":   true,
+	"Trustthisfolder?Codexcanread":           true,
+	"Isthisaprojectyoucreatedoroneyoutrust?": true,
+	"Yes,Itrustthisfolder":                   true,
 }
 
 // providerComposerRegion は「入力欄に今なにが載っているか」を画面から切り出す provider 別の
@@ -3101,8 +3793,7 @@ func (s *Server) injectInitialPromptNotify(sessionID int, prompt string, notice 
 		case composerBlocked:
 			s.logger.Warn("initial prompt not injected; child TUI is on a modal",
 				"session_id", sessionID, "attempt", attempt, "blocker", blocker)
-			s.reportInjectFailure(sessionID, notice,
-				fmt.Sprintf("child TUI is waiting on a modal (%s) and never reached its composer; the initial prompt was NOT delivered", blocker))
+			s.reportInjectFailure(sessionID, notice, composerBlockedDetail(blocker))
 			// C1 (plan_spawn-orchestration-backlog-closeout_c3_child-fast-fail.md): 配送失敗を
 			// 記録する。reportInjectFailure が既に親へ child_input_blocked を出したので、
 			// 起動失敗判定（childStartupFailed）が同じ子へ重ねて startup_failed を出さない。
@@ -3146,6 +3837,17 @@ func (s *Server) injectInitialPromptNotify(sessionID int, prompt string, notice 
 	s.markChildPromptFailed(sessionID)
 }
 
+// composerBlockedDetail は、子がモーダルで止まって初期プロンプトを届けられなかったときに
+// board と親へ出す文。フォルダ信頼の確認なら、利用者が子の画面で答えれば進められるので、
+// その手順まで書く（答えたあとも初期プロンプトは届いていないので、送り直しが要る）。
+func composerBlockedDetail(blocker string) string {
+	if folderTrustBlockingSignals[blocker] {
+		return fmt.Sprintf("child TUI is asking whether to trust its working folder (%s); the initial prompt was NOT delivered. "+
+			"Ask the user to open the child session and choose Yes (Codex: Trust and continue), then send the instructions again with orchestrate send", blocker)
+	}
+	return fmt.Sprintf("child TUI is waiting on a modal (%s) and never reached its composer; the initial prompt was NOT delivered", blocker)
+}
+
 // finishInitialPromptDelivery はエコー観測後の締め。確定 CR が効いたところまで確かめられれば
 // 配送成功、入力欄に本文が残ったままなら（Enter を 1 回送り直しても消えなければ）配送失敗
 // として記録する。どちらか一方だけを 1 回記録する。
@@ -3186,12 +3888,12 @@ func (s *Server) confirmInitialPromptSubmitted(sessionID int, marker string, not
 	}
 	s.sessionsMu.Lock()
 	ses := s.sessions[sessionID]
-	approvalVisible := ses != nil && ses.approvalVisible
+	awaitingApproval := ses != nil && ses.pendingApproval != nil
 	s.sessionsMu.Unlock()
 	if ses == nil {
 		return true
 	}
-	if approvalVisible {
+	if awaitingApproval {
 		s.logger.Warn("initial prompt still in composer but an approval prompt is visible; not resending Enter",
 			"session_id", sessionID)
 		return true
@@ -3348,13 +4050,83 @@ func collapseWhitespace(text string) string {
 }
 
 func buildChildInitialPrompt(base, boardPath, role, branch string, sessionID int) string {
-	id := strconv.Itoa(sessionID)
+	return buildChildInitialPromptFor(base, boardPath, role, branch, strconv.Itoa(sessionID))
+}
+
+// childLaunchPrompt decides how this child is given its first instruction, and
+// is the only place that decides it — for the first launch (dispatchSpawn) and
+// for a timeout retry (respawnTimedOutChild) alike (子 plan:
+// docs/local/plan_child_execution_modes_headless.md 内部 C3,
+// docs/local/plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3).
+//
+// Three routes; every child takes exactly one of them:
+//
+//	headless    handed over at launch (--prompt-file) and nothing is injected:
+//	            a non-interactive process has no input box to type into, and
+//	            the injector would wait for one forever.
+//	launch arg  interactive, and the CLI takes its first instruction as a
+//	            launch argument (viaArg — promptViaLaunchArg). Handed over
+//	            at launch the same way, and nothing is injected: the CLI holds
+//	            the instruction through its own startup dialogs (a folder-trust
+//	            prompt, an update notice) and runs it afterwards. Typing into
+//	            those dialogs is what went wrong on 2026-09-24 (#53).
+//	typed       every other interactive child: nothing at launch; the
+//	            instruction is injected after the session registers, once the
+//	            CLI's input box is actually there.
+//
+// The launch prompt carries the session id as a placeholder, because the child
+// has no id until it registers; the wrapper fills it in (internal/headless/prompt.go).
+func childLaunchPrompt(executionMode string, viaArg bool, base, boardPath, role, branch string) (string, bool) {
+	if !config.IsHeadlessExecutionMode(executionMode) && !viaArg {
+		return "", true
+	}
+	return buildHeadlessChildInitialPrompt(base, boardPath, role, branch), false
+}
+
+// promptViaLaunchArg reports whether an interactive session of provider gets
+// its first instruction as a launch argument — an orchestration child
+// (childLaunchPrompt) or a session started from the screen with an instruction
+// (screenSpawnLaunchPrompt). It is true only for a CLI in
+// internal/config/launch_prompt.go's table, and only when this machine can
+// actually pass it (wrapper.LaunchPromptArgUsable — a launch through cmd.exe
+// from a shim path with whitespace cannot). When the table says yes but the
+// machine says no, the session falls back to the typed route and the reason is
+// logged once per launch.
+func (s *Server) promptViaLaunchArg(provider, executionMode string) bool {
+	if config.IsHeadlessExecutionMode(executionMode) || !config.LaunchPromptViaArg(provider) {
+		return false
+	}
+	usable := s.launchArgUsable
+	if usable == nil {
+		usable = wrapper.LaunchPromptArgUsable
+	}
+	ok, reason := usable(provider)
+	if !ok {
+		s.logger.Warn("first instruction falls back to typing", "provider", provider, "reason", reason)
+	}
+	return ok
+}
+
+// buildHeadlessChildInitialPrompt is the same prompt for a child that does not
+// have a session id yet. A headless child is handed its prompt at startup,
+// before it registers, so the id is written as a placeholder and the wrapper
+// expands it after register (internal/headless/prompt.go). Everything else —
+// the board path, the protocol, the caller's own text — is identical, because
+// the two modes must not drift into two different sets of instructions.
+func buildHeadlessChildInitialPrompt(base, boardPath, role, branch string) string {
+	return buildChildInitialPromptFor(base, boardPath, role, branch, headless.SessionIDPlaceholder)
+}
+
+// buildChildInitialPromptFor renders the prompt with id already in its final
+// textual form, which is what lets the headless variant substitute a
+// placeholder without a second copy of the instructions.
+func buildChildInitialPromptFor(base, boardPath, role, branch, id string) string {
 	var b strings.Builder
 	b.WriteString("You are an orchestration child session.\n")
 	b.WriteString("Role: " + role + "\n")
 	b.WriteString("Session ID: " + id + "\n")
 	b.WriteString("Shared board (read-only for you): " + boardPath + "\n")
-	b.WriteString("Your progress file (write here): " + childProgressPath(boardPath, sessionID) + "\n")
+	b.WriteString("Your progress file (write here): " + childProgressPathFor(boardPath, id) + "\n")
 	if branch != "" {
 		b.WriteString("Worktree branch: " + branch + "\n")
 	}
@@ -3572,6 +4344,8 @@ func (s *Server) resolveSpawnChildProvider(parent *session, body *spawnChildRequ
 	}
 	s.cfgMu.Lock()
 	remembered := s.cfg.UserPrefs.Spawn.RoleProvider[body.Role]
+	rememberedEffort := s.cfg.UserPrefs.Spawn.RoleEffort[body.Role]
+	rememberedPermission := s.cfg.UserPrefs.Spawn.RolePermission[body.Role]
 	s.cfgMu.Unlock()
 	parentProvider := ""
 	if parent != nil {
@@ -3579,6 +4353,24 @@ func (s *Server) resolveSpawnChildProvider(parent *session, body *spawnChildRequ
 	}
 	provider, source := resolveChildProvider(body.Provider, roleAssignedProvider, remembered, parentProvider)
 	body.Provider = provider
+	// effort の記憶は provider と同じ場所で読む。明示指定があればそれを優先し、
+	// 記憶が今の provider で使えないときは黙って捨てる（役割の記憶は利便性で、
+	// 起動を失敗させる理由にしない。受理の判断は handleSpawnChild の検証が行う）。
+	if strings.TrimSpace(body.Effort) == "" && rememberedEffort != "" {
+		if config.ValidateEffort(body.Provider, rememberedEffort) == nil {
+			body.Effort = rememberedEffort
+		}
+	}
+	// 権限の段の記憶は conductor 起点の要求にだけ効かせる。確認ダイアログはこの
+	// body から作られるので、埋めた段がそのまま承認者に見え、見せた段で起動する。
+	// **UI 起点はここで埋めない**: 派生ダイアログは /api/info の role_permission を
+	// 見て自分で初期値を入れており、人がそれを「指定なし」へ戻した意思を Hub が
+	// 後から上書きしてしまう（子 plan 内部 C6 の設計 3）。
+	if body.Origin == launchOriginConductor && strings.TrimSpace(body.PermissionPreset) == "" && rememberedPermission != "" {
+		if config.ValidatePermissionPreset(rememberedPermission) == nil {
+			body.PermissionPreset = rememberedPermission
+		}
+	}
 	return source
 }
 
@@ -3610,6 +4402,67 @@ func providerConfirmationChangeNote(preConfirmProvider, decidedProvider string) 
 	return fmt.Sprintf("provider changed at confirmation: requested=%s decided=%s", preConfirmProvider, decidedProvider)
 }
 
+// applySpawnConfirmationDecision は承認ダイアログの決定を要求へ重ねる。Provider /
+// Model は空文字が「欄を触らなかった」で要求値が残る。3 項目は nil が「欄を送って
+// こなかった」で要求値が残り、非 nil はダイアログの実効値で置き換える。決定が空の
+// 構造体なら、返る要求は入力と 1 バイトも変わらない（3 項目を知らない呼び出し元の経路）。
+func applySpawnConfirmationDecision(body spawnChildRequest, decided spawnConfirmationDecision) spawnChildRequest {
+	body.Provider = spawnDecidedValue(decided.Provider, body.Provider)
+	body.Model = spawnDecidedValue(decided.Model, body.Model)
+	body.Effort = spawnDecidedLaunchValue(decided.Effort, body.Effort)
+	body.ExecutionMode = spawnDecidedLaunchValue(decided.ExecutionMode, body.ExecutionMode)
+	body.PermissionPreset = spawnDecidedLaunchValue(decided.PermissionPreset, body.PermissionPreset)
+	// 記憶の指示も他の 3 項目と同じ規則で重ねる（nil = 欄を送ってこなかった＝要求値が
+	// 残る）。拒否の決定はこの欄を送らないので、拒否で記憶が動くことはない。
+	if decided.RememberPermission != nil {
+		body.RememberPermission = decided.RememberPermission
+	}
+	// 信頼の登録は、要求の側からは立たない（json:"-"）。ここで決定の true だけを写す。
+	// 要求値を「残す」経路が無いので、nil / false はどちらも false になる。
+	body.GrantFolderTrust = decided.GrantFolderTrust != nil && *decided.GrantFolderTrust
+	return body
+}
+
+// spawnDecidedValue は「承認者が入れた値」と「要求された値」から実効値を選ぶ。
+// 空文字の決定は「欄を触らなかった」なので、要求値がそのまま残る（provider / model）。
+func spawnDecidedValue(decided, requested string) string {
+	if v := strings.TrimSpace(decided); v != "" {
+		return v
+	}
+	return requested
+}
+
+// spawnDecidedLaunchValue は起動要求の共通 3 項目の実効値を選ぶ。nil は「欄を送って
+// こなかった」なので要求値が残る。非 nil はダイアログが見せていた値そのもので、
+// 空文字は「指定なし」へ戻す。写像の無い provider へ差し替えて effort 欄が隠れた
+// とき、要求時の effort を引きずらないためにこの区別が要る。
+func spawnDecidedLaunchValue(decided *string, requested string) string {
+	if decided == nil {
+		return requested
+	}
+	return strings.TrimSpace(*decided)
+}
+
+// launchOptionChangeNote は、承認ダイアログで起動要求の共通 3 項目が差し替えられた
+// ときだけ 1 行を組み立てる（providerConfirmationChangeNote と同じ形）。
+// 変更が無ければ空文字＝ログを出さない。
+func launchOptionChangeNote(requested, decided spawnChildRequest) string {
+	changes := make([]string, 0, 3)
+	for _, field := range []struct {
+		name               string
+		before, afterValue string
+	}{
+		{"effort", requested.Effort, decided.Effort},
+		{"execution_mode", requested.ExecutionMode, decided.ExecutionMode},
+		{"permission_preset", requested.PermissionPreset, decided.PermissionPreset},
+	} {
+		if field.before != field.afterValue {
+			changes = append(changes, fmt.Sprintf("%s: requested=%q decided=%q", field.name, field.before, field.afterValue))
+		}
+	}
+	return strings.Join(changes, ", ")
+}
+
 // rememberRoleProvider は実際に起動した provider を役割ごとに覚える。
 // 承認ダイアログで書き換えられた後の値がここへ来るので、「1 度直せば次から効く」が成立する。
 // 保存に失敗しても spawn は成功扱いのままにする（記憶は利便性であって正しさではない）。
@@ -3630,6 +4483,98 @@ func (s *Server) rememberRoleProvider(role, provider string) {
 	s.cfgMu.Unlock()
 	if err := s.persistConfig(); err != nil {
 		s.logger.Warn("remember role provider failed", "role", role, "provider", provider, "err", err)
+	}
+}
+
+// rememberRoleEffort は実際に起動した effort を役割ごとに覚える
+// （rememberRoleProvider と同じ規律: 起動できた値だけ、保存の失敗は spawn を
+// 失敗させない）。空の effort は「指定なし」なので記憶も消す — 一度 high で
+// 起こした役割を effort 無しで起こし直したら、次も effort 無しが既定になる。
+func (s *Server) rememberRoleEffort(role, provider, effort string) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return
+	}
+	effort = strings.TrimSpace(effort)
+	if effort != "" && config.ValidateEffort(provider, effort) != nil {
+		return
+	}
+	s.cfgMu.Lock()
+	current, had := s.cfg.UserPrefs.Spawn.RoleEffort[role]
+	if current == effort && (had || effort == "") {
+		s.cfgMu.Unlock()
+		return
+	}
+	if effort == "" {
+		delete(s.cfg.UserPrefs.Spawn.RoleEffort, role)
+	} else {
+		if s.cfg.UserPrefs.Spawn.RoleEffort == nil {
+			s.cfg.UserPrefs.Spawn.RoleEffort = map[string]string{}
+		}
+		s.cfg.UserPrefs.Spawn.RoleEffort[role] = effort
+	}
+	s.cfgMu.Unlock()
+	if err := s.persistConfig(); err != nil {
+		s.logger.Warn("remember role effort failed", "role", role, "err", err)
+	}
+}
+
+// rememberPermissionForOrigin は「次回もこの段」の指示を受け取ってよい出所かを決める。
+// 画面（`ui`）から来たものだけを通し、conductor（AI）と relay の要求は nil へ落とす。
+// 判定を 1 つの純関数にしてあるのは、通す条件が増えたときに増やす場所が 1 か所で済み、
+// テストで両方向を固定できるから。
+func rememberPermissionForOrigin(origin string, remember *bool) *bool {
+	if strings.TrimSpace(origin) != launchOriginUI {
+		return nil
+	}
+	return remember
+}
+
+// applyRolePermissionMemory は起動できた子の body から「次回もこの段」の指示を反映する。
+// nil（欄が無い = 今日までの呼び出し全部）なら何もしない。
+func (s *Server) applyRolePermissionMemory(body spawnChildRequest) {
+	if body.RememberPermission == nil {
+		return
+	}
+	s.rememberRolePermission(body.Role, body.PermissionPreset, *body.RememberPermission)
+}
+
+// rememberRolePermission は「この役割では次回もこの段を使う」を役割ごとに覚える。
+//
+// rememberRoleProvider / rememberRoleEffort と同じ規律（起動できた値だけ、保存の失敗は
+// spawn を失敗させない）だが、**この 2 つと違って自動では書かない**。remember が true の
+// ときだけ覚え、false なら記憶を消す。tier が空（＝指定なし）で覚えようとしたときも
+// 記憶を消す: 「次回も指定なしで起こす」は記憶が無い状態そのものなので、空文字を
+// 覚えると意味の無い行が config に残る。表に無い段は覚えない（起動は済んでいるので
+// 失敗にはしない・子 plan 内部 C6 の設計 1）。
+func (s *Server) rememberRolePermission(role, tier string, remember bool) {
+	role = strings.TrimSpace(role)
+	if role == "" {
+		return
+	}
+	tier = strings.TrimSpace(tier)
+	if !remember {
+		tier = ""
+	} else if config.ValidatePermissionPreset(tier) != nil {
+		return
+	}
+	s.cfgMu.Lock()
+	current, had := s.cfg.UserPrefs.Spawn.RolePermission[role]
+	if current == tier && (had || tier == "") {
+		s.cfgMu.Unlock()
+		return
+	}
+	if tier == "" {
+		delete(s.cfg.UserPrefs.Spawn.RolePermission, role)
+	} else {
+		if s.cfg.UserPrefs.Spawn.RolePermission == nil {
+			s.cfg.UserPrefs.Spawn.RolePermission = map[string]string{}
+		}
+		s.cfg.UserPrefs.Spawn.RolePermission[role] = tier
+	}
+	s.cfgMu.Unlock()
+	if err := s.persistConfig(); err != nil {
+		s.logger.Warn("remember role permission failed", "role", role, "err", err)
 	}
 }
 

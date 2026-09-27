@@ -173,9 +173,9 @@ func (s *Server) maybeAutoApprove(id int, approval *nativeApproval) bool {
 	ses := s.sessions[id]
 	expectedCandidateKey := ""
 	expectedSourceEpoch := uint64(0)
-	if ses != nil {
-		expectedCandidateKey = ses.nativeApprovalCandidateKey
-		expectedSourceEpoch = ses.nativeApprovalSourceEpoch
+	if ses != nil && ses.pendingApproval.isNative() {
+		expectedCandidateKey = ses.pendingApproval.CandidateKey
+		expectedSourceEpoch = ses.pendingApproval.SourceEpoch
 	}
 	s.sessionsMu.Unlock()
 	if ses == nil {

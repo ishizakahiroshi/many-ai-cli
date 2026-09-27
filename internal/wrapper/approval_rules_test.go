@@ -223,6 +223,26 @@ func TestRulesFileContentHasIntentOptionalLines(t *testing.T) {
 	}
 }
 
+func TestRulesFileContentDoesNotPrintManyEnvRaw(t *testing.T) {
+	for _, forbidden := range []string{
+		`echo "$MANY_AI_CLI"`,
+		"`$env:MANY_AI_CLI`",
+	} {
+		if strings.Contains(rulesFileContent, forbidden) {
+			t.Errorf("rulesFileContent contains raw environment output guidance %q", forbidden)
+		}
+	}
+	for _, want := range []string{
+		"GetEnvironmentVariable('MANY_AI_CLI')",
+		"`match` / `unset` / `no-match` だけを出力する",
+		"環境変数の全件列挙をしない",
+	} {
+		if !strings.Contains(rulesFileContent, want) {
+			t.Errorf("rulesFileContent missing safe environment check guidance %q", want)
+		}
+	}
+}
+
 func TestInjectRulesClaudeImportIsIdempotent(t *testing.T) {
 	withTempHome(t)
 	path := filepath.Join(t.TempDir(), "CLAUDE.md")

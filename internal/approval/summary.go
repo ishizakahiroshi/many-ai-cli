@@ -40,7 +40,8 @@ var (
 	}
 	// findSideEffectRe catches find actions that can mutate files even when the
 	// command begins with the low-risk "find " prefix.
-	findSideEffectRe   = regexp.MustCompile(`(?i)\bfind\b[^\n]*\s-(?:exec|execdir|ok|okdir|delete)\b`)
+	findSideEffectRe   = regexp.MustCompile(`(?i)\bfind\b[^\n]*\s-(?:exec|execdir|ok|okdir|delete|fls|fprint|fprint0|fprintf)\b`)
+	gitOutputOptionRe  = regexp.MustCompile(`(?i)\bgit\b[^\n]*\s--output\b`)
 	gitBranchCommandRe = regexp.MustCompile(`(?i)^\s*git\s+branch(?:\s|$)`)
 )
 
@@ -83,9 +84,10 @@ func ClassifyRisk(command string) proto.ApprovalRiskTier {
 		}
 	}
 	// Read-only prefixes are not enough to classify shell syntax. A redirect,
-	// command substitution, find side-effect action, or branch mutation makes
-	// the command manual even when it starts with cat, ls, or git branch.
-	if HasWriteRedirect(value) || IsGitBranchMutation(value) || findSideEffectRe.MatchString(value) || strings.Contains(value, "$(") || strings.Contains(value, "`") {
+	// command substitution, process substitution, find/git file write option,
+	// or branch mutation makes the command manual even when it starts with cat,
+	// ls, or git branch.
+	if HasWriteRedirect(value) || IsGitBranchMutation(value) || findSideEffectRe.MatchString(value) || gitOutputOptionRe.MatchString(value) || strings.Contains(value, "$(") || strings.Contains(value, "`") || strings.Contains(value, "<(") || strings.Contains(value, "=(") {
 		return proto.ApprovalRiskMid
 	}
 	lowPrefixes := []string{
@@ -154,7 +156,14 @@ func splitRiskSegments(value string) []string {
 		}
 		switch ch {
 		case '\\':
-			escaped = true
+			// In Windows paths or unquoted commands, a backslash immediately followed
+			// by a shell connector (&, |, ;) should not escape that connector, so that
+			// commands like "dir C:\&calc.exe" are safely segmented.
+			if i+1 < len(value) && (value[i+1] == '&' || value[i+1] == '|' || value[i+1] == ';') {
+				// leave escaped as false
+			} else {
+				escaped = true
+			}
 		case '\'', '"':
 			quote = ch
 		case ';', '\n', '|':
@@ -206,7 +215,16 @@ func HasWriteRedirect(command string) bool {
 			continue
 		}
 		switch ch {
-		case '\\', '^':
+		case '\\':
+			// A backslash after a path character is a Windows separator, so
+			// "dir C:\>out" is a redirect. A backslash after whitespace still
+			// escapes the next character, as in "cat \> file".
+			if i+1 < len(command) && command[i+1] == '>' && backslashIsPathSeparator(command, i) {
+				// leave escaped false
+			} else {
+				escaped = true
+			}
+		case '^':
 			escaped = true
 		case '\'', '"':
 			quote = ch
@@ -217,6 +235,21 @@ func HasWriteRedirect(command string) bool {
 		}
 	}
 	return false
+}
+
+// backslashIsPathSeparator reports whether the backslash at index is a
+// Windows path separator. A leading backslash, or one that follows
+// whitespace or a shell connector, is a POSIX escape instead.
+func backslashIsPathSeparator(command string, index int) bool {
+	if index <= 0 {
+		return false
+	}
+	switch command[index-1] {
+	case ' ', '\t', '\n', '\r', ';', '|', '&', '(', ')', '<', '>':
+		return false
+	default:
+		return true
+	}
 }
 
 func safeRedirectTarget(command string, redirectIndex int) bool {

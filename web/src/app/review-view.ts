@@ -2,6 +2,8 @@
 import { token } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { resolveCurrentReviewLoad } from './review-load-generation.js';
+// commit モーダルと push の確認は Git タブと同じ 1 実装を使う（複製しない）。
+import { GitCommitModal, runGitPush, updatePushButtonLabel } from './git-view.js';
 import { probe } from '../debug/probe.js';
 
 // ---- Review view ----
@@ -116,6 +118,9 @@ import { probe } from '../debug/probe.js';
       this.turns = [];
       this.summary = null;
       this.branch = '';
+      // /api/git-status の生データ。Ship（commit / push）の活性判定と、
+      // commit モーダルのヘッダ表示に使う（Git タブと同じ情報源）。
+      this.workingTree = null;
       this.filterText = '';
       this.selectedPath = null;
       this.loading = false;
@@ -127,7 +132,7 @@ import { probe } from '../debug/probe.js';
 
       this.els = {};
       this._renderShell();
-      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
     }
 
     _renderShell() {
@@ -156,6 +161,8 @@ import { probe } from '../debug/probe.js';
             <button class="git-icon-btn" data-mode="sbs">${_esc(_gt('review_view_sbs', 'Side by side'))}</button>
           </div>
           <button class="git-icon-btn" data-refresh title="${_esc(_gt('review_view_refresh', 'Refresh'))}">↻</button>
+          <button class="git-icon-btn" data-push-btn title="${_esc(_gt('git_view_push', 'Push'))}" disabled>↥ push</button>
+          <button class="git-commit-all-btn" data-commit-all-btn disabled>${_esc(_gt('git_commit_all', 'Commit all'))}</button>
           ${closeBtnHtml}
         </div>
         <div class="review-body">
@@ -178,6 +185,28 @@ import { probe } from '../debug/probe.js';
       this.els.tree      = root.querySelector('[data-tree]');
       this.els.filter    = root.querySelector('[data-filter]');
       this.els.modeBtns  = Array.from(root.querySelectorAll('[data-mode]'));
+      this.els.pushBtn   = root.querySelector('[data-push-btn]');
+      this.els.commitBtn = root.querySelector('[data-commit-all-btn]');
+
+      // Commit all モーダルは Git タブと共有の 1 実装（git-view.ts の
+      // GitCommitModal）。ここでは DOM の置き場所とコンテキストだけを渡す。
+      this.commitModal = new GitCommitModal(root, {
+        getSessionId: () => this.sessionId,
+        getToken: () => this.token,
+        getContext: () => {
+          const wt = this.workingTree || {};
+          const summary = wt.summary || {};
+          return {
+            repo: wt.repo_name || this.gitRoot || '',
+            branch: wt.branch || this.branch || 'HEAD',
+            filesChanged: summary.files_changed || 0,
+            hasChanges: !!wt.has_changes,
+          };
+        },
+        onCommitted: () => this.refresh(),
+      });
+      this.els.commitBtn.addEventListener('click', () => this.commitModal.open());
+      this.els.pushBtn.addEventListener('click', () => this._gitPush());
 
       this.els.filter.addEventListener('input', (e: any) => {
         this.filterText = e.target.value || '';
@@ -186,13 +215,13 @@ import { probe } from '../debug/probe.js';
       this.els.scope.addEventListener('change', (e: any) => {
         this.scope = e.target.value || 'worktree';
         this.selectedPath = null;
-        this.load().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+        this.load().catch((err: any) => this._showError(this._errorMessage(err)));
       });
       this.els.modeBtns.forEach((b: any) => {
         b.addEventListener('click', () => this._setViewMode(b.dataset.mode));
       });
       root.querySelector('[data-refresh]').addEventListener('click', () => {
-        this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+        this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
       });
       root.querySelector('[data-close]')?.addEventListener('click', () => {
         try { this.opts.onClose(); } catch (err) { console.warn('[ReviewView] onClose failed:', err); }
@@ -226,7 +255,10 @@ import { probe } from '../debug/probe.js';
             const res = await fetch(`${endpoint}?${params.toString()}`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok || data.ok === false) {
-              throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+              const err: any = new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
+              // error コードを保持しておき、not_git_repo だけ専用文言に差し替える（_errorMessage）。
+              err.code = data && data.error;
+              throw err;
             }
             return data;
           },
@@ -251,8 +283,66 @@ import { probe } from '../debug/probe.js';
       // the turn list; otherwise its slower response can overwrite this view.
       this.loadGeneration++;
       this.selectedPath = null;
+      const statusPromise = this._fetchStatus();
       await this._loadTurns();
       await this.load();
+      await statusPromise;
+    }
+
+    // Ship（commit / push）の活性判定とモーダルのヘッダ表示に使う working tree の
+    // 状態。Review の scope が turn でも commit 対象は常に working tree 全体なので、
+    // diff ではなく Git タブと同じ /api/git-status を情報源にする。
+    async _fetchStatus() {
+      const sessionAtStart = String(this.sessionId);
+      try {
+        const params = new URLSearchParams({
+          session: sessionAtStart,
+          token: this.token,
+        });
+        const res = await fetch(`/api/git-status?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (String(this.sessionId) !== sessionAtStart) return;
+        this.workingTree = (!res.ok || data.ok === false) ? null : data;
+      } catch (_) {
+        this.workingTree = null;
+      } finally {
+        this._renderShipButtons();
+      }
+    }
+
+    _renderShipButtons() {
+      const wt = this.workingTree;
+      const changed = !!(wt && wt.has_changes);
+      if (this.els.commitBtn) {
+        this.els.commitBtn.disabled = !changed;
+        this.els.commitBtn.title = changed
+          ? _gt('review_commit_all_title', 'Open the same Commit all dialog as the Git tab. Push is not run.')
+          : _gt('git_commit_no_changes', 'No changes');
+      }
+      updatePushButtonLabel(this.els.pushBtn, wt);
+    }
+
+    async _gitPush() {
+      const btn = this.els.pushBtn;
+      if (!btn || btn.disabled) return;
+      const wt = this.workingTree || {};
+      // 確認の作法は Git タブと同じ（runGitPush）。Review 用の確認は作らない。
+      await runGitPush({
+        sessionId: this.sessionId,
+        token: this.token,
+        branch: wt.branch || this.branch || 'HEAD',
+        ahead: wt.ahead,
+        onStart: () => {
+          btn.dataset.busy = '1';
+          btn.disabled = true;
+          btn.textContent = '…';
+        },
+        onSuccess: () => this._fetchStatus(),
+        onSettled: () => {
+          delete btn.dataset.busy;
+          this._renderShipButtons();
+        },
+      });
     }
 
     setSessionId(newSid: any) {
@@ -260,16 +350,17 @@ import { probe } from '../debug/probe.js';
       if (String(this.sessionId) === String(newSid)) return;
       this.sessionId = newSid;
       this.scope = 'worktree';
-      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
     }
 
     setScope(turnNo: any) {
       const turn = Number(turnNo || 0);
       this.scope = turn > 0 ? `turn:${turn}` : 'worktree';
-      this.refresh().catch((err: any) => this._showError(err && err.message ? err.message : String(err)));
+      this.refresh().catch((err: any) => this._showError(this._errorMessage(err)));
     }
 
     dispose() {
+      try { this.commitModal.dispose(); } catch (_) {}
       try { this.container.innerHTML = ''; } catch (_) {}
     }
 
@@ -293,6 +384,15 @@ import { probe } from '../debug/probe.js';
       this.els.diffPane.innerHTML = `<div class="review-message error">${_esc(msg)}</div>`;
       if (this.els.tree) this.els.tree.innerHTML = '';
       if (this.els.stat) this.els.stat.textContent = '—';
+    }
+
+    // not_git_repo は Hub 側の生の git エラー文言（sanitizeGitErrMsg）をそのまま出さず、
+    // 「このフォルダは git 管理下にない」旨の案内に差し替える。それ以外はメッセージをそのまま使う。
+    _errorMessage(err: any): string {
+      if (err && err.code === 'not_git_repo') {
+        return _gt('review_not_git_repo', 'This folder is not tracked by git, so no diff can be shown.');
+      }
+      return err && err.message ? err.message : String(err);
     }
 
     async _loadTurns() {

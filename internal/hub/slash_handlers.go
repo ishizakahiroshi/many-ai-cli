@@ -19,10 +19,8 @@ func (s *Server) invalidateSlashCache(provider string) {
 	s.slashCmdMu.Unlock()
 }
 
-// slashCmdSourcesPatch keeps omitted provider fields intact. The settings UI
-// predates the opencode/grok fields, so decoding directly into the complete
-// struct would turn those omitted fields into empty strings and overwrite
-// user-configured sources.
+// slashCmdSourcesPatch keeps omitted provider fields intact so partial or older
+// clients cannot overwrite user-configured sources with empty strings.
 type slashCmdSourcesPatch struct {
 	Claude      *string `json:"claude"`
 	Codex       *string `json:"codex"`
@@ -283,5 +281,16 @@ func (s *Server) handleUsageLinkDefaults(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	defaults := s.usageLinkCache.get(config.DefaultUsageLinkSource)
+	writeJSON(w, defaults)
+}
+
+// handleInstallLinkDefaults は全 provider の公式インストール手順 URL を返す。
+// GitHub の resources/install-links/defaults.json から TTL 24h でキャッシュして提供し、
+// 取得失敗時は空の map を返す（静的フォールバックは持たない）。
+func (s *Server) handleInstallLinkDefaults(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodGet) {
+		return
+	}
+	defaults := s.installLinkCache.get(config.DefaultInstallLinkSource)
 	writeJSON(w, defaults)
 }

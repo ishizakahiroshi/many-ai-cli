@@ -1,6 +1,6 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-08-19(水) 19:36 — **本ファイルを索引へ再編した。** 常時ロード分が 5 週間で 129 → 269 行に倍増していたため、日付入りの「制定」節 7 本の本文を正本（コード・検査スクリプト・台帳）へ移し、ここには索引の 1 行ずつだけを残した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
+> 最終更新: 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
 
 > **このファイルは索引であって本文ではない。** 全 AI セッションで全文がロードされるので、本文を置くと全員のコンテキストを毎回消費する。詳細は各行が指す正本を読む。タスク別の詳細は `CLAUDE/*.md`。
 
@@ -8,7 +8,7 @@
 >
 > This development guide is maintained in **Japanese only** — the Japanese text above and below is the authoritative version. There is no English edition of this file. (The user-facing README *is* available in English: [README.md](README.md), with [README.ja.md](README.ja.md) and [README.vi.md](README.vi.md).)
 >
-> [CLAUDE.vi.md](CLAUDE.vi.md), [docs/README.vi.md](docs/README.vi.md) and the `docs/manual_*.vi.md` files are a **point-in-time snapshot (2026-08-15)** kindly contributed by a community translator. They are **no longer kept in sync** with this guide, so please read them as background rather than as current rules, and check the Japanese original before acting on anything. This does **not** apply to the Vietnamese **UI** locale (`web/src/i18n/vi.json`), which is a shipped feature and is maintained normally.
+> [CLAUDE.vi.md](CLAUDE.vi.md), [docs/vi/README.md](docs/vi/README.md) and the `docs/vi/manual_*.vi.md` files are a **point-in-time snapshot (2026-08-15)** kindly contributed by a community translator. They are **no longer kept in sync** with this guide, so please read them as background rather than as current rules, and check the Japanese original before acting on anything. This does **not** apply to the Vietnamese **UI** locale (`web/src/i18n/vi.json`), which is a shipped feature and is maintained normally.
 >
 > If you work in another language, we're sorry to ask — please translate as needed on your side (a machine translation of this file is usually enough). Translation contributions are genuinely welcome; we just can't promise to keep them in step with the Japanese original, so anything merged will be treated the same way: a dated snapshot.
 
@@ -16,7 +16,7 @@
 
 **many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
-**設計書（正本）**: [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md)。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
+**仕様の正本**は README（公開仕様）とソースコード（実装仕様）。v0.3.x の設計書は [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) へ退避した（非公開・履歴）。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
 
 v0.8.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプロキシを撤去、v0.5.0 で `setup` / `doctor` / autoapproval、v0.6.0 で transcript ベースのチャット本文、v0.7.0 で承認同一性の一本化とトレイ常駐、v0.8.0 で引き継ぎ看板・複数サブスクリプション・relay ループ・Command Code provider を追加した。
 
@@ -70,21 +70,21 @@ docs/local/               設計書・plan 等（非公開）
 | ルール | 正本（本文はここ） | 機械検査 |
 |---|---|---|
 | 承認の同一性は 1 本（`candidateKey` + `sourceEpoch`）だけ。誤表示を踏んでも抑止を足さない | `internal/hub/approval_identity.go` / `web/src/app/approval-answered.ts` | `TestApprovalSuppressionStateIsSingleSource` |
-| 承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_marker_transcript.go` | `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
+| 承認の表示は Hub が持つ保留中の記録を描くだけ。画面は端末の文字から承認を作らず、「保留中」も記録からだけ出す。承認マーカーの供給元はセッションに 1 つ（claude / codex は CLI のトランスクリプト、他は VT ミラー） | `internal/hub/approval_record.go` の冒頭 / `internal/hub/approval_marker_transcript.go` | `scripts/check-approval-display-source.mjs`（Validate CI） / `internal/hub/approval_display_guard_test.go` / `TestReplayApprovalSkipsVTMarkerWhenTranscriptIsSource` |
 | 複数サブスクリプションは設定ディレクトリを env で切るだけ。token を持たない | `internal/subscription/adapter.go` のパッケージ doc | `TestLiveSessionAuthIsNeverSwapped` ほか 2 件 |
 | auto 選択は spawn 時の round-robin だけ。残量を見て自動で別契約へ乗り換えない | `internal/hub/subscription.go` の `pickAutoSubscription` 冒頭 | `TestAutoSubscriptionNeverConsultsUsage` |
 | 利用者のファイルへ書く機能は「次回起動時の回収」まで設計する | `internal/doctor/residue.go` の冒頭 | `many-ai-cli doctor` の置き去り検査 / `scripts/check-approval-rules-residue.mjs`（commit 混入） |
-| 調査用の観測コードは同じコミットで `instrumentation.json` へ登録する | `scripts/check-instrumentation.mjs` の冒頭 | 同スクリプト（Validate CI） |
+| 調査用の観測コードは同じコミットで `instrumentation.json` へ登録し、リリース成果物には入れない（build tag オプトイン＋成果物検査） | `scripts/check-instrumentation.mjs` の冒頭 / `web/src/debug/probe.ts` / `docs/local/archive/v0.8.x/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs`（Validate CI） / `scripts/check-artifact-clean.mjs` |
 | 版数を手で直す場所は無い（タグが単一ソース。古いままが正常） | `scripts/check-version-sources.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | `resources/` は `main` へ push した時点で全ユーザーへ live 配信される | [`resources/README.md`](resources/README.md) | `scripts/check-slash-commands.mjs` |
 | profile へ持ち込む設定は additive のみ。credential は運ばず、書くのは自分のツリーの中だけ | `internal/subscription/seed.go` のパッケージ doc | `TestSeedIsAdditiveOnly` / `TestSeedNeverCarriesCredentials` |
 | 本ファイルを索引のまま保つ（本文を書き戻さない） | `scripts/check-claude-md.mjs` の冒頭 | 同スクリプト（Validate CI） |
 | 代替画面を CLI が全面管理している端末へこちらのテキストを差し込まない（消せない残骸になる）／マーカーは端末の折り返しで分断される前提で照合する（連続バイト完全一致にしない）／端末出力を溜めて捨てる状態機械を置かない（再描画フレームに CLOSE が描かれないことがある） | `web/src/app/hub-marker-filter.ts` の案 H・案 I・案 J | `hub-marker-filter-fixtures.ts` の案 H 5 件・案 I 8 件・案 J 6 件 |
 | 全画面オーバーレイには wheel 除外クラス `.aac-wheel-overlay` を付ける（端末に重なるだけのポップオーバーは `data-wheel-native`） | `web/src/app/terminal.ts` の `isModalOverlayOpen()` | `scripts/check-wheel-overlays.mjs`（Validate CI） |
+| 画面の JS を読み込んだ瞬間に、循環 import の相手の変数を同期で読まない（TDZ で評価が止まり「読み込み中...」のまま固まる。遅らせるなら `queueMicrotask`）。止まったときは黙らず失敗の帯を出す | `web/src/app/boot-guard.ts` の冒頭 / `scripts/check-web-module-init.mjs` の冒頭 | `scripts/check-web-module-init.mjs`（Validate CI） / `web/tests/boot-guard.test.ts` |
 | relay は Hub の状態機械で回し、AI conductor に判断させない。利用者ブランチへは触らない | `internal/hub/relay.go` / `internal/hub/relay_worktree.go` | `TestRelay_*`（`internal/hub/`） |
 | サイドバーの配置は 1 本の木から導く（兄弟順と折りたたみ以外でノードが器を越えない） | `web/src/app/sidebar-tree.ts` | `sidebar-tree-fixtures.ts` |
-| 観測コードはリリース成果物に入れない（build tag オプトイン＋成果物検査） | `web/src/debug/probe.ts` / `docs/local/archive/v0.8.x/plan_instrumentation-probe-lifecycle.md` | `scripts/check-instrumentation.mjs` / `scripts/check-artifact-clean.mjs` |
-| 引き継ぎ看板は入れてよいものだけを型で受け、それ以外は入れる口を作らない（伏字化は最後の網） | `internal/handoff/handoff.go` の冒頭コメント | `internal/handoff/handoff_test.go` の allowlist フィールド固定テスト |
+| 引き継ぎ看板とサブエージェントの木は、入れてよいものだけを型で受け、それ以外は入れる口を作らない。メモ本文は Record に入れず、記録済みパスを利用者が明示して開いた場合だけ Hub の読み取り専用 Markdown ビューアが表示できる。会話ログは引き続き後継のツールだけが開く | `internal/handoff/handoff.go` の冒頭コメント / `internal/proto/messages.go` の `SubagentNode` | `internal/handoff/handoff_test.go` の allowlist フィールド固定テスト / `TestSubagentNodeFieldsAreTheAllowlist` |
 | 残量ソースは provider 直書きの switch/slice ではなく 1 本の表で持つ。問い合わせて取る経路は作らない（`ReadUsage` を Adapter に足さない） | `internal/subscription/usage_source.go` | `internal/subscription/usage_source_test.go` |
 
 **新しいルールを足したくなったら、まずこの表に 1 行足せる形にできないかを考える。** できないもの（機械検査も、決まったファイルも無いもの）だけが本文を持ってよい。
@@ -107,6 +107,7 @@ docs/local/               設計書・plan 等（非公開）
 | D-10 | agenttrail 型のエージェント観察ボード（`PLAN.md` 規約 + ファイル監視 + hook 注入）を取り込む（軸が承認管理と違い、宣言と観測の突き合わせは relay 内で済む・2026-08-30 決定） |
 | D-11 | 認証済み Hub token をユーザー等価より狭める（capability token・遠隔 deny・PIN 必須化・query token 廃止。信頼境界は「token 保持者 = OS ユーザー本人」・2026-09-01 決定） |
 | D-12 | orchestration 子の全許可バイパスを既定 off にする（`child_full_bypass` を既定 `false` へ。relay が無人で回らなくなる・spawn 確認は既に必須・2026-09-08 決定） |
+| D-13 | Command Code Desktop 由来の 4 案（内蔵ブラウザ + Design mode / Taste 学習の Hub 再実装 / Desktop へ開く導線 / 活動タイムライン専用ペイン。どれも 1 エージェントを深く使う面で承認管理の軸に乗らない・2026-09-20 決定） |
 
 **共通する却下理由**（個別に蒸し返さないため 1 度だけ書く）: 候補の人気・伸び・他社の対応状況・利用者増の見込みを根拠にしない。本ツールの規模（star 6 / npm 週次 11・2026-08-14 実測）では、それらを根拠に採否を決める枠組みが成立しない。起点は「作者が実際に使っていて、日常の並列運用に入っているか」。
 
@@ -145,8 +146,9 @@ docs/local/               設計書・plan 等（非公開）
 
 | 項目 | パス |
 |------|------|
-| 設計書 v0.3.0（現行・正本） | [docs/v0.3.x-many-ai-cli-design.md](docs/v0.3.x-many-ai-cli-design.md) |
-| 設計書 v0.2.0 / v1（履歴） | [docs/v0.2.x-any-ai-cli-design.md](docs/v0.2.x-any-ai-cli-design.md) / [docs/local/archive/v0.1.3/cli-popup-design-v1.md](docs/local/archive/v0.1.3/cli-popup-design-v1.md) |
+| **どのファイルが何をして、どのテーブルを読み書きするか**（探す前にここ） | `.omitnix/index.json`。全ファイルの索引とテーブル逆引き。**解析できなかったファイルも名前と理由付きで載る**ので「索引に無い」と「読めなかった」を取り違えない。参照 0 件は「未使用」ではない。**`generated.commit` が HEAD と違えば索引はその commit 時点のもの**なので、古いまま断定せず `omitnix` で作り直すか、古いことを添えて答える |
+| 設計書 v0.3.x（履歴） | [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) |
+| 設計書 v0.2.0 / v1（履歴） | [docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md](docs/local/archive/v0.2.2/v0.2.x-any-ai-cli-design.md) / [docs/local/archive/v0.1.3/v0.1.x-any-ai-cli-design.md](docs/local/archive/v0.1.3/v0.1.x-any-ai-cli-design.md) |
 | Codex 用補足 | [AGENTS.md](AGENTS.md)（ローカル補足があれば `AGENTS.local.md`） |
 | Gemini 用補足 | [GEMINI.md](GEMINI.md)（**wrap 対象外**。本リポジトリで Gemini CLI を開発補助に使う場合の手引き） |
 

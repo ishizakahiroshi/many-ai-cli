@@ -1,19 +1,43 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, showToast, ti18n, token } from './util.js';
-import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, setUserPref, setVoiceEngine } from './user-prefs.js';
-import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, sessions, terminals } from './state.js';
+import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
+import { DEFAULT_USAGE_LINKS, DEFAULT_VOICE_GRACE_SEC, FONTSIZE_MAP, STORAGE_DESKTOP_NOTIFY_ENABLED_KEY, STORAGE_DISPLAY_LOCKED_MODE_KEY, STORAGE_FONTSIZE_KEY, STORAGE_LANG_KEY, STORAGE_MOBILE_INPUT_TOOLS_KEY, STORAGE_PC_INPUT_TOOLS_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_NOTIFY_SOUND_ENABLED_KEY, STORAGE_NOTIFY_SOUND_TYPE_KEY, STORAGE_PUSH_NOTIFY_ENABLED_KEY, STORAGE_QUICK_CMD_1_KEY, STORAGE_QUICK_CMD_2_KEY, STORAGE_QUICK_CMD_3_KEY, STORAGE_QUICK_CMD_4_KEY, STORAGE_QUICK_CMD_5_KEY, STORAGE_QUICK_CMD_1_SHOW_KEY, STORAGE_QUICK_CMD_2_SHOW_KEY, STORAGE_QUICK_CMD_3_SHOW_KEY, STORAGE_QUICK_CMD_4_SHOW_KEY, STORAGE_QUICK_CMD_5_SHOW_KEY, STORAGE_THEME_KEY, STORAGE_TRIGGER_ENABLED_KEY, STORAGE_TRIGGER_PHRASE_KEY, STORAGE_USAGE_LINK_CLAUDE_KEY, STORAGE_USAGE_LINK_CODEX_KEY, STORAGE_USAGE_LINK_COPILOT_KEY, STORAGE_USAGE_LINK_CURSOR_AGENT_KEY, STORAGE_USAGE_LINK_OLLAMA_KEY, STORAGE_USAGE_LINK_LM_STUDIO_KEY, STORAGE_USAGE_LINK_OPENCODE_KEY, STORAGE_USAGE_LINK_GROK_KEY, STORAGE_USAGE_LINK_COMMAND_CODE_KEY, STORAGE_USAGE_PROBE_MODEL_KEY, STORAGE_VOICE_GRACE_KEY, STORAGE_VOICE_WHISPER_AUTO_STOP_KEY,  STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, STORAGE_WAKE_WORD_ENABLED_KEY, STORAGE_WAKE_WORD_PHRASE_KEY, _putUserPrefsNow, _setNestedValue, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, getVoiceEngine, isTurnEndNotifyEnabled, setTurnEndNotifyEnabled, setUserPref, setVoiceEngine } from './user-prefs.js';
+import { activeSessionId, deriveProjectKeyFromCwd, maybeAutoSwitchToNextApproval, openProjectKey, sessions, terminals } from './state.js';
+import { getDoneSummary } from './done-summary.js';
 import { _userAvatarUrl, _userDisplayName, inputEl, set__userAvatarUrl, set__userDisplayName } from '../app.js';
 import { activateSession, moveSessionToSiblingFront, openDetachedGridForSessions, patchSessionMeta, providerDisplayName, providerIconHtml, render, renderSessionList, safeClassToken, sessionProjectKey, setFaviconEnvBadge, stateLabel } from './session-list.js';
 import { pathPopupEl } from './path-links.js';
-import { TERMINAL_SCROLLBACK_LINES, attachTerminal, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, sendResize } from './terminal.js';
-import { providerApprovalTriggers } from './approval.js';
+import { TERMINAL_SCROLLBACK_LINES, attachTerminal, dismissTerminalReadOverlays, fitTerminalPreservingBottom, refitActiveTerminalAfterLayout, refreshTerminalThemes, sendResize } from './terminal.js';
+import {
+  BUILTIN_XTERM_THEME,
+  MAX_CUSTOM_THEMES,
+  applySurfaceTokens,
+  clearSurfaceTokens,
+  contrastNameJa,
+  deriveCustomTheme,
+  hueBarCss,
+  hueName,
+  hueNameJa,
+  newCustomThemeId,
+  resolveThemeId,
+  setActiveXtermTheme,
+  xtermThemeFromTokens,
+  type CustomTheme,
+  type ThemeMode,
+} from './theme-tokens.js';
+import { defaultKnobs, findCustomTheme, loadCustomThemes, saveCustomThemes } from './custom-themes.js';
 import { MULTI_SCROLLBACK, getMessages } from './chat-history.js';
 import { FilesTabManager } from './files-view.js';
 import { fetchPushStatus, getPushSubscription, isLikelyIOSBrowserTabWithoutStandalone, pushNotificationsSupported, subscribeWebPush, unsubscribeWebPush } from './pwa.js';
 import { setStatusbarEnabled, isStatusbarEnabled, TOGGLEABLE_SEGMENTS, applySegmentVisibility, getSessionAgentInfo } from './token-statusbar.js';
 import { initUsagePanel, refreshUsagePanel } from './usage-panel.js';
-import { setHandoffNotifyThresholdPercent } from './handoff.js';
+import { setHandoffNoteMode, setHandoffNotifyThresholdPercent } from './handoff.js';
+import { applySessionStripMetrics, setSessionStripTab } from './session-strip.js';
+import { VALID_TAB_NAME_LIST } from './project-view-memory.js';
+import { saveProjectView } from './project-view-store.js';
+import { detectSupport } from '../vendor/vtype-core/index.js';
+import type { NVIDIANIMSettingsStatus } from '../types/proto.js';
+import { invalidateSpawnModelGroups } from './spawn-model-groups.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -182,6 +206,28 @@ async function buildSegmentToggles(): Promise<void> {
   }
 }
 
+// ---- 作業終了（running → standby）通知トグル ----
+// user_prefs へは同期しない device-local 設定なので、done-summary-notify-toggle と
+// 違って read-modify-write の PUT は不要（localStorage への setTurnEndNotifyEnabled
+// だけで完結する）。子 plan: plan_ux-notify-palette-review_c1_notify.md 内部 C2。
+
+export function updateTurnEndNotifyToggle(enabled: boolean): void {
+  const toggle = document.getElementById('turn-end-notify-enabled') as HTMLInputElement | null;
+  if (toggle) toggle.checked = enabled;
+}
+
+let _turnEndNotifyToggleAttached = false;
+export function attachTurnEndNotifyToggle(): void {
+  if (_turnEndNotifyToggleAttached) return;
+  const toggle = document.getElementById('turn-end-notify-enabled') as HTMLInputElement | null;
+  if (!toggle) return;
+  _turnEndNotifyToggleAttached = true;
+  toggle.checked = isTurnEndNotifyEnabled();
+  toggle.addEventListener('change', () => {
+    setTurnEndNotifyEnabled(toggle.checked);
+  });
+}
+
 // ---- タスク完了サマリー通知トグル ----
 
 export function updateDoneSummaryNotifyToggle(enabled: boolean): void {
@@ -312,11 +358,7 @@ export function showDesktopApprovalNotification(sessionId) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const sess = sessions.get(sessionId);
   if (!sess) return;
-  const isCurrentVisible =
-    document.visibilityState === 'visible' &&
-    sessionId === activeSessionId &&
-    !document.hidden;
-  if (isCurrentVisible) return;
+  if (isSessionCurrentlyViewed(sessionId)) return;
   const provider = providerDisplayName(sess.provider) || sess.provider || '';
   const title = sess.label ? `${provider} #${sessionId} [${sess.label}]` : `${provider} #${sessionId}`;
   const bodySource = sess.last_message || sess.first_message || sess.cwd || '';
@@ -325,6 +367,58 @@ export function showDesktopApprovalNotification(sessionId) {
     const n = new Notification(title, {
       body,
       tag: `many-ai-cli-approval-${sessionId}`,
+      icon: '/icon.svg',
+      badge: '/icon.svg',
+      requireInteraction: false,
+    });
+    n.onclick = () => {
+      window.focus();
+      activateSession(sessionId);
+      n.close();
+    };
+  } catch (_) {}
+}
+
+// 表示中タブで今まさに見ているセッションかどうか。showDesktopApprovalNotification が
+// 内々に使っていた判定を切り出し、作業終了通知（shouldNotifyTurnEnd の入力）とも
+// 共有する。
+export function isSessionCurrentlyViewed(sessionId: number): boolean {
+  return document.visibilityState === 'visible' && sessionId === activeSessionId && !document.hidden;
+}
+
+// 完了サマリー本文の先頭 1 文だけを取り出す。日本語の句点、英語のピリオド/感嘆符/
+// 疑問符のいずれかで区切る。区切りが見つからなければ全文を返す（呼び出し側で長さを
+// 絞る）。
+function firstSentenceOf(text: string): string {
+  const trimmed = String(text || '').trim();
+  const m = trimmed.match(/^[^。.!?！？]*[。.!?！？]/);
+  return (m ? m[0] : trimmed).trim();
+}
+
+// ---- 作業終了（running → standby）通知 ----
+// 子 plan: docs/local/plan_ux-notify-palette-review_c1_notify.md 内部 C2。
+// showDesktopApprovalNotification と同じ形。tag だけ別にして、承認通知とは別枠で
+// 通知が積み上がる/置き換わるようにする。
+export function showDesktopTurnEndNotification(sessionId: number, runningStartedAt?: number): void {
+  if (!desktopNotificationsEnabled()) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const sess = sessions.get(sessionId);
+  if (!sess) return;
+  if (isSessionCurrentlyViewed(sessionId)) return;
+  const provider = providerDisplayName(sess.provider) || sess.provider || '';
+  const title = sess.label ? `${provider} #${sessionId} [${sess.label}]` : `${provider} #${sessionId}`;
+  // 完了サマリーは会話だけのターンでは届かないことがあり、届くときも状態の変化より
+  // 遅れることがある（未確認）。今回の running 開始より新しいサマリーだけを使う。
+  const summary = getDoneSummary(sessionId);
+  const summaryIsFresh = !!summary && runningStartedAt !== undefined && Date.parse(summary.at || '') >= runningStartedAt;
+  const summaryText = summaryIsFresh ? firstSentenceOf(summary.text) : '';
+  const bodySource = summaryText || sess.last_message || '';
+  const prefix = t('turn_end_notification_prefix');
+  const body = (bodySource ? `${prefix} ${bodySource}` : prefix).replace(/\s+/g, ' ').trim().slice(0, 160);
+  try {
+    const n = new Notification(title, {
+      body,
+      tag: `many-ai-cli-turn-end-${sessionId}`,
       icon: '/icon.svg',
       badge: '/icon.svg',
       requireInteraction: false,
@@ -890,13 +984,228 @@ export function filterFirstMessage(text) {
   return trimmed.replace(/@\S+/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export function applyTheme(theme) {
-  // 'blue' は廃止済み。既存設定が 'blue' の場合は既定テーマにフォールバック
-  const t = (theme === 'dark' || theme === 'light') ? theme : 'light';
-  document.documentElement.setAttribute('data-theme', t);
-  const sel = document.getElementById('theme-select');
-  if (sel) sel.value = t;
-  try { localStorage.setItem(STORAGE_THEME_KEY, t); } catch (_) {}
+let _themeAdding = false;
+
+function langIsJa(): boolean {
+  return (localStorage.getItem(STORAGE_LANG_KEY) || 'ja') === 'ja';
+}
+
+function hueLabelText(h: number, mode: ThemeMode): string {
+  return langIsJa() ? hueNameJa(h, mode) : hueName(h, mode);
+}
+
+function contrastLabelText(c: number): string {
+  return langIsJa() ? contrastNameJa(c) : String(c);
+}
+
+function paintHueBar(id: string, mode: ThemeMode): void {
+  const el = document.getElementById(id);
+  if (el) el.style.background = hueBarCss(mode);
+}
+
+function setKnobLabels(kind: 'custom' | 'new', mode: ThemeMode, hue: number, contrast: number): void {
+  const hueLab = document.getElementById(kind + '-theme-hue-label');
+  const conLab = document.getElementById(kind + '-theme-contrast-label');
+  if (hueLab) hueLab.textContent = hueLabelText(hue, mode);
+  if (conLab) conLab.textContent = contrastLabelText(contrast);
+  paintHueBar(kind + '-theme-hue-bar', mode);
+}
+
+function rebuildThemeSelect(selected: string): void {
+  const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+  if (!sel) return;
+  const customs = loadCustomThemes();
+  const id = resolveThemeId(selected, customs);
+  sel.innerHTML = '<option value="light">Light</option><option value="dark">Dark</option>';
+  for (const c of customs) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  }
+  sel.value = id;
+}
+
+function readNewThemeKnobs(): { mode: ThemeMode; hue: number; contrast: number } {
+  const baseEl = document.getElementById('new-theme-base') as HTMLSelectElement | null;
+  const hueEl = document.getElementById('new-theme-hue') as HTMLInputElement | null;
+  const conEl = document.getElementById('new-theme-contrast') as HTMLInputElement | null;
+  const mode: ThemeMode = baseEl?.value === 'light' ? 'light' : 'dark';
+  return { mode, hue: Number(hueEl?.value || defaultKnobs(mode).hue), contrast: Number(conEl?.value || defaultKnobs(mode).contrast) };
+}
+
+function previewNewTheme(): void {
+  const knobs = readNewThemeKnobs();
+  const tokens = deriveCustomTheme(knobs.mode, knobs.hue, knobs.contrast);
+  applySurfaceTokens(tokens);
+  setActiveXtermTheme(xtermThemeFromTokens(tokens));
+  document.documentElement.setAttribute('data-theme', knobs.mode);
+  setKnobLabels('new', knobs.mode, knobs.hue, knobs.contrast);
+  try { refreshTerminalThemes(); } catch (_) {}
+}
+
+function syncThemeEditor(): void {
+  const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+  const editor = document.getElementById('custom-theme-editor');
+  const addForm = document.getElementById('custom-theme-add');
+  const addBtn = document.getElementById('theme-add-btn') as HTMLButtonElement | null;
+  const hint = document.getElementById('theme-hint');
+  if (!sel || !editor || !addForm) return;
+  if (_themeAdding) {
+    editor.hidden = true;
+    addForm.hidden = false;
+    if (addBtn) addBtn.hidden = true;
+    sel.disabled = true;
+    if (hint) hint.textContent = t('settings_theme_hint_add');
+    const knobs = readNewThemeKnobs();
+    setKnobLabels('new', knobs.mode, knobs.hue, knobs.contrast);
+    return;
+  }
+  sel.disabled = false;
+  if (addBtn) addBtn.hidden = false;
+  addForm.hidden = true;
+  const custom = findCustomTheme(sel.value);
+  if (custom) {
+    editor.hidden = false;
+    const nameEl = document.getElementById('custom-theme-name') as HTMLInputElement | null;
+    const hueEl = document.getElementById('custom-theme-hue') as HTMLInputElement | null;
+    const conEl = document.getElementById('custom-theme-contrast') as HTMLInputElement | null;
+    if (nameEl) nameEl.value = custom.name;
+    if (hueEl) hueEl.value = String(custom.hue);
+    if (conEl) conEl.value = String(custom.contrast);
+    setKnobLabels('custom', custom.mode, custom.hue, custom.contrast);
+    if (hint) hint.textContent = t('settings_theme_hint_custom');
+  } else {
+    editor.hidden = true;
+    if (hint) hint.textContent = t('settings_theme_hint');
+  }
+}
+
+export function applyTheme(theme, opts?: { rebuild?: boolean }) {
+  const customs = loadCustomThemes();
+  const id = resolveThemeId(String(theme || ''), customs);
+  const custom = findCustomTheme(id, customs);
+  if (custom) {
+    const tokens = deriveCustomTheme(custom.mode, custom.hue, custom.contrast);
+    applySurfaceTokens(tokens);
+    setActiveXtermTheme(xtermThemeFromTokens(tokens));
+    document.documentElement.setAttribute('data-theme', custom.mode);
+  } else {
+    clearSurfaceTokens();
+    setActiveXtermTheme(BUILTIN_XTERM_THEME);
+    document.documentElement.setAttribute('data-theme', id === 'dark' ? 'dark' : 'light');
+  }
+  if (opts?.rebuild !== false) rebuildThemeSelect(id);
+  const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+  if (sel) sel.value = id;
+  try { localStorage.setItem(STORAGE_THEME_KEY, id); } catch (_) {}
+  try { refreshTerminalThemes(); } catch (_) {}
+  if (!_themeAdding) syncThemeEditor();
+}
+
+function patchCustomTheme(id: string, patch: Partial<CustomTheme>): void {
+  const list = loadCustomThemes();
+  const idx = list.findIndex((c) => c.id === id);
+  if (idx < 0) return;
+  list[idx] = { ...list[idx], ...patch };
+  saveCustomThemes(list);
+}
+
+function bindCustomThemeControls(): void {
+  const addBtn = document.getElementById('theme-add-btn');
+  const cancelBtn = document.getElementById('theme-cancel-btn');
+  const saveBtn = document.getElementById('theme-save-btn');
+  const deleteBtn = document.getElementById('theme-delete-btn');
+  const nameEl = document.getElementById('custom-theme-name') as HTMLInputElement | null;
+  const hueEl = document.getElementById('custom-theme-hue') as HTMLInputElement | null;
+  const conEl = document.getElementById('custom-theme-contrast') as HTMLInputElement | null;
+  const newNameEl = document.getElementById('new-theme-name') as HTMLInputElement | null;
+  const newBaseEl = document.getElementById('new-theme-base') as HTMLSelectElement | null;
+  const newHueEl = document.getElementById('new-theme-hue') as HTMLInputElement | null;
+  const newConEl = document.getElementById('new-theme-contrast') as HTMLInputElement | null;
+
+  addBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const current = findCustomTheme(sel?.value || '');
+    const mode: ThemeMode = current?.mode || (sel?.value === 'light' ? 'light' : 'dark');
+    const knobs = defaultKnobs(mode);
+    if (newBaseEl) newBaseEl.value = mode;
+    if (newHueEl) newHueEl.value = String(knobs.hue);
+    if (newConEl) newConEl.value = String(knobs.contrast);
+    if (newNameEl) newNameEl.value = '';
+    _themeAdding = true;
+    syncThemeEditor();
+    previewNewTheme();
+    newNameEl?.focus();
+  });
+  cancelBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    _themeAdding = false;
+    applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
+  });
+  saveBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const name = (newNameEl?.value || '').trim();
+    if (!name) { newNameEl?.focus(); return; }
+    if (loadCustomThemes().length >= MAX_CUSTOM_THEMES) return;
+    const knobs = readNewThemeKnobs();
+    const created: CustomTheme = {
+      id: newCustomThemeId(),
+      name: name.slice(0, 16),
+      mode: knobs.mode,
+      hue: knobs.hue,
+      contrast: knobs.contrast,
+    };
+    const list = loadCustomThemes();
+    list.push(created);
+    saveCustomThemes(list);
+    _themeAdding = false;
+    applyTheme(created.id);
+    setUserPref('display.theme', created.id);
+  });
+  deleteBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const id = sel?.value || '';
+    saveCustomThemes(loadCustomThemes().filter((c) => c.id !== id));
+    applyTheme('dark');
+    setUserPref('display.theme', 'dark');
+  });
+  nameEl?.addEventListener('change', () => {
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const id = sel?.value || '';
+    const name = (nameEl.value || '').trim();
+    const cur = findCustomTheme(id);
+    if (!cur) return;
+    if (!name) { nameEl.value = cur.name; return; }
+    patchCustomTheme(id, { name: name.slice(0, 16) });
+    rebuildThemeSelect(id);
+  });
+  const onCustomKnob = () => {
+    const sel = document.getElementById('theme-select') as HTMLSelectElement | null;
+    const id = sel?.value || '';
+    const cur = findCustomTheme(id);
+    if (!cur) return;
+    patchCustomTheme(id, {
+      hue: Number(hueEl?.value || cur.hue),
+      contrast: Number(conEl?.value || cur.contrast),
+    });
+    applyTheme(id, { rebuild: false });
+  };
+  hueEl?.addEventListener('input', onCustomKnob);
+  conEl?.addEventListener('input', onCustomKnob);
+  newBaseEl?.addEventListener('change', () => {
+    const knobs = defaultKnobs(newBaseEl.value === 'light' ? 'light' : 'dark');
+    if (newHueEl) newHueEl.value = String(knobs.hue);
+    if (newConEl) newConEl.value = String(knobs.contrast);
+    previewNewTheme();
+  });
+  newHueEl?.addEventListener('input', previewNewTheme);
+  newConEl?.addEventListener('input', previewNewTheme);
+  document.addEventListener('user-prefs-mirrored', () => {
+    applyTheme(localStorage.getItem(STORAGE_THEME_KEY) || 'light');
+  });
 }
 
 export function applyFontSize(size) {
@@ -917,6 +1226,12 @@ export function applyFontSize(size) {
   const sel = document.getElementById('fontsize-select');
   if (sel) sel.value = s;
   try { localStorage.setItem(STORAGE_FONTSIZE_KEY, s); } catch (_) {}
+  // セッション帯の高さと文字サイズも同じ設定へ追従させる（利用者が手で高さを決めて
+  // いればその値が優先される）。terminalFontPx() が上の localStorage を読むため、
+  // 書き込みより後に呼ぶ（先に呼ぶと 1 つ前の文字サイズを基準に計算してしまう）。
+  // 初期 IIFE から呼ばれる経路では session-strip.js がまだ評価されていないことが
+  // あるので、terminals と同じく try/catch で守る。
+  try { applySessionStripMetrics(); } catch (_) {}
 }
 
 export function applyLang(lang) {
@@ -1001,6 +1316,7 @@ function syncSettingsPanelButton(): void {
   });
 
   themeEl.addEventListener('change',    () => { applyTheme(themeEl.value); setUserPref('display.theme', themeEl.value); });
+  bindCustomThemeControls();
   fontsizeEl.addEventListener('change', () => { applyFontSize(fontsizeEl.value); setUserPref('display.font_size', fontsizeEl.value); });
   langEl.addEventListener('change',     async () => {
     // setLang は即 location.reload() するため、debounce を待たず同期 PUT で確実に永続化する。
@@ -1079,11 +1395,46 @@ function syncSettingsPanelButton(): void {
 // =============================================================================
 const SETTINGS_IA_LEVEL_KEY = 'many-ai-cli.settings-level';
 
+// C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレットの「設定を開く」
+// コマンド用。initSettingsInformationArchitecture() の中で定義される節オープン処理
+// （openDeepLink と共有）を、ここへ差し込んでおく。
+let _openSettingsSectionImpl: ((sectionId?: string) => void) | null = null;
+
+/**
+ * 指定した設定セクション（data-section の値。例: "notify-sound" / "approval-hub"）を
+ * 開く。まず `#settings-btn` の click を模して開く（パネルが既に開いているときは
+ * 模さない — #settings-btn 自身の click ハンドラは hidden === true を見て開閉を
+ * トグルするため、開いている状態で click するとむしろ閉じてしまう）。これにより
+ * app.ts 側の `#settings-btn` click ハンドラが行う設定読み込み（通知音・承認設定等）
+ * を通してから節を開ける。節を開く処理そのものは openDeepLink と共有する。
+ */
+export function openSettingsSection(sectionId: string): void {
+  const panel = document.getElementById('settings-panel') as HTMLElement | null;
+  const btn = document.getElementById('settings-btn') as HTMLElement | null;
+  if (panel && panel.hidden && btn) {
+    btn.click();
+  } else {
+    setSettingsPanelOpen(true);
+  }
+  if (_openSettingsSectionImpl) {
+    _openSettingsSectionImpl(sectionId);
+    return;
+  }
+  // フォールバック: IA 未初期化（DOM 不足）でも <details> だけは開く。
+  const section = document.querySelector<HTMLDetailsElement>(`.settings-section[data-section="${CSS.escape(sectionId)}"]`);
+  if (section) {
+    section.open = true;
+    requestAnimationFrame(() => section.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+  }
+}
+
 function initSettingsInformationArchitecture(): void {
   const panel = document.getElementById('settings-panel');
   const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
   const status = document.getElementById('settings-search-status');
-  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-settings-level]'));
+  // セクションの <details> も同じ data-settings-level（かんたん/すべての分類）を持つので、
+  // 属性だけで拾うとセクション内のクリックで表示種別が切り替わる。切替ボタンの入れ物に絞る。
+  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.settings-ia-level [data-settings-level]'));
   const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
   if (!panel || !search || levelButtons.length === 0 || sections.length === 0) return;
 
@@ -1124,11 +1475,9 @@ function initSettingsInformationArchitecture(): void {
   search.addEventListener('input', apply);
   document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(apply));
 
-  const openDeepLink = () => {
-    const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
-    if (!match) return;
+  // C3: #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を開く本体。
+  const openSection = (sectionId?: string) => {
     setSettingsPanelOpen(true);
-    const sectionId = match[1];
     if (!sectionId) { apply(); return; }
     const section = sections.find((item) => item.dataset.section === sectionId);
     if (!section) return;
@@ -1141,8 +1490,14 @@ function initSettingsInformationArchitecture(): void {
       (section.querySelector('input, select, button') as HTMLElement | null)?.focus();
     });
   };
+  const openDeepLink = () => {
+    const match = /^#settings(?:[=/]([a-z0-9-]+))?$/i.exec(window.location.hash);
+    if (!match) return;
+    openSection(match[1]);
+  };
   window.addEventListener('hashchange', openDeepLink);
   requestAnimationFrame(() => { apply(); openDeepLink(); });
+  _openSettingsSectionImpl = openSection;
 }
 
 // データ削除は確認ダイアログを通過しても、操作名の入力が一致するまで実行しない。
@@ -1235,10 +1590,7 @@ initSettingsInformationArchitecture();
   let whisperUserModelChoice = null;
 
   function browserRecognitionSupported() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const isChromium = navigator.userAgentData?.brands?.some(b => /Chromium/.test(b.brand))
-      ?? /Chrome\//.test(navigator.userAgent);
-    return !!SpeechRecognition && !!isChromium;
+    return detectSupport().supported;
   }
 
   function descriptionKey(engine) {
@@ -1953,12 +2305,13 @@ window.addEventListener('many-binary-stale', (ev: Event) => {
 // ---- Hub 情報表示（single source: main.version / runtime → /api/info → ここ） ----
 (async () => {
   try {
-    const res = await fetch(`/api/info?token=${token}`);
+    const res = await apiFetch('/api/info');
     if (!res.ok) return;
     const info = await res.json();
     set__userAvatarUrl(info.userAvatar || '');
     set__userDisplayName(info.userDisplayName || '');
     setHandoffNotifyThresholdPercent(Number(info.handoff_notify_remaining_percent));
+    setHandoffNoteMode(info.handoff_note_on_threshold);
     document.dispatchEvent(new CustomEvent('user-info-ready'));
     // 稼働中 Hub が古いバイナリ（起動後にディスクの exe が差し替わった）なら
     // 常設バナーで再起動を促す。multi-question-banner と同じ構造・クラスを流用。
@@ -2132,22 +2485,6 @@ window.approvalPatternsUI = (function () {
     } catch (e) {
       console.warn('approval profiles load failed', e);
     }
-    try {
-      const res = await fetch(`/api/approval-patterns?token=${token}`);
-      if (res.ok) {
-        const data = await res.json();
-        const norm = arr => (Array.isArray(arr) ? arr : []).map(s => String(s).toLowerCase()).filter(Boolean);
-        providerApprovalTriggers.claude = norm(data.claude);
-        providerApprovalTriggers.codex  = norm(data.codex);
-        providerApprovalTriggers.copilot = norm(data.copilot);
-        providerApprovalTriggers['cursor-agent'] = norm(data['cursor-agent']);
-        providerApprovalTriggers.grok = norm(data.grok);
-        providerApprovalTriggers['command-code'] = norm(data['command-code']);
-        providerApprovalTriggers.common = norm(data.common);
-      }
-    } catch (e) {
-      console.warn('approval patterns load failed', e);
-    }
   }
 
   async function fetchProfileList(provider, profile) {
@@ -2220,10 +2557,6 @@ window.approvalPatternsUI = (function () {
         body: JSON.stringify(cache[provider].custom),
       });
       if (!res.ok) throw new Error('http ' + res.status);
-      if (activeProfiles[provider] === 'custom') {
-        const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-        providerApprovalTriggers[provider] = norm(cache[provider].custom);
-      }
       showToast(t('settings_approval_patterns_saved'));
     } catch (e) {
       console.warn('approval patterns save failed', e);
@@ -2270,9 +2603,6 @@ window.approvalPatternsUI = (function () {
       });
       if (!res.ok) throw new Error('http ' + res.status);
       activeProfiles[provider] = profile;
-      const list = (cache[provider] && cache[provider][profile]) || [];
-      const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-      providerApprovalTriggers[provider] = norm(list);
       render();
     } catch (e) {
       console.warn('approval profile switch failed', e);
@@ -2315,12 +2645,6 @@ window.approvalPatternsUI = (function () {
     async onOfficialUpdated(providers) {
       if (!Array.isArray(providers) || providers.length === 0) return;
       await Promise.all(providers.map(p => cache[p] ? loadProvider(p) : Promise.resolve()));
-      for (const p of providers) {
-        if (activeProfiles[p] === 'official') {
-          const norm = arr => arr.map(s => String(s).toLowerCase()).filter(Boolean);
-          providerApprovalTriggers[p] = norm(cache[p].official);
-        }
-      }
       render();
     },
   };
@@ -2332,6 +2656,8 @@ export async function loadSlashCmdSources() {
   const codexEl  = document.getElementById('slash-src-codex');
   const copilotEl = document.getElementById('slash-src-copilot');
   const cursorAgentEl = document.getElementById('slash-src-cursor-agent');
+  const openCodeEl = document.getElementById('slash-src-opencode');
+  const grokEl = document.getElementById('slash-src-grok');
   const commandCodeEl = document.getElementById('slash-src-command-code');
   if (!claudeEl || !codexEl || !copilotEl) return;
   try {
@@ -2342,6 +2668,8 @@ export async function loadSlashCmdSources() {
     codexEl.value  = data.codex  || '';
     copilotEl.value = data.copilot || '';
     if (cursorAgentEl) cursorAgentEl.value = data['cursor-agent'] || '';
+    if (openCodeEl) openCodeEl.value = data.opencode || '';
+    if (grokEl) grokEl.value = data.grok || '';
     if (commandCodeEl) commandCodeEl.value = data['command-code'] || '';
   } catch (_) {}
 }
@@ -2355,6 +2683,8 @@ export async function loadSlashCmdSources() {
       codex:  (document.getElementById('slash-src-codex')?.value  || '').trim(),
       copilot: (document.getElementById('slash-src-copilot')?.value || '').trim(),
       'cursor-agent': (document.getElementById('slash-src-cursor-agent')?.value || '').trim(),
+      opencode: (document.getElementById('slash-src-opencode')?.value || '').trim(),
+      grok: (document.getElementById('slash-src-grok')?.value || '').trim(),
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
@@ -2372,11 +2702,14 @@ export async function loadSlashCmdSources() {
 
 // ─── C2: 統合タブバー (setActiveTab) ───────────────────────────────────
 // セッション毎の表示モード (D13: in-memory, リロードで初期化)
-export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git'
-// Files/Git の遅延ロード状態 (sid -> Set<'files'|'git'>)
+export const sessionViewMode = new Map(); // sid -> 'terminal' | 'chat' | 'split' | 'files' | 'git' | 'review'
+// Files/Git/Review の遅延ロード状態 (sid -> Set<'files'|'git'|'review'>)
 export const sessionLazyLoaded = new Map();
 
-export const VALID_TAB_NAMES = new Set(['terminal', 'chat', 'split', 'files', 'git', 'multi', 'approval', 'history', 'orchestration']);
+// タブ名の正本は project-view-memory.ts の VALID_TAB_NAME_LIST（DOM を持たないので
+// node:test から検証できる）。箱ごとの記憶を復元するときも同じ一覧で検証する＝
+// 「ここには有るが復元側には無い」というずれが起きない。
+export const VALID_TAB_NAMES = new Set<string>(VALID_TAB_NAME_LIST);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
 export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
@@ -2455,10 +2788,11 @@ export function maybeFireLockedModeToast(sid, requestedMode) {
   showToast(tfn('toast_locked_mode_switched', { mode: modeLabel }));
 }
 
-// Files/Git のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
+// Files/Git/Review のうち、現セッションでまだ未取得のものは .lazy クラスを付け直す
 export function refreshLazyTabClasses(sid) {
-  const filesBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
-  const gitBtn   = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
+  const filesBtn  = document.querySelector('#unified-tab-bar .view-tab[data-tab="files"]');
+  const gitBtn    = document.querySelector('#unified-tab-bar .view-tab[data-tab="git"]');
+  const reviewBtn = document.querySelector('#unified-tab-bar .view-tab[data-tab="review"]');
   if (filesBtn) {
     const loaded = isTabLazyLoaded(sid, 'files');
     filesBtn.classList.toggle('lazy', !loaded);
@@ -2468,6 +2802,11 @@ export function refreshLazyTabClasses(sid) {
     const loaded = isTabLazyLoaded(sid, 'git');
     gitBtn.classList.toggle('lazy', !loaded);
     gitBtn.classList.toggle('loaded', loaded);
+  }
+  if (reviewBtn) {
+    const loaded = isTabLazyLoaded(sid, 'review');
+    reviewBtn.classList.toggle('lazy', !loaded);
+    reviewBtn.classList.toggle('loaded', loaded);
   }
 }
 
@@ -2541,11 +2880,33 @@ export function updateChatCountBadge() {
   badge.hidden = (n === 0);
 }
 
+/**
+ * いま開いている箱の「最後のタブ」を覚える（C4）。
+ *
+ * 呼ぶのはタブバーのクリックからだけ。setActiveTab の中では呼ばない（復元・承認の
+ * 自動移動・画面幅の変化からも通るので、利用者が触っていないタブが記憶を潰す）。
+ *
+ * いま見ているセッションが開いている箱のものでなければ、何も保存しない。別の箱の
+ * セッション ID をその箱の記憶へ書くと、次にその箱を開いたとき「箱の中に居ない
+ * セッション」を開こうとして先頭へ落ちる＝記憶が静かに消える。
+ */
+export function rememberTabForOpenProject(name: string): void {
+  if (!openProjectKey) return;
+  if (activeSessionId === null || activeSessionId === undefined) return;
+  const current = sessions.get(activeSessionId);
+  if (!current || sessionProjectKey(current) !== openProjectKey) return;
+  saveProjectView(openProjectKey, activeSessionId, name);
+}
+
 // C2 公開 API: タブを切り替える
 export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
   name = normalizeResponsiveTabName(name);
+
+  // Grok 会話履歴 / 過去ログの読み取り専用オーバーレイはターミナル領域に重なる。
+  // タブ切替（同じターミナルタブの再クリック含む）で閉じ、閉じるボタンを挟まない。
+  dismissTerminalReadOverlays();
 
   // マルチタブはセッション非依存のビュー: セッションなしでも動作させる
   if (name === 'multi') {
@@ -2574,6 +2935,9 @@ export function setActiveTab(sid, name) {
       mgr.focusSlot(restoreIdx);
     }
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // multi は同じ段へ「この箱だけ／全部」の範囲トグルを出す（セッション一覧は出さない）。
+    // 段の高さは共有＝タブを往復しても端末の高さが動かない。
+    setSessionStripTab('multi');
     // C3: "Detach current grid" ボタンをタブバーに挿入（初回のみ生成）
     _ensureMultiDetachBtn();
     return;
@@ -2601,12 +2965,14 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history');
     area.classList.add('mode-approval');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === 'approval');
     });
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // 承認タブはセッション非依存の集約ビュー。帯は隠す。
+    setSessionStripTab('approval');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
         detail: { sid: activeSessionId, name },
@@ -2626,11 +2992,13 @@ export function setActiveTab(sid, name) {
     if (mgr?.picker) mgr.picker.hide();
     if (prevMultiOpen && mgr) mgr.teardown();
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
     area.classList.add('mode-orchestration');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(button => button.classList.toggle('active', (button as HTMLElement).dataset.tab === name));
     window.renderOrchestrationDashboard?.();
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    // オーケストレーションもセッション非依存の集約ビュー。帯は隠す。
+    setSessionStripTab('orchestration');
     return;
   }
 
@@ -2670,17 +3038,20 @@ export function setActiveTab(sid, name) {
   }
   area.hidden = false;
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-approval', 'mode-history', 'mode-orchestration');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
+
+  // terminal / chat / split / files / git / history は帯を出すタブ。
+  setSessionStripTab(name);
 
   // タブボタンの active 切替
   document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === name);
   });
 
-  // D10: Files/Git は初回クリックで FilesTabManager に開かせる
+  // D10: Files/Git/Review は初回クリックで FilesTabManager に開かせる
   // FilesTabManager.setActive が再帰的に setActiveTab を呼ぶため再帰防止フラグで守る
-  if ((name === 'files' || name === 'git') && !_setActiveTabRecursion) {
+  if ((name === 'files' || name === 'git' || name === 'review') && !_setActiveTabRecursion) {
     _setActiveTabRecursion = true;
     try { handleLazyTabOpen(targetSid, name); }
     finally { _setActiveTabRecursion = false; }
@@ -2713,9 +3084,9 @@ export function setActiveTab(sid, name) {
   }
 }
 
-// D10: Files/Git タブを初回クリックで開く (および既ロード時の再アクティブ化)
-// openFilesTab / openGitTab は idempotent (既存タブがあれば再利用) なので、
-// セッション切替で .active が外れた files/git pane の再表示にも兼用する。
+// D10: Files/Git/Review タブを初回クリックで開く (および既ロード時の再アクティブ化)
+// openFilesTab / openGitTab / openReviewTab は idempotent (既存タブがあれば再利用) なので、
+// セッション切替で .active が外れた files/git/review pane の再表示にも兼用する。
 export function handleLazyTabOpen(sid, name) {
   const sess = sessions.get(sid);
   if (!sess) return;
@@ -2730,6 +3101,9 @@ export function handleLazyTabOpen(sid, name) {
       FilesTabManager.openFilesTab(sid, pk, gr, gr);
     } else if (name === 'git') {
       FilesTabManager.openGitTab(sid, gr, sess.branch || '');
+    } else if (name === 'review') {
+      // cwd はあるが git でない場合も開く: ReviewView 側が not_git_repo エラーを表示する。
+      FilesTabManager.openReviewTab(sid, gr);
     }
     markTabLazyLoaded(sid, name);
     refreshLazyTabClasses(sid);
@@ -2755,6 +3129,9 @@ export function switchToTerminalView() {
       const name = btn.dataset.tab;
       if (!VALID_TAB_NAMES.has(name)) return;
       setActiveTab(activeSessionId, name);
+      // 箱ごとの記憶（C4）。**保存は利用者の操作からだけ**なので setActiveTab の中では
+      // なくここで呼ぶ。setActiveTab は復元・承認の自動移動・幅の変化からも呼ばれる。
+      rememberTabForOpenProject(name);
       // C5: lock 中に lock 値以外へ切替えたら、セッションごと 5 分クールダウンでトースト
       if (typeof maybeFireLockedModeToast === 'function') {
         maybeFireLockedModeToast(activeSessionId, name);
@@ -3248,7 +3625,8 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     const lang = localStorage.getItem(STORAGE_LANG_KEY) || 'ja';
     const langLabel = lang === 'ja' ? '日本語' : lang === 'vi' ? 'Tiếng Việt' : 'English';
     const theme = localStorage.getItem(STORAGE_THEME_KEY) || 'light';
-    const themeLabel = theme === 'dark' ? 'Dark' : 'Light';
+    const custom = findCustomTheme(theme);
+    const themeLabel = custom ? custom.name : (theme === 'dark' ? 'Dark' : 'Light');
     const fs = localStorage.getItem(STORAGE_FONTSIZE_KEY) || 'medium';
     const fsLabel = fs === 'large' ? 'Large' : fs === 'small' ? 'Small' : 'Medium';
     const lk = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY) || '';
@@ -3418,7 +3796,11 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
   },
 
   'slash-src': () => {
-    const ids = ['slash-src-claude', 'slash-src-codex', 'slash-src-copilot', 'slash-src-cursor-agent', 'slash-src-command-code'];
+    const ids = [
+      'slash-src-claude', 'slash-src-codex', 'slash-src-copilot',
+      'slash-src-cursor-agent', 'slash-src-opencode', 'slash-src-grok',
+      'slash-src-command-code',
+    ];
     let custom = 0;
     for (const id of ids) {
       if (_summaryVal(id).trim()) custom++;
@@ -3459,4 +3841,147 @@ export function attachSummaryToggleListeners(): void {
     });
   });
 }
+
+// NVIDIA key controls stay on the Hub. The browser only receives configured
+// state and source; a saved key is never read back into an input or response.
+(function initNVIDIANIMSettings(): void {
+  if (typeof document === 'undefined') return;
+  const enabled = document.getElementById('nvidia-nim-enabled') as HTMLInputElement | null;
+  const apiKey = document.getElementById('nvidia-nim-api-key') as HTMLInputElement | null;
+  const keyState = document.getElementById('nvidia-nim-key-state');
+  const envNote = document.getElementById('nvidia-nim-env-note');
+  const saveBtn = document.getElementById('nvidia-nim-save') as HTMLButtonElement | null;
+  const testBtn = document.getElementById('nvidia-nim-test') as HTMLButtonElement | null;
+  const deleteBtn = document.getElementById('nvidia-nim-delete-key') as HTMLButtonElement | null;
+  const result = document.getElementById('nvidia-nim-test-result');
+  if (!enabled || !apiKey || !keyState || !envNote || !saveBtn || !testBtn || !deleteBtn || !result) return;
+
+  let current: NVIDIANIMSettingsStatus | null = null;
+  let busy = false;
+  const endpoint = (path: string): string => `${path}?token=${encodeURIComponent(token || '')}`;
+
+  function updateControls(): void {
+    const envManaged = current?.api_key_source === 'env';
+    apiKey.disabled = !!envManaged || busy;
+    deleteBtn.disabled = busy || current?.api_key_source !== 'file';
+    saveBtn.disabled = busy || (!!envManaged && apiKey.value.trim() !== '');
+    testBtn.disabled = busy || !current?.api_key_configured || apiKey.value.trim() !== '';
+  }
+
+  function showResult(key: string): void {
+    result.textContent = t(key);
+    result.hidden = false;
+  }
+
+  async function loadStatus(): Promise<void> {
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim'));
+      const data = await res.json().catch(() => ({})) as Partial<NVIDIANIMSettingsStatus>;
+      if (!res.ok || typeof data.enabled !== 'boolean' || typeof data.api_key_configured !== 'boolean') {
+        throw new Error('status unavailable');
+      }
+      current = data as NVIDIANIMSettingsStatus;
+      enabled.checked = current.enabled;
+      keyState.textContent = t(current.api_key_configured ? 'settings_nim_key_configured' : 'settings_nim_key_missing', {
+        source: t(`settings_nim_key_source_${current.api_key_source}`),
+      });
+      envNote.hidden = current.api_key_source !== 'env';
+      updateControls();
+    } catch (_) {
+      current = null;
+      keyState.textContent = t('settings_nim_key_status_failed');
+      envNote.hidden = true;
+      updateControls();
+    }
+  }
+
+  apiKey.addEventListener('input', updateControls);
+
+  saveBtn.addEventListener('click', async () => {
+    busy = true;
+    result.hidden = true;
+    updateControls();
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enabled.checked, api_key: apiKey.value }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const code = data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked'
+          : data?.error === 'invalid_api_key' ? 'settings_nim_key_invalid'
+          : 'settings_nim_save_failed';
+        showResult(code);
+        return;
+      }
+      apiKey.value = '';
+      invalidateSpawnModelGroups();
+      await loadStatus();
+      showResult('settings_nim_saved');
+    } catch (_) {
+      showResult('settings_nim_save_failed');
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  });
+
+  testBtn.addEventListener('click', async () => {
+    busy = true;
+    result.hidden = true;
+    updateControls();
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim/test'), { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.ok === true) {
+        showResult('settings_nim_test_ok');
+      } else {
+        if (data?.error === 'api_key_missing') {
+          showResult('settings_nim_test_api_key_missing');
+          return;
+        }
+        const code = typeof data?.code === 'string' ? data.code : '';
+        const known = ['unauthorized', 'payment_required', 'forbidden', 'not_found', 'timeout', 'rate_limited', 'server_error', 'request_rejected', 'connection_failed'];
+        showResult(known.includes(code) ? `settings_nim_test_${code}` : 'settings_nim_test_connection_failed');
+      }
+    } catch (_) {
+      showResult('settings_nim_test_connection_failed');
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  });
+
+  deleteBtn.addEventListener('click', async () => {
+    const confirmed = await appConfirm({
+      title: t('settings_nim_delete_confirm_title'),
+      message: t('settings_nim_delete_confirm_message'),
+      confirmText: t('settings_nim_delete_key'),
+      cancelText: t('cancel'),
+      kind: 'warn',
+    });
+    if (!confirmed) return;
+    busy = true;
+    updateControls();
+    try {
+      const res = await fetch(endpoint('/api/nvidia-nim/key'), { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showResult(data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked' : 'settings_nim_delete_failed');
+        return;
+      }
+      invalidateSpawnModelGroups();
+      await loadStatus();
+      showResult('settings_nim_deleted');
+    } catch (_) {
+      showResult('settings_nim_delete_failed');
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  });
+
+  void loadStatus();
+})();
 

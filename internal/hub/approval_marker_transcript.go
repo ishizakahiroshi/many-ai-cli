@@ -8,7 +8,7 @@ import (
 
 // approvalSourceTranscript は「CLI 自身のトランスクリプトから読んだ承認マーカー」を表す。
 // go_vt（端末ミラー）と区別できるようにするためのラベルで、Web 側の表示分岐には
-// 使わない（ブラウザは approval_marker を受け取った時点で hub_marker として扱う）。
+// 使わない（画面は供給元によらず同じ記録を描く）。
 const approvalSourceTranscript = "transcript"
 
 // approvalMarkerTranscriptMissLimit はトランスクリプトを読めない poll が何回続いたら
@@ -58,9 +58,21 @@ const approvalMarkerTranscriptMissLimit = 3
 // 退避で受け入れる代償: 承認が出たまま供給元が入れ替わると、同じ質問が VT 側の
 // candidateKey でもう一度出ることがある。承認が二重に見えるのは、承認が出ないより
 // はるかに軽い。
+//
+// 判定に使うのは「この provider の承認マーカーの供給元はトランスクリプトか」
+// （provider_feature_source.go の ApprovalMarker 列）で、**チャット面が
+// トランスクリプトを読めるか（StructuredTranscript 列）ではない**。
+// 以前は 1 つの provider 一覧で両方を答えていたため、チャットの読み取り対象を
+// 増やした瞬間にその provider の承認供給元まで黙って移る作りだった。
+// 承認の同一性（candidateKey + sourceEpoch の 1 本）が事故で動く経路は残さない。
+//
+// 読めていても当てにならないとき（2026-09-25 追記・codex_thread_follow.go）:
+// Codex が新しい会話へ切り替えたのに、同じ CODEX_HOME・cwd の別セッションと取り違えずに
+// 乗り換え先を決められない間は、読めている古い rollout に新しい質問は来ない。
+// そのまま供給元にしておくと承認が無音で消えるので、読めない場合と同じく VT へ戻す。
 func approvalMarkerSourceIsTranscriptLocked(ses *session) bool {
-	return ses != nil && isAgentChatProvider(ses.Provider) && ses.agentChatPath != "" &&
-		ses.agentChatMissStreak < approvalMarkerTranscriptMissLimit
+	return ses != nil && providerApprovalMarkerFromTranscript(ses.Provider) && ses.agentChatPath != "" &&
+		ses.agentChatMissStreak < approvalMarkerTranscriptMissLimit && !ses.codexThreadAmbiguous
 }
 
 // approvalMarkerFromTranscriptText は assistant メッセージ 1 通の本文から承認マーカー
@@ -96,20 +108,17 @@ func approvalMarkerFromTranscriptText(text string) *approvalMarkerBlock {
 // 答えられている（または捨てられている）。ブラウザ経由の回答なら approval_consumed で
 // 先に下りているので何も起きない。端末へ直接答えたときはこの経路だけが閉じる合図になる。
 // 供給元をトランスクリプトへ移した以上、「答えたかどうか」も端末の画面ではなく
-// トランスクリプトで判定する。画面の文字照合で閉じる旧経路（ブラウザ側の H9 / bg）は、
-// Ink の差分再描画で本文が欠けると未回答の承認まで閉じてしまい、閉じた承認を
-// 再配信する経路が無いので、この供給元では使わない。
+// トランスクリプトで判定する。画面の文字照合で閉じる旧経路（撤去済みのブラウザ側の照合）は、
+// Ink の差分再描画で本文が欠けると未回答の承認まで閉じてしまっていた。
 func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath string, messages []agentChatMessage, prime bool, detectedAt time.Time) {
-	if len(messages) == 0 || transcriptPath == "" || !isAgentChatProvider(provider) {
+	if len(messages) == 0 || transcriptPath == "" || !providerApprovalMarkerFromTranscript(provider) {
 		return
 	}
 	if prime {
 		last := messages[len(messages)-1]
 		switch last.Role {
 		case "assistant":
-			if marker := approvalMarkerFromTranscriptText(last.Text); marker != nil {
-				s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
-			}
+			s.openTranscriptQuestion(id, last, detectedAt)
 		case "user":
 			// 最後が user なら、それより前に立っていた質問はもう止まっていない。
 			s.closeApprovalMarkerOnTranscriptUserMessage(id, last.Text, detectedAt)
@@ -117,53 +126,68 @@ func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath 
 		return
 	}
 	for _, message := range messages {
-		if message.Text == "" {
-			continue
-		}
 		switch message.Role {
 		case "user":
-			s.closeApprovalMarkerOnTranscriptUserMessage(id, message.Text, detectedAt)
-		case "assistant":
-			if marker := approvalMarkerFromTranscriptText(message.Text); marker != nil {
-				s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
+			if message.Text != "" {
+				s.closeApprovalMarkerOnTranscriptUserMessage(id, message.Text, detectedAt)
 			}
+		case "assistant":
+			// 本文の無いツール・思考のメッセージも見る。文章の質問の後にそれが来たら、
+			// AI は答えを待たずに話し続けている（approval_text_question.go の「出力が落ち着いてから開く」節）。
+			s.openTranscriptQuestion(id, message, detectedAt)
 		}
 	}
 }
 
-// transcriptAnswerTextLimit は台帳の selected_text に残す user メッセージの上限。
-// 一覧表示用なので先頭だけあればよい。
-const transcriptAnswerTextLimit = 200
+// openTranscriptQuestion は assistant メッセージ 1 通から、次のユーザーの発話で答える質問を
+// 立てる。承認マーカーを先に見て、無ければマーカー無しの文章の質問（approval_text_question.go）
+// を見る。どちらも端末ミラーと同じ規則で、供給元がトランスクリプトなだけ。
+// マーカーはその場で開き、文章の質問は出力が落ち着いてから開く。ツールを呼んだメッセージは
+// ターンの途中なので、文章の質問として見ない。
+func (s *Server) openTranscriptQuestion(id int, message agentChatMessage, detectedAt time.Time) {
+	if marker := approvalMarkerFromTranscriptText(message.Text); marker != nil {
+		// 前の文章の質問（候補・開いている記録）は、このマーカーで話が先へ進んだので捨てる。
+		s.observeTranscriptTextQuestion(id, nil, detectedAt)
+		s.maybeBroadcastApprovalMarkerFrom(id, marker, detectedAt, approvalSourceTranscript)
+		return
+	}
+	var question *textQuestion
+	if message.Text != "" && len(message.Tools) == 0 {
+		question = detectTextQuestion(strings.Split(message.Text, "\n"))
+	}
+	s.observeTranscriptTextQuestion(id, question, detectedAt)
+}
 
 // closeApprovalMarkerOnTranscriptUserMessage は、トランスクリプトに user メッセージが
 // 現れた時点で保留中のマーカー承認を回答済みにする。ブラウザからの approval_consumed
 // （markNativeApprovalConsumed）と同じ状態遷移を Hub 自身の判断で起こすので、
-// 遅延フレーム向けの世代ずれ判定は通さない。保留中の候補が無ければ何もしない。
+// 遅延フレーム向けの世代ずれ判定は通さない。保留中のマーカーの記録が無ければ何もしない
+// （ブラウザや Hub から送った確定ユーザーターンで先に閉じている場合を含む）。
 func (s *Server) closeApprovalMarkerOnTranscriptUserMessage(id int, answer string, now time.Time) bool {
 	s.sessionsMu.Lock()
 	ses := s.sessions[id]
-	if ses == nil || ses.approvalMarkerCandidateKey == "" {
+	if ses != nil {
+		// まだ開いていない文章の質問の候補も、この発話で答えを待たなくなった。
+		ses.textQuestionAtIdle = nil
+	}
+	// 閉じるのは文章の質問（承認マーカーとマーカー無しの質問）だけ。ネイティブの承認と
+	// AskUserQuestion の告知は、画面から消えたときに閉じる。
+	if ses == nil || !ses.pendingApproval.isMarker() {
 		s.sessionsMu.Unlock()
 		return false
 	}
-	sig := ses.approvalMarkerSig
-	markApprovalConsumedAtEpochLocked(ses, ses.approvalMarkerCandidateKey, sig, ses.approvalMarkerSourceEpoch)
-	cleared := clearApprovalMarkerCandidateLocked(ses, id, approvalSourceTranscript)
+	record := ses.pendingApproval
+	markApprovalConsumedAtEpochLocked(ses, record.CandidateKey, record.Sig, record.SourceEpoch)
+	closure := closeApprovalRecordLocked(ses, id, approvalCloseAnsweredTerminal, now)
+	closure.answer = truncateApprovalAnswer(answer)
 	provider := ses.Provider
 	s.sessionsMu.Unlock()
 
-	answer = strings.TrimSpace(answer)
-	if runes := []rune(answer); len(runes) > transcriptAnswerTextLimit {
-		answer = string(runes[:transcriptAnswerTextLimit])
-	}
-	if s.sessionStore != nil && sig != "" {
-		s.sessionStore.StoreApprovalConsumed(id, sig, answer, now)
-	}
 	if s.logger != nil {
 		s.logger.Info("approval marker closed by transcript user message",
-			"session_id", id, "provider", provider, "sig", shortSig(sig))
+			"session_id", id, "provider", provider, "sig", shortSig(record.Sig))
 	}
-	s.broadcast(cleared)
+	s.finishApprovalRecordClosures(closure)
 	return true
 }
 

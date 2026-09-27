@@ -71,7 +71,7 @@ var usageSources = []UsageSource{
 	{Provider: "claude", Kind: UsageSourcePushed, CanDetectApproachingLimit: true, CanBeHandoffTarget: true},
 	{Provider: "codex", Kind: UsageSourceLocalFile, CanDetectApproachingLimit: true, CanBeHandoffTarget: true},
 	{Provider: "grok", Kind: UsageSourceLocalFile, CanDetectApproachingLimit: true, CanBeHandoffTarget: true},
-	// Copilot / Cursor Agent / opencode: no local file and no push channel
+	// Copilot / Cursor Agent / opencode / command-code: no local file and no push channel
 	// were found (子 plan 内部 C2 実測、Cursor Agent は 2026-09-08 に
 	// docs/local/reference/reference_usage-sources.md へ記録). This is
 	// independent of D-05 (見送り台帳): D-05 is about credentials not moving
@@ -79,6 +79,7 @@ var usageSources = []UsageSource{
 	{Provider: "copilot", Kind: UsageSourceNone, CanBeHandoffTarget: true},
 	{Provider: "cursor-agent", Kind: UsageSourceNone, CanBeHandoffTarget: true},
 	{Provider: "opencode", Kind: UsageSourceNone, CanBeHandoffTarget: true},
+	{Provider: "command-code", Kind: UsageSourceNone, CanBeHandoffTarget: true},
 }
 
 // UsageSourceFor returns provider's row, or a synthesized UsageSourceNone row

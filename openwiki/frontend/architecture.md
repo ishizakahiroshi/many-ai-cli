@@ -3,9 +3,6 @@ type: architecture-component
 title: Web Frontend Architecture
 description: The unbundled, per-file esbuild pipeline behind the TypeScript Web UI, the classic-script global-scope module style it targets, and how it reaches the browser as a go:embed asset.
 tags: [frontend, typescript, esbuild, i18n, state, terminal, xterm]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-7a573106b23a08d6d5fd36ce
     resource: repo://web/scripts/build.mjs
@@ -17,7 +14,10 @@ sources:
     resource: repo://web/src/app/state.ts
   - id: openwiki-source-e243b08ba93638a6ef00055e
     resource: repo://web/src/i18n.ts
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Not a bundle: one compiled file per source file

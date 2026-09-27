@@ -534,17 +534,18 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 	}
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
 	approvalID = strings.TrimSpace(approvalID)
-	activeNativeApproval := approvalID != "" && ses.nativeApprovalSig == approvalID
+	activeNativeApproval := approvalID != "" && ses.pendingApproval.isNative() && ses.pendingApproval.hasOptions() && ses.pendingApproval.Sig == approvalID
 	sourceEpoch := uint64(0)
 	if activeNativeApproval {
 		sourceEpoch = ensureApprovalSourceEpochLocked(ses)
 	}
+	notificationID := approvalNotificationIDLocked(ses, approvalID)
 	s.sessionsMu.Unlock()
 	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook/Web Push
 	// という端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
 	body = sessionlog.MaskSecrets(body)
-	if approvalID == "" {
-		approvalID = fmt.Sprintf("session-%d-%s", id, body)
+	if notificationID == "" {
+		notificationID = fmt.Sprintf("session-%d-%s", id, body)
 	}
 	body = strings.Join(strings.Fields(body), " ")
 	url := approvalPushURL(id)
@@ -559,7 +560,7 @@ func (s *Server) notifyApprovalPush(id int, approvalID, provider, question, cont
 		}
 	}
 	payload := pushApprovalPayload{
-		ID:           approvalID,
+		ID:           notificationID,
 		SessionID:    id,
 		Provider:     provider,
 		Title:        titleName,
@@ -615,18 +616,19 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 	}
 	body := firstNonEmpty(question, contextText, ses.LastMessage, ses.FirstMessage, ses.CWD, "Approval is waiting.")
 	approvalID = strings.TrimSpace(approvalID)
-	activeNativeApproval := approvalID != "" && ses.nativeApprovalSig == approvalID
+	activeNativeApproval := approvalID != "" && ses.pendingApproval.isNative() && ses.pendingApproval.hasOptions() && ses.pendingApproval.Sig == approvalID
 	sourceEpoch := uint64(0)
 	if activeNativeApproval {
 		sourceEpoch = ensureApprovalSourceEpochLocked(ses)
 	}
+	notificationID := approvalNotificationIDLocked(ses, approvalID)
 	s.sessionsMu.Unlock()
 	// 承認 question/context は生 PTY テキスト由来で未マスク。ntfy/webhook という
 	// 端末外の第三者へ送出する前に MaskSecrets を通す（全外部送出の単一ボトルネック）。
 	body = sessionlog.MaskSecrets(body)
 	body = strings.Join(strings.Fields(body), " ")
-	if approvalID == "" {
-		approvalID = fmt.Sprintf("session-%d-%s", id, body)
+	if notificationID == "" {
+		notificationID = fmt.Sprintf("session-%d-%s", id, body)
 	}
 	summary := approval.Summarize(question, contextText)
 	approveURL, rejectURL := "", ""
@@ -642,7 +644,7 @@ func (s *Server) notifyApprovalOutbound(id int, approvalID, provider, question, 
 	}
 
 	s.notifyMgr.SendApproval(notifyPkg.ApprovalPayload{
-		ID:         approvalID,
+		ID:         notificationID,
 		SessionID:  id,
 		Provider:   provider,
 		Title:      titleName,

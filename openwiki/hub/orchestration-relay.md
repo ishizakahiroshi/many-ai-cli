@@ -3,9 +3,6 @@ type: architecture-component
 title: Light Orchestration and the Relay Loop
 description: How a conductor session spawns child AI sessions with a shared board.md, and how the Hub-driven relay state machine runs a plan through implementation, adversarial review, and fix without an AI conductor in the loop.
 tags: [orchestration, relay, board, worktree, spawn-child, handoff]
-verified:
-  - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
 sources:
   - id: openwiki-source-a8910515ddd14810ad43f5c1
     resource: repo://internal/config/config.go
@@ -19,7 +16,10 @@ sources:
     resource: repo://internal/orchestrate/orchestrate.go
   - id: openwiki-source-23775c3de52f3ab95a13cb8b
     resource: repo://README.md
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
+verified:
+  - by: openwiki/0.5.0
+    at: 2026-09-21T12:35:03.565Z
 ---
 
 ## Light orchestration: spawn-child and the shared board
@@ -62,4 +62,4 @@ A relay starts from one of two equivalent entry points — the CLI (`many-ai-cli
 
 ## A related but distinct mechanism: session handoff records
 
-`internal/handoff` is not part of the orchestration board/relay machinery, but solves an adjacent problem: letting a *different* AI CLI session safely pick up context after this one stops, without leaking anything sensitive into that handoff. Its package doc states the core design rule plainly: what is allowed into a `Record` is decided by the Go type itself, not by scanning free text for secrets afterward — the struct has fields only for a commit hash/subject, changed file *paths* (never contents or diffs), session metadata, and exactly one free-text field; secret-masking (`sessionlog.MaskSecrets`) is applied only to that one free-text field, since it is the only field an AI could put arbitrary content into. Widening the `Record` type is treated as a deliberate design decision rather than a routine field addition — a test-enforced allowlist in `handoff_test.go` fails on purpose if a new field is added without also being added there.
+`internal/handoff` is not part of the orchestration board/relay machinery, but solves an adjacent problem: letting a *different* AI CLI session safely pick up context after this one stops, without leaking anything sensitive into that handoff. Its package doc states the core design rule plainly: what is allowed into a `Record` is decided by the Go type itself, not by scanning free text for secrets afterward — the struct has fields only for a commit hash/subject, changed file *paths* (never contents or diffs), session metadata, the *paths* of the provider's own transcript and of a handoff note the predecessor was asked to write (the Hub never reads, copies, or forwards either file's contents — the successor opens them with its own tools), and exactly one free-text field; secret-masking (`sessionlog.MaskSecrets`) is applied only to that one free-text field, since it is the only field an AI could put arbitrary content into. Widening the `Record` type is treated as a deliberate design decision rather than a routine field addition — a test-enforced allowlist in `handoff_test.go` fails on purpose if a new field is added without also being added there.

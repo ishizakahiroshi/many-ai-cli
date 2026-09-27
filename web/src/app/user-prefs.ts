@@ -1,6 +1,8 @@
 // --- ESM imports (generated) ---
 import { showToast, token } from './util.js';
 import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
+import { sanitizeProjectViews } from './project-view-memory.js';
+import { sanitizeCustomThemes } from './theme-tokens.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -16,9 +18,14 @@ export const STORAGE_PROJECT_FAVORITES_KEY = 'ai_cli_hub_project_favorites';
 export const STORAGE_COLLAPSED_NODES_KEY     = 'ai_cli_hub_collapsed_nodes';
 // 旧ピン留めを兄弟順へ変換し終えた印。1 度だけ走らせるために端末をまたいで共有する。
 export const STORAGE_SIDEBAR_PIN_MIGRATED_KEY = 'ai_cli_hub_sidebar_pin_migrated';
+// 箱（サイドバーのプロジェクトグループ）ごとに最後に見ていたセッションとタブ。
+// 最後に開いていた箱のキーも別に持つ。どちらもサーバー同期＝端末をまたいで共有する。
+// 帯の高さ（session-strip.ts）と multi の範囲（multi-scope.ts）は端末ごとなので
+// **ここへは載せない**（plan_project-box-open-and-session-strip_c4_state-memory.md）。
+export const STORAGE_PROJECT_VIEWS_KEY       = 'ai_cli_hub_project_views';
+export const STORAGE_OPEN_PROJECT_KEY        = 'ai_cli_hub_open_project';
 export const STORAGE_SPAWN_KEY             = 'ai_cli_hub_spawn_settings';
-// 新規セッションの provider 並び順（端末・ブラウザ単位。サーバ同期しない）。
-export const STORAGE_SPAWN_PROVIDER_ORDER_KEY = 'ai_cli_hub_spawn_provider_order';
+// provider の並び順（端末・ブラウザ単位。サーバ同期しない）は provider-order.ts が持つ。
 export const STORAGE_CWD_HISTORY_KEY       = 'ai_cli_hub_cwd_history';
 export const STORAGE_CWD_FAVORITES_KEY     = 'ai_cli_hub_cwd_favorites';
 export const STORAGE_TRIGGER_ENABLED_KEY      = 'ai_cli_hub_trigger_enabled';
@@ -71,6 +78,7 @@ export const STORAGE_DISPLAY_LOCKED_MODE_KEY  = 'ai_cli_hub_display_locked_mode'
 // 空文字＝未設定（既定の青系にフォールバック）。hex 文字列で保持。サーバ同期。
 export const STORAGE_LIVE_STATUS_BG_KEY       = 'ai_cli_hub_live_status_bg';
 export const STORAGE_LIVE_STATUS_FG_KEY       = 'ai_cli_hub_live_status_fg';
+export const STORAGE_CUSTOM_THEMES_KEY        = 'ai_cli_hub_custom_themes';
 // 承認 action-bar の折りたたみ（コンパクト）表示。device-local（端末ごとに保持）。
 // 大きな承認パネルで前後のターミナル本文が見切れる問題への対処として、
 // 質問本文・選択肢を 1 行省略表示にして高さを最小化する。既定は展開（false）。
@@ -80,6 +88,40 @@ export function isActionBarCollapsed(): boolean {
 }
 export function setActionBarCollapsed(value: boolean): void {
   try { localStorage.setItem(STORAGE_ACTION_BAR_COLLAPSED_KEY, value ? '1' : '0'); } catch (_) {}
+}
+// 作業が終わって running → standby（入力待ち）に戻ったときも、音・OS 通知で知らせるか
+// （既定 ON）。device-local（端末ごと）。承認待ちの通知設定（desktop_notifications /
+// notify_sound）とは別に持ち、Hub 同期の対応表（_USER_PREFS_PATH_TO_LS）には載せない
+// （子 plan: plan_ux-notify-palette-review_c1_notify.md の判断ログ）。
+export const STORAGE_TURN_END_NOTIFY_ENABLED_KEY = 'ai_cli_hub_turn_end_notify_enabled';
+export function isTurnEndNotifyEnabled(): boolean {
+  try { return localStorage.getItem(STORAGE_TURN_END_NOTIFY_ENABLED_KEY) !== '0'; } catch (_) { return true; }
+}
+export function setTurnEndNotifyEnabled(value: boolean): void {
+  try { localStorage.setItem(STORAGE_TURN_END_NOTIFY_ENABLED_KEY, value ? '1' : '0'); } catch (_) {}
+}
+// セッションごとの「作業終了通知」ベル。OFF にしたセッション ID の一覧を 1 キーに
+// 持つ。Hub 再起動でセッション ID が振り直されるため、purgeLocalStateForHubRestart()
+// から全消去する（ws-client.ts）。Hub へは同期しない（同上の判断ログ）。
+export const STORAGE_TURN_END_MUTED_SESSIONS_KEY = 'ai_cli_hub_turn_end_muted_sessions';
+function readTurnEndMutedSessions(): number[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((v) => Number.isInteger(v)) : [];
+  } catch (_) {
+    return [];
+  }
+}
+export function isTurnEndBellOff(id: number): boolean {
+  return readTurnEndMutedSessions().includes(id);
+}
+export function setTurnEndBellOff(id: number, off: boolean): void {
+  const list = readTurnEndMutedSessions().filter((v) => v !== id);
+  if (off) list.push(id);
+  try { localStorage.setItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY, JSON.stringify(list)); } catch (_) {}
+}
+export function clearAllTurnEndBellMutes(): void {
+  try { localStorage.removeItem(STORAGE_TURN_END_MUTED_SESSIONS_KEY); } catch (_) {}
 }
 // 両エンジン共通の「終了検知の待ち時間（秒）」既定値。
 // Whisper では無音がこの秒数続くと自動確定する（旧 Whisper 固定値 1.8秒に近い 2秒を採用）。
@@ -218,6 +260,11 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'quick_cmds.show5':          [STORAGE_QUICK_CMD_5_SHOW_KEY,      (v) => v ? '1' : '0'],
   'collapsed_nodes':           [STORAGE_COLLAPSED_NODES_KEY,       JSON.stringify],
   'sidebar_pin_migrated':      [STORAGE_SIDEBAR_PIN_MIGRATED_KEY,  (v) => v ? '1' : '0'],
+  // PUT はサーバー側の UserPrefs を丸ごと置き換える。この表に無いフィールドは、別の
+  // クライアントが保存した瞬間に消える＝ここへ載せるのは「同期させる」ためではなく
+  // 「消されないようにする」ための必須条件。
+  'project_views':             [STORAGE_PROJECT_VIEWS_KEY,         JSON.stringify],
+  'open_project':              [STORAGE_OPEN_PROJECT_KEY,          String],
   'templates':                 [STORAGE_TEMPLATES_KEY,             JSON.stringify],
   'template_send.immediate':   [STORAGE_TEMPLATE_SEND_IMMEDIATE_KEY, (v) => v ? '1' : '0'],
   'usage_links.claude':        [STORAGE_USAGE_LINK_CLAUDE_KEY,     String],
@@ -248,6 +295,7 @@ export const _USER_PREFS_PATH_TO_LS: UserPrefsPathMap = {
   'display.lang':              [STORAGE_LANG_KEY,                  String],
   'display.live_status_bg':    [STORAGE_LIVE_STATUS_BG_KEY,        String],
   'display.live_status_fg':    [STORAGE_LIVE_STATUS_FG_KEY,        String],
+  'display.custom_themes':     [STORAGE_CUSTOM_THEMES_KEY,         JSON.stringify],
 };
 // Voice engine selection is intentionally absent from server-synced user prefs.
 // It must stay device-local so PC can use browser recognition while iPhone uses Whisper.
@@ -267,6 +315,7 @@ export const _USER_PREFS_STRING_PATHS = new Set([
   'usage_links.grok',
   'usage_links.command-code',
   'usage_probe_model',
+  'open_project',
   'display.locked_mode',
   'display.theme',
   'display.font_size',
@@ -339,6 +388,16 @@ export function _parseStoredUserPref(path: string, raw: string): { ok: true; val
       tags: Array.isArray(item.tags) ? item.tags.filter((tag) => typeof tag === 'string').slice(0, 10) : [],
     })).filter((item) => item.body);
     return { ok: true, value };
+  }
+  if (path === 'project_views') {
+    // 検証の中身は DOM を持たない project-view-memory.ts にある（node:test から叩くため）。
+    // 未知のタブ名・壊れた session_id・上限超過はそこで落ちる。
+    const value = sanitizeProjectViews(parsed);
+    if (value === null) return { ok: false };
+    return { ok: true, value };
+  }
+  if (path === 'display.custom_themes') {
+    return { ok: true, value: sanitizeCustomThemes(parsed) };
   }
   if (path === 'spawn.defaults') {
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ok: false };

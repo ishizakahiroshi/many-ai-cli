@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:8791e049d7be0dd15714c0479a20730e55d247e981b18073d9f48b3f0cd57c64",
+  "pageVersion": "sha256:ca668124243089f9b52243af753b9da3bf088a020738f2da3f39f36b66a73d5a",
   "claims": [
     {
       "id": "claim_81236c6e7cf04308938caecb76bd8d95",
@@ -55,12 +55,12 @@
       "statement": "internal/sessionstore uses modernc.org/sqlite, a pure-Go SQLite driver, and applies PRAGMA busy_timeout as the first pragma on every new connection specifically because it defaults to 0 (immediate SQLITE_BUSY failure rather than waiting), so any pragma issued before it (such as the WAL-mode pragma issued during init, which creates a -wal file and can contend with another process already holding the database open) would itself fail immediately under lock contention instead of benefiting from the timeout.",
       "evidence": [
         {
-          "resource": "repo://internal/sessionstore/store.go#L17-L21",
-          "version": "repo-lines-v1:sha256:7eaf26363267b3640614db18531fb337acb5ea65360554b8c5b61d365f6057d2:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiODc5OWQ2NzRmMmIxZTQ3NDVjNmFlMjM0YWZhZmY0MWRhNzM5NjM2ZjNjYjQ3NTY0OWVlY2NjY2ZmZjIyZTMwNCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2UwZWYzOTAxNGJiYzkzZTBlY2NlYTI0Y2IxZjhiNGIwMzE4OTI0ZTNkNmUwZWUzOWVmNDVlYjBjMzZjNTA3ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZWEwZTI5YTAwNmFkZjc3NTUyMWQ3NThjYjMyNzIwZmI2MDU5NDQ4MzJiNjgwOTc0NDRkMDRmNWEzN2QxZTYxZCJ9"
+          "resource": "repo://internal/sessionstore/store.go#L18-L22",
+          "version": "repo-lines-v1:sha256:bc05cadfe80064c322542e0e7a53428c8e7e010ab70a4f5e73f7a149b0dcbdf5:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWI0MzkxODU1NjgzNDJjYjZiNDNiNWIxZDhiYzZhM2IzYTI1YTBhZGQ5N2M5NWJjYTdmZjgxOTU4MzRhYTM3OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWIzOWUwMjJlMGQ4NTQxMjAwMDNkNzkwYzI4Yjc1OTYyZWRkMzAzNzU2ZDUxMzMzZGY3NDVjZmI4NmVhMTFjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTZjZGE1MmQ1ZTNiY2UzMTY0MjUxYzFmM2IyMmJjZTIxYzEyNmZhNzg4MGVjZTIwZGE4ZjBiNDI3YzVmMWVhZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2Q1ZmZiZGU2MjAzNTBkNDY4NDlhN2I4YjAzNDgxZGRkY2QyNDI3ZmNlOWU0ZmFjNTVjZDY1ZmZlNDQyMTI2MSJ9"
         },
         {
-          "resource": "repo://internal/sessionstore/store.go#L26-L32",
-          "version": "repo-lines-v1:sha256:7ee6be4f6e4d6c9e73cc9fdc903e46db2b2382fdd62085c6055d6c1271b5a38b:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGRiMDRiMTM4NDAwMTNkZjQ4NWRhYzg5Njg4MDAzYzFlYTA4NTNiYWEwNWY2ODIxNzI4ODAzYzQ4ZGQzMzc1ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTI2MTZjYmY3ZDEzNmI2ZGM1YTJiMGVmOTBhNTdkMjE5ODM2ZWE5MzQ3MWE1ZmE2MjAzOTgxZWNiNTQyMTU1OCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2FmMWJiNjMyODBiNWFiODlmNWNjOTY1NjJlODFlYTZhNGRhMTQ0Yjc3M2UzMzNjODFiMDgzZTc0OTE3NDU0ZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzE3NGE1ZGVhNjEzY2JjY2JkZGQyOWMyNGNjNDM4MDFlMjgwOTlkZDA5MTVmNzUyOTlkYWUyM2UwNTY1OTgzMCJ9"
+          "resource": "repo://internal/sessionstore/store.go#L26-L40",
+          "version": "repo-lines-v1:sha256:dd1a9c03c53f898c37adedbc3ed887e2747e4f8f82aef281132de1c412b74213:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUwZmU5YjA0YWQ0NTdiMGU0NzVmN2JhYzE3MThkZGFkYjViNDU4NTJmYjJhNTI4YWEzNmQ0OTNmY2QzNTJkZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiMjk5NWRmNjkzMTNmYjI2M2VjNTQ5ODdkOTZjMmZiN2Y0NjJjMmFhZTcwODkxNDAwNzQ5MDUxOGRkYmE2OWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNkNWZmYmRlNjIwMzUwZDQ2ODQ5YTdiOGIwMzQ4MWRkZGNkMjQyN2ZjZTllNGZhYzU1Y2Q2NWZmZTQ0MjEyNjEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc3MzBlYTVhOWY0YjYwM2NhMGNkYzVkZjEwNDRkZTU2YmFkZDk1MjYxMDlhODVmMTlmYzRhMmZkM2E5ZGI3NTIifQ"
         }
       ]
     },
@@ -105,6 +105,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

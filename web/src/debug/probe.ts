@@ -17,6 +17,22 @@ export type ProbeFields = Record<string, unknown>;
 export type ProbeSink = (channel: string, fields: ProbeFields) => void;
 
 const sinks = new Map<string, ProbeSink>();
+let spanID = 0;
+
+/** Synchronous work boundaries. Observation failures must not interrupt the UI. */
+export function probeSpan(channel: string, fields: () => ProbeFields): (() => void) | undefined {
+  if (!__MAI_DEBUG__) return;
+  const sink = sinks.get(channel);
+  if (!sink) return;
+  const id = ++spanID;
+  try {
+    const head = fields();
+    sink(channel, { ...head, id, edge: 'begin' });
+    return () => {
+      try { sink(channel, { ...head, id, edge: 'end' }); } catch { /* observation only */ }
+    };
+  } catch { return; }
+}
 
 export function registerProbeSink(channel: string, sink: ProbeSink): void {
   sinks.set(channel, sink);

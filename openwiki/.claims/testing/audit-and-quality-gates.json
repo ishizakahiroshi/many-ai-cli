@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "pageVersion": "sha256:f712e356ee71577a9082ee48aeb333270c672c2cfab2509c077be07017289f1f",
+  "pageVersion": "sha256:72ad37ff0e568436c5d016ffe7ba534ed7291709a6758e0dbe5b3665dc360ec9",
   "claims": [
     {
       "id": "claim_ff6e618ad7314b7a827095a915d250f8",
@@ -17,8 +17,8 @@
       "statement": "instrumentation.json's header states the ledger exists because the same class of mistake happened three times before it was built: a v0.5.1 debug endpoint that recorded an approval's raw answer text verbatim (removed in v0.5.2), a v0.5.x wrapper input trace that persisted every keystroke byte unmasked at world-readable 0644 permissions with no retention limit (caught by a pre-release audit and removed in v0.6.0), and a v0.6.0 debug endpoint left enabled by default until immediately before release.",
       "evidence": [
         {
-          "resource": "repo://instrumentation.json#L2-L10",
-          "version": "repo-lines-v1:sha256:7a6e746378e1057a65f5d20850a4f77a30c83a2262a8b6c403e70af0100f663f:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDEzNzc2NzQ2OGQzZTM3MWU0ZDhjNWQ2MGQyNTA2NDUxMGI2MDZhMWExN2M5Mzk4YzM0ZTc2MjQ1YzI5YWM4ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDJiZDhmNTQ1Mzg0MmY0NGIxN2U1YzRjODE3NzkwMTA1ZjRjMjVlMjMyODYxNmY3NzFhZmJkYWNlY2M2ZDIzZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjEsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTZmYjA4ZmRhMWFjYjk1N2I2MTE2YmQzNzgxMWExZmU0MWEwMTYxMWMwNjMxZWRiZjc4NmQ2ODg5YTI3YTU1YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWRiNmJmMDE1YTEwZWEzNGY2MTI0ZThjNmQwZDg1MjBiOWMyMGVkMzc0ZmM1NTFjOWY0OTAwNmE1MDk3OWZkNSJ9"
+          "resource": "repo://instrumentation.json#L3-L10",
+          "version": "repo-lines-v1:sha256:651275f15e6fd44ba243f6740bed03cf24237ed09b3b06180796767ad36d8e68:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjU4YjdlMDk4YzBhMDc5NjYzYTQzMzJmM2E4OTExOWY5MTFjMTNmNzU4ODRhMDZmZGZjYTFhNjdhYjlmN2VhOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjY0MjA1NDZlMjY1MGUwNWQ0NzU5NmZiMTMxOGYwMDkyNjEyMmQ1ZTQ2NDU2YTFjZjZjMDIwOWQxOWY1NmY2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjIsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmE1MGQwZmM4NTg5MTljNGY5MTUxODkzZjhmNWNjNDk3ODcwYTE2Njc4OTgyMTAyY2Q1NDhkODEyMzZmZDgzNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmIxYzM2NGI3NDhmYWJkOWVkMDY3NjdjZmQ4MzA0NzJiMjYxYzQzMDI1YjI1YzBhYWViNGE1MDcwODA3YTUwZSJ9"
         }
       ]
     },
@@ -27,8 +27,8 @@
       "statement": "instrumentation.json's rules require registering observability code in the same commit that adds it, require an active entry to carry a hard UTC-calendar due date rather than being tied to a version number (a version-based scheme was tried first and abandoned because nothing in release.yml or the release manual actually advanced the recorded version, leaving two releases with the same stale marker), require a gate on every entry with always-on gates disallowed especially for anything persisting user-input-derived bytes, and require a removed entry to record removedIn with its files verified actually gone.",
       "evidence": [
         {
-          "resource": "repo://instrumentation.json#L12-L21",
-          "version": "repo-lines-v1:sha256:b0dc533315aaa1d8627abf6be7775eb733fd96ba2c9efd1e0d8ff4f02b4de23c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImRmMzU0MWE4MGFlNWUzMDAxOGMxNTQ0OTAxYjljOTcwM2ZmNTJmZmI1OWIxZGJlMWQzN2EyZmQ5MTNiYzY3YjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjllZTA3NWM4YTg1MDZlZTA5Zjk5NmQ0MTc2OTAyNDM0OTEzNjFmYTZhOTYxNTY3Y2NlODI0MjljMzMzOTM3YmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4YTJmZTdiOTY3MDk4NWYzOGFlNmQyYjJlY2EwMDdiNzE2ZTg3MTBmZDQwYmM5ZTk3ZTYzMGU3OWJkNWUxMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5YTBmNGM2NTFkMmZlMmZlNGE2NjJmYjAzYTJhZThmYTYxM2RiNGYxNmNmNTAyMWRmZjAzM2NkZTg0MjkxN2IifQ"
+          "resource": "repo://instrumentation.json#L13-L21",
+          "version": "repo-lines-v1:sha256:0b4a2b8212e43b9a83d1163d04f528ec5cba3a3cdab329010bd8057847f2d77a:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGVmM2UwNDllNzZhM2U4NTE5ZmJhMjBjYzI4OGJkOGE1YTU3NWY1OGE4N2JiMTRmY2IzYjUwZjYxN2YxZWM4ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNmNjOWI1ZjkxOWUzMTQwZTVjYzI1NmZkYzA3ZTI2MmVjYjI0YTgyNGQwMzg2NzhhZGZkOGU1OGMzNzA5NzNiMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2QwMTA3N2ExYjQ4ZTVkYjZhODljNThiYThmMzFiYmRjMzE3M2Y2MWU0MWY2NjUyZTVlNThjMDY5OTIyMWZhOSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDM4NjJmZjM4OTM1M2ZlZDYzMjZmYjc5YjNmNzk5MzFjOGE0NzUzZTY4OGNkM2YyYjBkMzc3YjViOWE1Mzk3NCJ9"
         }
       ]
     },
@@ -37,8 +37,8 @@
       "statement": "instrumentation.json separates a files field (an observability feature's own dedicated file, which disappears entirely on removal) from a sharedFiles field (a shared file like server.go the feature only borrows space in) because collapsing the two into one field forces a choice between registering making removal unverifiable or removal being checkable but unenforced, and two entries (ui-input-trace, hub-input-trace) picked the unenforced option before the split existed and were consequently forgotten during cleanup.",
       "evidence": [
         {
-          "resource": "repo://instrumentation.json#L22-L29",
-          "version": "repo-lines-v1:sha256:eebb15eeca87658739c31dc60e192658c05a3d4a1d52d053cfbb4f0ba102f9a7:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTA3YmUxYzk3OTAzZDYzYTc1NGE0MTYwNzk2NDgzZDg3ZDE5YjNlZmIxMWQwNWJjYzQyMGE2ZmU2ZmEwMmM1NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGI0NjIwMWUyMmVmODMzZWVjMTU3Y2ZjMGQ2ZWZmMTkxYjg1YWUxYWY2NTMzM2Q1ZmIwOTczMjdiNWFlOWExYiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNTg2MWUxMWVmZTIwMGIzNTliMGVhY2E3YjUyNGVhNDZiZDZhOTc1YTJjOGIwNGU0ZTNlMjZlN2NmNWE4NTk5MiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTBlYWJlMTRjMDA5ZGZiMGFkOWRkMzliZWM1NmZhNzgzOWExNTBjZGI0MTQ5NDMzYjk4ZjAzNmI3ZGVjZmU4OCJ9"
+          "resource": "repo://instrumentation.json#L23-L29",
+          "version": "repo-lines-v1:sha256:7f798efb0c0a23eb8808e549095633540d230ce80f17709d1bfcf031dcdf1085:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZmM0ZTc2YmViOWY0MzM4MjQ3YjRlY2M0OTQxZThlYTY0YzA1MjU0YzQzOTI1MTdlZDFmMDBiNGY4Y2VjOWM2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDFmMDg4MjQ1OGZiZjlmMzY5ZjU1NGNkMzJlZGRhM2RjYjlmZmJkNzZkMTJjY2RhNTEzZTE2NzNkMzYxMDkwNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTgyZTY3ZTRmNmMwNjUyMWI3OGZhNTFlZGQ0YjYwYTlhNTk3NDNmMTc1NjllMjIxNGJiYjgzNGI4Nzg4ZTdjMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjc1MjUwNGZmYjUyYjhiNzYxNjUxYWMzODVhMzMwMWY5NTU2OWY1ODZiZTBlMzhkZjgyYzVlYTU3ZTA0MmJmNiJ9"
         }
       ]
     },
@@ -89,6 +89,6 @@
   ],
   "verification": {
     "by": "openwiki/0.5.0",
-    "at": "2026-09-08T13:17:25.310Z"
+    "at": "2026-09-21T12:35:03.565Z"
   }
 }

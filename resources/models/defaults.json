@@ -1,5 +1,7 @@
 {
   "anthropic": [
+    {"id": "opus",                   "label": "Claude Opus (latest)"},
+    {"id": "sonnet",                 "label": "Claude Sonnet (latest)"},
     {"id": "claude-opus-5[1m]",        "label": "Claude Opus 5 (1M)"},
     {"id": "claude-opus-5",            "label": "Claude Opus 5"},
     {"id": "claude-sonnet-5",          "label": "Claude Sonnet 5"},
@@ -10,11 +12,10 @@
     {"id": "claude-opus-4-7",          "label": "Claude Opus 4.7"},
     {"id": "claude-sonnet-4-6",        "label": "Claude Sonnet 4.6"},
     {"id": "claude-haiku-4-5",         "label": "Claude Haiku 4.5"},
-    {"id": "claude-sonnet-4-5",        "label": "Claude Sonnet 4.5"},
-    {"id": "claude-3-7-sonnet-latest", "label": "Claude 3.7 Sonnet"},
-    {"id": "claude-3-5-sonnet-latest", "label": "Claude 3.5 Sonnet"}
+    {"id": "claude-sonnet-4-5",        "label": "Claude Sonnet 4.5"}
   ],
   "openai": [
+    {"id": "gpt-6-astra",         "label": "GPT-6 Astra"},
     {"id": "gpt-5.6-sol",         "label": "GPT-5.6 Sol"},
     {"id": "gpt-5.6-terra",       "label": "GPT-5.6 Terra"},
     {"id": "gpt-5.6-luna",        "label": "GPT-5.6 Luna"},
@@ -26,15 +27,14 @@
     {"id": "gpt-5.2",             "label": "GPT-5.2"}
   ],
   "copilot": [
+    {"id": "auto",                "label": "Auto (Copilot selects)"},
+    {"id": "gpt-6-astra",         "label": "GPT-6 Astra"},
     {"id": "claude-opus-5",     "label": "Claude Opus 5"},
     {"id": "claude-sonnet-5",   "label": "Claude Sonnet 5"},
     {"id": "claude-fable-5",    "label": "Claude Fable 5"},
     {"id": "claude-opus-4.8",   "label": "Claude Opus 4.8"},
     {"id": "claude-opus-4.7",   "label": "Claude Opus 4.7"},
-    {"id": "claude-opus-4.6",   "label": "Claude Opus 4.6"},
-    {"id": "claude-opus-4.5",   "label": "Claude Opus 4.5"},
     {"id": "claude-sonnet-4.6", "label": "Claude Sonnet 4.6"},
-    {"id": "claude-sonnet-4.5", "label": "Claude Sonnet 4.5"},
     {"id": "claude-haiku-4.5",  "label": "Claude Haiku 4.5"},
     {"id": "gpt-5.6-sol",       "label": "GPT-5.6 Sol"},
     {"id": "gpt-5.6-terra",     "label": "GPT-5.6 Terra"},
@@ -45,9 +45,11 @@
     {"id": "gpt-5.4-nano",      "label": "GPT-5.4 nano"},
     {"id": "gpt-5.3-codex",     "label": "GPT-5.3-Codex"},
     {"id": "gpt-5-mini",        "label": "GPT-5 mini"},
+    {"id": "gemini-3.8-flash",  "label": "Gemini 3.8 Flash"},
+    {"id": "gemini-3.7-flash",  "label": "Gemini 3.7 Flash"},
     {"id": "gemini-3.6-flash",  "label": "Gemini 3.6 Flash"},
     {"id": "gemini-3.5-flash",  "label": "Gemini 3.5 Flash"},
-    {"id": "gemini-3.1-pro",    "label": "Gemini 3.1 Pro"},
+    {"id": "grok-4.6",          "label": "Grok 4.6"},
     {"id": "grok-4.5",          "label": "Grok 4.5"},
     {"id": "kimi-k3",           "label": "Kimi K3"},
     {"id": "kimi-k2.7-code",    "label": "Kimi K2.7 Code"}
@@ -69,6 +71,7 @@
     {"id": "gpt-5.5-medium",                "label": "GPT-5.5 1M"},
     {"id": "gpt-5.4-medium",                "label": "GPT-5.4 1M"},
     {"id": "gpt-5.3-codex",                 "label": "Codex 5.3"},
+    {"id": "cursor-grok-4.6-high",          "label": "Cursor Grok 4.6"},
     {"id": "cursor-grok-4.5-high",          "label": "Cursor Grok 4.5"},
     {"id": "kimi-k3-max",                   "label": "Kimi K3"},
     {"id": "glm-5.2-high",                  "label": "GLM 5.2"},
@@ -76,8 +79,7 @@
     {"id": "gemini-3.1-pro",                "label": "Gemini 3.1 Pro"}
   ],
   "grok": [
-    {"id": "grok-4.5",                   "label": "Grok 4.5"},
-    {"id": "grok-4.20-0309-reasoning",   "label": "Grok 4.20 Reasoning"},
-    {"id": "grok-3",                     "label": "Grok 3"}
+    {"id": "grok-4.6",                   "label": "Grok 4.6"},
+    {"id": "grok-4.5",                   "label": "Grok 4.5"}
   ]
 }

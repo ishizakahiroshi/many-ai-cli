@@ -1,6 +1,9 @@
 package hub
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,14 +27,78 @@ var approvalSuppressionFields = map[string]string{
 	"approvalConsumedCandidateKey":   "消費済み候補の identity",
 	"approvalConsumedCandidateShape": "消費済み候補の shape（identity の材料・表示用）",
 	"approvalConsumedEpoch":          "消費が起きた世代",
+}
 
-	// 以下 3 本は「いま画面に出 している候補」であって「回答済みか」ではない。
-	// approval_marker.go:129 で再 broadcast を抑えるのに使うが、判定に使う同一性は
-	// candidateKey + sourceEpoch とまったく同じもので、2 つ目の定義を持ち込んでいない。
-	// v0.7 で撤去した 3 本が問題だったのは、それぞれ別の同一性を持っていたためである。
-	"approvalMarkerCandidateKey":   "いま表示中のマーカー候補の identity（同じ定義を使う）",
-	"approvalMarkerCandidateShape": "いま表示中のマーカー候補の shape",
-	"approvalMarkerSourceEpoch":    "いま表示中のマーカー候補の世代",
+// approvalRecordIdentityFields は、保留中の承認の記録（approval_record.go の
+// approvalRecord）が持つ同一性の全量である。以前は session にネイティブ用
+// （nativeApproval*）とマーカー用（approvalMarker*）の「いま表示中の候補」が 2 組あったが、
+// 2026-09-23 に記録 1 件へまとめた（plan_approval-display-single-source.md）。
+// 記録は「いま保留中の候補」を持つだけで、判定に使う同一性は candidateKey + sourceEpoch と
+// まったく同じもの。2 つ目の定義を持ち込んでいない。
+var approvalRecordIdentityFields = map[string]string{
+	"CandidateKey":   "保留中の候補の identity（approval_identity.go と同じ定義）",
+	"CandidateShape": "保留中の候補の shape",
+	"SourceEpoch":    "保留中の候補の世代",
+	"Sig":            "画面と台帳の行を引き当てる参照。同一性の判定には使わない",
+}
+
+// identityLikeName は、同一性や抑止に関わりそうなフィールド名かを返す。
+func identityLikeName(name string) bool {
+	for _, part := range []string{"Candidate", "Consumed", "Epoch", "Answered", "Key", "Sig", "Shape", "Suppress", "Dismiss", "Seen"} {
+		if strings.Contains(name, part) {
+			return true
+		}
+	}
+	return false
+}
+
+// structFields は file の中の型 typeName の struct フィールドを、名前と型の文字列で返す。
+func structFields(t *testing.T, file, typeName string) map[string]string {
+	t.Helper()
+	fset := token.NewFileSet()
+	parsed, err := parser.ParseFile(fset, file, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *ast.StructType
+	ast.Inspect(parsed, func(n ast.Node) bool {
+		spec, ok := n.(*ast.TypeSpec)
+		if !ok || spec.Name.Name != typeName {
+			return true
+		}
+		if st, ok := spec.Type.(*ast.StructType); ok {
+			found = st
+		}
+		return false
+	})
+	if found == nil {
+		t.Fatalf("%s に型 %s の struct が無い。走査条件が実装とずれている", file, typeName)
+	}
+	fields := map[string]string{}
+	for _, field := range found.Fields.List {
+		typ := typeString(field.Type)
+		for _, name := range field.Names {
+			fields[name.Name] = typ
+		}
+	}
+	return fields
+}
+
+func typeString(expr ast.Expr) string {
+	switch v := expr.(type) {
+	case *ast.Ident:
+		return v.Name
+	case *ast.StarExpr:
+		return "*" + typeString(v.X)
+	case *ast.ArrayType:
+		return "[]" + typeString(v.Elt)
+	case *ast.MapType:
+		return "map[" + typeString(v.Key) + "]" + typeString(v.Value)
+	case *ast.SelectorExpr:
+		return typeString(v.X) + "." + v.Sel.Name
+	default:
+		return ""
+	}
 }
 
 // TestApprovalSuppressionStateIsSingleSource は、承認の抑止 state が増えていない
@@ -91,6 +158,38 @@ func TestApprovalSuppressionStateIsSingleSource(t *testing.T) {
 				"candidateKey の作り方か sourceEpoch の進み方で直せないかを先に検討すること", name)
 		}
 	}
+
+	// 保留中の承認は session に 1 件だけ持つ（approval_record.go 冒頭の規則）。
+	// 記録の枠を増やすと「いま保留中」が 2 本になる。
+	var recordFields []string
+	for name, typ := range structFields(t, "server.go", "session") {
+		if strings.Contains(typ, "approvalRecord") {
+			recordFields = append(recordFields, name+" "+typ)
+		}
+	}
+	if len(recordFields) != 1 || recordFields[0] != "pendingApproval *approvalRecord" {
+		t.Errorf("session の保留中の承認の記録 = %v, want [pendingApproval *approvalRecord]（1 セッション 1 件）", recordFields)
+	}
+
+	// 記録が持つ同一性は candidateKey + sourceEpoch の 1 本だけ。記録型に同一性・抑止らしい
+	// フィールドを足すときも、上と同じく一覧へ足して通すのではなく、それが 2 つ目の定義に
+	// なっていないかを先に確かめる。
+	record := structFields(t, "approval_record.go", "approvalRecord")
+	for name := range approvalRecordIdentityFields {
+		if _, ok := record[name]; !ok {
+			t.Errorf("approvalRecord に同一性のフィールド %q が無い。走査条件が実装とずれている", name)
+		}
+	}
+	for name := range record {
+		if _, ok := approvalRecordIdentityFields[name]; ok {
+			continue
+		}
+		if identityLikeName(name) {
+			t.Errorf("保留中の記録に同一性・抑止らしい新しいフィールド %q が増えている。"+
+				"approval_record.go と approval_identity.go の冒頭を読み、"+
+				"「同じ質問とは何か」の 2 つ目の定義になっていないかを先に確かめること", name)
+		}
+	}
 }
 
 // TestApprovalIdentityRuleIsDocumentedInSource は、承認の同一性ルールの本文が
@@ -115,5 +214,44 @@ func TestApprovalIdentityRuleIsDocumentedInSource(t *testing.T) {
 			t.Errorf("approval_identity.go に同一性ルールの説明 %q が無い。"+
 				"CLAUDE.md へ書き戻さず、正本であるこのファイルに置くこと", needle)
 		}
+	}
+}
+
+// TestLedgerAnsweredReadIsConfinedToOneFunction は、承認の台帳から回答済みを読む場所が
+// vtQuestionAnsweredInLedger の 1 か所だけであることを固定する（approval_identity.go 冒頭の例外）。
+// 台帳を読む場所が増えると、「回答済みか」を決めるものが実質 2 本になる。増やしたくなったら、
+// まず冒頭のルールを読み、メモリの持ち越し（carryConsumedVTQuestionLocked）で説明できないかを確かめる。
+func TestLedgerAnsweredReadIsConfinedToOneFunction(t *testing.T) {
+	const reader, readerFile, method = "vtQuestionAnsweredInLedger", "approval_text_question.go", "LatestApprovalOfKinds"
+	allowed := 0
+	for _, file := range goSourceFiles(t) {
+		fset := token.NewFileSet()
+		parsed, err := parser.ParseFile(fset, file, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range parsed.Decls {
+			fn, _ := decl.(*ast.FuncDecl)
+			inReader := fn != nil && fn.Name.Name == reader && filepath.Base(file) == readerFile
+			ast.Inspect(decl, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok || sel.Sel.Name != method {
+					return true
+				}
+				if inReader {
+					allowed++
+					return true
+				}
+				t.Errorf("%s: %s を %s の外から呼んでいる（台帳から回答済みを読むのは 1 か所だけ）", fset.Position(call.Pos()), method, reader)
+				return true
+			})
+		}
+	}
+	if allowed == 0 {
+		t.Fatalf("%s の %s に %s の呼び出しが無い。走査条件が実装とずれている", readerFile, reader, method)
 	}
 }

@@ -1,8 +1,10 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
+import { findUrlCandidates } from './url-detect.js';
+import { bindUrlLinksIn, linkifyUrlsInElement } from './url-links.js';
 import { refitActiveTerminalAfterLayout } from './terminal.js';
 import { markTabLazyLoaded, refreshLazyTabClasses } from './settings.js';
 import { openLightbox, terminalWrapper } from './attachments.js';
@@ -294,30 +296,18 @@ export const FilesTabManager = (function () {
       filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => {
         el.classList.toggle('active', el.dataset.tabId === tabId);
       });
-      // C2: 外部から openFilesTab / openGitTab が呼ばれた場合は統合タブバーも追随
+      // C2: 外部から openFilesTab / openGitTab / openReviewTab が呼ばれた場合は統合タブバーも追随。
+      // review は独立した統合タブ (mode-review) を持つので files への読み替えは不要
+      // （C2 子 plan: docs/local/plan_ux-notify-palette-review_c2_review-tab.md）。
       if (targetTab) {
         const kind = targetTab.kind || targetTab.type;
         if (kind === 'files' || kind === 'git' || kind === 'review') {
           if (typeof window !== 'undefined' && typeof window.setActiveTab === 'function') {
             const sid = (typeof activeSessionId !== 'undefined') ? activeSessionId : null;
             if (sid !== null && sid !== undefined) {
-              const unifiedKind = kind === 'review' ? 'files' : kind;
-              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, unifiedKind);
+              if (typeof markTabLazyLoaded === 'function') markTabLazyLoaded(sid, kind);
               if (typeof refreshLazyTabClasses === 'function') refreshLazyTabClasses(sid);
-              window.setActiveTab(sid, unifiedKind);
-              // Review は統合バー上では Files pane を借りる。setActiveTab('files')
-              // の初回 lazy open が Files 子タブを activate するため、戻った後に
-              // Review 子タブをもう一度権威状態へ戻す。
-              if (kind === 'review') {
-                activeTabId = tabId;
-                tabList.querySelectorAll('.main-tab').forEach(el => {
-                  el.classList.toggle('active', el.dataset.tabId === tabId);
-                });
-                filesContents.classList.add('visible');
-                filesContents.querySelectorAll('.files-tab-content, .git-tab-content, .review-tab-content').forEach(el => {
-                  el.classList.toggle('active', el.dataset.tabId === tabId);
-                });
-              }
+              window.setActiveTab(sid, kind);
             }
           }
         }
@@ -953,7 +943,7 @@ export const FilesTabManager = (function () {
     // /api/info からセッション一覧を取得して gitRoot → projectKey のマッピングを試みる
     let sessions = [];
     try {
-      const res = await fetch(`/api/info?token=${encodeURIComponent(token)}`);
+      const res = await apiFetch('/api/info');
       if (res.ok) { const d = await res.json(); sessions = d.sessions || []; }
     } catch (err) {
       console.warn('[FilesTabManager] /api/info fetch error:', err);
@@ -2156,6 +2146,8 @@ export const FilesPreview = (function () {
       html = escapeHtml(content);
     }
     code.innerHTML = html;
+    // テキスト・ソース中の http(s) URL をリンクにする（クリックで開く / コピーのメニュー）
+    linkifyUrlsInElement(code);
     pre.appendChild(code);
     return pre;
   }
@@ -2182,12 +2174,24 @@ export const FilesPreview = (function () {
         text = token.tokens ? token.tokens.map(t => t.raw || '').join('') : (token.text || href || '');
       }
       text = text || href || '';
+      let tail = '';
+      if (/^https?:\/\//i.test(href) && !title && (text === href || text === escapeHtml(href))) {
+        // 本文に裸で書かれた URL の自動リンク。marked は空白の手前まで URL に含めるので、
+        // 直後に続く日本語や閉じ括弧は URL の判定（url-detect.ts）で外して本文へ戻す。
+        const c = findUrlCandidates(href)[0];
+        if (c && c.start === 0) {
+          tail = href.slice(c.end);
+          href = c.url;
+        }
+        text = href;
+      }
       const safeHref = escapeHtml(href || '');
       const safeText = escapeHtml(text);
       const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
 
       if (/^https?:\/\//i.test(href)) {
-        return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${safeTitle}>${safeText}</a>`;
+        // クリック時の動きは描画後の bindUrlLinksIn が付ける
+        return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer"${safeTitle}>${safeText}</a>${escapeHtml(tail)}`;
       }
       if (/\.(md|txt)$/i.test(href) && !/^https?:\/\//i.test(href) && !href.startsWith('/')) {
         // 相対 md リンク → data 属性で処理
@@ -2931,6 +2935,8 @@ export const FilesPreview = (function () {
               if (p) showPathPopup(p, e.clientX, e.clientY, sessionId || '');
             });
           });
+          bindUrlLinksIn(contentEl);
+          contentEl.querySelectorAll('pre code').forEach((code) => { linkifyUrlsInElement(code); });
         } else {
           // .txt など — hljs.highlightAuto で自動判定（巨大ファイルはプレーン）
           contentEl.innerHTML = '';

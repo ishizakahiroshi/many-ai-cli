@@ -115,6 +115,31 @@ func TestRelaySpawnPassesSubscriptionProfile(t *testing.T) {
 	}
 }
 
+// 役割に付いた effort / 実行モード / 権限段が、そのまま子の起動要求へ写ることを
+// 固定する（子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C3）。
+// `orchestrate relay --impl claude/opus@high` はこの経路で子へ届く。
+func TestRelaySpawnPassesLaunchOptions(t *testing.T) {
+	h := newRelayHarness(t)
+	st := h.start()
+	run := h.run(st.OrchestrationID)
+	// 既定（何も指定していない役割）では 3 項目とも空のままで、子の起動要求は
+	// この 3 項目が無かった頃と完全に一致する。
+	if first := h.spawns[0]; first.Effort != "" || first.ExecutionMode != "" || first.PermissionPreset != "" {
+		t.Fatalf("unset role must leave the launch options empty: %+v", first)
+	}
+	assignment := run.roles[relayRoleImplementation]
+	assignment.Effort = "high"
+	assignment.ExecutionMode = "interactive"
+	run.roles[relayRoleImplementation] = assignment
+	if err := h.s.relaySpawn(run, relayRoleImplementation, "prompt"); err != nil {
+		t.Fatalf("relaySpawn: %v", err)
+	}
+	last := h.spawns[len(h.spawns)-1]
+	if last.Effort != "high" || last.ExecutionMode != "interactive" {
+		t.Fatalf("spawn launch options = %+v", last)
+	}
+}
+
 func (h *relayHarness) fakeSpawn(parentID int, parent *session, body spawnChildRequest, prep childSpawnPreparation) (childSpawnResult, error) {
 	if h.spawnErr != nil {
 		return childSpawnResult{}, h.spawnErr
@@ -602,6 +627,57 @@ func TestRelay_startRelay_childFullBypassOffLeavesApprovalUnset(t *testing.T) {
 	body := h.spawns[0]
 	if body.AskForApproval != "" || body.Sandbox != "" || body.PermissionMode != "" || body.RiskConfirmed {
 		t.Fatalf("child_full_bypass=false must not fill approval defaults: %+v", body)
+	}
+}
+
+// 無人の既定を段 2 へ寄せたとき、relay の子が本当に段 2 の値で起動することを固定する。
+// relay は承認系フィールドを 1 つも送らないので、何段で回るかは
+// orchestration.child_permission_default だけが決める（子 plan:
+// docs/local/plan_derived-session-launch_c2_permission-tiers.md 内部 C4）。
+//
+// **既定そのものはまだ切り替えていない。** 切り替えるのは、利用者が段 2 で relay
+// 1 周（implementation → review → fix）の完走を確認してから。見送り台帳 D-12 の
+// 再検討条件「relay が既定 off のまま完走できる形が実装されたとき」を満たしに行く
+// のがこのテストの守備範囲で、満たしたと宣言するのは実走記録の仕事。
+func TestRelay_startRelay_childPermissionDefaultBounded(t *testing.T) {
+	h := newRelayHarness(t)
+	h.s.cfg.Orchestration.ChildPermissionDefault = config.PermissionPresetBounded
+	st := h.start()
+	run := h.run(st.OrchestrationID)
+
+	// implementation = codex: --sandbox workspace-write + --ask-for-approval never
+	impl := h.spawns[0]
+	if impl.Sandbox != "workspace-write" || impl.AskForApproval != "never" {
+		t.Fatalf("implementation の子が段 2 で起動していない: %+v", impl)
+	}
+	if !impl.RiskConfirmed {
+		t.Fatalf("段 2 の codex は高リスク確認済みで起動する必要がある: %+v", impl)
+	}
+
+	// review = claude: --permission-mode dontAsk + 許可 tool の一覧
+	if err := h.s.relaySpawn(run, relayRoleReview, "review please"); err != nil {
+		t.Fatalf("relaySpawn(review): %v", err)
+	}
+	review := h.spawns[len(h.spawns)-1]
+	if review.PermissionMode != "dontAsk" {
+		t.Fatalf("review の子が段 2 で起動していない: %+v", review)
+	}
+	if len(review.AllowedTools) == 0 {
+		t.Fatalf("段 2 の claude は allowlist 付きで起動する: %+v", review)
+	}
+}
+
+// 既定を書かない relay は今日どおり段 3（全許可）で回る。切替前後を 1 本の
+// テストで並べておかないと、「もう切り替わっている」と読み違えられる。
+func TestRelay_startRelay_childPermissionDefaultUnsetStaysFull(t *testing.T) {
+	h := newRelayHarness(t)
+	h.start()
+	impl := h.spawns[0]
+	if impl.Sandbox != "danger-full-access" || impl.AskForApproval != "never" || !impl.RiskConfirmed {
+		t.Fatalf("既定未設定の relay は段 3 のまま: %+v", impl)
+	}
+	if len(impl.AllowedTools) != 0 {
+		t.Fatalf("段 3 に allowlist は付かない: %+v", impl)
 	}
 }
 

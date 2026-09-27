@@ -4,6 +4,13 @@
 
 export type ProviderID = 'claude' | 'codex' | 'copilot' | 'cursor-agent' | 'opencode' | 'grok' | 'command-code' | 'common' | string;
 
+/** REST response from /api/nvidia-nim. Secret values are never returned. */
+export interface NVIDIANIMSettingsStatus {
+  enabled: boolean;
+  api_key_configured: boolean;
+  api_key_source: 'none' | 'env' | 'file' | string;
+}
+
 export type SessionState =
   | 'standby'
   | 'running'
@@ -31,12 +38,13 @@ export type MessageType =
   | 'pty_input'
   | 'pty_input_ack'
   | 'pty_resize'
-  | 'session_hint'
-  | 'approval_detected'
-  | 'approval_marker'
   | 'approval_marker_suppressed'
-  | 'approval_cleared'
   | 'approval_consumed'
+  // 画面 → Hub の問い直し（抑止告知の「再検出」）。Hub は今の記録を問い直した画面にだけ送る。
+  | 'approval_resync'
+  // 保留中の承認の記録（internal/hub/approval_record.go）。開閉の差分と、接続時のまとめ。
+  | 'approval_state'
+  | 'approval_snapshot'
 	| 'auto_approval_applied'
   | 'approval_patterns_updated'
   | 'binary_stale'
@@ -48,6 +56,8 @@ export type MessageType =
   | 'ping'
   | 'usage_stat'
   | 'workflow_progress'
+  // サブエージェントの木（親 plan: plan_subagent-tree-popup.md）。セッション単位の WS だけに送られる。
+  | 'subagent_tree'
   | 'done_summary'
   | 'git_turn'
   | 'user_turn_started'
@@ -89,6 +99,60 @@ export interface ApprovalSummary {
   paths?: string[];
   risk: ApprovalRiskTier;
   raw?: string;
+}
+
+/**
+ * Hub が持つ保留中の承認の記録（internal/proto.ApprovalRecord のミラー）。
+ * マーカーは block の原文だけを持ち、選択肢はブラウザ側の Hub ブロック用パーサで解く。
+ * ネイティブは Go 側で解いた question / context / options / summary を持つ。
+ * sig は台帳と回答の引き当て用の参照で、同一性ではない（同一性は candidate_key + source_epoch）。
+ */
+export interface ApprovalRecord {
+  candidate_key: string;
+  candidate_shape?: string;
+  source_epoch: number;
+  sig?: string;
+  /** native | marker */
+  origin: string;
+  /** go_vt | transcript */
+  source?: string;
+  kind?: string;
+  block?: string;
+  question?: string;
+  context?: string;
+  options?: ApprovalOption[];
+  summary?: ApprovalSummary;
+  detected_at?: string;
+}
+
+/** 閉じた記録と理由（internal/proto.ApprovalRecordClose のミラー）。 */
+export interface ApprovalRecordClose {
+  candidate_key: string;
+  source_epoch: number;
+  sig?: string;
+  origin?: string;
+  /** answered | answered_terminal | superseded | vanished | session_end | history_reset */
+  reason: string;
+}
+
+/**
+ * 1 セッションの記録の開閉（type='approval_state'。internal/proto.ApprovalState のミラー）。
+ * open と close のどちらか一方だけが入る。version はセッションごとに開閉のたびに 1 増え、
+ * 手元より古いものは捨てる（Hub はロックを外してから送るので、逆順に届くことがある）。
+ * 例外は approval_resync への返事（問い直した画面にだけ届く）で、今の version と open を持ち、
+ * 記録が無ければどちらも空（その版では記録が無い）。
+ */
+export interface ApprovalState {
+  version: number;
+  open?: ApprovalRecord;
+  close?: ApprovalRecordClose;
+}
+
+/** approval_snapshot の 1 セッション分。record が無いセッションは「保留中の承認なし」。 */
+export interface ApprovalSessionState {
+  session_id: number;
+  version: number;
+  record?: ApprovalRecord;
 }
 
 export interface SessionMeta {
@@ -173,6 +237,47 @@ export interface WorkflowProgress {
   task_detail_source?: string;
 }
 
+/**
+ * サブエージェントの木の 1 ノード（internal/proto.SubagentNode のミラー）。
+ * WfAgentDetail と同じ規律で、プロンプト本文・ツール結果・子の返答を保持する
+ * フィールドは持たない。last_tool_summary は許可したキー（command / pattern /
+ * path / file_path）の値を切り詰めたものだけ。
+ */
+export interface SubagentNode {
+  id: string;
+  /** 空 = 最上位（親の直接の子）。 */
+  parent_id?: string;
+  /** 1 = 最上位の子, 2 = 孫, ... */
+  depth: number;
+  /** 親が付けた短い名前（Claude: description, Codex: agent_nickname/agent_role）。プロンプトそのものではない。 */
+  label?: string;
+  agent_type?: string;
+  model?: string;
+  /** running | done | failed | unknown */
+  state: string;
+  started_at?: number; // epoch ms
+  last_activity_at?: number; // epoch ms
+  finished_at?: number; // epoch ms
+  /** 読み取り側が数えきれていないときは未送（0 を「まだ 0 回」と誤解させない）。 */
+  tool_calls?: number;
+  last_tool_name?: string;
+  last_tool_summary?: string;
+}
+
+/**
+ * サブエージェントの木（internal/proto.SubagentTree のミラー）。セッション単位の
+ * WS だけに送られ、ログ出力・永続化・外部送信はしない
+ * （docs/local/plan_subagent-tree-popup.md 方針 3・6）。
+ */
+export interface SubagentTree {
+  /** この木を作った adapters.subagents の読み方（セッションの provider と一致するとは限らない）。 */
+  provider?: string;
+  nodes?: SubagentNode[];
+  /** 上限で落とした件数。 */
+  omitted?: number;
+  updated_at?: number; // epoch ms
+}
+
 /** relay ループ 1 本の状態（internal/proto/messages.go の RelayStatus のミラー）。 */
 export interface RelayStatus {
   orchestration_id?: string;
@@ -239,6 +344,8 @@ export interface Message {
 	awaiting_approval?: boolean;
 	activity?: SessionActivity;
   workflow_progress?: WorkflowProgress;
+  /** サブエージェントの木。type='subagent_tree' のメッセージでのみ届く。 */
+  subagent_tree?: SubagentTree;
   exit_code?: number;
   token?: string | null;
   data?: string | Uint8Array;
@@ -274,6 +381,10 @@ export interface Message {
   approval_candidate_shape?: string;
   approval_consumed?: boolean;
   approval_consumed_epoch?: number;
+  /** type='approval_state' でだけ届く。 */
+  approval_state?: ApprovalState;
+  /** type='approval_snapshot' でだけ届く（接続した画面にだけ送られる）。 */
+  approval_snapshot?: ApprovalSessionState[];
   done_summary?: DoneSummary;
   turn?: number;
   files_changed?: number;
@@ -294,8 +405,21 @@ export interface Message {
   model?: string;
   /** reasoning effort（"high" 等）。起動バナー / モデル変更行から Hub が検出した値。 */
   effort?: string;
+  /** 起動要求に添えられた実行モード（auto / interactive / headless）。空は指定なし。 */
+  execution_mode?: string;
+  /** 起動要求に添えられた権限段（attended / bounded / full）。空は指定なし。 */
+  permission_preset?: string;
+  /**
+   * wrapper が申告した「起動時に実際に付けた権限モード」（plan / acceptEdits /
+   * dontAsk / auto / bypassPermissions / bounded）。空は「権限のフラグを 1 つも
+   * 付けていない」。**起動時の 1 点の値**で、セッション中の切り替えは含まない。
+   * 段（permission_preset）とは語彙が別。
+   */
+  permission_mode?: string;
   route?: string;
   parent_session_id?: number;
+  /** このセッションが続きを引き受けた前任の ID。0 / 未送は通常起動。親子関係ではない。 */
+  handoff_from?: number;
   auto?: boolean;
   depth?: number;
   orchestration_id?: string;
@@ -310,6 +434,16 @@ export interface Message {
 	initial_prompt?: string;
 	/** epoch ms。spawn_confirmation_requested とその再送の両方に載る。 */
 	spawn_requested_at_ms?: number;
+	/**
+	 * 確認ダイアログの「この役割では次回もこの段を使う」チェックボックスの初期状態。
+	 * true = Hub がその役割の段を既に覚えている（段そのものは permission_preset）。
+	 */
+	remember_permission?: boolean;
+	/**
+	 * 確認ダイアログで「このフォルダを信頼済みとして登録する」を出してよい provider。
+	 * spawn_confirmation_requested とその再送の両方に載る。
+	 */
+	trust_grant_providers?: string[];
 	/**
 	 * spawn_confirmation_closed の reason は5値のみ:
 	 * approved | refused | superseded | parent_gone | spawn_failed。
@@ -377,6 +511,11 @@ export interface Message {
   repo_name?: string;       // workspace.repo.name
   remaining_pct?: number;   // Claude Code statusLine 算出済みの context 残り%
   reasoning_output_tokens?: number; // Codex token_count.info reasoning_output_tokens
+  // handoff_note: 残量の帯から依頼した引き継ぎメモの結果（子 plan:
+  // plan_derived-session-launch_c4_handoff-routes.md 内部 C2）。note_ok=false は
+  // 「60 秒内に合図が来なかった / ファイルが無い」で、その場合 note_path は空。
+  note_ok?: boolean;
+  note_path?: string;
   // C3: git 変更状況メタ（git_checked=true のメッセージのみ有効）
   git_checked?: boolean;
   git_files?: number;
@@ -406,9 +545,18 @@ export interface SessionSnapshot {
   model?: string;
   /** reasoning effort（"high" 等）。UI 3 箇所の統一表示に使う（usage 側の値が優先）。 */
   effort?: string;
+  /** wrapper が申告した実行モード（"headless" のみ。空＝対話）。 */
+  execution_mode?: string;
+  /**
+   * wrapper が申告した「起動時に実際に付けた権限モード」。空は指定なしで、
+   * カードには何も出さない（「不明」を出さない）。ライブ値ではない。
+   */
+  permission_mode?: string;
   route?: string;
   shell?: string;
   parent_session_id?: number;
+  /** このセッションが続きを引き受けた前任の ID。0 / 未送は通常起動。親子関係ではない。 */
+  handoff_from?: number;
   role?: string;
   auto?: boolean;
   depth?: number;

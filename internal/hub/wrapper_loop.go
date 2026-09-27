@@ -78,6 +78,51 @@ func (s *Server) attachStore(start sessionstore.SessionStart, cardMeta sessionst
 	return storeID, saved
 }
 
+// initialInjectGateNeeded reports whether a registering session holds user
+// input until its first instruction has been typed in (initialInjectPending).
+//
+// orchestration セッションは登録直後に初期プロンプト注入（conductor は wrapperLoop
+// 末尾、子は dispatchSpawn の injectInitialPromptNotify）が走る。通常の /api/spawn が
+// initial_prompt を渡した場合（plan_session-handoff-board_c4_prompted-spawn.md C1）
+// も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を保留し、
+// 起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
+//
+// 最初の指示を起動時に受け取ったセッション（PromptAtLaunch）には掛けない。注入が
+// 来ないのでゲートを解く人がおらず、90 秒の上限まで利用者の入力 — 画面に出た信頼
+// 確認への回答も — が届かなくなる（子 plan
+// plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3、画面から起動した
+// conductor・指示付きのセッションは plan_child-launch-prompt-and-trust_c5_ui-launched.md）。
+func initialInjectGateNeeded(meta pendingChild) bool {
+	return (meta.OrchestrationID != "" || meta.InitialPrompt != "") && !meta.PromptAtLaunch
+}
+
+// registrationInjectPrompt is what wrapperLoop types into a session right after
+// it registers, and the name of the goroutine that types it. An empty prompt
+// means nothing is typed.
+//
+//   - A conductor started from the toolbar's "Orchestration" button (Auto is
+//     false) gets the role guide (plan_orchestration-spawn-ui-exposure.md C2).
+//     spawn-child's own children (Auto is true) are typed by dispatchSpawn,
+//     never here.
+//   - A plain /api/spawn with an instruction gets that instruction as is,
+//     without the board/role framing (plan_session-handoff-board_c4_prompted-spawn.md
+//     C1). A conductor that also carried one gets only the role guide.
+//   - Either of the two handed over at launch instead (PromptAtLaunch — a CLI
+//     that takes its first instruction as a launch argument; 子 plan
+//     plan_child-launch-prompt-and-trust_c5_ui-launched.md) gets nothing: the
+//     CLI already holds the same text.
+func (s *Server) registrationInjectPrompt(meta pendingChild) (prompt, name string) {
+	switch {
+	case meta.PromptAtLaunch:
+		return "", ""
+	case meta.OrchestrationID != "" && !meta.Auto:
+		return buildConductorInitialPrompt(meta.OrchestrationID, s.orchestrationRolesFor(meta.OrchestrationID)), "inject_initial_prompt_conductor"
+	case meta.OrchestrationID == "" && meta.InitialPrompt != "":
+		return meta.InitialPrompt, "inject_initial_prompt_spawn"
+	}
+	return "", ""
+}
+
 func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	startedAt := time.Now()
 	branch := gitBranch(reg.CWD)
@@ -146,22 +191,40 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		}, cardMeta)
 	}
 	s.sessionsMu.Lock()
+	// Effort は wrapper が起動時に実際に付けた reasoning effort（子 plan:
+	// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C2）。空なら従来
+	// どおり未設定のままで、バナー検出（applyDetectedModel）が後から埋める。起動値が
+	// 入っていれば、空文字では既存値を消さない同関数がそれを保つ。
 	ses := &session{
-		ID:              id,
-		StoreID:         storeID,
-		Provider:        reg.Provider,
-		Display:         reg.Display,
-		CWD:             reg.CWD,
-		Branch:          branch,
-		Label:           cardMeta.Label,
-		Pinned:          cardMeta.Pinned,
-		Color:           cardMeta.Color,
-		Note:            cardMeta.Note,
-		AutoTitle:       cardMeta.AutoTitle,
-		Model:           reg.Model,
+		ID:               id,
+		StoreID:          storeID,
+		Provider:         reg.Provider,
+		ProviderRevision: reg.ProviderRevision,
+		Display:          reg.Display,
+		CWD:              reg.CWD,
+		Branch:           branch,
+		Label:            cardMeta.Label,
+		Pinned:           cardMeta.Pinned,
+		Color:            cardMeta.Color,
+		Note:             cardMeta.Note,
+		AutoTitle:        cardMeta.AutoTitle,
+		Model:            reg.Model,
+		Effort:           reg.Effort,
+		// ExecutionMode も wrapper の申告が正本。対話セッションは空を送るので、
+		// この項目が存在しなかった頃と 1 バイトも変わらない（子 plan:
+		// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+		ExecutionMode: reg.ExecutionMode,
+		// PermissionMode も同じく wrapper の申告が正本。権限のフラグを 1 つも
+		// 付けずに起動したセッションは空を送るので、この項目が存在しなかった頃と
+		// 1 バイトも変わらない（C5, plan_cross-provider-agent-ux-adoption.md）。
+		PermissionMode:  reg.PermissionMode,
 		Route:           regRoute,
 		Shell:           reg.Shell,
 		ParentSessionID: childMeta.ParentSessionID,
+		// 看板 jsonl（recordHandoffSessionStart）と同じ値をセッション本体へも写す。
+		// カードの「↪ #前任」チップはこれを読む（子 plan
+		// plan_derived-session-launch_c3_derive-launch.md 内部 C4）。
+		HandoffFrom:     childMeta.HandoffFrom,
 		Role:            childMeta.Role,
 		Auto:            childMeta.Auto,
 		Depth:           childMeta.Depth,
@@ -198,12 +261,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		customProviderSession: customProviderSession,
 	}
 	ses.inputMu = new(sync.Mutex) // AUDIT-11: 生成時に必ず allocate（未設定だと Lock で nil panic）
-	if childMeta.OrchestrationID != "" || childMeta.InitialPrompt != "" {
-		// orchestration セッションは登録直後に初期プロンプト注入（conductor は本関数末尾、
-		// 子は handleSpawnChild の injectInitialPrompt）が走る。通常の /api/spawn が
-		// initial_prompt を渡した場合（plan_session-handoff-board_c4_prompted-spawn.md C1）
-		// も同じ注入が末尾で走るので、同じゲートを使う。注入完了までユーザー入力を
-		// 保留し、起動途中の CLI に入力が捨てられる・注入と混線するのを防ぐ。
+	if initialInjectGateNeeded(childMeta) {
 		ses.initialInjectPending = true
 		ses.initialInjectGateAt = time.Now()
 	}
@@ -250,27 +308,17 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.logger.Info("statusline_gate_hub", "session_id", id, "provider", reg.Provider, "token_statusbar_send", tokenStatusbarForAck)
 	_ = wc.send(proto.Message{Type: "registered", SessionID: id, Cols: initCols, Rows: initRows, StartedAt: ses.StartedAt, LogPath: rawLogPath, JSONLPath: jsonlPath, TokenStatusbar: tokenStatusbarForAck, OrchestrationID: childMeta.OrchestrationID, Auto: childMeta.Auto, BoardPath: childMeta.BoardPath})
 	s.logger.Info("session registered", "id", id, "provider", reg.Provider, "cwd", reg.CWD, "pid", reg.PID)
-	// C2 (plan_orchestration-spawn-ui-exposure.md): conductor セッション（ツールバーの
-	// 「オーケストレーション」ボタン経由・Auto=false）にだけ役割マッピングの案内を注入する。
-	// spawn-child で自動生成される子（Auto=true）は handleSpawnChild 側で
-	// buildChildInitialPrompt を既に注入済みなのでここでは対象外。
-	if childMeta.OrchestrationID != "" && !childMeta.Auto {
-		roles := s.orchestrationRolesFor(childMeta.OrchestrationID)
+	// 登録直後に打ち込む最初の指示（conductor の案内か、画面から渡した文面。何を
+	// 打ち込むか・打ち込まないかは registrationInjectPrompt だけが決める）。
+	if prompt, name := s.registrationInjectPrompt(childMeta); prompt != "" {
 		// goroutine で注入する: ここは wrapperMessageLoop 開始前のため、同期で
 		// waitForInputReady を呼ぶと出力が観測できず常に maxWait までブロックし、
 		// その間 PTY 出力の中継も止まる。
 		// safeGo で panic を recover する（素の go だと injectInitialPrompt 中の panic が
 		// Hub プロセス全体を落とし、稼働中の全セッションが同時に切断される）。
-		prompt := buildConductorInitialPrompt(childMeta.OrchestrationID, roles)
-		s.safeGo("inject_initial_prompt_conductor", func() { s.injectInitialPrompt(id, prompt) })
-	} else if childMeta.OrchestrationID == "" && childMeta.InitialPrompt != "" {
-		// C1 (plan_session-handoff-board_c4_prompted-spawn.md): 通常の /api/spawn
-		// が画面から渡した文面。orchestration 経路のような board/role の枠組み文は
-		// 付けず、sanitizeSpawnInitialPrompt 済みの文面をそのまま注入する。
-		// 同じ safeGo + injectInitialPrompt を使うので、Enter が消える不具合の
-		// 再発防止（confirmInitialPromptSubmitted 等）もそのまま効く。
-		prompt := childMeta.InitialPrompt
-		s.safeGo("inject_initial_prompt_spawn", func() { s.injectInitialPrompt(id, prompt) })
+		// conductor も画面の文面も同じ injectInitialPrompt を使うので、Enter が消える
+		// 不具合の再発防止（confirmInitialPromptSubmitted 等）もそのまま効く。
+		s.safeGo(name, func() { s.injectInitialPrompt(id, prompt) })
 	}
 	// announce 直前に再確認（inject 後〜ここまでの狭い窓での dismiss も拾う）。
 	// sessionUpdateMessage は approvalSourceEpoch を読むため、ここだけは
@@ -519,6 +567,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	// スクロールバックが 64KB へ切り詰められ、ブラウザ再読込で履歴が失われていた。
 	var prevPTYBuf []byte
 	var prevVT *vtBuffer
+	var prevAltScreen bool
 	var prevCols, prevRows int
 	var prevSeen int64
 	var prevInputSeq int64
@@ -527,24 +576,19 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	var prevInputAckCapable bool
 	var prevAgentChatPath string
 	var prevAgentChatOffset int64
+	var prevProviderRevision string
 	var prevReplayEpoch uint64
 	var prevApprovalSourceEpoch uint64
 	var prevApprovalEpochPending bool
 	var prevApprovalConsumedCandidateKey string
 	var prevApprovalConsumedCandidateShape string
 	var prevApprovalConsumedEpoch uint64
-	var prevNativeApprovalSig string
-	var prevNativeApprovalCandidateKey string
-	var prevNativeApprovalCandidateShape string
-	var prevNativeApprovalSourceEpoch uint64
+	var prevPendingApproval *approvalRecord
+	var prevApprovalStateVersion uint64
 	var prevNativeApprovalTailSig string
 	var prevNativeApprovalClearMisses int
 	var prevNativeApprovalConsumed string
 	var prevNativeApprovalConsumedAt time.Time
-	var prevApprovalMarkerSig string
-	var prevApprovalMarkerCandidateKey string
-	var prevApprovalMarkerCandidateShape string
-	var prevApprovalMarkerSourceEpoch uint64
 	var prevApprovalMarkerSuppressedSig string
 	var prevApprovalMarkerSuppressedAt time.Time
 	var prevReattachState reattachPreservedState
@@ -554,6 +598,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	prevExists := false
 	if cur := s.sessions[acceptedID]; cur != nil {
 		prevReattachState = snapshotReattachStateLocked(cur)
+		prevProviderRevision = cur.ProviderRevision
 		prevAgentChatPath = cur.agentChatPath
 		prevAgentChatOffset = cur.agentChatOffset
 		prevReplayEpoch = cur.replayEpoch
@@ -562,18 +607,16 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevApprovalConsumedCandidateKey = cur.approvalConsumedCandidateKey
 		prevApprovalConsumedCandidateShape = cur.approvalConsumedCandidateShape
 		prevApprovalConsumedEpoch = cur.approvalConsumedEpoch
-		prevNativeApprovalSig = cur.nativeApprovalSig
-		prevNativeApprovalCandidateKey = cur.nativeApprovalCandidateKey
-		prevNativeApprovalCandidateShape = cur.nativeApprovalCandidateShape
-		prevNativeApprovalSourceEpoch = cur.nativeApprovalSourceEpoch
+		// 記録は開いた後に書き換えない値なので、ポインタをそのまま渡してよい
+		// （approval_record.go 冒頭）。
+		prevPendingApproval = cur.pendingApproval
+		// 版番号は巻き戻さない。画面は手元より古い版を捨てるので、0 から数え直すと
+		// reattach 後の開閉がすべて捨てられる。
+		prevApprovalStateVersion = cur.approvalStateVersion
 		prevNativeApprovalTailSig = cur.nativeApprovalTailSig
 		prevNativeApprovalClearMisses = cur.nativeApprovalClearMisses
 		prevNativeApprovalConsumed = cur.nativeApprovalConsumed
 		prevNativeApprovalConsumedAt = cur.nativeApprovalConsumedAt
-		prevApprovalMarkerSig = cur.approvalMarkerSig
-		prevApprovalMarkerCandidateKey = cur.approvalMarkerCandidateKey
-		prevApprovalMarkerCandidateShape = cur.approvalMarkerCandidateShape
-		prevApprovalMarkerSourceEpoch = cur.approvalMarkerSourceEpoch
 		prevApprovalMarkerSuppressedSig = cur.approvalMarkerSuppressedSig
 		prevApprovalMarkerSuppressedAt = cur.approvalMarkerSuppressedAt
 		stopReattachAsyncStateLocked(cur)
@@ -581,6 +624,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		oldHistory = cur.History
 		prevPTYBuf = cur.ptyBuf
 		prevVT = cur.vt
+		prevAltScreen = cur.altScreen
 		prevCols, prevRows = cur.lastCols, cur.lastRows
 		prevSeen = cur.ptyBytesSeen
 		prevInputSeq = cur.inputSeq
@@ -593,6 +637,9 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		prevResendInput = cur.resendInput
 		prevInputAckCapable = cur.inputAckCapable
 		prevExists = true
+	}
+	if prevExists && prevProviderRevision != "" {
+		req.ProviderRevision = prevProviderRevision
 	}
 	// gap = 切断中に Hub が受け取れなかったぶん。既存 UI へはこれだけを流す。
 	gap := replay
@@ -621,6 +668,16 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		// 新規（Hub 再起動後の cold reattach）／PTY サイズ変更時は従来どおり
 		// replay からミラーを作り直す。旧サイズのまま書くと折り返しがずれる。
 		vt = newVTBuffer(req.Cols, req.Rows)
+		if prevExists {
+			// PTY サイズが変わっただけの reattach（wrapper 側の意図的な再接続。出力
+			// キュー溢れ時などに珍しくない）では、直前セッションの代替画面状態を種として
+			// 引き継ぐ。replay（wrapper 側 64KB リング）には ESC[?1049h が入っていない
+			// ことが多く、無条件に false から始めると CLI は代替画面のままなのに Hub 側
+			// だけ通常画面へ戻ったと誤認する
+			// （docs/local/bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+			// replay 側に ESC[?1049h/l が含まれていれば、下の Write が正しく上書きする。
+			vt.altScreen = prevAltScreen
+		}
 		if len(replay) > 0 {
 			vt.Write(replay)
 		}
@@ -647,6 +704,7 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		ID:                             acceptedID,
 		StoreID:                        storeID,
 		Provider:                       req.Provider,
+		ProviderRevision:               req.ProviderRevision,
 		Display:                        req.Display,
 		CWD:                            req.CWD,
 		Branch:                         branch,
@@ -676,24 +734,19 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		ptyBuf:                         ptyBuf,
 		ptyBytesSeen:                   ptyBytesSeen,
 		vt:                             vt,
+		altScreen:                      vt.AltScreen(),
 		replayEpoch:                    replayEpoch,
 		approvalSourceEpoch:            approvalSourceEpoch,
 		approvalEpochPending:           prevApprovalEpochPending,
 		approvalConsumedCandidateKey:   prevApprovalConsumedCandidateKey,
 		approvalConsumedCandidateShape: prevApprovalConsumedCandidateShape,
 		approvalConsumedEpoch:          prevApprovalConsumedEpoch,
-		nativeApprovalSig:              prevNativeApprovalSig,
-		nativeApprovalCandidateKey:     prevNativeApprovalCandidateKey,
-		nativeApprovalCandidateShape:   prevNativeApprovalCandidateShape,
-		nativeApprovalSourceEpoch:      prevNativeApprovalSourceEpoch,
+		pendingApproval:                prevPendingApproval,
+		approvalStateVersion:           prevApprovalStateVersion,
 		nativeApprovalTailSig:          prevNativeApprovalTailSig,
 		nativeApprovalClearMisses:      prevNativeApprovalClearMisses,
 		nativeApprovalConsumed:         prevNativeApprovalConsumed,
 		nativeApprovalConsumedAt:       prevNativeApprovalConsumedAt,
-		approvalMarkerSig:              prevApprovalMarkerSig,
-		approvalMarkerCandidateKey:     prevApprovalMarkerCandidateKey,
-		approvalMarkerCandidateShape:   prevApprovalMarkerCandidateShape,
-		approvalMarkerSourceEpoch:      prevApprovalMarkerSourceEpoch,
 		approvalMarkerSuppressedSig:    prevApprovalMarkerSuppressedSig,
 		approvalMarkerSuppressedAt:     prevApprovalMarkerSuppressedAt,
 		lastCols:                       req.Cols,
@@ -909,15 +962,18 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			scanNativeApproval := false
 			hadNativeApprovalSig := false
 			resumeAgentChatTail := false
-			chunkHasApprovalTrigger := ptyChunkContainsAny(m.Data, nativeApprovalTriggerTokens)
 			s.sessionsMu.Lock()
 			if ses := s.sessions[id]; ses != nil {
+				chunkHasApprovalTrigger := s.chunkMayShowScreenApproval(ses.Provider, m.Data)
 				ses.ptyBuf = appendPTYReplay(ses.ptyBuf, m.Data)
 				ses.ptyBytesSeen += int64(len(m.Data))
 				if ses.vt == nil {
 					ses.vt = newVTBuffer(ses.lastCols, ses.lastRows)
 				}
 				ses.vt.Write(m.Data)
+				// ptyBuf と同じロックの内側で、vt がパースした代替画面状態を同期する
+				// （bugfix_alt-screen-mode-lost-on-ui-replay_2026-09-12.md）。
+				ses.altScreen = ses.vt.AltScreen()
 				provider = ses.Provider
 				if provider == "claude" && ses.OrchestrationID != "" {
 					candidate := detectCrossSessionMessage(ses.vt.Lines())
@@ -940,9 +996,9 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				}
 				shouldCheckApproval := sessionApprovalDetectionEligible(ses) &&
 					now.After(ses.vtResizeDebounceUntil) &&
-					(chunkHasApprovalTrigger || ses.nativeApprovalSig != "" || ses.nativeApprovalScanQueued)
+					(chunkHasApprovalTrigger || ses.pendingApproval.isNative() || ses.nativeApprovalScanQueued)
 				if shouldCheckApproval {
-					hadNativeApprovalSig = ses.nativeApprovalSig != ""
+					hadNativeApprovalSig = ses.pendingApproval.isNative()
 					vtLines = ses.vt.TailLines(vtTailLinesForApproval)
 					tailSig := nativeApprovalTailSignature(vtLines)
 					if tailSig != ses.nativeApprovalTailSig {
@@ -969,13 +1025,16 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 					// 開始マーカーが画面外へ流れた場合の再構成（approval_marker.go）。
 					// ネイティブ承認は上の TailLines（現在画面のみ）のまま — 解決済みプロンプトの再検出を避ける。
 					marker = extractApprovalMarkerBlockFromVT(ses.vt)
+					// マーカー無しの文章の質問（approval_text_question.go）はチャンクごとには探さない。
+					// 作業の途中の箇条書きを質問と取り違えるので、出力が落ち着いた時点で 1 回だけ見る
+					// （approval_text_question.go の「出力が落ち着いてから開く」節）。
 				}
 				// 出力が動いている間はトランスクリプトの tail を止めない。
 				// pollAgentChat は最後の出力から 1 分で自分を止めるが、再開する口が
 				// register / reattach にしか無かったため、いったん止まると次の
 				// 出力が来ても誰も読み直さなかった。承認マーカーの供給元にする以上、
 				// 「出力があるのに読んでいない」時間帯を残せない。
-				if isAgentChatProvider(provider) && !ses.agentChatRunning && !ses.UsageProbe {
+				if providerHasStructuredTranscript(provider) && !ses.agentChatRunning && !ses.UsageProbe {
 					resumeAgentChatTail = true
 				}
 				// 終了マーカーが端末に出た＝回答を書き終えた合図。次の poll を前倒しする。
@@ -1004,7 +1063,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				s.recordCrossSessionMessage(id, crossSessionMessage, now)
 			}
 			if scanNativeApproval {
-				approval := detectNativeApproval(provider, vtLines)
+				approval := s.detectScreenApproval(provider, vtLines)
 				if approval == nil && hadNativeApprovalSig && shouldSuppressNativeApprovalClearMiss(provider, vtLines) {
 					s.resetNativeApprovalClearMisses(id)
 				} else {
@@ -1043,6 +1102,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			}
 			s.handleCommitMsgChunk(id, cleanText)
 			s.handleHandoffTurnSummaryChunk(id, cleanText)
+			s.handleHandoffNoteChunk(id, cleanText)
 		case "pty_input_ack":
 			s.handlePTYInputAck(wc, id, m.InputSeq)
 		case "session_end":
@@ -1074,6 +1134,7 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 				// 実行中 workflow の heartbeat/journal タイマーを終端させる。
 				// 放置すると stale VT が settle を永久ブロックする（F1）。
 				s.finalizeWorkflowOnSessionEnd(id)
+				s.finalizeSubagentTreeOnSessionEnd(id)
 			}
 		}
 	}
@@ -1145,7 +1206,11 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 		s.logger.Warn("pending_input_dropped", "session_id", id, "count", n, "cause", "wrapper_disconnect")
 		delete(s.pendingInput, id)
 	}
+	// wrapper が居なくなったセッションの承認には答えられない。保留中の記録を閉じる。
+	// 再接続すれば、replay の再評価とトランスクリプトの prime が作り直す。
+	approvalClosure := closeApprovalRecordLocked(s.sessions[id], id, approvalCloseSessionEnd, time.Now())
 	s.sessionsMu.Unlock()
+	s.finishApprovalRecordClosures(approvalClosure)
 	if requeuedCount > 0 {
 		s.logger.Info("requeued in-flight pty_input",
 			"session_id", id,
@@ -1154,9 +1219,10 @@ func (s *Server) wrapperMessageLoop(wc *wrapperConn, id int) {
 			"seq_end", requeuedMaxSeq,
 			"cause", "wrapper_disconnect")
 	}
-	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow の
+	// session_end を経ない切断（プロセス kill / Hub 側 WS 断）でも workflow と subagent_tree の
 	// 追跡タイマーを必ず終端させる（session_end 経由と重複しても冪等）。
 	s.finalizeWorkflowOnSessionEnd(id)
+	s.finalizeSubagentTreeOnSessionEnd(id)
 	if endState == "disconnected" {
 		if historyToClose != nil {
 			ev := map[string]any{

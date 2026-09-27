@@ -117,6 +117,7 @@ func (s *Server) syncCustomApprovalPatterns(ctx context.Context) {
 	if len(changed) == 0 {
 		return
 	}
+	s.reloadApprovalTriggerPhrases()
 	s.broadcast(proto.Message{Type: "approval_patterns_updated", Providers: changed})
 }
 

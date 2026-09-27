@@ -5,7 +5,7 @@ description: How the many-ai-cli binary dispatches its subcommands (serve, wrap,
 tags: [cli, entrypoint, subcommands, setup, doctor, tray, uninstall, hubruntime]
 verified:
   - by: openwiki/0.5.0
-    at: 2026-09-08T13:17:25.310Z
+    at: 2026-09-21T12:35:03.565Z
 sources:
   - id: openwiki-source-e8686ac829ccdb846b0aa13a
     resource: repo://cmd/many-ai-cli/main.go
@@ -19,7 +19,7 @@ sources:
     resource: repo://internal/tray/tray.go
   - id: openwiki-source-e00913e4bcd242475f802bf7
     resource: repo://internal/uninstall/uninstall.go
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
 ---
 
 ## Overview

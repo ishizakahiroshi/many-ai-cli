@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"encoding/json"
+	"errors"
 	"strings"
 
 	"many-ai-cli/internal/config"
@@ -12,6 +14,7 @@ const (
 	RouteOpenAI    = "openai"
 	RouteOllama    = "ollama"
 	RouteLMStudio  = "lm-studio"
+	RouteNVIDIANIM = "nvidia-nim"
 )
 
 // isLocalRoute はローカル LLM サーバーへの route かどうかを返す。
@@ -24,11 +27,106 @@ func isLocalRoute(route string) bool {
 // validRoute は spawn API で受け取り得る route 値の whitelist。
 func validRoute(route string) bool {
 	switch route {
-	case "", RouteAnthropic, RouteOpenAI, RouteOllama, RouteLMStudio:
+	case "", RouteAnthropic, RouteOpenAI, RouteOllama, RouteLMStudio, RouteNVIDIANIM:
 		return true
 	default:
 		return false
 	}
+}
+
+var errNVIDIANIMRouteRequiresOpenCode = errors.New("NVIDIA NIM route is only available for OpenCode")
+var errInvalidOpenCodeNIMConfig = errors.New("invalid OpenCode runtime config")
+
+// validateProviderRoute rejects the hosted NIM route for providers that do not
+// understand OpenCode's Chat Completions provider configuration.
+func validateProviderRoute(provider, route string) error {
+	if route == RouteNVIDIANIM && provider != "opencode" {
+		return errNVIDIANIMRouteRequiresOpenCode
+	}
+	return nil
+}
+
+// parseOpenCodeNVIDIANIMModel converts OpenCode's provider/model form to the
+// exact NVIDIA model ID used as the key in the runtime provider config.
+func parseOpenCodeNVIDIANIMModel(model string) (string, bool) {
+	model = strings.TrimSpace(model)
+	const prefix = "nvidia/"
+	if !strings.HasPrefix(model, prefix) {
+		return "", false
+	}
+	modelID := strings.TrimPrefix(model, prefix)
+	if modelID == "" {
+		return "", false
+	}
+	for _, segment := range strings.Split(modelID, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", false
+		}
+		for _, r := range segment {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+				continue
+			}
+			return "", false
+		}
+	}
+	return modelID, true
+}
+
+// mergeOpenCodeNVIDIANIMConfig adds the NVIDIA OpenAI-compatible provider and
+// selected model to OPENCODE_CONFIG_CONTENT while retaining other providers.
+// Parse failures deliberately return a fixed error without echoing the source.
+func mergeOpenCodeNVIDIANIMConfig(existing, modelID string) (string, error) {
+	root := map[string]any{}
+	if strings.TrimSpace(existing) != "" {
+		if err := json.Unmarshal([]byte(existing), &root); err != nil || root == nil {
+			return "", errInvalidOpenCodeNIMConfig
+		}
+	}
+
+	providers, ok := root["provider"].(map[string]any)
+	if !ok {
+		if _, exists := root["provider"]; exists {
+			return "", errInvalidOpenCodeNIMConfig
+		}
+		providers = map[string]any{}
+	}
+	nvidia, ok := providers["nvidia"].(map[string]any)
+	if !ok {
+		if _, exists := providers["nvidia"]; exists {
+			return "", errInvalidOpenCodeNIMConfig
+		}
+		nvidia = map[string]any{}
+	}
+	options, ok := nvidia["options"].(map[string]any)
+	if !ok {
+		if _, exists := nvidia["options"]; exists {
+			return "", errInvalidOpenCodeNIMConfig
+		}
+		options = map[string]any{}
+	}
+	models, ok := nvidia["models"].(map[string]any)
+	if !ok {
+		if _, exists := nvidia["models"]; exists {
+			return "", errInvalidOpenCodeNIMConfig
+		}
+		models = map[string]any{}
+	}
+
+	nvidia["name"] = "NVIDIA NIM"
+	nvidia["npm"] = "@ai-sdk/openai-compatible"
+	options["baseURL"] = "https://integrate.api.nvidia.com/v1"
+	options["apiKey"] = "{env:NVIDIA_API_KEY}"
+	nvidia["options"] = options
+	models[modelID] = map[string]any{"name": modelID}
+	nvidia["models"] = models
+	providers["nvidia"] = nvidia
+	root["provider"] = providers
+
+	merged, err := json.Marshal(root)
+	if err != nil {
+		return "", errInvalidOpenCodeNIMConfig
+	}
+	return string(merged), nil
 }
 
 // EnvPresetFor は provider × route の組み合わせから子プロセスへ追加注入すべき
@@ -105,6 +203,9 @@ func RouteForModel(provider, model string, knownOllama map[string]bool, knownLmS
 	}
 	if strings.Contains(m, ":cloud") {
 		return RouteOllama
+	}
+	if provider == "opencode" && strings.HasPrefix(m, "nvidia/") {
+		return RouteNVIDIANIM
 	}
 	switch provider {
 	case "claude":

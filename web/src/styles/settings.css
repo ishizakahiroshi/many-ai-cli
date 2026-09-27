@@ -1,6 +1,8 @@
 /* Extracted from styles.css. Imported by /styles.css. */
 
 /* Settings panel */
+.jev-text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 5rem; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.5rem; font: inherit; }
+.settings-row.jev-opt-in-row { justify-content: flex-start; gap: 0.5rem; }
 /* 設定パネル */
 #settings-panel {
   position: fixed;
@@ -170,6 +172,16 @@
 .settings-row--stacked {
   align-items: stretch;
 }
+.settings-row--theme-knob {
+  flex-direction: column;
+  align-items: stretch;
+}
+.theme-slider { display: flex; flex-direction: column; gap: 4px; min-width: 0; width: 100%; }
+.theme-slider input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+.theme-slider-meta { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); }
+.theme-hue-bar { height: 8px; border-radius: var(--radius-pill); border: 1px solid var(--line); }
+.theme-knob-value { color: var(--muted); font-size: 0.75rem; font-weight: 400; margin-left: 6px; }
+.settings-inline-btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
 .settings-label { font-size: 0.85rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
 .settings-row-actions {
   display: flex;
@@ -177,6 +189,158 @@
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.provider-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 4px;
+}
+.provider-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.provider-manager-details {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.provider-manager-meta { color: var(--muted); font-size: 0.72rem; }
+.provider-manager-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.provider-manager-status[data-kind="disabled"] { border-style: dashed; }
+.provider-manager-status[data-kind="missing"] {
+  border-color: var(--warn-text);
+  border-style: dotted;
+}
+.provider-manager-status[data-kind="error"] {
+  border-color: var(--warn-text);
+  border-style: double;
+}
+.provider-manager-empty { color: var(--muted); font-size: 0.8rem; padding: 4px 0; }
+.provider-manager-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.provider-manager-toolbar { margin-top: 8px; }
+.provider-enrollment-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.58);
+}
+.provider-enrollment-overlay[hidden] { display: none !important; }
+.provider-enrollment-form {
+  width: min(480px, 100%);
+  margin: auto 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+.provider-enrollment-form .settings-row {
+  flex-wrap: wrap;
+}
+.provider-enrollment-form .settings-input-text {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.provider-enrollment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.provider-enrollment-header h2 {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.provider-enrollment-close {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 4px 6px;
+}
+.provider-enrollment-result[data-state="error"] { font-weight: 600; }
+.provider-enrollment-result[data-state="ok"] { color: var(--text); }
+.provider-enrollment-update { width: 100%; margin: 4px 0 2px; }
+.provider-enrollment-update h3 { margin: 6px 0 2px; font-size: 0.82rem; color: var(--muted); }
+.provider-enrollment-update .settings-note { display: block; padding: 0 0 4px; }
+.provider-enrollment-advanced { width: 100%; }
+.provider-enrollment-advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+.provider-enrollment-advanced .settings-label { margin-top: 6px; }
+.provider-enrollment-advanced-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 140px;
+  resize: vertical;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 0.78rem;
+  white-space: pre;
+}
+.provider-enrollment-advanced .settings-note { display: block; margin-top: 4px; }
+.provider-history-panel { width: min(560px, 100%); max-height: 80vh; overflow-y: auto; }
+.provider-history-section { margin-top: 12px; }
+.provider-history-section h3 { margin: 0 0 6px; font-size: 0.82rem; color: var(--muted); }
+.provider-history-list { display: flex; flex-direction: column; gap: 6px; }
+.provider-history-empty { color: var(--muted); font-size: 0.8rem; }
+.provider-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+.provider-history-row-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.provider-history-row-meta strong { font-size: 0.82rem; }
+.provider-history-row-meta span { color: var(--muted); font-size: 0.7rem; }
+.provider-history-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .provider-manager-row { align-items: flex-start; flex-direction: column; }
+  .provider-manager-actions { width: 100%; }
+  .provider-manager-actions .settings-inline-btn,
+  .provider-enrollment-form .settings-inline-btn {
+    flex: 1 1 auto;
+    min-height: var(--control-h-sm);
+  }
+  .provider-enrollment-form .settings-row-actions {
+    justify-content: stretch;
+  }
 }
 
 .settings-select {

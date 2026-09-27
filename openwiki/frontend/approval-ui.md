@@ -15,7 +15,7 @@ sources:
     resource: repo://web/src/app/approval-parser.ts
   - id: openwiki-source-fd59600b2ce89a0c8ea7d408
     resource: repo://web/src/app/hub-marker-filter.ts
-generated: { by: "claude-code", at: "2026-09-08T13:17:25.310Z" }
+generated: { by: "claude-code", at: "2026-09-21T12:35:03.565Z" }
 ---
 
 ## Two independent problems

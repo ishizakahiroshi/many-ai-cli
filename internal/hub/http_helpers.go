@@ -556,7 +556,12 @@ func isAllowedHubOrigin(rawOrigin string, port int, allowedHosts ...string) bool
 	switch strings.ToLower(u.Scheme) {
 	case "http":
 		// ローカル直アクセスは http かつ hub ポート一致を要求する（従来通り）。
-		return isAllowedHubHost(u.Host, port, allowedHosts...)
+		// ポート省略時はデフォルトポート 80 を補完して hub の port と比較する。
+		host := u.Host
+		if u.Port() == "" {
+			host = net.JoinHostPort(u.Hostname(), "80")
+		}
+		return isAllowedHubHost(host, port, allowedHosts...)
 	case "https":
 		// Tailscale serve など HTTPS リバースプロキシ経由は外部ポートが 443 で
 		// hub の bind ポート（47777 等）と異なるため、ポート一致は課さない。

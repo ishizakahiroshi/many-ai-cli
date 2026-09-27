@@ -349,7 +349,7 @@ func run(args []string) error {
 		}
 		return uninstall.Run(*purge)
 	case "shell-init":
-		fmt.Print(shell.InitScript())
+		fmt.Print(shell.InitScriptForConfig(cfg))
 		return nil
 	case "setup":
 		fs := flag.NewFlagSet("setup", flag.ContinueOnError)
@@ -362,6 +362,8 @@ func run(args []string) error {
 		return setupcmd.Run()
 	case "issue":
 		return runIssue(cfg, args[1:], defaultIssueDependencies())
+	case "provider":
+		return runProviderCommand(cfg, args[1:])
 	case "wrap":
 		if len(args) < 2 {
 			return errors.New("wrap <provider>")

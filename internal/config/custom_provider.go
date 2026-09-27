@@ -73,6 +73,16 @@ type CustomProvider struct {
 	// this CLI's approval-prompt patterns, mirroring ApprovalPatternSources
 	// for built-in providers. Empty means no approval detection.
 	ApprovalPatternSource string `yaml:"approval_pattern_source,omitempty" json:"approval_pattern_source,omitempty"`
+	// Headless optionally describes how to run this CLI non-interactively, in
+	// the same shape as the built-in table (internal/config/headless.go). nil
+	// — the normal case — means this entry can only be launched interactively.
+	// With `format: text` a CLI that has any print mode at all becomes an
+	// unattended child from the definition alone (親 plan D9).
+	//
+	// A malformed definition is reported by Warnings() and ignored; it never
+	// stops the entry from being spawned interactively, and it never reaches a
+	// command line.
+	Headless *HeadlessDef `yaml:"headless,omitempty" json:"headless,omitempty"`
 }
 
 // EffectiveLabel returns Label, falling back to ID when Label is empty.
@@ -201,8 +211,18 @@ func (cfg *Config) customProviderWarnings() []string {
 	if cfg == nil || len(cfg.CustomProviders) == 0 {
 		return nil
 	}
-	_, invalid, duplicate := filterCustomProviders(cfg.CustomProviders)
+	kept, invalid, duplicate := filterCustomProviders(cfg.CustomProviders)
 	var warnings []string
+	for _, p := range kept {
+		if p.Headless == nil {
+			continue
+		}
+		if err := ValidateHeadlessDef(*p.Headless); err != nil {
+			warnings = append(warnings, fmt.Sprintf(
+				"custom_providers entry %q has an invalid headless definition (%v) and can only be launched interactively",
+				p.ID, err))
+		}
+	}
 	for _, id := range invalid {
 		warnings = append(warnings, fmt.Sprintf(
 			"custom_providers entry %q is invalid (bad id, collides with a built-in provider, or missing command) and will not appear as a spawn option",

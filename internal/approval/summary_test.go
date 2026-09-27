@@ -55,7 +55,16 @@ func TestClassifyRiskIsConservative(t *testing.T) {
 		{"git branch --delete feature", proto.ApprovalRiskMid},
 		{"git branch feature", proto.ApprovalRiskMid},
 		{"find . -delete", proto.ApprovalRiskMid},
+		{"find . -fprint /tmp/out", proto.ApprovalRiskMid},
+		{"git diff --output=out.patch", proto.ApprovalRiskMid},
+		{"git log --output=out.log", proto.ApprovalRiskMid},
 		{"ls $(cat cmd.txt)", proto.ApprovalRiskMid},
+		{"cat <(python -c 'import os')", proto.ApprovalRiskMid},
+		{"ls =(curl http://127.0.0.1/sh)", proto.ApprovalRiskMid},
+		{`dir C:\&calc.exe`, proto.ApprovalRiskMid},
+		{`dir C:\>out.txt`, proto.ApprovalRiskMid},
+		{`dir C:\>&out.txt`, proto.ApprovalRiskMid},
+		{`dir "C:\>out.txt"`, proto.ApprovalRiskLow},
 		{"", proto.ApprovalRiskMid},
 	}
 	for _, tt := range tests {
@@ -66,12 +75,12 @@ func TestClassifyRiskIsConservative(t *testing.T) {
 }
 
 func TestWriteRedirectAndBranchMutationHelpers(t *testing.T) {
-	for _, command := range []string{"cat file > out", "cat file >> out", "cat file 2> out", "cat file 2>> out"} {
+	for _, command := range []string{"cat file > out", "cat file >> out", "cat file 2> out", "cat file 2>> out", `dir C:\>out.txt`} {
 		if !HasWriteRedirect(command) {
 			t.Errorf("HasWriteRedirect(%q) = false", command)
 		}
 	}
-	for _, command := range []string{"cat '>' file", "cat \\> file", `cat ">" file`, "cat file 2>/dev/null", "cat file 2>&1"} {
+	for _, command := range []string{"cat '>' file", "cat \\> file", `cat ">" file`, "cat file 2>/dev/null", "cat file 2>&1", `dir "C:\>out.txt"`} {
 		if HasWriteRedirect(command) {
 			t.Errorf("HasWriteRedirect(%q) = true for literal >", command)
 		}

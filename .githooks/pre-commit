@@ -6,4 +6,19 @@ node scripts/secrets-scan.mjs --staged --block || exit 1
 
 # 子セッションを起こすと wrapper が AGENTS.md へ承認ルールを追記する。
 # doctor は「次回起動時」に気づくが、commit への混入は別の穴なのでここで止める。
-node scripts/check-approval-rules-residue.mjs
+node scripts/check-approval-rules-residue.mjs || exit 1
+
+# --- omitnix: 生成物の鮮度検査（2026-09-11 追加） ---
+# コミット済みの .omitnix/index.json が、いまのソースと食い違っていたら止める。
+# 書き換えはしない。hook が生成物を書き換えると、レビューされていない内容が
+# コミットへ混ざるため。止まったら `omitnix` を実行して差分を確認し、
+# 生成された index.json を自分で git add すること。
+# 新規ファイルの gate（--gate）は意図的に入れていない。
+#
+# 直上の各検査へ `|| exit 1` を付けてあるのは、ここを末尾に足すと hook の終了コードが
+# omitnix の結果になり、前段の BLOCKED が握り潰されるため。
+if command -v omitnix >/dev/null 2>&1; then
+	omitnix --check || exit 1
+elif command -v python >/dev/null 2>&1 && python -c "import omitnix" >/dev/null 2>&1; then
+	python -m omitnix --check || exit 1
+fi

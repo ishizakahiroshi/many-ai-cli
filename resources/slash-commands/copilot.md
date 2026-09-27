@@ -11,7 +11,9 @@
 | `/changelog` | Show recent CLI changes. | Check what changed after an update. |
 | `/chronicle` | Open chronicle/session history features. | Review or manage past activity. |
 | `/clear` | Clear the terminal view. | Reset visible output without leaving the session. |
+| `/collect-debug-logs` | Collect debug logs into a local file or a secret GitHub gist. | Gather logs to share when reporting an issue. |
 | `/compact` | Compact conversation context. | Reclaim context during long sessions. |
+| `/computer` | Show or toggle Computer Use. | Enable or check computer-use tool access. |
 | `/context` | Inspect current context usage. | Understand what is loaded into the session. |
 | `/copy` | Copy current output or context. | Move session text to the clipboard. |
 | `/cwd` | Show or change the current working directory. | Confirm where tools will run. |
@@ -38,6 +40,7 @@
 | `/mcp` | Manage MCP servers. | Inspect external tools connected to Copilot. |
 | `/memory` | Manage session memory settings. | Configure memory use and retention. |
 | `/model` | Select the model. | Switch model before continuing work. |
+| `/move` | Move uncommitted changes into a new git worktree. | Switch to a new worktree without losing in-progress edits. |
 | `/new` | Start a new session. | Reset conversation context. |
 | `/orchestrate` | Split work into child AI sessions using the Hub board API. | Coordinate design, implementation, and test workers from one conductor session. |
 | `/permissions` | Switch between permission modes. | Change how much Copilot asks before it runs tools. |
@@ -69,4 +72,6 @@
 | `/usage` | Show usage information. | Inspect quota or usage stats. |
 | `/user` | Show user/account info. | Confirm which GitHub identity is active. |
 | `/version` | Show version. | Confirm installed CLI version. |
+| `/vim` | Toggle Vim mode for the input. | Use Vim-style motions and editing in the prompt. |
 | `/voice` | Toggle voice dictation. | Use voice input for prompts. |
+| `/worktree` | Create a new git worktree from the configured base ref. | Start a fresh worktree while leaving current changes behind. |

@@ -2,6 +2,9 @@ package hub
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +15,8 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/nvidianim"
+	"many-ai-cli/internal/provider"
 	"many-ai-cli/internal/sessionlog"
 	"many-ai-cli/internal/wrapper"
 )
@@ -27,8 +32,29 @@ type spawnWrappedSpec struct {
 	PermissionMode string
 	Sandbox        string
 	AskForApproval string
-	Route          string
-	Utf8Session    bool
+	// AllowedTools は段 2（bounded）で provider へ渡す許可 tool の一覧。
+	// 空なら --allowed-tools を付けない＝この項目が存在しなかった頃と同じ argv。
+	// 値の出所は internal/hub/child_permission.go の表と config だけ。
+	AllowedTools []string
+	Route        string
+	Utf8Session  bool
+	// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+	// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md）。
+	// すべて省略可で、空文字は「指定なし」= この 3 項目が存在しなかった頃と
+	// 完全に同じ挙動。受理値の表と検証は internal/config/effort.go が持つ。
+	Effort           string
+	ExecutionMode    string
+	PermissionPreset string
+	// InitialPrompt は起動時に渡す最初の指示。入れるのは 2 通りだけで、どちらも
+	// childLaunchPrompt が決める:
+	//   - headless 起動。注入する相手（プロンプト待ちの TUI）が無いので、起動時に
+	//     渡すしかない（子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）
+	//   - 対話起動で、CLI が最初の指示を起動引数で受け取れるとき（config の
+	//     launch_prompt.go の表。子 plan:
+	//     docs/local/plan_child-launch-prompt-and-trust_c4_launch-arg-prompt.md 内部 C3）
+	// それ以外の対話起動では空のままで、指示は今までどおり登録後に PTY へ注入される。
+	// どちらの場合も wrapper へは --prompt-file で渡し、Hub の argv には本文を出さない。
+	InitialPrompt string
 	// SubscriptionProfileID は起動に使うサブスクリプション profile。
 	// 空なら CLI 自身のログイン環境をそのまま使う（従来動作）。
 	SubscriptionProfileID string
@@ -38,6 +64,17 @@ type spawnWrappedSpec struct {
 	// UsageProbe marks a short-lived internal session that must not be exposed
 	// in the normal UI session feed.
 	UsageProbe bool
+	// FolderTrust は wrapper のプロセスを起動する直前に 1 度だけ、子が実際に受け取る
+	// env と作業フォルダを渡して呼ばれる。承認画面で「このフォルダを信頼済みとして
+	// 登録する」が選ばれた orchestration の子にだけ dispatchSpawn が入れる。nil なら
+	// 何もしない。
+	//
+	// env を呼び出し側で組み立て直さず、ここで受け取るのは、auto の契約選択
+	// （subscriptionLaunch）が呼ぶたびに順番を進めるから。組み立て直すと、信頼を
+	// 書いた契約と子が起動した契約がずれる。戻り値が無いのは、書けなくても起動を
+	// 止めないため（親 plan の不変条件 4）。再起動用の spec（setChildRestartData）には
+	// 写さない — 同じフォルダで起きる再起動には、最初に書いた信頼がそのまま効く。
+	FolderTrust func(env []string, dir string)
 }
 
 const manyAICLIBinEnv = "MANY_AI_CLI_BIN"
@@ -60,9 +97,60 @@ func appendOpenCodePermissionArgs(wrapArgs []string, permissionMode string) []st
 	return wrapArgs
 }
 
+// routeSpawnEnv returns the additional child environment for a selected route.
+// The NVIDIA API key is only resolved and added for the OpenCode NIM route.
+func (s *Server) routeSpawnEnv(provider, route, model string) ([]string, error) {
+	if err := validateProviderRoute(provider, route); err != nil {
+		return nil, err
+	}
+	if route != RouteNVIDIANIM {
+		s.cfgMu.Lock()
+		ollamaBaseURL := s.cfg.Ollama.BaseURL
+		lmStudioBaseURL := s.cfg.LMStudio.BaseURL
+		s.cfgMu.Unlock()
+		return EnvPresetForWithOllamaBase(provider, route, ollamaBaseURL, lmStudioBaseURL), nil
+	}
+
+	s.cfgMu.Lock()
+	enabled := s.cfg.NVIDIANIM.Enabled
+	s.cfgMu.Unlock()
+	if !enabled {
+		return nil, errors.New("NVIDIA NIM route is disabled")
+	}
+	modelID, ok := parseOpenCodeNVIDIANIMModel(model)
+	if !ok {
+		return nil, errors.New("NVIDIA NIM model selection is invalid")
+	}
+	configDir, err := config.Dir()
+	if err != nil {
+		return nil, errors.New("NVIDIA API key is unavailable")
+	}
+	apiKey, _, err := nvidianim.ResolveAPIKey(configDir)
+	if err != nil || apiKey == "" {
+		return nil, errors.New("NVIDIA API key is unavailable")
+	}
+	configContent, err := mergeOpenCodeNVIDIANIMConfig(os.Getenv("OPENCODE_CONFIG_CONTENT"), modelID)
+	if err != nil {
+		return nil, err
+	}
+	return []string{
+		nvidianim.APIKeyEnv + "=" + apiKey,
+		"OPENCODE_CONFIG_CONTENT=" + configContent,
+	}, nil
+}
+
 func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) (int, error) {
 	if !validOrchestrationProvider(spec.Provider) {
 		return 0, fmt.Errorf("invalid provider")
+	}
+	if err := validateProviderRoute(spec.Provider, spec.Route); err != nil {
+		return 0, err
+	}
+	// 更新中の provider は起動させない（子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1: 「更新中の集合に入った
+	// 後に起動が来たら必ず止まる」）。
+	if s.providerUpdating(spec.Provider) {
+		return 0, fmt.Errorf("provider %q is currently updating", spec.Provider)
 	}
 	// profile は env を組み立てる前に解決する。存在しない / 無効化された profile を
 	// 指定された場合はここで失敗させ、**別アカウントで黙って起動しない**。
@@ -153,12 +241,34 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 			wrapArgs = append(wrapArgs, "--permission-mode", spec.PermissionMode)
 		}
 	}
+	// effort は provider 別 switch の外で 1 度だけ足す。どの provider が effort を
+	// 受けるかは internal/config/effort.go の表だけが知っている。写像が無い
+	// provider では spec.Effort が空（検証で弾かれている）なので何も足さない。
+	if args := s.effortWrapArgsForProvider(spec.Provider, spec.Effort); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	// 段 2 の許可 tool も同じく switch の外で 1 度だけ。空なら何も足さない。
+	if args := allowedToolsWrapArgs(spec.AllowedTools); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	// headless は provider 別 switch の外。ここまでで組んだ model / effort /
+	// 権限のフラグはそのまま使い（headless 専用の写像を作らない・親 plan からの
+	// 差分 5）、実行モードを 1 組のフラグで足すだけにする。対話起動で最初の指示を
+	// 起動引数で渡す子も、同じ --prompt-file で wrapper へ渡す。
+	headlessArgs, promptPath, headlessErr := s.launchPromptWrapArgs(spec.ExecutionMode, spec.InitialPrompt)
+	if headlessErr != nil {
+		return 0, headlessErr
+	}
+	wrapArgs = append(wrapArgs, headlessArgs...)
 	effectiveRoute := spec.Route
 	if effectiveRoute == "" {
 		localCfg := s.snapshotLocalModels()
 		known := collectOllamaModelIDs(s.modelsCache, localCfg)
 		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
 		effectiveRoute = RouteForModel(spec.Provider, resolvedModel, known, knownLmStudio)
+	}
+	if err := validateProviderRoute(spec.Provider, effectiveRoute); err != nil {
+		return 0, err
 	}
 	if spec.Provider == "codex" && isLocalRoute(effectiveRoute) {
 		wrapArgs = append(wrapArgs, "--codex-oss")
@@ -169,6 +279,10 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 
 	id, err := s.startWrapProcess(spec, wrapArgs, subEnv, effectiveRoute, wait)
 	if err != nil {
+		// The wrapper never started, so nothing will ever read the prompt
+		// file. Take it back rather than leaving the user's own instruction
+		// sitting in a temp directory (internal/doctor/residue.go の規律).
+		removeHeadlessPromptFile(promptPath)
 		return 0, err
 	}
 	if spawnRecordsLastModel(spec, resolvedModel, effectiveRoute) {
@@ -182,7 +296,11 @@ func (s *Server) spawnWrappedSession(spec spawnWrappedSpec, wait time.Duration) 
 // spawn and by the subscription login spawn, which needs the same environment,
 // log, and process-attribute handling but none of the model/permission flags.
 func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []string, effectiveRoute string, wait time.Duration) (int, error) {
-	exe, err := os.Executable()
+	executable := s.wrapExecutable
+	if executable == nil {
+		executable = os.Executable
+	}
+	exe, err := executable()
 	if err != nil {
 		return 0, fmt.Errorf("executable error: %w", err)
 	}
@@ -203,15 +321,20 @@ func (s *Server) startWrapProcess(spec spawnWrappedSpec, wrapArgs, subEnv []stri
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
-	s.cfgMu.Lock()
-	ollamaBaseURL := s.cfg.Ollama.BaseURL
-	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
-	s.cfgMu.Unlock()
-	if envPreset := EnvPresetForWithOllamaBase(spec.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
-		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	routeEnv, err := s.routeSpawnEnv(spec.Provider, effectiveRoute, spec.Model)
+	if err != nil {
+		return 0, err
+	}
+	if len(routeEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, routeEnv)
 	}
 	if len(subEnv) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
+	}
+	// env はここで確定する。以降で cmd.Env を触らないので、FolderTrust が見る env と
+	// 子が受け取る env は同じもの。
+	if spec.FolderTrust != nil {
+		spec.FolderTrust(cmd.Env, cmd.Dir)
 	}
 
 	var stdinNull, spawnLog *os.File
@@ -309,19 +432,14 @@ func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string,
 // a custom provider spawn, not just appear in the dropdown (敵対レビュー
 // 2026-08-31 Finding 1: this switch used to be a fixed built-in list only).
 func (s *Server) validSpawnProvider(provider string) bool {
-	switch provider {
-	case "claude", "codex", "copilot", "cursor-agent", "opencode", "grok", "command-code", "shell":
+	if provider == "shell" {
 		return true
 	}
-	s.cfgMu.Lock()
-	custom := s.cfg.CustomProviders
-	s.cfgMu.Unlock()
-	for _, p := range config.EffectiveCustomProviders(custom) {
-		if p.ID == provider {
-			return true
-		}
+	definition, ok := s.providerDefinition(provider)
+	if !ok {
+		return false
 	}
-	return false
+	return definition.Enabled == nil || *definition.Enabled
 }
 
 // validGridAIProvider reports whether provider is valid as the AI half of
@@ -346,6 +464,252 @@ func resolveSpawnModel(model string, isCustomProvider bool) string {
 		return ""
 	}
 	return strings.TrimSpace(model)
+}
+
+func resolveSpawnModelForDefinition(model string, isCustomProvider bool, definition provider.EffectiveDefinition, hasDefinition bool) string {
+	if !isCustomProvider || !hasDefinition || definition.Launch == nil || len(definition.Launch.ModelArgs) == 0 {
+		return resolveSpawnModel(model, isCustomProvider)
+	}
+	return strings.TrimSpace(model)
+}
+
+// validateLaunchRequestOptions trims and validates the three launch-request
+// options shared by /api/spawn, spawn-child and the relay roles (子 plan:
+// docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1). It
+// mutates the values in place so every entry point stores the same trimmed
+// form. All three are optional: an empty value passes for every provider,
+// which is what keeps callers that never send them unchanged.
+//
+// The decision of which providers accept an effort level, and which execution
+// modes / permission presets this build can honour, lives in
+// internal/config/effort.go — this function must not grow a provider switch.
+func validateLaunchRequestOptions(provider string, effort, mode, preset *string) error {
+	*effort = strings.TrimSpace(*effort)
+	*mode = config.NormalizeExecutionMode(*mode)
+	*preset = config.NormalizePermissionPreset(*preset)
+	if err := config.ValidateEffort(provider, *effort); err != nil {
+		return err
+	}
+	if err := config.ValidateExecutionMode(*mode); err != nil {
+		return err
+	}
+	return config.ValidatePermissionPreset(*preset)
+}
+
+// effortWrapArgs returns the `wrap` flags that carry effort, or nil when
+// effort is empty or the provider has no mapping. Keeping it a helper (rather
+// than inlining config.EffortArgs at both call sites) means the two argument
+// builders in this file stay identical, and the wrapper flag name is written
+// down once.
+// allowedToolsWrapArgs returns the `wrap` flag carrying the bounded tier's
+// allowlist, or nil when there is none — so a launch without one produces
+// exactly the argv it did before the tier existed.
+//
+// The values are re-validated here even though they came from the table and
+// config.yaml: they end up in a child process's argument list, and on Windows
+// some launches pass through a cmd.exe shim. An entry that does not look like a
+// tool name or command pattern is dropped rather than passed on (config.Warnings
+// already told the user about it when it came from their config file).
+func allowedToolsWrapArgs(values []string) []string {
+	kept := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if config.ValidAllowedToolValue(value) {
+			kept = append(kept, value)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return []string{"--allowed-tools", strings.Join(kept, ",")}
+}
+
+// headlessWrapArgs returns the `wrap` flags that make this launch headless, and
+// the path of the prompt file it wrote. Both are empty for every other launch,
+// so an interactive spawn produces exactly the argv it produced before this
+// mode existed (親 plan 不変条件 1).
+//
+// The prompt is handed over as a file rather than as an argument because an
+// argument is visible to every process on the machine (a process list), ends up
+// in shell history where one is involved, and is bounded by the OS argv limit —
+// while the prompt is the user's own work instruction, often long. The wrapper
+// reads the file once and deletes it (takePromptFile), so the two halves are:
+// the Hub writes, the wrapper collects.
+//
+// An empty prompt is allowed: a headless launch with no instruction is a
+// no-instruction run, not an error, and the file is simply not written.
+func (s *Server) headlessWrapArgs(executionMode, prompt string) ([]string, string, error) {
+	if !config.IsHeadlessExecutionMode(executionMode) {
+		return nil, "", nil
+	}
+	args := []string{"--headless"}
+	if strings.TrimSpace(prompt) == "" {
+		return args, "", nil
+	}
+	path, err := writeHeadlessPromptFile(prompt)
+	if err != nil {
+		return nil, "", err
+	}
+	return append(args, "--prompt-file", path), path, nil
+}
+
+// launchPromptWrapArgs is headlessWrapArgs for launches that may also be
+// interactive sessions taking their first instruction as a launch argument:
+// orchestration children (spawnWrappedSession) and sessions started from the
+// screen (/api/spawn). A headless launch gets exactly what headlessWrapArgs
+// gives it. An interactive launch gets `--prompt-file <path>` only when it is
+// handed an instruction — which childLaunchPrompt and screenSpawnLaunchPrompt
+// do only for a CLI in internal/config/launch_prompt.go's table — and nothing
+// otherwise, so every other interactive launch keeps the argv it had before.
+func (s *Server) launchPromptWrapArgs(executionMode, prompt string) ([]string, string, error) {
+	if config.IsHeadlessExecutionMode(executionMode) {
+		return s.headlessWrapArgs(executionMode, prompt)
+	}
+	if strings.TrimSpace(prompt) == "" {
+		return nil, "", nil
+	}
+	path, err := writeHeadlessPromptFile(prompt)
+	if err != nil {
+		return nil, "", err
+	}
+	return []string{"--prompt-file", path}, path, nil
+}
+
+// screenSpawnLaunchPrompt decides how an interactive session started from the
+// screen (/api/spawn) is given its first instruction, and returns the text to
+// hand the wrapper at launch — or "" when the instruction, if any, is typed in
+// after the session registers, as before (子 plan:
+// docs/local/plan_child-launch-prompt-and-trust_c5_ui-launched.md 内部 C1).
+//
+// The rule is the orchestration child's (childLaunchPrompt): a CLI that takes
+// its first instruction as a launch argument, on a machine that can pass one
+// (promptViaLaunchArg), gets it at launch; every other CLI keeps the typed
+// route. The text is exactly what registrationInjectPrompt would have typed:
+// the conductor's role guide for a conductor — even when an instruction came
+// along too, since the guide alone is what a conductor has always received —
+// and the screen's own instruction otherwise.
+func (s *Server) screenSpawnLaunchPrompt(provider, executionMode, orchestrationID, initialPrompt string) string {
+	if orchestrationID == "" && initialPrompt == "" {
+		return ""
+	}
+	if !s.promptViaLaunchArg(provider, executionMode) {
+		return ""
+	}
+	if orchestrationID != "" {
+		return buildConductorInitialPrompt(orchestrationID, s.orchestrationRolesFor(orchestrationID))
+	}
+	return initialPrompt
+}
+
+// writeHeadlessPromptFile writes one launch's prompt into ~/.many-ai-cli/tmp
+// with the same private modes as every other file many-ai-cli owns, and returns
+// its path.
+//
+// The name is random so two launches cannot collide and so the file name itself
+// says nothing about the work. The contents are never logged here or anywhere
+// else on this path.
+func writeHeadlessPromptFile(prompt string) (string, error) {
+	dir, err := config.Dir()
+	if err != nil {
+		return "", err
+	}
+	dir = filepath.Join(dir, "tmp")
+	if err := os.MkdirAll(dir, sessionlog.PrivateDirMode); err != nil {
+		return "", fmt.Errorf("headless prompt dir: %w", err)
+	}
+	// Collect anything an earlier run left behind before writing a new one. The
+	// wrapper deletes its own prompt file, but a kill skips that, and a leftover
+	// here is the user's own instruction sitting on disk — so the cleanup gets a
+	// path that does not depend on a graceful exit (the rule in
+	// internal/doctor/residue.go, applied to our own directory).
+	sweepStaleHeadlessPrompts(dir, time.Now())
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("headless prompt name: %w", err)
+	}
+	path := filepath.Join(dir, "prompt-"+hex.EncodeToString(raw[:])+".md")
+	if err := os.WriteFile(path, []byte(prompt), sessionlog.PrivateFileMode); err != nil {
+		return "", fmt.Errorf("headless prompt file: %w", err)
+	}
+	return path, nil
+}
+
+func removeHeadlessPromptFile(path string) {
+	if strings.TrimSpace(path) == "" {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+// headlessPromptMaxAge is how long a prompt file may sit unread before it is
+// treated as abandoned. A wrapper reads its file within seconds of starting;
+// an hour is long enough that a slow machine is never mistaken for a crash.
+const headlessPromptMaxAge = time.Hour
+
+// leftoverCount is what one reclaim pass did, as numbers only (the Hub-start
+// reclaim logs it; see reclaimLeftoverFiles).
+type leftoverCount struct {
+	removed int
+	failed  int
+}
+
+// sweepStaleHeadlessPrompts deletes prompt files older than headlessPromptMaxAge
+// from dir. It only ever touches the names many-ai-cli writes there: this
+// package's prompt-*.md, and the wrapper's launch-<pid>-*.md pointer files
+// (internal/wrapper/launch_prompt.go). A wrapper deletes its own pointer file
+// when it exits; a kill skips that, so the pointer is collected here too — but
+// only once its wrapper is gone. While the wrapper runs, its CLI may still be
+// waiting on a trust dialog without having read the file, and age alone says
+// nothing about that.
+//
+// It runs before each new prompt file is written and once at Hub start
+// (reclaimLeftoverFiles). A dir that does not exist yet is not a failure.
+func sweepStaleHeadlessPrompts(dir string, now time.Time) leftoverCount {
+	var count leftoverCount
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			count.failed++
+		}
+		return count
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			continue
+		}
+		if pid, ok := wrapper.LaunchPromptFileOwner(name); ok {
+			if pidAlive(pid) {
+				continue
+			}
+		} else if !strings.HasPrefix(name, "prompt-") || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) > headlessPromptMaxAge {
+			if removeErr := os.Remove(filepath.Join(dir, name)); removeErr != nil {
+				if !os.IsNotExist(removeErr) {
+					count.failed++
+				}
+				continue
+			}
+			count.removed++
+		}
+	}
+	return count
+}
+
+func effortWrapArgs(provider, effort string) []string {
+	if effort == "" {
+		return nil
+	}
+	if _, ok := config.EffortSupportFor(provider); !ok {
+		return nil
+	}
+	return []string{"--effort", effort}
 }
 
 func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
@@ -374,6 +738,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// SubscriptionProfileID は使用するサブスクリプション profile。
 		// 省略・空文字は「Default CLI login」で、従来のリクエストと同一の挙動になる。
 		SubscriptionProfileID string `json:"subscription_profile_id"`
+		// Effort / ExecutionMode / PermissionPreset は起動要求の共通 3 項目
+		// （子 plan: docs/local/plan_derived-session-launch_c1_request-schema.md 内部 C1）。
+		// 省略時（空文字）はこの 3 項目を知らない呼び出し元と 1 バイトも変わらない。
+		// 受理値は internal/config/effort.go の表が持つ。
+		Effort           string `json:"effort"`
+		ExecutionMode    string `json:"execution_mode"`
+		PermissionPreset string `json:"permission_preset"`
 		// C1: plan_orchestration-spawn-ui-exposure.md — ツールバーの「オーケストレーション」
 		// ボタン経由の起動でのみ true。詳細設定アコーディオンで役割を設定した場合のみ
 		// OrchestrationRoles が埋まる（未設定ロールは省略 or nil）。
@@ -381,8 +752,9 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		OrchestrationRoles map[string]*orchestrationRoleAssignment `json:"orchestration_roles"`
 		// InitialPrompt (plan_session-handoff-board_c4_prompted-spawn.md C1):
 		// 画面から渡す最初の指示。空文字（省略）は「従来どおり何も注入しない」で、
-		// この分岐に一切入らない。配送は spawn-child が使っている
-		// injectInitialPrompt を共有する（新しい配送方式を作らない）。
+		// この分岐に一切入らない。配送は子と同じ 2 通りで、起動引数で受け取れる
+		// CLI には起動時に --prompt-file で渡し、それ以外は spawn-child が使っている
+		// injectInitialPrompt を共有する（screenSpawnLaunchPrompt が決める）。
 		InitialPrompt string `json:"initial_prompt"`
 		// HandoffFrom (plan_session-handoff-board_c5_handoff-md.md 内部 C3):
 		// 引き継ぎ元セッションの ID。看板 UI からの起動でのみ渡され、それ以外の
@@ -396,14 +768,24 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid provider")
 		return
 	}
+	// 更新中の provider は起動させない（子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1）。
+	if s.providerUpdating(body.Provider) {
+		writeJSONError(w, http.StatusConflict, "provider_updating", "provider is currently updating")
+		return
+	}
 	// custom provider かどうかは以降で何度か使う（subscription 早期拒否・
 	// model/route 抑止）。同じ判定を s.cfgMu 越しに何度も取らないよう1回だけ引く。
 	s.cfgMu.Lock()
 	isCustomProvider := s.cfg.IsCustomProviderID(body.Provider)
 	s.cfgMu.Unlock()
+	// dontAsk は Claude / Grok が --permission-mode としてそのまま解釈する値。
+	// 既存の変換関数を通らない provider では today の "default" と同じく無視される
+	// （子 plan: plan_derived-session-launch_c1_request-schema.md 内部 C1）。
 	validPermModes := map[string]bool{
 		"": true, "default": true, "plan": true,
 		"acceptEdits": true, "auto": true, "bypassPermissions": true,
+		"dontAsk": true,
 	}
 	validSandboxes := map[string]bool{
 		"": true, "read-only": true, "workspace-write": true, "danger-full-access": true,
@@ -422,6 +804,28 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid route")
 		return
 	}
+	if err := validateProviderRoute(body.Provider, body.Route); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "route is not available for this provider")
+		return
+	}
+	// 起動要求の共通 3 項目。空文字は「指定なし」なので、この検証は 3 項目を
+	// 送ってこない既存の呼び出しでは一切失敗しない。
+	if err := validateLaunchRequestOptions(body.Provider, &body.Effort, &body.ExecutionMode, &body.PermissionPreset); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	// 実行モードを provider ごとに解決する。/api/spawn は画面の起動口なので
+	// origin は常に ui 扱い＝ auto は対話のまま。**明示 headless だけが headless**
+	// で、その provider に定義が無ければ 400（黙って対話へ倒さない・親 plan D2）。
+	// 省略した呼び出しは空のまま素通りする（子 plan:
+	// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
+	resolvedExecutionMode, execModeErr := config.ResolveExecutionMode(
+		body.ExecutionMode, s.headlessCapableProviderFromRegistry(body.Provider, s.snapshotCfg()), launchOriginUI, false)
+	if execModeErr != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", execModeErr.Error())
+		return
+	}
+	body.ExecutionMode = resolvedExecutionMode
 	if !validWorktreeCleanup(body.WorktreeCleanup) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid worktree cleanup policy")
 		return
@@ -455,6 +859,20 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if !spawnValidModelLabel(body.Model) || !spawnValidModelLabel(body.Label) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid model or label value")
 		return
+	}
+	// Resolve the hosted route before creating pending-session state or a worktree.
+	// A model selected from the NVIDIA group also implies its route if an older
+	// caller omitted the explicit route field.
+	var nvidiaNIMEnv []string
+	nvidiaNIMSelected := body.Route == RouteNVIDIANIM ||
+		(body.Provider == "opencode" && strings.HasPrefix(strings.TrimSpace(body.Model), "nvidia/"))
+	if nvidiaNIMSelected {
+		var routeErr error
+		nvidiaNIMEnv, routeErr = s.routeSpawnEnv(body.Provider, RouteNVIDIANIM, body.Model)
+		if routeErr != nil {
+			writeJSONError(w, http.StatusBadRequest, "route_unavailable", routeErr.Error())
+			return
+		}
 	}
 	// ドライブ/FS ルートやホーム親ディレクトリ自身は cwd として弾く（AI がホーム配下を巻き込む事故防止）。
 	if spawnCwdTooBroad(cwd) {
@@ -566,6 +984,13 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	// 従来の /api/spawn（initial_prompt を知らない呼び出し元）と 1 バイトも
 	// 挙動が変わらない。
 	initialPrompt := sanitizeSpawnInitialPrompt(body.InitialPrompt)
+	headlessSpawn := config.IsHeadlessExecutionMode(body.ExecutionMode)
+	// 起動引数で最初の指示を受け取れる CLI の対話セッションは、conductor の案内も
+	// 画面の文面も起動時に渡し、登録後に打ち込まない。Hub が中身を読めない起動直後の
+	// 画面（フォルダの信頼の確認など）へ打ち込まないため（子 plan:
+	// docs/local/plan_child-launch-prompt-and-trust_c5_ui-launched.md 内部 C1）。
+	// 空なら今までどおり登録後に打ち込む。
+	launchPrompt := s.screenSpawnLaunchPrompt(body.Provider, body.ExecutionMode, orchestrationID, initialPrompt)
 	if lbl := spawnPendingLabelForInitialPrompt(body.Label, initialPrompt, time.Now()); lbl != "" {
 		body.Label = lbl
 		s.orchestration.mu.Lock()
@@ -573,7 +998,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		// entry を作っていることがあるので、reserveOrchestrationConductor と
 		// 同じく上書きせずマージする。
 		meta := s.orchestration.pending[body.Label]
-		meta.InitialPrompt = initialPrompt
+		// headless では注入しない（注入する相手が無い）。文面は起動時に
+		// --prompt-file で渡す。起動引数で渡す対話セッションも同じで、ここに
+		// 入れると同じ指示が 2 回届く。pending 自体は残すので、引き継ぎ元の記録
+		// （HandoffFrom）は注入するときと同じように残る
+		// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C3）。
+		if !headlessSpawn && launchPrompt == "" {
+			meta.InitialPrompt = initialPrompt
+		}
 		meta.HandoffFrom = body.HandoffFrom
 		if meta.SpawnedAt.IsZero() {
 			meta.SpawnedAt = time.Now()
@@ -581,6 +1013,17 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		s.orchestration.pending[body.Label] = meta
 		s.orchestration.mu.Unlock()
 	}
+	// 起動時に渡した印。wrapperLoop はこれを見て、登録後に打ち込まず
+	// （registrationInjectPrompt）、入力保留も掛けない（initialInjectGateNeeded）。
+	// 渡すときの label は conductor の予約か、上の initial_prompt の分岐で必ず決まっている。
+	// 印は起動のたびに付け直す。起動に失敗した前の起動が同じ label の pending に残した
+	// 印を引き継ぐと、打ち込みで渡すはずの今回の指示がどこからも届かない。
+	s.orchestration.mu.Lock()
+	if meta, ok := s.orchestration.pending[body.Label]; ok || launchPrompt != "" {
+		meta.PromptAtLaunch = launchPrompt != ""
+		s.orchestration.pending[body.Label] = meta
+	}
+	s.orchestration.mu.Unlock()
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -589,7 +1032,8 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	wrapArgs := []string{"wrap", body.Provider}
-	resolvedModel := resolveSpawnModel(body.Model, isCustomProvider)
+	definition, hasDefinition := s.providerDefinition(body.Provider)
+	resolvedModel := resolveSpawnModelForDefinition(body.Model, isCustomProvider, definition, hasDefinition)
 
 	if body.Label != "" {
 		// --label=value 形式で渡す（空白区切りだと value が次フラグに化ける可能性がある）。
@@ -662,6 +1106,26 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// permission_preset が明示されたときだけ、子セッションと同じ表
+	// （internal/hub/child_permission.go）で段を解決し、空欄を埋める。明示値が
+	// 優先で、preset が空なら何も埋めない＝この項目を知らない呼び出しと 1 バイトも
+	// 変わらない。**RiskConfirmed はここでは触らない**: 高リスク権限の確認は人が
+	// 押す経路の歯止めで、preset という近道で自動的に通してよいものではない
+	// （埋めた結果が高リスクなら、下の switch がいつもどおり確認を要求する）。
+	var allowedTools []string
+	if body.PermissionPreset != "" {
+		preset := permissionPresetApproval(body.Provider, body.PermissionPreset, s.snapshotCfg().Orchestration)
+		if body.PermissionMode == "" {
+			body.PermissionMode = preset.PermissionMode
+		}
+		if body.Sandbox == "" {
+			body.Sandbox = preset.Sandbox
+		}
+		if body.AskForApproval == "" {
+			body.AskForApproval = preset.AskForApproval
+		}
+		allowedTools = preset.AllowedTools
+	}
 	switch body.Provider {
 	case "claude":
 		mode := body.ModelSelection
@@ -753,16 +1217,59 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 			wrapArgs = append(wrapArgs, "--permission-mode", body.PermissionMode)
 		}
 	}
+	if isCustomProvider && resolvedModel != "" {
+		if modelArgs, modelErr := provider.ModelArgs(definition, resolvedModel); modelErr == nil {
+			wrapArgs = append(wrapArgs, modelArgs...)
+		}
+	}
+	// effort は provider 別 switch の外で 1 度だけ足す（spawnWrappedSession と同じ形）。
+	if args := s.effortWrapArgsForProvider(body.Provider, body.Effort); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	if args := allowedToolsWrapArgs(allowedTools); len(args) > 0 {
+		wrapArgs = append(wrapArgs, args...)
+	}
+	// 起動時に渡す指示も同じく switch の外。headless は画面の文面そのもの、対話は
+	// 起動引数の経路に乗ったときだけ（launchPrompt）。どちらでもない対話起動では
+	// 1 引数も増えない。
+	promptAtLaunch := launchPrompt
+	if headlessSpawn {
+		promptAtLaunch = initialPrompt
+	}
+	promptArgs, promptPath, promptErr := s.launchPromptWrapArgs(body.ExecutionMode, promptAtLaunch)
+	if promptErr != nil {
+		cleanupIsolated()
+		writeJSONError(w, http.StatusInternalServerError, "spawn_error", errorDetail("prompt file error", promptErr))
+		return
+	}
+	wrapArgs = append(wrapArgs, promptArgs...)
 	// route が未指定の場合は model 名から推定する。Anthropic / OpenAI の
 	// 既定 route は env 注入を行わない（ユーザー shell の値を継承）。
 	effectiveRoute := body.Route
-	if effectiveRoute == "" {
+	if effectiveRoute == "" && !isCustomProvider {
 		s.cfgMu.Lock()
 		localCfg := append([]config.LocalModel(nil), s.cfg.LocalModels...)
 		s.cfgMu.Unlock()
 		known := collectOllamaModelIDs(s.modelsCache, localCfg)
 		knownLmStudio := collectLMStudioModelIDs(s.modelsCache)
 		effectiveRoute = RouteForModel(body.Provider, resolvedModel, known, knownLmStudio)
+	}
+	if err := validateProviderRoute(body.Provider, effectiveRoute); err != nil {
+		removeHeadlessPromptFile(promptPath)
+		cleanupIsolated()
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "route is not available for this provider")
+		return
+	}
+	routeEnv := nvidiaNIMEnv
+	if effectiveRoute != RouteNVIDIANIM {
+		var routeErr error
+		routeEnv, routeErr = s.routeSpawnEnv(body.Provider, effectiveRoute, resolvedModel)
+		if routeErr != nil {
+			removeHeadlessPromptFile(promptPath)
+			cleanupIsolated()
+			writeJSONError(w, http.StatusBadRequest, "route_unavailable", routeErr.Error())
+			return
+		}
 	}
 	// Codex CLI は env (OPENAI_BASE_URL 等) だけでは provider を切り替えず、
 	// CLI 引数 --oss / --profile で OSS (Ollama) provider に切替える設計。
@@ -787,14 +1294,10 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 	if s.parentShell != "" {
 		cmd.Env = append(cmd.Env, "MANY_AI_CLI_PARENT_SHELL="+s.parentShell)
 	}
-	s.cfgMu.Lock()
-	ollamaBaseURL := s.cfg.Ollama.BaseURL
-	lmStudioBaseURL := s.cfg.LMStudio.BaseURL
-	s.cfgMu.Unlock()
-	if envPreset := EnvPresetForWithOllamaBase(body.Provider, effectiveRoute, ollamaBaseURL, lmStudioBaseURL); len(envPreset) > 0 {
-		cmd.Env = mergeEnvOverrides(cmd.Env, envPreset)
+	if len(routeEnv) > 0 {
+		cmd.Env = mergeEnvOverrides(cmd.Env, routeEnv)
 		s.logger.Debug("spawn: env preset applied",
-			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(envPreset))
+			"provider", body.Provider, "route", effectiveRoute, "keys", envKeyList(routeEnv))
 	}
 	if len(subEnv) > 0 {
 		cmd.Env = mergeEnvOverrides(cmd.Env, subEnv)
@@ -828,8 +1331,14 @@ func (s *Server) handleSpawn(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	setCmdSysProcAttr(cmd)
-	if err := cmd.Start(); err != nil {
+	start := s.startSpawnCmd
+	if start == nil {
+		start = (*exec.Cmd).Start
+	}
+	if err := start(cmd); err != nil {
 		cleanupIsolated()
+		// 読む相手が起動しなかったので、書いたプロンプトを引き取る。
+		removeHeadlessPromptFile(promptPath)
 		if stdinNull != nil {
 			_ = stdinNull.Close()
 		}
@@ -968,6 +1477,12 @@ func (s *Server) handleSpawnGrid(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Preset == "ai+shell" && !s.validGridAIProvider(aiProvider) {
 		writeJSONError(w, http.StatusBadRequest, "bad_request", "invalid ai provider for ai+shell preset")
+		return
+	}
+	// 更新中の provider は起動させない（子 plan
+	// plan_provider-cli-update_c3_update-api.md 内部 C1）。
+	if body.Preset == "ai+shell" && s.providerUpdating(aiProvider) {
+		writeJSONError(w, http.StatusConflict, "provider_updating", "provider is currently updating")
 		return
 	}
 
