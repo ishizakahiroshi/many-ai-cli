@@ -171,7 +171,8 @@ func TestFollowCodexThreadSwitchRepointsTranscript(t *testing.T) {
 	s := newTestServer()
 	ses := registerCodexFollowSession(s, 1, codexHome, oldPath)
 
-	if !s.followCodexThreadSwitch(1, oldPath, time.Now()) {
+	// Keep the lookup clock in the fixture's date window as calendar time advances.
+	if !s.followCodexThreadSwitch(1, oldPath, codexFollowNow) {
 		t.Fatal("followCodexThreadSwitch = false, want a switch to the new conversation")
 	}
 	if ses.NativeLogPath != newPath {
@@ -184,7 +185,7 @@ func TestFollowCodexThreadSwitchRepointsTranscript(t *testing.T) {
 		t.Fatal("approval marker source left the transcript after an unambiguous switch")
 	}
 	// 間隔の内側では探し直さない。
-	if s.followCodexThreadSwitch(1, newPath, time.Now()) {
+	if s.followCodexThreadSwitch(1, newPath, codexFollowNow.Add(codexThreadFollowInterval-time.Nanosecond)) {
 		t.Fatal("followCodexThreadSwitch ran again inside codexThreadFollowInterval")
 	}
 }
@@ -204,7 +205,7 @@ func TestFollowCodexThreadSwitchAmbiguousFallsBackToVT(t *testing.T) {
 	if !approvalMarkerSourceIsTranscriptLocked(ses) {
 		t.Fatal("precondition: transcript should be the approval marker source")
 	}
-	if s.followCodexThreadSwitch(1, oldPath, time.Now()) {
+	if s.followCodexThreadSwitch(1, oldPath, codexFollowNow) {
 		t.Fatal("followCodexThreadSwitch switched although another codex session shares the cwd")
 	}
 	if ses.NativeLogPath != "" {
