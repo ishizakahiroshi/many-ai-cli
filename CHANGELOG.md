@@ -25,7 +25,9 @@ Release artifacts are published at
   stores the key without returning it, lists NVIDIA models and tests the key
   through `/v1/models`, while OpenCode connects directly to NVIDIA's Chat
   Completions API. Trial limitations and per-model compatibility caveats are
-  documented; no production SLA is promised.
+  documented; no production SLA is promised. This route has not yet been
+  exercised against the live NVIDIA API with a real key or a real OpenCode
+  session; only unit tests and a static mock render have run.
 - **You can now save an edited handoff prompt to the board without starting a
   successor session or spending AI tokens.** The derive dialog keeps AI-written
   and manually saved memos as separate files, lists both paths, and opens a
@@ -681,6 +683,15 @@ Release artifacts are published at
 - **Low-quota handoff notices now identify the limiting usage window and its
   remaining percentage**, such as `Weekly limit: 7% remaining`, instead of
   leaving you to guess whether the 5-hour or weekly allowance triggered it.
+- **A subscription's usage past its limit no longer reads as 0% used, and its
+  handoff banner no longer stays silent.** The Hub rounded a 5h/7d usage
+  percentage above 100 down to 0, which a fully-used session then displayed as
+  untouched; the value is now clamped to 100. The handoff banner used to fire
+  once per session, so a 5-hour banner could suppress the 7-day banner when
+  its own threshold was crossed later; the "already notified" record is now
+  kept per session-and-window instead. This has been checked with synthetic
+  input only; the real `statusLine` value a CLI reports once past its limit
+  has not been observed.
 - Terminal scrollbar drags now remain manual scrolls when the pointer is held
   before moving, preventing bottom-follow from pinning the thumb to the bottom
   while the displayed text moves elsewhere.
