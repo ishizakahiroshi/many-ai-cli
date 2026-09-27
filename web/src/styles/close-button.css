@@ -19,6 +19,7 @@
 .usage-dropdown-close,
 .server-modal-close,
 .wf-modal-close,
+.handoff-dialog-close,
 .mc-modal-close,
 .spawn-web-dir-close,
 .dgl-close,
@@ -46,6 +47,7 @@
 .usage-dropdown-close:hover,
 .server-modal-close:hover,
 .wf-modal-close:hover,
+.handoff-dialog-close:hover,
 .mc-modal-close:hover,
 .spawn-web-dir-close:hover,
 .dgl-close:hover,
@@ -64,6 +66,7 @@
 .mc-modal-close,
 .dgl-close,
 .relay-dialog-close,
+.handoff-dialog-close,
 .bug-report-close,
 .spawn-web-dir-close { --close-btn-fs: 1rem; }
 
@@ -75,7 +78,8 @@
 
 /* ヘッダ内で右端へ押し出すもの。 */
 .usage-dropdown-close,
-.wf-modal-close { margin-left: auto; }
+.wf-modal-close,
+.handoff-dialog-close { margin-left: auto; }
 
 /* ── 配置: 閉じるボタンを左へ寄せる設定（body.close-left / web/src/app/ui-side.ts） ── */
 
@@ -88,6 +92,7 @@ body.close-left :is(
   .git-commit-close,
   .server-modal-close,
   .wf-modal-close,
+  .handoff-dialog-close,
   .mc-modal-close,
   .bug-report-close,
   .dgl-close,

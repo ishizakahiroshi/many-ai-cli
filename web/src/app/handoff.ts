@@ -184,9 +184,11 @@ function buildDialogShell(titleKey: string, titleFallback: string, extraClass = 
   const backdrop = document.createElement('div');
   backdrop.className = `handoff-dialog-backdrop aac-wheel-overlay${extraClass ? ` ${extraClass}` : ''}`;
   backdrop.innerHTML = `<div class="handoff-dialog" role="dialog" aria-modal="true" aria-labelledby="handoff-dialog-title">
-    <h2 id="handoff-dialog-title">${escapeHtml(tx(titleKey, titleFallback))}</h2>
+    <div class="handoff-dialog-header">
+      <h2 id="handoff-dialog-title">${escapeHtml(tx(titleKey, titleFallback))}</h2>
+      <button class="handoff-dialog-close" type="button" data-handoff-close aria-label="${escapeHtml(tx('settings_close', '閉じる'))}">✕</button>
+    </div>
     <div class="handoff-dialog-body"><p>${escapeHtml(tx('handoff_dialog_loading', '読み込み中…'))}</p></div>
-    <div class="handoff-dialog-actions"><button type="button" data-handoff-cancel>${escapeHtml(tx('handoff_dialog_cancel', 'キャンセル'))}</button></div>
   </div>`;
   document.body.appendChild(backdrop);
   const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
@@ -196,7 +198,9 @@ function buildDialogShell(titleKey: string, titleFallback: string, extraClass = 
   };
   document.addEventListener('keydown', onKeyDown);
   backdrop.addEventListener('click', (event) => { if (event.target === backdrop) close(); });
-  backdrop.querySelector('[data-handoff-cancel]')?.addEventListener('click', close);
+  const closeButton = backdrop.querySelector<HTMLButtonElement>('[data-handoff-close]');
+  closeButton?.addEventListener('click', close);
+  closeButton?.focus();
   return { backdrop, close };
 }
 
