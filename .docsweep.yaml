@@ -1,8 +1,8 @@
 # many-ai-cli: 現行リリース系列の archive を正本にする。docs/local 配下（gitignore）に置く。
 # ルート archive/ は使わない（誤って git 管理に載るのを防ぐ）。
 # 過去のリリース系 archive も v0.4.x / v0.6.x / v0.7.x / v0.8.x と `.x` 付きで揃えてある。
-# **リリースを打ったらここを次の系列へ進める**（v0.8.0 リリース後の 2026-09-11 に v0.8.x → v0.9.x へ）。
-archive_dir: docs/local/archive/v0.9.x
+# **リリースを打ったらここを次の系列へ進める**（v0.9.0 リリース後の 2026-09-27 に v0.9.x → v0.10.x へ）。
+archive_dir: docs/local/archive/v0.10.x
 
 # **`docsweep sweep` を素で走らせないこと（2026-09-11 実測）。**
 # sweep は docs/local 配下を再帰で見て、`done` / `discarded` のものを「既に archive の中にあっても」
