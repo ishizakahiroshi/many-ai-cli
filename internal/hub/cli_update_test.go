@@ -9,7 +9,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"many-ai-cli/internal/provider"
@@ -439,54 +441,61 @@ func TestRunCLIUpdateJobProviderLoginRequired(t *testing.T) {
 	}
 }
 
-// --- C2: 同時実行 vs serial --------------------------------------------------
+// --- C2: concurrent / serial scheduling -------------------------------------
 
-// TestRunCLIUpdateJobConcurrentIsFasterThanSerial pins the C2 completion
-// condition: 3 providers running concurrently finish in roughly 1x the fake
-// command's sleep duration, while the same 3 with serial:true take roughly
-// 3x — proving the concurrent job actually overlaps the 3 processes instead
-// of accidentally serializing them, and that serial actually waits for each
-// one before starting the next.
-func TestRunCLIUpdateJobConcurrentIsFasterThanSerial(t *testing.T) {
-	s := newCLIUpdateTestServer(t)
-	ids := []string{"conc-a", "conc-b", "conc-c"}
-	withFakeCLILookupNames(t, ids...)
-	t.Setenv("MANY_AI_CLI_FAKE_UPDATE_VERSION_MODE", "static")
-	t.Setenv("MANY_AI_CLI_FAKE_UPDATE_COMMAND_MODE", "sleep")
-	t.Setenv("MANY_AI_CLI_FAKE_UPDATE_SLEEP_MS", "300")
-
-	defs := make([]provider.Definition, 0, len(ids))
-	for _, id := range ids {
-		defs = append(defs, fakeUpdateDefinition(id, "TestCliUpdateFakeVersionHelper", "TestCliUpdateFakeCommandHelper"))
-	}
-	registry := buildFakeUpdateRegistry(t, s, defs...)
-	plans := make(map[string]cliUpdatePlan, len(ids))
-	for _, id := range ids {
-		plan := planCLIUpdate(id, registry)
-		if !plan.Eligible {
-			t.Fatalf("plan for %q not eligible: %s", id, plan.Reason)
-		}
-		plans[id] = plan
-	}
-
-	start := time.Now()
-	concurrentJob := newCLIUpdateJob("job-concurrent", false, ids, nil, time.Now())
-	s.runCLIUpdateJob(concurrentJob, registry, plans)
-	concurrentElapsed := time.Since(start)
-
-	start = time.Now()
-	serialJob := newCLIUpdateJob("job-serial", true, ids, nil, time.Now())
-	s.runCLIUpdateJob(serialJob, registry, plans)
-	serialElapsed := time.Since(start)
-
-	if concurrentElapsed >= serialElapsed {
-		t.Fatalf("concurrent (%v) should be faster than serial (%v)", concurrentElapsed, serialElapsed)
-	}
-	if concurrentElapsed > 700*time.Millisecond {
-		t.Fatalf("concurrent run took %v, want well under 3x the 300ms sleep (proves overlap)", concurrentElapsed)
-	}
-	if serialElapsed < 800*time.Millisecond {
-		t.Fatalf("serial run took %v, want roughly 3x the 300ms sleep (proves serialization)", serialElapsed)
+// The real subprocess outcome tests above cover update execution. Scheduling is
+// checked separately: fake time advances only when every worker is blocked, so
+// process startup, antivirus and shared CI runner load cannot change the result.
+func TestRunCLIUpdateProvidersScheduling(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		count  int
+		serial bool
+		peak   int
+	}{
+		{"concurrent", 3, false, 3},
+		{"bounded", cliUpdateMaxConcurrency + 2, false, cliUpdateMaxConcurrency},
+		{"serial", 3, true, 1},
+		{"empty", 0, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ids := make([]string, tc.count)
+				for i := range ids {
+					ids[i] = fmt.Sprintf("cli-%d", i)
+				}
+				var mu sync.Mutex
+				active, peak, finished := 0, 0, 0
+				seen := map[string]int{}
+				var order []string
+				runCLIUpdateProviders(ids, tc.serial, func(id string) {
+					mu.Lock()
+					active++
+					peak = max(peak, active)
+					seen[id]++
+					order = append(order, id)
+					mu.Unlock()
+					time.Sleep(time.Second) // virtual, no wall-clock performance assertion
+					mu.Lock()
+					active--
+					finished++
+					mu.Unlock()
+				})
+				mu.Lock()
+				defer mu.Unlock()
+				if peak != tc.peak || active != 0 || finished != tc.count {
+					t.Fatalf("peak=%d active=%d finished=%d; want peak=%d active=0 finished=%d", peak, active, finished, tc.peak, tc.count)
+				}
+				for i, id := range ids {
+					if seen[id] != 1 {
+						t.Errorf("%s ran %d times, want 1", id, seen[id])
+					}
+					if tc.serial && order[i] != id {
+						t.Errorf("serial position %d = %s, want %s", i, order[i], id)
+					}
+				}
+			})
+		})
 	}
 }
 

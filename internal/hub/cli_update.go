@@ -407,15 +407,21 @@ func (s *Server) runCLIUpdateJob(job *cliUpdateJob, registry *provider.Registry,
 		defer s.endProviderUpdate(id)
 		s.runCLIUpdateJobProvider(ctx, job, registry, plans[id])
 	}
-	if job.serial {
-		for _, id := range job.accepted {
+	runCLIUpdateProviders(job.accepted, job.serial, run)
+}
+
+// Keep scheduling independent of subprocess I/O so overlap and the concurrency
+// bound can be tested with a virtual clock instead of runner speed thresholds.
+func runCLIUpdateProviders(accepted []string, serial bool, run func(string)) {
+	if serial {
+		for _, id := range accepted {
 			run(id)
 		}
 		return
 	}
 	sem := make(chan struct{}, cliUpdateMaxConcurrency)
 	var wg sync.WaitGroup
-	for _, id := range job.accepted {
+	for _, id := range accepted {
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(id string) {
