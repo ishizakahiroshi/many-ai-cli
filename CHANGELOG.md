@@ -17,12 +17,6 @@ Release artifacts are published at
   in Settings.** The "Slash command sources" section now lists both providers
   next to the existing five, with their default URLs pre-filled; loading,
   saving, reset and the settings summary cover them like the others.
-- **Debug builds can capture dashboard stalls during voice input.** A separate
-  worker records bounded processing checkpoints and suspected heartbeat gaps to
-  a rotating local `ui-freeze.jsonl`, without speech or terminal text. This is
-  diagnostic instrumentation; the reported voice-input freeze remains unconfirmed.
-  Release checks require all temporary logging, tracing and monitoring
-  instrumentation to be purged before publishing.
 - **NVIDIA NIM is available as an optional OpenCode-only route.** The Hub
   stores the key without returning it, lists NVIDIA models and tests the key
   through `/v1/models`, while OpenCode connects directly to NVIDIA's Chat
