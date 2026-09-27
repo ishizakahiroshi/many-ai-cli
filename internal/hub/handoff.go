@@ -619,9 +619,8 @@ type handoffPreview struct {
 	NotePaths      []string `json:"note_paths,omitempty"`
 	Markdown       string   `json:"markdown,omitempty"`
 	// CandidateProviders (handleHandoffItem のみが埋める): 起動先として選べる
-	// provider の一覧。子 plan 内部 C2「同一 provider の別 subscription
-	// profile は候補に出さない」を満たすため、この一覧に元セッションの
-	// provider は含まれない（handoffCandidateProviders 参照）。
+	// provider の一覧。利用者が同じ CLI で続けられるよう、元セッションの
+	// provider も含める（handoffCandidateProviders 参照）。
 	CandidateProviders []string `json:"candidate_providers,omitempty"`
 }
 
@@ -796,18 +795,14 @@ func fillHandoffSuccessors(entries []handoffPreview) {
 }
 
 // handoffCandidateProviders returns the built-in providers a handoff
-// successor may be spawned as, excluding sourceProvider. 子 plan 内部 C2:
-// 「同一 provider の別 subscription profile は候補に出さない」— the
-// simplest way to guarantee that is to never offer the source session's own
-// provider at all (internal/hub/subscription.go's "残量を見て自動で契約を
-// 切り替えない" invariant then never even becomes reachable from this UI:
-// there is no picker through which a same-provider different profile could
-// be chosen in the first place).
+// successor may be spawned as, including the source session's provider.
+// Selection and launch are explicit user actions; this does not select a
+// subscription based on remaining quota or automatically start a successor.
 //
 // The provider list itself lives in subscription.usageSources (子 plan:
 // docs/local/plan_session-handoff-board_c6_usage-dispatch.md), not a literal
 // slice here, so a provider added to that table becomes a handoff target
 // without a second edit in this file.
-func handoffCandidateProviders(sourceProvider string) []string {
-	return subscription.HandoffTargetProviders(sourceProvider)
+func handoffCandidateProviders() []string {
+	return subscription.HandoffTargetProviders()
 }

@@ -75,7 +75,7 @@ func (s *Server) handleHandoffItem(w http.ResponseWriter, r *http.Request) {
 	s.sessionsMu.Lock()
 	_, preview.Live = s.sessions[id]
 	s.sessionsMu.Unlock()
-	preview.CandidateProviders = handoffCandidateProviders(preview.Provider)
+	preview.CandidateProviders = handoffCandidateProviders()
 	writeJSON(w, preview)
 }
 

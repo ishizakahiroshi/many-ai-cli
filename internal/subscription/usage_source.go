@@ -112,13 +112,11 @@ func LocalFileUsageProviders() []string {
 }
 
 // HandoffTargetProviders returns every table provider that can be a handoff
-// successor, excluding exclude (normally the source session's own provider —
-// 子 plan (docs/local/plan_session-handoff-board_c5_handoff-md.md) 内部 C2:
-// 同一 provider の別 subscription profile を候補に出さない).
-func HandoffTargetProviders(exclude string) []string {
+// successor. A user may explicitly continue with the same provider.
+func HandoffTargetProviders() []string {
 	out := make([]string, 0, len(usageSources))
 	for _, row := range usageSources {
-		if row.CanBeHandoffTarget && row.Provider != exclude {
+		if row.CanBeHandoffTarget {
 			out = append(out, row.Provider)
 		}
 	}

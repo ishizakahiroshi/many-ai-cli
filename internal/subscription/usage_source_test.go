@@ -1,6 +1,9 @@
 package subscription
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // TestUsageSourceForUnknownProviderIsNone is the C6 completion criterion
 // (子 plan: docs/local/plan_session-handoff-board_c6_usage-dispatch.md 内部
@@ -64,21 +67,10 @@ func TestLocalFileUsageProviders(t *testing.T) {
 	}
 }
 
-// TestHandoffTargetProvidersExcludesSource pins the same behavior
-// internal/hub's handoffCandidateProviders relies on: the source provider is
-// never offered as its own successor, and every other table provider is.
-func TestHandoffTargetProvidersExcludesSource(t *testing.T) {
-	got := HandoffTargetProviders("claude")
-	for _, p := range got {
-		if p == "claude" {
-			t.Fatalf("HandoffTargetProviders must exclude the source provider: %v", got)
-		}
-	}
-	want := map[string]bool{"codex": true, "grok": true, "copilot": true, "cursor-agent": true, "opencode": true, "command-code": true}
-	for _, p := range got {
-		delete(want, p)
-	}
-	if len(want) != 0 {
-		t.Fatalf("HandoffTargetProviders missing: %v (got %v)", want, got)
+func TestHandoffTargetProvidersIncludesAllTargets(t *testing.T) {
+	got := HandoffTargetProviders()
+	want := []string{"claude", "codex", "grok", "copilot", "cursor-agent", "opencode", "command-code"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("HandoffTargetProviders() = %v, want %v", got, want)
 	}
 }

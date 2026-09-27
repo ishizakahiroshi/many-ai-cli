@@ -23,6 +23,9 @@ Release artifacts are published at
   provider name, and search now also matches the branch name.
 
 ### Fixed
+- **Handoff allows continuing with the same CLI**, including Codex-to-Codex.
+  The source CLI is no longer omitted from the destination picker; launching
+  the successor and choosing a subscription remain explicit user actions.
 - **Hub restarts preserve input sequence numbers and the full 2 MiB replay
   window from updated wrappers.** New instructions are no longer discarded as
   duplicate input after reconnect, and retained terminal history is no longer

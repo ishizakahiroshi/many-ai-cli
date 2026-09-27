@@ -359,8 +359,8 @@ function renderDeriveForm(
   // 選んだ段が残る）。触るまでは記憶が初期値を決める。
   let presetEdited = false;
 
-  // 引き継ぎ先の候補は看板が返した一覧だけ（元と別の provider。親 D7）。
-  // 子は親と同じ provider も選べ、custom provider も対象になる。
+  // 引き継ぎ先の候補は看板が返した一覧だけ（元と同じ provider も含む）。
+  // 子は custom provider も対象になる。
   function providerChoices(): DeriveProviderOption[] {
     if (kind === 'handoff') {
       return source.candidateProviders.map((value) => ({ value, label: providerLabel(value, customProviders) }));
@@ -673,8 +673,8 @@ function renderDeriveForm(
 
   kindSelect.value = kind;
   applyKind();
-  // 起点の provider が子の候補にあれば初期値にする（親と同じ CLI で子を立てるのが
-  // 既定の期待）。引き継ぎでは候補から外れているので、その場合は空のままになる。
+  // 起点の provider が候補にあれば初期値にする。引き継ぎも同じ CLI で続けられ、
+  // 別の CLI に切り替える場合は利用者が選ぶ。
   if (!providerSelect.value && source.provider) {
     const match = Array.from(providerSelect.options).find((o) => o.value === source.provider);
     if (match) {

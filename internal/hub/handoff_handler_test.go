@@ -5,28 +5,21 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"many-ai-cli/internal/handoff"
 )
 
-// TestHandoffCandidateProvidersExcludesSource is the C2/C3 completion
-// criterion "同一 provider の別 subscription profile は候補に出さない",
-// implemented by never offering the source session's own provider at all.
-func TestHandoffCandidateProvidersExcludesSource(t *testing.T) {
-	got := handoffCandidateProviders("claude")
-	for _, p := range got {
-		if p == "claude" {
-			t.Fatalf("candidate list must not include the source provider: %v", got)
-		}
-	}
-	want := map[string]bool{"codex": true, "copilot": true, "cursor-agent": true, "opencode": true, "grok": true}
-	for _, p := range got {
-		delete(want, p)
-	}
-	if len(want) != 0 {
-		t.Fatalf("candidate list missing providers: %v (got %v)", want, got)
+func TestHandoffCandidateProvidersIncludesSource(t *testing.T) {
+	for _, source := range []string{"codex", "claude", "grok", "copilot", "cursor-agent", "opencode", "command-code"} {
+		t.Run(source, func(t *testing.T) {
+			got := handoffCandidateProviders()
+			if !slices.Contains(got, source) {
+				t.Fatalf("candidate list must include the source provider %q: %v", source, got)
+			}
+		})
 	}
 }
 
@@ -55,7 +48,7 @@ func TestHandleHandoffItemNotExists(t *testing.T) {
 
 // TestHandleHandoffItemRendersMarkdown is the C1 completion criterion: a
 // session with a recorded board renders the six-section markdown and writes
-// it to the *_handoff.md sibling, and the candidate provider list excludes
+// it to the *_handoff.md sibling, and the candidate provider list includes
 // the session's own provider.
 func TestHandleHandoffItemRendersMarkdown(t *testing.T) {
 	s, _ := subsTestServer(t)
@@ -89,10 +82,8 @@ func TestHandleHandoffItemRendersMarkdown(t *testing.T) {
 	if !strings.Contains(got.Markdown, "セッションの素性") || !strings.Contains(got.Markdown, "[success] did the thing") {
 		t.Fatalf("markdown missing expected sections: %q", got.Markdown)
 	}
-	for _, p := range got.CandidateProviders {
-		if p == "codex" {
-			t.Fatalf("candidate_providers must exclude the session's own provider: %v", got.CandidateProviders)
-		}
+	if !slices.Contains(got.CandidateProviders, "codex") {
+		t.Fatalf("candidate_providers must allow Codex-to-Codex handoff: %v", got.CandidateProviders)
 	}
 
 	path, err := handoff.RenderedPathFor(sessionID)
