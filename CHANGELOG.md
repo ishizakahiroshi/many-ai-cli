@@ -578,6 +578,10 @@ Release artifacts are published at
 
 ### Fixed
 
+- **Session cards keep two rows when a completion summary appears or clears.**
+  The summary uses the remaining space in the second row, with ellipsis and a
+  full-text tooltip, while the context gauge, child toggle and branch remain
+  outside the shrinking text area.
 - **Terminal path detection no longer stalls on long runs of closing punctuation
   inside a filename.** Suffix trimming now scans once instead of using a nested
   regular expression with exponential backtracking.
