@@ -10,6 +10,8 @@ Release artifacts are published at
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-27
+
 ### Added
 - **The slash-command source URLs for OpenCode and Grok Build can be overridden
   in Settings.** The "Slash command sources" section now lists both providers
@@ -364,6 +366,12 @@ Release artifacts are published at
   or **Delete** it. They are saved with your
   other display settings on the Hub (`display.custom_themes`), which checks
   each theme's name and ranges before storing it.
+- **The handoff list can now be searched, and running sessions sort above
+  finished ones.** Type a number, the CLI name shown on screen, or part of
+  the folder path to filter, case-insensitively; within each group, entries
+  stay ordered by session number, newest first. The text shown when nothing
+  matches your search is different from the text shown when there are no
+  handoffs recorded at all.
 
 ### Changed
 - CLI update rows now use the same rotating ring as running sessions while an
@@ -792,6 +800,28 @@ Release artifacts are published at
   it arrived in 0.5.0. The Raw log button, its tooltip and the popup it opens
   had no translations in any language, so since 0.5.1 they showed internal
   key names such as `agent_log_button` instead of text.
+- **The handoff list dialog now closes with the same ✕ button every other
+  dialog in the app uses**, in its header, with the same hover and
+  keyboard-focus behavior; Escape and clicking outside the dialog still work
+  too. It previously ended in a bottom "Cancel" button that no other dialog
+  has.
+- **Codex's Sent history no longer shows the AGENTS/environment context that
+  gets silently prepended to your first message.** Recent Codex rollouts
+  label the origin of each content block; the Hub now keeps only the
+  user-authored blocks in that view. Older rollouts, which carry no such
+  labeling, are read as before.
+- **An orchestration child closed from the dashboard before it finished is no
+  longer reported to its parent as complete.** Dismissing a child's session
+  removed it from the Hub's live session list, so the usual idle-progress
+  check could no longer see it, and once its timeout passed the child was
+  told to the conductor and the board as "completed without a DONE marker."
+  A dismissed child now gets its own message instead — closed by the user,
+  its work possibly unfinished.
+- **Clicking an approval's rationale/context text to expand it now actually
+  shows the full text.** In the compact display it kept the one-line ellipsis
+  even while expanded; in a full-height right column the expanded text could
+  grow past the panel's own edge and get clipped. The expanded block no
+  longer shrinks, and now wraps onto multiple lines in compact mode too.
 
 ### Security
 - The derive dialog's permission preview now follows execution mode. Choosing
@@ -848,6 +878,32 @@ Release artifacts are published at
   `command` uses one is marked with an error in Settings → AI CLI
   integrations until the character is taken out. `SECURITY.md` now says how
   to report a vulnerability.
+- **Leftover per-launch temp files are now cleaned up once at Hub startup,
+  not only the next time the same slot is written to.** A killed session
+  could leave behind a `.claude.json` temporary copy — the default login's,
+  the Hub's own env copy, or a subscription profile's, each including its
+  `oauthAccount` — or a `~/.many-ai-cli/tmp/prompt-*.md` / `launch-*.md`
+  instruction file. A file still in use (fresh, or its wrapper still alive —
+  a wrapper reattaching after a Hub restart is not mistaken for an orphan) is
+  left alone. The scan now walks the containing folder instead of using a
+  glob, so a filename containing `[` is no longer skipped; a failed sweep
+  only logs a kind and a count and never blocks startup.
+- A one-tap approval link now has its method, Host and Origin checked before
+  its token is verified, instead of after — an audit-found ordering gap
+  where a forged link's claim data could be read before the request's origin
+  was. An `Origin` header with no port is now treated as port 80 when
+  compared against the Hub's own port.
+- Command risk classification now also catches process substitution
+  (`<(...)`, zsh's `=(...)`), `find`'s write-adjacent listing flags (`-fls`,
+  `-fprint`, `-fprint0`, `-fprintf`), `git ... --output`, and a Windows path
+  immediately followed by a shell connector or redirect (such as
+  `C:\&calc.exe` or `C:\>out`) as Mid risk rather than read-only; a backslash
+  right after whitespace still escapes the next character.
+- An SSH launcher profile's working directory is now validated like its
+  other fields, rejecting one that starts with `-` or contains a control
+  character. Claude Code's per-session temporary settings file has its file
+  permissions restricted to the current user immediately after it is
+  written.
 
 ## [0.8.0] - 2026-09-09
 
@@ -3326,7 +3382,8 @@ preparation, so v0.1.1 is the earliest version visible on GitHub.
 - Gemini CLI is intentionally out of scope for wrapping; see
   `docs/v0.2.0-any-ai-cli-design.md` for the rationale.
 
-[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/ishizakahiroshi/many-ai-cli/compare/v0.5.1...v0.6.0
