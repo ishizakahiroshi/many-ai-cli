@@ -24,7 +24,7 @@ import {
   type I18nMessage,
 } from './cli-availability.js';
 import { loadProviderSummaries } from './provider-store.js';
-import { providerIconHtml } from './session-list.js';
+import { providerIconHtml, stateIconSvgHtml } from './session-list.js';
 import { apiFetch, escapeHtml, token } from './util.js';
 
 // fetchInstallLinkDefaults は provider id → 公式インストール手順 URL。元は
@@ -332,7 +332,7 @@ export function mountCliMaintenance(container: HTMLElement, installed: CliInstal
       ? `<div class="cli-maint-failure-row" data-provider="${escapeHtml(status.id)}">${escapeHtml(txm(failureDetail))}</div>`
       : '';
     return `<div class="cli-maint-row${rowDragClass()}" data-provider="${escapeHtml(status.id)}"${rowDragAttrs()}>
-      <span class="cli-maint-chk" aria-hidden="true">${inFlight ? '…' : '✓'}</span>
+      <span class="cli-maint-chk${inFlight ? ' cli-maint-updating' : ''}" aria-hidden="true">${inFlight ? stateIconSvgHtml('ring') : '✓'}</span>
       ${providerIconHtml(status.id, 18)}
       <span class="cli-maint-name">${escapeHtml(status.displayName)}</span>
       <span class="cli-maint-version-cell"><span class="cli-maint-version">${escapeHtml(versionText)}</span></span>

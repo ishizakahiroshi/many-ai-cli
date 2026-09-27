@@ -360,6 +360,8 @@ Release artifacts are published at
   each theme's name and ranges before storing it.
 
 ### Changed
+- CLI update rows now use the same rotating ring as running sessions while an
+  update is queued or running, in both the initial screen and AI CLI settings.
 - **After updating, reload any dashboard tab that was open before the update.**
   The Hub now tells the page about approvals in a new form that the previous
   version's page does not read, so a tab left open across the update does not
