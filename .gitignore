@@ -94,3 +94,6 @@ desktop.ini
 
 # Local pre-release audit evidence (may contain unpublished findings)
 /docs/ai-audit-prompts/
+
+# Local promo video sources and renders
+/brag-output/
