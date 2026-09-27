@@ -1,5 +1,9 @@
 package proto
 
+// PTYReplayBufferLimit is the shared raw-byte retention window. A wrapper must
+// retain as much as Hub so a Hub restart does not shrink the available history.
+const PTYReplayBufferLimit = 2 * 1024 * 1024
+
 // TypeSessionDismissed は Hub → wrapper の「このセッションは意図的に閉じられた」通知。
 // wrapper が WS の EOF から意図を推定すると postReattachGuard(10s) 以内では
 // 「回線不調」に倒れ、2 秒後に再接続してセッションが復活してしまう
@@ -30,10 +34,14 @@ type Message struct {
 	PID              int    `json:"pid,omitempty"`
 	// InputSeq identifies a Hub-to-wrapper pty_input frame so the wrapper can
 	// acknowledge the frame after the bytes have been written to the PTY.
-	InputSeq int64  `json:"input_seq,omitempty"`
-	Shell    string `json:"shell,omitempty"`
-	Version  string `json:"version,omitempty"`
-	State    string `json:"state,omitempty"`
+	InputSeq int64 `json:"input_seq,omitempty"`
+	// InputSeqHighWatermark is the highest input number received by the wrapper.
+	// A restarted Hub allocates above it, even if its PTY write is still pending.
+	// This does not mark pending writes as completed for duplicate detection.
+	InputSeqHighWatermark int64  `json:"input_seq_high_watermark,omitempty"`
+	Shell                 string `json:"shell,omitempty"`
+	Version               string `json:"version,omitempty"`
+	State                 string `json:"state,omitempty"`
 	// Three orthogonal session activity signals. State remains a compatibility
 	// display label; consumers that need a safe interruption point use
 	// output_idle && !workflow_active.

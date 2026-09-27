@@ -34,7 +34,6 @@ import (
 
 const (
 	reconnectDialInterval          = 2 * time.Second
-	replayBufferLimit              = 64 * 1024 // bytes of recent PTY output to replay on reconnect
 	hubProbeTimeout                = 1 * time.Second
 	hubStartupTimeout              = 10 * time.Second
 	hubStartupPoll                 = 100 * time.Millisecond
@@ -90,6 +89,9 @@ type wrapperSession struct {
 	// 後続プロンプトを誤承認する。接続を跨いで保持する必要があるため conn ではなく
 	// セッションに持つ。
 	maxProcessedInputSeq int64
+	// Allocation watermark also includes a received frame whose PTY write is
+	// still in progress when the reconnect supervisor snapshots this state.
+	maxReceivedInputSeq int64
 }
 
 // inputSeqAlreadyProcessed は seq が「PTY へ書き終えた分の再送」かを返す。
@@ -117,6 +119,18 @@ func (ws *wrapperSession) markInputSeqProcessed(seq int64) {
 	if seq > ws.maxProcessedInputSeq {
 		ws.maxProcessedInputSeq = seq
 	}
+}
+
+func (ws *wrapperSession) inputSeqHighWatermark() int64 {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	return max(ws.maxProcessedInputSeq, ws.maxReceivedInputSeq)
+}
+
+func (ws *wrapperSession) noteInputSeqReceived(seq int64) {
+	ws.stateMu.Lock()
+	defer ws.stateMu.Unlock()
+	ws.maxReceivedInputSeq = max(ws.maxReceivedInputSeq, seq)
 }
 
 func newWrapperSession(conn *websocket.Conn, sid int, sendWriteTimeout time.Duration) *wrapperSession {
@@ -367,7 +381,7 @@ func (r *reconnectSupervisor) run() {
 				cols, rows = w, h
 			}
 			replay, ptyBytes := r.snapshotReplay()
-			newConn, newSID, queuedMessages, err := dialAndReattachWithPending(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes)
+			newConn, newSID, queuedMessages, err := dialAndReattachWithPending(r.cfg, r.ws.getSID(), r.provider, r.display, r.cwd, r.label, r.model, r.agentSessionID, r.startedAtText, r.rawLogPath, r.jsonlPath, cols, rows, replay, ptyBytes, r.ws.inputSeqHighWatermark())
 			if err != nil {
 				r.logger.Info("reconnect attempt failed", "err", err)
 				continue
@@ -1579,32 +1593,9 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 		}
 	}
 
-	// Recent PTY output buffer: replayed to UI after a successful reconnect so
-	// the new session card has context for what happened during the gap.
-	var (
-		replayMu    sync.Mutex
-		replayBuf   bytes.Buffer
-		replayTotal int64 // PTY から読み出した累計バイト数（reattach で Hub へ申告する）
-	)
-	appendReplay := func(chunk []byte) {
-		replayMu.Lock()
-		defer replayMu.Unlock()
-		replayBuf.Write(chunk)
-		replayTotal += int64(len(chunk))
-		if replayBuf.Len() > replayBufferLimit {
-			replayBuf.Next(replayBuf.Len() - replayBufferLimit)
-		}
-	}
-	// snapshotReplay は replay バッファと累計バイト数を同一ロック下で返す。
-	// 別々に取ると両者の間に appendReplay が挟まり、Hub 側の差分計算
-	// （累計の差で replay の末尾を切り出す）が 1 チャンクぶんずれる。
-	snapshotReplay := func() ([]byte, int64) {
-		replayMu.Lock()
-		defer replayMu.Unlock()
-		out := make([]byte, replayBuf.Len())
-		copy(out, replayBuf.Bytes())
-		return out, replayTotal
-	}
+	var replay ptyReplayBuffer
+	appendReplay := replay.append
+	snapshotReplay := replay.snapshot
 
 	done := make(chan struct{})
 	var doneOnce sync.Once
@@ -1664,6 +1655,7 @@ func Run(cfg *config.Config, logger *slog.Logger, provider string, args []string
 				switch m.Type {
 				case "pty_input":
 					if len(m.Data) > 0 {
+						wses.noteInputSeqReceived(m.InputSeq)
 						data := m.Data
 						var writeErr error
 						if wses.inputSeqAlreadyProcessed(m.InputSeq) {
@@ -1957,7 +1949,7 @@ func dialAndRegister(cfg *config.Config, provider, display, cwd, label, model, e
 	return conn, reg, nil
 }
 
-func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes int64) (*websocket.Conn, int, []proto.Message, error) {
+func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, display, cwd, label, model, agentSessionID, startedAt, rawLogPath, jsonlPath string, termCols, termRows int, replay []byte, ptyBytes, inputSeqHighWatermark int64) (*websocket.Conn, int, []proto.Message, error) {
 	wsURL := url.URL{Scheme: "ws", Host: fmt.Sprintf("127.0.0.1:%d", cfg.Hub.Port), Path: "/ws"}
 	// Origin はポート付きで許可リストに一致させる（理由は dialAndRegister のコメント参照）。
 	origin := fmt.Sprintf("http://127.0.0.1:%d", cfg.Hub.Port)
@@ -1971,33 +1963,34 @@ func dialAndReattachWithPending(cfg *config.Config, sessionID int, provider, dis
 		providerRevision = registry.Revision()
 	}
 	if err := websocket.JSON.Send(conn, proto.Message{
-		Type:              "reattach",
-		Role:              "wrapper",
-		SessionID:         sessionID,
-		Provider:          provider,
-		ProviderRevision:  providerRevision,
-		Display:           display,
-		CWD:               cwd,
-		Label:             label,
-		Model:             model,
-		PID:               os.Getpid(),
-		Shell:             DetectShell(),
-		Token:             cfg.Token,
-		HomeDir:           homeDir,
-		CodexHome:         codexHome,
-		ClaudeDir:         claudeDir,
-		GrokHome:          grokHome,
-		AgentSessionID:    agentSessionID,
-		SubscriptionID:    activeSubscriptionID(),
-		UsageProbe:        os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
-		SubscriptionLogin: os.Getenv("MANY_AI_CLI_SUBSCRIPTION_LOGIN") == "1",
-		Cols:              termCols,
-		Rows:              termRows,
-		StartedAt:         startedAt,
-		LogPath:           rawLogPath,
-		JSONLPath:         jsonlPath,
-		ReplayB64:         base64.StdEncoding.EncodeToString(replay),
-		PTYBytes:          ptyBytes,
+		Type:                  "reattach",
+		Role:                  "wrapper",
+		SessionID:             sessionID,
+		Provider:              provider,
+		ProviderRevision:      providerRevision,
+		Display:               display,
+		CWD:                   cwd,
+		Label:                 label,
+		Model:                 model,
+		PID:                   os.Getpid(),
+		Shell:                 DetectShell(),
+		Token:                 cfg.Token,
+		HomeDir:               homeDir,
+		CodexHome:             codexHome,
+		ClaudeDir:             claudeDir,
+		GrokHome:              grokHome,
+		AgentSessionID:        agentSessionID,
+		SubscriptionID:        activeSubscriptionID(),
+		UsageProbe:            os.Getenv("MANY_AI_CLI_USAGE_PROBE") == "1",
+		SubscriptionLogin:     os.Getenv("MANY_AI_CLI_SUBSCRIPTION_LOGIN") == "1",
+		Cols:                  termCols,
+		Rows:                  termRows,
+		StartedAt:             startedAt,
+		LogPath:               rawLogPath,
+		JSONLPath:             jsonlPath,
+		ReplayB64:             base64.StdEncoding.EncodeToString(replay),
+		PTYBytes:              ptyBytes,
+		InputSeqHighWatermark: inputSeqHighWatermark,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, 0, nil, err

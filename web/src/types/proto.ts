@@ -335,6 +335,7 @@ export interface Message {
   project_id?: string;
   pid?: number;
   input_seq?: number;
+  input_seq_high_watermark?: number;
   shell?: string;
   version?: string;
   state?: SessionState;

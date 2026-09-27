@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Worker } from 'node:worker_threads';
 import {
   expandLogicalPathLine,
   findPathCandidates,
@@ -89,6 +90,70 @@ test('trimUrlCandidate / isHttpUrl', () => {
   assert.equal(isHttpUrl('https://example.com'), true);
   assert.equal(isHttpUrl('javascript:alert(1)'), false);
   assert.equal(isHttpUrl('https://'), false);
+});
+
+test('trimUrlCandidate: mixed punctuation and brackets retain the previous trimming results', () => {
+  // Keep the previous algorithm as an oracle on short synthetic inputs only.
+  const previousTrim = (raw: string): string => {
+    let url = raw;
+    const count = (ch: string) => [...url].filter(c => c === ch).length;
+    for (;;) {
+      if (/[.,;:!?*]$/.test(url)
+        || (url.endsWith(')') && count('(') < count(')'))
+        || (url.endsWith(']') && count('[') < count(']'))) {
+        url = url.slice(0, -1);
+      } else return url;
+    }
+  };
+  const bases = ['', 'https://example.com/a', 'https://example.com/(a)', 'https://example.com/[a]', 'https://example.com/([a])'];
+  let suffixes = [''];
+  for (let length = 0; length <= 4; length++) {
+    for (const suffix of suffixes) {
+      for (const base of bases) {
+        const raw = base + suffix;
+        assert.equal(trimUrlCandidate(raw), previousTrim(raw), raw);
+      }
+    }
+    suffixes = suffixes.flatMap(suffix => ['(', ')', '[', ']', '.', ',', '!', 'x'].map(ch => suffix + ch));
+  }
+  assert.equal(trimUrlCandidate('https://example.com/([a])])...;:!?*'), 'https://example.com/([a])');
+  assert.equal(trimUrlCandidate('https://example.com/([a])x'), 'https://example.com/([a])x');
+});
+
+test('URL suffix: long unmatched closing brackets complete without blocking the caller', { timeout: 10000 }, async () => {
+  // The worker remains terminable if repeated full-string counting regresses.
+  const moduleUrl = new URL(import.meta.url.endsWith('.ts') ? './url-detect.ts' : './url-detect.js', import.meta.url).href;
+  const worker = new Worker(`
+    const { parentPort, workerData } = require('node:worker_threads');
+    (async () => {
+      const m = await import(workerData);
+      const expected = 'https://example.com/([a])';
+      for (const suffix of [')', ']', ']).!']) {
+        const text = expected + suffix.repeat(150000);
+        const found = m.findUrlCandidates(text);
+        if (m.trimUrlCandidate(text) !== expected || found.length !== 1
+          || found[0].url !== expected || found[0].start !== 0 || found[0].end !== expected.length) {
+          parentPort.postMessage(false);
+          return;
+        }
+      }
+      parentPort.postMessage(true);
+    })().catch(error => { throw error; });
+  `, { eval: true, workerData: moduleUrl });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('URL suffix trimming exceeded 5 seconds')), 5000);
+      worker.once('message', result => {
+        clearTimeout(timer);
+        if (result === true) resolve();
+        else reject(new Error('URL suffix trimming changed the candidate or its range'));
+      });
+      worker.once('error', error => { clearTimeout(timer); reject(error); });
+      worker.once('exit', () => { clearTimeout(timer); reject(new Error('URL suffix worker exited without a result')); });
+    });
+  } finally {
+    await worker.terminate();
+  }
 });
 
 test('splitUrlPieces: ハイライトで断片に割れた URL は、またいだ断片ごとに同じ行き先で返す', () => {

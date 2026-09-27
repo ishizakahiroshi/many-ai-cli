@@ -10,7 +10,7 @@ package hub
 // 描き直すため 1 秒間に数百チャンクを吐き、この切断が実際に頻発していた
 // （セッション #1 で 1 日 11 回）。
 //
-// 切断中のバイト列は wrapper 側の replay リングバッファ（64KB）に残るが、
+// 切断中のバイト列は wrapper 側の replay リングバッファ（Hub と同じ上限）に残るが、
 // 従来はそれを Hub の VT ミラーへ流し込むだけで、すでに接続済みのブラウザへは
 // 一切送っていなかった。端末は「1 バイトも落ちない」前提のストリームなので、
 // 絶対座標で部分再描画する TUI では以後の描画位置がずれ、画面が古いまま復帰
@@ -19,7 +19,7 @@ package hub
 // reattachReplayGap は replay の末尾から「Hub が受信できていないぶん」だけを
 // 切り出す。
 //
-// replay は直近 replayBufferLimit バイトの固定窓であり、その大半は切断前に
+// replay は直近 proto.PTYReplayBufferLimit バイトの固定窓であり、その大半は切断前に
 // Hub 経由で UI へ配信済み。全量を再配信すると xterm.js に同じ内容が二重描画
 // される（docs/local/archive/v0.4.0/
 // bugfix_codex-terminal-reconnect-replay-duplication_2026-07-06.md で一度踏んだ罠）。

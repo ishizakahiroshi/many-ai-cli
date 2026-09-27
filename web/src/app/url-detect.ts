@@ -27,31 +27,29 @@ const TRAILING_PUNCT_RE = /[.,;:!?*]$/;
 // CLI が折り返した行末に来やすく、URL がそこで終わるとは考えにくい文字。
 const INCOMPLETE_URL_END_RE = /[-_=&]$/;
 
-function countChar(text: string, ch: string): number {
-  let n = 0;
-  for (const c of text) if (c === ch) n++;
-  return n;
-}
-
 // 末尾の句読点と、対応の取れない閉じ括弧を落とす。
 // 「(https://example.com)」の ) は落とし、「https://en.wikipedia.org/wiki/Foo_(bar)」の ) は残す。
 export function trimUrlCandidate(raw: string): string {
-  let url = String(raw || '');
-  for (;;) {
-    if (TRAILING_PUNCT_RE.test(url)) {
-      url = url.slice(0, -1);
-      continue;
-    }
-    if (url.endsWith(')') && countChar(url, '(') < countChar(url, ')')) {
-      url = url.slice(0, -1);
-      continue;
-    }
-    if (url.endsWith(']') && countChar(url, '[') < countChar(url, ']')) {
-      url = url.slice(0, -1);
-      continue;
-    }
-    return url;
+  const url = String(raw || '');
+  // Count once: recounting the entire URL for each trailing bracket is quadratic
+  // and can block the UI thread when terminal output has a long bracket suffix.
+  let extraRound = 0;
+  let extraSquare = 0;
+  for (const ch of url) {
+    if (ch === '(') extraRound--;
+    else if (ch === ')') extraRound++;
+    else if (ch === '[') extraSquare--;
+    else if (ch === ']') extraSquare++;
   }
+  let end = url.length;
+  while (end > 0) {
+    const ch = url[end - 1];
+    if (TRAILING_PUNCT_RE.test(ch)) end--;
+    else if (ch === ')' && extraRound > 0) { extraRound--; end--; }
+    else if (ch === ']' && extraSquare > 0) { extraSquare--; end--; }
+    else break;
+  }
+  return url.slice(0, end);
 }
 
 export function isHttpUrl(url: string): boolean {

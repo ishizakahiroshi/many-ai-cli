@@ -312,24 +312,33 @@ export function ensureTerminal(id) {
 
         // combined 上の charIndex → xterm の { x (1-based), y (1-based) }
         const ciToXY = (ci) => {
-          let ri = physRows.length - 1;
-          for (let i = 0; i < physRows.length - 1; i++) {
-            if (ci < rowOffsets[i + 1]) { ri = i; break; }
+          // A long soft-wrapped row can contain thousands of links. Find its
+          // physical row without walking from the first row for every endpoint.
+          let lo = 0;
+          let hi = physRows.length;
+          while (lo + 1 < hi) {
+            const mid = (lo + hi) >>> 1;
+            if (rowOffsets[mid] <= ci) lo = mid;
+            else hi = mid;
           }
-          const r = physRows[ri];
-          const charInRow = ci - rowOffsets[ri];
+          const r = physRows[lo];
+          const charInRow = ci - rowOffsets[lo];
           return { x: (r.cellMap[charInRow] ?? charInRow) + 1, y: r.y1 };
         };
 
         const links = [];
-        const occupiedRanges = [];
-        const overlapsExistingLink = (start, end) => occupiedRanges.some(r => start <= r.end && end >= r.start);
+        // One byte per UTF-16 position avoids comparing each candidate against
+        // every previous link. Candidates within each regex pass do not overlap,
+        // so checking/marking their spans stays linear in the logical row length.
+        const occupied = new Uint8Array(combined.length);
+        const overlapsExistingLink = (start, end) => occupied.subarray(start, end + 1).includes(1);
+        const markOccupied = (start, end) => occupied.fill(1, start, end + 1);
         const addPathLink = (rawPath, startCI) => {
           const pathStr = trimTerminalPathCandidate(rawPath);
           if (pathStr.length < 3) return;
           const endCI = startCI + pathStr.length - 1;
           if (overlapsExistingLink(startCI, endCI)) return;
-          occupiedRanges.push({ start: startCI, end: endCI });
+          markOccupied(startCI, endCI);
           const capturedPath = resolveTerminalPathCandidate(pathStr, id);
           const startPos = ciToXY(startCI);
           const endPos = ciToXY(endCI);
@@ -357,7 +366,7 @@ export function ensureTerminal(id) {
           const startCI = c.start;
           const endCI = c.end - 1;
           if (overlapsExistingLink(startCI, endCI)) continue;
-          occupiedRanges.push({ start: startCI, end: endCI });
+          markOccupied(startCI, endCI);
           const url = c.url;
           links.push({
             range: { start: ciToXY(startCI), end: ciToXY(endCI) },
@@ -396,7 +405,7 @@ export function ensureTerminal(id) {
           const startCI = cm.index;
           const endCI = cm.index + cm[0].length - 1;
           if (overlapsExistingLink(startCI, endCI)) continue;
-          occupiedRanges.push({ start: startCI, end: endCI });
+          markOccupied(startCI, endCI);
           links.push({
             range: { start: ciToXY(startCI), end: ciToXY(endCI) },
             text: cm[0],

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "29e42513daea392b5ae05a2a0893045978234215",
+    "commit": "00f381727c91ac57767cabaa2172ecbae021e576",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1061,
-    "analyzed": 830,
+    "discovered": 1066,
+    "analyzed": 834,
     "unresolved": 31,
     "unknown": 1,
-    "unclaimed": 199,
+    "unclaimed": 200,
     "skipped_by_config": 0
   },
   "files": [
@@ -9423,6 +9423,35 @@
       "unresolved": []
     },
     {
+      "path": "internal/hub/reattach_recovery_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/hub/reattach_replay.go",
       "adapter": "go",
       "status": "analyzed",
@@ -18597,6 +18626,64 @@
       "unresolved": []
     },
     {
+      "path": "internal/wrapper/pty_replay.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/wrapper/pty_replay_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/wrapper/pty_unix.go",
       "adapter": "go",
       "status": "analyzed",
@@ -19683,6 +19770,14 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "portfolio/promo-cover.jpg",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.jpg'"
     },
     {
       "path": "resources/README.md",
@@ -27198,6 +27293,36 @@
     },
     {
       "path": "web/tests/subagent-tree.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/terminal-link-provider.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

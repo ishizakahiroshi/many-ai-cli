@@ -42,9 +42,31 @@ export function trimWindowsPathCandidate(path: string): string {
   let text = String(path || '');
   text = text.replace(/([\\/])\s+.*$/, '$1');
   text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
-  text = text.replace(/\s+[぀-ヿ㐀-鿿＀-￯].*$/u, '');
-  text = text.replace(/\s+[A-Za-z]$/, '');
+  text = stripWindowsDescription(text);
+  if (/[A-Za-z]$/.test(text)) {
+    let start = text.length - 1;
+    while (start > 0 && /\s/.test(text[start - 1])) start--;
+    if (start < text.length - 1) text = text.slice(0, start);
+  }
   return stripTrailingPathPunctuation(text);
+}
+
+// Preserve the old whitespace + Japanese description suffix, including its
+// non-multiline .* semantics, without retrying at every space in a long run.
+function stripWindowsDescription(text: string): string {
+  let lastLineBreak = -1;
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (/[\r\n\u2028\u2029]/.test(text[i])) { lastLineBreak = i; break; }
+  }
+  for (let i = 0; i < text.length;) {
+    if (!/\s/.test(text[i])) { i++; continue; }
+    const start = i;
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (i > lastLineBreak && i < text.length && /[぀-ヿ㐀-鿿＀-￯]/u.test(text[i])) {
+      return text.slice(0, start);
+    }
+  }
+  return text;
 }
 
 export function stripTerminalLineSuffix(path: string): string {
@@ -59,7 +81,9 @@ export function isAbsolutePath(path: string): boolean {
 // Windows drive paths can appear with either backslashes or forward slashes
 // in terminal output, e.g. D:\src\app.go or C:/example/project/README.md.
 // バッククォートは Unix / 相対パスと同じく除外する（Markdown のコードスパン閉じをパスに含めない）。
-export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(`])+)/g;
+// Consume each whitespace run once. Checking the next drive at every space
+// would rescan the remaining run quadratically; the captures stay unchanged.
+export const ABS_WIN_PATH_RE = /([A-Za-z]:[\\/](?:[^\s\x00-\x1f<>:"|?*(`]+|(?!\s+[A-Za-z]:[\\/])[^\S\x00-\x1f]+)+)/g;
 // 空白を挟んだ説明文中の区切り（例: "hljs / highlight / prism"）を
 // Unix 絶対パスとして誤検出しないよう、セグメント内の空白は許可しない。
 export const ABS_UNIX_PATH_RE = /(\/[^\s\/\x00-\x1f"'<>`|(]+(?:\/[^\s\/\x00-\x1f"'<>`|(]*)*)/g;
@@ -117,7 +141,10 @@ function trimWrapLine(text: string): string {
 }
 
 function stripTrailingWrapPunct(text: string): string {
-  return String(text || '').replace(/(?:[\s,;:'"`<>\])}])+$/g, '');
+  const value = String(text || '');
+  let end = value.length;
+  while (end > 0 && /[\s,;:'"`<>\])}]/.test(value[end - 1])) end--;
+  return value.slice(0, end);
 }
 
 export function isPathContinuationText(text: string): boolean {

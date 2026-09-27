@@ -641,6 +641,10 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 	if prevExists && prevProviderRevision != "" {
 		req.ProviderRevision = prevProviderRevision
 	}
+	// The wrapper survives a Hub restart and keeps its dedup watermark. Starting
+	// again at 1 would acknowledge and silently drop genuinely new input.
+	// Keep the higher Hub sequence on warm reattach (including unacked frames).
+	prevInputSeq = max(prevInputSeq, req.InputSeqHighWatermark)
 	// gap = 切断中に Hub が受け取れなかったぶん。既存 UI へはこれだけを流す。
 	gap := replay
 	ptyBuf := replay

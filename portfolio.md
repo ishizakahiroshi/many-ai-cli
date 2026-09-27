@@ -15,6 +15,15 @@ tech: ["JavaScript", "Node.js", "Web Dashboard"]
 store: null
 live: null
 guide: null
+cover:
+  path: portfolio/promo-cover.jpg
+  alt:
+    ja: 7つのAI CLIをひとつの画面で確認する紹介動画
+    en: Overview of seven AI CLIs in one dashboard
+video:
+  provider: youtube
+  id: HhCJAjWQpvU
+  durationSeconds: 20
 featured: true
 features:
   - icon: "▦"

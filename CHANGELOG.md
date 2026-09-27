@@ -22,6 +22,17 @@ Release artifacts are published at
   straight to that session's preview. The model shows as a tooltip on the
   provider name, and search now also matches the branch name.
 
+### Fixed
+- **Hub restarts preserve input sequence numbers and the full 2 MiB replay
+  window from updated wrappers.** New instructions are no longer discarded as
+  duplicate input after reconnect, and retained terminal history is no longer
+  reduced to 64 KiB. Already discarded output cannot be recovered by this fix.
+- **Terminal link detection avoids repeated full scans on long output.** URL
+  suffixes with many unmatched brackets and Windows paths with long whitespace
+  runs are processed in linear passes. Rows containing many links use a compact
+  occupancy map and binary row lookup instead of scanning every earlier link
+  and row, preserving link priority, targets and clickable ranges.
+
 ## [0.9.0] - 2026-09-27
 
 ### Added

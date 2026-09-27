@@ -20,6 +20,9 @@ func TestDialAndReattachWithPendingKeepsMessagesBeforeAck(t *testing.T) {
 		if req.Type != "reattach" {
 			return
 		}
+		if req.InputSeqHighWatermark != 3 {
+			t.Errorf("input watermark = %d, want 3", req.InputSeqHighWatermark)
+		}
 		_ = websocket.JSON.Send(conn, proto.Message{
 			Type:     "pty_input",
 			InputSeq: 4,
@@ -46,7 +49,7 @@ func TestDialAndReattachWithPendingKeepsMessagesBeforeAck(t *testing.T) {
 	cfg.Hub.Port = port
 
 	conn, sid, queued, err := dialAndReattachWithPending(
-		cfg, 1, "codex", "Codex", "/tmp", "", "", "", "", "", "", 80, 24, nil, 0,
+		cfg, 1, "codex", "Codex", "/tmp", "", "", "", "", "", "", 80, 24, nil, 0, 3,
 	)
 	if err != nil {
 		t.Fatalf("dialAndReattachWithPending returned error: %v", err)

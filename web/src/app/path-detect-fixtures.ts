@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Worker } from 'node:worker_threads';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import {
+  ABS_WIN_PATH_RE,
   expandLogicalPathLine,
   findPathCandidates,
   isPathContinuationText,
@@ -12,6 +14,62 @@ import {
   type PathWrapRow,
 } from './path-detect.js';
 
+async function checkPathCandidateInChild(check: string): Promise<void> {
+  const moduleUrl = new URL(import.meta.url.endsWith('.ts') ? './path-detect.ts' : './path-detect.js', import.meta.url).href;
+  // A native regexp can delay Worker.terminate() in Bun. A separate process
+  // remains killable even while the regexp engine is still evaluating a match.
+  const { stdout } = await promisify(execFile)(process.execPath, ['--eval', `
+    (async () => {
+      const m = await import(${JSON.stringify(moduleUrl)});
+      ${check}
+      console.log('ok');
+    })().catch(error => { console.error(error); process.exitCode = 1; });
+  `], { timeout: 5000, killSignal: 'SIGKILL', windowsHide: true });
+  assert.equal(stdout.trim(), 'ok');
+}
+
+test('Windows paths: whitespace runs preserve raw captures and the next drive boundary', () => {
+  const previous = /([A-Za-z]:[\\/](?:(?!\s+[A-Za-z]:[\\/])[^\x00-\x1f<>:"|?*(`])+)/g;
+  const parts = [' ', '\t', '\n', '\r', '\u00a0', '\u2028', 'あ', 'a', ')', ' C:/next', '\tD:\\next', 'x:/next'];
+  const capture = (re: RegExp, text: string) => {
+    re.lastIndex = 0;
+    const found: Array<[number, string, string, number]> = [];
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text)) !== null) found.push([match.index, match[0], match[1], re.lastIndex]);
+    return found;
+  };
+  for (const first of parts) for (const second of parts) {
+    const text = 'C:/file' + first + second + ' D:/last';
+    assert.deepEqual(capture(ABS_WIN_PATH_RE, text), capture(previous, text));
+  }
+});
+
+test('Windows path descriptions: whitespace and line breaks retain their suffix meaning', () => {
+  for (const [input, expected] of [
+    ['C:/file   説明', 'C:/file'],
+    ['C:/file\n  説明', 'C:/file'],
+    ['C:/file あ\nend', 'C:/file あ\nend'],
+    ['C:/file あ\n tail 説明', 'C:/file あ\n tail'],
+    ['C:/file\u00a0Ａ', 'C:/file'],
+    ['C:/file   end', 'C:/file   end'],
+    ['C:/file   A', 'C:/file'],
+    ['C:/file\nA', 'C:/file'],
+    ['C:/file A\n', 'C:/file A\n'],
+  ]) assert.equal(trimWindowsPathCandidate(input), expected);
+});
+
+test('path detection: long whitespace and wrap punctuation complete without blocking', { timeout: 10000 }, async () => {
+  await checkPathCandidateInChild(`
+      const text = 'C:/file' + ' '.repeat(100000) + 'end';
+      m.ABS_WIN_PATH_RE.lastIndex = 0;
+      const match = m.ABS_WIN_PATH_RE.exec(text);
+      if (match?.[1] !== text || m.trimWindowsPathCandidate(text) !== text
+        || m.isPathContinuationText(')'.repeat(100000) + 'x') !== false) {
+        throw new Error('path detection changed the candidate');
+      }
+  `);
+});
+
 test('path suffix: trailing punctuation is removed and internal punctuation is preserved', () => {
   assert.equal(trimTerminalPathCandidate('  /work/report.md ) ] ;  '), '/work/report.md');
   assert.equal(trimTerminalPathCandidate('D:/work/(draft)))x.txt'), 'D:/work/(draft)))x.txt');
@@ -19,31 +77,13 @@ test('path suffix: trailing punctuation is removed and internal punctuation is p
   assert.equal(trimWindowsPathCandidate('D:/work/report.md )'), 'D:/work/report.md');
 });
 
-test('path suffix: long internal punctuation completes without blocking the caller', async () => {
-  // Run in a terminable worker: a regression must fail rather than hang the test runner.
-  // Source fixtures run through Bun; compiled fixtures resolve the adjacent JS file.
-  const moduleUrl = new URL(import.meta.url.endsWith('.ts') ? './path-detect.ts' : './path-detect.js', import.meta.url).href;
-  const worker = new Worker(`
-    const { parentPort, workerData } = require('node:worker_threads');
-    (async () => {
-      const m = await import(workerData);
+test('path suffix: long internal punctuation completes without blocking the caller', { timeout: 10000 }, async () => {
+  await checkPathCandidateInChild(`
       const text = 'D:/work/' + ')'.repeat(10000) + 'x';
-      parentPort.postMessage(m.trimTerminalPathCandidate(text) === text && m.trimWindowsPathCandidate(text) === text);
-    })().catch(error => { throw error; });
-  `, { eval: true, workerData: moduleUrl });
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('path trimming exceeded 5 seconds')), 5000);
-      worker.once('message', result => {
-        clearTimeout(timer);
-        if (result === true) resolve();
-        else reject(new Error('internal punctuation was modified'));
-      });
-      worker.once('error', error => { clearTimeout(timer); reject(error); });
-    });
-  } finally {
-    await worker.terminate();
-  }
+      if (m.trimTerminalPathCandidate(text) !== text || m.trimWindowsPathCandidate(text) !== text) {
+        throw new Error('internal punctuation was modified');
+      }
+  `);
 });
 
 function row(text: string, opts: { wrapped?: boolean; width?: number } = {}): PathWrapRow {

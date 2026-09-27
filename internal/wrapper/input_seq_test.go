@@ -45,11 +45,31 @@ func TestInputSeqWatermarkNeverRegresses(t *testing.T) {
 	ws := newWrapperSession(nil, 1, 0)
 	ws.markInputSeqProcessed(12)
 	ws.markInputSeqProcessed(3)
+	if got := ws.inputSeqHighWatermark(); got != 12 {
+		t.Fatalf("reattach watermark = %d, want 12", got)
+	}
 
 	if !ws.inputSeqAlreadyProcessed(12) {
 		t.Fatal("watermark regressed after an out-of-order mark")
 	}
 	if ws.inputSeqAlreadyProcessed(13) {
 		t.Fatal("watermark advanced past the highest processed seq")
+	}
+}
+
+func TestInputSeqReattachReservesInProgressWriteWithoutSuppressingRetry(t *testing.T) {
+	ws := newWrapperSession(nil, 1, 0)
+	ws.markInputSeqProcessed(41)
+	ws.noteInputSeqReceived(42)
+	ws.noteInputSeqReceived(3)
+	if got := ws.inputSeqHighWatermark(); got != 42 {
+		t.Fatalf("reattach allocation watermark = %d, want 42", got)
+	}
+	if ws.inputSeqAlreadyProcessed(42) {
+		t.Fatal("received but unwritten input must remain retryable")
+	}
+	ws.markInputSeqProcessed(42)
+	if !ws.inputSeqAlreadyProcessed(42) {
+		t.Fatal("completed input must still be deduplicated")
 	}
 }

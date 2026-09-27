@@ -48,8 +48,8 @@ import (
 const (
 	idleAfter              = 3 * time.Second
 	tickerInterval         = 200 * time.Millisecond
-	maxPTYBuf              = 2 * 1024 * 1024 // 2 MB: scrollback 拡大に合わせてアクティブセッションの replay を伸長
-	replayTailForNonActive = 64 * 1024       // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
+	maxPTYBuf              = proto.PTYReplayBufferLimit
+	replayTailForNonActive = 64 * 1024 // 64 KB: 非アクティブセッションの UI 接続時 replay 上限
 	uiPingInterval         = 30 * time.Second
 	branchLookupTimeout    = 250 * time.Millisecond
 	branchRefreshAfter     = 2 * time.Second
@@ -63,7 +63,7 @@ const (
 	nativeApprovalBlankLineLimit = 2
 	vtResizeDebounce             = 200 * time.Millisecond
 	approvalConsumedTTL          = 10 * time.Second
-	wsMaxPayloadBytes            = 2 << 20 // 2 MiB: UI/wrapper JSON frame receive cap
+	wsMaxPayloadBytes            = 4 << 20 // Fits a 2 MiB replay after base64 encoding plus JSON metadata.
 
 	bracketedPasteStart = "\x1b[200~"
 	bracketedPasteEnd   = "\x1b[201~"
