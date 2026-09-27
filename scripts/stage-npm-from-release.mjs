@@ -32,7 +32,7 @@ const srcDir = isAbsolute(dirArg) ? dirArg : join(repoRoot, dirArg);
 const npmDir = join(repoRoot, 'npm');
 
 // Archive name suffix -> { pkg, binName }. Archive base names look like
-// many-ai-cli-<ver>-<suffix>.zip and unzip to a same-named top-level folder.
+// many-ai-cli-<ver>-<suffix>.zip and contain the binary at the archive root.
 const TARGETS = [
   { suffix: 'windows-x64', pkg: 'many-ai-cli-windows-x64', binName: 'many-ai-cli.exe', exec: false },
   { suffix: 'linux-x64', pkg: 'many-ai-cli-linux-x64', binName: 'many-ai-cli', exec: true },
@@ -110,10 +110,11 @@ async function main() {
       problems.push(`${zipName}: unzip failed (exit ${r.status})`);
       continue;
     }
-    const zipBase = zipName.replace(/\.zip$/, '');
-    const src = join(outDir, zipBase, binName);
+    // GoReleaser archives are flat (no wrap_in_directory), so the binary sits
+    // at the extraction root, not inside a <zip-basename>/ subfolder.
+    const src = join(outDir, binName);
     if (!existsSync(src)) {
-      problems.push(`${zipName}: ${binName} not found at expected path`);
+      problems.push(`${zipName}: ${binName} not found at expected path (${src})`);
       continue;
     }
     const binDir = join(npmDir, pkg, 'bin');
