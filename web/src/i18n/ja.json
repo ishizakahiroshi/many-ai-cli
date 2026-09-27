@@ -2031,6 +2031,7 @@
   "handoff_list_title": "引き継ぎできるセッション",
   "handoff_list_empty": "引き継ぎの記録はまだありません",
   "handoff_list_live": "実行中",
+  "handoff_list_started": "開始",
   "handoff_list_ended": "終了",
   "handoff_list_preview": "プレビュー",
   "handoff_list_search": "番号、CLI名、フォルダ",

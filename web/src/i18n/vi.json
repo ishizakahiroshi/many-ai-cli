@@ -2031,6 +2031,7 @@
   "handoff_list_title": "Các session có thể bàn giao",
   "handoff_list_empty": "Chưa có bản ghi bàn giao nào",
   "handoff_list_live": "Đang chạy",
+  "handoff_list_started": "Bắt đầu",
   "handoff_list_ended": "Đã kết thúc",
   "handoff_list_preview": "Xem trước",
   "handoff_list_search": "Số, CLI, hoặc thư mục",

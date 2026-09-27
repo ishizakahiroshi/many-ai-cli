@@ -18,6 +18,7 @@ import {
   decideHandoffNotify,
   handoffListMatches,
   handoffNoteActionFor,
+  handoffRelativeAge,
   newHandoffNotifyLedger,
   normalizeHandoffNoteMode,
   orderHandoffList,
@@ -25,6 +26,7 @@ import {
   type HandoffUsageWindow,
 } from './handoff-store.js';
 import { windowLabel } from './usage-limit.js';
+import { abbreviateBranchName } from './session-strip-branch.js';
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -211,11 +213,28 @@ interface HandoffListEntry {
   provider?: string;
   cwd?: string;
   branch?: string;
+  model?: string;
   live?: boolean;
   started_at?: string;
   ended_at?: string;
   /** このセッションを引き継いだ後継（Hub 側の逆引き。無ければ 0 / 未送）。 */
   handoff_to?: number;
+  /** このセッション自身が別セッションからの引き継ぎで始まった場合、その前任の番号。 */
+  handoff_from?: number;
+}
+
+// たった今 / N分前 / N時間前 / N日前。既存のスラッシュコマンド ピッカーと同じ
+// i18n キー（slash_picker_*）を流用する（新しい経過表示の言い回しを増やさない）。
+function formatHandoffAge(iso: string | undefined): string {
+  if (!iso) return '';
+  const age = handoffRelativeAge(iso, Date.now());
+  if (!age) return '';
+  switch (age.unit) {
+    case 'now': return tx('slash_picker_just_now', 'たった今');
+    case 'minute': return tx('slash_picker_ago_min', '{n}分前', { n: age.amount });
+    case 'hour': return tx('slash_picker_ago_hour', '{n}時間前', { n: age.amount });
+    default: return tx('slash_picker_ago_day', '{n}日前', { n: age.amount });
+  }
 }
 
 export async function openHandoffListDialog(): Promise<void> {
@@ -239,6 +258,7 @@ export async function openHandoffListDialog(): Promise<void> {
       live: !!entry.live,
       providerLabel: providerLabel(String(entry.provider || '')),
       cwd: String(entry.cwd || ''),
+      branch: String(entry.branch || ''),
     }));
     const ordered = orderHandoffList(items);
     body.innerHTML = '';
@@ -263,16 +283,38 @@ export async function openHandoffListDialog(): Promise<void> {
       const status = entry.live ? tx('handoff_list_live', '実行中') : tx('handoff_list_ended', '終了');
       const main = document.createElement('div');
       main.className = 'handoff-list-row-main';
+      // このセッション自身が引き継ぎで始まった場合の前任番号。サイドバーのカード
+      // （card-handoff-chip / session-list.ts）と同じ「↪ #N」表記・同じ tooltip
+      // キーに揃える（同種 UI は既存仕様を踏襲）。
+      const predecessor = Number(entry.handoff_from || 0);
+      const predecessorHtml = predecessor
+        ? `<span class="handoff-list-row-predecessor" role="button" tabindex="0" data-open-session="${predecessor}" title="${escapeHtml(tx('card_handoff_from_tooltip', `Continues #${predecessor}`, { id: predecessor }))}">↪ #${predecessor}</span>`
+        : '';
       // 後継がいる行にはその番号を出す。前任の看板には何も書かず、Hub 側が
       // 後継の handoff_from から逆引きした値をそのまま見せる。
       const successor = Number(entry.handoff_to || 0);
       const successorHtml = successor
-        ? `<span class="handoff-list-row-successor">${escapeHtml(tx('card_handoff_to', `Successor #${successor}`, { id: successor }))}</span>`
+        ? `<span class="handoff-list-row-successor" role="button" tabindex="0" data-open-session="${successor}">${escapeHtml(tx('card_handoff_to', `Successor #${successor}`, { id: successor }))}</span>`
         : '';
+      const branch = String(entry.branch || '');
+      const branchHtml = branch
+        ? `<span class="handoff-list-row-branch" title="${escapeHtml(branch)}">${escapeHtml(abbreviateBranchName(branch))}</span>`
+        : '';
+      const startedAge = formatHandoffAge(entry.started_at);
+      const startedHtml = startedAge
+        ? `<span class="handoff-list-row-time">${escapeHtml(tx('handoff_list_started', '開始'))}: ${escapeHtml(startedAge)}</span>`
+        : '';
+      // 終了時刻は終了済みの行だけ（実行中は ended_at がそもそも無い）。
+      const endedAge = !entry.live ? formatHandoffAge(entry.ended_at) : '';
+      const endedHtml = endedAge
+        ? `<span class="handoff-list-row-time">${escapeHtml(tx('handoff_list_ended', '終了'))}: ${escapeHtml(endedAge)}</span>`
+        : '';
+      // model は行を狭めてまで常設するほどではないので provider 名の tooltip に載せる。
+      const providerTitleAttr = entry.model ? ` title="${escapeHtml(entry.model)}"` : '';
       main.innerHTML = `<span class="handoff-list-row-id">#${escapeHtml(String(entry.session_id))}</span>` +
-        `<span class="handoff-list-row-provider">${escapeHtml(label)}</span>` +
+        `<span class="handoff-list-row-provider"${providerTitleAttr}>${escapeHtml(label)}</span>` +
         `<span class="handoff-list-row-status" data-live="${entry.live ? '1' : '0'}">${escapeHtml(status)}</span>` +
-        successorHtml +
+        predecessorHtml + successorHtml + branchHtml + startedHtml + endedHtml +
         `<span class="handoff-list-row-cwd" title="${escapeHtml(String(entry.cwd || ''))}">${escapeHtml(String(entry.cwd || ''))}</span>`;
       const previewBtn = document.createElement('button');
       previewBtn.type = 'button';
@@ -285,6 +327,26 @@ export async function openHandoffListDialog(): Promise<void> {
         void openDeriveDialog(entry.session_id, { kind: 'handoff' });
       });
       row.append(main, previewBtn);
+      // 前任 / 後継チップはこの一覧の中でその番号のプレビューへ飛べるようにする
+      // （サイドバーのカードと同じ ↪ 表記だが、遷移先はこの一覧内なので、あちらの
+      // 「生きていればタブ切替・終了済みなら一覧を開く」ではなく、常にこの一覧の
+      // プレビューボタンと同じ派生ダイアログを開く）。
+      main.querySelectorAll<HTMLElement>('[data-open-session]').forEach((chip) => {
+        const targetID = Number(chip.dataset.openSession || 0);
+        if (!targetID) return;
+        chip.addEventListener('click', (event) => {
+          event.stopPropagation();
+          close();
+          void openDeriveDialog(targetID, { kind: 'handoff' });
+        });
+        chip.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          event.stopPropagation();
+          close();
+          void openDeriveDialog(targetID, { kind: 'handoff' });
+        });
+      });
       return row;
     };
 

@@ -766,7 +766,14 @@ header {
 .handoff-list-row-provider { flex-shrink: 0; }
 .handoff-list-row-status { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; background: var(--bg, #14171f); border: 1px solid var(--line); }
 .handoff-list-row-status[data-live="1"] { color: var(--accent-text, #93c5fd); border-color: var(--accent, #3b82f6); }
-.handoff-list-row-successor { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted-2, #9aa4b2); }
+.handoff-list-row-successor,
+.handoff-list-row-predecessor { flex-shrink: 0; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted-2, #9aa4b2); cursor: pointer; }
+.handoff-list-row-successor:hover,
+.handoff-list-row-predecessor:hover { color: var(--accent-text, #93c5fd); border-color: var(--accent, #3b82f6); }
+.handoff-list-row-successor:focus-visible,
+.handoff-list-row-predecessor:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: 1px; }
+.handoff-list-row-branch { flex-shrink: 0; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2, #9aa4b2); font-family: Consolas, monospace; font-size: 0.7rem; }
+.handoff-list-row-time { flex-shrink: 0; color: var(--muted-2, #9aa4b2); font-size: 0.7rem; }
 .handoff-list-row-cwd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2, #9aa4b2); }
 .handoff-list-row-preview { flex-shrink: 0; padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; cursor: pointer; }
 .handoff-list-row-preview:hover { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }

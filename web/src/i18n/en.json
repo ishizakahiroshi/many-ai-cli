@@ -2031,6 +2031,7 @@
   "handoff_list_title": "Sessions you can hand off",
   "handoff_list_empty": "No handoff records yet",
   "handoff_list_live": "Running",
+  "handoff_list_started": "Started",
   "handoff_list_ended": "Ended",
   "handoff_list_preview": "Preview",
   "handoff_list_search": "Number, CLI, or folder",

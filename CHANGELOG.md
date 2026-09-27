@@ -14,6 +14,13 @@ Release artifacts are published at
 - **Notification sound has a 0–100 volume slider**, independent of system volume.
   It applies to the default beep, custom sounds and test playback. Zero mutes
   the sound; 100 preserves the previous level. The setting is saved per browser.
+- **The handoff session list now shows when each session started (and ended),
+  its branch, and its predecessor/successor link.** Rows display a relative
+  "N minutes/hours/days ago" time, an abbreviated branch name, and a clickable
+  "↪ #N" chip for the predecessor (if this session continued from a handoff)
+  and the successor (if one was launched from it) — clicking either jumps
+  straight to that session's preview. The model shows as a tooltip on the
+  provider name, and search now also matches the branch name.
 
 ## [0.9.0] - 2026-09-27
 

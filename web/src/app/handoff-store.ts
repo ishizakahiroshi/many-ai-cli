@@ -146,12 +146,14 @@ export function handoffNoteActionFor(mode: HandoffNoteMode): HandoffNoteAction {
   return 'button';
 }
 
-/** 引き継ぎ一覧の 1 行。検索は画面に出る CLI 名とフォルダを見る。 */
+/** 引き継ぎ一覧の 1 行。検索は画面に出る CLI 名・フォルダ・branch を見る。 */
 export interface HandoffListItem {
   sessionID: number;
   live: boolean;
   providerLabel: string;
   cwd: string;
+  /** 未取得（git 管理下でない等）は空文字。検索対象だが表示の要否は呼び出し側が決める。 */
+  branch?: string;
 }
 
 /**
@@ -173,5 +175,33 @@ export function handoffListMatches(item: HandoffListItem, query: string): boolea
   const q = query.trim().toLowerCase();
   if (!q) return true;
   const id = String(item.sessionID);
-  return [id, `#${id}`, item.providerLabel, item.cwd].join('\n').toLowerCase().includes(q);
+  return [id, `#${id}`, item.providerLabel, item.cwd, item.branch || '']
+    .join('\n').toLowerCase().includes(q);
+}
+
+/** handoffRelativeAge が返す丸め単位。「たった今」は分未満をまとめて 1 単位にする。 */
+export type HandoffRelativeAgeUnit = 'now' | 'minute' | 'hour' | 'day';
+
+export interface HandoffRelativeAge {
+  unit: HandoffRelativeAgeUnit;
+  amount: number;
+}
+
+/**
+ * ISO 時刻からの経過を「たった今 / N分前 / N時間前 / N日前」の単位へ丸める。
+ * app.ts のスラッシュコマンド ピッカー（formatAge）と同じ丸め方に揃えている
+ * （既存の経過表示 i18n キー slash_picker_* をそのまま流用するため）。
+ * 不正な時刻・未来の時刻（クロックずれ）は null を返す（呼び出し側は空表示に倒す）。
+ */
+export function handoffRelativeAge(iso: string, nowMs: number): HandoffRelativeAge | null {
+  const from = Date.parse(iso);
+  if (!Number.isFinite(from)) return null;
+  const diffMs = nowMs - from;
+  if (diffMs < 0) return null;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return { unit: 'now', amount: 0 };
+  if (minutes < 60) return { unit: 'minute', amount: minutes };
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return { unit: 'hour', amount: hours };
+  return { unit: 'day', amount: Math.floor(hours / 24) };
 }

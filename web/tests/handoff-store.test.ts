@@ -3,6 +3,7 @@ import {
   decideHandoffNotify,
   handoffListMatches,
   handoffNoteActionFor,
+  handoffRelativeAge,
   limitingUsageWindowFromUsageStat,
   newHandoffNotifyLedger,
   normalizeHandoffNoteMode,
@@ -244,5 +245,31 @@ describe('handoffListMatches', () => {
     expect(handoffListMatches(row({ sessionID: 164 }), '64')).toBe(true);
     expect(handoffListMatches(item, '640')).toBe(false);
     expect(handoffListMatches(item, 'grok')).toBe(false);
+  });
+
+  test('branch also matches, and a missing branch does not throw', () => {
+    const withBranch = row({ sessionID: 64, branch: 'feature/handoff-list-fields' });
+    expect(handoffListMatches(withBranch, 'handoff-list-fields')).toBe(true);
+    expect(handoffListMatches(row({ sessionID: 64 }), 'feature')).toBe(false);
+  });
+});
+
+describe('handoffRelativeAge', () => {
+  const now = Date.parse('2026-09-28T12:00:00Z');
+
+  test('rounds down to the unit boundary', () => {
+    expect(handoffRelativeAge('2026-09-28T11:59:30Z', now)).toEqual({ unit: 'now', amount: 0 });
+    expect(handoffRelativeAge('2026-09-28T11:45:00Z', now)).toEqual({ unit: 'minute', amount: 15 });
+    expect(handoffRelativeAge('2026-09-28T09:00:00Z', now)).toEqual({ unit: 'hour', amount: 3 });
+    expect(handoffRelativeAge('2026-09-25T12:00:00Z', now)).toEqual({ unit: 'day', amount: 3 });
+  });
+
+  test('an unparseable timestamp is null, not NaN', () => {
+    expect(handoffRelativeAge('', now)).toBeNull();
+    expect(handoffRelativeAge('not-a-date', now)).toBeNull();
+  });
+
+  test('a future timestamp (clock skew) is null rather than a negative age', () => {
+    expect(handoffRelativeAge('2026-09-28T12:05:00Z', now)).toBeNull();
   });
 });
