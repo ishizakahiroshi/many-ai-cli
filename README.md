@@ -266,7 +266,7 @@ If `command`'s executable is not on PATH, the session ends the same way a missin
 | Go | 1.25+ (build time) |
 | OS | Windows 10/11, macOS, Linux |
 | Browser | Chrome / Edge / Firefox / Safari |
-| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI (install the providers you intend to use separately) |
+| AI CLI | Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code (install the providers you intend to use separately) |
 
 ### Platform verification
 
@@ -431,7 +431,7 @@ Whichever install path you used, the next steps are the same.
 
    On **Windows** it creates a single **"MANY-AI-CLI"** shortcut on your desktop, which starts a tray icon, and puts the same shortcut in your **Startup folder** so the tray is there after you sign in. If you would rather launch it yourself, delete "MANY-AI-CLI" from the Startup folder or switch it off in **Task Manager → Startup apps**. On macOS and Linux it creates **"Many AI Hub Start"** and **"Many AI Hub Stop"** (`.command` / `.desktop`).
 2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
-3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
+3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok / command-code). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
 To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
@@ -1271,7 +1271,7 @@ For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `many-a
 ## Architecture
 
 ```
-AI CLI (claude / codex / copilot / cursor-agent / grok)
+AI CLI (claude / codex / copilot / cursor-agent / opencode / grok / command-code)
     └─ many-ai-cli wrap  <── PTY wrapper
            │ WebSocket
     ┌──────▼──────┐
@@ -1424,15 +1424,16 @@ The new session's own board records which session it continues, and the two card
 
 `many-ai-cli` is local-first, but the following outbound HTTPS requests can occur and you should be aware of them:
 
-- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
+- **Slash command list (Hub itself)** — When the slash command picker is opened, the Hub fetches a markdown file from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,opencode,grok,command-code}.md` and caches it for 24 hours. The source URL can be changed (or pointed to a local file path) in **Settings → Slash command sources**.
 - **Approval pattern list (Hub itself)** — On Hub startup, the official approval detection patterns can be fetched from `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` and cached for 24 hours. The source URLs can be overridden in config.
 - **CLI install links (Hub itself)** — When the first-run screen or **Settings → AI CLI integrations** shows the install status list, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json` (links to each CLI's official install instructions) and caches it for 24 hours. If the fetch fails, the list is shown without links.
 - **AI Usage Links defaults (Hub itself)** — When the dashboard page loads, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json` (the default link to each vendor's usage page in the Usage menu) and caches it for 24 hours. The source URL cannot be changed or turned off; if the fetch fails, the links built into the Hub are used.
 - **Model suggestions (Hub itself)** — When New Session, the derive dialog or the spawn confirmation dialog first needs model suggestions, and when you press ↻ next to the model field, the Hub fetches `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json` (the models suggested for Claude Code, Codex and Copilot, and the fallback list for Cursor Agent and Grok) and caches it for 24 hours. `models_source` in `config.yaml` changes the source URL; if the fetch fails, those suggestions are left empty and you can still type a model name.
+- **NVIDIA NIM model catalog and connection check (Hub itself, opt-in only)** — When NVIDIA NIM is configured (see [NVIDIA NIM trial route](#nvidia-nim-trial-route-opencode-only) above), the Hub calls NVIDIA's `/v1/models` endpoint to populate the model picker and to run the Settings connection check. Inference itself is not proxied — OpenCode sends it directly to NVIDIA's Chat Completions endpoint.
 - **Web Push notifications (Hub itself, opt-in only)** — When Push notifications are enabled, the Hub sends encrypted Web Push requests to the browser vendor's push service over HTTPS. Approval payloads include the session ID/name, provider, and a short approval-question/context excerpt; workflow-completion payloads contain only the session name and aggregate agent count. They do **not** include the Hub URL token, journal result text, or agent IDs. VAPID keys and subscriptions are stored locally in `~/.many-ai-cli/push_store.json`. Notifications can be delivered while an SSH tunnel is down, but opening the Hub from the notification still requires the tunnel and Hub to be reachable.
 - **Voice input (only while in use)** — Browser mode uses the Web Speech API; in Chrome / Edge, **microphone audio is sent to the browser vendor's speech-recognition servers (Google / Microsoft)**. Whisper mode sends audio to the Hub and then to the configured Whisper server. Keep `voice.whisper.server_url` on `127.0.0.1` / `localhost` for local-only processing; external API URLs would send audio to that external service. See also the privacy note in the voice input section.
 - **Managed Whisper install (Windows x64 Hub, opt-in only)** — Clicking **Settings → Voice → Install** downloads a whisper.cpp Windows x64 release archive from GitHub Releases and the selected ggml model from Hugging Face into `~/.many-ai-cli/whisper/`. The release archive is SHA-256 verified before extraction; model entries without a published hash are downloaded over HTTPS and shown as hash-unverified in the UI.
-- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI) talk directly to their respective vendor APIs (Anthropic, OpenAI, GitHub, Cursor, xAI) over HTTPS. `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
+- **Wrapped CLI traffic (the CLIs themselves)** — The CLIs you wrap (Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, opencode, Command Code) talk directly to their own backends over HTTPS — Anthropic, OpenAI, GitHub, Cursor, and xAI for the five official CLIs, and whichever model provider opencode or Command Code is configured to use (including NVIDIA NIM for opencode, see above). `many-ai-cli` only relays PTY I/O via local WebSocket; it does not intercept, log, or proxy these API requests. Whatever network behavior the underlying CLI has applies as-is.
 
 ### ⚠️ Data retention by wrapped CLIs
 
@@ -1447,6 +1448,8 @@ The table below summarizes each vendor's stance as of 2026. Always verify the cu
 | **GitHub Copilot CLI** (GitHub: Product Specific Terms, March 2026) | **Yes** — prompts are retained and used to fine-tune your private model | No explicit opt-out documented (verify current terms) | Not specified |
 | **Cursor Agent CLI** (Cursor) | Verify current terms | Verify current terms | Verify current terms |
 | **Grok Build CLI** (xAI) | Verify current terms | Verify current terms | Verify current terms |
+| **opencode** (community CLI; routes to whichever backend you configure, including NVIDIA NIM) | Depends on the configured backend | Depends on the configured backend | Depends on the configured backend |
+| **Command Code** | Verify current terms | Verify current terms | Verify current terms |
 
 ### ⚠️ Terms-of-service change risk
 

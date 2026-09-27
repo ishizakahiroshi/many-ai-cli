@@ -228,7 +228,7 @@ relay の役割も headless で回せます。この経路は「1 指示 = 1 プ
 | Go | 1.25 以上（ビルド時） |
 | OS | Windows 10/11、macOS、Linux |
 | ブラウザ | Chrome / Edge / Firefox / Safari |
-| AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI（使う provider は別途インストール済みであること） |
+| AI CLI | Claude Code、Codex CLI、GitHub Copilot CLI、Cursor Agent CLI、Grok Build CLI、opencode、Command Code（使う provider は別途インストール済みであること） |
 
 ### プラットフォーム検証状況
 
@@ -381,7 +381,7 @@ sha256sum -c SHA256SUMS.txt
 
    **Windows** ではデスクトップに **「MANY-AI-CLI」** のショートカットが 1 個作成されます（トレイ常駐を起動します）。macOS / Linux では従来どおり **「Many AI Hub Start」「Many AI Hub Stop」** の 2 個です（`.command` / `.desktop`）。
 2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
-3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
+3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok / command-code）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
 止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
@@ -1222,7 +1222,7 @@ wrapper の Hub への WebSocket が切れたとき、wrapper は **Hub の HTTP
 ## アーキテクチャ
 
 ```
-AI CLI (claude / codex / copilot / cursor-agent / grok)
+AI CLI (claude / codex / copilot / cursor-agent / opencode / grok / command-code)
     └─ many-ai-cli wrap  <── PTY ラッパー
            │ WebSocket
     ┌──────▼──────┐
@@ -1375,15 +1375,16 @@ Grok セッションでは、生成された子は親自身のセッションフ
 
 `many-ai-cli` 自体はローカル動作を前提としていますが、以下の外部 HTTPS 通信が発生し得ます。
 
-- **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,grok}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
+- **スラッシュコマンド一覧の取得（Hub 本体の通信）**: スラッシュコマンドピッカーを開くと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/slash-commands/{claude,codex,copilot,cursor-agent,opencode,grok,command-code}.md` を取得し、24 時間キャッシュします。取得元 URL は設定パネルの **スラッシュコマンドソース** から変更可能で、ローカルファイルパスを指定することもできます。
 - **承認検出パターンの取得（Hub 本体の通信）**: Hub 起動時に、公式の承認検出パターンを `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/approval-patterns/{claude,codex,copilot,cursor-agent,opencode,grok,command-code,common}.md` から取得し、24 時間キャッシュする場合があります。取得元 URL は config で上書きできます。
 - **CLI のインストール手順リンクの取得（Hub 本体の通信）**: 初回画面や **設定 → AI CLI 連携** で導入状況一覧を出すとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/install-links/defaults.json`（各 CLI の公式インストール手順へのリンク）を取得し、24 時間キャッシュします。取得できないときは、リンク無しで一覧を出します。
 - **AI Usage Links の既定リンクの取得（Hub 本体の通信）**: ダッシュボードの画面を読み込むと、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/usage-links/defaults.json`（Usage メニューに出す、各ベンダーの使用量ページへの既定のリンク）を取得し、24 時間キャッシュします。取得元 URL は変更できず、止める設定もありません。取得できないときは Hub に組み込んだリンクを使います。
 - **モデル候補の一覧の取得（Hub 本体の通信）**: 新規セッションの画面・派生ダイアログ・spawn 確認ダイアログが初めてモデル候補を出すときと、モデル欄の横の ↻ を押したとき、Hub は `https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/resources/models/defaults.json`（Claude Code・Codex・Copilot のモデル候補と、Cursor Agent・Grok の予備の候補）を取得し、24 時間キャッシュします。取得元 URL は `config.yaml` の `models_source` で変更できます。取得できないときはこれらの候補が空になり、モデル名は手で入力できます。
+- **NVIDIA NIM のモデルカタログと接続試験（Hub 本体の通信 / opt-in のみ）**: NVIDIA NIM を設定している場合（上記の [NVIDIA NIM trial route](#nvidia-nim-trial-routeopencode-専用) 参照）、Hub は NVIDIA の `/v1/models` endpoint を呼び、モデルピッカーの一覧取得と設定画面の接続試験に使います。推論そのものは proxy されず、OpenCode から NVIDIA の Chat Completions endpoint へ直接送られます。
 - **Web Push 通知（Hub 本体の通信 / opt-in のみ）**: プッシュ通知を有効にした場合、Hub は暗号化された Web Push request をブラウザベンダーの push サービスへ HTTPS 送信します。承認 payload には OS 通知表示に必要なセッション ID / 名前、provider、承認質問・文脈の短い抜粋が含まれます。Workflow 完了 payload はセッション名と agent 集計件数だけです。Hub URL token、journal の result 本文、agent ID は含めません。VAPID 鍵と購読情報は `~/.many-ai-cli/push_store.json` にローカル保存されます。SSH トンネルが切れていても通知配送自体は届く場合がありますが、通知から Hub を開くにはトンネルと Hub に到達できる必要があります。
 - **音声入力（使用時のみ）**: ブラウザ内蔵認識は Web Speech API を使用しており、Chrome / Edge では **マイク音声がブラウザベンダー（Google / Microsoft）の音声認識サーバへ送信されます**。Whisper モードでは音声が Hub へ送られ、Hub が `voice.whisper.server_url` の Whisper サーバへ中継します。ローカル処理にしたい場合は `127.0.0.1` / `localhost` のローカルサーバだけを指定してください。外部 API URL を設定した場合、音声データはその外部サービスへ送信されます。「音声入力」節の注意書きも参照。
 - **Whisper 管理インストール（Windows x64 Hub / opt-in のみ）**: **設定パネル → 音声入力 → インストール** を押した場合だけ、Hub は whisper.cpp の Windows x64 release archive を GitHub Releases から、選択した ggml モデルを Hugging Face から `~/.many-ai-cli/whisper/` へ HTTPS ダウンロードします。release archive は展開前に SHA-256 を照合します。公開ハッシュ未設定のモデルは HTTPS ダウンロードとして扱い、UI ではハッシュ未検証として表示します。
-- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI 自身は、それぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）と HTTPS で直接通信します。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
+- **wrap 対象 CLI の API 通信（CLI 自身の通信）**: ラップ対象である Claude Code / Codex CLI / GitHub Copilot CLI / Cursor Agent CLI / Grok Build CLI / opencode / Command Code 自身は、それぞれのバックエンドと HTTPS で直接通信します。公式 5 CLI はそれぞれのベンダー API（Anthropic / OpenAI / GitHub / Cursor / xAI）、opencode と Command Code は設定したモデルプロバイダー（opencode は NVIDIA NIM を含む。上記参照）です。`many-ai-cli` は PTY の入出力をローカル WebSocket で中継するだけで、これらの API 通信を傍受・記録・プロキシすることはありません。元の CLI のネットワーク挙動がそのまま適用されます。
 
 ### ⚠️ wrap 対象 CLI のデータ保持について
 
@@ -1398,6 +1399,8 @@ Grok セッションでは、生成された子は親自身のセッションフ
 | **GitHub Copilot CLI**（GitHub: Product Specific Terms 2026/3 版） | **使われる**（プロンプトは保持され private モデルの fine-tune に利用） | 規約上の明示的な opt-out は不明（最新規約を要確認） | 明示なし |
 | **Cursor Agent CLI**（Cursor） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 | **Grok Build CLI**（xAI） | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
+| **opencode**（コミュニティ CLI。設定したバックエンド次第。NVIDIA NIM を含む） | 設定したバックエンド次第 | 設定したバックエンド次第 | 設定したバックエンド次第 |
+| **Command Code** | 最新規約を要確認 | 最新規約を要確認 | 最新規約を要確認 |
 
 ### ⚠️ 規約変更リスクについて
 
