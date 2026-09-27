@@ -4,7 +4,23 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Go](https://img.shields.io/badge/go-1.25+-blue)
 
+https://github.com/user-attachments/assets/5b330094-9609-40ec-b059-c3dae964684f
+
+*20-second overview · Japanese text · Music · Recreated demo screens.*
+
+<details>
+<summary>Video credits</summary>
+
+Music: [Happy Beats & Business Moves Vol. 1](https://ende.app/en/song/12866-happy-beats-business-moves-vol-1) by Sascha Ende, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Edited to 20 seconds with volume adjustments, fades, and added sound effects. Sound effects: Kenney, CC0. Created with [brag](https://github.com/latent-spaces/brag) and Hyperframes.
+
+</details>
+
+<details>
+<summary>Watch the approval workflow demo</summary>
+
 ![many-ai-cli demo: a conductor AI asks to spawn two child AI sessions, you approve, one child pauses with a question, you answer with one click, and both report done](https://raw.githubusercontent.com/ishizakahiroshi/many-ai-cli/main/assets/demo-approval.gif)
+
+</details>
 
 **Seven AI coding CLIs in one dashboard — and extra paid plans where the CLI lets you stack them.** Run `Claude Code`, `Codex CLI`, `GitHub Copilot CLI`, `Cursor Agent CLI`, `Grok Build CLI`, `opencode`, and `Command Code` in parallel; `many-ai-cli` watches every session in a PTY and tells you the moment one of them stops — an approval, a finished task, or an error — even from your phone. Remaining quota for the plans you stacked sits in the same Usage menu.
 
