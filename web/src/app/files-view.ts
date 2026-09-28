@@ -103,6 +103,8 @@ export const FilesTabManager = (function () {
       onSessionRemoved: () => {},
       getSessionsRef: () => null,
       setSessionsRef: () => {},
+      mountPaneContent: () => false,
+      unmountPaneContent: () => {},
     };
   }
 
@@ -111,6 +113,10 @@ export const FilesTabManager = (function () {
   let tabs = [];
   let activeTabId = null;
   let sessionTabEl = null;  // セッションタブ（常に1枚）
+  // A pane can own a Files/Git/Review content node while the hidden legacy tab
+  // bar keeps its independent active tab. Opening pane content must not switch
+  // the user's visible top-level tab.
+  let paneOpening = false;
 
   // 外部から渡される sessions(Map) への参照（restore / 付け替えで使う）。
   // app.js 上部の `let sessions = new Map()` を直接参照できないので setter で受け取る。
@@ -235,7 +241,7 @@ export const FilesTabManager = (function () {
     tabs.forEach(tab => {
       const visible = isVisibleInCurrentSession(tab);
       if (tab.el) tab.el.hidden = !visible;
-      if (tab.contentEl && !visible) tab.contentEl.classList.remove('active');
+      if (tab.contentEl && !visible && !tab.paneHost) tab.contentEl.classList.remove('active');
     });
     const active = tabs.find(tab => tab.id === activeTabId);
     if (active && !isVisibleInCurrentSession(active)) {
@@ -267,6 +273,7 @@ export const FilesTabManager = (function () {
   }
 
   function setActive(tabId) {
+    if (paneOpening) return;
     refreshVisibleTabs();
     const targetTab = tabs.find(tab => tab.id === tabId);
     if (targetTab && !isVisibleInCurrentSession(targetTab)) {
@@ -329,6 +336,7 @@ export const FilesTabManager = (function () {
     const existing = tabs.find(t => {
       if ((t.kind || t.type) !== 'files') return false;
       if (t.filesRoot !== filesRoot) return false;
+      if (t.paneHost && !sameSessionId(t.sessionId, sessionId)) return false;
       if (hasProject) return t.projectKey === projectKey;
       return sameSessionId(t.sessionId, sessionId);
     });
@@ -457,6 +465,12 @@ export const FilesTabManager = (function () {
     const idx = tabs.findIndex(t => t.id === id);
     if (idx === -1) return;
     const tabObj = tabs[idx];
+    // A ReviewView can close itself from inside a pane. Remove its saved pane
+    // placement before disposing the view, or the next render would reopen it.
+    if (tabObj.paneHost) {
+      const slotIdx = Number(tabObj.paneHost.closest('.pane-slot')?.dataset.slotIdx);
+      if (Number.isInteger(slotIdx)) window.multiPaneManager?.removeSlot?.(slotIdx);
+    }
     // DOM 削除
     try { tabObj.el.remove(); } catch (_) {}
     try { tabObj.contentEl.remove(); } catch (_) {}
@@ -592,6 +606,7 @@ export const FilesTabManager = (function () {
     const existing = tabs.find(t => {
       if ((t.kind || t.type) !== 'git') return false;
       if (t.gitRoot !== gitRoot) return false;
+      if (t.paneHost && !sameSessionId(t.sessionId, sessionId)) return false;
       if (hasProject) return t.projectKey === projectKey;
       return sameSessionId(t.sessionId, sessionId);
     });
@@ -618,12 +633,12 @@ export const FilesTabManager = (function () {
       } catch (_) {}
       if (existing.gitRoot) lsUpdateGitViewRef(existing.gitRoot, newRef);
       try {
-        if (existing.gitView && typeof existing.gitView.setViewRef === 'function' && newRef) {
+        if (!paneOpening && existing.gitView && typeof existing.gitView.setViewRef === 'function' && newRef) {
           existing.gitView.setViewRef(newRef);
         }
       } catch (_) {}
       setActive(existing.id);
-      notifyTabStateChanged();
+      if (!paneOpening) notifyTabStateChanged();
       return existing.id;
     }
 
@@ -735,6 +750,7 @@ export const FilesTabManager = (function () {
     const existing = tabs.find(t => {
       if ((t.kind || t.type) !== 'review') return false;
       if (t.gitRoot !== gitRoot) return false;
+      if (t.paneHost && !sameSessionId(t.sessionId, sessionId)) return false;
       if (hasProject) return t.projectKey === projectKey;
       return sameSessionId(t.sessionId, sessionId);
     });
@@ -751,7 +767,7 @@ export const FilesTabManager = (function () {
       } else {
         // 再度開いたときは指定スコープ（無指定なら現在スコープ）を取り直す
         try {
-          if (turnNo == null && existing.reviewView && typeof existing.reviewView.refresh === 'function') {
+          if (!paneOpening && turnNo == null && existing.reviewView && typeof existing.reviewView.refresh === 'function') {
             existing.reviewView.refresh();
           }
         } catch (_) {}
@@ -764,7 +780,7 @@ export const FilesTabManager = (function () {
         } catch (_) {}
       }
       setActive(existing.id);
-      notifyTabStateChanged();
+      if (!paneOpening) notifyTabStateChanged();
       return existing.id;
     }
 
@@ -841,6 +857,39 @@ export const FilesTabManager = (function () {
     setActive(id);
     notifyTabStateChanged();
     return id;
+  }
+
+  /** Move the existing Files/Git/Review content node into a flexible pane. */
+  function mountPaneContent(kind, sessionId, host) {
+    if (!host || !['files', 'git', 'review'].includes(kind)) return false;
+    const session = sessionsRef?.get(sessionId);
+    if (!session) return false;
+    const root = session.git_root || session.cwd || '';
+    if (!root) return false;
+    let id = null;
+    paneOpening = true;
+    try {
+      if (kind === 'files') id = openFilesTab(sessionId, session.project || root, root, root);
+      else if (kind === 'git') id = openGitTab(sessionId, root, session.branch || '');
+      else id = openReviewTab(sessionId, root);
+    } finally {
+      paneOpening = false;
+    }
+    const tab = tabs.find(candidate => candidate.id === id);
+    if (!tab?.contentEl) return false;
+    tab.paneHost = host;
+    tab.contentEl.classList.add('active');
+    host.appendChild(tab.contentEl);
+    return true;
+  }
+
+  /** Keep the tab instance and loaded data alive after a pane is removed. */
+  function unmountPaneContent(host) {
+    const tab = tabs.find(candidate => candidate.paneHost === host);
+    if (!tab?.contentEl) return;
+    tab.paneHost = null;
+    tab.contentEl.classList.toggle('active', tab.id === activeTabId);
+    filesContents.appendChild(tab.contentEl);
   }
 
   // ─── カード open マーカー再描画通知 ───────────────────────────────────
@@ -1082,6 +1131,8 @@ export const FilesTabManager = (function () {
     onSessionRemoved,
     setSessionsRef,
     getSessionsRef,
+    mountPaneContent,
+    unmountPaneContent,
   };
 })();
 

@@ -28,6 +28,7 @@
 @import url("/styles/subscriptions.css");
 @import url("/styles/close-button.css");
 @import url("/styles/shortcut-help.css");
+@import url("/styles/pane-placement.css");
 
 #deferred-send-status { order:2; flex:1 1 100%; display:flex; align-items:center; gap:7px; font-size:.72rem; color:var(--muted); }
 #deferred-send-status[hidden] { display:none; }
@@ -1215,7 +1216,6 @@ header {
 }
 
 @media (max-width: 1000px) {
-  #tab-multi,
   .view-tab[data-tab="split"] {
     display: none;
   }

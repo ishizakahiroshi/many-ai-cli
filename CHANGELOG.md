@@ -11,6 +11,12 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Arrange Hub tabs and session cards in flexible panes.** Drag a tab or card
+  onto the current view to open a two-pane layout, or onto a Multi pane to
+  replace just that pane. Pane handles move or swap views, while the close
+  control removes a placement without ending its session. Browser-local layouts
+  are saved separately for all sessions and each open project. Touch devices
+  can choose a destination from a menu and switch visible panes on small screens.
 - **Saved routines are shared by the PC and phone connected to the same Hub.**
   Review an instruction before starting it in a new session, or schedule it
   daily/on weekdays with an explicit time zone. Run history retains each run's

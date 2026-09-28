@@ -200,6 +200,25 @@ function buildSessionRow(id: number, compact = false): HTMLElement {
   return row;
 }
 
+function buildDrawerSessionEntry(id: number): HTMLElement {
+  const entry = document.createElement('div');
+  entry.className = 'mobile-drawer-session-entry';
+  entry.appendChild(buildSessionRow(id, true));
+  const place = document.createElement('button');
+  place.type = 'button';
+  place.className = 'mobile-drawer-session-place';
+  place.textContent = '＋';
+  const translated = t('pane_show_in_pane');
+  place.setAttribute('aria-label', translated === 'pane_show_in_pane' ? 'ペインに表示' : translated);
+  place.addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('pane-placement-request', {
+      detail: { kind: 'session', sessionId: id, anchor: place },
+    }));
+  });
+  entry.appendChild(place);
+  return entry;
+}
+
 function projectName(id: number): string {
   const cwd = sessions.get(id)?.cwd || '';
   const name = cwd.replace(/\\/g, '/').split('/').filter(Boolean).pop();
@@ -301,6 +320,8 @@ function buildViewSwitchSection(): HTMLElement | null {
   const grid = document.createElement('div');
   grid.className = 'mobile-drawer-views-grid';
   for (const tab of tabs) {
+    const entry = document.createElement('div');
+    entry.className = 'mobile-drawer-view-entry';
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mobile-drawer-view-btn';
@@ -310,7 +331,23 @@ function buildViewSwitchSection(): HTMLElement | null {
       tab.click();
       (window as any).closeMobileSessionDrawer?.();
     });
-    grid.appendChild(btn);
+    entry.appendChild(btn);
+    const tabName = tab.dataset.tab || '';
+    if (tabName && !['multi', 'split'].includes(tabName)) {
+      const place = document.createElement('button');
+      place.type = 'button';
+      place.className = 'mobile-drawer-pane-place';
+      place.textContent = '＋';
+      const translated = t('pane_show_in_pane');
+      place.setAttribute('aria-label', translated === 'pane_show_in_pane' ? 'ペインに表示' : translated);
+      place.addEventListener('click', () => {
+        window.dispatchEvent(new CustomEvent('pane-placement-request', {
+          detail: { kind: 'tab', tabName, sessionId: activeSessionId ?? undefined, anchor: place },
+        }));
+      });
+      entry.appendChild(place);
+    }
+    grid.appendChild(entry);
   }
   section.appendChild(grid);
   return section;
@@ -536,7 +573,7 @@ function renderMobileDrawerResults(): void {
   const pending = document.createElement('section');
   pending.className = 'mobile-drawer-section';
   pending.appendChild(buildSectionHeader('mobile_home_section_pending_count', pendingIds.length));
-  for (const id of pendingIds) pending.appendChild(buildSessionRow(id, true));
+  for (const id of pendingIds) pending.appendChild(buildDrawerSessionEntry(id));
   body.appendChild(pending);
 
   const list = document.createElement('section');
@@ -548,7 +585,7 @@ function renderMobileDrawerResults(): void {
     empty.textContent = t('mobile_home_search_empty');
     list.appendChild(empty);
   } else {
-    for (const id of sessionIds) list.appendChild(buildSessionRow(id, true));
+    for (const id of sessionIds) list.appendChild(buildDrawerSessionEntry(id));
   }
   body.appendChild(list);
 

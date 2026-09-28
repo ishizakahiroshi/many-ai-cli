@@ -1353,6 +1353,22 @@ export function renderSessionList() {
       };
       actions.appendChild(frontBtn);
 
+      // タッチ・キーボードでのペイン配置。カード本体のクリックは従来どおり
+      // セッションを開き、配置先の選択は明示したボタンから始める。
+      const paneBtn = document.createElement('button');
+      paneBtn.type = 'button';
+      paneBtn.className = 'session-pane-placement-btn';
+      paneBtn.textContent = '＋';
+      paneBtn.title = ti18n('pane_show_in_pane', 'ペインに表示');
+      paneBtn.setAttribute('aria-label', paneBtn.title);
+      paneBtn.onclick = (e) => {
+        e.stopPropagation();
+        window.dispatchEvent(new CustomEvent('pane-placement-request', {
+          detail: { kind: 'session', sessionId: s.id, anchor: paneBtn },
+        }));
+      };
+      actions.appendChild(paneBtn);
+
       const metaBtn = document.createElement('button');
       metaBtn.className = 'session-meta-btn';
       metaBtn.textContent = '⋯';
@@ -1460,10 +1476,17 @@ export function renderSessionList() {
       c.draggable = true;
       c.addEventListener('dragstart', (e) => {
         set_dragSrcId(s.id);
+        set_dragSrcGroupKey(null);
         c.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          // sidebar の兄弟順変更とペイン配置を受け手側で識別する。
+          // Firefox でもドラッグを開始できるようデータを載せる。
+          try { e.dataTransfer.setData('application/x-many-ai-cli-pane', JSON.stringify({ kind: 'session', sessionId: s.id })); } catch (_) { /* noop */ }
+        }
       });
       c.addEventListener('dragend', () => {
+        set_dragSrcId(null);
         c.classList.remove('dragging');
         if (dragOverCardEl) {
           dragOverCardEl.classList.remove('drag-over', 'drop-before', 'drop-after');

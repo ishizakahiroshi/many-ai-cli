@@ -278,7 +278,7 @@
     },
     {
       "id": "ui-freeze-recorder",
-      "status": "removed",
+      "status": "active",
       "purpose": "音声入力中のタブ停止に備え、処理前後と heartbeat 欠落を別 Worker から保存する。本文は保存しない",
       "addedIn": "unreleased",
       "gate": "opt-in build: MAI_DEBUG=1 / --debug and Go -tags maidebug; no runtime setting changes",
@@ -302,13 +302,12 @@
       ],
       "artifactNeedles": [
         "/api/debug/ui-freeze",
-        "ui-freeze.jsonl",
+        "foreground-stall-capture.ndjson",
         "ui-freeze recorder unavailable"
       ],
       "removalCondition": "原因特定後、または次回リリース前の早い方で make debug-purge id=ui-freeze-recorder を実行。利用者の明示指示により、原因未確定でもリリース前の purge は必須。共有フックは残し sink と登録をパージする",
-      "reason": "2026-09-27 新タブでも音声入力中に全操作が停止。停止後のブラウザ観測はタイムアウトし現行ログに証拠がない。1MB x3、認証必須、入力本文を受理しない固定スキーマ。",
-      "removedIn": "unreleased",
-      "removedOn": "2026-09-27"
+      "reason": "2026-09-27 新タブでも音声入力中に全操作が停止。停止後のブラウザ観測はタイムアウトし現行ログに証拠がない。1MB x3、認証必須、入力本文を受理しない固定スキーマ。\n2026-09-28 12:14 JSTにHubブラウザのフリーズが再発。現行Hubには診断sinkがなく今回の記録を取得できなかったため、次の自然な再発を記録するため復元。",
+      "due": "2026-10-12"
     }
   ]
 }

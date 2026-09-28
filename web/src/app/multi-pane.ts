@@ -4,6 +4,17 @@ import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHid
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
 import { openProjectKey } from './state.js';
 import { projectKeyForSession } from './sidebar-tree.js';
+import { isValidTabName } from './project-view-memory.js';
+import {
+  FLEXIBLE_PANE_STORAGE_KEY,
+  PANE_DRAG_MIME,
+  normalizeFlexibleLayouts,
+  paneContentKey,
+  paneLayoutKey,
+  parsePaneDragPayload,
+  type FlexibleLayouts,
+  type PaneContent,
+} from './flexible-pane-state.js';
 import {
   MULTI_SCOPE_ALL,
   MULTI_SCOPE_BOX,
@@ -195,6 +206,9 @@ export class MultiPaneManager {
     // A: 列／行ごとのサイズ比率（fr 値の配列）。境界ドラッグで更新する。
     this.colFracs = this._loadFracs('Cols', this.cols);
     this.rowFracs = this._loadFracs('Rows', this.rows);
+    this.customLayouts = this._loadCustomLayouts();
+    this.activeLayoutKey = null;
+    this.mobileActiveSlot = 0;
 
     // CSS カスタムプロパティを初期値にセット
     if (this.area) {
@@ -205,10 +219,12 @@ export class MultiPaneManager {
     // GridPicker は MultiPaneManager 生成後に作る
     this.picker = new GridPicker(this);
     this.picker.syncBadge();
+    this._wireNormalDropTarget();
   }
 
   /** レイアウトを変更してDOM再構築 */
   setLayout(cols, rows) {
+    this._selectLayoutForCurrentScope();
     this.cols = Math.max(1, Math.min(6, cols));
     this.rows = Math.max(1, Math.min(3, rows));
     if (this.area) {
@@ -218,6 +234,16 @@ export class MultiPaneManager {
     // A: 列／行数が変わったらサイズ比率を等分にリセットする
     this.colFracs = this._equalFracs(this.cols);
     this.rowFracs = this._equalFracs(this.rows);
+    const layout = this._currentCustomLayout();
+    if (layout) {
+      layout.cols = this.cols;
+      layout.rows = this.rows;
+      layout.colFracs = this.colFracs.slice();
+      layout.rowFracs = this.rowFracs.slice();
+      layout.slots = Array.from({ length: this.cols * this.rows }, (_, i) => layout.slots[i] || null);
+      layout.autoSplit = false;
+      this._saveCustomLayouts();
+    }
     this._saveFracs();
     this._applyFontScale();
     this.render();
@@ -228,6 +254,7 @@ export class MultiPaneManager {
   render() {
     if (!this.area) return;
     const allSorted = window.getSortedSessions ? window.getSortedSessions() : [];
+    this._selectLayoutForCurrentScope();
     for (const id of Array.from(this.dismissPendingSessionIds)) {
       if (!allSorted.some(s => s && s.id === id)) {
         this.dismissPendingSessionIds.delete(id);
@@ -262,16 +289,31 @@ export class MultiPaneManager {
     this.scopeOverflow = plan.overflow;
 
     // slots 配列を更新（visibleIds の先頭 total 件を表示）
-    this.slots = plan.slotIds.map(id => {
+    const custom = this._currentCustomLayout();
+    this.slots = custom ? custom.slots.map(content => {
+      if (!content) return null;
+      if (content.kind === 'tab') {
+        if (content.sessionId !== null) {
+          const owner = byId.get(content.sessionId);
+          if (!owner || String(owner.started_at || '') !== content.startedAt) return null;
+        }
+        return { tab: content };
+      }
+      const session = byId.get(content.sessionId);
+      return session && String(session.started_at || '') === content.startedAt ? { session } : null;
+    }) : plan.slotIds.map(id => {
       const session = (id != null) ? byId.get(id) : null;
       return session ? { session } : null;
     });
 
     // DOM を再構築
+    this.area.querySelectorAll('.pane-slot').forEach(el => this._unmountTabSlot(el));
     this.area.innerHTML = '';
     for (let i = 0; i < total; i++) {
       const slot = this.slots[i];
-      const pane = slot ? this._buildPane(i, slot.session) : this._buildEmptyPane(i);
+      const pane = slot && slot.session ? this._buildPane(i, slot.session)
+        : slot && slot.tab ? this._buildTabPane(i, slot.tab)
+        : this._buildEmptyPane(i);
       this.area.appendChild(pane);
     }
 
@@ -282,10 +324,13 @@ export class MultiPaneManager {
     this._applyFontScale();
 
     // 各スロットに xterm をアタッチ（DOM 追加後）
-    this.area.querySelectorAll('.pane-slot:not(.empty)').forEach((slotEl, i) => {
+    this.area.querySelectorAll('.pane-slot').forEach((slotEl, i) => {
       const slot = this.slots[i];
       if (slot && slot.session) this.attachToSlot(slotEl, slot.session);
+      else if (slot && slot.tab) this._mountTabSlot(slotEl, slot.tab, i);
     });
+    this._applyMobileActiveSlot();
+    this._notifyLayoutChanged();
 
     // C5: サイドバーの P<n> バッジを更新（スロット割当が変わったため）
     // renderSessionList は app.js のスコープ変数なので window 経由でアクセス
@@ -306,21 +351,6 @@ export class MultiPaneManager {
     const header = this._buildHeader(idx, session);
     el.appendChild(header);
 
-    // B: ヘッダを掴んでペインを並べ替える（HTML5 D&D）。
-    //    ドラッグ元はヘッダのみ（端末本体はテキスト選択を維持）。
-    header.draggable = true;
-    header.addEventListener('dragstart', (e) => {
-      this._dragFromIdx = idx;
-      if (e.dataTransfer) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(idx));
-      }
-      el.classList.add('dragging');
-    });
-    header.addEventListener('dragend', () => {
-      this._dragFromIdx = null;
-      if (this.area) this.area.querySelectorAll('.pane-slot').forEach(s => s.classList.remove('dragging', 'drag-over'));
-    });
     this._wireDropTarget(el, idx);
 
     const termArea = document.createElement('div');
@@ -350,6 +380,46 @@ export class MultiPaneManager {
     });
 
     return el;
+  }
+
+  /** Non-terminal views have one DOM owner. C4 mounts that owner in this host. */
+  _buildTabPane(idx, tab) {
+    const el = document.createElement('div');
+    el.className = 'pane-slot pane-tab-slot' + (idx === this.focusedIdx ? ' focused' : '');
+    el.dataset.slotIdx = String(idx);
+    (el as any)._paneDescriptor = tab;
+    const header = document.createElement('div');
+    header.className = 'pane-header';
+    const title = document.createElement('span');
+    title.className = 'ph-dir';
+    title.textContent = tab.tabName;
+    header.appendChild(title);
+    this._appendPaneControls(header, idx);
+    el.appendChild(header);
+    const host = document.createElement('div');
+    host.className = 'pane-view-area';
+    el.appendChild(host);
+    this._wireDropTarget(el, idx);
+    el.addEventListener('mousedown', () => this.focusSlot(idx));
+    return el;
+  }
+
+  _mountTabSlot(slotEl, tab, idx) {
+    const host = slotEl.querySelector('.pane-view-area');
+    if (!host) return;
+    // The view owner must move the original root; cloning would duplicate IDs/state.
+    const mount = (window as any).mountFlexiblePaneView;
+    if (typeof mount === 'function') mount(tab, host, idx);
+    else host.textContent = tab.tabName;
+  }
+
+  _unmountTabSlot(slotEl) {
+    const idx = Number(slotEl.dataset.slotIdx);
+    const tab = (slotEl as any)._paneDescriptor;
+    const host = slotEl.querySelector('.pane-view-area');
+    if (!tab || !host) return;
+    const unmount = (window as any).unmountFlexiblePaneView;
+    if (typeof unmount === 'function') unmount(tab, host, idx);
   }
 
   /** ペインヘッダ DOM（プロバイダ丸・#id・ラベル・バッジ・✕ボタン） */
@@ -391,21 +461,54 @@ export class MultiPaneManager {
                       : '—';
     header.appendChild(badge);
 
-    // ✕ 閉じるボタン
+    this._appendPaneControls(header, idx);
+    return header;
+  }
+
+  _appendPaneControls(header, idx) {
+    const moveBtn = document.createElement('button');
+    moveBtn.className = 'ph-move';
+    moveBtn.type = 'button';
+    moveBtn.textContent = '⠿';
+    moveBtn.title = this._t('pane_move', 'ペインを移動');
+    moveBtn.setAttribute('aria-label', moveBtn.title);
+    moveBtn.draggable = true;
+    moveBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+    moveBtn.addEventListener('dragstart', (e) => {
+      this._dragFromIdx = idx;
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+      }
+      header.parentElement?.classList.add('dragging');
+    });
+    moveBtn.addEventListener('dragend', () => {
+      this._dragFromIdx = null;
+      this.area?.querySelectorAll('.pane-slot').forEach(s => s.classList.remove('dragging', 'drag-over'));
+    });
+    moveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.dispatchEvent(new CustomEvent('pane-placement-request', {
+        detail: { kind: 'move', fromIdx: idx, anchor: moveBtn },
+      }));
+    });
+    header.appendChild(moveBtn);
+
+    // ✕ removes only this display placement; the session continues.
     const closeBtn = document.createElement('button');
     closeBtn.className = 'ph-close';
     closeBtn.type = 'button';
     closeBtn.textContent = '✕';
-    closeBtn.title = 'セッションを閉じる';
+    closeBtn.title = this._t('pane_remove', 'ペインの配置を外す');
+    closeBtn.setAttribute('aria-label', closeBtn.title);
     closeBtn.addEventListener('mousedown', (e) => e.stopPropagation());
     closeBtn.addEventListener('mouseup', (e) => e.stopPropagation());
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.closeSlot(idx);
+      this.removeSlot(idx);
     });
     header.appendChild(closeBtn);
 
-    return header;
   }
 
   /** 通常ターミナルと同じスクロール補助ボタンをペイン内に生成 */
@@ -544,7 +647,7 @@ export class MultiPaneManager {
 
     const label = document.createElement('span');
     label.className = 'empty-num';
-    label.textContent = `スロット ${idx + 1}`;
+    label.textContent = `${this._t('pane_slot', 'スロット')} ${idx + 1}`;
     el.appendChild(label);
 
     // B: 空スロットもドロップ先にする（末尾への移動）
@@ -556,20 +659,241 @@ export class MultiPaneManager {
   /** B: ペイン要素をドロップ先として配線する */
   _wireDropTarget(el, idx) {
     el.addEventListener('dragover', (e) => {
-      if (this._dragFromIdx == null || this._dragFromIdx === idx) return;
+      const hasPayload = Array.from(e.dataTransfer?.types || []).includes(PANE_DRAG_MIME);
+      if (!hasPayload && (this._dragFromIdx == null || this._dragFromIdx === idx)) return;
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
       el.classList.add('drag-over');
     });
     el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
     el.addEventListener('drop', (e) => {
-      e.preventDefault();
       el.classList.remove('drag-over');
+      const payload = parsePaneDragPayload(e.dataTransfer?.getData(PANE_DRAG_MIME) || '');
+      if (payload) {
+        e.preventDefault();
+        if (payload.kind === 'session') this.placeSession(payload.sessionId, idx);
+        else this.placeTab(payload.tabName, payload.sessionId, idx);
+        this._dragFromIdx = null;
+        return;
+      }
       const from = this._dragFromIdx;
       this._dragFromIdx = null;
       if (from == null || from === idx) return;
-      this._reorderSlots(from, idx);
+      e.preventDefault();
+      this.moveSlot(from, idx);
     });
+  }
+
+  _wireNormalDropTarget() {
+    const area = document.getElementById('display-area');
+    if (!area) return;
+    area.addEventListener('dragover', (e) => {
+      if (Array.from(e.dataTransfer?.types || []).includes(PANE_DRAG_MIME)) {
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+      }
+    });
+    area.addEventListener('drop', (e) => {
+      const payload = parsePaneDragPayload(e.dataTransfer?.getData(PANE_DRAG_MIME) || '');
+      if (!payload) return;
+      e.preventDefault();
+      window.dispatchEvent(new CustomEvent('pane-placement-request', {
+        detail: { payload, targetIdx: null, source: 'display-area' },
+      }));
+    });
+  }
+
+  _layoutKey() {
+    return paneLayoutKey(effectiveScope(this.scope, openProjectKey), openProjectKey);
+  }
+
+  _currentCustomLayout() {
+    return this.customLayouts[this._layoutKey()] || null;
+  }
+
+  _selectLayoutForCurrentScope() {
+    const key = this._layoutKey();
+    if (key === this.activeLayoutKey) return;
+    this.activeLayoutKey = key;
+    const layout = this.customLayouts[key];
+    if (layout) {
+      this.cols = layout.cols;
+      this.rows = layout.rows;
+      this.colFracs = layout.colFracs.slice();
+      this.rowFracs = layout.rowFracs.slice();
+    } else {
+      const legacy = this._loadLayout();
+      this.cols = legacy.cols;
+      this.rows = legacy.rows;
+      this.colFracs = this._loadFracs('Cols', this.cols);
+      this.rowFracs = this._loadFracs('Rows', this.rows);
+    }
+    this.area?.style.setProperty('--pane-cols', String(this.cols));
+    this.area?.style.setProperty('--pane-rows', String(this.rows));
+    this.picker?.syncBadge();
+  }
+
+  _loadCustomLayouts() {
+    try { return normalizeFlexibleLayouts(JSON.parse(localStorage.getItem(FLEXIBLE_PANE_STORAGE_KEY) || '{}')); }
+    catch (_) { return {}; }
+  }
+
+  _saveCustomLayouts() {
+    try { localStorage.setItem(FLEXIBLE_PANE_STORAGE_KEY, JSON.stringify(this.customLayouts)); }
+    catch (_) { /* Private browsing may disallow storage. Current placement still works. */ }
+  }
+
+  _contentForSession(sessionId): Extract<PaneContent, { kind: 'session' }> | null {
+    const id = Number(sessionId);
+    const session = (window.getSortedSessions ? window.getSortedSessions() : []).find(s => s.id === id);
+    if (!session) return null;
+    return { kind: 'session', sessionId: id, startedAt: String(session.started_at || '') };
+  }
+
+  _contentForTab(tabName, sessionId): PaneContent | null {
+    if (!isValidTabName(tabName) || tabName === 'multi' || tabName === 'split') return null;
+    if (tabName === 'terminal') return this._contentForSession(sessionId);
+    const globalTab = tabName === 'approval' || tabName === 'history' || tabName === 'orchestration';
+    if (globalTab) return { kind: 'tab', tabName, sessionId: null, startedAt: null };
+    const session = this._contentForSession(sessionId);
+    if (!session) return null;
+    return { kind: 'tab', tabName, sessionId: session.sessionId, startedAt: session.startedAt };
+  }
+
+  _contentForPayload(payload): PaneContent | null {
+    if (!payload || typeof payload !== 'object') return null;
+    if (payload.kind === 'session') return this._contentForSession(payload.sessionId);
+    if (payload.kind === 'tab') return this._contentForTab(payload.tabName, payload.sessionId);
+    return null;
+  }
+
+  _materializeCustomLayout(autoSplit = false) {
+    const key = this._layoutKey();
+    if (this.customLayouts[key]) return this.customLayouts[key];
+    const slots = Array.from({ length: this.cols * this.rows }, (_, i) => {
+      const slot = this.slots[i];
+      return slot?.session ? this._contentForSession(slot.session.id) : slot?.tab || null;
+    });
+    const layout = { cols: this.cols, rows: this.rows, colFracs: this.colFracs.slice(),
+      rowFracs: this.rowFracs.slice(), slots, autoSplit };
+    this.customLayouts[key] = layout;
+    return layout;
+  }
+
+  /** Seed both panes before setActiveTab('multi') renders the grid. */
+  beginAutoSplit(existing, incoming) {
+    const first = this._contentForPayload(existing);
+    const second = this._contentForPayload(incoming);
+    if (!first || !second || paneContentKey(first) === paneContentKey(second)) return false;
+    this.cols = 2;
+    this.rows = 1;
+    this.colFracs = [1, 1];
+    this.rowFracs = [1];
+    this.customLayouts[this._layoutKey()] = {
+      cols: 2, rows: 1, colFracs: [1, 1], rowFracs: [1], slots: [first, second], autoSplit: true,
+    };
+    this.mobileActiveSlot = 1;
+    this._saveCustomLayouts();
+    return true;
+  }
+
+  _placeContent(content, targetIdx) {
+    if (!content) return false;
+    const layout = this._materializeCustomLayout();
+    const count = layout.slots.length;
+    const firstEmpty = layout.slots.findIndex(slot => slot === null);
+    const target = Number.isInteger(targetIdx) && targetIdx >= 0 && targetIdx < count
+      ? targetIdx : firstEmpty >= 0 ? firstEmpty : Math.min(this.focusedIdx, count - 1);
+    const existing = layout.slots.findIndex(slot => slot && paneContentKey(slot) === paneContentKey(content));
+    if (existing === target && JSON.stringify(layout.slots[target]) === JSON.stringify(content)) return true;
+    if (existing >= 0) layout.slots[existing] = null;
+    layout.slots[target] = content;
+    this.focusedIdx = target;
+    this.mobileActiveSlot = target;
+    this._saveCustomLayouts();
+    this.render();
+    return true;
+  }
+
+  placeTab(tabName, sessionId = null, targetIdx = undefined) {
+    return this._placeContent(this._contentForTab(tabName, sessionId), targetIdx);
+  }
+
+  placeSession(sessionId, targetIdx = undefined) {
+    return this._placeContent(this._contentForSession(sessionId), targetIdx);
+  }
+
+  /** Move to an empty slot, or swap two occupied slots. */
+  moveSlot(fromIdx, toIdx) {
+    const count = this.cols * this.rows;
+    if (!Number.isInteger(fromIdx) || !Number.isInteger(toIdx) ||
+        fromIdx < 0 || toIdx < 0 || fromIdx >= count || toIdx >= count || fromIdx === toIdx ||
+        !this.slots[fromIdx]) return false;
+    const layout = this._materializeCustomLayout();
+    [layout.slots[fromIdx], layout.slots[toIdx]] = [layout.slots[toIdx], layout.slots[fromIdx]];
+    this.focusedIdx = toIdx;
+    this.mobileActiveSlot = toIdx;
+    this._saveCustomLayouts();
+    this.render();
+    return true;
+  }
+
+  /** Remove a placement only. Never call dismissSession from a pane close control. */
+  removeSlot(idx) {
+    if (!Number.isInteger(idx) || idx < 0 || idx >= this.cols * this.rows || !this.slots[idx]) return false;
+    const layout = this._materializeCustomLayout();
+    layout.slots[idx] = null;
+    if (this.focusedIdx === idx) {
+      const next = layout.slots.findIndex(slot => slot !== null);
+      this.focusedIdx = next >= 0 ? next : 0;
+    }
+    if (this.mobileActiveSlot === idx) this.mobileActiveSlot = this.focusedIdx;
+    this._saveCustomLayouts();
+    this.render();
+    this._maybeAutoCollapse(layout);
+    return true;
+  }
+
+  _maybeAutoCollapse(layout) {
+    if (!layout?.autoSplit || !this.area || this.area.hidden ||
+        layout !== this._currentCustomLayout()) return;
+    const remaining = layout.slots.filter(Boolean);
+    if (remaining.length === 1) {
+      window.dispatchEvent(new CustomEvent('flexible-pane-auto-collapse', {
+        detail: { remaining: remaining[0] },
+      }));
+    }
+  }
+
+  setMobileActiveSlot(idx) {
+    if (!Number.isInteger(idx) || idx < 0 || idx >= this.cols * this.rows) return false;
+    if (idx === this.mobileActiveSlot) return true;
+    this.mobileActiveSlot = idx;
+    this.focusSlot(idx);
+    this._notifyLayoutChanged();
+    const session = this.slots[idx]?.session;
+    if (session) requestAnimationFrame(() => {
+      const slotEl = this.area?.querySelectorAll('.pane-slot')[idx];
+      const termArea = slotEl?.querySelector('.pane-terminal-area');
+      const terminal = window.getTerminalEntry?.(session.id);
+      if (termArea && terminal) this._fitTerminalInSlot(termArea, terminal, session.id);
+    });
+    return true;
+  }
+
+  getMobileActiveSlot() { return this.mobileActiveSlot; }
+
+  _applyMobileActiveSlot() {
+    const count = this.cols * this.rows;
+    if (this.mobileActiveSlot >= count) this.mobileActiveSlot = 0;
+    this.area?.querySelectorAll('.pane-slot').forEach((el, i) =>
+      el.classList.toggle('mobile-pane-active', i === this.mobileActiveSlot));
+  }
+
+  _notifyLayoutChanged() {
+    window.dispatchEvent(new CustomEvent('flexible-pane-layout-changed', {
+      detail: { slots: this.slots, cols: this.cols, rows: this.rows, activeSlot: this.mobileActiveSlot },
+    }));
   }
 
   /**
@@ -582,6 +906,10 @@ export class MultiPaneManager {
    *     変換は multi-scope.ts の orderIndexForSlot（reorderForScope が内部で通す）1 か所。
    */
   _reorderSlots(from, to) {
+    if (this._currentCustomLayout()) {
+      this.moveSlot(from, to);
+      return;
+    }
     const visible = Array.isArray(this.visibleIds) ? this.visibleIds : this.order;
     if (from < 0 || from >= visible.length) return;
     this.order = reorderForScope(this.order, visible, from, to);
@@ -591,26 +919,57 @@ export class MultiPaneManager {
     this.render();
   }
 
-  /** スロットのセッションを終了して空にする */
+  /** Compatibility alias: the close control only removes the placement. */
   closeSlot(idx) {
-    const slot = this.slots[idx];
-    if (!slot || !slot.session) return;
-    // app.js の dismissSession を利用（存在する場合）
-    const session = slot.session;
-    this.dismissPendingSessionIds.add(session.id);
-    if (typeof window.dismissSession === 'function') {
-      window.dismissSession(session.id);
-    }
-    this.slots[idx] = null;
-    if (this.focusedIdx === idx) {
-      const next = this.slots.findIndex((s, i) => i !== idx && s !== null);
-      this.focusSlot(next >= 0 ? next : 0);
-    }
-    this.render();
+    this.removeSlot(idx);
   }
 
   onSessionRemoved(sessionId) {
     this.dismissPendingSessionIds.delete(sessionId);
+    this.onSessionEnded(sessionId);
+  }
+
+  onSessionEnded(sessionId) {
+    let changed = false;
+    for (const layout of Object.values(this.customLayouts as FlexibleLayouts)) {
+      for (let i = 0; i < layout.slots.length; i++) {
+        if (layout.slots[i]?.sessionId === sessionId) {
+          layout.slots[i] = null;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this._saveCustomLayouts();
+      if (this.area && !this.area.hidden) this.render();
+      const layout = this._currentCustomLayout();
+      if (layout) queueMicrotask(() => this._maybeAutoCollapse(layout));
+    }
+  }
+
+  /** Call after a complete Hub snapshot, never during WebSocket reconnect gaps. */
+  reconcileSessionsAfterSnapshot(snapshotSessions) {
+    if (!Array.isArray(snapshotSessions)) return;
+    // The caller's complete snapshot is authoritative. The UI sessions Map can
+    // still contain entries from before a WebSocket reconnect at this point.
+    const live = new Map(snapshotSessions.map(session => [session.id, session]));
+    let changed = false;
+    for (const layout of Object.values(this.customLayouts as FlexibleLayouts)) {
+      for (let i = 0; i < layout.slots.length; i++) {
+        const content = layout.slots[i];
+        if (!content || content.sessionId === null) continue;
+        const session = live.get(content.sessionId);
+        if (!session || String(session.started_at || '') !== content.startedAt ||
+            ['completed', 'error', 'disconnected'].includes(session.state)) {
+          layout.slots[i] = null;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) return;
+    this._saveCustomLayouts();
+    if (this.area && !this.area.hidden) this.render();
+    this._maybeAutoCollapse(this._currentCustomLayout());
   }
 
   /** フォーカスをスロット idx に移動 */
@@ -623,7 +982,9 @@ export class MultiPaneManager {
     }
     // buf-clear-btn のターゲットをフォーカスセッションに更新
     const bufBtn = document.getElementById('buf-clear-btn');
-    const session = (this.slots[idx] && this.slots[idx].session) || null;
+    const slot = this.slots[idx];
+    const session = (slot && slot.session) || null;
+    const tabSessionId = slot?.tab?.sessionId;
     if (bufBtn) {
       bufBtn._targetSession = session;
     }
@@ -635,7 +996,11 @@ export class MultiPaneManager {
       if (typeof window.activateSessionForMultiPane === 'function') {
         window.activateSessionForMultiPane(session.id);
       }
+    } else if (tabSessionId && this.area && !this.area.hidden &&
+               typeof window.activateSessionForMultiPane === 'function') {
+      window.activateSessionForMultiPane(tabSessionId);
     }
+    this._applyMobileActiveSlot();
   }
 
   /**
@@ -808,7 +1173,10 @@ export class MultiPaneManager {
    */
   teardown() {
     if (!this.area) return;
-    this.area.querySelectorAll('.pane-slot').forEach(el => this.detachSlot(el));
+    this.area.querySelectorAll('.pane-slot').forEach(el => {
+      this.detachSlot(el);
+      this._unmountTabSlot(el);
+    });
   }
 
   // ─── A: グリッドのリサイズ（境界スプリッタ） ──────────────────
@@ -924,6 +1292,13 @@ export class MultiPaneManager {
   }
 
   _saveLayout() {
+    const custom = this._currentCustomLayout();
+    if (custom) {
+      custom.cols = this.cols;
+      custom.rows = this.rows;
+      this._saveCustomLayouts();
+      return;
+    }
     try {
       localStorage.setItem('multiPaneCols', this.cols);
       localStorage.setItem('multiPaneRows', this.rows);
@@ -1029,6 +1404,13 @@ export class MultiPaneManager {
 
   // ─── A: サイズ比率の永続化 ──────────────────────────────────
   _saveFracs() {
+    const custom = this._currentCustomLayout();
+    if (custom) {
+      custom.colFracs = this.colFracs.slice();
+      custom.rowFracs = this.rowFracs.slice();
+      this._saveCustomLayouts();
+      return;
+    }
     try {
       localStorage.setItem('multiPaneColFracs', JSON.stringify(this.colFracs));
       localStorage.setItem('multiPaneRowFracs', JSON.stringify(this.rowFracs));

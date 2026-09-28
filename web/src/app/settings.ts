@@ -2742,7 +2742,7 @@ export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
 export const RESPONSIVE_WIDE_MODE_MIN = 1001;
 
 export function normalizeResponsiveTabName(name) {
-  if ((name === 'split' || name === 'multi') && window.innerWidth < RESPONSIVE_WIDE_MODE_MIN) {
+  if (name === 'split' && window.innerWidth < RESPONSIVE_WIDE_MODE_MIN) {
     return 'terminal';
   }
   return name;
@@ -2976,8 +2976,13 @@ export function setActiveTab(sid, name) {
     return;
   }
 
-  // 承認タブ: セッション非依存のビュー
-  if (name === 'approval') {
+  // 承認と履歴はセッションが無い状態でも表示できる集約ビュー。
+  if (name === 'approval' || name === 'history') {
+    if (name === 'history' && sid != null && sid !== activeSessionId) {
+      sessionViewMode.set(sid, name);
+      return;
+    }
+    if (name === 'history' && activeSessionId != null) sessionViewMode.set(activeSessionId, name);
     const area = document.getElementById('display-area');
     if (!area) return;
     const multiView = document.getElementById('multi-view');
@@ -2998,14 +3003,14 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history');
-    area.classList.add('mode-approval');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.add('mode-' + name);
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === 'approval');
+      b.classList.toggle('active', b.dataset.tab === name);
     });
     if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
     // 承認タブはセッション非依存の集約ビュー。帯は隠す。
-    setSessionStripTab('approval');
+    setSessionStripTab(name);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
         detail: { sid: activeSessionId, name },
@@ -3213,9 +3218,8 @@ window.matchMedia?.('(max-width: 720px)').addEventListener('change', () => {
 
 window.addEventListener('resize', () => {
   if (window.innerWidth >= RESPONSIVE_WIDE_MODE_MIN) return;
-  const multiView = document.getElementById('multi-view');
   const area = document.getElementById('display-area');
-  if ((multiView && !multiView.hidden) || (area && area.classList.contains('mode-split'))) {
+  if (area && area.classList.contains('mode-split')) {
     setActiveTab(activeSessionId, 'terminal');
   }
 });

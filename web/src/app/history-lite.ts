@@ -8,6 +8,8 @@ let root: HTMLElement | null = null;
 let all: Overview[] = [];
 let selected: Overview | null = null;
 let messages: Message[] = [];
+let historyLoaded = false;
+let historyLoading: Promise<void> | null = null;
 
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c] || c));
 const stamp = (v: string) => { const d = new Date(v); return Number.isNaN(+d) ? v : d.toISOString().replace('T', ' ').slice(0, 16); };
@@ -73,10 +75,21 @@ function render() {
   root.querySelector('#history-spawn')?.addEventListener('click', sendToSpawn);
 }
 
+export async function refreshHistoryLite(force = false) {
+  if (historyLoaded && !force) return;
+  if (historyLoading) return historyLoading;
+  historyLoading = (async () => {
+    try { await load(); historyLoaded = true; render(); }
+    catch (_) { showToast('履歴を読み込めませんでした'); }
+    finally { historyLoading = null; }
+  })();
+  return historyLoading;
+}
+
 export function initHistoryLite() {
   root = document.getElementById('history-pane');
   if (!root) return;
   root.addEventListener('history:open' as any, () => {});
-  document.getElementById('history-tab-btn')?.addEventListener('click', async () => { try { await load(); render(); } catch (_) { showToast('履歴を読み込めませんでした'); } });
+  document.getElementById('history-tab-btn')?.addEventListener('click', () => void refreshHistoryLite(true));
   render();
 }

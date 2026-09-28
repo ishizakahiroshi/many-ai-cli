@@ -571,6 +571,10 @@ export function _connectWs() {
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
+    // The full snapshot is the first safe point to discard saved placements
+    // for sessions that no longer exist. During reconnect, the map can be
+    // temporarily empty while the old layout is still valid.
+    window.multiPaneManager?.reconcileSessionsAfterSnapshot?.(arr || []);
     document.getElementById('summary').textContent = t('connected') || '接続済み';
     // 旧ピン留めの 1 回きりの変換。snapshot が入った直後（＝全セッションが揃った時点）に走らせる。
     migratePinnedSessionsOnce();
@@ -712,6 +716,7 @@ export function _connectWs() {
       activateSession(m.session_id);
     }
   } else if (m.type === 'session_end') {
+    window.multiPaneManager?.onSessionEnded?.(m.session_id);
     if ((m.state || 'disconnected') === 'completed') {
       requestSessionDismiss(m.session_id);
       removeLocalSession(m.session_id);

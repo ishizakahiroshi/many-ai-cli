@@ -28,6 +28,8 @@ import './app/voice-whisper.js';
 import './app/git-view.js';
 import './app/review-view.js';
 import './app/files-view.js';
+import { initFlexiblePaneViews } from './app/flexible-pane-views.js';
+import './app/pane-placement-menu.js';
 import './app/pwa.js';
 import { initTokenStatusbar } from './app/token-statusbar.js';
 import { initDetachedGridMode } from './app/detached-grid.js';
@@ -93,6 +95,7 @@ initUiSide();
 // 端末の上のセッション帯（いま開いている箱のセッション一覧 + 高さの掴み帯）
 initSessionStrip();
 initJevOptIn();
+initFlexiblePaneViews();
 // ここまで評価が届いたら初期化は完了。これより後に文を足さない（足した文の例外は、
 // 「画面を読み込めませんでした」の表示に乗らない）。
 markAppEntryEvaluated();
