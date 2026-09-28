@@ -2,7 +2,15 @@
 
 /* Spawn panel */
 /* 新規セッションバー */
-#new-session-bar { padding: 6px 4px 4px; display: flex; gap: var(--space-1); }
+#new-session-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  gap: var(--space-1);
+  padding: 6px 4px 4px;
+  background: var(--bg);
+}
 
 #new-session-btn.new-session-sidebar-btn {
   display: inline-flex;
