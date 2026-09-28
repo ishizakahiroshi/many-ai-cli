@@ -1376,7 +1376,12 @@
             <path d="M12 7v5l3 2"/>
           </svg>
         </button>
-        <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
+        <button id="new-session-btn" class="new-session-sidebar-btn" data-i18n-tooltip="new_session" aria-labelledby="new-session-btn-label">
+          <svg class="new-session-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span id="new-session-btn-label" class="new-session-btn-label" data-i18n="new_session">+ New Session</span>
+        </button>
       </div>
       <div id="new-session-panel" class="aac-wheel-overlay" hidden>
         <div class="new-session-form">

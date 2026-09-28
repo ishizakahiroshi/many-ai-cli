@@ -31,6 +31,7 @@ Release artifacts are published at
   provider name, and search now also matches the branch name.
 
 ### Changed
+- **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
 - **Chat hides classified thinking and collapses progress and unclassified
   Codex records.** Final answers remain visible; CLI output is still available
   through the view switch.
