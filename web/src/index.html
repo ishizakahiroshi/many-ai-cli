@@ -1369,7 +1369,13 @@
         <!-- C5: plan_session-handoff-board_c5_handoff-md.md — 経路2「一覧のボタンから」の
              入口。看板ディレクトリを直接読むので、Hub 再起動後・セッション終了後も開ける。 -->
         <button id="handoff-list-btn" class="detached-grid-launcher-sidebar-btn" data-i18n-tooltip="handoff_list_button" aria-label="Open handoff list" title="引き継ぎ一覧">↪</button>
-        <button type="button" class="routines-entry" data-open-routines data-i18n="routines_title">Routines</button>
+        <button type="button" class="detached-grid-launcher-sidebar-btn" data-open-routines data-i18n-tooltip="routines_title" aria-label="Routines">
+          <svg class="routine-sidebar-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 8a8 8 0 1 0 1 6"/>
+            <path d="M20 4v4h-4"/>
+            <path d="M12 7v5l3 2"/>
+          </svg>
+        </button>
         <button id="new-session-btn" data-i18n="new_session">+ New Session</button>
       </div>
       <div id="new-session-panel" class="aac-wheel-overlay" hidden>

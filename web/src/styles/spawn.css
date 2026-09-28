@@ -41,6 +41,7 @@
   border-color: var(--accent, #3b82f6);
   color: #fff;
 }
+.routine-sidebar-icon { width: 17px; height: 17px; display: block; }
 
 #kill-all-btn {
   display: inline-flex;
