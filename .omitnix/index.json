@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "a27bd135ace9e4e4cd14758c964b75a071f95c2f",
+    "commit": "990b4f36f76f98f094f4e63f538cae24910eaf1a",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1092,
-    "analyzed": 860,
+    "discovered": 1093,
+    "analyzed": 861,
     "unresolved": 31,
     "unknown": 1,
     "unclaimed": 200,
@@ -7510,6 +7510,35 @@
     },
     {
       "path": "internal/hub/lifecycle_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/lookpath_like_spawn_windows_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {
@@ -23671,7 +23700,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Touch and keyboard alternative to dragging tabs, cards, and pane handles."
+          "value": "Move a pane by keyboard and provide compact screen switching."
         },
         "authentication": {
           "state": "not_configured"

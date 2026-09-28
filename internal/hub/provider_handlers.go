@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os/exec"
 	"strings"
 
 	"many-ai-cli/internal/provider"
@@ -13,7 +12,9 @@ import (
 
 // providerCommandLookPath is a seam so handler tests can force a "not found"
 // result without depending on what happens to be on the test machine's PATH.
-var providerCommandLookPath = exec.LookPath
+// The default searches the same PATH spawn hands to children (see
+// lookPathLikeSpawn), not the Hub process's own possibly stale PATH.
+var providerCommandLookPath = lookPathLikeSpawn
 
 // providerCommandDiagnostics reports, per provider, whether its launch
 // executable can be found on PATH. This is a live, request-time check (PATH

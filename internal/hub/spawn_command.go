@@ -2,8 +2,38 @@ package hub
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
+
+// lookPathLikeSpawn は exec.LookPath と同じ結果を、spawn が子へ渡すのと同じ
+// PATH（sanitizeEnv と同じ expandPathEntries で作り直したもの）に対して返す。
+//
+// Hub プロセスの PATH は親プロセスの起動時点のまま固まっている。Windows で
+// Hub（またはその親）の起動後に CLI を入れた・入れ直した場合、インストーラーが
+// 書き換えたレジストリの PATH は spawn 側にだけ見え、exec.LookPath を直接使う
+// 導入状況・バージョン確認・更新の判定には見えず「起動できるのに未インストール」
+// になる。CLI の場所を探す処理はこの関数（providerCommandLookPath）を通すこと。
+//
+// macOS / Linux では expandPathEntries が何もしないので exec.LookPath と同じ。
+func lookPathLikeSpawn(file string) (string, error) {
+	if strings.ContainsRune(file, '/') || strings.ContainsRune(file, filepath.Separator) || filepath.VolumeName(file) != "" {
+		return exec.LookPath(file)
+	}
+	for _, dir := range expandPathEntries(filepath.SplitList(os.Getenv("PATH"))) {
+		// 相対エントリは exec.LookPath でも ErrDot で失敗扱いになるので飛ばす。
+		if strings.TrimSpace(dir) == "" || !filepath.IsAbs(dir) {
+			continue
+		}
+		// パス区切りを含む名前を渡すと、exec.LookPath はそのファイルだけを
+		// 調べる（Windows では PATHEXT も当てる）。
+		if path, err := exec.LookPath(filepath.Join(dir, file)); err == nil {
+			return path, nil
+		}
+	}
+	return "", &exec.Error{Name: file, Err: exec.ErrNotFound}
+}
 
 // sanitizeEnv は子プロセスへ渡す環境変数列の PATH (Windows では "Path" / "PATH" の
 // 大小無視) を整える:
