@@ -8,7 +8,39 @@ import (
 	"time"
 
 	"many-ai-cli/internal/config"
+	"many-ai-cli/internal/subscription"
 )
+
+func TestCodexManualCheckKeepsSourceTimeDistinctAndOldLocalRecordOut(t *testing.T) {
+	store := newSubscriptionUsageStore()
+	cfg := &config.Config{Subscriptions: config.SubscriptionProfiles{
+		"codex": {{ID: "profile-a"}},
+	}}
+	checked := time.Date(2026, 9, 28, 9, 40, 0, 0, time.UTC)
+	old := checked.Add(-time.Minute)
+	store.putObservation("codex", "profile-a", subscriptionUsageValue{codex: &codexSubscriptionUsage{
+		Primary: &usageWindow{UsedPercent: 20, RemainingPercent: 80},
+	}}, old, old, "local")
+	store.putCodexAppServer("profile-a", subscription.CodexAppServerUsage{
+		Primary: &subscription.CodexAppServerWindow{UsedPercent: 21, WindowMinutes: 300},
+		Credits: &subscription.CodexAppServerCredits{HasCredits: true, Balance: "12"},
+	}, checked)
+	store.putObservation("codex", "profile-a", subscriptionUsageValue{codex: &codexSubscriptionUsage{
+		Primary: &usageWindow{UsedPercent: 20, RemainingPercent: 80},
+	}}, old, old, "local")
+	row := store.snapshot(cfg).Providers[0].Profiles[0]
+	if row.Codex == nil || row.Codex.Primary.UsedPercent != 21 || row.Codex.Credits == nil || row.Codex.Credits.Balance != "12" || row.CheckedAt == "" || row.ObservedAt != "" {
+		t.Fatalf("manual check was replaced or source time invented: %+v", row)
+	}
+	newer := checked.Add(time.Minute)
+	store.putObservation("codex", "profile-a", subscriptionUsageValue{codex: &codexSubscriptionUsage{
+		Primary: &usageWindow{UsedPercent: 22, RemainingPercent: 78},
+	}}, newer, newer, "local")
+	row = store.snapshot(cfg).Providers[0].Profiles[0]
+	if row.Codex.Primary.UsedPercent != 22 || row.CheckedAt != "" || row.ObservedAt == "" {
+		t.Fatalf("newer source record did not replace manual check: %+v", row)
+	}
+}
 
 func TestSubscriptionUsageRefreshesCodexAndGrokProfiles(t *testing.T) {
 	root := t.TempDir()

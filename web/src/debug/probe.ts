@@ -19,8 +19,11 @@ export type ProbeSink = (channel: string, fields: ProbeFields) => void;
 const sinks = new Map<string, ProbeSink>();
 let spanID = 0;
 
-/** Synchronous work boundaries. Observation failures must not interrupt the UI. */
-export function probeSpan(channel: string, fields: () => ProbeFields): (() => void) | undefined {
+/**
+ * Synchronous work boundaries. Observation failures must not interrupt the UI.
+ * The finisher may overlay end-only fields (e.g. a result count) onto the head.
+ */
+export function probeSpan(channel: string, fields: () => ProbeFields): ((end?: () => ProbeFields) => void) | undefined {
   if (!__MAI_DEBUG__) return;
   const sink = sinks.get(channel);
   if (!sink) return;
@@ -28,8 +31,8 @@ export function probeSpan(channel: string, fields: () => ProbeFields): (() => vo
   try {
     const head = fields();
     sink(channel, { ...head, id, edge: 'begin' });
-    return () => {
-      try { sink(channel, { ...head, id, edge: 'end' }); } catch { /* observation only */ }
+    return (end) => {
+      try { sink(channel, { ...head, ...(end ? end() : {}), id, edge: 'end' }); } catch { /* observation only */ }
     };
   } catch { return; }
 }

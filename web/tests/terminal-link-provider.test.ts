@@ -43,7 +43,8 @@ async function detect(input: string, cols = 120, y = 1, activate = false, emptyF
       }
       let callbacks = 0, finished = 0, links = [], actions = [];
       const scope = { ...path, ...url, term, id: 7,
-        probeSpan: () => () => { finished++; },
+        // Count only the outer span; links.* stage spans nest inside it.
+        probeSpan: (_channel, fields) => fields().phase === 'terminal.links' ? () => { finished++; } : () => {},
         resolveTerminalPathCandidate: path.trimTerminalPathCandidate,
         scheduleHidePathPopup() {},
         showPathPopup: value => actions.push(['path', value]),

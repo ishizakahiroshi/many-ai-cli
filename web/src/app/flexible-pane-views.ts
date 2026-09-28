@@ -114,6 +114,25 @@ function commitPlacement(detail: any): void {
   }
   const incoming = normalizePlacement(detail);
   if (!incoming) return;
+  if (incoming.kind === 'tab' && incoming.sessionId != null) {
+    const owner = incoming.sessionId;
+    const existing = currentView();
+    const hadWorkspace = mgr.hasSessionWorkspace?.(owner);
+    if (!mgr.setWorkspaceSession?.(owner)) return;
+    if (!hadWorkspace) {
+      const first = existing?.kind === 'tab' && existing.sessionId === owner &&
+        existing.tabName !== incoming.tabName ? existing : incoming;
+      if (!mgr.beginAutoSplit?.({ kind: 'session', sessionId: owner }, first)) return;
+      if (first !== incoming) mgr.addTab(incoming.tabName, owner, detail?.targetIdx);
+    } else {
+      mgr.addTab(incoming.tabName, owner, detail?.targetIdx);
+    }
+    if (activeSessionId !== owner) (window as any).activateSessionForMultiPane?.(owner);
+    setActiveTab(owner, 'terminal');
+    mgr.picker?.hide();
+    return;
+  }
+  if (isOpen && mgr.workspaceSession) setActiveTab(activeSessionId, 'multi');
   if (!isOpen) {
     const existing = currentView();
     if (existing && JSON.stringify(existing) === JSON.stringify(incoming)) return;
@@ -126,30 +145,29 @@ function commitPlacement(detail: any): void {
     setActiveTab(activeSessionId, 'multi');
     mgr.picker?.hide();
   }
-  const target = Number.isInteger(detail.targetIdx) ? detail.targetIdx : undefined;
   const placed = incoming.kind === 'session'
-    ? mgr.placeSession(incoming.sessionId, target)
-    : mgr.placeTab(incoming.tabName, incoming.sessionId, target);
-  if (placed) {
-    const focus = target != null && target >= 0 && target < mgr.slots.length ? target : mgr.focusedIdx;
-    mgr.focusSlot(focus);
-  }
+    ? mgr.addSession(incoming.sessionId, detail?.targetIdx)
+    : mgr.addTab(incoming.tabName, incoming.sessionId, detail?.targetIdx);
+  if (placed) mgr.focusSlot(mgr.focusedIdx);
 }
 
 export function initFlexiblePaneViews(): void {
   const hostWindow = window as any;
   hostWindow.mountFlexiblePaneView = mountView;
   hostWindow.unmountFlexiblePaneView = unmountView;
+  hostWindow.currentFlexiblePaneView = currentView;
   window.addEventListener('pane-placement-commit', event => commitPlacement((event as CustomEvent).detail));
   window.addEventListener('pane-placement-request', event => {
     const detail = (event as CustomEvent).detail;
-    if (detail?.source === 'display-area') commitPlacement(detail.payload || detail);
+    if (detail?.source === 'display-area') commitPlacement({ ...(detail.payload || detail), targetIdx: detail.targetIdx });
   });
   window.addEventListener('flexible-pane-auto-collapse', event => {
     const remaining = (event as CustomEvent).detail?.remaining as PaneContent | undefined;
     if (!remaining) return;
     const multiView = document.getElementById('multi-view');
     if (!multiView || multiView.hidden) return;
+    const mgr = hostWindow.multiPaneManager;
+    if (mgr?.workspaceSession) mgr.clearSinglePaneWorkspace?.();
     const sid = remaining.sessionId;
     if (sid != null && sessions.has(sid)) (window as any).activateSessionForMultiPane?.(sid);
     setActiveTab(sid ?? activeSessionId, remaining.kind === 'session' ? 'terminal' : remaining.tabName);

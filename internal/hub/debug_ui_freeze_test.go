@@ -98,3 +98,15 @@ func TestUIFreezeBoundsAndRegistration(t *testing.T) {
 		t.Fatal("unbounded open spans")
 	}
 }
+
+func TestUIFreezeAcceptsLinkStages(t *testing.T) {
+	for _, phase := range []string{"links.expand", "links.rows", "links.url", "links.winpath", "links.unixpath", "links.relpath", "links.crunch", "links.callback"} {
+		var p uiFreezePacket
+		if err := json.Unmarshal([]byte(strings.ReplaceAll(uiFreezeTestBody(), "voice.result", phase)), &p); err != nil {
+			t.Fatal(err)
+		}
+		if !validUIFreezePacket(p) {
+			t.Fatalf("link stage rejected: %s", phase)
+		}
+	}
+}

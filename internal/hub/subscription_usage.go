@@ -50,6 +50,8 @@ type subscriptionUsageProfile struct {
 	Name           string                   `json:"name,omitempty"`
 	Plan           string                   `json:"plan,omitempty"`
 	RetrievedAt    string                   `json:"retrieved_at,omitempty"`
+	CheckedAt      string                   `json:"checked_at,omitempty"`
+	ObservedAt     string                   `json:"observed_at,omitempty"`
 	ProbeAvailable bool                     `json:"probe_available,omitempty"`
 	ProbeState     string                   `json:"probe_state,omitempty"`
 	AuthStatus     string                   `json:"auth_status,omitempty"`
@@ -79,6 +81,7 @@ type subscriptionUsageValue struct {
 	grok        *grokSubscriptionUsage
 	observedAt  time.Time
 	retrievedAt time.Time
+	checkedAt   time.Time
 	source      string
 }
 
@@ -161,8 +164,15 @@ func (s *subscriptionUsageStore) putObservation(provider, id string, value subsc
 	key := subscriptionUsageKey{provider: provider, id: id}
 	if current, ok := s.entries[key]; ok {
 		if provider == "codex" {
+			if current.source == "app-server" {
+				if !observedAt.After(current.checkedAt) {
+					return
+				}
+			}
 			if !usageObservationReplaces(current.observedAt, observedAt) {
-				return
+				if current.source != "app-server" {
+					return
+				}
 			}
 		} else if source == "local" && current.source == "live" {
 			// Keep the original precedence for providers without both channels.
@@ -177,6 +187,30 @@ func (s *subscriptionUsageStore) putObservation(provider, id string, value subsc
 	value.observedAt = observedAt
 	value.source = source
 	s.entries[key] = value
+}
+
+// putCodexAppServer stores a successful explicit check. The App Server does
+// not supply an observation timestamp, so checkedAt is not passed off as one.
+func (s *subscriptionUsageStore) putCodexAppServer(id string, usage subscription.CodexAppServerUsage, checkedAt time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	convert := func(window *subscription.CodexAppServerWindow) *usageWindow {
+		if window == nil {
+			return nil
+		}
+		return usageWindowFromSource(window.UsedPercent, "used", window.WindowMinutes, window.ResetsAt)
+	}
+	codex := &codexSubscriptionUsage{Primary: convert(usage.Primary), Secondary: convert(usage.Secondary), PlanType: usage.PlanType}
+	if credits := usage.Credits; credits != nil {
+		codex.Credits = &codexCredits{HasCredits: credits.HasCredits, Unlimited: credits.Unlimited, Balance: credits.Balance}
+		if credits.HasCredits && !credits.Unlimited {
+			codex.CreditsBalance = credits.Balance
+		}
+	}
+	s.entries[subscriptionUsageKey{provider: "codex", id: config.NormalizeSubscriptionID(id)}] = subscriptionUsageValue{
+		codex: codex, checkedAt: checkedAt,
+		retrievedAt: checkedAt, source: "app-server",
+	}
 }
 
 // usageObservationReplaces reports whether incoming should replace current.
@@ -423,6 +457,12 @@ func (s *subscriptionUsageStore) snapshot(cfg *config.Config) subscriptionUsageR
 			}
 			if value, ok := s.entries[subscriptionUsageKey{provider: provider, id: id}]; ok {
 				row.RetrievedAt = value.retrievedAt.Format(time.RFC3339)
+				if !value.checkedAt.IsZero() {
+					row.CheckedAt = value.checkedAt.Format(time.RFC3339)
+				}
+				if !value.observedAt.IsZero() {
+					row.ObservedAt = value.observedAt.Format(time.RFC3339)
+				}
 				row.Claude = value.claude
 				row.Codex = value.codex
 				row.Grok = value.grok

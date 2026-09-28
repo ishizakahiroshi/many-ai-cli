@@ -380,9 +380,15 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   background: rgba(255, 107, 107, 0.06);
 }
 /* chip 行: 検索ドリブン化 C2 */
+/* 一覧をスクロールしても閉じるボタンが見えるよう上端に固定する。
+   固定すると下の行が透けるので、薄い色を不透明な --bg-elev の上に重ねる。 */
 .cwd-dropdown-chips {
   display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 8px 6px;
-  border-bottom: 1px solid var(--line-soft); background: var(--bg-elev2, rgba(255,122,61,0.04));
+  border-bottom: 1px solid var(--line-soft);
+  background:
+    linear-gradient(var(--bg-elev2, rgba(255,122,61,0.04)), var(--bg-elev2, rgba(255,122,61,0.04))),
+    var(--bg-elev);
+  position: sticky; top: -2px; z-index: 2;
 }
 .cwd-dropdown-chips.has-no-match {
   outline: 1px solid var(--accent);
@@ -414,6 +420,14 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .cwd-dropdown-clear-favorites:hover {
   border-color: var(--danger, #ff6b6b); color: var(--danger, #ff6b6b);
   background: rgba(255, 107, 107, 0.08);
+}
+.cwd-dropdown-close {
+  background: transparent; color: var(--muted); border: 1px solid var(--line-soft);
+  border-radius: 999px; padding: 3px 7px; font: inherit; font-size: 0.72rem;
+  cursor: pointer; line-height: 1;
+}
+.cwd-dropdown-close:hover {
+  border-color: var(--text); color: var(--text);
 }
 /* chip 圧縮 UI: launcher 1 個＋ホバー/クリックで popover 展開 */
 .cwd-dropdown-chip-collapsed {

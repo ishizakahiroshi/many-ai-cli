@@ -3,7 +3,12 @@
 // Included only with MAI_DEBUG. No speech, terminal text, URL or error message.
 import { registerProbeSink } from './probe.js';
 
-const phases = new Set(['voice.result', 'input.layout', 'terminal.fit', 'terminal.links']);
+// links.* are stages inside terminal.links; keep in sync with debug_ui_freeze.go.
+const phases = new Set([
+  'voice.result', 'input.layout', 'terminal.fit', 'terminal.links',
+  'links.expand', 'links.rows', 'links.url', 'links.winpath', 'links.unixpath',
+  'links.relpath', 'links.crunch', 'links.callback',
+]);
 export interface FreezeEvent {
   id: number;
   phase: string;

@@ -14,7 +14,6 @@
 //  - HTML5 の drag&drop はタッチ端末では発火しない。並べ替えはデスクトップ専用で、
 //    タッチ環境では従来どおりクリックだけが動く。
 
-import { t } from '../i18n.js';
 import { activeSessionId } from './state.js';
 
 const STORAGE_KEY = 'unifiedTabOrder';
@@ -29,29 +28,14 @@ function tabsOf(bar: HTMLElement): HTMLElement[] {
   return Array.from(bar.querySelectorAll<HTMLElement>('.view-tab'));
 }
 
-function placementButtonFor(tab: HTMLElement): HTMLElement | null {
-  const next = tab.nextElementSibling as HTMLElement | null;
-  return next?.classList.contains('tab-pane-placement-btn') && next.dataset.tab === tab.dataset.tab ? next : null;
-}
-
 function tabAt(target: EventTarget | null): HTMLElement | null {
   const element = target instanceof Element ? target : null;
-  const tab = element?.closest<HTMLElement>('.view-tab');
-  if (tab) return tab;
-  const button = element?.closest<HTMLElement>('.tab-pane-placement-btn');
-  const previous = button?.previousElementSibling as HTMLElement | null;
-  return previous?.classList.contains('view-tab') ? previous : null;
+  return element?.closest<HTMLElement>('.view-tab') || null;
 }
 
-function insertTabPairBefore(bar: HTMLElement, tab: HTMLElement, reference: Node | null): void {
-  const button = placementButtonFor(tab);
-  if (reference === tab || reference === button) return;
+function insertTabBefore(bar: HTMLElement, tab: HTMLElement, reference: Node | null): void {
+  if (reference === tab) return;
   bar.insertBefore(tab, reference);
-  if (button) bar.insertBefore(button, reference);
-}
-
-function tabPairNextSibling(tab: HTMLElement): Node | null {
-  return (placementButtonFor(tab) || tab).nextSibling;
 }
 
 function placementPayload(tabName: string): { kind: 'tab'; tabName: string; sessionId: number | null } {
@@ -101,8 +85,8 @@ function applyOrder(bar: HTMLElement, order: string[]): void {
   // 保存に無いタブ（新規追加分）は元の並びのまま末尾へ
   for (const el of tabs) if (!ordered.includes(el)) ordered.push(el);
 
-  const anchor = tabPairNextSibling(tabs[tabs.length - 1]);
-  for (const el of ordered) insertTabPairBefore(bar, el, anchor);
+  const anchor = tabs[tabs.length - 1].nextSibling;
+  for (const el of ordered) insertTabBefore(bar, el, anchor);
 }
 
 function clearDropMarks(bar: HTMLElement): void {
@@ -130,37 +114,21 @@ export function initTabBarOrder(): void {
 
   applyOrder(bar, loadOrder());
 
-  tabsOf(bar).forEach(el => { el.draggable = true; });
+  tabsOf(bar).forEach(el => {
+    el.draggable = true;
+    if (el.dataset.tab && !NON_PANE_TABS.has(el.dataset.tab)) el.setAttribute('aria-keyshortcuts', 'Shift+Enter');
+  });
 
-  // タッチとキーボードでも配置できる入口。タブとは兄弟にして、既存のタブクリックと
-  // モバイルドロワーの tab.innerHTML 複製へ操作ボタンが紛れ込まないようにする。
-  for (const tab of tabsOf(bar)) {
-    const tabName = tab.dataset.tab;
-    if (!tabName || NON_PANE_TABS.has(tabName)) continue;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'tab-pane-placement-btn';
-    button.dataset.tab = tabName;
-    button.textContent = '+';
-    const updateLabel = () => {
-      const placeLabel = t('pane_show_in_pane');
-      const tabLabel = tab.getAttribute('aria-label')
-        || tab.querySelector<HTMLElement>('[data-i18n^="tab_"]')?.textContent?.trim()
-        || tab.textContent?.trim()
-        || tabName;
-      button.title = placeLabel;
-      button.setAttribute('aria-label', `${tabLabel}: ${placeLabel}`);
-    };
-    updateLabel();
-    // i18n の辞書取得は非同期。初期化後に辞書とタブ名が揃った時点で更新する。
-    document.addEventListener('i18n-ready', updateLabel, { once: true });
-    button.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('pane-placement-request', {
-        detail: { ...placementPayload(tabName), anchor: button },
-      }));
-    });
-    tab.after(button);
-  }
+  bar.addEventListener('keydown', (e: KeyboardEvent) => {
+    const tab = tabAt(e.target);
+    const tabName = tab?.dataset.tab;
+    if (!tabName || NON_PANE_TABS.has(tabName) || e.key !== 'Enter' || !e.shiftKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent('pane-placement-request', {
+      detail: placementPayload(tabName),
+    }));
+  });
 
   bar.addEventListener('dragstart', (e: DragEvent) => {
     const tab = (e.target as HTMLElement | null)?.closest<HTMLElement>('.view-tab');
@@ -211,11 +179,11 @@ export function initTabBarOrder(): void {
     if (tab) {
       const rect = tab.getBoundingClientRect();
       const after = e.clientX >= rect.left + rect.width / 2;
-      insertTabPairBefore(bar, dragSrc, after ? tabPairNextSibling(tab) : tab);
+      insertTabBefore(bar, dragSrc, after ? tab.nextSibling : tab);
     } else {
       const tabs = tabsOf(bar);
       const last = tabs[tabs.length - 1];
-      if (last && last !== dragSrc) insertTabPairBefore(bar, dragSrc, tabPairNextSibling(last));
+      if (last && last !== dragSrc) insertTabBefore(bar, dragSrc, last.nextSibling);
     }
     persistCurrentOrder(bar);
   });

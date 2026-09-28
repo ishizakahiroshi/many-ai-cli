@@ -250,6 +250,9 @@ export function ensureTerminal(id) {
   term.registerLinkProvider({
     provideLinks(y, callback) {
       const finishProbe = probeSpan('ui.freeze', () => ({ phase: 'terminal.links' }));
+      // Stage boundaries inside the same synchronous call: a stall records which
+      // stage never ended. Sizes are counts only (begin: input size, end: output size).
+      const stage = (phase: string, size: number) => probeSpan('ui.freeze', () => ({ phase, size }));
       try {
         const buf = term.buffer.active;
         const thisLine = buf.getLine(y - 1);
@@ -284,8 +287,11 @@ export function ensureTerminal(id) {
           };
         };
         // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス・URL の分断も結合する
+        const finishExpand = stage('links.expand', buf.length);
         const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols, looksLikeLinkWrapContinuation);
+        finishExpand?.(() => ({ size: end - start + 1 }));
 
+        const finishRows = stage('links.rows', end - start + 1);
         const physRows = [];
         for (let i = start; i <= end; i++) {
           const line = buf.getLine(i);
@@ -303,6 +309,7 @@ export function ensureTerminal(id) {
           }
           physRows.push({ y1: i + 1, text, cellMap });
         }
+        finishRows?.(() => ({ size: physRows.reduce((n, r) => n + r.text.length, 0) }));
         if (physRows.length === 0) { callback([]); return; }
 
         // 行テキストを結合し、各行の開始オフセットを記録する
@@ -363,6 +370,7 @@ export function ensureTerminal(id) {
 
         // URL を先に取る。パスの判定は URL の中にも当たる（「https://…」の「s://…」を Windows の
         // ドライブパスとみなす）ので、URL の範囲を先に埋めて重なるパスを捨てさせる。
+        const finishUrl = stage('links.url', combined.length);
         for (const c of findUrlCandidates(combined)) {
           const startCI = c.start;
           const endCI = c.end - 1;
@@ -383,14 +391,18 @@ export function ensureTerminal(id) {
             },
           });
         }
+        finishUrl?.(() => ({ size: links.length }));
         for (const re of [ABS_WIN_PATH_RE, ABS_UNIX_PATH_RE]) {
+          const finishPath = stage(re === ABS_WIN_PATH_RE ? 'links.winpath' : 'links.unixpath', combined.length);
           re.lastIndex = 0;
           let m;
           while ((m = re.exec(combined)) !== null) {
             if (re === ABS_UNIX_PATH_RE && !isTerminalPathStartBoundary(combined, m.index)) continue;
             addPathLink(m[1], m.index);
           }
+          finishPath?.(() => ({ size: links.length }));
         }
+        const finishRel = stage('links.relpath', combined.length);
         let m;
         REL_PATH_RE.lastIndex = 0;
         while ((m = REL_PATH_RE.exec(combined)) !== null) {
@@ -399,7 +411,9 @@ export function ensureTerminal(id) {
           if (!isLikelyRelPath(trimmed)) continue;
           addPathLink(rawPath, m.index + m[1].length);
         }
+        finishRel?.(() => ({ size: links.length }));
         // 折りたたみマーカーをクリック可能にする（ctrl+o キャプチャ → ポップアップ表示）
+        const finishCrunch = stage('links.crunch', combined.length);
         CRUNCH_LINK_RE.lastIndex = 0;
         let cm;
         while ((cm = CRUNCH_LINK_RE.exec(combined)) !== null) {
@@ -417,7 +431,10 @@ export function ensureTerminal(id) {
             },
           });
         }
+        finishCrunch?.(() => ({ size: links.length }));
+        const finishCallback = stage('links.callback', links.length);
         callback(links);
+        finishCallback?.();
       } finally { finishProbe?.(); }
     }
   });

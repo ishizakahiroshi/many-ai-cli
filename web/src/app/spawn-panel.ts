@@ -1910,10 +1910,9 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
     let html = '';
 
-    // chip 行（roots がある場合、または履歴/お気に入りの一括削除ボタンを出す場合）。
-    // launcher chip 1 個に圧縮し hover/click で popover を開く。
-    const showChipsRow = hasRoots || hist.length > 0 || favs.length > 0;
-    if (showChipsRow) {
+    // chip 行。閉じるボタンを常に置くため、roots・履歴・お気に入りが空でも出す。
+    // roots は launcher chip 1 個に圧縮し hover/click で popover を開く。
+    {
       const chipsClass = noMatch ? 'cwd-dropdown-chips has-no-match' : 'cwd-dropdown-chips';
       let chipsHtml = `<li class="${chipsClass}">`;
       if (hasRoots) {
@@ -1943,17 +1942,16 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         }
         chipsHtml += `</div></div>`;
       }
-      // 履歴/お気に入りの一括削除ボタン（chip 行の右寄せ）。
-      if (hist.length > 0 || favs.length > 0) {
-        chipsHtml += `<div class="cwd-dropdown-chip-actions">`;
-        if (hist.length > 0) {
-          chipsHtml += `<button class="cwd-dropdown-clear-history" type="button" title="${escapeHtml(t('spawn_cwd_clear_history'))}">${escapeHtml(t('spawn_cwd_clear_history'))}</button>`;
-        }
-        if (favs.length > 0) {
-          chipsHtml += `<button class="cwd-dropdown-clear-favorites" type="button" title="${escapeHtml(t('spawn_cwd_clear_favorites'))}">${escapeHtml(t('spawn_cwd_clear_favorites'))}</button>`;
-        }
-        chipsHtml += `</div>`;
+      // 履歴/お気に入りの一括削除ボタンと閉じるボタン（chip 行の右寄せ）。
+      chipsHtml += `<div class="cwd-dropdown-chip-actions">`;
+      if (hist.length > 0) {
+        chipsHtml += `<button class="cwd-dropdown-clear-history" type="button" title="${escapeHtml(t('spawn_cwd_clear_history'))}">${escapeHtml(t('spawn_cwd_clear_history'))}</button>`;
       }
+      if (favs.length > 0) {
+        chipsHtml += `<button class="cwd-dropdown-clear-favorites" type="button" title="${escapeHtml(t('spawn_cwd_clear_favorites'))}">${escapeHtml(t('spawn_cwd_clear_favorites'))}</button>`;
+      }
+      chipsHtml += `<button class="cwd-dropdown-close" type="button" title="${escapeHtml(t('spawn_cwd_close_dropdown'))}" aria-label="${escapeHtml(t('spawn_cwd_close_dropdown'))}">✕</button>`;
+      chipsHtml += `</div>`;
       if (noMatch) {
         chipsHtml += `</li>` +
           `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
@@ -1961,9 +1959,6 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         chipsHtml += `</li>`;
       }
       html += chipsHtml;
-    } else if (noMatch) {
-      // roots・履歴・お気に入りが全て空でも 0 件案内は出す。
-      html += `<li class="cwd-dropdown-no-match" aria-hidden="true">${escapeHtml(t('spawn_cwd_no_match_hint'))}</li>`;
     }
 
     // subdirs セクション（入力値に区切りが含まれるとき）。
@@ -2168,6 +2163,11 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
+      clearOllamaModelDefault();
+    }
+  }
+  (window as any).openSpawnFor = openSpawnFor;
+
   // C3（plan_memo-panel.md）: メモの「ここから起動」の実体。cwd が空（メモが未分類）の
   // ときは openSpawnFor と同じく既存の入力値を残し、無ければ /api/info の cwd へ倒す。
   _openSpawnPanelWithImpl = (opts) => {
@@ -2198,11 +2198,6 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       clearOllamaModelDefault();
     }
   };
-
-      clearOllamaModelDefault();
-    }
-  }
-  (window as any).openSpawnFor = openSpawnFor;
 
   spawnCancelBtn.addEventListener('click', () => { newSessionPanel.hidden = true; setSpawnOrchestrationMode(false); });
   spawnLaunchBtn.addEventListener('click', spawnSession);
@@ -2603,6 +2598,13 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       (spawnCwdInput as HTMLInputElement).value = next;
       spawnCwdInput.focus();
       renderCwdDropdown(next);
+      return;
+    }
+    // 閉じるボタン: Escape と同じく一覧だけ閉じて入力欄へ戻す（外側クリックの代わり）。
+    if (e.target.closest('.cwd-dropdown-close')) {
+      e.preventDefault();
+      cwdDropdown.hidden = true;
+      focusInputNoReopen();
       return;
     }
     const clearHistBtn = e.target.closest('.cwd-dropdown-clear-history');

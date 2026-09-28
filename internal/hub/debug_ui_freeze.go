@@ -53,7 +53,10 @@ func validUIFreezePacket(p uiFreezePacket) bool {
 			return false
 		}
 		switch e.Phase {
-		case "voice.result", "input.layout", "terminal.fit", "terminal.links":
+		case "voice.result", "input.layout", "terminal.fit", "terminal.links",
+			// Stages inside terminal.links; keep in sync with web/src/debug/ui-freeze.ts.
+			"links.expand", "links.rows", "links.url", "links.winpath", "links.unixpath",
+			"links.relpath", "links.crunch", "links.callback":
 			return true
 		}
 		return false

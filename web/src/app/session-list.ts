@@ -205,6 +205,8 @@ export function activateSessionForMultiPane(id) {
 window.activateSessionForMultiPane = activateSessionForMultiPane;
 
 export function activateSession(id) {
+  const wasWorkspace = document.getElementById('multi-view')?.dataset.paneMode === 'workspace' &&
+    !document.getElementById('multi-view')?.hidden;
   const previousArea = document.getElementById('display-area');
   if (previousArea && !previousArea.hidden && (previousArea.classList.contains('mode-terminal') || previousArea.classList.contains('mode-split'))) {
     captureTerminalView(terminals.get(activeSessionId));
@@ -224,7 +226,7 @@ export function activateSession(id) {
   if (!_multiPaneFocusSyncing) {
     const multiView = document.getElementById('multi-view');
     const mgr = window.multiPaneManager;
-    if (multiView && !multiView.hidden && mgr) {
+    if (multiView && !multiView.hidden && multiView.dataset.paneMode !== 'workspace' && mgr) {
       // フォーカス対象スロットのインデックスを探す
       const slotIdx = mgr.slots.findIndex(s => s && s.session && s.session.id === id);
       _multiPaneFocusSyncing = true;
@@ -274,7 +276,8 @@ export function activateSession(id) {
   updateQuickCmdButtons(id);
   // C2: D11 セッション情報チップ更新 + D13 セッション毎モード復元 + チャット件数バッジ購読
   if (typeof renderSessionInfoChip === 'function') renderSessionInfoChip();
-  if (typeof applyActiveSessionViewMode === 'function') applyActiveSessionViewMode();
+  if (wasWorkspace && window.multiPaneManager?.hasSessionWorkspace?.(id)) setActiveTab(id, 'terminal');
+  else if (typeof applyActiveSessionViewMode === 'function') applyActiveSessionViewMode();
   if (typeof rewireChatHistorySub === 'function') rewireChatHistorySub(id);
   // chat-payload (内蔵プロキシ経由 payload 表示) のアクティブセッションを切替
   setActiveSessionForPayload(id);
@@ -616,7 +619,7 @@ window.addEventListener(MEMOS_CHANGED_EVENT, () => { renderSessionList(); });
 // ─── C5: セッションカードクリック — マルチタブ時のフォーカス切替 ──────────
 export function onSessionCardActivate(id) {
   const multiView = document.getElementById('multi-view');
-  const isMultiOpen = multiView && !multiView.hidden;
+  const isMultiOpen = multiView && !multiView.hidden && multiView.dataset.paneMode !== 'workspace';
   const projectKeyToOpen = projectBoxKeyAfterSessionCardSelection(
     id,
     openProjectKey,
@@ -1377,22 +1380,6 @@ export function renderSessionList() {
       };
       actions.appendChild(frontBtn);
 
-      // タッチ・キーボードでのペイン配置。カード本体のクリックは従来どおり
-      // セッションを開き、配置先の選択は明示したボタンから始める。
-      const paneBtn = document.createElement('button');
-      paneBtn.type = 'button';
-      paneBtn.className = 'session-pane-placement-btn';
-      paneBtn.textContent = '＋';
-      paneBtn.title = ti18n('pane_show_in_pane', 'ペインに表示');
-      paneBtn.setAttribute('aria-label', paneBtn.title);
-      paneBtn.onclick = (e) => {
-        e.stopPropagation();
-        window.dispatchEvent(new CustomEvent('pane-placement-request', {
-          detail: { kind: 'session', sessionId: s.id, anchor: paneBtn },
-        }));
-      };
-      actions.appendChild(paneBtn);
-
       const metaBtn = document.createElement('button');
       metaBtn.className = 'session-meta-btn';
       metaBtn.textContent = '⋯';
@@ -1498,6 +1485,15 @@ export function renderSessionList() {
 
       // D&Dドラッグ順序変更
       c.draggable = true;
+      c.setAttribute('aria-keyshortcuts', 'Shift+Enter');
+      c.addEventListener('keydown', (e) => {
+        if (e.target !== c || e.key !== 'Enter' || !e.shiftKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        window.dispatchEvent(new CustomEvent('pane-placement-request', {
+          detail: { kind: 'session', sessionId: s.id },
+        }));
+      });
       c.addEventListener('dragstart', (e) => {
         set_dragSrcId(s.id);
         set_dragSrcGroupKey(null);

@@ -2947,8 +2947,13 @@ export function setActiveTab(sid, name) {
     if (!area) return;
     const multiView = document.getElementById('multi-view');
     const mgr = window.multiPaneManager;
+    if (multiView && !multiView.hidden && mgr?.workspaceSession) mgr.teardown();
+    mgr?.setWorkspaceSession?.(null);
     area.hidden = true;
-    if (multiView) multiView.hidden = false;
+    if (multiView) {
+      multiView.hidden = false;
+      multiView.dataset.paneMode = 'overview';
+    }
     // scrollback を縮小（全セッション）
     const scrollbackMulti = MULTI_SCROLLBACK();
     sessions.forEach(s => {
@@ -2992,6 +2997,7 @@ export function setActiveTab(sid, name) {
     if (mgr && mgr.picker) mgr.picker.hide();
     if (prevMultiOpen && mgr) {
       mgr.teardown();
+      mgr.setWorkspaceSession?.(null);
       sessions.forEach(s => {
         const t = terminals.get(s.id);
         if (t && t.term) {
@@ -3028,7 +3034,10 @@ export function setActiveTab(sid, name) {
     const prevMultiOpen = multiView && !multiView.hidden;
     if (multiView) multiView.hidden = true;
     if (mgr?.picker) mgr.picker.hide();
-    if (prevMultiOpen && mgr) mgr.teardown();
+    if (prevMultiOpen && mgr) {
+      mgr.teardown();
+      mgr.setWorkspaceSession?.(null);
+    }
     area.hidden = false;
     area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
     area.classList.add('mode-orchestration');
@@ -3054,6 +3063,25 @@ export function setActiveTab(sid, name) {
   const multiView = document.getElementById('multi-view');
   const mgr = window.multiPaneManager;
 
+  // A terminal tab with a saved layout opens only this session's related views.
+  if (name === 'terminal' && mgr?.hasSessionWorkspace?.(targetSid) && multiView) {
+    if (!multiView.hidden) mgr.teardown();
+    mgr.setWorkspaceSession(targetSid);
+    area.hidden = true;
+    multiView.hidden = false;
+    multiView.dataset.paneMode = 'workspace';
+    mgr.picker?.hide();
+    mgr.render();
+    setSessionStripTab('terminal');
+    document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b =>
+      b.classList.toggle('active', b.dataset.tab === 'terminal'));
+    if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
+    window.dispatchEvent(new CustomEvent('session-view-mode-changed', {
+      detail: { sid: targetSid, name: 'terminal' },
+    }));
+    return;
+  }
+
   // ── 他タブへ切替: マルチビューを閉じる ──
   const prevMultiOpen = (multiView && !multiView.hidden);
   if (multiView) multiView.hidden = true;
@@ -3062,6 +3090,7 @@ export function setActiveTab(sid, name) {
   if (prevMultiOpen) {
     // 全スロットを detach（xterm の container を宙ぶらりんに）
     if (mgr) mgr.teardown();
+    mgr?.setWorkspaceSession?.(null);
     // scrollback を標準値に戻す
     sessions.forEach(s => {
       const t = terminals.get(s.id);

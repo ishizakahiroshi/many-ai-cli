@@ -8,10 +8,14 @@ import { isValidTabName } from './project-view-memory.js';
 import {
   FLEXIBLE_PANE_STORAGE_KEY,
   PANE_DRAG_MIME,
+  addPaneContent,
+  migrateSessionTabsToWorkspaces,
   normalizeFlexibleLayouts,
   paneContentKey,
   paneLayoutKey,
+  sessionPaneLayoutKey,
   parsePaneDragPayload,
+  previewPaneDrop,
   type FlexibleLayouts,
   type PaneContent,
 } from './flexible-pane-state.js';
@@ -208,6 +212,9 @@ export class MultiPaneManager {
     this.rowFracs = this._loadFracs('Rows', this.rows);
     this.customLayouts = this._loadCustomLayouts();
     this.activeLayoutKey = null;
+    this.workspaceSession = null;
+    this.dragPayload = null;
+    this.dropPreview = null;
     this.mobileActiveSlot = 0;
 
     // CSS カスタムプロパティを初期値にセット
@@ -220,6 +227,19 @@ export class MultiPaneManager {
     this.picker = new GridPicker(this);
     this.picker.syncBadge();
     this._wireNormalDropTarget();
+    document.addEventListener('dragstart', (event) => {
+      this.dragPayload = parsePaneDragPayload(event.dataTransfer?.getData(PANE_DRAG_MIME) || '');
+    });
+    document.addEventListener('dragend', () => this._clearDropPreview());
+    this.area?.addEventListener('dragover', event => {
+      if (!this.area || this.area.hidden || this._dragFromIdx != null ||
+          !Array.from(event.dataTransfer?.types || []).includes(PANE_DRAG_MIME)) return;
+      event.preventDefault();
+      this._showDropPreview(this.area);
+    });
+    this.area?.addEventListener('dragleave', event => {
+      if (!this.area?.contains(event.relatedTarget as Node)) this._clearDropPreview();
+    });
   }
 
   /** レイアウトを変更してDOM再構築 */
@@ -253,6 +273,7 @@ export class MultiPaneManager {
   /** セッション一覧を state.js の orderSessions（サイドバーの木を深さ優先でたどった順）で取得してスロットに割当て、DOM を再構築 */
   render() {
     if (!this.area) return;
+    this._clearDropPreview();
     const allSorted = window.getSortedSessions ? window.getSortedSessions() : [];
     this._selectLayoutForCurrentScope();
     for (const id of Array.from(this.dismissPendingSessionIds)) {
@@ -274,7 +295,9 @@ export class MultiPaneManager {
     //     手で並べ替えた順序が失われる（multi タブを 1 回開くだけで起きる）。
     //     保存する列（order）と表示する列（visibleIds）は computeRenderPlan が 1 か所で
     //     作り分ける。保存するのは前者だけ。
-    const byId = new Map(sorted.map(s => [s.id, s]));
+    const byId = new Map(sorted.filter(s => !this.workspaceSession ||
+      (s.id === this.workspaceSession.sessionId && String(s.started_at || '') === this.workspaceSession.startedAt))
+      .map(s => [s.id, s]));
     const plan = computeRenderPlan({
       prevOrder: this.order,
       liveSortedIds: sorted.map(s => s.id),
@@ -671,8 +694,9 @@ export class MultiPaneManager {
       const payload = parsePaneDragPayload(e.dataTransfer?.getData(PANE_DRAG_MIME) || '');
       if (payload) {
         e.preventDefault();
-        if (payload.kind === 'session') this.placeSession(payload.sessionId, idx);
-        else this.placeTab(payload.tabName, payload.sessionId, idx);
+        window.dispatchEvent(new CustomEvent('pane-placement-commit', {
+          detail: { ...payload, targetIdx: idx },
+        }));
         this._dragFromIdx = null;
         return;
       }
@@ -691,9 +715,19 @@ export class MultiPaneManager {
       if (Array.from(e.dataTransfer?.types || []).includes(PANE_DRAG_MIME)) {
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        area.classList.add('pane-drop-ready');
+        this._showDropPreview(area);
+      }
+    });
+    area.addEventListener('dragleave', (e) => {
+      if (!area.contains(e.relatedTarget)) {
+        area.classList.remove('pane-drop-ready');
+        this._clearDropPreview();
       }
     });
     area.addEventListener('drop', (e) => {
+      area.classList.remove('pane-drop-ready');
+      this._clearDropPreview();
       const payload = parsePaneDragPayload(e.dataTransfer?.getData(PANE_DRAG_MIME) || '');
       if (!payload) return;
       e.preventDefault();
@@ -704,7 +738,141 @@ export class MultiPaneManager {
   }
 
   _layoutKey() {
+    if (this.workspaceSession) return sessionPaneLayoutKey(this.workspaceSession.sessionId, this.workspaceSession.startedAt);
     return paneLayoutKey(effectiveScope(this.scope, openProjectKey), openProjectKey);
+  }
+
+  _clearDropPreview() {
+    this.dropPreview?.remove();
+    this.dropPreview = null;
+    document.getElementById('display-area')?.classList.remove('pane-drop-ready');
+    this.area?.querySelectorAll('.pane-slot.drag-over').forEach(slot => slot.classList.remove('drag-over'));
+  }
+
+  _previewLayout(payload, host) {
+    const content = this._contentForPayload(payload);
+    if (!content) return null;
+    const localTab = payload.kind === 'tab' && payload.sessionId != null;
+    let owner = null;
+    let base;
+    if (localTab) {
+      owner = this._contentForSession(payload.sessionId);
+      if (!owner) return null;
+      const key = sessionPaneLayoutKey(owner.sessionId, owner.startedAt);
+      base = this.customLayouts[key];
+      if (!base) {
+        const current = (window as any).currentFlexiblePaneView?.();
+        const first = current?.kind === 'tab' && current.sessionId === owner.sessionId &&
+          current.tabName !== payload.tabName ? this._contentForPayload(current) : null;
+        base = { cols: 2, rows: 1, colFracs: [1, 1], rowFracs: [1],
+          slots: [owner, first], autoSplit: true };
+      }
+    } else if (host.id === 'display-area' && (window as any).currentFlexiblePaneView?.()) {
+      const current = (window as any).currentFlexiblePaneView();
+      base = { cols: 2, rows: 1, colFracs: [1, 1], rowFracs: [1],
+        slots: [this._contentForPayload(current), null] };
+    } else if (this.area && !this.area.hidden && !this.workspaceSession) {
+      base = this._currentCustomLayout() || {
+        cols: this.cols, rows: this.rows, colFracs: this.colFracs, rowFracs: this.rowFracs,
+        slots: this.slots.map(slot => slot?.session ? this._contentForSession(slot.session.id) : slot?.tab || null),
+      };
+    } else {
+      const overviewKey = paneLayoutKey(effectiveScope(this.scope, openProjectKey), openProjectKey);
+      base = this.customLayouts[overviewKey];
+      if (!base) {
+        const current = (window as any).currentFlexiblePaneView?.();
+        const first = current ? this._contentForPayload(current) : null;
+        base = { cols: 2, rows: 1, colFracs: [1, 1], rowFracs: [1], slots: [first, null] };
+      }
+    }
+    const prediction = previewPaneDrop(base, content);
+    if (!prediction) return null;
+    return { ...prediction, owner };
+  }
+
+  _showDropPreview(host) {
+    const payload = this.dragPayload;
+    if (!payload || host.hidden) return;
+    const prediction = this._previewLayout(payload, host);
+    if (!prediction) return;
+    if (this.dropPreview?.parentElement === host && this.dropPreview.dataset.payload === JSON.stringify(payload)) return;
+    this._clearDropPreview();
+    const { layout, suggestedIdx, existing, owner } = prediction;
+    const preview = document.createElement('div');
+    preview.className = 'pane-drop-preview';
+    preview.dataset.payload = JSON.stringify(payload);
+    preview.setAttribute('aria-hidden', 'true');
+    preview.style.gridTemplateColumns = layout.colFracs.map(fr => `minmax(0, ${fr}fr)`).join(' ');
+    preview.style.gridTemplateRows = layout.rowFracs.map(fr => `minmax(0, ${fr}fr)`).join(' ');
+    const heading = document.createElement('div');
+    heading.className = 'pane-drop-preview-heading';
+    heading.textContent = owner ? `#${owner.sessionId} ${this._t('pane_workspace', '作業面')}`
+      : this._t('pane_overview', 'マルチ');
+    preview.appendChild(heading);
+    layout.slots.forEach((slot, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'pane-drop-preview-cell';
+      const candidate = existing ? idx === suggestedIdx : !slot;
+      if (candidate) cell.classList.add('candidate');
+      if (existing && idx === suggestedIdx) cell.classList.add('already');
+      const number = document.createElement('strong');
+      number.textContent = `${idx + 1}/${layout.slots.length}`;
+      const label = document.createElement('span');
+      label.textContent = slot ? (slot.kind === 'session' ? `#${slot.sessionId} Terminal`
+        : `${slot.sessionId == null ? '' : `#${slot.sessionId} `}${slot.tabName}`)
+        : `${owner ? `#${owner.sessionId} ` : ''}${payload.kind === 'session' ? 'Terminal' : payload.tabName}`;
+      cell.append(number, label);
+      if (candidate) {
+        cell.addEventListener('dragover', event => {
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+          preview.querySelectorAll('.pane-drop-preview-cell.hover').forEach(el => el.classList.remove('hover'));
+          cell.classList.add('hover');
+        });
+        cell.addEventListener('drop', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          const actual = parsePaneDragPayload(event.dataTransfer?.getData(PANE_DRAG_MIME) || '');
+          this._clearDropPreview();
+          if (!actual) return;
+          window.dispatchEvent(new CustomEvent(host.id === 'display-area' ? 'pane-placement-request' : 'pane-placement-commit', {
+            detail: host.id === 'display-area'
+              ? { payload: actual, targetIdx: idx, source: 'display-area' }
+              : { ...actual, targetIdx: idx },
+          }));
+        });
+      } else {
+        cell.addEventListener('dragover', event => event.preventDefault());
+        cell.addEventListener('drop', event => {
+          event.preventDefault();
+          event.stopPropagation();
+        });
+      }
+      preview.appendChild(cell);
+    });
+    host.appendChild(preview);
+    this.dropPreview = preview;
+  }
+
+  setWorkspaceSession(sessionId = null) {
+    const next = sessionId == null ? null : this._contentForSession(sessionId);
+    const oldKey = this._layoutKey();
+    this.workspaceSession = next;
+    if (oldKey !== this._layoutKey()) this.activeLayoutKey = null;
+    return next !== null || sessionId == null;
+  }
+
+  hasSessionWorkspace(sessionId) {
+    const session = this._contentForSession(sessionId);
+    return !!session && !!this.customLayouts[sessionPaneLayoutKey(session.sessionId, session.startedAt)];
+  }
+
+  clearSinglePaneWorkspace() {
+    if (!this.workspaceSession) return;
+    const key = this._layoutKey();
+    delete this.customLayouts[key];
+    this.activeLayoutKey = null;
+    this._saveCustomLayouts();
   }
 
   _currentCustomLayout() {
@@ -734,7 +902,14 @@ export class MultiPaneManager {
   }
 
   _loadCustomLayouts() {
-    try { return normalizeFlexibleLayouts(JSON.parse(localStorage.getItem(FLEXIBLE_PANE_STORAGE_KEY) || '{}')); }
+    try {
+      const layouts = normalizeFlexibleLayouts(JSON.parse(localStorage.getItem(FLEXIBLE_PANE_STORAGE_KEY) || '{}'));
+      if (migrateSessionTabsToWorkspaces(layouts)) {
+        try { localStorage.setItem(FLEXIBLE_PANE_STORAGE_KEY, JSON.stringify(layouts)); }
+        catch (_) { /* Keep migrated placements in memory for this tab. */ }
+      }
+      return layouts;
+    }
     catch (_) { return {}; }
   }
 
@@ -797,30 +972,37 @@ export class MultiPaneManager {
     return true;
   }
 
-  _placeContent(content, targetIdx) {
+  /** D&D adds another visible pane without replacing one already on screen. */
+  _addContent(content, preferredIdx) {
     if (!content) return false;
     const layout = this._materializeCustomLayout();
-    const count = layout.slots.length;
-    const firstEmpty = layout.slots.findIndex(slot => slot === null);
-    const target = Number.isInteger(targetIdx) && targetIdx >= 0 && targetIdx < count
-      ? targetIdx : firstEmpty >= 0 ? firstEmpty : Math.min(this.focusedIdx, count - 1);
     const existing = layout.slots.findIndex(slot => slot && paneContentKey(slot) === paneContentKey(content));
-    if (existing === target && JSON.stringify(layout.slots[target]) === JSON.stringify(content)) return true;
-    if (existing >= 0) layout.slots[existing] = null;
-    layout.slots[target] = content;
-    this.focusedIdx = target;
-    this.mobileActiveSlot = target;
+    if (existing >= 0) {
+      this.focusSlot(existing);
+      return true;
+    }
+    const target = addPaneContent(layout, content, preferredIdx);
+    if (target === null) return false;
+    this.cols = layout.cols;
+    this.rows = layout.rows;
+    this.colFracs = layout.colFracs.slice();
+    this.rowFracs = layout.rowFracs.slice();
+    this.area?.style.setProperty('--pane-cols', String(this.cols));
+    this.area?.style.setProperty('--pane-rows', String(this.rows));
+    this.picker?.syncBadge();
+    this.focusedIdx = this.mobileActiveSlot = target;
     this._saveCustomLayouts();
     this.render();
+    this.focusSlot(target);
     return true;
   }
 
-  placeTab(tabName, sessionId = null, targetIdx = undefined) {
-    return this._placeContent(this._contentForTab(tabName, sessionId), targetIdx);
+  addTab(tabName, sessionId = null, preferredIdx = undefined) {
+    return this._addContent(this._contentForTab(tabName, sessionId), preferredIdx);
   }
 
-  placeSession(sessionId, targetIdx = undefined) {
-    return this._placeContent(this._contentForSession(sessionId), targetIdx);
+  addSession(sessionId, preferredIdx = undefined) {
+    return this._addContent(this._contentForSession(sessionId), preferredIdx);
   }
 
   /** Move to an empty slot, or swap two occupied slots. */
@@ -931,7 +1113,12 @@ export class MultiPaneManager {
 
   onSessionEnded(sessionId) {
     let changed = false;
-    for (const layout of Object.values(this.customLayouts as FlexibleLayouts)) {
+    for (const [key, layout] of Object.entries(this.customLayouts as FlexibleLayouts)) {
+      if (key.startsWith(`session:${sessionId}:`)) {
+        delete this.customLayouts[key];
+        changed = true;
+        continue;
+      }
       for (let i = 0; i < layout.slots.length; i++) {
         if (layout.slots[i]?.sessionId === sessionId) {
           layout.slots[i] = null;
@@ -954,7 +1141,17 @@ export class MultiPaneManager {
     // still contain entries from before a WebSocket reconnect at this point.
     const live = new Map(snapshotSessions.map(session => [session.id, session]));
     let changed = false;
-    for (const layout of Object.values(this.customLayouts as FlexibleLayouts)) {
+    for (const [key, layout] of Object.entries(this.customLayouts as FlexibleLayouts)) {
+      if (key.startsWith('session:')) {
+        const owner = layout.slots.find(slot => slot?.kind === 'session');
+        const liveOwner = owner && live.get(owner.sessionId);
+        if (!owner || !liveOwner || String(liveOwner.started_at || '') !== owner.startedAt ||
+            ['completed', 'error', 'disconnected'].includes(liveOwner.state)) {
+          delete this.customLayouts[key];
+          changed = true;
+          continue;
+        }
+      }
       for (let i = 0; i < layout.slots.length; i++) {
         const content = layout.slots[i];
         if (!content || content.sessionId === null) continue;
@@ -1192,6 +1389,7 @@ export class MultiPaneManager {
    */
   teardown() {
     if (!this.area) return;
+    this._clearDropPreview();
     this.area.querySelectorAll('.pane-slot').forEach(el => {
       this.detachSlot(el);
       this._unmountTabSlot(el);

@@ -4,12 +4,34 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/subscription"
 )
+
+var codexUsageChecks = struct {
+	sync.Mutex
+	active map[string]bool
+}{active: map[string]bool{}}
+
+func codexUsageDirectoryKey(path string) string {
+	clean := filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(clean)
+	}
+	return clean
+}
+
+type codexUsageRefreshRequest struct {
+	Provider  string `json:"provider"`
+	ID        string `json:"id"`
+	SessionID int    `json:"session_id,omitempty"`
+}
 
 // handleSubscriptionUsage returns only profile names and provider-reported
 // usage metadata. Profile directories and authentication material never cross
@@ -24,6 +46,77 @@ func (s *Server) handleSubscriptionUsage(w http.ResponseWriter, r *http.Request)
 	store.applyAuthStatuses(r.Context(), cfg, subscriptionConfigDir(), &response, r.URL.Query().Get("refresh_auth") == "1")
 	s.applyUsageProbeStates(&response)
 	writeJSON(w, response)
+}
+
+// handleCodexUsageRefresh explicitly reads the selected profile's ChatGPT
+// limits. It never runs an agent turn or reuses the default Codex login.
+func (s *Server) handleCodexUsageRefresh(w http.ResponseWriter, r *http.Request) {
+	if !s.guard(w, r, http.MethodPost) {
+		return
+	}
+	var body codexUsageRefreshRequest
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if strings.TrimSpace(body.Provider) != "codex" {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", "manual refresh supports Codex profiles only")
+		return
+	}
+	id := config.NormalizeSubscriptionID(body.ID)
+	if err := config.ValidateSubscriptionID(id); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "bad_request", err.Error())
+		return
+	}
+	resolved, err := subscription.Resolve(s.snapshotCfg(), subscriptionConfigDir(), "codex", id)
+	if err != nil || resolved == nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_subscription", "Codex profile is unavailable")
+		return
+	}
+	if body.SessionID != 0 {
+		s.sessionsMu.Lock()
+		ses := s.sessions[body.SessionID]
+		matches := ses != nil && ses.Provider == "codex" &&
+			config.NormalizeSubscriptionID(ses.SubscriptionProfileID) == id &&
+			codexUsageDirectoryKey(ses.CodexHome) == codexUsageDirectoryKey(resolved.ProfileDir)
+		s.sessionsMu.Unlock()
+		if !matches {
+			writeJSONError(w, http.StatusConflict, "session_profile_changed", "session login directory no longer matches this profile")
+			return
+		}
+	}
+	key := codexUsageDirectoryKey(resolved.ProfileDir)
+	codexUsageChecks.Lock()
+	if codexUsageChecks.active[key] {
+		codexUsageChecks.Unlock()
+		writeJSONError(w, http.StatusConflict, "refresh_running", "usage refresh is already running for this profile")
+		return
+	}
+	codexUsageChecks.active[key] = true
+	codexUsageChecks.Unlock()
+	defer func() {
+		codexUsageChecks.Lock()
+		delete(codexUsageChecks.active, key)
+		codexUsageChecks.Unlock()
+	}()
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	usage, err := subscription.ReadCodexAppServerUsage(ctx, resolved.ProfileDir)
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			status = http.StatusGatewayTimeout
+		}
+		writeJSONError(w, status, "usage_refresh_failed", "Codex usage could not be retrieved; previous values were kept")
+		return
+	}
+	current, err := subscription.Resolve(s.snapshotCfg(), subscriptionConfigDir(), "codex", id)
+	if err != nil || current == nil || codexUsageDirectoryKey(current.ProfileDir) != key {
+		writeJSONError(w, http.StatusConflict, "profile_changed", "Codex profile changed during usage refresh; previous values were kept")
+		return
+	}
+	checkedAt := time.Now()
+	s.subscriptionUsageStoreForServer().putCodexAppServer(id, usage, checkedAt)
+	writeJSON(w, map[string]any{"ok": true, "provider": "codex", "id": id, "checked_at": checkedAt.Format(time.RFC3339)})
 }
 
 type subscriptionUsageProbeRequest struct {

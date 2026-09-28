@@ -1,5 +1,5 @@
-// Touch and keyboard alternative to dragging tabs, cards, and pane handles.
-// The layout owner handles pane-placement-commit, including entering Multi.
+// Move a pane by keyboard and provide compact screen switching.
+// Touch placement requests commit immediately through the layout owner.
 
 type PlacementRequest = {
   kind: 'tab' | 'session' | 'move';
@@ -129,9 +129,7 @@ function openPlacementMenu(request: PlacementRequest): void {
   dialog.setAttribute('aria-labelledby', 'pane-placement-heading');
   const heading = document.createElement('h2');
   heading.id = 'pane-placement-heading';
-  heading.textContent = request.kind === 'move'
-    ? label('pane_placement_move_to', '移動先を選ぶ')
-    : label('pane_placement_show_in', '表示先を選ぶ');
+  heading.textContent = label('pane_placement_move_to', '移動先を選ぶ');
   const close = document.createElement('button');
   close.type = 'button';
   close.className = 'pane-placement-cancel';
@@ -144,37 +142,24 @@ function openPlacementMenu(request: PlacementRequest): void {
 
   const choices = document.createElement('div');
   choices.className = 'pane-placement-choices';
-  const multiOpen = !document.getElementById('multi-view')?.hidden;
-  if (!multiOpen && request.kind !== 'move') {
+  const capacity = Math.max(0, Number(mgr.cols) * Number(mgr.rows));
+  const sourceIdx = existingSlotIndex(mgr, request);
+  for (let idx = 0; idx < capacity; idx++) {
+    if (idx === sourceIdx) continue;
+    const slot = mgr.slots?.[idx] || null;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'pane-placement-choice';
-    button.textContent = label('pane_placement_add_beside', '今の画面と並べて表示');
-    button.addEventListener('click', () => commitPlacement(request));
+    const action = slot ? label('pane_placement_swap', '入れ替え') : label('pane_placement_move', '移動');
+    button.textContent = `${idx + 1}. ${slotTitle(slot, idx)} · ${action}`;
+    button.addEventListener('click', () => commitPlacement(request, idx));
     choices.appendChild(button);
-  } else {
-    const capacity = Math.max(0, Number(mgr.cols) * Number(mgr.rows));
-    const sourceIdx = existingSlotIndex(mgr, request);
-    for (let idx = 0; idx < capacity; idx++) {
-      if (idx === sourceIdx) continue;
-      const slot = mgr.slots?.[idx] || null;
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'pane-placement-choice';
-      const action = request.kind === 'move'
-        ? slot ? label('pane_placement_swap', '入れ替え') : label('pane_placement_move', '移動')
-        : slot ? label('pane_placement_replace', '置き換え')
-          : sourceIdx >= 0 ? label('pane_placement_move', '移動') : label('pane_placement_add', '配置');
-      button.textContent = `${idx + 1}. ${slotTitle(slot, idx)} · ${action}`;
-      button.addEventListener('click', () => commitPlacement(request, idx));
-      choices.appendChild(button);
-    }
-    if (choices.childElementCount === 0) {
-      const hint = document.createElement('p');
-      hint.className = 'pane-placement-empty';
-      hint.textContent = label('pane_placement_no_target', '移動先の枠がありません。マルチのレイアウトを増やしてください。');
-      choices.appendChild(hint);
-    }
+  }
+  if (choices.childElementCount === 0) {
+    const hint = document.createElement('p');
+    hint.className = 'pane-placement-empty';
+    hint.textContent = label('pane_placement_no_target', '移動先の枠がありません。マルチのレイアウトを増やしてください。');
+    choices.appendChild(hint);
   }
   dialog.appendChild(choices);
   overlay.appendChild(dialog);
@@ -216,7 +201,9 @@ function renderCompactPaneSwitcher(): void {
 function initPanePlacementMenu(): void {
   window.addEventListener('pane-placement-request', event => {
     const request = validRequest((event as CustomEvent).detail);
-    if (request && request.source !== 'display-area') openPlacementMenu(request);
+    if (!request || request.source === 'display-area') return;
+    if (request.kind === 'move') openPlacementMenu(request);
+    else commitPlacement(request);
   });
 
   const stack = document.getElementById('display-stack');

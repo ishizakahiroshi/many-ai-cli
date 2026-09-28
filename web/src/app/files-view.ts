@@ -336,7 +336,7 @@ export const FilesTabManager = (function () {
     const existing = tabs.find(t => {
       if ((t.kind || t.type) !== 'files') return false;
       if (t.filesRoot !== filesRoot) return false;
-      if (t.paneHost && !sameSessionId(t.sessionId, sessionId)) return false;
+      if ((paneOpening || t.paneHost || t.paneOwnerSessionId != null) && !sameSessionId(t.sessionId, sessionId)) return false;
       if (hasProject) return t.projectKey === projectKey;
       return sameSessionId(t.sessionId, sessionId);
     });
@@ -606,7 +606,7 @@ export const FilesTabManager = (function () {
     const existing = tabs.find(t => {
       if ((t.kind || t.type) !== 'git') return false;
       if (t.gitRoot !== gitRoot) return false;
-      if (t.paneHost && !sameSessionId(t.sessionId, sessionId)) return false;
+      if ((paneOpening || t.paneHost || t.paneOwnerSessionId != null) && !sameSessionId(t.sessionId, sessionId)) return false;
       if (hasProject) return t.projectKey === projectKey;
       return sameSessionId(t.sessionId, sessionId);
     });
@@ -750,7 +750,7 @@ export const FilesTabManager = (function () {
     const existing = tabs.find(t => {
       if ((t.kind || t.type) !== 'review') return false;
       if (t.gitRoot !== gitRoot) return false;
-      if (t.paneHost && !sameSessionId(t.sessionId, sessionId)) return false;
+      if ((paneOpening || t.paneHost || t.paneOwnerSessionId != null) && !sameSessionId(t.sessionId, sessionId)) return false;
       if (hasProject) return t.projectKey === projectKey;
       return sameSessionId(t.sessionId, sessionId);
     });
@@ -877,6 +877,7 @@ export const FilesTabManager = (function () {
     }
     const tab = tabs.find(candidate => candidate.id === id);
     if (!tab?.contentEl) return false;
+    tab.paneOwnerSessionId = sessionId;
     tab.paneHost = host;
     tab.contentEl.classList.add('active');
     host.appendChild(tab.contentEl);

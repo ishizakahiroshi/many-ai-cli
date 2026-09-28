@@ -54,6 +54,8 @@ interface UsageProfile {
   name?: string;
   plan?: string;
   retrieved_at?: string;
+  checked_at?: string;
+  observed_at?: string;
   auth_status?: 'ready' | 'login_required' | 'status_unknown' | string;
   auth_checking?: boolean;
   probe_available?: boolean;
@@ -248,9 +250,15 @@ function noWindowsText(): string {
   return `<span class="usage-not-acquired">${escapeHtml(tx('usage_no_windows', 'No usage limits are currently available'))}</span>`;
 }
 
-function profileRetrieved(profile: UsageProfile): string {
-  const retrieved = retrievedText(profile.retrieved_at);
+function profileRetrieved(provider: string, profile: UsageProfile): string {
+  const retrieved = usageTimeText(provider, profile);
   return retrieved ? `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>` : '';
+}
+
+function usageTimeText(provider: string, profile: UsageProfile): string {
+  if (provider === 'codex' && profile.checked_at) return tx('usage_checked_at', 'Checked {time}', { time: fixedDateTime(profile.checked_at) });
+  if (provider === 'codex' && profile.observed_at) return tx('usage_observed_at', 'Source record {time}', { time: fixedDateTime(profile.observed_at) });
+  return retrievedText(profile.retrieved_at);
 }
 
 function creditsText(usage: CodexUsage): string {
@@ -277,10 +285,10 @@ function claudeBody(provider: string, profile: UsageProfile): string {
       meter(tx('usage_window_5h', '5h'), usage.five_hour),
       meter(tx('usage_window_7d', '7d'), usage.seven_day),
     ]);
-    body += profileRetrieved(profile);
+    body += profileRetrieved(provider, profile);
   } else if (usage) {
     body += noWindowsText();
-    body += profileRetrieved(profile);
+    body += profileRetrieved(provider, profile);
   } else {
     body += `<div class="usage-profile-actions"><span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span></div>`;
   }
@@ -296,17 +304,20 @@ function claudeBody(provider: string, profile: UsageProfile): string {
 
 function codexBody(provider: string, profile: UsageProfile): string {
   const usage = profile.codex;
+  const key = profileKey(profile, provider);
   let body = authNotice(provider, profile);
-  if (!usage) return body + `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
-  const windows = sortUsageWindows([usage.primary, usage.secondary].filter((window): window is UsageWindow => !!window && remainingPercent(window) !== null));
-  if (windows.length === 0) {
-    body += noWindowsText();
+  if (!usage) {
+    body += `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
   } else {
-    body += metersGroup(windows.map((window) => meter(windowLabelText(windowLabel(windowMinutes(window))), window)));
+    const windows = sortUsageWindows([usage.primary, usage.secondary].filter((window): window is UsageWindow => !!window && remainingPercent(window) !== null));
+    body += windows.length === 0 ? noWindowsText() : metersGroup(windows.map((window) => meter(windowLabelText(windowLabel(windowMinutes(window))), window)));
+    const credits = creditsText(usage);
+    if (credits) body += `<div class="usage-profile-facts">${credits}</div>`;
+    body += profileRetrieved(provider, profile);
   }
-  const credits = creditsText(usage);
-  if (credits) body += `<div class="usage-profile-facts">${credits}</div>`;
-  body += profileRetrieved(profile);
+  const busy = running.has(key);
+  const label = tx(busy ? 'usage_probe_running' : failures.has(key) ? 'usage_probe_retry' : 'usage_inline_refresh', busy ? 'Retrieving' : failures.has(key) ? 'Retry' : 'Refresh usage');
+  body += `<div class="usage-profile-actions">${failures.has(key) ? `<span class="usage-probe-error">${escapeHtml(failures.get(key) || '')}</span>` : ''}${actionButton('usage-probe-button', label, `data-codex-refresh="${escapeHtml(key)}"`, busy)}</div>`;
   return body;
 }
 
@@ -317,7 +328,7 @@ function grokBody(provider: string, profile: UsageProfile): string {
   const end = usage.period_end ? fixedDateTime(usage.period_end) : '';
   body += metersGroup([meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent, remaining_percent: usage.remaining_percent })]);
   if (end) body += `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>`;
-  body += profileRetrieved(profile);
+  body += profileRetrieved(provider, profile);
   return body;
 }
 
@@ -397,7 +408,7 @@ function renderInlineUsage(): void {
     ? `<span class="inline-usage-message${inlineRefreshError ? ' inline-usage-message--error' : ''}" title="${escapeHtml(message)}">${escapeHtml(message)}</span>`
     : `<div class="inline-usage-center">${windows.map(({ label, window }) => meter(label, window, true)).join('')}</div>`;
   const credits = provider === 'codex' && profile?.codex ? creditsText(profile.codex) : '';
-  const retrieved = profile ? retrievedText(profile.retrieved_at) : '';
+  const retrieved = profile ? usageTimeText(provider, profile) : '';
   const side = `<div class="inline-usage-side">${credits || '<span></span>'}<span class="usage-profile-meta" title="${escapeHtml(retrieved)}">${escapeHtml(retrieved)}</span></div>`;
   const errorText = tx('usage_probe_failed', 'Could not retrieve usage');
   const errorBadge = inlineRefreshError && windows.length > 0
@@ -411,6 +422,7 @@ function renderInlineUsage(): void {
 async function refreshInlineUsage(): Promise<void> {
   const target = activeUsageTarget();
   if (!target) return;
+  const targetSessionId = activeSessionId;
   const key = `${target.provider}:${target.id}`;
   if (inlineRefreshBusyKey === key) return;
   inlineRefreshBusyKey = key;
@@ -428,6 +440,8 @@ async function refreshInlineUsage(): Promise<void> {
     success = false;
   } else if (target.provider === 'claude' && profile.probe_available) {
     success = await startProbe(key);
+  } else if (target.provider === 'codex') {
+    success = await startCodexRefresh(key, targetSessionId);
   } else {
     // Some Claude profiles cannot run the probe. The GET still rereads the
     // Hub's available Usage snapshot and does not falsely report probe failure.
@@ -533,6 +547,15 @@ function renderProfiles(response: UsageResponse): void {
 
 function bindProbeButtons(): void {
   if (!panelRoot) return;
+  panelRoot.querySelectorAll<HTMLButtonElement>('[data-codex-refresh]').forEach((button) => {
+    if (button.dataset.bound === '1') return;
+    button.dataset.bound = '1';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void startCodexRefresh(button.dataset.codexRefresh || '');
+    });
+  });
   panelRoot.querySelectorAll<HTMLButtonElement>('[data-probe-start]').forEach((button) => {
     if (button.dataset.bound === '1') return;
     button.dataset.bound = '1';
@@ -670,6 +693,32 @@ async function startProbe(key: string): Promise<boolean | null> {
       if (usageData) renderProfiles(usageData);
     }
     return false;
+  }
+}
+
+async function startCodexRefresh(key: string, sessionId: number | null = null): Promise<boolean | null> {
+  if (running.has(key)) return null;
+  if (!key.startsWith('codex:')) return false;
+  const profile = findProfile(key);
+  if (!profile) return false;
+  running.add(key);
+  failures.delete(key);
+  if (usageData) renderProfiles(usageData);
+  try {
+    const response = await apiFetch('/api/subscription-usage/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'codex', id: profile.id, ...(sessionId === null ? {} : { session_id: sessionId }) }),
+    });
+    if (!response.ok) throw new Error(`usage refresh failed: ${response.status}`);
+    return await refreshUsagePanel();
+  } catch (_) {
+    failures.set(key, tx('usage_probe_failed', 'Could not retrieve usage'));
+    await refreshUsagePanel();
+    return false;
+  } finally {
+    running.delete(key);
+    if (usageData) renderProfiles(usageData);
   }
 }
 
