@@ -1311,6 +1311,7 @@
   "gcv_copy_failed": "Sao chép thất bại",
   "tab_chat_empty": "Chưa có lịch sử",
   "chat_source_payload": "Xem payload (β)",
+  "chat_show_noise": "Hiển thị chi tiết công cụ và tiến độ",
   "tab_files_lazy_tooltip": "Bấm để tải (chưa fetch)",
   "tab_git_lazy_tooltip": "Bấm để tải (chưa fetch)",
   "tab_review_lazy_tooltip": "Bấm để tải (chưa fetch)",

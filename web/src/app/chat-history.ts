@@ -510,6 +510,33 @@ export function clearBuffer(session) {
   });
 })();
 
+// Keep the chat focused on user messages and AI answers by default. Tool-only
+// records and progress details remain available through this persisted toggle.
+const CHAT_NOISE_STORAGE_KEY = 'chatShowNoise';
+
+function readChatNoisePreference(): boolean {
+  try { return localStorage.getItem(CHAT_NOISE_STORAGE_KEY) === '1'; }
+  catch { return false; }
+}
+
+function initChatNoiseToggle() {
+  const pane = document.getElementById('chat-pane');
+  const toggle = document.getElementById('chat-noise-toggle') as HTMLInputElement | null;
+  if (!pane || !toggle) return;
+  toggle.checked = readChatNoisePreference();
+  pane.classList.toggle('show-chat-noise', toggle.checked);
+  toggle.addEventListener('change', () => {
+    pane.classList.toggle('show-chat-noise', toggle.checked);
+    try { localStorage.setItem(CHAT_NOISE_STORAGE_KEY, toggle.checked ? '1' : '0'); }
+    catch { /* The current page still honors the toggle when storage is unavailable. */ }
+  });
+}
+
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initChatNoiseToggle);
+  else initChatNoiseToggle();
+}
+
 // =========================================================================
 // C3: チャットメッセージレンダリング本体
 // docs/local/plan_chat-history-subview.md §C3
@@ -806,6 +833,7 @@ export function renderMessageBubble(sid, msg) {
   wrapEl.dataset.msgId = String(msg.id);
   wrapEl.dataset.role = role;
   wrapEl.dataset.kind = kind;
+  wrapEl.dataset.presentation = presentation;
 
   // メッセージ番号
   const numEl = document.createElement('span');
@@ -951,13 +979,11 @@ export function renderMessageBubble(sid, msg) {
     const raw = msg.normalizedText || msg.rawText || '';
     const transcript = msg.meta?.transcript === true;
     const cleanText = transcript ? raw : stripToolCallLines(raw);
-    if (cleanText && (presentation === 'progress' || presentation === 'unclassified')) {
+    if (cleanText && presentation === 'progress') {
       const details = document.createElement('details');
-      details.className = 'chat-transcript-section chat-transcript-record';
+      details.className = 'chat-transcript-section chat-transcript-record chat-noise-detail';
       const summary = document.createElement('summary');
-      summary.textContent = presentation === 'progress'
-        ? ti18n('chat_progress_record', '作業の進捗を確認')
-        : ti18n('chat_unclassified_record', '未分類の記録 — 回答が含まれる場合があります');
+      summary.textContent = ti18n('chat_progress_record', '作業の進捗を確認');
       details.appendChild(summary);
       details.appendChild(renderInlineText(cleanText));
       content.appendChild(details);

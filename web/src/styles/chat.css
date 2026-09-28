@@ -43,6 +43,13 @@
   font-size: 12px;
   flex-shrink: 0;
 }
+#chat-pane:not(.show-chat-noise) .msg[data-presentation="tool"],
+#chat-pane:not(.show-chat-noise) .msg[data-presentation="progress"],
+#chat-pane:not(.show-chat-noise) .chat-noise-detail,
+#chat-pane:not(.show-chat-noise) .chat-transcript-tools,
+#chat-pane:not(.show-chat-noise) .tool-call {
+  display: none !important;
+}
 #chat-pane .chat-source-toggle {
   display: inline-flex;
   align-items: center;

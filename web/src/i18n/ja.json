@@ -1311,6 +1311,7 @@
   "gcv_copy_failed": "コピーに失敗しました",
   "tab_chat_empty": "履歴はまだありません",
   "chat_source_payload": "Payload表示 (β)",
+  "chat_show_noise": "ツール・進捗を表示",
   "tab_files_lazy_tooltip": "クリックで読み込み (未取得)",
   "tab_git_lazy_tooltip": "クリックで読み込み (未取得)",
   "tab_review_lazy_tooltip": "クリックで読み込み (未取得)",

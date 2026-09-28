@@ -32,9 +32,9 @@ Release artifacts are published at
 
 ### Changed
 - **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
-- **Chat hides classified thinking and collapses progress and unclassified
-  Codex records.** Final answers remain visible; CLI output is still available
-  through the view switch.
+- **Chat shows user messages and AI replies by default.** Tool-only records and
+  progress details stay hidden until “Show tool and progress details” is enabled;
+  Codex reply text remains visible even when its transcript phase is unclassified.
 - **Prompt templates are available on phones and refreshed across devices.**
   Unrelated settings saves preserve the shared list, and concurrent template
   edits require an explicit conflict resolution instead of silently overwriting
