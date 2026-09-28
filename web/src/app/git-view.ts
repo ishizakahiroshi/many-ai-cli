@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { token } from './util.js';
+import { apiFetch, token } from './util.js';
 import { STORAGE_LANG_KEY } from './user-prefs.js';
 import { appConfirm } from './settings.js';
 import { showPathPopup, joinPath, isAbsolutePath } from './path-links.js';
@@ -285,7 +285,7 @@ export class GitCommitModal {
     this._renderState();
     const tok = this._token();
     try {
-      const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(tok)}`, {
+      const res = await apiFetch('/api/git-commit-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -332,7 +332,7 @@ export class GitCommitModal {
     }, 200000);
     const tok = this._token();
     try {
-      const res = await fetch(`/api/git-commit-message?token=${encodeURIComponent(tok)}`, {
+      const res = await apiFetch('/api/git-commit-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -398,7 +398,7 @@ export class GitCommitModal {
     this._renderState();
     const tok = this._token();
     try {
-      const res = await fetch(`/api/git-commit-all?token=${encodeURIComponent(tok)}`, {
+      const res = await apiFetch('/api/git-commit-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -453,7 +453,7 @@ export async function runGitPush(opts) {
   if (!ok) return false;
   if (typeof o.onStart === 'function') o.onStart();
   try {
-    const res = await fetch(`/api/git-push?token=${encodeURIComponent(tok)}`, {
+    const res = await apiFetch('/api/git-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session: o.sessionId, token: tok }),
@@ -1105,12 +1105,11 @@ export function updatePushButtonLabel(btn, wt) {
       try {
         const params = new URLSearchParams({
           session: String(this.sessionId),
-          token: this.token,
           ref: this.viewRef || 'HEAD',
           limit: String(PAGE_LIMIT),
           skip: String(this.skip),
         });
-        const res = await fetch(`/api/git-log?${params.toString()}`);
+        const res = await apiFetch(`/api/git-log?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) {
           throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
@@ -1137,9 +1136,8 @@ export function updatePushButtonLabel(btn, wt) {
       try {
         const params = new URLSearchParams({
           session: String(this.sessionId),
-          token: this.token,
         });
-        const res = await fetch(`/api/git-refs?${params.toString()}`);
+        const res = await apiFetch(`/api/git-refs?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) return;
         this.refs = Array.isArray(data.refs) ? data.refs : [];
@@ -1153,9 +1151,8 @@ export function updatePushButtonLabel(btn, wt) {
       try {
         const params = new URLSearchParams({
           session: String(this.sessionId),
-          token: this.token,
         });
-        const res = await fetch(`/api/git-status?${params.toString()}`);
+        const res = await apiFetch(`/api/git-status?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.ok === false) {
           this.workingTree = null;
@@ -1177,10 +1174,9 @@ export function updatePushButtonLabel(btn, wt) {
     async _fetchShow(hash) {
       const params = new URLSearchParams({
         session: String(this.sessionId),
-        token: this.token,
         hash,
       });
-      const res = await fetch(`/api/git-show?${params.toString()}`);
+      const res = await apiFetch(`/api/git-show?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
       return data;
@@ -1271,7 +1267,7 @@ export function updatePushButtonLabel(btn, wt) {
       const origText = btn.textContent;
       btn.textContent = '…';
       try {
-        const res = await fetch(`/api/git-fetch?token=${encodeURIComponent(this.token)}`, {
+        const res = await apiFetch('/api/git-fetch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session: this.sessionId, token: this.token }),
@@ -1309,7 +1305,7 @@ export function updatePushButtonLabel(btn, wt) {
       btn.disabled = true;
       btn.textContent = '…';
       try {
-        const res = await fetch(`/api/git-pull?token=${encodeURIComponent(this.token)}`, {
+        const res = await apiFetch('/api/git-pull', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session: this.sessionId, token: this.token }),

@@ -7,6 +7,7 @@ import {
   resetState,
   sortUsageWindows,
   usageSeverity,
+  usageFreshness,
   usedPercent,
   windowLabel,
 } from './usage-limit.js';
@@ -47,4 +48,22 @@ test('usage limit helpers expose severity and reset staleness', () => {
     remainingMs: 90 * 60_000,
   });
   assert.equal(resetState((now - 1) / 1000, now)?.stale, true);
+});
+
+test('usageFreshness marks last-known values old only when login is not confirmed', () => {
+  assert.equal(usageFreshness('ready', true), 'current');
+  assert.equal(usageFreshness('login_required', true), 'signed_out');
+  assert.equal(usageFreshness('status_unknown', true), 'unverified');
+});
+
+test('usageFreshness never calls an empty display old', () => {
+  for (const status of ['login_required', 'status_unknown', 'ready']) {
+    assert.equal(usageFreshness(status, false), 'current');
+  }
+});
+
+test('usageFreshness does not assert staleness for an unsettled auth state', () => {
+  assert.equal(usageFreshness(undefined, true), 'current');
+  assert.equal(usageFreshness('', true), 'current');
+  assert.equal(usageFreshness('foo', true), 'current');
 });

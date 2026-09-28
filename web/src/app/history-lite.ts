@@ -1,6 +1,6 @@
 // P-10: deliberately small persisted-session workbench. It does not revive the
 // removed chat proxy; all data comes from sessionstore and the existing log API.
-import { token, showToast } from './util.js';
+import { apiFetch, showToast } from './util.js';
 
 type Overview = Record<string, any>;
 type Message = { id: number; ts: string; role: string; rawText?: string; normalizedText?: string };
@@ -16,7 +16,7 @@ const stamp = (v: string) => { const d = new Date(v); return Number.isNaN(+d) ? 
 const text = (m: Message) => m.normalizedText || m.rawText || '';
 
 async function load() {
-  const res = await fetch(`/api/session-history?${new URLSearchParams({ token, limit: '500' })}`);
+  const res = await apiFetch('/api/session-history?limit=500');
   if (!res.ok) throw new Error(`history ${res.status}`);
   const data = await res.json();
   all = Array.isArray(data.sessions) ? data.sessions : [];
@@ -25,9 +25,9 @@ async function load() {
 async function openSession(item: Overview) {
   selected = item; messages = [];
   render();
-  const params = new URLSearchParams({ token, session_db_id: String(item.id), limit: '500' });
+  const params = new URLSearchParams({ session_db_id: String(item.id), limit: '500' });
   try {
-    const res = await fetch(`/api/session-chat?${params}`);
+    const res = await apiFetch(`/api/session-chat?${params}`);
     if (!res.ok) throw new Error(`chat ${res.status}`);
     const data = await res.json();
     messages = Array.isArray(data.messages) ? data.messages : [];

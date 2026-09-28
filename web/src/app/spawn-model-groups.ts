@@ -9,6 +9,8 @@
 // provider 空の Ollama / LM Studio を出す。この分岐を「全部フォールバック」へ
 // まとめない（bugfix_derive-dialog-model-provider-mismatch_2026-09-12.md C1）。
 
+import { apiFetch } from './util.js';
+
 export interface SpawnModel {
   id: string;
   label?: string;
@@ -149,7 +151,7 @@ export async function loadSpawnModelGroups(token: string, force = false): Promis
   const generation = cacheGeneration;
   const p = (async () => {
     try {
-      const res = await fetch(`/api/models?token=${token}`, { method });
+      const res = await apiFetch('/api/models', { method });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const groups = Array.isArray(data?.groups) ? data.groups : [];

@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { showToast, token } from './util.js';
+import { apiFetch, showToast, token } from './util.js';
 import { createUserPrefsPutQueue } from './user-prefs-put-queue.js';
 import { sanitizeProjectViews } from './project-view-memory.js';
 import { sanitizeCustomThemes } from './theme-tokens.js';
@@ -471,7 +471,7 @@ export function refreshSharedPromptTemplates(): Promise<boolean> {
   const version = templateSync.readVersion();
   templateRefresh = (async () => {
     try {
-      const response = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+      const response = await apiFetch('/api/user-prefs');
       if (!response.ok) return false;
       return mirrorSharedTemplates(await response.json(), version, response.headers.get('X-Template-Version') || '');
     } catch (_) { return false; }
@@ -495,7 +495,7 @@ function reportTemplateConflict(): never {
 export async function resolveSharedTemplateConflict(keepLocal: boolean): Promise<boolean> {
   const generation = templateSync.readVersion();
   try {
-    const response = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    const response = await apiFetch('/api/user-prefs');
     if (!response.ok) return false;
     const prefs = await response.json();
     if (generation !== templateSync.readVersion()) return false;
@@ -541,7 +541,7 @@ export function _userPrefsHttpError(phase: string, res: Response): UserPrefsHttp
 export async function _putUserPrefsNow() {
   const tk = token;
   // 現在のサーバ値を取得してからパッチ適用し全体置換
-  const getRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
+  const getRes = await apiFetch('/api/user-prefs');
   if (!getRes.ok) throw _userPrefsHttpError('GET', getRes);
   const current = await getRes.json();
   // localStorage の最新値を current にマージ
@@ -559,7 +559,7 @@ export async function _putUserPrefsNow() {
     }
   }
   const templateVersion = templateConflict ? null : templateSync.mergeInto(current, localTemplates.ok ? localTemplates.value : null);
-  const putRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
+  const putRes = await apiFetch('/api/user-prefs', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-Template-Write': templateVersion === null ? 'preserve' : 'compare', 'X-Template-Version': compareVersion },
     body: JSON.stringify(current),
@@ -639,7 +639,7 @@ export async function _mirrorUserPrefsFromServer() {
   const tk = token;
   const templateVersion = templateSync.readVersion();
   try {
-    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
+    const res = await apiFetch('/api/user-prefs');
     if (!res.ok) return null;
     const prefs: UserPrefsObject = await res.json();
     // 各フィールドを localStorage にミラー（既存値を上書き）
@@ -669,7 +669,7 @@ export async function _mirrorUserPrefsFromServer() {
 export async function migrateLocalstoragePrefsToServer() {
   const tk = token;
   try {
-    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
+    const res = await apiFetch('/api/user-prefs');
     if (!res.ok) return;
     const prefs: UserPrefsObject = await res.json();
     if (prefs.migrated_from_localstorage) return; // 移行済み
@@ -686,7 +686,7 @@ export async function migrateLocalstoragePrefsToServer() {
     }
     if (!hasAny) return;
     merged.migrated_from_localstorage = true;
-    const migrated = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
+    const migrated = await apiFetch('/api/user-prefs', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'X-Template-Write': 'compare', 'X-Template-Version': res.headers.get('X-Template-Version') || '' },
       body: JSON.stringify(merged),

@@ -3,7 +3,7 @@
 // プリセット → session 起動 / URL 生成ロジックを集約する。
 // spawn-panel.ts や session-list.ts から呼び出して二重化を防ぐ。
 
-import { token, escapeHtml } from './util.js';
+import { apiFetch, token, escapeHtml } from './util.js';
 import { sessions } from './state.js';
 import { calcDetachedLayout, openDetachedGridForSessions } from './session-list.js';
 import {
@@ -118,7 +118,7 @@ export async function spawnGridAndOpen(opts: {
 }): Promise<void> {
   const prevMax = sessions.size > 0 ? Math.max(...Array.from(sessions.keys())) : 0;
 
-  const res = await fetch(`/api/spawn-grid?token=${token}`, {
+  const res = await apiFetch('/api/spawn-grid', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

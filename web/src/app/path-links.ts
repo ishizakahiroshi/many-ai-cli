@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { showToast, token } from './util.js';
+import { apiFetch, showToast, token } from './util.js';
 import { sessions } from './state.js';
 import { FilesTabManager, FilesPreview } from './files-view.js';
 import {
@@ -295,9 +295,9 @@ export async function renameFileViaApi(filePath, sessionId) {
   const newName = input.trim();
   if (!newName || newName === current) return;
   try {
-    const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
-    const url = `/api/files-rename?token=${encodeURIComponent(token)}${sessionQs}`;
-    const res = await fetch(url, {
+    const sessionQs = sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
+    const url = `/api/files-rename${sessionQs}`;
+    const res = await apiFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ src: filePath, newName }),
@@ -318,8 +318,8 @@ export async function renameFileViaApi(filePath, sessionId) {
 
 export async function callOpenApi(endpoint, path, errorKey = 'link_open_error', sessionId = null) {
   try {
-    const sessionQs = (sessionId != null && sessionId !== '') ? `&session=${encodeURIComponent(sessionId)}` : '';
-    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}${sessionQs}`, {
+    const sessionQs = (sessionId != null && sessionId !== '') ? `?session=${encodeURIComponent(sessionId)}` : '';
+    const res = await apiFetch(`${endpoint}${sessionQs}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path }),
@@ -440,9 +440,9 @@ export async function deleteDirViaApi(filePath, sessionId) {
   const message = (t('link_delete_dir_confirm') || 'Delete this folder and all contents?').replace('{name}', name);
   if (!window.confirm(message)) return;
   try {
-    const sessionQs = sessionId ? `&session=${encodeURIComponent(sessionId)}` : '';
-    const url = `/api/files-delete-dir?token=${encodeURIComponent(token)}${sessionQs}`;
-    const res = await fetch(url, {
+    const sessionQs = sessionId ? `?session=${encodeURIComponent(sessionId)}` : '';
+    const url = `/api/files-delete-dir${sessionQs}`;
+    const res = await apiFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ src: filePath }),

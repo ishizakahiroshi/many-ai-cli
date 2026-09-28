@@ -66,6 +66,20 @@ export function usageSeverity(remaining: number): UsageSeverity {
   return 'normal';
 }
 
+// 'signed_out' / 'unverified' mean the numbers on screen are the last ones
+// obtained, not current ones, because the profile's login state is not
+// confirmed. Without numbers there is nothing to call old, and an unsettled
+// state (auth_status empty while checking) is never asserted as stale.
+// This is separate from resetState().stale, which is about a passed reset time.
+export type UsageFreshness = 'current' | 'signed_out' | 'unverified';
+
+export function usageFreshness(authStatus: string | undefined, hasValues: boolean): UsageFreshness {
+  if (!hasValues) return 'current';
+  if (authStatus === 'login_required') return 'signed_out';
+  if (authStatus === 'status_unknown') return 'unverified';
+  return 'current';
+}
+
 export function resetState(resetAt: unknown, now = Date.now()): { epoch: number; stale: boolean; remainingMs: number } | null {
   if (typeof resetAt !== 'number' || !Number.isFinite(resetAt) || resetAt <= 0) return null;
   const epoch = resetAt * 1000;

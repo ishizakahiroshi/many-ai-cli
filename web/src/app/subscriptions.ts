@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { escapeHtml, showToast, token } from './util.js';
+import { apiFetch, escapeHtml, showToast } from './util.js';
 import { appConfirm } from './settings.js';
 
 // ---- Settings > Subscriptions（plan_multi-subscription-pool C4）----
@@ -64,8 +64,8 @@ function providerLabel(provider: string): string {
 }
 
 function subsApi(path: string, init?: RequestInit): Promise<Response> {
-  const sep = path.includes('?') ? '&' : '?';
-  return fetch(`${path}${sep}token=${encodeURIComponent(token || '')}`, init);
+  return apiFetch(path, init);
+
 }
 
 const jsonInit = (bodyObj: unknown): RequestInit => ({

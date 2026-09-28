@@ -6,7 +6,7 @@
 //
 // パス・URL は Chat タブ相当のクリック／右クリック操作を提供する（読み取り専用でも
 // ファイルを開く・コピーする導線は必要。textContent 直書きだとプレーン文字列のまま）。
-import { showToast, ti18n, token } from './util.js';
+import { apiFetch, showToast, ti18n } from './util.js';
 import { sessions } from './state.js';
 import { appendTextWithLinks } from './url-links.js';
 
@@ -86,12 +86,11 @@ function gcvUpdateRangeLabel() {
 
 async function gcvFetchPage(sid: number, offset: number, limit: number) {
   const params = new URLSearchParams({
-    token,
     session_id: String(sid),
     limit: String(limit),
   });
   if (offset >= 0) params.set('offset', String(offset));
-  const res = await fetch(`/api/grok-history?${params.toString()}`);
+  const res = await apiFetch(`/api/grok-history?${params.toString()}`);
   if (!res.ok) throw new Error(`grok-history ${res.status}`);
   return res.json();
 }

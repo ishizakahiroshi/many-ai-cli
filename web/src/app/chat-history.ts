@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { escapeHtml, showToast, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
 import { appendTextWithUrlLinks } from './url-links.js';
 import { activeSessionId, chatHistory, chatHistoryAutoCommitTimers, chatHistoryIdSeq, chatHistoryOutputBuffers, chatHistorySubs, sessions, terminals } from './state.js';
 import { _userAvatarUrl, _userDisplayName } from '../app.js';
@@ -215,7 +215,7 @@ export async function restoreChatHistoryFromStore(sid, opts: any = {}) {
   chatHistoryStoreInflight.add(sid);
   try {
     const endpoint = isTranscriptBackedSession(sid) ? '/api/agent-chat' : '/api/session-chat';
-    const res = await fetch(`${endpoint}?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sid)}&limit=500`);
+    const res = await apiFetch(`${endpoint}?session_id=${encodeURIComponent(sid)}&limit=500`);
     if (!res.ok) return false;
     const data = await res.json();
     const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -1406,7 +1406,7 @@ if (typeof window !== 'undefined') {
         showToast(ti18n('chat_raw_log_open_failed', '生ログを開けませんでした'));
         return;
       }
-      const res = await fetch(`/api/open-dir?token=${encodeURIComponent(token)}`, {
+      const res = await apiFetch('/api/open-dir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind: 'path', path: targetPath }),
@@ -1456,7 +1456,7 @@ if (typeof window !== 'undefined') {
       box.innerHTML = '<div class="chat-global-search-head">検索中...</div>';
     }
     try {
-      const res = await fetch(`/api/session-search?token=${encodeURIComponent(token)}&q=${encodeURIComponent(q)}&limit=30`);
+      const res = await apiFetch(`/api/session-search?q=${encodeURIComponent(q)}&limit=30`);
       if (!res.ok) throw new Error(`status ${res.status}`);
       const data = await res.json();
       renderGlobalSearchResults(q, Array.isArray(data.results) ? data.results : []);

@@ -44,6 +44,7 @@ function fixture(storage=new Map<string,string>(), migrated=true){
       return response(server,version);
     },
   };
+  ctx.apiFetch = ctx.fetch;
   const source=readFileSync(new URL('../src/app/user-prefs.ts',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export /gm,'');
   runInNewContext(new Bun.Transpiler({loader:'ts'}).transformSync(source)+'\nglobalThis.api={setUserPref,_putUserPrefsNow,flushUserPrefsPut,refreshSharedPromptTemplates,setSharedTemplateEditing,sharedTemplatesHaveConflict,resolveSharedTemplateConflict};',ctx);
   return {storage,calls,timers,events,warnings,api:ctx.api,get server(){return server;},get version(){return version;},remote(templates:any,newVersion:string){server={...server};if(templates===undefined)delete server.templates;else server.templates=clone(templates);version=newVersion;},holdGet(){let release!:(value:any)=>void;nextGet=new Promise(resolve=>{release=resolve;});return release;},beforePut(fn:()=>void){beforePut=fn;},failNextPut(){nextPutError=new Error('synthetic offline');},async fireTimer(){const entry=timers.entries().next().value;if(!entry)throw new Error('No pending debounce');const [id,fn]=entry;timers.delete(id);fn();await settle();}};

@@ -10,6 +10,7 @@ export function setLang(v: string): void | undefined {
 }
 
 (async () => {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
   const stored = localStorage.getItem('ai_cli_hub_lang');
   // navigator.language: "vi", "vi-VN", "en-US", "ja-JP", ...
   const nav = (navigator.language || 'ja').toLowerCase();

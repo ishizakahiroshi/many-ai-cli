@@ -11,7 +11,7 @@
 //
 // 見た目の正本は web/src/styles/spawn-confirm.css。
 import { t } from '../i18n.js';
-import { escapeHtml, token } from './util.js';
+import { apiFetch, escapeHtml, token } from './util.js';
 import {
   fillModelDatalist,
   getCachedSpawnModelGroups,
@@ -540,7 +540,7 @@ function showSpawnConfirmationDialog(record: SpawnConfirmationRecord): void {
     const grantFolderTrust = folderTrustDecision(!!trustField && !trustField.hidden, !!trustInput?.checked, approved);
     if (grantFolderTrust !== undefined) payload.grant_folder_trust = grantFolderTrust;
     try {
-      const res = await fetch(`/api/sessions/${record.parentId}/spawn-confirm?token=${token}`, {
+      const res = await apiFetch(`/api/sessions/${record.parentId}/spawn-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

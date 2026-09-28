@@ -2,7 +2,7 @@
 // /api/session-log（生 PTY ログの範囲読み）でページ単位に遡って表示する。
 // ライブターミナルには行を「前に差し込む」API が無いため、読み取り専用の
 // 別 xterm をオーバーレイで重ねるページング方式を取る。
-import { showToast, ti18n, token } from './util.js';
+import { apiFetch, showToast, ti18n } from './util.js';
 import { activeSessionId, sessions, terminals } from './state.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 
@@ -180,12 +180,11 @@ function hvUpdateRangeLabel() {
 
 async function hvFetchPage(sid: number, offset: number) {
   const params = new URLSearchParams({
-    token,
     session_id: String(sid),
     limit: String(HV_CHUNK_BYTES),
   });
   if (offset >= 0) params.set('offset', String(offset));
-  const res = await fetch(`/api/session-log?${params.toString()}`);
+  const res = await apiFetch(`/api/session-log?${params.toString()}`);
   if (!res.ok) throw new Error(`session-log ${res.status}`);
   return res.json();
 }

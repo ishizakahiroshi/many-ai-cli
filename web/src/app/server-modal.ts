@@ -7,7 +7,7 @@
 // （モーダル埋め込みはしない＝低リスク）。設計は settings-panel / workflow-modal に準拠。
 
 import { t } from '../i18n.js';
-import { token } from './util.js';
+import { apiFetch, token } from './util.js';
 import { setSettingsPanelOpen } from './settings.js';
 
 interface ServerProfile {
@@ -50,19 +50,15 @@ let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
 // ── API ────────────────────────────────────────────────────────────────────
 
-function tk(): string {
-  return encodeURIComponent(token || '');
-}
-
 async function apiGet(path: string): Promise<any> {
-  const res = await fetch(`${path}?token=${tk()}`);
+  const res = await apiFetch(path);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.detail || data?.error || res.statusText);
   return data;
 }
 
 async function apiPost(path: string, body?: unknown): Promise<any> {
-  const res = await fetch(`${path}?token=${tk()}`, {
+  const res = await apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body == null ? undefined : JSON.stringify(body),

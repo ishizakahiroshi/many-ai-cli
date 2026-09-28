@@ -1002,7 +1002,7 @@ async function loadInfo(force: boolean): Promise<void> {
   info = null;
   if (modalOpen) render();
   try {
-    const res = await fetch(`/api/mobile-connect?token=${encodeURIComponent(token || '')}`, { cache: 'no-store' });
+    const res = await apiFetch('/api/mobile-connect', { cache: 'no-store' });
     if (!res.ok) {
       loadError = res.status === 401
         ? t('mobile_connect_error_unauthorized')

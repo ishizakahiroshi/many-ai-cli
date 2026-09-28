@@ -11,6 +11,10 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Usage for a profile whose login cannot be confirmed is now marked as not
+  current.** The last retrieved values are kept, and the Usage panel and the
+  active session's Usage row show that they may be out of date, with the time
+  they were last retrieved.
 - **Codex subscription usage can now be refreshed manually for each profile.**
   The Hub reads ChatGPT limits through that profile's Codex App Server login,
   shows the check time, and keeps the previous values if the check fails.
@@ -94,6 +98,11 @@ Release artifacts are published at
   Commands that embed arbitrary PowerShell statements via `@(...)` (such as
   `cat @(...)` or `dir @(...)`) are classified as mid-risk instead of incorrectly
   being treated as low-risk.
+- **Web UI requests use Cookie and Bearer authorization instead of query tokens.**
+  API calls across the web dashboard no longer include `?token=` in request URLs,
+  preventing token exposure in browser history, server access logs, and shared links.
+- **Dependency `golang.org/x/crypto` updated to v0.57.0**, eliminating upstream advisory GO-2025-3486.
+
 
 ## [0.9.0] - 2026-09-27
 

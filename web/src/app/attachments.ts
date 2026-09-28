@@ -405,8 +405,8 @@ export async function flushPendingAttach(sessionId) {
     try {
       const formData = new FormData();
       formData.append('file', new Blob([buf]), filename || 'blob');
-      const res = await fetch(
-        `/api/attach?token=${encodeURIComponent(token)}&session_id=${encodeURIComponent(sessionId)}`,
+      const res = await apiFetch(
+        `/api/attach?session_id=${encodeURIComponent(sessionId)}`,
         { method: 'POST', body: formData }
       );
       if (!res.ok) {

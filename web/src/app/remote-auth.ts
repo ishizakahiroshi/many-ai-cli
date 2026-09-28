@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { token, showToast } from './util.js';
+import { apiFetch, showToast } from './util.js';
 import { appConfirm } from './settings.js';
 
 // ---- リモートアクセス保護（plan_hub-remote-auth.md C3）----
@@ -15,8 +15,8 @@ function isLoopbackHost(): boolean {
 }
 
 function authApi(path: string, init?: RequestInit): Promise<Response> {
-  const sep = path.includes('?') ? '&' : '?';
-  return fetch(`${path}${sep}token=${encodeURIComponent(token || '')}`, init);
+  return apiFetch(path, init);
+
 }
 
 const jsonInit = (bodyObj: unknown): RequestInit => ({

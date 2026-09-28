@@ -25,15 +25,14 @@ import {
 } from './cli-availability.js';
 import { loadProviderSummaries } from './provider-store.js';
 import { providerIconHtml, stateIconSvgHtml } from './session-list.js';
-import { apiFetch, escapeHtml, token } from './util.js';
+import { apiFetch, escapeHtml } from './util.js';
 
 // fetchInstallLinkDefaults は provider id → 公式インストール手順 URL。元は
 // zero-session-empty-state.ts だけが持っていたが、導入状況一覧の取得元をここへ一本化
-// したのでこちらへ移した（settings.ts の usage-link-defaults 取得と揃えた書き方: token を
-// クエリに付ける生 fetch。取得できなくても一覧は出す方針なので、失敗時は空 map）。
+// したのでこちらへ移した（取得できなくても一覧は出す方針なので、失敗時は空 map）。
 export async function fetchInstallLinkDefaults(): Promise<Record<string, string>> {
   try {
-    const res = await fetch(`/api/install-link-defaults?token=${encodeURIComponent(token || '')}`);
+    const res = await apiFetch('/api/install-link-defaults');
     if (!res.ok) return {};
     const body = await res.json();
     return body && typeof body === 'object' ? body : {};

@@ -1,5 +1,5 @@
 // --- ESM imports (generated) ---
-import { token } from './util.js';
+import { apiFetch, token } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { resolveCurrentReviewLoad } from './review-load-generation.js';
 // commit モーダルと push の確認は Git タブと同じ 1 実装を使う（複製しない）。
@@ -239,7 +239,6 @@ import { probe } from '../debug/probe.js';
           async () => {
             const params = new URLSearchParams({
               session: String(this.sessionId),
-              token: this.token,
             });
             let endpoint = '/api/git-diff';
             let turnNo = 0;
@@ -252,7 +251,7 @@ import { probe } from '../debug/probe.js';
               endpoint = '/api/git-turn-diff';
               params.set('turn', String(turnNo));
             }
-            const res = await fetch(`${endpoint}?${params.toString()}`);
+            const res = await apiFetch(`${endpoint}?${params.toString()}`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok || data.ok === false) {
               const err: any = new Error(data && data.detail ? data.detail : `HTTP ${res.status}`);
@@ -297,9 +296,8 @@ import { probe } from '../debug/probe.js';
       try {
         const params = new URLSearchParams({
           session: sessionAtStart,
-          token: this.token,
         });
-        const res = await fetch(`/api/git-status?${params.toString()}`);
+        const res = await apiFetch(`/api/git-status?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (String(this.sessionId) !== sessionAtStart) return;
         this.workingTree = (!res.ok || data.ok === false) ? null : data;
@@ -399,9 +397,8 @@ import { probe } from '../debug/probe.js';
       const sessionAtStart = String(this.sessionId);
       const params = new URLSearchParams({
         session: sessionAtStart,
-        token: this.token,
       });
-      const res = await fetch(`/api/git-turns?${params.toString()}`);
+      const res = await apiFetch(`/api/git-turns?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
       if (String(this.sessionId) !== sessionAtStart) return;
       if (!res.ok || data.ok === false) {
@@ -690,8 +687,8 @@ import { probe } from '../debug/probe.js';
       return;
     }
     try {
-      const params = new URLSearchParams({ session: String(sessionID), token: token || '' });
-      const res = await fetch(`/api/git-turns?${params.toString()}`);
+      const params = new URLSearchParams({ session: String(sessionID) });
+      const res = await apiFetch(`/api/git-turns?${params.toString()}`);
       const data = await res.json().catch(() => ({}));
       // 応答の鮮度ガード。この関数は cache 空のときだけ呼ばれるため、fetch 中に
       // WS の git_turn が cache を埋めていたらそちらが必ず新しい（適用すると stale な

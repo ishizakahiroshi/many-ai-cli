@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { token, showToast, el } from './util.js';
+import { apiFetch, showToast, el } from './util.js';
 
 // ---- 🌐 外部公開（Tailscale serve）トグル — plan_tailscale-serve-host-toggle.md C1 ----
 //
@@ -81,8 +81,8 @@ function notify(): void {
 }
 
 function api(path: string, init?: RequestInit): Promise<Response> {
-  const sep = path.includes('?') ? '&' : '?';
-  return fetch(`${path}${sep}token=${encodeURIComponent(token || '')}`, { cache: 'no-store', ...init });
+  return apiFetch(path, { cache: 'no-store', ...init });
+
 }
 
 // GET 状態取得。成功時はキャッシュ更新＋リスナー通知。

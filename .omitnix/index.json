@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "0990139d93d0769d8115f386c981c239cda828b4",
+    "commit": "d308f1adae87163efbd60c453826d794640b9d2f",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -135,8 +135,8 @@
   },
   "coverage": {
     "discovered": 1102,
-    "analyzed": 870,
-    "unresolved": 31,
+    "analyzed": 895,
+    "unresolved": 6,
     "unknown": 1,
     "unclaimed": 200,
     "skipped_by_config": 0
@@ -21893,7 +21893,7 @@
     {
       "path": "web/src/app/attachments.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -21914,18 +21914,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/attach?token=*&session_id=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/attach?token=*&session_id=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/boot-guard.ts",
@@ -22020,7 +22013,7 @@
     {
       "path": "web/src/app/chat-history.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22041,27 +22034,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/open-dir?token=*",
-            "/api/session-search?token=*&q=*&limit=30"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${endpoint}?token=${encodeURIComponent(token)}&session_id=${encodeURI..."
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/open-dir?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/session-search?token=*&q=*&limit=30"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/chat-payload.ts",
@@ -22156,7 +22133,7 @@
     {
       "path": "web/src/app/cli-maintenance.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22177,18 +22154,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/install-link-defaults?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/install-link-defaults?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/command-palette-store.ts",
@@ -22493,7 +22463,7 @@
     {
       "path": "web/src/app/detached-grid-launcher.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22514,18 +22484,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/spawn-grid?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/spawn-grid?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/detached-grid.ts",
@@ -22650,7 +22613,7 @@
     {
       "path": "web/src/app/files-view.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22675,16 +22638,7 @@
           "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: probeUrl"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: url"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/first-run-tour.ts",
@@ -22809,7 +22763,7 @@
     {
       "path": "web/src/app/git-view.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22830,63 +22784,16 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/git-commit-all?token=*",
-            "/api/git-commit-message?token=*",
-            "/api/git-fetch?token=*",
-            "/api/git-log?*",
-            "/api/git-pull?token=*",
-            "/api/git-push?token=*",
-            "/api/git-refs?*",
-            "/api/git-show?*",
-            "/api/git-status?*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-commit-message?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-commit-all?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-push?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-log?*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-refs?*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-status?*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-show?*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-fetch?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-pull?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/grok-chat-viewer.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -22907,18 +22814,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/grok-history?*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/grok-history?*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/handoff-store.ts",
@@ -22983,7 +22883,7 @@
     {
       "path": "web/src/app/history-lite.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -23004,28 +22904,16 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/session-chat?*",
-            "/api/session-history?*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/session-history?*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/session-chat?*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/history-viewer.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -23046,23 +22934,16 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/session-log?*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/session-log?*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/host-expose.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -23087,12 +22968,7 @@
           "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${path}${sep}token=${encodeURIComponent(token || '')}`"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/hub-marker-filter-fixtures.ts",
@@ -23487,7 +23363,7 @@
     {
       "path": "web/src/app/mobile-connect.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -23508,18 +23384,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/mobile-connect?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/mobile-connect?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/mobile-home.ts",
@@ -23824,7 +23693,7 @@
     {
       "path": "web/src/app/orchestration-dashboard.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "none_observed",
@@ -23845,28 +23714,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/files-content?path=*&session=*&token=*",
-            "/api/sessions/*/*?token=*",
-            "/api/sessions/*/relay?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/files-content?path=*&session=*&token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/sessions/*/*?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/sessions/*/relay?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/orchestration-roles.ts",
@@ -23991,7 +23843,7 @@
     {
       "path": "web/src/app/path-links.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24016,16 +23868,7 @@
           "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: url"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${endpoint}?token=${encodeURIComponent(token)}${sessionQs}`"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/project-view-memory-fixtures.ts",
@@ -24420,7 +24263,7 @@
     {
       "path": "web/src/app/remote-auth.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24445,12 +24288,7 @@
           "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${path}${sep}token=${encodeURIComponent(token || '')}`"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/residue-sweep.ts",
@@ -24515,7 +24353,7 @@
     {
       "path": "web/src/app/review-view.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24536,27 +24374,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/git-status?*",
-            "/api/git-turns?*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${endpoint}?${params.toString()}`"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-status?*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/git-turns?*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/routines-model.ts",
@@ -24621,7 +24443,7 @@
     {
       "path": "web/src/app/server-modal.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24646,17 +24468,12 @@
           "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${path}?token=${tk()}`"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/session-list.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24677,23 +24494,16 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/sessions/*/meta?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/sessions/*/meta?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/session-search-palette.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24714,18 +24524,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/session-search?*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/session-search?*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/session-strip-branch.ts",
@@ -24910,7 +24713,7 @@
     {
       "path": "web/src/app/settings.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -24931,120 +24734,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/approval-patterns/*?token=*",
-            "/api/approval-patterns/copy-official?token=*",
-            "/api/approval-patterns/profile?token=*",
-            "/api/approval/dismiss?token=*",
-            "/api/approval/enable?token=*",
-            "/api/approval/status?token=*",
-            "/api/notify-config?token=*",
-            "/api/notify-generate-topic?token=*",
-            "/api/notify-test?token=*",
-            "/api/pick-file?filter=exe&token=*",
-            "/api/slash-cmd-sources?token=*",
-            "/api/terminal-app?token=*",
-            "/api/usage-link-defaults?token=*",
-            "/api/user-prefs/avatar?token=*",
-            "/api/user-prefs/notify-sound-custom?token=*",
-            "/api/user-prefs?token=*",
-            "/api/whisper/*?token=*",
-            "/api/whisper/status?token=*",
-            "approval-patterns/*.*.json?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval/status?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval/enable?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval/dismiss?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/user-prefs?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/whisper/status?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/whisper/*?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/user-prefs/notify-sound-custom?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/user-prefs/avatar?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/usage-link-defaults?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval-patterns/profile?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: approval-patterns/*.*.json?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval-patterns/*?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval-patterns/copy-official?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/slash-cmd-sources?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/notify-config?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/notify-generate-topic?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/notify-test?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/terminal-app?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/pick-file?filter=exe&token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: endpoint('/api/nvidia-nim')"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: endpoint('/api/nvidia-nim/test')"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: endpoint('/api/nvidia-nim/key')"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/shared-template-sync.ts",
@@ -25229,7 +24923,7 @@
     {
       "path": "web/src/app/spawn-confirm.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -25250,23 +24944,16 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/sessions/*/spawn-confirm?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/sessions/*/spawn-confirm?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/spawn-model-groups.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -25287,18 +24974,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/models?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/models?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/spawn-panel-fixtures.ts",
@@ -25333,7 +25013,7 @@
     {
       "path": "web/src/app/spawn-panel.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -25354,38 +25034,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/encoding-check?token=*",
-            "/api/list-subdirs?token=*",
-            "/api/path-exists?token=*",
-            "/api/pick-directory?token=*",
-            "/api/spawn?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/list-subdirs?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/path-exists?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/pick-directory?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/encoding-check?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/spawn?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/spawn-provider-options.ts",
@@ -25480,7 +25133,7 @@
     {
       "path": "web/src/app/subscriptions.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -25505,12 +25158,7 @@
           "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "the address of this request is a run-time value: `${path}${sep}token=${encodeURIComponent(token || '')}`"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/tab-bar-order.ts",
@@ -25755,7 +25403,7 @@
     {
       "path": "web/src/app/token-statusbar.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -25776,18 +25424,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/user-prefs?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/user-prefs?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/transcript-message-fixtures.ts",
@@ -26122,7 +25763,7 @@
     {
       "path": "web/src/app/user-prefs.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
@@ -26143,18 +25784,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/user-prefs?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/user-prefs?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/util.ts",

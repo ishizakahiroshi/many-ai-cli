@@ -7,10 +7,12 @@ import {
   remainingPercent,
   resetState,
   sortUsageWindows,
+  usageFreshness,
   usageSeverity,
   usedPercent,
   windowLabel,
   windowMinutes,
+  type UsageFreshness,
   type UsageWindowInput,
 } from './usage-limit.js';
 import { hasProviderCapability } from './provider-store.js';
@@ -213,9 +215,23 @@ function meter(label: string, window: UsageWindow | undefined, compact = false):
   </div>`;
 }
 
-function metersGroup(groups: string[]): string {
+// ログインを確認できない間に残っている値は「最後に取得できた値」で最新ではない。
+// 理由文はパネルの注記と下部の行のバッジで同じものを使う。
+function staleReason(freshness: UsageFreshness): string {
+  if (freshness === 'signed_out') {
+    return tx('usage_stale_signed_out', 'You are not signed in, so the last retrieved values are shown. They are not current.');
+  }
+  if (freshness === 'unverified') {
+    return tx('usage_stale_unverified', 'Login status could not be checked, so the last retrieved values are shown. They may not be current.');
+  }
+  return '';
+}
+
+function metersGroup(groups: string[], freshness: UsageFreshness = 'current'): string {
   const items = groups.filter(Boolean);
-  return items.length ? `<div class="usage-meters">${items.join('')}</div>` : '';
+  if (!items.length) return '';
+  if (freshness === 'current') return `<div class="usage-meters">${items.join('')}</div>`;
+  return `<div class="usage-stale-note" role="status">${escapeHtml(staleReason(freshness))}</div><div class="usage-meters usage-meters--stale-auth">${items.join('')}</div>`;
 }
 
 function actionButton(className: string, label: string, attribute: string, disabled = false): string {
@@ -250,12 +266,26 @@ function noWindowsText(): string {
   return `<span class="usage-not-acquired">${escapeHtml(tx('usage_no_windows', 'No usage limits are currently available'))}</span>`;
 }
 
-function profileRetrieved(provider: string, profile: UsageProfile): string {
-  const retrieved = usageTimeText(provider, profile);
-  return retrieved ? `<div class="usage-profile-meta">${escapeHtml(retrieved)}</div>` : '';
+function profileRetrieved(provider: string, profile: UsageProfile, freshness: UsageFreshness = 'current'): string {
+  const retrieved = usageTimeText(provider, profile, freshness);
+  return retrieved ? `<div class="usage-profile-meta${freshness === 'current' ? '' : ' usage-profile-meta--stale'}">${escapeHtml(retrieved)}</div>` : '';
 }
 
-function usageTimeText(provider: string, profile: UsageProfile): string {
+// パネルと下部の行が同じ判定を使う。値が 1 つも表示できないときは旧値ではない。
+function profileFreshness(provider: string, profile: UsageProfile): UsageFreshness {
+  return usageFreshness(profile.auth_status, compactWindows(provider, profile).length > 0);
+}
+
+function usageTimeText(provider: string, profile: UsageProfile, freshness: UsageFreshness = 'current'): string {
+  if (freshness !== 'current') {
+    // 旧値は「たった今」「N 分前」を出さず、値の観測時刻を絶対時刻で示す。
+    // 認証を確認した時刻や現在時刻は使わない。
+    const observed = provider === 'codex'
+      ? profile.checked_at || profile.observed_at || profile.retrieved_at
+      : profile.retrieved_at;
+    const time = fixedDateTime(observed);
+    return time ? tx('usage_last_retrieved', 'Last retrieved {time}', { time }) : '';
+  }
   if (provider === 'codex' && profile.checked_at) return tx('usage_checked_at', 'Checked {time}', { time: fixedDateTime(profile.checked_at) });
   if (provider === 'codex' && profile.observed_at) return tx('usage_observed_at', 'Source record {time}', { time: fixedDateTime(profile.observed_at) });
   return retrievedText(profile.retrieved_at);
@@ -279,13 +309,14 @@ function claudeBody(provider: string, profile: UsageProfile): string {
   const hasUsage = hasWindows(usage);
   const busy = running.has(key) || profile.probe_state === 'running';
   const failure = failures.has(key) && !usage;
+  const freshness = profileFreshness(provider, profile);
   let body = authNotice(provider, profile);
   if (hasUsage && usage) {
     body += metersGroup([
       meter(tx('usage_window_5h', '5h'), usage.five_hour),
       meter(tx('usage_window_7d', '7d'), usage.seven_day),
-    ]);
-    body += profileRetrieved(provider, profile);
+    ], freshness);
+    body += profileRetrieved(provider, profile, freshness);
   } else if (usage) {
     body += noWindowsText();
     body += profileRetrieved(provider, profile);
@@ -310,10 +341,11 @@ function codexBody(provider: string, profile: UsageProfile): string {
     body += `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_unacquired', 'Not retrieved'))}</span>`;
   } else {
     const windows = sortUsageWindows([usage.primary, usage.secondary].filter((window): window is UsageWindow => !!window && remainingPercent(window) !== null));
-    body += windows.length === 0 ? noWindowsText() : metersGroup(windows.map((window) => meter(windowLabelText(windowLabel(windowMinutes(window))), window)));
+    const freshness = profileFreshness(provider, profile);
+    body += windows.length === 0 ? noWindowsText() : metersGroup(windows.map((window) => meter(windowLabelText(windowLabel(windowMinutes(window))), window)), freshness);
     const credits = creditsText(usage);
     if (credits) body += `<div class="usage-profile-facts">${credits}</div>`;
-    body += profileRetrieved(provider, profile);
+    body += profileRetrieved(provider, profile, freshness);
   }
   const busy = running.has(key);
   const label = tx(busy ? 'usage_probe_running' : failures.has(key) ? 'usage_probe_retry' : 'usage_inline_refresh', busy ? 'Retrieving' : failures.has(key) ? 'Retry' : 'Refresh usage');
@@ -326,9 +358,10 @@ function grokBody(provider: string, profile: UsageProfile): string {
   let body = authNotice(provider, profile);
   if (!usage) return body + `<span class="usage-not-acquired">${escapeHtml(tx('usage_profile_grok_unacquired', 'Launch Grok on this subscription to see numbers'))}</span>`;
   const end = usage.period_end ? fixedDateTime(usage.period_end) : '';
-  body += metersGroup([meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent, remaining_percent: usage.remaining_percent })]);
+  const freshness = profileFreshness(provider, profile);
+  body += metersGroup([meter(tx('usage_window_weekly', 'Weekly'), { used_percent: usage.used_percent, remaining_percent: usage.remaining_percent })], freshness);
   if (end) body += `<div class="usage-profile-meta">${escapeHtml(tx('usage_period_end', 'Billing period ends {time}', { time: end }))}</div>`;
-  body += profileRetrieved(provider, profile);
+  body += profileRetrieved(provider, profile, freshness);
   return body;
 }
 
@@ -402,20 +435,32 @@ function renderInlineUsage(): void {
   } else if (profile.auth_checking && !profile.claude && !profile.codex && !profile.grok) {
     message = tx('usage_auth_checking', 'Checking login status');
   }
-  if (profile && windows.length === 0 && !message) message = tx('usage_no_windows', 'No usage limits are currently available');
+  if (profile && windows.length === 0 && !message) {
+    // 値が無いまま状態を確認できないときは、本当の理由（ログイン状態）を出す。
+    message = profile.auth_status === 'status_unknown' && !profile.auth_checking
+      ? tx('usage_auth_unknown', 'Login status could not be checked')
+      : tx('usage_no_windows', 'No usage limits are currently available');
+  }
+  const freshness: UsageFreshness = profile && !message ? usageFreshness(profile.auth_status, windows.length > 0) : 'current';
+  const stale = freshness !== 'current';
   const identity = `<div class="inline-usage-identity"><strong title="${escapeHtml(providerLabel)}">${escapeHtml(providerLabel)}</strong><span title="${escapeHtml(profile?.name || target?.id || '')}">${escapeHtml(profile?.name || target?.id || '')}${profile ? ` · ${escapeHtml(profilePlan(provider, profile))}` : ''}</span></div>`;
   const center = message
     ? `<span class="inline-usage-message${inlineRefreshError ? ' inline-usage-message--error' : ''}" title="${escapeHtml(message)}">${escapeHtml(message)}</span>`
-    : `<div class="inline-usage-center">${windows.map(({ label, window }) => meter(label, window, true)).join('')}</div>`;
+    : `<div class="inline-usage-center${stale ? ' inline-usage-center--stale-auth' : ''}">${windows.map(({ label, window }) => meter(label, window, true)).join('')}</div>`;
   const credits = provider === 'codex' && profile?.codex ? creditsText(profile.codex) : '';
-  const retrieved = profile ? usageTimeText(provider, profile) : '';
-  const side = `<div class="inline-usage-side">${credits || '<span></span>'}<span class="usage-profile-meta" title="${escapeHtml(retrieved)}">${escapeHtml(retrieved)}</span></div>`;
+  const retrieved = profile ? usageTimeText(provider, profile, freshness) : '';
+  const side = `<div class="inline-usage-side">${credits || '<span></span>'}<span class="usage-profile-meta${stale ? ' usage-profile-meta--stale' : ''}" title="${escapeHtml(retrieved)}">${escapeHtml(retrieved)}</span></div>`;
+  // side は狭い幅で隠れるので、旧値の印は side の外に置いて残す。
+  const staleText = staleReason(freshness);
+  const staleBadge = stale
+    ? `<span class="inline-usage-stale-badge" role="status" aria-label="${escapeHtml(staleText)}" title="${escapeHtml(staleText)}">${escapeHtml(tx('usage_stale_badge', 'Old'))}</span>`
+    : '';
   const errorText = tx('usage_probe_failed', 'Could not retrieve usage');
   const errorBadge = inlineRefreshError && windows.length > 0
     ? `<span class="inline-usage-refresh-error" role="status" aria-label="${escapeHtml(errorText)}" title="${escapeHtml(errorText)}">!</span>`
     : '';
   const refreshLabel = tx('usage_inline_refresh', 'Refresh usage');
-  inlineRoot.innerHTML = `${identity}${center}${side}${errorBadge}<button class="inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
+  inlineRoot.innerHTML = `${identity}${center}${side}${staleBadge}${errorBadge}<button class="inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
   inlineRoot.querySelector<HTMLButtonElement>('.inline-usage-refresh')?.addEventListener('click', () => { void refreshInlineUsage(); });
 }
 

@@ -51,7 +51,7 @@ export async function checkApprovalOnStartup() {
   if (_approvalAlertChecked) return;
   _approvalAlertChecked = true;
   try {
-    const res = await fetch(`/api/approval/status?token=${token}`);
+    const res = await apiFetch('/api/approval/status');
     if (!res.ok) return;
     const data = await res.json();
     if (!data.enabled && !data.first_launch_shown) {
@@ -84,7 +84,7 @@ export function showApprovalToast() {
     yesBtn.disabled = true;
     yesBtn.textContent = t('approval_toast_enabling');
     try {
-      await fetch(`/api/approval/enable?token=${token}`, { method: 'POST' });
+      await apiFetch('/api/approval/enable', { method: 'POST' });
     } catch (_) {}
     el.remove();
     updateApprovalToggle(true);
@@ -96,7 +96,7 @@ export function showApprovalToast() {
   noBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     try {
-      await fetch(`/api/approval/dismiss?token=${token}`, { method: 'POST' });
+      await apiFetch('/api/approval/dismiss', { method: 'POST' });
     } catch (_) {}
     el.remove();
   });
@@ -117,7 +117,7 @@ export function updateApprovalToggle(enabled) {
 
 export async function loadApprovalSettings() {
   try {
-    const res = await fetch(`/api/approval/status?token=${token}`);
+    const res = await apiFetch('/api/approval/status');
     if (!res.ok) return;
     const data = await res.json();
     updateApprovalToggle(data.enabled);
@@ -137,13 +137,13 @@ export function updateTokenStatusbarToggle(enabled: boolean): void {
 // （enabled / segments / 他の prefs）を消してしまう。必ず現在値を GET → マージ → full PUT。
 async function saveTokenStatusbarPrefs(patch: { enabled?: boolean; segments?: Record<string, boolean> }): Promise<void> {
   try {
-    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    const res = await apiFetch('/api/user-prefs');
     const cur = res.ok ? await res.json() : {};
     const tsb = { ...(cur.token_statusbar || {}) };
     if (patch.enabled !== undefined) tsb.enabled = patch.enabled;
     if (patch.segments !== undefined) tsb.segments = { ...(tsb.segments || {}), ...patch.segments };
     const next = { ...cur, token_statusbar: tsb };
-    await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
+    await apiFetch('/api/user-prefs', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(next),
@@ -181,7 +181,7 @@ async function buildSegmentToggles(): Promise<void> {
 
   let segments: Record<string, boolean> = {};
   try {
-    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    const res = await apiFetch('/api/user-prefs');
     if (res.ok) {
       const data = await res.json();
       segments = (data?.token_statusbar?.segments as Record<string, boolean>) || {};
@@ -247,7 +247,7 @@ export function attachDoneSummaryNotifyToggle(): void {
   // 現在値をサーバから読んで反映
   (async () => {
     try {
-      const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+      const res = await apiFetch('/api/user-prefs');
       if (res.ok) {
         const data = await res.json();
         toggle.checked = !!(data?.done_summary_notify?.enabled);
@@ -260,10 +260,10 @@ export function attachDoneSummaryNotifyToggle(): void {
     // templates / session_order / cwd_history など他の全設定が消えるので、
     // saveTokenStatusbarPrefs と同じ read-modify-write にする。
     try {
-      const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+      const res = await apiFetch('/api/user-prefs');
       const cur = res.ok ? await res.json() : {};
       const next = { ...cur, done_summary_notify: { ...(cur.done_summary_notify || {}), enabled } };
-      await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`, {
+      await apiFetch('/api/user-prefs', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(next),
@@ -1733,7 +1733,7 @@ initSettingsInformationArchitecture();
   async function refreshWhisperStatus() {
     if (!whisperManagedPanel) return;
     try {
-      const res = await fetch(`/api/whisper/status?token=${encodeURIComponent(token || '')}`);
+      const res = await apiFetch('/api/whisper/status');
       if (!res.ok) return;
       renderWhisperStatus(await res.json());
     } catch (_) {}
@@ -1745,7 +1745,7 @@ initSettingsInformationArchitecture();
       init.headers = { 'Content-Type': 'application/json' };
       init.body = JSON.stringify(body);
     }
-    const res = await fetch(`/api/whisper/${action}?token=${encodeURIComponent(token || '')}`, init);
+    const res = await apiFetch(`/api/whisper/${action}`, init);
     let data = null;
     try { data = await res.json(); } catch (_) {}
     if (!res.ok) {
@@ -2060,7 +2060,7 @@ initSettingsInformationArchitecture();
       const tk = token;
       try {
         const buf = await f.arrayBuffer();
-        const putRes = await fetch(`/api/user-prefs/notify-sound-custom?token=${tk}`, {
+        const putRes = await apiFetch('/api/user-prefs/notify-sound-custom', {
           method: 'PUT',
           headers: { 'Content-Type': f.type || 'application/octet-stream' },
           body: buf,
@@ -2186,11 +2186,11 @@ initSettingsInformationArchitecture();
   async function patchServerPref(path, value) {
     const tk = token;
     try {
-      const getRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`);
+      const getRes = await apiFetch('/api/user-prefs');
       if (!getRes.ok) throw new Error(`GET ${getRes.status}`);
       const prefs = await getRes.json();
       _setNestedValue(prefs, path, value);
-      const putRes = await fetch(`/api/user-prefs?token=${encodeURIComponent(tk || '')}`, {
+      const putRes = await apiFetch('/api/user-prefs', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(prefs),
@@ -2241,7 +2241,7 @@ initSettingsInformationArchitecture();
     const tk = token;
     try {
       const buf = await file.arrayBuffer();
-      const res = await fetch(`/api/user-prefs/avatar?token=${tk}`, {
+      const res = await apiFetch('/api/user-prefs/avatar', {
         method: 'PUT',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
         body: buf,
@@ -2273,7 +2273,7 @@ initSettingsInformationArchitecture();
 // 失敗時は DEFAULT_USAGE_LINKS のハードコード値をそのまま使う。
 (async () => {
   try {
-    const res = await fetch(`/api/usage-link-defaults?token=${encodeURIComponent(token || '')}`);
+    const res = await apiFetch('/api/usage-link-defaults');
     if (!res.ok) return;
     const d = await res.json();
     for (const k of ['claude', 'codex', 'copilot', 'cursor-agent', 'ollama', 'lm-studio', 'opencode', 'grok', 'command-code']) {
@@ -2492,7 +2492,7 @@ window.approvalPatternsUI = (function () {
 
   async function loadActive() {
     try {
-      const profRes = await fetch(`/api/approval-patterns/profile?token=${token}`);
+      const profRes = await apiFetch('/api/approval-patterns/profile');
       if (profRes.ok) {
         const p = await profRes.json();
         activeProfiles = {
@@ -2512,7 +2512,7 @@ window.approvalPatternsUI = (function () {
 
   async function fetchProfileList(provider, profile) {
     try {
-      const res = await fetch(`approval-patterns/${encodeURIComponent(provider)}.${encodeURIComponent(profile)}.json?token=${encodeURIComponent(token || '')}`);
+      const res = await apiFetch(`approval-patterns/${encodeURIComponent(provider)}.${encodeURIComponent(profile)}.json`);
       if (!res.ok) return [];
       return await res.json();
     } catch (_) {
@@ -2574,7 +2574,7 @@ window.approvalPatternsUI = (function () {
 
   async function saveCustom(provider) {
     try {
-      const res = await fetch(`/api/approval-patterns/${encodeURIComponent(provider)}?token=${encodeURIComponent(token || '')}`, {
+      const res = await apiFetch(`/api/approval-patterns/${encodeURIComponent(provider)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cache[provider].custom),
@@ -2619,7 +2619,7 @@ window.approvalPatternsUI = (function () {
       return;
     }
     try {
-      const res = await fetch(`/api/approval-patterns/profile?token=${token}`, {
+      const res = await apiFetch('/api/approval-patterns/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider, profile }),
@@ -2638,7 +2638,7 @@ window.approvalPatternsUI = (function () {
     if (isReadonly()) return;
     const provider = currentProvider();
     try {
-      const res = await fetch(`/api/approval-patterns/copy-official?token=${token}`, {
+      const res = await apiFetch('/api/approval-patterns/copy-official', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider }),
@@ -2684,7 +2684,7 @@ export async function loadSlashCmdSources() {
   const commandCodeEl = document.getElementById('slash-src-command-code');
   if (!claudeEl || !codexEl || !copilotEl) return;
   try {
-    const resp = await fetch(`/api/slash-cmd-sources?token=${token}`);
+    const resp = await apiFetch('/api/slash-cmd-sources');
     if (!resp.ok) return;
     const data = await resp.json();
     claudeEl.value = data.claude || '';
@@ -2711,7 +2711,7 @@ export async function loadSlashCmdSources() {
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
-      const resp = await fetch(`/api/slash-cmd-sources?token=${token}`, {
+      const resp = await apiFetch('/api/slash-cmd-sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -3519,7 +3519,7 @@ window.addEventListener('files-tab-state-changed', () => {
 
   async function loadNotifyConfig() {
     try {
-      const res = await fetch(`/api/notify-config?token=${encodeURIComponent(token || '')}`);
+      const res = await apiFetch('/api/notify-config');
       if (!res.ok) return;
       const data = await res.json();
       backends = Array.isArray(data.backends) ? data.backends.map((b: any) => ({
@@ -3599,7 +3599,7 @@ window.addEventListener('files-tab-state-changed', () => {
         genBtn.textContent = t('settings_ntfy_generate_topic') || '自動生成';
         genBtn.addEventListener('click', async () => {
           try {
-            const res = await fetch(`/api/notify-generate-topic?token=${encodeURIComponent(token || '')}`, { method: 'POST' });
+            const res = await apiFetch('/api/notify-generate-topic', { method: 'POST' });
             if (!res.ok) return;
             const data = await res.json();
             backends[i].topic = data.topic || '';
@@ -3620,7 +3620,7 @@ window.addEventListener('files-tab-state-changed', () => {
       testBtn.addEventListener('click', async () => {
         testBtn.disabled = true;
         try {
-          const res = await fetch(`/api/notify-test?token=${encodeURIComponent(token || '')}`, {
+          const res = await apiFetch('/api/notify-test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ backend: backends[i] }),
@@ -3659,7 +3659,7 @@ window.addEventListener('files-tab-state-changed', () => {
       const events: string[] = [];
       if (eventApprovalEl?.checked) events.push('approval');
       if (eventDoneEl?.checked) events.push('done');
-      const res = await fetch(`/api/notify-config?token=${encodeURIComponent(token || '')}`, {
+      const res = await apiFetch('/api/notify-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ backends, events, include_body: !!includeBodyEl?.checked }),
@@ -3691,7 +3691,7 @@ window.addEventListener('files-tab-state-changed', () => {
 
   async function loadTerminalApp() {
     try {
-      const res = await fetch(`/api/terminal-app?token=${token}`);
+      const res = await apiFetch('/api/terminal-app');
       if (!res.ok) return;
       const cfg = await res.json();
       terminalAppEl.value = cfg.terminal_app || '';
@@ -3701,7 +3701,7 @@ window.addEventListener('files-tab-state-changed', () => {
 
   async function saveTerminalApp() {
     try {
-      const res = await fetch(`/api/terminal-app?token=${token}`, {
+      const res = await apiFetch('/api/terminal-app', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ terminal_app: terminalAppEl.value.trim() }),
@@ -3717,7 +3717,7 @@ window.addEventListener('files-tab-state-changed', () => {
     terminalBrowseBtn.addEventListener('click', async () => {
       terminalBrowseBtn.disabled = true;
       try {
-        const res = await fetch(`/api/pick-file?filter=exe&token=${token}`, { method: 'POST' });
+        const res = await apiFetch('/api/pick-file?filter=exe', { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           if (data.ok && data.path) terminalAppEl.value = data.path;
@@ -4016,7 +4016,7 @@ export function attachSummaryToggleListeners(): void {
 
   let current: NVIDIANIMSettingsStatus | null = null;
   let busy = false;
-  const endpoint = (path: string): string => `${path}?token=${encodeURIComponent(token || '')}`;
+  const endpoint = (path: string): string => path;
 
   function updateControls(): void {
     const envManaged = current?.api_key_source === 'env';
@@ -4033,7 +4033,7 @@ export function attachSummaryToggleListeners(): void {
 
   async function loadStatus(): Promise<void> {
     try {
-      const res = await fetch(endpoint('/api/nvidia-nim'));
+      const res = await apiFetch(endpoint('/api/nvidia-nim'));
       const data = await res.json().catch(() => ({})) as Partial<NVIDIANIMSettingsStatus>;
       if (!res.ok || typeof data.enabled !== 'boolean' || typeof data.api_key_configured !== 'boolean') {
         throw new Error('status unavailable');
@@ -4060,7 +4060,7 @@ export function attachSummaryToggleListeners(): void {
     result.hidden = true;
     updateControls();
     try {
-      const res = await fetch(endpoint('/api/nvidia-nim'), {
+      const res = await apiFetch(endpoint('/api/nvidia-nim'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: enabled.checked, api_key: apiKey.value }),
@@ -4090,7 +4090,7 @@ export function attachSummaryToggleListeners(): void {
     result.hidden = true;
     updateControls();
     try {
-      const res = await fetch(endpoint('/api/nvidia-nim/test'), { method: 'POST' });
+      const res = await apiFetch(endpoint('/api/nvidia-nim/test'), { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.ok === true) {
         showResult('settings_nim_test_ok');
@@ -4123,7 +4123,7 @@ export function attachSummaryToggleListeners(): void {
     busy = true;
     updateControls();
     try {
-      const res = await fetch(endpoint('/api/nvidia-nim/key'), { method: 'DELETE' });
+      const res = await apiFetch(endpoint('/api/nvidia-nim/key'), { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         showResult(data?.error === 'key_managed_by_environment' ? 'settings_nim_key_env_locked' : 'settings_nim_delete_failed');

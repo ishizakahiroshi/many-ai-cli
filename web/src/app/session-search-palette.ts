@@ -7,7 +7,7 @@
 // コマンド・検索結果のどちらも選べる。コマンドの定義・絞り込み・選択位置の計算は
 // command-palette-store.ts（DOM なし）に切り出している。
 import { t } from '../i18n.js';
-import { token, showToast } from './util.js';
+import { apiFetch, showToast } from './util.js';
 import { activeSessionId, orderSessions, sessions } from './state.js';
 import { activateSession } from './session-list.js';
 import { scrollTerminalToSearchMatch } from './terminal.js';
@@ -441,8 +441,8 @@ async function search() {
   const currentRequest = ++requestID;
   setStatus(t('session_search_status_searching'));
   try {
-    const params = new URLSearchParams({ token, q: query, limit: String(RESULT_LIMIT) });
-    const response = await fetch(`/api/session-search?${params.toString()}`);
+    const params = new URLSearchParams({ q: query, limit: String(RESULT_LIMIT) });
+    const response = await apiFetch(`/api/session-search?${params.toString()}`);
     if (!response.ok) throw new Error(`session-search ${response.status}`);
     const data = await response.json();
     if (currentRequest !== requestID) return;

@@ -3,7 +3,7 @@ import type { CrossSessionMessage, RelayEvent, RelayStatus } from '../types/prot
 import { dirnameForPath } from './path-links.js';
 import { FilesTabManager } from './files-view.js';
 import { sessions } from './state.js';
-import { escapeHtml, showToast, token } from './util.js';
+import { apiFetch, escapeHtml, showToast } from './util.js';
 import { openRelayDialog } from './relay-dialog.js';
 
 // C1 (P-18): conductor とその子の現在状態を、既存の session snapshot だけで
@@ -133,7 +133,7 @@ async function loadBoardPreview(sessionID: number, filePath: string): Promise<vo
   if (key !== boardPreviewTarget) return;
   const requestID = ++boardPreviewRequestID;
   try {
-    const response = await fetch(`/api/files-content?path=${encodeURIComponent(filePath)}&session=${encodeURIComponent(String(sessionID))}&token=${encodeURIComponent(token || '')}`);
+    const response = await apiFetch(`/api/files-content?path=${encodeURIComponent(filePath)}&session=${encodeURIComponent(String(sessionID))}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(String(data.detail || data.error || `HTTP ${response.status}`));
     if (requestID !== boardPreviewRequestID || key !== boardPreviewTarget) return;
@@ -376,7 +376,7 @@ async function sendRelayAction(conductor: any, relay: RelayStatus, action: strin
   const sessionID = Number(conductor.id);
   const relayID = String(relay.orchestration_id || '');
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(String(sessionID))}/${action}?token=${encodeURIComponent(token || '')}`, {
+    const response = await apiFetch(`/api/sessions/${encodeURIComponent(String(sessionID))}/${action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orchestration_id: relayID }),
@@ -626,7 +626,7 @@ async function loadRelayTimeline(conductorID: number, relays: RelayStatus[]): Pr
   relayTimelineFetchKey = key;
   const requestID = ++relayTimelineRequestID;
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(String(conductorID))}/relay?token=${encodeURIComponent(token || '')}`);
+    const response = await apiFetch(`/api/sessions/${encodeURIComponent(String(conductorID))}/relay`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(String(data.detail || data.error || `HTTP ${response.status}`));
     const next = new Map<string, RelayEvent[]>();

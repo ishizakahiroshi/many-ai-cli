@@ -1583,7 +1583,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
   async function fetchSubdirs(parent: string): Promise<string[]> {
     if (subdirsCache.has(parent)) return subdirsCache.get(parent)!;
     try {
-      const res = await fetch(`/api/list-subdirs?token=${token}`, {
+      const res = await apiFetch('/api/list-subdirs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: parent }),
@@ -2007,7 +2007,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
     const unknown = [...new Set(paths)].filter(p => p && !pathExistsCache.has(p));
     if (unknown.length === 0) return;
     try {
-      const res = await fetch(`/api/path-exists?token=${token}`, {
+      const res = await apiFetch('/api/path-exists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paths: unknown }),
@@ -2323,7 +2323,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       setStatus(t('spawn_web_dir_loading') || 'Loading…');
       listEl.innerHTML = '';
       try {
-        const res = await fetch(`/api/list-subdirs?token=${token}`, {
+        const res = await apiFetch('/api/list-subdirs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ path: target }),
@@ -2446,7 +2446,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
           await openWebDirBrowser();
           return;
         }
-        const res = await fetch(`/api/pick-directory?token=${token}`, { method: 'POST' });
+        const res = await apiFetch('/api/pick-directory', { method: 'POST' });
         if (res.ok) {
           const data = await res.json();
           if (data.ok && data.path) {
@@ -2827,7 +2827,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
       let utf8Session = false;
       if (route === 'ollama') {
         try {
-          const encRes = await fetch(`/api/encoding-check?token=${token}`);
+          const encRes = await apiFetch('/api/encoding-check');
           if (encRes.ok) {
             const encData = await encRes.json();
             if (encData.is_windows && encData.is_powershell && !encData.is_utf8) {
@@ -2967,7 +2967,7 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
         const { roles, count } = collectOrchestrationRoles();
         if (count > 0) bodyObj.orchestration_roles = roles;
       }
-      const res = await fetch(`/api/spawn?token=${token}`, {
+      const res = await apiFetch('/api/spawn', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyObj),

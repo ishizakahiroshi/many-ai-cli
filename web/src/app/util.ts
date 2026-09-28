@@ -61,8 +61,13 @@ try { sessionStorage.removeItem('many-ai-cli-reauth'); } catch (_) { /* private 
 // Bearer 経由や旧来の `?token=` fetch も requestToken 側で並列に受理される
 // ので、本ヘルパを使わない fetch は現状維持で回帰しない。
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
   const merged: RequestInit = {
     ...init,
+    headers,
     credentials: init.credentials ?? 'same-origin',
   };
   return fetch(path, merged);
@@ -219,4 +224,4 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 // --- ESM window-interop publish (generated; preserves dynamic window.* lookups) ---
-window.showToast = showToast;
+if (typeof window !== 'undefined') window.showToast = showToast;

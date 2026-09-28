@@ -10,7 +10,7 @@
 
 import type { Message } from '../types/proto.js';
 import { activeSessionId, sessions, chatHistory } from './state.js';
-import { token, escapeHtml } from './util.js';
+import { apiFetch, token, escapeHtml } from './util.js';
 import { t } from '../i18n.js';
 import { providerIconHtml, providerDisplayName, safeClassToken, stateLabel, activateSession, renderSessionList } from './session-list.js';
 import { wsConnectionState } from './ws-client.js';
@@ -1347,7 +1347,7 @@ function stopTick(): void {
 export async function initTokenStatusbar(): Promise<void> {
   startTick();
   try {
-    const res = await fetch(`/api/user-prefs?token=${encodeURIComponent(token || '')}`);
+    const res = await apiFetch('/api/user-prefs');
     if (!res.ok) return;
     const data = await res.json();
     const tsb = data?.token_statusbar;

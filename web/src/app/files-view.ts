@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { apiFetch, escapeHtml, showToast, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
 import { findUrlCandidates } from './url-detect.js';
@@ -1044,8 +1044,8 @@ export const FilesTabManager = (function () {
         // → tree が `..` 1 個だけで中身を確認できないため。
         try {
           const sessionQs = `&session=${encodeURIComponent(sessionId)}`;
-          const probeUrl = `/api/files-list?root=${encodeURIComponent(entry.root)}&token=${encodeURIComponent(token)}${sessionQs}`;
-          const probeRes = await fetch(probeUrl);
+          const probeUrl = `/api/files-list?root=${encodeURIComponent(entry.root)}${sessionQs}`;
+          const probeRes = await apiFetch(probeUrl);
           if (!probeRes.ok) {
             console.info('[FilesTabManager] skip restoring tab (not accessible by current Hub):', entry.root, probeRes.status);
             continue;
@@ -1716,9 +1716,9 @@ export const FilesTreeView = (function () {
     // C2: 多ファイル移動の共通ロジック。失敗メッセージ配列を返す（空なら全件成功）。
     async function moveFiles(srcs, dstDir) {
       const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
-      const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
-      const url = `/api/files-move?token=${encodeURIComponent(token)}${sessionQs}`;
-      const res = await fetch(url, {
+      const sessionQs = liveSid ? `?session=${encodeURIComponent(liveSid)}` : '';
+      const url = `/api/files-move${sessionQs}`;
+      const res = await apiFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ srcs, dstDir }),
@@ -1836,8 +1836,8 @@ export const FilesTreeView = (function () {
       try {
         const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
         const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
-        const url = `/api/files-list?root=${encodeURIComponent(filesRoot)}&token=${encodeURIComponent(token)}${sessionQs}`;
-        const res = await fetch(url);
+        const url = `/api/files-list?root=${encodeURIComponent(filesRoot)}${sessionQs}`;
+        const res = await apiFetch(url);
         if (!res.ok) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml('HTTP ' + res.status)} — ${escapeHtml(filesRoot)}</div>`; return; }
         const data = await res.json();
         if (!data.exists) { treeArea.innerHTML = `<div class="files-tree-error">${escapeHtml(t('files_tree_not_found') || 'Directory not found')} — ${escapeHtml(filesRoot)}</div>`; return; }
@@ -1990,9 +1990,9 @@ export const FilesTreeView = (function () {
       if (!trimmed) return;
       try {
         const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
-        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
-        const url = `/api/files-create?token=${encodeURIComponent(token)}${sessionQs}`;
-        const res = await fetch(url, {
+        const sessionQs = liveSid ? `?session=${encodeURIComponent(liveSid)}` : '';
+        const url = `/api/files-create${sessionQs}`;
+        const res = await apiFetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dir: filesRoot, name: trimmed }),
@@ -2029,9 +2029,9 @@ export const FilesTreeView = (function () {
       if (!trimmed) return;
       try {
         const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
-        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
-        const url = `/api/files-mkdir?token=${encodeURIComponent(token)}${sessionQs}`;
-        const res = await fetch(url, {
+        const sessionQs = liveSid ? `?session=${encodeURIComponent(liveSid)}` : '';
+        const url = `/api/files-mkdir${sessionQs}`;
+        const res = await apiFetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dir: filesRoot, name: trimmed }),
@@ -2806,9 +2806,9 @@ export const FilesPreview = (function () {
 
       try {
         const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
-        const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
-        const url = `/api/files-save?token=${encodeURIComponent(token)}${sessionQs}`;
-        const res = await fetch(url, {
+        const sessionQs = liveSid ? `?session=${encodeURIComponent(liveSid)}` : '';
+        const url = `/api/files-save${sessionQs}`;
+        const res = await apiFetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -2920,8 +2920,8 @@ export const FilesPreview = (function () {
       try {
         const liveSid = resolveLiveSessionId(sessionId, filesRoot, gitRoot);
         const sessionQs = liveSid ? `&session=${encodeURIComponent(liveSid)}` : '';
-        const url = `/api/files-content?path=${encodeURIComponent(absPath)}&token=${encodeURIComponent(token)}${sessionQs}`;
-        const res = await fetch(url);
+        const url = `/api/files-content?path=${encodeURIComponent(absPath)}${sessionQs}`;
+        const res = await apiFetch(url);
         if (!res.ok) {
           let detail = '';
           try { const ed = await res.json(); detail = (ed && (ed.detail || ed.error)) || ''; } catch (_) {}
