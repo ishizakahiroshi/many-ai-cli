@@ -122,6 +122,7 @@ func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath 
 		case "user":
 			// 最後が user なら、それより前に立っていた質問はもう止まっていない。
 			s.closeApprovalMarkerOnTranscriptUserMessage(id, last.Text, detectedAt)
+			s.markTranscriptUserTurnBoundary(id)
 		}
 		return
 	}
@@ -130,6 +131,7 @@ func (s *Server) scanTranscriptApprovalMarkers(id int, provider, transcriptPath 
 		case "user":
 			if message.Text != "" {
 				s.closeApprovalMarkerOnTranscriptUserMessage(id, message.Text, detectedAt)
+				s.markTranscriptUserTurnBoundary(id)
 			}
 		case "assistant":
 			// 本文の無いツール・思考のメッセージも見る。文章の質問の後にそれが来たら、
@@ -189,6 +191,38 @@ func (s *Server) closeApprovalMarkerOnTranscriptUserMessage(id int, answer strin
 	}
 	s.finishApprovalRecordClosures(closure)
 	return true
+}
+
+// markTranscriptUserTurnBoundary は、トランスクリプトに現れた user メッセージを
+// live prompt の境界として sourceEpoch を進める。
+//
+// なぜ要るか（2026-09-28・bugfix_transcript-marker-same-question-suppressed_2026-09-28.md）:
+// 承認の同一性は質問文と選択肢の番号だけで決まるので、エージェントが前置きだけ書き換えて
+// 同じ質問を出し直すと、前の質問と同じ candidateKey になる。それを新しい質問として開けるのは
+// 世代が進んだときだけだが、これまで世代を進める境界は入力欄の確定ターン（input_gate.go）だけで、
+// しかも承認が開いている間の発話は「回答の approval_consumed を待つ」ために境界にしていなかった。
+// 端末へ直接答えた・質問と関係ない発話をした・パネルで答えた、のどれでも、回答済みが同じ世代に
+// 残ったまま次の質問を迎え、出し直した質問が無音で「回答済み」として捨てられていた。
+//
+// トランスクリプトが供給元のセッションでは、user メッセージより後の assistant メッセージは
+// 必ず新しい観測である（画面の再描画のような読み直しが無い）。だからここで世代を進める。
+// 端末ミラーの持ち越し（carryConsumedVTQuestionLocked）は通さない。持ち越しは画面に残った
+// 回答済みの質問が読み直されて開き直るのを止めるためのもので、トランスクリプトの質問は
+// 画面から読み直されないから要らないうえ、通すと画面に残った回答済みの質問のせいで
+// 出し直した質問がまた捨てられる。
+//
+// ネイティブの承認が開いている間は進めない（input_gate.go と同じ条件）。ネイティブの承認は
+// 端末の画面から読み直されるので、世代が動くと同じ承認が新しい候補として開き直る。
+// 遅れて届いた approval_consumed は回答した記録の世代で記録されるので
+// （markApprovalConsumedAtEpochLocked）、ここで世代が先へ進んでいても新しい質問は抑えない。
+func (s *Server) markTranscriptUserTurnBoundary(id int) {
+	s.sessionsMu.Lock()
+	defer s.sessionsMu.Unlock()
+	ses := s.sessions[id]
+	if ses == nil || approvalCandidateActiveLocked(ses) {
+		return
+	}
+	advanceApprovalSourceEpochLocked(ses)
 }
 
 // approvalMarkerCloseBytes は PTY チャンクを走査するための終了マーカー。

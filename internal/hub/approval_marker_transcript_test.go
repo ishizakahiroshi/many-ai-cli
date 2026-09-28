@@ -498,6 +498,112 @@ func TestTranscriptBatchAnswerThenNewQuestionKeepsNewQuestion(t *testing.T) {
 	}
 }
 
+// エージェントが同じ質問（質問文も選択肢の番号も同じ）を、ユーザーの発話の後で出し直したら、
+// それは新しい質問として開く。トランスクリプトの user メッセージは、その前の質問への
+// 回答（あるいは質問を無視した発話）であり、それより後の assistant メッセージは新しい観測である
+// （bugfix_transcript-marker-same-question-suppressed_2026-09-28.md）。
+func TestTranscriptSameQuestionAfterUserMessageReopens(t *testing.T) {
+	first := transcriptAssistantText()
+	second := strings.Replace(first, "前置きの 1 行目。", "前置きを書き直した 1 行目。", 1)
+	if first == second {
+		t.Fatal("前提が違う: 2 本目の前置きが置換できていない")
+	}
+	if approvalMarkerCandidateIdentity("claude", approvalMarkerFromTranscriptText(first).Block).key !=
+		approvalMarkerCandidateIdentity("claude", approvalMarkerFromTranscriptText(second).Block).key {
+		t.Fatal("前提が違う: 2 本の質問が同じ質問として扱われていない")
+	}
+
+	t.Run("端末や入力欄から質問と関係ない発話をした後", func(t *testing.T) {
+		s := newTestServer()
+		ses := registerTestSession(s, 1, "claude")
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "assistant", Kind: "text", Text: first},
+		}, false, time.Now())
+		if markerRecordKey(ses) == "" {
+			t.Fatal("前提が違う: 1 本目の質問が立っていない")
+		}
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "user", Kind: "text", Text: "先に手順を確認して"},
+			{Role: "assistant", Kind: "text", Text: second},
+		}, false, time.Now())
+		if markerRecordSig(ses) != approvalMarkerFromTranscriptText(second).Sig {
+			t.Fatalf("出し直した質問が立っていない: sig=%q", markerRecordSig(ses))
+		}
+	})
+
+	t.Run("ブラウザのパネルで答えた後", func(t *testing.T) {
+		s := newTestServer()
+		ses := registerTestSession(s, 1, "claude")
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "assistant", Kind: "text", Text: first},
+		}, false, time.Now())
+		key, epoch := markerRecordKey(ses), markerRecordEpoch(ses)
+		s.markNativeApprovalConsumed(proto.Message{
+			Type: "approval_consumed", SessionID: 1,
+			ApprovalCandidateKey: key, ApprovalSourceEpoch: epoch,
+			ApprovalSource: "hub_marker", SentText: "3",
+		})
+		if markerRecordKey(ses) != "" {
+			t.Fatal("前提が違う: 回答後も候補が残っている")
+		}
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "user", Kind: "text", Text: "3"},
+			{Role: "assistant", Kind: "text", Text: second},
+		}, false, time.Now())
+		if markerRecordSig(ses) != approvalMarkerFromTranscriptText(second).Sig {
+			t.Fatalf("出し直した質問が立っていない: sig=%q", markerRecordSig(ses))
+		}
+	})
+
+	t.Run("回答済みの質問が端末にまだ映っているとき", func(t *testing.T) {
+		s := newTestServer()
+		ses := registerTestSession(s, 1, "claude")
+		ses.agentChatPath = "transcript.jsonl"
+		ses.vt = newVTBuffer(80, 40)
+		ses.vt.Write([]byte(strings.ReplaceAll(first, "\n", "\r\n")))
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "assistant", Kind: "text", Text: first},
+		}, false, time.Now())
+		key, epoch := markerRecordKey(ses), markerRecordEpoch(ses)
+		s.markNativeApprovalConsumed(proto.Message{
+			Type: "approval_consumed", SessionID: 1,
+			ApprovalCandidateKey: key, ApprovalSourceEpoch: epoch,
+			ApprovalSource: "hub_marker", SentText: "1",
+		})
+		// 入力欄から次の発話を送った（確定したユーザーターン）。
+		s.sessionsMu.Lock()
+		markApprovalUserTurnBoundaryLocked(ses)
+		s.sessionsMu.Unlock()
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "user", Kind: "text", Text: "1"},
+			{Role: "assistant", Kind: "text", Text: second},
+		}, false, time.Now())
+		if markerRecordSig(ses) != approvalMarkerFromTranscriptText(second).Sig {
+			t.Fatalf("出し直した質問が立っていない: sig=%q", markerRecordSig(ses))
+		}
+	})
+
+	t.Run("同じメッセージを読み直しても二度は開かない", func(t *testing.T) {
+		s := newTestServer()
+		ses := registerTestSession(s, 1, "claude")
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "assistant", Kind: "text", Text: first},
+			{Role: "user", Kind: "text", Text: "1"},
+		}, false, time.Now())
+		if markerRecordKey(ses) != "" {
+			t.Fatal("前提が違う: 回答後も候補が残っている")
+		}
+		// reattach の prime は最後のメッセージしか見ない。最後が user なら何も開かない。
+		s.scanTranscriptApprovalMarkers(1, "claude", "transcript.jsonl", []agentChatMessage{
+			{Role: "assistant", Kind: "text", Text: first},
+			{Role: "user", Kind: "text", Text: "1"},
+		}, true, time.Now())
+		if markerRecordKey(ses) != "" {
+			t.Fatal("答えた質問が prime で開き直った")
+		}
+	})
+}
+
 // prime（reattach）で最後のメッセージが user なら、その前に立っていた質問は下ろす。
 // 保留中の候補が無いときは何も配信しない。
 func TestTranscriptPrimeWithTrailingUserMessageClosesMarker(t *testing.T) {
