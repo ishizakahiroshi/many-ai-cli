@@ -543,6 +543,8 @@
   "usage_info_label": "Thông tin thêm",
   "usage_unavailable_tooltip": "Không thể lấy usage bằng lệnh CLI. Hãy mở trang web để tự kiểm tra.",
   "usage_profile_unacquired": "Chưa lấy",
+  "usage_inline_no_profile": "Phiên này chưa chọn hồ sơ gói đăng ký",
+  "usage_inline_refresh": "Làm mới mức sử dụng của gói này",
   "usage_profile_grok_unacquired": "Chạy Grok trên gói này thì số liệu sẽ hiện",
   "usage_window_5h": "5 giờ",
   "usage_window_7d": "7 ngày",

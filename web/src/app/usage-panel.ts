@@ -1,5 +1,6 @@
-// Usage dropdown: provider links remain static, while profile usage is fetched
-// from the Hub only when the menu is opened. No provider auth file is read here.
+// Usage dropdown and active-session inline row share the Hub usage snapshot.
+// The dropdown fetches on open; the inline row fetches on session/profile change.
+// No provider auth file is read in the browser.
 import { t } from '../i18n.js';
 import { apiFetch, escapeHtml } from './util.js';
 import {
@@ -14,6 +15,7 @@ import {
 } from './usage-limit.js';
 import { hasProviderCapability } from './provider-store.js';
 import { PROVIDER_ORDER_CHANGED_EVENT, sortByProviderOrder } from './provider-order.js';
+import { activeSessionId, sessions } from './state.js';
 
 interface UsageWindow {
   used_percent?: number;
@@ -81,7 +83,11 @@ const running = new Set<string>();
 const failures = new Map<string, string>();
 let panelRoot: HTMLElement | null = null;
 let usageData: UsageResponse | null = null;
-let refreshInFlight: Promise<void> | null = null;
+let refreshInFlight: Promise<boolean> | null = null;
+let inlineRoot: HTMLElement | null = null;
+let inlineRefreshBusyKey = '';
+let inlineRefreshError = false;
+let lastInlineTarget = '';
 let authPollTimer: number | null = null;
 let authPollDeadline = 0;
 
@@ -323,6 +329,126 @@ function profilePlan(provider: string, profile: UsageProfile): string {
   return observed || configured;
 }
 
+function activeUsageTarget(): { provider: string; id: string } | null {
+  const session = activeSessionId === null ? null : sessions.get(activeSessionId);
+  const provider = String(session?.provider || '');
+  const id = String(session?.subscription_profile_id || '');
+  return provider && id ? { provider, id } : null;
+}
+
+// Both the dropdown and the compact row use meter(), creditsText(),
+// profilePlan(), and retrievedText(). Only the compact layout selects one
+// window (the weekly window when available) to fit the existing bar height.
+function compactWindow(provider: string, profile: UsageProfile): { label: string; window: UsageWindow } | null {
+  const valid = (window: UsageWindow | undefined): window is UsageWindow => remainingPercent(window) !== null;
+  if (provider === 'claude') {
+    const usage = profile.claude;
+    if (valid(usage?.seven_day)) return { label: tx('usage_window_7d', '7d'), window: usage.seven_day };
+    if (valid(usage?.five_hour)) return { label: tx('usage_window_5h', '5h'), window: usage.five_hour };
+  }
+  if (provider === 'codex') {
+    const windows = [profile.codex?.primary, profile.codex?.secondary].filter(valid);
+    const window = windows.find((item) => windowMinutes(item) === 10080) || sortUsageWindows(windows).at(-1);
+    if (window) return { label: windowLabelText(windowLabel(windowMinutes(window))), window };
+  }
+  if (provider === 'grok' && profile.grok && Number.isFinite(profile.grok.used_percent)) {
+    return { label: tx('usage_window_weekly', 'Weekly'), window: profile.grok };
+  }
+  return null;
+}
+
+function renderInlineUsage(): void {
+  if (!inlineRoot) return;
+  const target = activeUsageTarget();
+  const session = activeSessionId === null ? null : sessions.get(activeSessionId);
+  const provider = target?.provider || String(session?.provider || '');
+  const busy = !!target && inlineRefreshBusyKey === `${target.provider}:${target.id}`;
+  const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Usage';
+  const providerData = usageData?.providers.find((item) => item.provider === provider);
+  const profile = target && providerData?.profiles.find((item) => item.id === target.id);
+  const selectedWindow = profile ? compactWindow(provider, profile) : null;
+  let message = '';
+  if (!session) message = tx('agent_log_no_session', 'Select a session.');
+  else if (!target) message = tx('usage_inline_no_profile', 'No subscription profile selected');
+  else if (!hasProviderCapability(provider, 'usage')) message = tx('usage_no_windows', 'No usage limits are currently available');
+  else if (inlineRefreshError && !selectedWindow) message = tx('usage_probe_failed', 'Could not retrieve usage');
+  else if (!usageData) message = busy ? tx('usage_loading', 'Loading usage') : tx('usage_profile_unacquired', 'Not retrieved');
+  else if (!profile) message = tx('usage_profile_unacquired', 'Not retrieved');
+  else if (profile.auth_status === 'login_required' && !profile.claude && !profile.codex && !profile.grok) {
+    message = tx('usage_auth_required', 'Re-authentication required');
+  } else if (profile.auth_checking && !profile.claude && !profile.codex && !profile.grok) {
+    message = tx('usage_auth_checking', 'Checking login status');
+  }
+  if (profile && !selectedWindow && !message) message = tx('usage_no_windows', 'No usage limits are currently available');
+  const identity = `<div class="inline-usage-identity"><strong title="${escapeHtml(providerLabel)}">${escapeHtml(providerLabel)}</strong><span title="${escapeHtml(profile?.name || target?.id || '')}">${escapeHtml(profile?.name || target?.id || '')}${profile ? ` · ${escapeHtml(profilePlan(provider, profile))}` : ''}</span></div>`;
+  const center = message
+    ? `<span class="inline-usage-message${inlineRefreshError ? ' inline-usage-message--error' : ''}" title="${escapeHtml(message)}">${escapeHtml(message)}</span>`
+    : `<div class="inline-usage-center">${meter(selectedWindow!.label, selectedWindow!.window)}</div>`;
+  const credits = provider === 'codex' && profile?.codex ? creditsText(profile.codex) : '';
+  const retrieved = profile ? retrievedText(profile.retrieved_at) : '';
+  const side = `<div class="inline-usage-side">${credits || '<span></span>'}<span class="usage-profile-meta" title="${escapeHtml(retrieved)}">${escapeHtml(retrieved)}</span></div>`;
+  const errorText = tx('usage_probe_failed', 'Could not retrieve usage');
+  const errorBadge = inlineRefreshError && selectedWindow
+    ? `<span class="inline-usage-refresh-error" role="status" aria-label="${escapeHtml(errorText)}" title="${escapeHtml(errorText)}">!</span>`
+    : '';
+  const refreshLabel = tx('usage_inline_refresh', 'Refresh usage');
+  inlineRoot.innerHTML = `${identity}${center}${side}${errorBadge}<button class="inline-usage-refresh" type="button" aria-label="${escapeHtml(refreshLabel)}" title="${escapeHtml(refreshLabel)}"${!target || !hasProviderCapability(provider, 'usage') || busy ? ' disabled' : ''}>${busy ? '…' : '↻'}</button>`;
+  inlineRoot.querySelector<HTMLButtonElement>('.inline-usage-refresh')?.addEventListener('click', () => { void refreshInlineUsage(); });
+}
+
+async function refreshInlineUsage(): Promise<void> {
+  const target = activeUsageTarget();
+  if (!target) return;
+  const key = `${target.provider}:${target.id}`;
+  if (inlineRefreshBusyKey === key) return;
+  inlineRefreshBusyKey = key;
+  inlineRefreshError = false;
+  renderInlineUsage();
+  let success: boolean | null;
+  // The initial row may be clicked before its first snapshot has arrived.
+  let profile = findProfile(key);
+  let fetchedInitially = false;
+  if (!profile) {
+    fetchedInitially = await refreshUsagePanel();
+    profile = findProfile(key);
+  }
+  if (!profile) {
+    success = false;
+  } else if (target.provider === 'claude' && profile.probe_available) {
+    success = await startProbe(key);
+  } else {
+    // Some Claude profiles cannot run the probe. The GET still rereads the
+    // Hub's available Usage snapshot and does not falsely report probe failure.
+    success = fetchedInitially || await refreshUsagePanel();
+  }
+  if (inlineRefreshBusyKey === key) inlineRefreshBusyKey = '';
+  // The selection may have changed while the request or Claude confirmation
+  // was open. Never carry its error state into another profile.
+  if (activeUsageTarget()?.provider === target.provider && activeUsageTarget()?.id === target.id) {
+    inlineRefreshError = success === false;
+  }
+  renderInlineUsage();
+}
+
+function onInlineTargetChanged(): void {
+  const target = activeUsageTarget();
+  const key = target ? `${target.provider}:${target.id}` : '';
+  if (key !== lastInlineTarget) {
+    lastInlineTarget = key;
+    inlineRefreshError = false;
+    renderInlineUsage();
+    if (key && hasProviderCapability(target!.provider, 'usage')) {
+      void refreshUsagePanel().then((success) => {
+        if (lastInlineTarget !== key) return;
+        inlineRefreshError = !success;
+        renderInlineUsage();
+      });
+    }
+  } else {
+    renderInlineUsage();
+  }
+}
+
 // renderSkeleton draws placeholder rows for the first open, when there is no
 // previous answer to leave on screen. Without it the dropdown shows only the
 // static links until the fetch lands, which reads as "nothing is happening".
@@ -505,11 +631,11 @@ async function confirmProbe(profile: UsageProfile): Promise<boolean> {
   });
 }
 
-async function startProbe(key: string): Promise<void> {
-  if (!key || running.has(key)) return;
+async function startProbe(key: string): Promise<boolean | null> {
+  if (!key || running.has(key)) return null;
   const profile = findProfile(key);
-  if (!profile || !profile.probe_available) return;
-  if (!await confirmProbe(profile)) return;
+  if (!profile || !profile.probe_available) return false;
+  if (!await confirmProbe(profile)) return null;
   running.add(key);
   failures.delete(key);
   if (usageData) renderProfiles(usageData);
@@ -522,7 +648,7 @@ async function startProbe(key: string): Promise<void> {
     });
     if (!response.ok) throw new Error(`probe failed: ${response.status}`);
     running.delete(key);
-    await refreshUsagePanel();
+    return await refreshUsagePanel();
   } catch (_) {
     running.delete(key);
     await refreshUsagePanel();
@@ -531,6 +657,7 @@ async function startProbe(key: string): Promise<void> {
       failures.set(key, tx('usage_probe_failed', 'Could not retrieve usage'));
       if (usageData) renderProfiles(usageData);
     }
+    return false;
   }
 }
 
@@ -610,6 +737,9 @@ function applyProviderOrderToPanel(): void {
 export function initUsagePanel(dropdown: HTMLElement): void {
   if (panelRoot === dropdown) return;
   panelRoot = dropdown;
+  inlineRoot = document.getElementById('session-inline-usage');
+  document.addEventListener('session-usage-target-changed', onInlineTargetChanged);
+  onInlineTargetChanged();
   applyProviderOrderToPanel();
   document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, applyProviderOrderToPanel);
   bindUnavailableInfo();
@@ -622,12 +752,12 @@ export function initUsagePanel(dropdown: HTMLElement): void {
   });
 }
 
-export async function refreshUsagePanel(forceAuth = false): Promise<void> {
+export async function refreshUsagePanel(forceAuth = false): Promise<boolean> {
   return runRefresh(forceAuth, false);
 }
 
-async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<void> {
-  if (!panelRoot) return;
+async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<boolean> {
+  if (!panelRoot) return false;
   if (!fromPoll) {
     // A user-initiated open (or Retry) starts a fresh polling window.
     authPollDeadline = Date.now() + AUTH_POLL_WINDOW_MS;
@@ -648,7 +778,9 @@ async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<void> 
         }
       }
       renderProfiles(usageData);
+      renderInlineUsage();
       scheduleAuthPoll();
+      return true;
     } catch (_) {
       // Keep the static links and the last successful values visible. The UI
       // intentionally has no stale/expiry state; a failed refresh is not proof
@@ -656,6 +788,7 @@ async function runRefresh(forceAuth: boolean, fromPoll: boolean): Promise<void> 
       if (usageData) renderProfiles(usageData);
       // A failed first load must not leave the skeleton pretending to load.
       else clearProfileLists();
+      return false;
     } finally {
       refreshInFlight = null;
     }

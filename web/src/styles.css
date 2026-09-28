@@ -2030,12 +2030,30 @@ header {
 /* 画像転送パネル */
 #attach-panel {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 12px;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-width: 0;
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
 }
+#attach-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 39px;
+  min-width: 0;
+  padding: 3px 12px;
+}
+#attach-tray {
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  height: 52px;
+  min-width: 0;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--line);
+}
+#attach-panel.has-attachments #attach-tray { display: flex; }
 
 #attach-drop-zone {
   display: flex;
@@ -2051,13 +2069,15 @@ header {
   transition: border-color 0.15s, background 0.15s;
   user-select: none;
   flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 #attach-drop-zone:hover { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
 #attach-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
 .attach-sub { font-size: 0.7rem; color: var(--line-soft); }
 #attach-drop-zone .attach-icon { display: none; }
 
-#attach-thumbnails { display: flex; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; flex: 1; }
+#attach-thumbnails { display: flex; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; flex: 1; min-width: 0; }
 .attach-thumb-wrapper { position: relative; flex-shrink: 0; }
 .attach-thumb {
   width: 40px;
@@ -2132,8 +2152,71 @@ header {
 }
 #attach-clear-btn:hover { color: var(--danger); border-color: var(--danger-bg); background: var(--danger-bg); }
 
-#agent-log-btn {
+#session-inline-usage {
+  display: flex;
+  align-items: center;
+  flex: 0 1 440px;
+  width: 440px;
+  min-width: 0;
+  height: 33px;
   margin-left: auto;
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  color: var(--text);
+  font-size: 0.62rem;
+}
+.inline-usage-identity { flex: 0 0 76px; min-width: 0; margin-right: 5px; line-height: 1.2; }
+.inline-usage-identity strong,
+.inline-usage-identity span,
+.inline-usage-side span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inline-usage-identity span,
+.inline-usage-side .usage-profile-meta { color: var(--muted-2); }
+.inline-usage-center { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.inline-usage-center .usage-meter-group { min-width: 0; }
+.inline-usage-center .usage-meter-line { margin: 0; }
+.inline-usage-center .usage-meter-label { min-width: 27px; }
+.inline-usage-center .usage-meter { min-width: 20px; }
+.inline-usage-center .usage-meter-value { width: 52px; }
+.inline-usage-center .usage-meter-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.57rem; }
+.inline-usage-side { flex: 0 0 88px; min-width: 0; margin-left: 5px; line-height: 1.2; }
+.inline-usage-side .usage-profile-meta { margin: 2px 0 0; }
+.inline-usage-refresh {
+  flex: 0 0 23px;
+  height: 27px;
+  margin-left: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.inline-usage-refresh:hover { color: var(--text); background: var(--bg-2); }
+.inline-usage-refresh:focus-visible { outline: 2px solid var(--accent); }
+.inline-usage-refresh:disabled { opacity: 0.5; cursor: wait; }
+.inline-usage-refresh-error { flex: 0 0 auto; margin-left: 4px; color: var(--danger); font-weight: 700; cursor: help; }
+.inline-usage-message { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2); }
+.inline-usage-message--error { color: var(--danger); }
+@media (max-width: 880px) {
+  #attach-drop-zone { flex: 0 1 150px; min-width: 25px; }
+  #session-inline-usage { flex: 1 1 250px; width: auto; }
+  .inline-usage-side { display: none; }
+}
+@media (max-width: 570px) {
+  #attach-drop-zone { flex-basis: 25px; padding: 5px; }
+  #attach-drop-zone .attach-icon { display: inline; }
+  #attach-drop-zone .attach-hint-text,
+  #attach-drop-zone .attach-sub { display: none; }
+  .inline-usage-identity { flex-basis: 49px; }
+  .inline-usage-identity span { display: none; }
+  .inline-usage-center .usage-meter-value { width: 48px; }
+}
+
+#agent-log-btn {
+  margin-left: 0;
   background: transparent;
   color: var(--muted-2);
   border: 1px solid var(--line);

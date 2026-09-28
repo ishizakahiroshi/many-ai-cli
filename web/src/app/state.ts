@@ -336,6 +336,7 @@ export function set__elapsedTimerInterval(v: ReturnType<typeof setInterval> | nu
 export function set_actionBarFocusIdx(v: number) { actionBarFocusIdx = v; }
 export function set_activeSessionId(v: number | null) {
   activeSessionId = v;
+  document.dispatchEvent(new Event('session-usage-target-changed'));
 }
 export function set_batchFocusIdx(v: number) { batchFocusIdx = v; }
 export function set_multiSelectFocusIdx(v: number) { multiSelectFocusIdx = v; }

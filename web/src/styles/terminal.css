@@ -516,19 +516,21 @@
 
   body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
     min-height: 42px;
     margin: 0 12px 6px;
-    padding: 5px 8px;
     border: 1px solid var(--line-soft);
     border-radius: var(--radius-md);
     background: var(--bg, #111827);
   }
 
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-drop-zone,
-  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-camera-btn {
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-bar {
     display: none;
+  }
+
+  body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-tray {
+    width: 100%;
+    border-bottom: 0;
   }
 
   body.mobile-has-session:not(.mobile-home-view) #attach-panel.has-attachments #attach-thumbnails {

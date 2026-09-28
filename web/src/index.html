@@ -1911,21 +1911,26 @@
           </div>
         </div>
         <div id="attach-panel">
-          <div id="attach-drop-zone">
-            <span class="attach-icon" aria-hidden="true">📎</span>
-            <span class="attach-hint-text" data-i18n="attach_hint">Paste or D&amp;D file</span>
-            <span class="attach-sub" data-i18n="attach_sub">(Click to select file)</span>
+          <div id="attach-tray">
+            <div id="attach-thumbnails"></div>
+            <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
           </div>
-          <input type="file" id="attach-file-input" multiple style="display:none">
-          <!-- B2: スマホ専用カメラ撮影 input。accept="image/*" capture="environment" で
-               iOS Safari / Android Chrome ともにカメラ起動を優先させる。
-               PC では非表示（mobile-home.css の @media クエリで attach-camera-btn のみ表示する）。 -->
-          <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
-          <button id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
-          <div id="attach-thumbnails"></div>
-          <button id="attach-clear-btn" data-i18n-tooltip="attach_clear_tooltip" hidden>✕</button>
-          <button id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>
-          <button id="attach-copy-cwd-btn" type="button" data-i18n-tooltip="attach_copy_cwd_tooltip" aria-label="Copy working directory path">📁</button>
+          <div id="attach-bar">
+            <div id="attach-drop-zone">
+              <span class="attach-icon" aria-hidden="true">📎</span>
+              <span class="attach-hint-text" data-i18n="attach_hint">Paste or D&amp;D file</span>
+              <span class="attach-sub" data-i18n="attach_sub">(Click to select file)</span>
+            </div>
+            <input type="file" id="attach-file-input" multiple style="display:none">
+            <!-- B2: スマホ専用カメラ撮影 input。accept="image/*" capture="environment" で
+                 iOS Safari / Android Chrome ともにカメラ起動を優先させる。
+                 PC では非表示（mobile-home.css の @media クエリで attach-camera-btn のみ表示する）。 -->
+            <input type="file" id="attach-camera-input" accept="image/*" capture="environment" style="display:none">
+            <button id="attach-camera-btn" type="button" data-i18n-tooltip="attach_camera_tooltip" aria-label="Camera">📷</button>
+            <div id="session-inline-usage" role="status" aria-live="polite"></div>
+            <button id="agent-log-btn" type="button" data-i18n="agent_log_button" data-i18n-tooltip="agent_log_tooltip" aria-haspopup="dialog" aria-expanded="false">📄 Raw log</button>
+            <button id="attach-copy-cwd-btn" type="button" data-i18n-tooltip="attach_copy_cwd_tooltip" aria-label="Copy working directory path">📁</button>
+          </div>
         </div>
       </div>
     </div><!-- /#terminal-column -->

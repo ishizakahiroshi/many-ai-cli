@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e88af89bfbde50967c6038b8aebf931060d23ea4",
+    "commit": "a27bd135ace9e4e4cd14758c964b75a071f95c2f",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -25832,7 +25832,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "Usage dropdown: provider links remain static, while profile usage is fetched"
+          "value": "Usage dropdown and active-session inline row share the Hub usage snapshot."
         },
         "authentication": {
           "state": "not_configured"

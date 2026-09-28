@@ -571,6 +571,7 @@ export function _connectWs() {
       sessions.set(s.id, s);
       addToSessionOrder(s.id);
     });
+    document.dispatchEvent(new Event('session-usage-target-changed'));
     // The full snapshot is the first safe point to discard saved placements
     // for sessions that no longer exist. During reconnect, the map can be
     // temporarily empty while the old layout is still valid.
@@ -669,6 +670,7 @@ export function _connectWs() {
     // subscription profile は Go 側 proto の短い名前（subscription_id / _name）で届き、
     // snapshot は session 構造体の名前（subscription_profile_id / _name）で届く。
     // カード側は snapshot 名で読むので、ここで揃えておく。
+    const previousSubscriptionID = cur.subscription_profile_id;
     if (m.subscription_id !== undefined) cur.subscription_profile_id = m.subscription_id;
     if (m.subscription_name !== undefined) cur.subscription_profile_name = m.subscription_name;
     // C3: git 変更状況は git_checked=true のメッセージでのみ更新する
@@ -679,6 +681,9 @@ export function _connectWs() {
       cur.git_deleted = m.git_deleted ?? 0;
     }
     sessions.set(m.session_id, cur);
+    if (m.session_id === activeSessionId && previousSubscriptionID !== cur.subscription_profile_id) {
+      document.dispatchEvent(new Event('session-usage-target-changed'));
+    }
     // 実行中⇄アイドルの遷移をアクティブセッションの入力欄／送信ボタンへ反映する
 	if (m.state && m.session_id === activeSessionId) { updateInputAffordance(); syncLiveStatusDomForActive(); }
 	if (m.relays !== undefined || m.cross_session_messages !== undefined || m.board_path !== undefined) window.renderOrchestrationDashboard?.();
