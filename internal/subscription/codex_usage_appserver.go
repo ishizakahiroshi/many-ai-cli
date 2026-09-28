@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-var ErrCodexUsageUnavailable = errors.New("Codex subscription usage unavailable")
+var ErrCodexUsageUnavailable = errors.New("codex subscription usage unavailable")
 
 type CodexAppServerUsage struct {
 	Primary   *CodexAppServerWindow
