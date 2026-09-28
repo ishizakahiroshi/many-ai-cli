@@ -3239,7 +3239,7 @@ function _ensureMultiDetachBtn(): void {
   btn.id = 'multi-detach-btn';
   btn.className = 'multi-detach-btn view-tab-util';
   btn.type = 'button';
-  btn.textContent = '⊞↗';
+  btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="10" height="11" rx="1"/><path d="M12 4h9v9M21 4l-9 9"/></svg>';
   btn.title = ti18n('multi_detach_current_grid', 'Detach current grid');
   btn.setAttribute('aria-label', ti18n('multi_detach_current_grid', 'Detach current grid'));
   btn.addEventListener('click', () => {

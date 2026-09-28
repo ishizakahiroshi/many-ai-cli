@@ -17,13 +17,13 @@
   align-items: center;
   justify-content: center;
   min-width: 18px;
-  padding: 1px 5px;
+  height: 18px;
+  padding: 0 5px;
   border-radius: var(--radius-pill);
   background: var(--warn);
   color: #111;
   font-size: var(--header-font-size);
   font-variant-numeric: tabular-nums;
-  margin-left: 4px;
 }
 #approval-tab-badge[hidden] { display: none !important; }
 

@@ -1037,6 +1037,11 @@
     border-color: var(--accent);
     color: var(--accent);
   }
+  .mobile-drawer-view-btn .orchestration-icon {
+    width: 16px;
+    height: 16px;
+    stroke-width: 1.8;
+  }
 
   /* B2: スマホ専用「📷 撮影」ボタン（attach-panel 内）。
      PC では @media 外の既定で display:none、ここで mobile 幅のみ表示に上書きする。

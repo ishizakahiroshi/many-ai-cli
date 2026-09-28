@@ -141,7 +141,7 @@ export function initTabBarOrder(): void {
     button.type = 'button';
     button.className = 'tab-pane-placement-btn';
     button.dataset.tab = tabName;
-    button.textContent = '＋';
+    button.textContent = '+';
     const updateLabel = () => {
       const placeLabel = t('pane_show_in_pane');
       const tabLabel = tab.getAttribute('aria-label')
