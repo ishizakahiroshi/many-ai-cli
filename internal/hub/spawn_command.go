@@ -13,8 +13,8 @@ import (
 // Hub プロセスの PATH は親プロセスの起動時点のまま固まっている。Windows で
 // Hub（またはその親）の起動後に CLI を入れた・入れ直した場合、インストーラーが
 // 書き換えたレジストリの PATH は spawn 側にだけ見え、exec.LookPath を直接使う
-// 導入状況・バージョン確認・更新の判定には見えず「起動できるのに未インストール」
-// になる。CLI の場所を探す処理はこの関数（providerCommandLookPath）を通すこと。
+// 導入状況・バージョン確認・更新の判定やモデル一覧の取得には見えず「起動できるのに
+// 未インストール」になる。CLI の場所を探す処理はこの関数（providerCommandLookPath）を通すこと。
 //
 // macOS / Linux では expandPathEntries が何もしないので exec.LookPath と同じ。
 func lookPathLikeSpawn(file string) (string, error) {

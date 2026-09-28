@@ -58,6 +58,37 @@ func TestLookPathLikeSpawn_FindsCLIOnlyInRegistryPath(t *testing.T) {
 	}
 }
 
+// TestModelListCommand_FindsCLIOnlyInRegistryPath は、モデル一覧の取得
+// （cursor-agent / grok の runNativeModelListCommand、opencode も同じ seam）も
+// レジストリの Path にだけある CLI を見つけて実行できることを確かめる。
+func TestModelListCommand_FindsCLIOnlyInRegistryPath(t *testing.T) {
+	installed := t.TempDir()
+	script := filepath.Join(installed, "fakecli-models.cmd")
+	if err := os.WriteFile(script, []byte("@echo fake-model-a\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", t.TempDir()+string(os.PathListSeparator)+filepath.Join(os.Getenv("SystemRoot"), "System32"))
+	withRegistryStub(t, func(name string) string {
+		if strings.EqualFold(name, "Path") {
+			return installed
+		}
+		return ""
+	})
+
+	// 対照: プロセスの PATH だけを見る exec.LookPath には見えない（直す前の取得経路）。
+	if got, err := exec.LookPath("fakecli-models"); err == nil {
+		t.Fatalf("exec.LookPath found %q; the test must put the CLI outside the process PATH", got)
+	}
+
+	out, err := runNativeModelListCommand("fakecli-models")
+	if err != nil {
+		t.Fatalf("runNativeModelListCommand() error = %v, want the registry-only CLI to run", err)
+	}
+	if !strings.Contains(string(out), "fake-model-a") {
+		t.Fatalf("runNativeModelListCommand() output = %q, want it to contain fake-model-a", out)
+	}
+}
+
 // TestLookPathLikeSpawn_NotFoundIsExecError は、どこにも無い名前で exec.LookPath と
 // 同じ形のエラー（ErrNotFound を包んだ *exec.Error）を返すことを確かめる。
 func TestLookPathLikeSpawn_NotFoundIsExecError(t *testing.T) {

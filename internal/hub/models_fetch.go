@@ -393,7 +393,7 @@ type openCodeVerboseModel struct {
 }
 
 func fetchOpenCodeModels(force bool) ([]Model, error) {
-	bin, err := exec.LookPath("opencode")
+	bin, err := providerCommandLookPath("opencode")
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +437,7 @@ func fetchGrokModels(bool) ([]Model, error) {
 }
 
 func runNativeModelListCommand(command string, args ...string) ([]byte, error) {
-	bin, err := exec.LookPath(command)
+	bin, err := providerCommandLookPath(command)
 	if err != nil {
 		return nil, err
 	}
