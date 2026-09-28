@@ -95,7 +95,7 @@
   "stop_btn_title": "Dừng (Esc)",
   "stop_btn_title_ctrlc": "Dừng (Ctrl+C)",
   "send": "Gửi",
-  "attach_hint": "Dán hoặc kéo-thả file",
+  "attach_hint": "Dán / thả",
   "attach_sub": "(Bấm để chọn file)",
   "attach_camera_tooltip": "Chụp ảnh và đính kèm",
   "mobile_composer_attach_tooltip": "Thêm đính kèm",

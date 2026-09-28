@@ -95,7 +95,7 @@
   "stop_btn_title": "停止 (Esc)",
   "stop_btn_title_ctrlc": "停止 (Ctrl+C)",
   "send": "送信",
-  "attach_hint": "ファイルをペースト or D&D",
+  "attach_hint": "貼付 / D&D",
   "attach_sub": "（クリックでファイル選択）",
   "attach_camera_tooltip": "カメラで撮影して添付",
   "mobile_composer_attach_tooltip": "添付を追加",

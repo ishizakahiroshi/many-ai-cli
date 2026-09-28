@@ -95,7 +95,7 @@
   "stop_btn_title": "Stop (Esc)",
   "stop_btn_title_ctrlc": "Stop (Ctrl+C)",
   "send": "Send",
-  "attach_hint": "Paste or D&D file",
+  "attach_hint": "Paste / drop",
   "attach_sub": "(Click to select file)",
   "attach_camera_tooltip": "Take a photo and attach",
   "mobile_composer_attach_tooltip": "Add attachment",

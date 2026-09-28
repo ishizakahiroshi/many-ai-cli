@@ -15,6 +15,9 @@ Release artifacts are published at
   The compact meter keeps the existing attachment bar height, moves pending
   thumbnails above it, and refreshes the selected profile through the existing
   Usage source. Raw log and folder controls remain at the right edge.
+- **The active session Usage row now shows all available limit windows.**
+  Claude and Codex show both short and long limits when available, while Grok
+  shows its weekly limit. The file drop area is narrower to make room.
 - **Arrange Hub tabs and session cards in flexible panes.** Drag a tab or card
   onto the current view to open a two-pane layout, or onto a Multi pane to
   replace just that pane. Pane handles move or swap views, while the close

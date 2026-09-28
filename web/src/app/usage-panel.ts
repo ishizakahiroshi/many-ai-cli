@@ -142,15 +142,17 @@ function relativeDuration(milliseconds: number): string {
     : tx('usage_reset_days', '{n}d', { n: days });
 }
 
-function resetMeta(epoch: number | undefined): { text: string; stale: boolean } {
+function resetMeta(epoch: number | undefined): { text: string; shortText: string; stale: boolean } {
   const state = resetState(epoch);
-  if (!state) return { text: '', stale: false };
-  if (state.stale) return { text: tx('usage_reset_elapsed', 'Reset time passed'), stale: true };
+  if (!state) return { text: '', shortText: '', stale: false };
+  if (state.stale) return { text: tx('usage_reset_elapsed', 'Reset time passed'), shortText: '!', stale: true };
+  const duration = relativeDuration(state.remainingMs);
   return {
     text: tx('usage_reset_in', 'Resets in {time} · {absolute}', {
-      time: relativeDuration(state.remainingMs),
+      time: duration,
       absolute: fixedDateTime(epoch),
     }),
+    shortText: `⏳ ${duration}`,
     stale: false,
   };
 }
@@ -170,7 +172,7 @@ function windowLabelText(label: ReturnType<typeof windowLabel>): string {
 // provider の Web 画面は逆に「使用済み」で塗るため、同じ状態でもバーの向きが逆に見え、
 // 丸めの違いで used + remaining が 101 になることもある。**数字は正しい。**
 // 経緯・実測・使用済み表記へ寄せない理由は docs/local/reference/reference_usage-display.md。
-function meter(label: string, window: UsageWindow | undefined): string {
+function meter(label: string, window: UsageWindow | undefined, compact = false): string {
   if (!window) return '';
   const remaining = remainingPercent(window as UsageWindowInput);
   if (remaining === null) return '';
@@ -188,8 +190,18 @@ function meter(label: string, window: UsageWindow | undefined): string {
     reset.text,
     stateText,
   ].filter(Boolean).join(' · ');
-  const aria = `${label}: ${tx('usage_remaining_aria', '{remaining}% remaining, {used}% used', { remaining: roundedRemaining, used: roundedUsed })}${stateText ? `, ${stateText}` : ''}`;
+  const aria = `${label}: ${tx('usage_remaining_aria', '{remaining}% remaining, {used}% used', { remaining: roundedRemaining, used: roundedUsed })}${reset.text ? `, ${reset.text}` : ''}${stateText ? `, ${stateText}` : ''}`;
   const title = `${tx('usage_remaining_title', 'Remaining {remaining}% · Used {used}%', { remaining: roundedRemaining, used: roundedUsed })}${reset.text ? `\n${reset.text}` : ''}`;
+  if (compact) {
+    return `<div class="inline-usage-window usage-meter-group${reset.stale ? ' usage-meter-group--stale' : ''}">
+      <div class="usage-meter-line" data-usage-severity="${severity}">
+        <span class="usage-meter-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
+        <span class="usage-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${roundedRemaining}" aria-label="${escapeHtml(aria)}" title="${escapeHtml(title)}"><span class="usage-meter-fill" style="width:${roundedRemaining}%"></span></span>
+        <span class="usage-meter-value">${escapeHtml(tx('usage_remaining_value', 'Remaining {n}%', { n: roundedRemaining }))}</span>
+        ${reset.shortText ? `<span class="inline-usage-window-reset${reset.stale ? ' usage-meter-meta--stale' : ''}" title="${escapeHtml(reset.text)}" aria-label="${escapeHtml(reset.text)}">${escapeHtml(reset.shortText)}</span>` : ''}
+      </div>
+    </div>`;
+  }
   return `<div class="usage-meter-group${reset.stale ? ' usage-meter-group--stale' : ''}">
     <div class="usage-meter-line" data-usage-severity="${severity}">
       <span class="usage-meter-label">${escapeHtml(label)}</span>
@@ -336,25 +348,25 @@ function activeUsageTarget(): { provider: string; id: string } | null {
   return provider && id ? { provider, id } : null;
 }
 
-// Both the dropdown and the compact row use meter(), creditsText(),
-// profilePlan(), and retrievedText(). Only the compact layout selects one
-// window (the weekly window when available) to fit the existing bar height.
-function compactWindow(provider: string, profile: UsageProfile): { label: string; window: UsageWindow } | null {
+// The compact row shows every available limit; narrow screens hide all but
+// the longest window. Both layouts use the same meter calculations.
+function compactWindows(provider: string, profile: UsageProfile): { label: string; window: UsageWindow }[] {
   const valid = (window: UsageWindow | undefined): window is UsageWindow => remainingPercent(window) !== null;
   if (provider === 'claude') {
     const usage = profile.claude;
-    if (valid(usage?.seven_day)) return { label: tx('usage_window_7d', '7d'), window: usage.seven_day };
-    if (valid(usage?.five_hour)) return { label: tx('usage_window_5h', '5h'), window: usage.five_hour };
+    return [
+      ...(valid(usage?.five_hour) ? [{ label: tx('usage_window_5h', '5h'), window: usage.five_hour }] : []),
+      ...(valid(usage?.seven_day) ? [{ label: tx('usage_window_7d', '7d'), window: usage.seven_day }] : []),
+    ];
   }
   if (provider === 'codex') {
     const windows = [profile.codex?.primary, profile.codex?.secondary].filter(valid);
-    const window = windows.find((item) => windowMinutes(item) === 10080) || sortUsageWindows(windows).at(-1);
-    if (window) return { label: windowLabelText(windowLabel(windowMinutes(window))), window };
+    return sortUsageWindows(windows).map((window) => ({ label: windowLabelText(windowLabel(windowMinutes(window))), window }));
   }
-  if (provider === 'grok' && profile.grok && Number.isFinite(profile.grok.used_percent)) {
-    return { label: tx('usage_window_weekly', 'Weekly'), window: profile.grok };
+  if (provider === 'grok' && profile.grok && valid(profile.grok)) {
+    return [{ label: tx('usage_window_weekly', 'Weekly'), window: profile.grok }];
   }
-  return null;
+  return [];
 }
 
 function renderInlineUsage(): void {
@@ -366,12 +378,12 @@ function renderInlineUsage(): void {
   const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Usage';
   const providerData = usageData?.providers.find((item) => item.provider === provider);
   const profile = target && providerData?.profiles.find((item) => item.id === target.id);
-  const selectedWindow = profile ? compactWindow(provider, profile) : null;
+  const windows = profile ? compactWindows(provider, profile) : [];
   let message = '';
   if (!session) message = tx('agent_log_no_session', 'Select a session.');
   else if (!target) message = tx('usage_inline_no_profile', 'No subscription profile selected');
   else if (!hasProviderCapability(provider, 'usage')) message = tx('usage_no_windows', 'No usage limits are currently available');
-  else if (inlineRefreshError && !selectedWindow) message = tx('usage_probe_failed', 'Could not retrieve usage');
+  else if (inlineRefreshError && windows.length === 0) message = tx('usage_probe_failed', 'Could not retrieve usage');
   else if (!usageData) message = busy ? tx('usage_loading', 'Loading usage') : tx('usage_profile_unacquired', 'Not retrieved');
   else if (!profile) message = tx('usage_profile_unacquired', 'Not retrieved');
   else if (profile.auth_status === 'login_required' && !profile.claude && !profile.codex && !profile.grok) {
@@ -379,16 +391,16 @@ function renderInlineUsage(): void {
   } else if (profile.auth_checking && !profile.claude && !profile.codex && !profile.grok) {
     message = tx('usage_auth_checking', 'Checking login status');
   }
-  if (profile && !selectedWindow && !message) message = tx('usage_no_windows', 'No usage limits are currently available');
+  if (profile && windows.length === 0 && !message) message = tx('usage_no_windows', 'No usage limits are currently available');
   const identity = `<div class="inline-usage-identity"><strong title="${escapeHtml(providerLabel)}">${escapeHtml(providerLabel)}</strong><span title="${escapeHtml(profile?.name || target?.id || '')}">${escapeHtml(profile?.name || target?.id || '')}${profile ? ` · ${escapeHtml(profilePlan(provider, profile))}` : ''}</span></div>`;
   const center = message
     ? `<span class="inline-usage-message${inlineRefreshError ? ' inline-usage-message--error' : ''}" title="${escapeHtml(message)}">${escapeHtml(message)}</span>`
-    : `<div class="inline-usage-center">${meter(selectedWindow!.label, selectedWindow!.window)}</div>`;
+    : `<div class="inline-usage-center">${windows.map(({ label, window }) => meter(label, window, true)).join('')}</div>`;
   const credits = provider === 'codex' && profile?.codex ? creditsText(profile.codex) : '';
   const retrieved = profile ? retrievedText(profile.retrieved_at) : '';
   const side = `<div class="inline-usage-side">${credits || '<span></span>'}<span class="usage-profile-meta" title="${escapeHtml(retrieved)}">${escapeHtml(retrieved)}</span></div>`;
   const errorText = tx('usage_probe_failed', 'Could not retrieve usage');
-  const errorBadge = inlineRefreshError && selectedWindow
+  const errorBadge = inlineRefreshError && windows.length > 0
     ? `<span class="inline-usage-refresh-error" role="status" aria-label="${escapeHtml(errorText)}" title="${escapeHtml(errorText)}">!</span>`
     : '';
   const refreshLabel = tx('usage_inline_refresh', 'Refresh usage');

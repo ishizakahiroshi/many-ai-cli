@@ -1445,11 +1445,11 @@ header {
     width: 100%;
   }
 
-  /* モバイルでは添付ドロップゾーンを小さなアイコンボタンに圧縮（テキスト・サブを隠す） */
+  /* モバイルでは添付ドロップゾーンを小さなアイコンボタンに圧縮する。 */
   #attach-drop-zone { padding: 4px 8px; font-size: 1rem; gap: 0; }
   #attach-drop-zone .attach-icon { display: inline; line-height: 1; }
   #attach-drop-zone .attach-hint-text,
-  #attach-drop-zone .attach-sub { display: none; }
+  #attach-drop-zone .attach-sub { display: block; }
 }
 
 /* セッションカード */
@@ -2080,7 +2080,10 @@ header {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--space-2);
+  position: relative;
+  flex: 0 1 136px;
+  min-width: 110px;
+  gap: 0;
   padding: 5px 10px;
   border: 1px dashed var(--line-soft);
   border-radius: var(--radius-md);
@@ -2089,13 +2092,21 @@ header {
   color: var(--muted-2);
   transition: border-color 0.15s, background 0.15s;
   user-select: none;
-  flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
 }
 #attach-drop-zone:hover { border-color: var(--accent); color: var(--accent-text); background: var(--accent-soft); }
 #attach-drop-zone.dragover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text); }
-.attach-sub { font-size: 0.7rem; color: var(--line-soft); }
+#attach-drop-zone .attach-hint-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Keep the click instruction available to assistive technologies without using bar width. */
+#attach-drop-zone .attach-sub {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 #attach-drop-zone .attach-icon { display: none; }
 
 #attach-thumbnails { display: flex; gap: var(--space-2); flex-wrap: nowrap; overflow-x: auto; overscroll-behavior: contain; flex: 1; min-width: 0; }
@@ -2176,8 +2187,8 @@ header {
 #session-inline-usage {
   display: flex;
   align-items: center;
-  flex: 0 1 440px;
-  width: 440px;
+  flex: 0 1 640px;
+  width: 640px;
   min-width: 0;
   height: 33px;
   margin-left: auto;
@@ -2194,13 +2205,13 @@ header {
 .inline-usage-side span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inline-usage-identity span,
 .inline-usage-side .usage-profile-meta { color: var(--muted-2); }
-.inline-usage-center { flex: 1 1 auto; min-width: 0; overflow: hidden; }
-.inline-usage-center .usage-meter-group { min-width: 0; }
-.inline-usage-center .usage-meter-line { margin: 0; }
-.inline-usage-center .usage-meter-label { min-width: 27px; }
+.inline-usage-center { display: flex; flex-direction: column; justify-content: center; gap: 1px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.inline-usage-window { min-width: 0; }
+.inline-usage-window .usage-meter-line { height: 13px; margin: 0; gap: 4px; }
+.inline-usage-window .usage-meter-label { flex: 0 0 38px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inline-usage-center .usage-meter { min-width: 20px; }
-.inline-usage-center .usage-meter-value { width: 52px; }
-.inline-usage-center .usage-meter-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.57rem; }
+.inline-usage-window .usage-meter-value { width: 79px; }
+.inline-usage-window-reset { flex: 0 0 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--muted-2); }
 .inline-usage-side { flex: 0 0 88px; min-width: 0; margin-left: 5px; line-height: 1.2; }
 .inline-usage-side .usage-profile-meta { margin: 2px 0 0; }
 .inline-usage-refresh {
@@ -2222,18 +2233,22 @@ header {
 .inline-usage-message { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-2); }
 .inline-usage-message--error { color: var(--danger); }
 @media (max-width: 880px) {
-  #attach-drop-zone { flex: 0 1 150px; min-width: 25px; }
+  #attach-drop-zone { flex: 0 0 32px; min-width: 32px; justify-content: center; padding: 5px; }
+  #attach-drop-zone .attach-icon { display: inline; }
+  #attach-drop-zone .attach-hint-text,
+  #attach-drop-zone .attach-sub { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   #session-inline-usage { flex: 1 1 250px; width: auto; }
   .inline-usage-side { display: none; }
 }
 @media (max-width: 570px) {
-  #attach-drop-zone { flex-basis: 25px; padding: 5px; }
-  #attach-drop-zone .attach-icon { display: inline; }
-  #attach-drop-zone .attach-hint-text,
-  #attach-drop-zone .attach-sub { display: none; }
+  #attach-drop-zone { flex-basis: 30px; min-width: 30px; }
   .inline-usage-identity { flex-basis: 49px; }
   .inline-usage-identity span { display: none; }
-  .inline-usage-center .usage-meter-value { width: 48px; }
+  .inline-usage-window:not(:last-child) { display: none; }
+  .inline-usage-window .usage-meter-label { flex-basis: 27px; }
+  .inline-usage-window .usage-meter-value { width: 48px; }
+  .inline-usage-window-reset:not(.usage-meter-meta--stale) { display: none; }
+  .inline-usage-window-reset.usage-meter-meta--stale { flex-basis: 8px; }
 }
 
 #agent-log-btn {
