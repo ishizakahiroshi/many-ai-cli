@@ -739,7 +739,9 @@ export function initUsagePanel(dropdown: HTMLElement): void {
   panelRoot = dropdown;
   inlineRoot = document.getElementById('session-inline-usage');
   document.addEventListener('session-usage-target-changed', onInlineTargetChanged);
-  onInlineTargetChanged();
+  // settings.ts initializes the dropdown while modules are still evaluating.
+  // Wait until state.ts has initialized activeSessionId before reading it.
+  queueMicrotask(onInlineTargetChanged);
   applyProviderOrderToPanel();
   document.addEventListener(PROVIDER_ORDER_CHANGED_EVENT, applyProviderOrderToPanel);
   bindUnavailableInfo();
