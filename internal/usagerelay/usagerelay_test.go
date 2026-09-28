@@ -350,15 +350,15 @@ func TestTokenCountEventResolveLegacyFormats(t *testing.T) {
 // 入力は合成データで、実機の statusLine JSON を観測したものではない。
 func TestRunClaudeRateLimitsToleratesUnexpectedValues(t *testing.T) {
 	cases := []struct {
-		name         string
-		rateLimits   string
-		bodyPresent  bool
-		fiveHour     bool
-		fivePct      float64
-		fiveReset    int64
-		sevenDay     bool
-		sevenPct     float64
-		sevenReset   int64
+		name        string
+		rateLimits  string
+		bodyPresent bool
+		fiveHour    bool
+		fivePct     float64
+		fiveReset   int64
+		sevenDay    bool
+		sevenPct    float64
+		sevenReset  int64
 	}{
 		{name: "used over 100 passes through", rateLimits: `{"five_hour":{"used_percentage":105.5,"resets_at":1738425600},"seven_day":{"used_percentage":41.2,"resets_at":1738857600}}`, bodyPresent: true, fiveHour: true, fivePct: 105.5, fiveReset: 1738425600, sevenDay: true, sevenPct: 41.2, sevenReset: 1738857600},
 		{name: "negative used passes through", rateLimits: `{"five_hour":{"used_percentage":-3,"resets_at":1738425600}}`, bodyPresent: true, fiveHour: true, fivePct: -3, fiveReset: 1738425600},
