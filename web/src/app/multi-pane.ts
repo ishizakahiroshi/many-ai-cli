@@ -1026,6 +1026,25 @@ export class MultiPaneManager {
     el.classList.toggle('waiting-approval', status === 'waiting');
   }
 
+  /**
+   * 子 plan: docs/local/plan_session-card-label-edit.md C2。
+   * カード右クリックの改名は session_update（session_meta）で届くが、状態遷移が
+   * 無いため updateSlotBadge の経路には乗らない。ペイン見出しの ph-dir だけを
+   * その場で書き換え、フルの render() は起こさない（他ペインの再アタッチを避ける）。
+   */
+  updateSlotLabel(sessionId, text, cwd) {
+    const slotIdx = this.slots.findIndex(s => s && s.session && s.session.id === sessionId);
+    if (slotIdx < 0) return;
+    if (!this.area) return;
+    const slotEls = this.area.querySelectorAll('.pane-slot');
+    const el = slotEls[slotIdx];
+    if (!el) return;
+    const dir = el.querySelector('.ph-dir');
+    if (!dir) return;
+    dir.textContent = text || '';
+    dir.title = cwd || '';
+  }
+
   // ─── C3: xterm アタッチ管理 ──────────────────────────────────
 
   /**

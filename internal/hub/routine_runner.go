@@ -233,7 +233,10 @@ func (s *Server) refreshRoutineRuns(now time.Time) {
 	observations := map[string]observed{}
 	s.sessionsMu.Lock()
 	for id, ses := range s.sessions {
-		observations[ses.Label] = observed{id: id, state: ses.State, waiting: ses.pendingApproval != nil || ses.Activity.AwaitingUser, lastOutput: ses.lastOutputAt}
+		// Key by LaunchLabel (fixed at register time), not the mutable display
+		// Label: a card rename must not orphan the routine's run tracking
+		// (plan_session-card-label-edit.md C1).
+		observations[ses.LaunchLabel] = observed{id: id, state: ses.State, waiting: ses.pendingApproval != nil || ses.Activity.AwaitingUser, lastOutput: ses.lastOutputAt}
 	}
 	s.sessionsMu.Unlock()
 	m.mu.Lock()
@@ -311,7 +314,7 @@ func (s *Server) recordRoutineDone(summary proto.DoneSummary) {
 	s.sessionsMu.Lock()
 	label := ""
 	if ses := s.sessions[summary.SessionID]; ses != nil {
-		label = ses.Label
+		label = ses.LaunchLabel
 	}
 	s.sessionsMu.Unlock()
 	if label == "" {
@@ -360,7 +363,7 @@ func (s *Server) activeRoutineSession(sessionID int, at time.Time) bool {
 	s.sessionsMu.Lock()
 	label := ""
 	if ses := s.sessions[sessionID]; ses != nil {
-		label = ses.Label
+		label = ses.LaunchLabel
 	}
 	s.sessionsMu.Unlock()
 	if label == "" {
@@ -385,7 +388,7 @@ func (s *Server) routineRunURL(sessionID int) string {
 	s.sessionsMu.Lock()
 	label := ""
 	if ses := s.sessions[sessionID]; ses != nil {
-		label = ses.Label
+		label = ses.LaunchLabel
 	}
 	s.sessionsMu.Unlock()
 	if label == "" {

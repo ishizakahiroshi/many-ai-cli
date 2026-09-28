@@ -204,12 +204,15 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 		CWD:              reg.CWD,
 		Branch:           branch,
 		Label:            cardMeta.Label,
-		Pinned:           cardMeta.Pinned,
-		Color:            cardMeta.Color,
-		Note:             cardMeta.Note,
-		AutoTitle:        cardMeta.AutoTitle,
-		Model:            reg.Model,
-		Effort:           reg.Effort,
+		// LaunchLabel is always the wrapper's own register-time value, never the
+		// persisted/restored cardMeta.Label (which may differ after a rename).
+		LaunchLabel: reg.Label,
+		Pinned:      cardMeta.Pinned,
+		Color:       cardMeta.Color,
+		Note:        cardMeta.Note,
+		AutoTitle:   cardMeta.AutoTitle,
+		Model:       reg.Model,
+		Effort:      reg.Effort,
 		// ExecutionMode も wrapper の申告が正本。対話セッションは空を送るので、
 		// この項目が存在しなかった頃と 1 バイトも変わらない（子 plan:
 		// docs/local/plan_child_execution_modes_headless.md 内部 C1）。
@@ -705,14 +708,17 @@ func (s *Server) reattachLoop(conn *websocket.Conn, req proto.Message) {
 		approvalSourceEpoch = 1
 	}
 	s.sessions[acceptedID] = &session{
-		ID:                             acceptedID,
-		StoreID:                        storeID,
-		Provider:                       req.Provider,
-		ProviderRevision:               req.ProviderRevision,
-		Display:                        req.Display,
-		CWD:                            req.CWD,
-		Branch:                         branch,
-		Label:                          cardMeta.Label,
+		ID:               acceptedID,
+		StoreID:          storeID,
+		Provider:         req.Provider,
+		ProviderRevision: req.ProviderRevision,
+		Display:          req.Display,
+		CWD:              req.CWD,
+		Branch:           branch,
+		Label:            cardMeta.Label,
+		// Same rule as the fresh-register path above: LaunchLabel is the
+		// wrapper's own register-time value, not the persisted display label.
+		LaunchLabel:                    req.Label,
 		Pinned:                         cardMeta.Pinned,
 		Color:                          cardMeta.Color,
 		Note:                           cardMeta.Note,

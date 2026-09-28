@@ -603,12 +603,30 @@ export function _connectWs() {
     // project_id は omitempty で送られるので、未指定なら既存値を保つ（branch と同じ規約）。
     if (m.project_id !== undefined) cur.project_id = m.project_id;
     if (m.label !== undefined) cur.label       = m.label;
+    // launch_label は register 時に固定される起動時ラベル（照合用・子 plan:
+    // plan_session-card-label-edit.md C1）。omitempty で送られるので、未指定なら
+    // 既存値を保つ（branch / project_id と同じ規約）。
+    if (m.launch_label !== undefined) cur.launch_label = m.launch_label;
 	if (m.session_meta) {
 	  cur.label = m.session_meta.label;
 	  cur.pinned = m.session_meta.pinned;
 	  cur.color = m.session_meta.color;
 	  cur.note = m.session_meta.note;
 	  cur.auto_title = m.session_meta.auto_title;
+	  // 子 plan: plan_session-card-label-edit.md C2 — カード右クリックの改名は
+	  // handleSessionMeta が state を変えないまま session_meta だけで届くため、
+	  // 下の m.state ブロック（updateSlotBadge 経路）を通らない。Grid ペイン見出し
+	  // （multi-pane）と別窓 Grid（detached-grid）の ph-dir をここで直接書き換える。
+	  // pane-placement-menu.ts の slotTitle() は開くたびに live の session.label を
+	  // 読むので、こちらは手当て不要（同じ session オブジェクト参照を見ている）。
+	  const mpMgr = window.multiPaneManager;
+	  if (mpMgr && typeof mpMgr.updateSlotLabel === 'function') {
+	    mpMgr.updateSlotLabel(m.session_id, cur.label || cur.cwd || '', cur.cwd || '');
+	  }
+	  const dgMgrForLabel = window.detachedGridManager;
+	  if (dgMgrForLabel && typeof dgMgrForLabel.onSessionsUpdated === 'function') {
+	    dgMgrForLabel.onSessionsUpdated();
+	  }
 	}
     if (m.shell)           cur.shell           = m.shell;
     if (m.state) {

@@ -3,9 +3,13 @@ import { isRoutineRunActive, routineRunFromURL, routineSessionMatches } from '..
 import type { RoutineRun } from '../src/app/routines-model';
 test('old run cannot open a reused live session ID',()=>{
   const run={session_id:4,session_label:'routine-synthetic'} as RoutineRun;
-  expect(routineSessionMatches(run,{id:4,label:'other'})).toBe(false);
-  expect(routineSessionMatches(run,{id:4,label:'routine-synthetic'})).toBe(true);
-  expect(routineSessionMatches({...run,session_label:''},{id:4,label:''})).toBe(false);
+  expect(routineSessionMatches(run,{id:4,launch_label:'other'})).toBe(false);
+  expect(routineSessionMatches(run,{id:4,launch_label:'routine-synthetic'})).toBe(true);
+  expect(routineSessionMatches({...run,session_label:''},{id:4,launch_label:''})).toBe(false);
+});
+test('renaming the card (mutable label) does not break the match; only launch_label is keyed on',()=>{
+  const run={session_id:4,session_label:'routine-synthetic'} as RoutineRun;
+  expect(routineSessionMatches(run,{id:4,label:'renamed from card',launch_label:'routine-synthetic'})).toBe(true);
 });
 test('notification preserves exact run and rejects malformed IDs',()=>{
   expect(routineRunFromURL('https://example.test/?routine_run=run-123')).toBe('run-123');

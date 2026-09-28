@@ -402,6 +402,8 @@ export interface Message {
   transcript_grew_at?: string;
   started_at?: string;
   label?: string;
+  /** register 時に固定される起動時ラベル。照合用（子 plan: plan_session-card-label-edit.md C1）。 */
+  launch_label?: string;
 	 session_meta?: SessionMeta;
   model?: string;
   /** reasoning effort（"high" 等）。起動バナー / モデル変更行から Hub が検出した値。 */
@@ -539,6 +541,8 @@ export interface SessionSnapshot {
   project_id?: string;
   branch?: string;
   label?: string;
+  /** register 時に固定される起動時ラベル。照合用（子 plan: plan_session-card-label-edit.md C1）。カードの改名では変わらない。 */
+  launch_label?: string;
 	 pinned?: boolean;
 	 color?: string;
 	 note?: string;

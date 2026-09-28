@@ -404,7 +404,10 @@ func (s *Server) waitForSessionByLabelContext(ctx context.Context, label string,
 	for {
 		s.sessionsMu.Lock()
 		for id, ses := range s.sessions {
-			if ses.Label == label {
+			// LaunchLabel, not the mutable display Label: this waits for the
+			// just-spawned registration, keyed on the value the spawn request
+			// itself carried (plan_session-card-label-edit.md C1).
+			if ses.LaunchLabel == label {
 				s.sessionsMu.Unlock()
 				return id, nil
 			}

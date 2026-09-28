@@ -54,6 +54,13 @@ Release artifacts are published at
   the other device's changes.
 
 ### Fixed
+- **Renaming a session card no longer breaks routine completion tracking or
+  reattach matching.** The Hub now keys those lookups on a fixed launch-time
+  label instead of the editable display label. The card's right-click "Change
+  label" now opens an input dialog matching the New Session label field
+  (translated menu text, current value pre-filled, blank clears back to the
+  automatic title) instead of a plain browser prompt, and detached/Grid pane
+  headings pick up the new name immediately.
 - **Handoff allows continuing with the same CLI**, including Codex-to-Codex.
   The source CLI is no longer omitted from the destination picker; launching
   the successor and choosing a subscription remain explicit user actions.

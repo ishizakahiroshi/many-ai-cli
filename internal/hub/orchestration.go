@@ -3342,6 +3342,7 @@ func sessionUpdateMessage(ses *session) proto.Message {
 		Branch:               ses.Branch,
 		ProjectID:            ses.ProjectID,
 		Label:                ses.Label,
+		LaunchLabel:          ses.LaunchLabel,
 		Model:                ses.Model,
 		ExecutionMode:        ses.ExecutionMode,
 		PermissionMode:       ses.PermissionMode,

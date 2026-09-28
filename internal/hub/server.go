@@ -113,13 +113,17 @@ type session struct {
 	CWD              string `json:"cwd"`
 	Branch           string `json:"branch,omitempty"`
 	ProjectID        string `json:"project_id,omitempty"` // cwd が属する本体リポジトリのルート（project_id.go）。UI のサイドバーの箱はこの値で作る
-	Label            string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示
-	Pinned           bool   `json:"pinned,omitempty"`
-	Color            string `json:"color,omitempty"`
-	Note             string `json:"note,omitempty"`
-	AutoTitle        string `json:"auto_title,omitempty"`
-	Model            string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
-	Effort           string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
+	Label            string `json:"label,omitempty"`      // UI カード 3 行目に【ラベル】として表示。右クリックでいつでも書き換わる。照合キーには使わない
+	// LaunchLabel は register 時に wrapper が申告した起動時の値で固定（子 plan:
+	// docs/local/plan_session-card-label-edit.md C1）。handleSessionMeta は触らない。
+	// routine / relay 再接続 / spawn 待ちの照合はすべてこちらを見る。
+	LaunchLabel string `json:"launch_label,omitempty"`
+	Pinned      bool   `json:"pinned,omitempty"`
+	Color       string `json:"color,omitempty"`
+	Note        string `json:"note,omitempty"`
+	AutoTitle   string `json:"auto_title,omitempty"`
+	Model       string `json:"model,omitempty"`  // 使用モデル名; UI カード表示用
+	Effort      string `json:"effort,omitempty"` // reasoning effort（"high" 等）; バナー / モデル変更行から検出。statusLine relay が無くても UI へ出すための値
 	// ExecutionMode は wrapper が申告した実行モード。空（＝大半のセッション）は
 	// 対話（PTY）で、"headless" は非対話 runner で走っているセッション
 	// （子 plan: docs/local/plan_child_execution_modes_headless.md 内部 C1）。

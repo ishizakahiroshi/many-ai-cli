@@ -53,7 +53,7 @@ describe('routines async DOM paths',()=>{
     const f=fixture();f.ui.openRoutines('run-one');await tick();
     const details=f.find(el=>el.tagName==='details');details.open=true;
     const summary=details.children[0];summary.focus();const content=f.find(el=>el.className==='routines-content');content.scrollTop=75;
-    f.sessions.set(7,{id:7,label:'unique-run-one'});await f.poll();
+    f.sessions.set(7,{id:7,label:'renamed from card',launch_label:'unique-run-one'});await f.poll();
     expect(f.find(el=>el.tagName==='details')).toBe(details);expect(details.open).toBe(true);expect(f.document.activeElement).toBe(summary);expect(content.scrollTop).toBe(75);
     expect(f.find(el=>el.tagName==='button'&&el.textContent==='routines_open_session').hidden).toBe(false);
   });

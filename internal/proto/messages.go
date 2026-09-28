@@ -192,7 +192,15 @@ type Message struct {
 	StartedAt string `json:"started_at,omitempty"`
 
 	// Label: セッション識別用の任意ラベル（UI カード 3 行目に【ラベル】として表示）。
+	// カードの右クリックからいつでも書き換わる表示名。**照合キーには使わない**
+	// （下の LaunchLabel が照合用）。
 	Label string `json:"label,omitempty"`
+
+	// LaunchLabel: register 時に wrapper が申告した起動時の値で、以後の改名では
+	// 変わらない（子 plan: docs/local/plan_session-card-label-edit.md C1）。
+	// routine / relay 再接続 / spawn 待ちの照合はすべてこちらを見る。Label と違い
+	// handleSessionMeta では絶対に書き換えない。
+	LaunchLabel string `json:"launch_label,omitempty"`
 
 	// SessionMeta はカード識別用の永続メタデータ。label を空文字へ戻す更新も
 	// 確実に伝えるため、session_update ではこの入れ子オブジェクトで送る。

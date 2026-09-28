@@ -13,8 +13,11 @@ export interface RoutineRun {
 export function isRoutineRunActive(run: Pick<RoutineRun, 'status'>): boolean {
   return ['starting', 'running', 'waiting'].includes(run.status);
 }
-export function routineSessionMatches(run: RoutineRun, session?: { id: number; label?: string }): boolean {
-  return !!session && !!run.session_label && session.id === run.session_id && session.label === run.session_label;
+// 照合は起動時ラベル（launch_label）で行う。label はカード右クリックでいつでも
+// 書き換わる表示名なので、改名すると一致しなくなる（子 plan:
+// plan_session-card-label-edit.md C1 / C2）。
+export function routineSessionMatches(run: RoutineRun, session?: { id: number; launch_label?: string }): boolean {
+  return !!session && !!run.session_label && session.id === run.session_id && session.launch_label === run.session_label;
 }
 export function routineRunFromURL(url: string): string | null {
   const id = new URL(url).searchParams.get('routine_run');

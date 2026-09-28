@@ -154,7 +154,13 @@ func (h *relayHarness) fakeSpawn(parentID int, parent *session, body spawnChildR
 	child.OrchestrationID = prep.orchestrationID
 	child.BoardPath = prep.boardPath
 	child.CWD = prep.childCWD
-	child.Label = fmt.Sprintf("orch-%s-%s-%d", safeToken(prep.orchestrationID), body.Role, id)
+	// Real registration sets both Label and LaunchLabel from the same
+	// wrapper-reported value at spawn time; mirror that here since
+	// sessionLabel()/relayReattachMatch now key off LaunchLabel (C1 of
+	// plan_session-card-label-edit.md).
+	launchLabel := fmt.Sprintf("orch-%s-%s-%d", safeToken(prep.orchestrationID), body.Role, id)
+	child.Label = launchLabel
+	child.LaunchLabel = launchLabel
 	h.s.sessionsMu.Lock()
 	h.s.wrappers[id] = newWrapperConn(&websocket.Conn{})
 	h.s.sessionsMu.Unlock()

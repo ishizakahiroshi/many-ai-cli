@@ -3271,7 +3271,7 @@ export function openCardCtxMenu(x, y, sid) {
   const labelCopyId         = ti18n('ctx_copy_id',               'Copy session ID');
   const labelOpenInGrid     = ti18n('ctx_open_in_grid',          'Open in detached grid');
   const labelOpenProjectGrid = ti18n('ctx_open_project_in_grid', 'Open project in detached grid');
-  const labelRename         = ti18n('session_rename',             'Rename session');
+  const labelRename         = ti18n('session_rename',             'Change label');
   const labelMoveFront      = ti18n('session_move_front',         'Move this session to the front');
   const labelColor          = ti18n('session_set_color',          'Set color');
   const labelNote           = ti18n('session_edit_note',          'Edit note');
@@ -3329,8 +3329,7 @@ export function openCardCtxMenu(x, y, sid) {
       } else if (action === 'copy-id') {
         try { navigator.clipboard && navigator.clipboard.writeText(String(id)); } catch (_) {}
       } else if (action === 'rename') {
-        const value = window.prompt(labelRename, String(sess.label || ''));
-        if (value !== null) void patchSessionMeta(id, { label: value });
+        openLabelRenameDialog(id);
       } else if (action === 'move-front') {
         // 器の中で兄弟順の先頭へ動かすだけ。セッションの属性は書き換えない。
         moveSessionToSiblingFront(id);
@@ -3344,6 +3343,71 @@ export function openCardCtxMenu(x, y, sid) {
       }
     });
   });
+}
+
+// ─── ラベル変更ダイアログ（子 plan: docs/local/plan_session-card-label-edit.md C2） ───
+// 見た目・placeholder・例文は新規セッション画面のラベル欄（index.html #spawn-label,
+// class spawn-input, data-i18n-placeholder="spawn_label_placeholder"）に揃える。
+// 開閉・Escape・背景クリックの作法は handoff.ts の buildDialogShell / derive-dialog.ts と同じ。
+let _labelRenameDialogEl: HTMLElement | null = null;
+export function openLabelRenameDialog(id: number): void {
+  if (_labelRenameDialogEl) { _labelRenameDialogEl.remove(); _labelRenameDialogEl = null; }
+  const sess = sessions.get(id) as any;
+  if (!sess) return;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'label-rename-dialog-backdrop aac-wheel-overlay';
+  const titleText = ti18n('session_rename', 'ラベルを変更');
+  const hintText = ti18n('session_rename_dialog_hint', '空にすると自動タイトル表示に戻ります');
+  const placeholder = ti18n('spawn_label_placeholder', 'ラベル（省略可）例: dev改修作業');
+  const saveText = ti18n('settings_save', '保存');
+  const cancelText = ti18n('handoff_dialog_cancel', 'キャンセル');
+  backdrop.innerHTML = `<div class="label-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="label-rename-dialog-title">
+    <h2 id="label-rename-dialog-title">${escapeHtml(titleText)}</h2>
+    <input type="text" class="spawn-input label-rename-dialog-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off" spellcheck="false">
+    <p class="label-rename-dialog-hint">${escapeHtml(hintText)}</p>
+    <p class="label-rename-dialog-error" data-label-rename-error hidden></p>
+    <div class="label-rename-dialog-actions">
+      <button type="button" data-label-rename-cancel>${escapeHtml(cancelText)}</button>
+      <button type="button" class="primary" data-label-rename-save>${escapeHtml(saveText)}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(backdrop);
+  _labelRenameDialogEl = backdrop;
+
+  const input = backdrop.querySelector('input') as HTMLInputElement;
+  const errorEl = backdrop.querySelector('[data-label-rename-error]') as HTMLElement;
+  const saveBtn = backdrop.querySelector('[data-label-rename-save]') as HTMLButtonElement;
+  input.value = String(sess.label || '');
+
+  const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close(); };
+  const close = (): void => {
+    document.removeEventListener('keydown', onKeyDown);
+    backdrop.remove();
+    if (_labelRenameDialogEl === backdrop) _labelRenameDialogEl = null;
+  };
+  document.addEventListener('keydown', onKeyDown);
+  backdrop.addEventListener('click', (event) => { if (event.target === backdrop) close(); });
+  backdrop.querySelector('[data-label-rename-cancel]')?.addEventListener('click', close);
+
+  let saving = false;
+  async function save(): Promise<void> {
+    if (saving) return;
+    saving = true;
+    saveBtn.disabled = true;
+    errorEl.hidden = true;
+    const ok = await patchSessionMeta(id, { label: input.value });
+    saving = false;
+    saveBtn.disabled = false;
+    if (ok) { close(); return; }
+    errorEl.textContent = ti18n('files_preview_edit_save_error', '保存に失敗しました');
+    errorEl.hidden = false;
+  }
+  saveBtn.addEventListener('click', () => { void save(); });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); void save(); }
+  });
+  input.focus();
+  input.select();
 }
 
 function sessForMetaLabel(id) {

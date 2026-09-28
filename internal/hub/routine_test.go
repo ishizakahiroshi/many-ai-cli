@@ -97,7 +97,7 @@ func TestRoutineConcurrentAdmissionAndRetryRemainOneRun(t *testing.T) {
 	if _, _, err := s.startRoutine("saved", "second-click", "manual", time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	s.sessions[42] = &session{ID: 42, Label: "routine-" + id}
+	s.sessions[42] = &session{ID: 42, Label: "routine-" + id, LaunchLabel: "routine-" + id}
 	s.recordRoutineDone(proto.DoneSummary{SessionID: 42, Text: "Changes reviewed. Tests were not run.", At: time.Now().Format(time.RFC3339)})
 	for _, key := range []string{"same-click", "second-click"} {
 		run, existing, err := s.startRoutine("saved", key, "manual", time.Now())
@@ -190,7 +190,7 @@ func TestRoutineResultFrozenAndDeletedDefinitionRetainsRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRoutineStatus(t, s, run.ID, "running")
-	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel}
+	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel, LaunchLabel: run.SessionLabel}
 	w := routineRequest(s, http.MethodDelete, "/api/routines/saved?token=routine-test-token", nil)
 	if w.Code != 409 {
 		t.Fatalf("active delete = %d", w.Code)
@@ -225,8 +225,8 @@ func TestRoutineRestartRebindsLabelAndUnknownCompletion(t *testing.T) {
 	run.Status = "running"
 	run.HubInstanceID = "old-hub"
 	s.routines.data.Runs = []routineRun{run}
-	s.sessions[42] = &session{ID: 42, Label: "unrelated", State: "completed"}
-	s.sessions[55] = &session{ID: 55, Label: run.SessionLabel, State: "waiting", Activity: SessionActivity{AwaitingUser: true}}
+	s.sessions[42] = &session{ID: 42, Label: "unrelated", LaunchLabel: "unrelated", State: "completed"}
+	s.sessions[55] = &session{ID: 55, Label: run.SessionLabel, LaunchLabel: run.SessionLabel, State: "waiting", Activity: SessionActivity{AwaitingUser: true}}
 	s.refreshRoutineRuns(time.Now())
 	got := s.routines.data.Runs[0]
 	if got.SessionID != 55 || got.Status != "waiting" || got.HubInstanceID != s.instanceID {
@@ -302,7 +302,7 @@ func TestRoutineNativeReadOnlyCompletionPreservesFullResult(t *testing.T) {
 	now := time.Now().Add(-time.Minute)
 	run, _ := newRoutineRun(s.routines.data.Routines[0], "click", "manual", now)
 	s.routines.data.Runs = []routineRun{run}
-	s.sessions[42] = &session{ID: 42, Provider: "codex", Label: run.SessionLabel, State: "running"}
+	s.sessions[42] = &session{ID: 42, Provider: "codex", Label: run.SessionLabel, LaunchLabel: run.SessionLabel, State: "running"}
 	text := strings.Repeat("Checked existing files. No files were changed. ", 30)
 	s.handleCodexTaskCompletion(42, codexTaskCompletion{TurnID: "first-turn", At: time.Now().Format(time.RFC3339Nano), LastAgentMessage: text})
 	got := s.routines.data.Runs[0]
@@ -318,7 +318,7 @@ func TestRoutineNativeEmptyResultDoesNotInventAnswer(t *testing.T) {
 	s := routineTestServer(t)
 	run, _ := newRoutineRun(s.routines.data.Routines[0], "click", "manual", time.Now().Add(-time.Minute))
 	s.routines.data.Runs = []routineRun{run}
-	s.sessions[42] = &session{ID: 42, Provider: "codex", Label: run.SessionLabel, State: "running"}
+	s.sessions[42] = &session{ID: 42, Provider: "codex", Label: run.SessionLabel, LaunchLabel: run.SessionLabel, State: "running"}
 	s.handleCodexTaskCompletion(42, codexTaskCompletion{TurnID: "first-turn", At: time.Now().Format(time.RFC3339Nano)})
 	got := s.routines.data.Runs[0]
 	if got.Status != "finished" || got.ResultAvailable || got.Result != "" || got.Summary != "" {
@@ -330,7 +330,7 @@ func TestRoutineIdleWithoutCompletionNeedsConfirmation(t *testing.T) {
 	s := routineTestServer(t)
 	run, _ := newRoutineRun(s.routines.data.Routines[0], "click", "manual", time.Now().Add(-time.Minute))
 	s.routines.data.Runs = []routineRun{run}
-	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel, State: "standby", lastOutputAt: time.Now().Add(-time.Minute)}
+	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel, LaunchLabel: run.SessionLabel, State: "standby", lastOutputAt: time.Now().Add(-time.Minute)}
 	s.refreshRoutineRuns(time.Now())
 	got := s.routines.data.Runs[0]
 	if got.Status != "waiting" || got.ResultAvailable || got.Error == "" || got.FinishedAt != "" {
@@ -408,7 +408,7 @@ func TestRoutineResultSaveFailureRetriesWithoutChangingRun(t *testing.T) {
 	s := routineTestServer(t)
 	run, _ := newRoutineRun(s.routines.data.Routines[0], "click", "manual", time.Now())
 	s.routines.data.Runs = []routineRun{run}
-	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel, State: "standby"}
+	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel, LaunchLabel: run.SessionLabel, State: "standby"}
 	s.routines.write = func(string, routineFile) error { return errors.New("temporary write failure") }
 	s.recordRoutineDone(proto.DoneSummary{SessionID: 42, Text: "A fixed result.", At: time.Now().Format(time.RFC3339Nano)})
 	if s.routines.data.Runs[0].Status != "starting" || len(s.routines.pendingResults) != 1 {
@@ -419,5 +419,48 @@ func TestRoutineResultSaveFailureRetriesWithoutChangingRun(t *testing.T) {
 	got := s.routines.data.Runs[0]
 	if got.ID != run.ID || got.Status != "finished" || got.Result != "A fixed result." || len(s.routines.pendingResults) != 0 {
 		t.Fatalf("result recovery lost identity: %+v", got)
+	}
+}
+
+// TestRoutineRenamedSessionStillCompletesRun is the C1 completion criterion of
+// docs/local/plan_session-card-label-edit.md: routine matching keys on the
+// session's fixed LaunchLabel, so renaming the card from the right-click menu
+// (PATCH /api/session/:id/meta, same path web/src/app/settings.ts uses) must
+// not strand the run in an active state.
+func TestRoutineRenamedSessionStillCompletesRun(t *testing.T) {
+	s := routineTestServer(t)
+	run, _ := newRoutineRun(s.routines.data.Routines[0], "click", "manual", time.Now())
+	run.SessionID = 42
+	run.Status = "running"
+	s.routines.data.Runs = []routineRun{run}
+	// Mirrors real registration: Label and LaunchLabel start equal (both come
+	// from the wrapper's register-time report), only Label is meant to drift.
+	s.sessions[42] = &session{ID: 42, Label: run.SessionLabel, LaunchLabel: run.SessionLabel, State: "running"}
+
+	req := httptest.NewRequest(http.MethodPatch, "http://127.0.0.1/api/session/42/meta?token=routine-test-token", strings.NewReader(`{"label":"renamed from card"}`))
+	req.RemoteAddr = "127.0.0.1:32100"
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	s.handleSessionMetaAPI(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("rename status = %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if got := s.sessions[42]; got.Label != "renamed from card" || got.LaunchLabel != run.SessionLabel {
+		t.Fatalf("rename must only change Label, not LaunchLabel: %+v", got)
+	}
+
+	// activeRoutineSession (checked before the run has finished, e.g. to block
+	// a duplicate launch) must still recognize the renamed session as this run.
+	if !s.activeRoutineSession(42, time.Now().Add(time.Minute)) {
+		t.Fatal("activeRoutineSession lost the renamed session")
+	}
+
+	s.recordRoutineDone(proto.DoneSummary{SessionID: 42, Text: "Renamed session result.", At: time.Now().Format(time.RFC3339)})
+	finished := s.routines.data.Runs[0]
+	if finished.Status != "finished" || !finished.ResultAvailable || finished.Result != "Renamed session result." {
+		t.Fatalf("renamed session's run did not finish: %+v", finished)
+	}
+	if got := s.routineRunURL(42); got != "/?routine_run="+run.ID {
+		t.Fatalf("routineRunURL lost the renamed session: %q", got)
 	}
 }

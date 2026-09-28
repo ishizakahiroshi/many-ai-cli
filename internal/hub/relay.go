@@ -1072,11 +1072,17 @@ func (s *Server) relayRearmChildTimers(boardID string, childID int) {
 	}
 }
 
+// sessionLabel returns the session's launch-time label (LaunchLabel), used to
+// key relay reattach matching (run.implLabel / strongLabel / reviewLabel).
+// It must not read the mutable display Label: a card rename after spawn must
+// not break relayReattachMatch, which compares against the wrapper register
+// message's own Label (also always the launch-time value; C1 of plan
+// docs/local/plan_session-card-label-edit.md).
 func (s *Server) sessionLabel(id int) string {
 	s.sessionsMu.Lock()
 	defer s.sessionsMu.Unlock()
 	if ses := s.sessions[id]; ses != nil {
-		return ses.Label
+		return ses.LaunchLabel
 	}
 	return ""
 }
