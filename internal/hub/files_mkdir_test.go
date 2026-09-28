@@ -138,3 +138,17 @@ func TestFilesMkdir_RejectParentNotFound(t *testing.T) {
 		t.Fatalf("unexpected error code: %q detail=%q", resp.Error, resp.Detail)
 	}
 }
+
+func TestFilesMkdir_RejectVCS(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestMkdirServer(t, tmp)
+
+	code, resp := callMkdir(t, s, gitDir, "newdir")
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden, got code=%d resp=%+v", code, resp)
+	}
+}

@@ -64,6 +64,28 @@ func (s *Server) handleFilesRename(w http.ResponseWriter, r *http.Request) {
 		writeRenameErr(w, http.StatusForbidden, "forbidden", "src is outside allowed roots")
 		return
 	}
+	for _, root := range []string{cwd, gitRoot} {
+		if root == "" {
+			continue
+		}
+		same, known := protectedPathIdentityEqual(srcClean, root)
+		if !known {
+			writeRenameErr(w, http.StatusConflict, "conflict", "cannot establish allowed root identity")
+			return
+		}
+		if same {
+			writeRenameErr(w, http.StatusConflict, "conflict", "refusing to rename an allowed root directory")
+			return
+		}
+	}
+	if isVCSPath(srcClean) {
+		writeRenameErr(w, http.StatusForbidden, "forbidden", "refusing to rename a version control path")
+		return
+	}
+	if isVCSPath(req.NewName) {
+		writeRenameErr(w, http.StatusForbidden, "forbidden", "refusing to rename to a version control path")
+		return
+	}
 
 	if _, err := os.Lstat(srcClean); err != nil {
 		writeRenameErr(w, http.StatusNotFound, "not_found", errorDetail("src not found", err))

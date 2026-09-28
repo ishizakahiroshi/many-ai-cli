@@ -171,3 +171,32 @@ func isSecretReadDenied(absPath string) bool {
 	}
 	return false
 }
+
+// isVCSPath は path 自体またはその上位・下位ディレクトリがバージョン管理メタディレクトリ
+// （.git / .hg / .svn）であるかを判定する。
+//
+// 破壊的・変更系 Files API（delete / rename / move / create / mkdir / save）で
+// VCS 管理ディレクトリ配下の破壊や hooks 注入を防止するために使用する。
+func isVCSPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	cleaned := filepath.Clean(path)
+	slash := filepath.ToSlash(cleaned)
+	for _, comp := range strings.Split(slash, "/") {
+		c := strings.ToLower(comp)
+		if c == ".git" || c == ".hg" || c == ".svn" {
+			return true
+		}
+	}
+	if resolved, ok := evalSymlinksViaSelf(cleaned); ok && resolved != cleaned {
+		resolvedSlash := filepath.ToSlash(resolved)
+		for _, comp := range strings.Split(resolvedSlash, "/") {
+			c := strings.ToLower(comp)
+			if c == ".git" || c == ".hg" || c == ".svn" {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -66,6 +66,10 @@ func (s *Server) handleFilesMkdir(w http.ResponseWriter, r *http.Request) {
 		writeMkdirErr(w, http.StatusForbidden, "forbidden", "dir is outside allowed roots")
 		return
 	}
+	if isVCSPath(dirClean) || isVCSPath(req.Name) {
+		writeMkdirErr(w, http.StatusForbidden, "forbidden", "cannot create directories in version control directories")
+		return
+	}
 
 	info, err := os.Stat(dirClean)
 	if err != nil {

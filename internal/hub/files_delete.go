@@ -60,6 +60,10 @@ func (s *Server) handleFilesDeleteDir(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if isVCSPath(srcClean) {
+		writeDeleteDirErr(w, http.StatusForbidden, "forbidden", "refusing to delete a version control directory")
+		return
+	}
 
 	info, err := os.Lstat(srcClean)
 	if err != nil {

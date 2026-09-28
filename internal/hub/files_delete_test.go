@@ -132,3 +132,23 @@ func TestFilesDeleteDir_RejectOutsideAllowedRoot(t *testing.T) {
 		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
+
+func TestFilesDeleteDir_RejectVCSDir(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newTestRenameServer(t, tmp)
+	code, resp := callDeleteDir(t, s, gitDir)
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden, got code=%d resp=%+v", code, resp)
+	}
+	if resp.Error != "forbidden" || !strings.Contains(resp.Detail, "version control") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+	if _, err := os.Stat(gitDir); err != nil {
+		t.Fatalf(".git should not be deleted: %v", err)
+	}
+}

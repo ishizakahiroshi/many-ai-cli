@@ -73,6 +73,24 @@ func (s *Server) planSingleMove(src, dstDirClean, cwd, gitRoot string) (fileMove
 		return fileMovePlan{}, fileMoveResult{Src: src, Error: "forbidden: src is outside allowed roots"}
 	}
 	srcClean := filepath.Clean(src)
+	for _, root := range []string{cwd, gitRoot} {
+		if root == "" {
+			continue
+		}
+		same, known := protectedPathIdentityEqual(srcClean, root)
+		if !known {
+			return fileMovePlan{}, fileMoveResult{Src: src, Error: "conflict: cannot establish allowed root identity"}
+		}
+		if same {
+			return fileMovePlan{}, fileMoveResult{Src: src, Error: "conflict: refusing to move an allowed root directory"}
+		}
+	}
+	if isVCSPath(srcClean) {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "forbidden: refusing to move a version control path"}
+	}
+	if isVCSPath(dstDirClean) {
+		return fileMovePlan{}, fileMoveResult{Src: src, Error: "forbidden: refusing to move into a version control path"}
+	}
 
 	srcInfo, err := os.Lstat(srcClean)
 	if err != nil {
@@ -242,6 +260,10 @@ func (s *Server) handleFilesMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dstDirClean := filepath.Clean(req.DstDir)
+	if isVCSPath(dstDirClean) {
+		writeMoveErr(w, http.StatusForbidden, "forbidden", "dstDir cannot be a version control directory")
+		return
+	}
 	dstDirInfo, err := os.Stat(dstDirClean)
 	if err != nil {
 		writeMoveErr(w, http.StatusNotFound, "not_found", errorDetail("dstDir not found", err))
@@ -292,7 +314,8 @@ func fileOperationErrorStatus(msg string) (int, string) {
 		strings.Contains(low, "already in"),
 		strings.Contains(low, "duplicate"),
 		strings.Contains(low, "overwrite"),
-		strings.Contains(low, "descendant"):
+		strings.Contains(low, "descendant"),
+		strings.Contains(low, "conflict"):
 		return http.StatusConflict, "conflict"
 	case strings.Contains(low, "failed"):
 		return http.StatusInternalServerError, "operation_failed"

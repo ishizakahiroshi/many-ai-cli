@@ -253,3 +253,21 @@ func TestFilesSave_DirectoryPath(t *testing.T) {
 		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
+
+func TestFilesSave_RejectVCS(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(gitDir, "hook.sh")
+	if err := os.WriteFile(hook, []byte("echo hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestSaveServer(t, tmp)
+
+	code, resp := callSave(t, s, hook, "evil content", time.Time{})
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden, got code=%d resp=%+v", code, resp)
+	}
+}

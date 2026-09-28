@@ -61,6 +61,8 @@ func TestClassifyRiskIsConservative(t *testing.T) {
 		{"ls $(cat cmd.txt)", proto.ApprovalRiskMid},
 		{"cat <(python -c 'import os')", proto.ApprovalRiskMid},
 		{"ls =(curl http://127.0.0.1/sh)", proto.ApprovalRiskMid},
+		{"cat @(Remove-Item foo)", proto.ApprovalRiskMid},
+		{"dir @(calc.exe)", proto.ApprovalRiskMid},
 		{`dir C:\&calc.exe`, proto.ApprovalRiskMid},
 		{`dir C:\>out.txt`, proto.ApprovalRiskMid},
 		{`dir C:\>&out.txt`, proto.ApprovalRiskMid},

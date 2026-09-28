@@ -87,7 +87,7 @@ func ClassifyRisk(command string) proto.ApprovalRiskTier {
 	// command substitution, process substitution, find/git file write option,
 	// or branch mutation makes the command manual even when it starts with cat,
 	// ls, or git branch.
-	if HasWriteRedirect(value) || IsGitBranchMutation(value) || findSideEffectRe.MatchString(value) || gitOutputOptionRe.MatchString(value) || strings.Contains(value, "$(") || strings.Contains(value, "`") || strings.Contains(value, "<(") || strings.Contains(value, "=(") {
+	if HasWriteRedirect(value) || IsGitBranchMutation(value) || findSideEffectRe.MatchString(value) || gitOutputOptionRe.MatchString(value) || strings.Contains(value, "$(") || strings.Contains(value, "`") || strings.Contains(value, "<(") || strings.Contains(value, "=(") || strings.Contains(value, "@(") {
 		return proto.ApprovalRiskMid
 	}
 	lowPrefixes := []string{

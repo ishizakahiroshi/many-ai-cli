@@ -321,3 +321,51 @@ func TestRollbackMovesDoesNotOverwriteRecreatedSource(t *testing.T) {
 		t.Fatalf("rollback changed data: src=%q dst=%q", srcData, dstData)
 	}
 }
+
+func TestFilesMove_RejectAllowedRoot(t *testing.T) {
+	tmp := t.TempDir()
+	sub := filepath.Join(tmp, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestMoveServer(t, tmp)
+	code, resp := callMove(t, s, tmp, sub)
+	if code != http.StatusConflict || resp.OK {
+		t.Fatalf("expected conflict, got code=%d resp=%+v", code, resp)
+	}
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "allowed root") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+}
+
+func TestFilesMove_RejectVCS(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	sub := filepath.Join(tmp, "sub")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestMoveServer(t, tmp)
+
+	// Moving .git should be rejected
+	code, resp := callMove(t, s, gitDir, sub)
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden for moving .git, got code=%d resp=%+v", code, resp)
+	}
+	if resp.Error != "forbidden" || !strings.Contains(resp.Detail, "version control") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+
+	// Moving into .git should also be rejected
+	file := filepath.Join(sub, "file.txt")
+	if err := os.WriteFile(file, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, resp = callMove(t, s, file, gitDir)
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden for moving into .git, got code=%d resp=%+v", code, resp)
+	}
+}

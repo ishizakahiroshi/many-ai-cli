@@ -82,6 +82,10 @@ func (s *Server) handleFilesSave(w http.ResponseWriter, r *http.Request) {
 		writeSaveErr(w, http.StatusForbidden, "forbidden", "path is outside allowed roots", time.Time{})
 		return
 	}
+	if isVCSPath(pathClean) {
+		writeSaveErr(w, http.StatusForbidden, "forbidden", "cannot modify files in version control directories", time.Time{})
+		return
+	}
 
 	// テキストファイル許可リスト判定（読み取りと同一リスト）
 	if !isTextFile(pathClean) {

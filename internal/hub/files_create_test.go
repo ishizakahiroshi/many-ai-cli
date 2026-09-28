@@ -117,3 +117,17 @@ func TestFilesCreate_RejectSeparatorInName(t *testing.T) {
 		}
 	}
 }
+
+func TestFilesCreate_RejectVCS(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestCreateServer(t, tmp)
+
+	code, resp := callCreate(t, s, gitDir, "hook.sh")
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden, got code=%d resp=%+v", code, resp)
+	}
+}

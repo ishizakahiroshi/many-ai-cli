@@ -55,6 +55,10 @@ func (s *Server) handleFilesCreate(w http.ResponseWriter, r *http.Request) {
 		writeCreateErr(w, http.StatusForbidden, "forbidden", "dir is outside allowed roots")
 		return
 	}
+	if isVCSPath(dirClean) || isVCSPath(req.Name) {
+		writeCreateErr(w, http.StatusForbidden, "forbidden", "cannot create files in version control directories")
+		return
+	}
 
 	info, err := os.Stat(dirClean)
 	if err != nil {

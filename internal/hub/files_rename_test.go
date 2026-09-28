@@ -160,3 +160,43 @@ func TestFilesRename_RejectNonAbsolute(t *testing.T) {
 		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
 	}
 }
+
+func TestFilesRename_RejectAllowedRoot(t *testing.T) {
+	tmp := t.TempDir()
+	s := newTestRenameServer(t, tmp)
+	code, resp := callRename(t, s, tmp, "renamed-root")
+	if code != http.StatusConflict || resp.OK {
+		t.Fatalf("expected conflict, got code=%d resp=%+v", code, resp)
+	}
+	if resp.Error != "conflict" || !strings.Contains(resp.Detail, "allowed root") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+}
+
+func TestFilesRename_RejectVCS(t *testing.T) {
+	tmp := t.TempDir()
+	gitDir := filepath.Join(tmp, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := newTestRenameServer(t, tmp)
+
+	// Renaming .git should be rejected
+	code, resp := callRename(t, s, gitDir, "dotgit_bak")
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden for .git, got code=%d resp=%+v", code, resp)
+	}
+	if resp.Error != "forbidden" || !strings.Contains(resp.Detail, "version control") {
+		t.Fatalf("unexpected error: code=%q detail=%q", resp.Error, resp.Detail)
+	}
+
+	// Renaming another dir to .git should also be rejected
+	sub := filepath.Join(tmp, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, resp = callRename(t, s, sub, ".git")
+	if code != http.StatusForbidden || resp.OK {
+		t.Fatalf("expected forbidden for newName .git, got code=%d resp=%+v", code, resp)
+	}
+}

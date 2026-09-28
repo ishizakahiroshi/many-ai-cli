@@ -86,6 +86,14 @@ Release artifacts are published at
 - **The prompt template picker is larger, and the mouse wheel now scrolls its
   list.** The picker opens wider and taller, and scrolling the wheel over it
   scrolls the list instead of the terminal behind it.
+- **Files API endpoints protect repository roots and version control directories (.git, .hg, .svn).**
+  Deleting, renaming, moving, creating, or editing paths within or targeting
+  version control directories and root directories is rejected with 403 Forbidden
+  or 409 Conflict.
+- **Approval risk classification recognizes PowerShell array subexpressions `@(...)`.**
+  Commands that embed arbitrary PowerShell statements via `@(...)` (such as
+  `cat @(...)` or `dir @(...)`) are classified as mid-risk instead of incorrectly
+  being treated as low-risk.
 
 ## [0.9.0] - 2026-09-27
 
@@ -536,7 +544,7 @@ Release artifacts are published at
   (the conductor's and the relay's) to the bounded tier.
 
 - The running-session indicator in the session list now spins instead of pulsing.
-  The old dot only grew from about 6px to 9px on a 1.4s cycle, which was too
+  The old dot only grew from about 6px to 9px on a 1.4-second cycle, which was too
   small a change to notice at a glance on a dark card. It now reuses the
   dashed-ring icon already used for "processing" and rotates it, a much more
   visible way to say "something is happening" that doesn't depend on spotting
