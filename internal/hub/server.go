@@ -795,6 +795,7 @@ func (c *wrapperConn) close() {
 
 type Server struct {
 	routines           *routineManager
+	memos              *memoManager
 	cfg                *config.Config
 	providers          *provider.Registry
 	providerRegistryMu sync.RWMutex
@@ -1348,6 +1349,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 		serverConns:           newServerConnManager(logger),
 	}
 	s.initRoutines()
+	s.initMemos()
 	if dir := subscriptionConfigDir(); dir != "" {
 		s.subscriptionUsage.refreshLocal(cfg, dir, time.Now())
 		s.recoverUsageProbes(dir)
@@ -1578,6 +1580,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/routine-runs", s.handleRoutineRuns)
 	mux.HandleFunc("/api/routine-runs/", s.handleRoutineRuns)
 	mux.HandleFunc("/api/auto-approval/status", s.handleAutoApprovalStatus)
+	mux.HandleFunc("/api/memos", s.handleMemos)
+	mux.HandleFunc("/api/memos/", s.handleMemos)
 	mux.HandleFunc("/api/auto-approval/simulate", s.handleAutoApprovalSimulation)
 	mux.HandleFunc("/api/push/status", s.handlePushStatus)
 	mux.HandleFunc("/api/push/vapid-public-key", s.handlePushVAPIDPublicKey)

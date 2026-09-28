@@ -45,6 +45,13 @@ Release artifacts are published at
 
 ### Changed
 - **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
+- **A personal memo drawer sits next to New Session.** Click the note icon to
+  jot next-step reminders, grouped by project with the active session's
+  project listed first; each memo can be checked off, edited in place, or
+  launched directly into a new session carrying its text as the initial
+  prompt. Paths written in a memo open in the existing file preview. Small
+  badges on the button and on matching session cards show each project's
+  open memo count.
 - **Chat shows user messages and AI replies by default.** Tool-only records and
   progress details stay hidden until “Show tool and progress details” is enabled;
   Codex reply text remains visible even when its transcript phase is unclassified.

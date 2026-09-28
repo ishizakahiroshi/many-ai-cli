@@ -175,7 +175,32 @@ func (s *Server) resolveAllowedFilePath(r *http.Request) (fileReadGrant, error) 
 	if s.isPathMentionedInSession(r, pathParam, cwd) || s.isPathMentionedInSession(r, readPath, cwd) {
 		return fileReadGrant{path: readPath, readOnly: true, viaMention: true}, nil
 	}
+
+	// メモドロワー（memo_store.go）に保存したパスも同じ読み取り専用フォールバックで許可する。
+	// メモは看板を消した後や別デバイスから再開するために書くもので、論理リモート
+	// （tailscale 等）から開けないと「メモに書いたパスがそこから開けない」だけが
+	// 直 loopback と違う挙動になってしまう。直 loopback は filesScopeRestricted の分岐で
+	// 既に無条件許可されているため、ここに来るのは論理リモートのときだけ。
+	if s.isPathMentionedInMemos(pathParam) || s.isPathMentionedInMemos(readPath) {
+		return fileReadGrant{path: readPath, readOnly: true, viaMention: true}, nil
+	}
 	return fileReadGrant{}, httpError{status: http.StatusForbidden, msg: "forbidden: path is outside allowed roots"}
+}
+
+// isPathMentionedInMemos は保存済みメモ（memo_store.go の memoMentions）の本文に absPath の
+// 言及があるかを照合する。isPathMentionedInSession はセッションの cwd 1 つに対して相対表記の
+// variant を作るが、メモは項目ごとに project（cwd 相当）が異なるため、メモごとに
+// pathMentionVariants を計算し直す。s.memoMentions() はメモストア未初期化時に nil を返す
+// （fail-closed）ので、この関数もその場合は常に false になる。
+func (s *Server) isPathMentionedInMemos(absPath string) bool {
+	for _, m := range s.memoMentions() {
+		for _, variant := range pathMentionVariants(absPath, m.Project) {
+			if strings.Contains(m.Text, variant) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isRecordedHandoffMemoPath allows the existing Markdown viewer to read only

@@ -27,6 +27,12 @@ import { openHandoffListDialog } from './handoff.js';
 import { openNextSpawnConfirmationFor, pendingSpawnConfirmationCount } from './spawn-confirm.js';
 import { currentSessionStripTab, renderSessionStrip } from './session-strip.js';
 import { captureTerminalView, restoreTerminalView, terminalViewFollows } from './session-view-position.js';
+// C4 (plan_memo-panel.md): メモの件数バッジ。memo-panel.ts は spawn-panel.ts を import し、
+// spawn-panel.ts は providerIconHtml のためこのファイルを import している。session-list.ts が
+// memo-panel.ts を直接 import すると session-list → memo-panel → spawn-panel → session-list の
+// 循環になる（scripts/check-web-module-init.mjs が拾う TDZ の型）ため、循環を作らない
+// memo-model.ts（path-detect.js しか import しない葉モジュール）からだけ読む。
+import { MEMOS_CHANGED_EVENT, openMemoCountForCwd } from './memo-model.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -603,6 +609,10 @@ document.addEventListener('keydown', (e) => {
   jumpToSessionByIndex(n);
 });
 
+// C4 (plan_memo-panel.md): メモの追加・完了・削除でセッション一覧のバッジを更新する。
+// renderSessionList は関数宣言（hoisted）なので、この時点で参照しても TDZ にならない。
+window.addEventListener(MEMOS_CHANGED_EVENT, () => { renderSessionList(); });
+
 // ─── C5: セッションカードクリック — マルチタブ時のフォーカス切替 ──────────
 export function onSessionCardActivate(id) {
   const multiView = document.getElementById('multi-view');
@@ -713,6 +723,20 @@ function cardCtxHtml(s) {
   const severity = pct >= 90 ? 'crit' : (pct >= 75 ? 'warn' : '');
   const title = ti18n('card_ctx_title', 'Context window usage', { pct });
   return `<span class="card-ctx" data-tooltip="${escapeHtml(title)}" aria-label="${escapeHtml(title)}"><span class="card-ctx-gauge"><span class="card-ctx-fill ${severity}" style="width:${pct}%"></span></span><span class="card-ctx-pct ${severity}">${pct}%</span>${ctx.is1m ? '<span class="card-ctx-1m">1M</span>' : ''}</span>`;
+}
+
+// C4 (plan_memo-panel.md): そのセッションの cwd に属する未完了メモの件数。
+// project_id ではなく cwd で判定する（memo-model.ts の openMemoCountForCwd に
+// 集約した理由は同ファイルのコメント参照）。同じプロジェクトの複数セッションは
+// 同じ件数になる（完了条件: プロジェクト単位のため）。0 件のときは出さない。
+function cardMemoBadgeHtml(s) {
+  const cwd = String(s?.cwd || '');
+  if (!cwd) return '';
+  const count = openMemoCountForCwd(cwd);
+  if (count <= 0) return '';
+  const label = count > 99 ? '99+' : String(count);
+  const tip = ti18n('memo_session_open_count', `${count} open memos for this project`, { count });
+  return ` <span class="card-memo-badge" data-tooltip="${escapeHtml(tip)}" aria-label="${escapeHtml(tip)}">${escapeHtml(label)}</span>`;
 }
 
 // 1 枚のカードの 2 行目を in-place で更新する（フル再描画を避け、スクロール位置・
@@ -1299,7 +1323,7 @@ export function renderSessionList() {
       const stateDescription = activity.label || label;
       const statePillHtml = `<span class="card-state-pill ${safeClassToken(state)} ${activity.className}" title="${escapeHtml(stateDescription)}" data-tooltip="${escapeHtml(stateDescription)}" aria-label="${escapeHtml(stateDescription)}"><span class="card-pdot"></span><span class="card-state-icon" aria-hidden="true">${stateIconSvgHtml(activity.iconKind)}</span><span class="card-state-text">${escapeHtml(label)}</span></span>`;
       c.innerHTML =
-		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}</div>` +
+		`<div class="card-title-row">${statePillHtml} <b>#${s.id}</b> ${cardProviderModelHtml(s)}${taskTitleHtml}${cardMemoBadgeHtml(s)}</div>` +
 	        metaRow;
 
       const childToggleEl = c.querySelector('.card-children-toggle') as HTMLElement | null;

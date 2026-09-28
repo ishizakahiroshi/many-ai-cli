@@ -641,3 +641,78 @@ func TestHandleFilesDownload_LoopbackOutsideArbitraryExtensionAllowed(t *testing
 		t.Fatalf("pem: expected 403, got %d: %s", code, body)
 	}
 }
+
+// --- メモに書かれたパスの読み取り許可（C2） ---
+
+// newFilesContentServerWithMemo は、直接 memoManager にメモを 1 件仕込んだ Server を返す。
+// HTTP 経由の /api/memos を通さず、resolveAllowedFilePath 側の判定だけを検証する。
+func newFilesContentServerWithMemo(t *testing.T, tmp string, text string) *Server {
+	t.Helper()
+	s := newTestFilesContentServer(tmp)
+	s.memos = newMemoManager(filepath.Join(t.TempDir(), "memos.json"))
+	s.memos.mu.Lock()
+	s.memos.data.Memos = append(s.memos.data.Memos, memo{ID: "m1", Text: text, CreatedAt: "2026-01-01T00:00:00Z", UpdatedAt: "2026-01-01T00:00:00Z"})
+	s.memos.mu.Unlock()
+	return s
+}
+
+// TestHandleFilesContent_MemoMentionedOutsidePathReadOnly は、論理リモートからの要求でも
+// 保存済みメモの本文に書かれたスコープ外パスが読み取り専用（readOnly=true）で 200 になる
+// ことを確認する（チャット言及フォールバックと同じ扱い）。
+func TestHandleFilesContent_MemoMentionedOutsidePathReadOnly(t *testing.T) {
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "memo_outside.md")
+	if err := os.WriteFile(outsideFile, []byte("# outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := newFilesContentServerWithMemo(t, projDir, "次: "+outsideFile+" から再開")
+
+	code, body, resp := callFilesContentFrom(t, s, outsideFile, testRemoteAddrRemote)
+	if code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", code, body)
+	}
+	if !resp.ReadOnly {
+		t.Fatalf("expected readOnly=true, got %+v", resp)
+	}
+	if resp.Content != "# outside\n" {
+		t.Fatalf("content = %q", resp.Content)
+	}
+}
+
+// TestHandleFilesContent_UnmentionedInMemoPathForbidden は、どのメモにも書かれていない
+// スコープ外パスは論理リモートから引き続き 403 になることを確認する。
+func TestHandleFilesContent_UnmentionedInMemoPathForbidden(t *testing.T) {
+	projDir := t.TempDir()
+	outsideFile := filepath.Join(t.TempDir(), "not_in_memo.md")
+	if err := os.WriteFile(outsideFile, []byte("secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := newFilesContentServerWithMemo(t, projDir, "関係ないメモ")
+
+	code, body, _ := callFilesContentFrom(t, s, outsideFile, testRemoteAddrRemote)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", code, body)
+	}
+}
+
+// TestHandleFilesContent_MemoMentionedSecretPathStillForbidden は、メモに書かれていても
+// 秘密情報 denylist 該当ファイル（.env 等）は 403 のままであることを確認する
+// （denylist はメモ言及フォールバックより手前で評価される）。
+func TestHandleFilesContent_MemoMentionedSecretPathStillForbidden(t *testing.T) {
+	setSecTestHome(t)
+	projDir := t.TempDir()
+	outsideDir := t.TempDir()
+	envPath := filepath.Join(outsideDir, ".env")
+	if err := os.WriteFile(envPath, []byte("API_KEY=super-secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := newFilesContentServerWithMemo(t, projDir, "env: "+envPath)
+
+	code, body, _ := callFilesContentFrom(t, s, envPath, testRemoteAddrRemote)
+	if code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", code, body)
+	}
+	if !strings.Contains(body, "secret-like file") {
+		t.Fatalf("unexpected body: %q", body)
+	}
+}

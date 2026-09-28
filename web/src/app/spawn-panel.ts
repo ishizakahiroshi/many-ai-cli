@@ -49,6 +49,18 @@ export function openSpawnPanelIfClosed(): void {
   _openSpawnPanelIfClosedImpl?.();
 }
 
+// C3（plan_memo-panel.md）: メモの「ここから起動」用。cwd と最初の指示をプリセットして
+// 新規セッションパネルを開く。メモは特定の provider を持たないので provider は変えない。
+let _openSpawnPanelWithImpl: ((opts: { cwd: string; prompt: string }) => void) | null = null;
+
+/**
+ * 新規セッションパネルを cwd / 最初の指示（initial prompt）を入れた状態で開く。
+ * 起動そのものは行わない（起動ボタンは利用者が押す。メモ側から /api/spawn を直接呼ばない）。
+ */
+export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void {
+  _openSpawnPanelWithImpl?.(opts);
+}
+
 // ---- 新規セッション spawn panel ----
 (function () {
   // node:test が純関数だけ import するとき document は無い。配線を走らせない。
@@ -2156,6 +2168,37 @@ export function openSpawnPanelIfClosed(): void {
       fetchModelGroups(false).catch(() => {});
     } else {
       populateModelDatalist();
+  // C3（plan_memo-panel.md）: メモの「ここから起動」の実体。cwd が空（メモが未分類）の
+  // ときは openSpawnFor と同じく既存の入力値を残し、無ければ /api/info の cwd へ倒す。
+  _openSpawnPanelWithImpl = (opts) => {
+    setSpawnOrchestrationMode(false);
+    loadSpawnSettings();
+    if (opts.cwd) {
+      spawnCwdInput.value = opts.cwd;
+    } else if (!spawnCwdInput.value) {
+      void (async () => {
+        try {
+          const res = await apiFetch('/api/info');
+          if (res.ok) spawnCwdInput.value = (await res.json()).cwd || '';
+        } catch (_) {}
+      })();
+    }
+    if (spawnInitialPrompt) {
+      spawnInitialPrompt.value = opts.prompt || '';
+      spawnInitialPrompt.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    newSessionPanel.hidden = false;
+    updateSpawnProviderIcon();
+    refreshCwdInputStatus();
+    spawnCwdInput.focus();
+    if (!getCachedSpawnModelGroups()) {
+      fetchModelGroups(false).catch(() => {});
+    } else {
+      populateModelDatalist();
+      clearOllamaModelDefault();
+    }
+  };
+
       clearOllamaModelDefault();
     }
   }

@@ -1,0 +1,155 @@
+/* Extracted for /styles.css import. plan_memo-panel.md C3 — 作業メモの右ドロワー。
+   非モーダル: 画面全体は覆わない部分ドロワーなので .aac-wheel-overlay は使わない
+   （scripts/check-wheel-overlays.mjs は fixed かつ4辺0のルールだけを対象にする。
+   このドロワーは right/top/bottom だけを固定し left は指定しないので対象外になる）。
+   端末に重なる部分の wheel はネイティブスクロールに任せる（memo-panel.ts の
+   data-wheel-native）。 */
+#memo-drawer {
+  position: fixed;
+  top: calc(var(--app-header-h) + 8px);
+  right: 8px;
+  bottom: 8px;
+  width: min(380px, calc(100vw - 16px));
+  z-index: 1150;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev, #1e2330);
+  color: var(--text);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.45);
+}
+#memo-drawer[hidden] { display: none; }
+.memo-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-shrink: 0; }
+.memo-drawer-title-wrap { min-width: 0; }
+.memo-drawer-title { margin: 0; font-size: 1rem; }
+.memo-drawer-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--muted-2, #9aa4b2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memo-drawer-close {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted-2, #9aa4b2);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+.memo-drawer-close:hover { color: var(--text); }
+.memo-drawer-description {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--muted-2, #9aa4b2);
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+.memo-input-wrap { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.memo-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #14171f);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+.memo-plaintext-note { margin: 0; font-size: 0.68rem; color: var(--muted-2, #9aa4b2); }
+.memo-feedback { margin: 0; font-size: 0.76rem; color: var(--danger, #f87171); white-space: pre-wrap; flex-shrink: 0; }
+.memo-feedback:empty { margin: 0; }
+.memo-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.memo-empty { margin: 0; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); }
+.memo-group { display: flex; flex-direction: column; gap: 6px; }
+.memo-group-heading { display: flex; align-items: baseline; gap: 6px; font-size: 0.78rem; min-width: 0; }
+.memo-group-heading strong { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.memo-group-count { color: var(--muted-2, #9aa4b2); flex-shrink: 0; }
+.memo-group-rows { display: flex; flex-direction: column; gap: 6px; }
+.memo-group-done { font-size: 0.76rem; }
+.memo-group-done summary { cursor: pointer; color: var(--muted-2, #9aa4b2); }
+.memo-group-done .memo-group-rows { margin-top: 6px; }
+.memo-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.memo-row-done { opacity: 0.62; }
+.memo-row-done .memo-row-text { text-decoration: line-through; }
+.memo-row-check { margin-top: 3px; flex-shrink: 0; }
+.memo-row-body { flex: 1; min-width: 0; }
+.memo-row-text { font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.memo-row-edit {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid var(--accent, #3b82f6);
+  border-radius: var(--radius-sm);
+  background: var(--bg, #14171f);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  resize: vertical;
+}
+.memo-row-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.memo-row-launch,
+.memo-row-delete {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft, var(--muted));
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.memo-row-launch:hover { color: #fff; border-color: var(--accent, #3b82f6); background: var(--accent, #3b82f6); }
+.memo-row-delete:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); }
+.memo-sidebar-icon { width: 17px; height: 17px; display: block; }
+
+/* C4: 件数バッジ（ボタン本体・セッション一覧の行）。0 件のときは要素ごと hidden にする。 */
+[data-open-memo] { position: relative; }
+.memo-button-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: bold;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+.memo-button-badge[hidden] { display: none; }
+.card-memo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--bg-elev, #181c24);
+  color: var(--accent-text, #93c5fd);
+  border: 1px solid var(--line, #2a3040);
+  font-size: 0.62rem;
+  font-weight: bold;
+  line-height: 13px;
+  flex-shrink: 0;
+}
