@@ -2,7 +2,8 @@
 // 非モーダル: showModal() は使わず、開いたままターミナルを操作できる（data-wheel-native）。
 // グループ化・並び順・件数の純粋ロジックは memo-model.ts にある。
 import { t } from '../i18n.js';
-import { apiFetch } from './util.js';
+import { apiFetch, token } from './util.js';
+import { openLightbox } from './lightbox.js';
 import { activeSessionId, sessions } from './state.js';
 import { openSpawnPanelWith } from './spawn-panel.js';
 import { basenameForPath, openFileModal } from './path-links.js';
@@ -10,7 +11,10 @@ import { findPathCandidates } from './path-detect.js';
 import {
   countOpenMemosForProject,
   groupMemosByProject,
+  MEMO_IMAGE_MAX_BYTES,
+  MEMO_IMAGES_PER_MEMO,
   MEMOS_CHANGED_EVENT,
+  pickMemoImageFiles,
   resolveMemoPathTarget,
   setSharedMemoCache,
   sortDoneMemos,
@@ -36,6 +40,16 @@ let feedbackEl: HTMLElement;
 let inputEl: HTMLTextAreaElement;
 let subtitleEl: HTMLElement;
 let loadGeneration = 0;
+// 入力欄に貼り付け・ドロップした画像（Hub へ保存済みの画像名）。メモを追加すると空になる。
+// × で外した画像や、追加せずに終わった画像は Hub が次回起動時に回収する（memo_images.go）。
+let pendingImages: string[] = [];
+let pendingImagesEl: HTMLElement;
+// 送信中のアップロード。Enter が先に押されても、終わるのを待ってからメモを作る。
+const inflightUploads = new Set<Promise<void>>();
+
+function memoImageUrl(name: string): string {
+  return `/api/memo-images/${encodeURIComponent(name)}?token=${encodeURIComponent(token)}`;
+}
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {
   const el = document.createElement(tag);
@@ -94,10 +108,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const raw = await response.text();
     let detail = '';
+    let code = '';
     try {
       const error = JSON.parse(raw);
+      if (typeof error.error === 'string') code = error.error;
       if (typeof error.detail === 'string') detail = error.detail.slice(0, 350);
     } catch (_) { /* プロキシのエラーページはダイアログに出しても分からない。 */ }
+    // 画像の容量上限は利用者が対処できる（不要なメモを消す）ので、言語に合わせた文で出す。
+    if (code === 'memo_images_full') throw new Error(t('memo_images_full'));
     throw new Error(`${t('memo_request_failed')} (${response.status})${detail ? ' ' + detail : ''}`);
   }
   return await response.json() as T;
@@ -112,6 +130,71 @@ function activeProject(): string {
 
 function showFeedback(error: unknown): void {
   feedbackEl.textContent = error instanceof Error ? error.message : t('memo_request_failed');
+}
+
+function renderPendingImages(): void {
+  if (!pendingImagesEl) return;
+  pendingImagesEl.replaceChildren();
+  pendingImagesEl.hidden = pendingImages.length === 0;
+  for (const name of pendingImages) {
+    const item = node('div', '', 'memo-image-thumb memo-image-thumb-pending');
+    const img = document.createElement('img');
+    img.src = memoImageUrl(name);
+    img.alt = '';
+    img.addEventListener('click', () => openLightbox(img.src));
+    const remove = node('button', '✕', 'memo-image-remove');
+    remove.type = 'button';
+    remove.title = t('memo_image_remove');
+    remove.setAttribute('aria-label', t('memo_image_remove'));
+    remove.addEventListener('click', () => {
+      pendingImages = pendingImages.filter((n) => n !== name);
+      renderPendingImages();
+      inputEl.focus();
+    });
+    item.append(img, remove);
+    pendingImagesEl.append(item);
+  }
+}
+
+/** 貼り付け・ドロップした画像を Hub へ保存し、入力欄の下にサムネイルで並べる。 */
+function addPendingImageFiles(files: File[]): void {
+  feedbackEl.textContent = '';
+  for (const file of files) {
+    if (pendingImages.length + inflightUploads.size >= MEMO_IMAGES_PER_MEMO) {
+      feedbackEl.textContent = t('memo_image_limit', { count: MEMO_IMAGES_PER_MEMO });
+      return;
+    }
+    if (file.size > MEMO_IMAGE_MAX_BYTES) {
+      feedbackEl.textContent = t('memo_image_too_large');
+      continue;
+    }
+    const upload = (async () => {
+      try {
+        const { image } = await request<{ image: string }>('/api/memo-images',
+          { method: 'POST', headers: { 'Content-Type': file.type }, body: file });
+        pendingImages.push(image);
+        renderPendingImages();
+      } catch (error) { showFeedback(error); }
+    })();
+    inflightUploads.add(upload);
+    void upload.finally(() => inflightUploads.delete(upload));
+  }
+}
+
+function renderMemoImages(container: HTMLElement, images: readonly string[]): void {
+  const wrap = node('div', '', 'memo-row-images');
+  for (const name of images) {
+    const item = node('div', '', 'memo-image-thumb');
+    const img = document.createElement('img');
+    img.src = memoImageUrl(name);
+    img.alt = '';
+    img.loading = 'lazy';
+    img.title = t('memo_image_open');
+    img.addEventListener('click', (e) => { e.stopPropagation(); openLightbox(img.src); });
+    item.append(img);
+    wrap.append(item);
+  }
+  container.append(wrap);
 }
 
 // appendLinkedText（path-links.ts）はライブセッションの cwd で相対パスを解決するが、
@@ -207,7 +290,9 @@ function beginEdit(memo: Memo, rowBody: HTMLElement, textEl: HTMLElement): void 
     textEl.hidden = false;
     if (commit) {
       const next = textarea.value.trim();
-      if (next && next !== memo.text) void updateText(memo, next);
+      // 画像を持つメモは本文を空にしてよい（画像だけのメモとして残る）。
+      const allowEmpty = (memo.images?.length ?? 0) > 0;
+      if ((next || allowEmpty) && next !== memo.text) void updateText(memo, next);
     }
   };
   textarea.addEventListener('keydown', (e) => {
@@ -233,6 +318,14 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   renderMemoText(textEl, memo.text, project);
   textEl.addEventListener('dblclick', () => beginEdit(memo, rowBody, textEl));
   rowBody.append(textEl);
+  if (memo.images && memo.images.length > 0) {
+    renderMemoImages(rowBody, memo.images);
+    // 画像だけのメモは本文が空。ダブルクリックで後から一言足せるよう、薄い案内を出す。
+    if (!memo.text) {
+      textEl.classList.add('memo-row-text-empty');
+      textEl.textContent = t('memo_image_add_note');
+    }
+  }
 
   const actions = node('div', '', 'memo-row-actions');
   const launch = node('button', t('memo_launch'), 'memo-row-launch');
@@ -306,17 +399,24 @@ function updateSubtitle(): void {
 }
 
 async function submitNewMemo(): Promise<void> {
-  const text = inputEl.value.trim();
-  if (!text) return;
+  if (!inputEl.value.trim() && pendingImages.length === 0 && inflightUploads.size === 0) return;
   inputEl.disabled = true;
   try {
-    const payload: { text: string; session_id?: number } = { text };
+    // 貼り付けた直後に Enter されても画像を取りこぼさない。
+    if (inflightUploads.size > 0) await Promise.all(Array.from(inflightUploads));
+    const text = inputEl.value.trim();
+    const images = pendingImages.slice();
+    if (!text && images.length === 0) return;
+    const payload: { text: string; session_id?: number; images?: string[] } = { text };
+    if (images.length > 0) payload.images = images;
     if (activeSessionId !== null) payload.session_id = activeSessionId;
     const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
     cache.push(memo);
     notifyMemosChanged();
     announceMemosChangedToOtherWindows();
     inputEl.value = '';
+    pendingImages = [];
+    renderPendingImages();
     renderList();
   } catch (error) {
     showFeedback(error);
@@ -373,7 +473,31 @@ function ensureDrawer(): HTMLElement {
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitNewMemo(); }
   });
-  inputWrap.append(inputEl, node('p', t('memo_plaintext_note'), 'memo-plaintext-note'));
+  // スクリーンショットの貼り付け（Ctrl+V）。文字も一緒に入っているクリップボード
+  // （表計算ソフトのセル等）は文字の貼り付けを優先し、画像としては取り込まない。
+  inputEl.addEventListener('paste', (e) => {
+    const data = e.clipboardData;
+    if (!data) return;
+    const files = pickMemoImageFiles(Array.from(data.files));
+    if (files.length === 0 || data.types.includes('text/plain')) return;
+    e.preventDefault();
+    addPendingImageFiles(files);
+  });
+  // 画像ファイルのドロップ。
+  inputWrap.addEventListener('dragover', (e) => {
+    if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); inputWrap.classList.add('memo-input-dragover'); }
+  });
+  inputWrap.addEventListener('dragleave', () => inputWrap.classList.remove('memo-input-dragover'));
+  inputWrap.addEventListener('drop', (e) => {
+    inputWrap.classList.remove('memo-input-dragover');
+    const files = pickMemoImageFiles(Array.from(e.dataTransfer?.files ?? []));
+    if (files.length === 0) return;
+    e.preventDefault();
+    addPendingImageFiles(files);
+  });
+  pendingImagesEl = node('div', '', 'memo-input-images');
+  pendingImagesEl.hidden = true;
+  inputWrap.append(inputEl, pendingImagesEl, node('p', t('memo_plaintext_note'), 'memo-plaintext-note'));
 
   feedbackEl = node('p', '', 'memo-feedback');
   feedbackEl.setAttribute('role', 'status');

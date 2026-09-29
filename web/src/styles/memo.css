@@ -72,6 +72,40 @@
   resize: vertical;
 }
 .memo-plaintext-note { margin: 0; font-size: 0.68rem; color: var(--muted-2, #9aa4b2); }
+.memo-input-dragover .memo-input { border-color: var(--accent, #3b82f6); border-style: dashed; }
+/* 画像のサムネイル（入力欄の下＝追加前、メモの行＝保存済み）。 */
+.memo-input-images,
+.memo-row-images { display: flex; flex-wrap: wrap; gap: 6px; }
+.memo-input-images[hidden] { display: none; }
+.memo-row-images { margin-top: 6px; }
+.memo-image-thumb {
+  position: relative;
+  width: 72px;
+  height: 54px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg, #14171f);
+  flex-shrink: 0;
+}
+.memo-image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.memo-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 0.62rem;
+  line-height: 18px;
+  cursor: pointer;
+}
+.memo-image-remove:hover { background: var(--danger, #e06c75); }
+.memo-row-text-empty { color: var(--muted-2, #9aa4b2); font-size: 0.72rem; }
 .memo-feedback { margin: 0; font-size: 0.76rem; color: var(--danger, #f87171); white-space: pre-wrap; flex-shrink: 0; }
 .memo-feedback:empty { margin: 0; }
 .memo-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; }

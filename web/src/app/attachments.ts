@@ -5,6 +5,7 @@ import { activeSessionId, sessions, terminals } from './state.js';
 import { copyPathText } from './path-links.js';
 import { inputEl, isInteractiveFocusTarget, stagePastedText, updateInputAffordance } from '../app.js';
 import { pushMessage } from './chat-history.js';
+import { openLightbox } from './lightbox.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -514,30 +515,5 @@ export function addFileChip(file, onRemove) {
   return wrapper;
 }
 
-export function openLightbox(src, opts: any = {}) {
-  const overlay = document.createElement('div');
-  overlay.id = 'image-lightbox';
-  overlay.classList.add('aac-wheel-overlay');
-  const isVideo = opts.type === 'video';
-  const media: any = document.createElement(isVideo ? 'video' : 'img');
-  if (isVideo) {
-    media.controls = true;
-    media.autoplay = true;
-    media.playsInline = true;
-  }
-  media.src = src;
-  overlay.appendChild(media);
-  document.body.appendChild(overlay);
-  const close = () => {
-    if (isVideo) {
-      try { media.pause(); } catch (_) {}
-    }
-    overlay.remove();
-    document.removeEventListener('keydown', onKey);
-  };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) close();
-  });
-  document.addEventListener('keydown', onKey);
-}
+// 本体は葉モジュール lightbox.ts（作業メモからも使うため）。既存の import 元を保つ。
+export { openLightbox };

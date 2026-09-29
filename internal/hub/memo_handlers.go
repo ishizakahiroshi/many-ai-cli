@@ -56,14 +56,16 @@ func (s *Server) handleMemos(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMemoCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Text      string `json:"text"`
-		SessionID int    `json:"session_id,omitempty"`
+		Text      string   `json:"text"`
+		SessionID int      `json:"session_id,omitempty"`
+		Images    []string `json:"images,omitempty"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
 	text := strings.TrimSpace(body.Text)
-	if text == "" || len(text) > memoTextMaxLen {
+	// 画像だけのメモ（スクショを貼って Enter）を許す。本文も画像も無いメモは作らない。
+	if (text == "" && len(body.Images) == 0) || len(text) > memoTextMaxLen {
 		writeJSONError(w, 400, "bad_request", "text must contain 1 to 4000 bytes")
 		return
 	}
@@ -76,6 +78,10 @@ func (s *Server) handleMemoCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, 400, "memo_limit", "maximum of 500 saved memos reached")
 		return
 	}
+	if err := m.validateImagesLocked(body.Images, ""); err != nil {
+		writeJSONError(w, 400, "bad_request", err.Error())
+		return
+	}
 	id, err := memoID()
 	if err != nil {
 		writeJSONError(w, 500, "memo_operation_failed", "memo operation could not be saved")
@@ -83,6 +89,9 @@ func (s *Server) handleMemoCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	now := memoTime(time.Now())
 	item := memo{ID: id, Text: text, Project: project, CreatedAt: now, UpdatedAt: now}
+	if len(body.Images) > 0 {
+		item.Images = append([]string{}, body.Images...)
+	}
 	next := m.copyLocked()
 	next.Memos = append(next.Memos, item)
 	if err := m.commitLocked(next); err != nil {
@@ -102,7 +111,7 @@ func (s *Server) handleMemoUpdate(w http.ResponseWriter, r *http.Request, id str
 	}
 	if body.Text != nil {
 		trimmed := strings.TrimSpace(*body.Text)
-		if trimmed == "" || len(trimmed) > memoTextMaxLen {
+		if len(trimmed) > memoTextMaxLen {
 			writeJSONError(w, 400, "bad_request", "text must contain 1 to 4000 bytes")
 			return
 		}
@@ -121,6 +130,11 @@ func (s *Server) handleMemoUpdate(w http.ResponseWriter, r *http.Request, id str
 	}
 	if idx < 0 {
 		writeJSONError(w, 404, "not_found", "memo not found")
+		return
+	}
+	// 本文を空にしてよいのは画像を持つメモだけ（画像だけのメモとして残る）。
+	if body.Text != nil && *body.Text == "" && len(next.Memos[idx].Images) == 0 {
+		writeJSONError(w, 400, "bad_request", "text must contain 1 to 4000 bytes")
 		return
 	}
 	now := time.Now()
@@ -159,10 +173,16 @@ func (s *Server) handleMemoDelete(w http.ResponseWriter, id string) {
 		writeJSONError(w, 404, "not_found", "memo not found")
 		return
 	}
+	images := next.Memos[idx].Images
 	next.Memos = append(next.Memos[:idx], next.Memos[idx+1:]...)
 	if err := m.commitLocked(next); err != nil {
 		writeJSONError(w, 500, "memo_operation_failed", "memo operation could not be saved")
 		return
+	}
+	// memos.json から外れた後で画像を消す（先に消すと、保存失敗時にメモだけ残って画像が無くなる）。
+	// 消し損ねた画像は参照されないので、次回起動時の cleanOrphanImages が回収する。
+	if errs := m.removeImages(images); len(errs) > 0 {
+		s.logger.Warn("memo image removal failed", "memo_id", id, "err", errs[0])
 	}
 	writeJSON(w, map[string]bool{"ok": true})
 }

@@ -1583,6 +1583,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/routine-runs/", s.handleRoutineRuns)
 	mux.HandleFunc("/api/memos", s.handleMemos)
 	mux.HandleFunc("/api/memos/", s.handleMemos)
+	mux.HandleFunc("/api/memo-images", s.handleMemoImages)
+	mux.HandleFunc("/api/memo-images/", s.handleMemoImages)
 	mux.HandleFunc("/api/auto-approval/status", s.handleAutoApprovalStatus)
 	mux.HandleFunc("/api/auto-approval/simulate", s.handleAutoApprovalSimulation)
 	mux.HandleFunc("/api/push/status", s.handlePushStatus)

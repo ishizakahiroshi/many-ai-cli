@@ -24,6 +24,8 @@ type memo struct {
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 	DoneAt    string `json:"done_at,omitempty"`
+	// Images は memo-images/ 配下の画像名（パスではない）。memo_images.go 参照。
+	Images []string `json:"images,omitempty"`
 }
 
 type memoFile struct {
@@ -37,15 +39,21 @@ const (
 )
 
 type memoManager struct {
-	mu      sync.Mutex
-	data    memoFile
-	path    string
-	loadErr error
-	write   func(string, memoFile) error
+	mu        sync.Mutex
+	data      memoFile
+	path      string
+	imagesDir string
+	loadErr   error
+	write     func(string, memoFile) error
 }
 
 func newMemoManager(path string) *memoManager {
-	m := &memoManager{path: path, write: writeMemoFile, data: memoFile{Version: 1, Memos: []memo{}}}
+	m := &memoManager{
+		path:      path,
+		imagesDir: filepath.Join(filepath.Dir(path), "memo-images"),
+		write:     writeMemoFile,
+		data:      memoFile{Version: 1, Memos: []memo{}},
+	}
 	b, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return m
@@ -73,6 +81,10 @@ func (s *Server) initMemos() {
 	s.memos = newMemoManager(filepath.Join(dir, "memos.json"))
 	if s.memos.loadErr != nil {
 		s.logger.Warn("memo store unavailable", "err", s.memos.loadErr)
+		return
+	}
+	if n := s.memos.cleanOrphanImages(time.Now()); n > 0 {
+		s.logger.Info("removed unattached memo images", "count", n)
 	}
 }
 

@@ -26,6 +26,18 @@ export interface Memo {
   created_at: string;
   updated_at: string;
   done_at?: string;
+  /** Hub の memo-images/ 配下の画像名（パスではない）。画像だけのメモは text が空。 */
+  images?: string[];
+}
+
+/** 1 つのメモに付けられる画像の上限（internal/hub/memo_images.go の memoImagesPerMemo と同じ）。 */
+export const MEMO_IMAGES_PER_MEMO = 10;
+/** 1 枚の上限（同 memoImageMaxBytes と同じ）。送る前に弾いて、待たせてから失敗させない。 */
+export const MEMO_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** 貼り付けたファイルのうち、メモに付けられる画像（Hub が受ける 4 形式）だけを返す。 */
+export function pickMemoImageFiles<T extends { type: string }>(files: readonly T[]): T[] {
+  return files.filter((f) => ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(f.type));
 }
 
 export interface MemoGroup {

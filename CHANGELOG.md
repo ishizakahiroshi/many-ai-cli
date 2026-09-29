@@ -19,6 +19,14 @@ Release artifacts are published at
   The detached window does not resize the terminal or repeat notification
   sounds, and actions that need the main window (opening a session, the new
   session panel) are handed back to it.
+- **Images can now be pasted into the work memo.** Press Ctrl+V or drop an
+  image file on the memo input to attach screenshots (PNG, JPEG, GIF, WebP;
+  up to 10 per memo, 10 MB each), and a memo can be saved with images only.
+  Saved memos show thumbnails that enlarge on click. The images are kept in
+  `~/.many-ai-cli/memo-images/`, separate from session attachments, so log
+  and attachment cleanup never removes them; they are deleted together with
+  their memo, and images pasted but never added to a memo are removed when the
+  Hub starts at least a day later. New images are refused once the folder reaches 500 MB.
 - **Empty Multi-pane slots can now be removed in one click.** A slot that sits
   in a row (or column) with no view in it shows a "Remove this row" (or
   "Remove this column") button. It shrinks the layout, for example from 2×2 to

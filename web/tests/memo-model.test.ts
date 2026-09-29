@@ -5,6 +5,7 @@ import {
   cwdMatchesMemoProject,
   groupMemosByProject,
   openMemoCountForCwd,
+  pickMemoImageFiles,
   resolveMemoPathTarget,
   setSharedMemoCache,
   sortDoneMemos,
@@ -145,4 +146,12 @@ test('setSharedMemoCache feeds openMemoCountForCwd and totalOpenMemoCount', () =
   expect(totalOpenMemoCount()).toBe(2);
   setSharedMemoCache([]);
   expect(totalOpenMemoCount()).toBe(0);
+});
+
+test('pickMemoImageFiles keeps only the four image types the Hub accepts', () => {
+  const files = [
+    { type: 'image/png' }, { type: 'image/jpeg' }, { type: 'image/gif' }, { type: 'image/webp' },
+    { type: 'image/svg+xml' }, { type: 'text/plain' }, { type: '' },
+  ];
+  expect(pickMemoImageFiles(files).map((f) => f.type)).toEqual(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 });
