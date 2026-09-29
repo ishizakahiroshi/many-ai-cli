@@ -3,6 +3,7 @@ import { t } from '../i18n.js';
 import { apiFetch, showToast, token } from './util.js';
 import { sessions } from './state.js';
 import { FilesTabManager, FilesPreview } from './files-view.js';
+import { saveTextToMemo } from './memo-model.js';
 import {
   findPathCandidates,
   isAbsolutePath,
@@ -154,6 +155,12 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
       const rel = relativeBase ? computeRelPath(relativeBase, filePath) : filePath;
       return copyPathText(rel, anchor).catch(() => {});
     }},
+    // 絶対パスのまま保存する。メモの分類先（project）は Hub がセッションの cwd から決めるので、
+    // ここで相対にすると基点がずれうる（plan_path-menu-save-to-memo.md の方針）。
+    { icon: '📝', key: 'link_save_to_memo', action: (anchor) => saveTextToMemo(filePath, sessionId).then(
+      (result) => showToast(t(result === 'exists' ? 'link_save_to_memo_exists' : 'link_save_to_memo_done'), anchor),
+      (err) => showToast(err instanceof Error ? err.message : t('memo_request_failed'), anchor),
+    )},
   );
   if (isDir) {
     items.push(

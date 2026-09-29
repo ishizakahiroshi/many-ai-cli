@@ -11,6 +11,12 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **File paths can now be saved to the work memo from the path menu.** The
+  menu that opens on a path in the terminal, chat, Files tree and elsewhere has
+  a new "Save to work memo" item. It adds the full path as a memo, grouped under
+  the project of the session the path came from, and says so in a short notice
+  without opening the memo drawer. If the same path is already an unfinished
+  memo, nothing is added and the notice says it is already there.
 - **Tabs and the work memo can now open in their own window.** Right-click a
   tab (Chat, Files, Git, Review, History, Approvals, Subagents, Multi) or the
   work memo button and choose "Open in new window", so the view can stay on

@@ -118,6 +118,7 @@ NVIDIA API の trial 利用は、別途適用される subscription がない限
 - **古いビルドの警告** — Hub の稼働中に実行ファイルを差し替えると、ダッシュボードが「まだ古いビルドで動いている」と知らせる。修正が効かない理由を探し回らずに済む
 - **Workflow の進捗表示** — 完了エージェント数・経過時間・エージェントツリーを Hub 側で算出し、セッションカードと Workflow 画面に表示する。完了時の Web Push は任意で有効化できる
 - **モデルピッカー + Ollama route 自動切替**: spawn フォームから Anthropic / OpenAI / Ollama Cloud / Ollama Local のモデルを選択でき、Hub が必要な `ANTHROPIC_*` / `OPENAI_*` 環境変数をセッションごとに自動注入（shell での事前設定不要）。Ollama daemon が別ホストにある場合は `config.yaml` の `ollama.base_url` で接続先を変更可能（Hyper-V ゲストからホストの Ollama を使う手順は [docs/manual_local-llm-hyperv-host.md](docs/manual_local-llm-hyperv-host.md) を参照）
+- **作業メモ**: サイドバーのボタンから、次にやることを自分用に書き留められる。メモはプロジェクトごとにまとまり、完了のチェック、その場での編集、メモの本文を最初の指示にした新規セッションの起動ができる。パスのメニューの「作業メモに保存」で、ファイルのパスを 1 回の操作でメモにできる
 
 ## 軽量オーケストレーション
 

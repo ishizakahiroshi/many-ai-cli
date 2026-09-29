@@ -120,7 +120,7 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 - **Stale-binary warning** — if you replace the executable while the Hub is running, the dashboard tells you the process is still on the old build instead of leaving you to wonder why a fix did not take effect
 - **Live workflow progress** — agents done/total, elapsed time and the agent tree are computed by the Hub and shown on the session card and in the workflow view, with an optional Web Push when a run finishes
 - **Model picker with Ollama routing** — pick Anthropic / OpenAI / Ollama Cloud / Ollama Local models from the spawn form; the Hub auto-injects the right `ANTHROPIC_*` / `OPENAI_*` env vars per session, no shell setup required. If the Ollama daemon runs on another host, set `ollama.base_url` in `config.yaml`
-- **Personal memo drawer** — jot next-step notes from the sidebar, grouped by project; check them off, edit them in place, or launch a new session with a memo's text as the initial prompt
+- **Personal memo drawer** — jot next-step notes from the sidebar, grouped by project; check them off, edit them in place, or launch a new session with a memo's text as the initial prompt. A file path can also be saved in one click with "Save to work memo" in the path menu
 
 ## Light orchestration
 

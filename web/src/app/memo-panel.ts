@@ -10,11 +10,13 @@ import { basenameForPath, openFileModal } from './path-links.js';
 import { findPathCandidates } from './path-detect.js';
 import {
   countOpenMemosForProject,
+  findOpenMemoByText,
   groupMemosByProject,
   MEMO_IMAGE_MAX_BYTES,
   MEMO_IMAGES_PER_MEMO,
   MEMOS_CHANGED_EVENT,
   pickMemoImageFiles,
+  registerMemoSaver,
   resolveMemoPathTarget,
   setSharedMemoCache,
   sortDoneMemos,
@@ -398,6 +400,34 @@ function updateSubtitle(): void {
   }
 }
 
+type NewMemoPayload = { text: string; session_id?: number; images?: string[] };
+
+// 入力欄からの追加と、パスの右クリックメニューからの保存（saveTextToMemo）の共通部分。
+async function createMemo(payload: NewMemoPayload): Promise<void> {
+  const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
+  cache.push(memo);
+  notifyMemosChanged();
+  announceMemosChangedToOtherWindows();
+  renderList();
+}
+
+// plan_path-menu-save-to-memo.md: パスの右クリックメニューの「作業メモに保存」の実体。
+// memo-model.ts の saveTextToMemo から呼ばれる（循環 import を避けるための登録方式）。
+// sessionId は呼び出し元によって number のことも '' のこともある。数値として読めなければ
+// 選択中のセッションで分類し、それも無ければ未分類にする。
+async function saveTextFromOutside(text: string, sessionId?: number | string | null): Promise<'saved' | 'exists'> {
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error(t('memo_request_failed'));
+  if (findOpenMemoByText(cache, trimmed)) return 'exists';
+  const payload: NewMemoPayload = { text: trimmed };
+  const sid = Number(sessionId);
+  if (Number.isInteger(sid) && sid > 0) payload.session_id = sid;
+  else if (activeSessionId !== null) payload.session_id = activeSessionId;
+  await createMemo(payload);
+  return 'saved';
+}
+registerMemoSaver(saveTextFromOutside);
+
 async function submitNewMemo(): Promise<void> {
   if (!inputEl.value.trim() && pendingImages.length === 0 && inflightUploads.size === 0) return;
   inputEl.disabled = true;
@@ -407,17 +437,13 @@ async function submitNewMemo(): Promise<void> {
     const text = inputEl.value.trim();
     const images = pendingImages.slice();
     if (!text && images.length === 0) return;
-    const payload: { text: string; session_id?: number; images?: string[] } = { text };
+    const payload: NewMemoPayload = { text };
     if (images.length > 0) payload.images = images;
     if (activeSessionId !== null) payload.session_id = activeSessionId;
-    const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
-    cache.push(memo);
-    notifyMemosChanged();
-    announceMemosChangedToOtherWindows();
+    await createMemo(payload);
     inputEl.value = '';
     pendingImages = [];
     renderPendingImages();
-    renderList();
   } catch (error) {
     showFeedback(error);
   } finally {

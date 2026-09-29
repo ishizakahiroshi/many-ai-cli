@@ -3,6 +3,7 @@ import {
   countOpenMemosForCwd,
   countOpenMemosForProject,
   cwdMatchesMemoProject,
+  findOpenMemoByText,
   groupMemosByProject,
   openMemoCountForCwd,
   pickMemoImageFiles,
@@ -154,4 +155,21 @@ test('pickMemoImageFiles keeps only the four image types the Hub accepts', () =>
     { type: 'image/svg+xml' }, { type: 'text/plain' }, { type: '' },
   ];
   expect(pickMemoImageFiles(files).map((f) => f.type)).toEqual(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+});
+
+test('findOpenMemoByText matches an open memo with the same text, ignoring surrounding spaces', () => {
+  const path = 'D:\\repo\\docs\\local\\plan_x.md';
+  const memos = [
+    memo({ id: 'done', text: path, done: true }),
+    memo({ id: 'open', text: `  ${path}\n` }),
+  ];
+  expect(findOpenMemoByText(memos, path)?.id).toBe('open');
+  expect(findOpenMemoByText(memos, ` ${path} `)?.id).toBe('open');
+});
+
+test('findOpenMemoByText ignores done memos, other text and empty input', () => {
+  const path = '/repo/docs/plan_x.md';
+  const memos = [memo({ id: 'done', text: path, done: true }), memo({ id: 'other', text: `${path} C3 から` })];
+  expect(findOpenMemoByText(memos, path)).toBeUndefined();
+  expect(findOpenMemoByText(memos, '   ')).toBeUndefined();
 });

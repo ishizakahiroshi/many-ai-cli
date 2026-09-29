@@ -107,6 +107,39 @@ export function countOpenMemosForProject(memos: readonly Memo[], project: string
 }
 
 /**
+ * 本文が同じ未完了メモを返す（無ければ undefined）。パスの右クリックメニューの
+ * 「作業メモに保存」（plan_path-menu-save-to-memo.md）が、同じパスを何度も積まないために使う。
+ * 完了済みは対象にしない（再開位置として改めて積み直したい場合があるため）。
+ */
+export function findOpenMemoByText(memos: readonly Memo[], text: string): Memo | undefined {
+  const target = text.trim();
+  if (!target) return undefined;
+  return memos.find((m) => !m.done && m.text.trim() === target);
+}
+
+// 「作業メモに保存」の受け口（plan_path-menu-save-to-memo.md）。path-links.ts は
+// memo-panel.ts に import されているので、path-links.ts から memo-panel.ts を import すると
+// 循環になる（MEMOS_CHANGED_EVENT と同じ理由）。memo-panel.ts が読み込み時に実体を登録し、
+// path-links.ts はこの葉モジュール経由で呼ぶ。
+export type MemoSaveResult = 'saved' | 'exists';
+type MemoSaver = (text: string, sessionId?: number | string | null) => Promise<MemoSaveResult>;
+let memoSaver: MemoSaver | null = null;
+
+/** memo-panel.ts だけが呼ぶ。 */
+export function registerMemoSaver(saver: MemoSaver): void {
+  memoSaver = saver;
+}
+
+/**
+ * 文字列を 1 件の作業メモとして保存する。分類先は sessionId のセッションの project
+ * （Hub が決める）。同じ本文の未完了メモが既にあれば作らずに 'exists' を返す。失敗は reject。
+ */
+export function saveTextToMemo(text: string, sessionId?: number | string | null): Promise<MemoSaveResult> {
+  if (!memoSaver) return Promise.reject(new Error('memo panel is not loaded'));
+  return memoSaver(text, sessionId);
+}
+
+/**
  * メモ本文中のパス表記（findPathCandidates の結果）が指す実際のパスを求める。
  * 相対パスは、そのメモの project（書いた時点のセッションの git root）を基点に解決する。
  * appendLinkedText（path-links.ts）はライブセッションの cwd で解決する作りなので、メモの
