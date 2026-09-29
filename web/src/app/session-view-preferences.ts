@@ -25,7 +25,7 @@ export function saveViewPreference(storage: ViewPreferenceStorage | null, device
 }
 
 export function resolveReadingMode(saved: unknown, locked: unknown, device: ViewDevice): string {
-  return readingMode(saved) || (locked === 'split' ? 'split' : readingMode(locked)) || (device === 'mobile' ? 'chat' : 'terminal');
+  return readingMode(saved) || readingMode(locked) || (device === 'mobile' ? 'chat' : 'terminal');
 }
 
 // Preserve the existing numeric Map API, including cleanupRemovedSessionState.delete(id).

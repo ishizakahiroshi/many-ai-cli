@@ -1557,7 +1557,7 @@ initSettingsInformationArchitecture();
 (function () {
   const sel = document.getElementById('locked-mode-select');
   if (!sel) return;
-  // 初期値読み込み (localStorage → '' / 'terminal' / 'chat' / 'split')
+  // 初期値読み込み (localStorage → '' / 'terminal' / 'chat')
   const initial = (typeof getDisplayLockedMode === 'function') ? getDisplayLockedMode() : '';
   sel.value = initial || '';
   sel.addEventListener('change', () => {
@@ -2738,17 +2738,9 @@ export const sessionLazyLoaded = new Map();
 // 「ここには有るが復元側には無い」というずれが起きない。
 export const VALID_TAB_NAMES = new Set<string>(VALID_TAB_NAME_LIST);
 // C5: lock の対象モード (Files/Git は lock 対象外: D10 の lazy 読み込みと相性が悪い)
-export const LOCKABLE_MODES = new Set(['terminal', 'chat', 'split']);
-export const RESPONSIVE_WIDE_MODE_MIN = 1001;
+export const LOCKABLE_MODES = new Set(['terminal', 'chat']);
 
-export function normalizeResponsiveTabName(name) {
-  if (name === 'split' && window.innerWidth < RESPONSIVE_WIDE_MODE_MIN) {
-    return 'terminal';
-  }
-  return name;
-}
-
-// C5: 「表示モードを固定」設定値の取得 ('' / 'terminal' / 'chat' / 'split')
+// C5: 「表示モードを固定」設定値の取得 ('' / 'terminal' / 'chat')
 export function getDisplayLockedMode() {
   try {
     const raw = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY);
@@ -2925,12 +2917,11 @@ export function rememberTabForOpenProject(name: string): void {
 export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
   if (!VALID_TAB_NAMES.has(name)) return;
-  name = normalizeResponsiveTabName(name);
 
   // Capture before hiding either view. Chat owns its own position through this event.
   const previousArea = document.getElementById('display-area');
   if (previousArea && !previousArea.hidden && previousArea.dataset.viewSessionId === String(activeSessionId) &&
-      (previousArea.classList.contains('mode-terminal') || previousArea.classList.contains('mode-split'))) {
+      previousArea.classList.contains('mode-terminal')) {
     captureTerminalView(terminals.get(activeSessionId));
   }
   window.dispatchEvent(new CustomEvent('session-view-mode-changing', {
@@ -3009,7 +3000,7 @@ export function setActiveTab(sid, name) {
       }
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
     area.classList.add('mode-' + name);
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.tab === name);
@@ -3039,7 +3030,7 @@ export function setActiveTab(sid, name) {
       mgr.setWorkspaceSession?.(null);
     }
     area.hidden = false;
-    area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
+    area.classList.remove('mode-terminal', 'mode-chat', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
     area.classList.add('mode-orchestration');
     document.querySelectorAll('#unified-tab-bar .view-tab').forEach(button => button.classList.toggle('active', (button as HTMLElement).dataset.tab === name));
     window.renderOrchestrationDashboard?.();
@@ -3106,10 +3097,10 @@ export function setActiveTab(sid, name) {
   area.hidden = false;
   area.dataset.viewSessionId = String(targetSid);
 
-  area.classList.remove('mode-terminal', 'mode-chat', 'mode-split', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
+  area.classList.remove('mode-terminal', 'mode-chat', 'mode-files', 'mode-git', 'mode-review', 'mode-approval', 'mode-history', 'mode-orchestration');
   area.classList.add('mode-' + name);
 
-  // terminal / chat / split / files / git / history は帯を出すタブ。
+  // terminal / chat / files / git / history は帯を出すタブ。
   setSessionStripTab(name);
 
   // タブボタンの active 切替
@@ -3125,14 +3116,14 @@ export function setActiveTab(sid, name) {
     finally { _setActiveTabRecursion = false; }
   }
 
-  // xterm のリサイズ (D6): terminal/split に切り替えたときは refit
-  if (name === 'terminal' || name === 'split') {
+  // xterm のリサイズ (D6): terminal に切り替えたときは refit
+  if (name === 'terminal') {
     if (typeof refitActiveTerminalAfterLayout === 'function') {
       const entry = terminals.get(targetSid);
       refitActiveTerminalAfterLayout(terminalViewFollows(entry));
       // Runs after the existing layout fit; no polling or delayed overwrite of user scroll.
       requestAnimationFrame(() => {
-        if (activeSessionId === targetSid && (area.classList.contains('mode-terminal') || area.classList.contains('mode-split'))) {
+        if (activeSessionId === targetSid && area.classList.contains('mode-terminal')) {
           restoreTerminalView(entry);
         }
       });
@@ -3148,7 +3139,7 @@ export function setActiveTab(sid, name) {
   if (typeof refreshLockedModeTabClasses === 'function') refreshLockedModeTabClasses();
 
   // bugfix 2026-06-04: DOM mode 確定後に view mode change event を発火する。
-  // chat-history.js はこれを購読して chat/split 切替時の chat-pane mount を保証する。
+  // chat-history.js はこれを購読して chat 切替時の chat-pane mount を保証する。
   // ESM import binding は window.setActiveTab の上書きでは差し替わらないため、
   // monkey patch ではなく event で副作用を流す（タブクリック / applyActiveSessionViewMode
   // など全呼び出し経路がここを通る）。
@@ -3232,7 +3223,7 @@ export function switchToTerminalView() {
 // 新規セッション/アクティブ切替時に display-area のモードを復元
 export function applyActiveSessionViewMode() {
   if (activeSessionId === null || activeSessionId === undefined) return;
-  const mode = normalizeResponsiveTabName(getSessionViewMode(activeSessionId));
+  const mode = getSessionViewMode(activeSessionId);
   refreshLazyTabClasses(activeSessionId);
   setActiveTab(activeSessionId, mode);
 }
@@ -3240,16 +3231,8 @@ export function applyActiveSessionViewMode() {
 window.matchMedia?.('(max-width: 720px)').addEventListener('change', () => {
   const area = document.getElementById('display-area');
   if (!area || area.hidden) return;
-  if (['terminal', 'chat', 'split'].some(mode => area.classList.contains('mode-' + mode))) {
+  if (['terminal', 'chat'].some(mode => area.classList.contains('mode-' + mode))) {
     applyActiveSessionViewMode();
-  }
-});
-
-window.addEventListener('resize', () => {
-  if (window.innerWidth >= RESPONSIVE_WIDE_MODE_MIN) return;
-  const area = document.getElementById('display-area');
-  if (area && area.classList.contains('mode-split')) {
-    setActiveTab(activeSessionId, 'terminal');
   }
 });
 
@@ -3790,7 +3773,6 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
     const lk = localStorage.getItem(STORAGE_DISPLAY_LOCKED_MODE_KEY) || '';
     const lkLabel = lk === 'terminal' ? _summaryLabel('ターミナル', 'Terminal')
                   : lk === 'chat'     ? _summaryLabel('チャット',  'Chat')
-                  : lk === 'split'    ? _summaryLabel('分割',      'Split')
                                       : _summaryLabel('自由切替',  'Free');
     return [langLabel, themeLabel, fsLabel, lkLabel].join('・');
   },

@@ -333,7 +333,7 @@ function buildViewSwitchSection(): HTMLElement | null {
     });
     entry.appendChild(btn);
     const tabName = tab.dataset.tab || '';
-    if (tabName && !['multi', 'split'].includes(tabName)) {
+    if (tabName && tabName !== 'multi') {
       const place = document.createElement('button');
       place.type = 'button';
       place.className = 'mobile-drawer-pane-place';

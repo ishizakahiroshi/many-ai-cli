@@ -1147,10 +1147,10 @@ export function mountChatPaneForSession(sid) {
   if (!position || position.following) scrollChatPaneToBottomSoon({ passes: 2 });
 }
 
-// display-area が chat / split 表示中かどうか（appendMessage の mount 欠落保険用）
+// display-area が chat 表示中かどうか（appendMessage の mount 欠落保険用）
 function isChatViewModeActive() {
   const da = document.getElementById('display-area');
-  return !!da && (da.classList.contains('mode-chat') || da.classList.contains('mode-split'));
+  return !!da && da.classList.contains('mode-chat');
 }
 
 // 1 メッセージの増分追加。subscribe コールバックから呼ばれる。
@@ -1183,7 +1183,7 @@ export function appendMessage(sid, msg) {
   if (wasAtBottom) scrollChatPaneToBottomSoon({ passes: 2 });
 }
 
-// setActiveTab が chat/split に切り替わるタイミングで chat-pane の中身を保証する。
+// setActiveTab が chat に切り替わるタイミングで chat-pane の中身を保証する。
 // bugfix 2026-06-04: 以前は window.setActiveTab を wrapper で差し替えていたが、
 // settings.js 内の主要経路（タブクリック / applyActiveSessionViewMode）は ESM import の
 // setActiveTab を直接呼ぶため wrapper を通らず、mount が欠落していた。
@@ -1198,7 +1198,7 @@ if (typeof window !== 'undefined') {
     const { sid, name } = (ev && ev.detail) || {};
     if (sid === null || sid === undefined) return;
     if (sid !== activeSessionId) return;
-    if (name !== 'chat' && name !== 'split') return;
+    if (name !== 'chat') return;
     try {
       // 既に同 sid でマウント済みなら差分のみ。違う sid なら再構築。
       if (_chatPaneMountedSid !== sid) {
@@ -1242,7 +1242,6 @@ if (typeof window !== 'undefined') {
     const da = document.getElementById('display-area');
     if (!da) return null;
     if (da.classList.contains('mode-chat')) return 'chat';
-    if (da.classList.contains('mode-split')) return 'split';
     if (da.classList.contains('mode-terminal')) return 'terminal';
     if (da.classList.contains('mode-files')) return 'files';
     if (da.classList.contains('mode-git')) return 'git';
@@ -1918,7 +1917,7 @@ if (typeof window !== 'undefined') {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
       if (!isChatVisible()) return;
       const mode = activeMode();
-      if (mode !== 'chat' && mode !== 'split') return;
+      if (mode !== 'chat') return;
       const inp = getFilterBarInput();
       if (!inp) return;
       e.preventDefault();
@@ -1951,7 +1950,7 @@ if (typeof window !== 'undefined') {
     if (e.key === 'Escape') {
       if (!isChatVisible()) return;
       const mode = activeMode();
-      if (mode !== 'chat' && mode !== 'split') return;
+      if (mode !== 'chat') return;
       const inp = getFilterBarInput();
       if (inp && (inp.value !== '' || _searchQuery !== '')) {
         e.preventDefault();

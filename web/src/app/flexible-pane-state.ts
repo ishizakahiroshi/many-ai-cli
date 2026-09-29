@@ -99,7 +99,7 @@ export function normalizePaneContent(raw: unknown): PaneContent | null {
     return { kind: 'session', sessionId: Number(value.sessionId), startedAt: value.startedAt };
   }
   if (value.kind !== 'tab' || !isValidTabName(value.tabName) ||
-      value.tabName === 'multi' || value.tabName === 'split' || value.tabName === 'terminal') return null;
+      value.tabName === 'multi' || value.tabName === 'terminal') return null;
   const sessionId = value.sessionId == null ? null : Number(value.sessionId);
   if (sessionId !== null && (!Number.isSafeInteger(sessionId) || sessionId <= 0)) return null;
   const startedAt = sessionId === null ? null : value.startedAt;
@@ -185,7 +185,7 @@ export function parsePaneDragPayload(raw: string):
     if (id !== null && (!Number.isSafeInteger(id) || id <= 0)) return null;
     if (value.kind === 'session') return id === null ? null : { kind: 'session', sessionId: id };
     if (value.kind === 'tab' && isValidTabName(value.tabName) &&
-        value.tabName !== 'multi' && value.tabName !== 'split') {
+        value.tabName !== 'multi') {
       return { kind: 'tab', tabName: value.tabName, sessionId: id };
     }
   } catch (_) { /* External drags are not placement requests. */ }

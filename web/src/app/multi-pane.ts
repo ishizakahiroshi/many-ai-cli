@@ -926,7 +926,7 @@ export class MultiPaneManager {
   }
 
   _contentForTab(tabName, sessionId): PaneContent | null {
-    if (!isValidTabName(tabName) || tabName === 'multi' || tabName === 'split') return null;
+    if (!isValidTabName(tabName) || tabName === 'multi') return null;
     if (tabName === 'terminal') return this._contentForSession(sessionId);
     const globalTab = tabName === 'approval' || tabName === 'history' || tabName === 'orchestration';
     if (globalTab) return { kind: 'tab', tabName, sessionId: null, startedAt: null };

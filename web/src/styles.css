@@ -1214,7 +1214,6 @@ header {
 
 /* Responsive breakpoints:
    - 720px and below: single-column mobile layout.
-   - 1000px and below: hide drag/split-heavy modes.
    Pointer queries enlarge touch targets independent of width. */
 @media (pointer: coarse) {
   button,
@@ -1253,12 +1252,6 @@ header {
   .card {
     padding-top: 12px;
     padding-bottom: 12px;
-  }
-}
-
-@media (max-width: 1000px) {
-  .view-tab[data-tab="split"] {
-    display: none;
   }
 }
 

@@ -18,7 +18,7 @@ import { activeSessionId } from './state.js';
 
 const STORAGE_KEY = 'unifiedTabOrder';
 const PANE_DRAG_TYPE = 'application/x-many-ai-cli-pane';
-const NON_PANE_TABS = new Set(['multi', 'split']);
+const NON_PANE_TABS = new Set(['multi']);
 
 function barEl(): HTMLElement | null {
   return document.getElementById('unified-tab-bar');

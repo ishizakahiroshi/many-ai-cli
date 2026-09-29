@@ -73,7 +73,7 @@ function currentView(): Placement | null {
   if (!area || area.hidden) return null;
   const mode = Array.from(area.classList).find(name => name.startsWith('mode-'))?.slice(5);
   if (!mode) return null;
-  if (mode === 'terminal' || mode === 'split') {
+  if (mode === 'terminal') {
     return activeSessionId != null && sessions.has(activeSessionId)
       ? { kind: 'session', sessionId: activeSessionId } : null;
   }

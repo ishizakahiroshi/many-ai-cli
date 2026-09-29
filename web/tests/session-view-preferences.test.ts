@@ -24,7 +24,8 @@ describe('device-local reading preference', () => {
     expect(resolveReadingMode(null, 'terminal', 'mobile')).toBe('terminal');
     expect(resolveReadingMode(null, '', 'mobile')).toBe('chat');
     expect(resolveReadingMode(null, '', 'desktop')).toBe('terminal');
-    expect(resolveReadingMode(null, 'split', 'desktop')).toBe('split');
+    // 廃止した split を固定値に保存していても、既定の表示へ落ちる
+    expect(resolveReadingMode(null, 'split', 'desktop')).toBe('terminal');
   });
   test('corrupt and inaccessible storage remain usable', () => {
     expect(readViewPreference({ getItem: () => '{broken}', setItem() {} }, 'mobile')).toBeNull();

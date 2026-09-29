@@ -208,7 +208,7 @@ export function activateSession(id) {
   const wasWorkspace = document.getElementById('multi-view')?.dataset.paneMode === 'workspace' &&
     !document.getElementById('multi-view')?.hidden;
   const previousArea = document.getElementById('display-area');
-  if (previousArea && !previousArea.hidden && (previousArea.classList.contains('mode-terminal') || previousArea.classList.contains('mode-split'))) {
+  if (previousArea && !previousArea.hidden && previousArea.classList.contains('mode-terminal')) {
     captureTerminalView(terminals.get(activeSessionId));
   }
   // C3 (plan_spawn-orchestration-backlog-closeout_c4_spawn-confirm-ui.md): 「その親が

@@ -99,7 +99,7 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 - **Unified approval panel** — approve/reject Claude Code, Codex CLI, GitHub Copilot CLI, Cursor Agent CLI, Grok Build CLI, and opencode prompts from the browser
 - **Batch approvals** — answer multiple numbered questions from one action bar and submit them together
 - **Real-time PTY output** via xterm.js over WebSocket
-- **Chat history and split view** — read a bubble-style conversation history, search/filter it, or keep it beside the live terminal
+- **Chat history and multi-pane view** — read a bubble-style conversation history, search/filter it, or place it beside the live terminal in a Multi pane
 - **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
 - **Detached Session Grid** — pop AI or Shell sessions out into a separate browser window as a standalone grid view; the Hub keeps managing approvals and session state
 - **Shell sessions** — spawn a plain interactive shell (PowerShell / bash / sh) as a regular Hub session alongside AI sessions; AI-specific features (approval injection, Chat, token bar) are automatically disabled for shell sessions
@@ -1061,8 +1061,8 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.
   - Bottom: multi-line input box, attach / send buttons, slash-command picker (`/clear`, `/model`, `/`), and the auto-mode toggle hint `shift+tab`.
-- **Tabs**: Terminal, Chat, Split, Multi, Files, Git, and Review tabs share the main area. Files, Git, and Review tabs are loaded lazily and can be restored after restart.
-- **Chat / Split**: chat view extracts user turns, AI output, approvals, and attachments from the live PTY stream. Split view keeps chat history beside the terminal.
+- **Tabs**: Terminal, Chat, Multi, Files, Git, and Review tabs share the main area. Files, Git, and Review tabs are loaded lazily and can be restored after restart.
+- **Chat**: chat view extracts user turns, AI output, approvals, and attachments from the live PTY stream. To keep it beside the terminal, place a Chat pane next to a Terminal pane in Multi.
 - **Multi tab**: shows several sessions in a grid and routes focus, input, resize, and approval UI to the active pane.
 - **Approval action bar**: appears above the input when an approval is pending. Single prompts use buttons; multi-question prompts render stacked choices with "Submit all".
 - **Fold the action bar**: `✕` folds the action bar into a one-line strip just above the input; click the strip to open it again. While it is folded, your keys go to the terminal, and the approval stays pending. The one exception is an empty Enter (or the send button with an empty input) while a high-risk approval is folded: it is not sent, and a toast asks you to open the strip.
@@ -1076,7 +1076,7 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 ### Usage notes
 
 - **Approval**: When an AI CLI requires approval, an action bar appears above the input. Click the button or navigate with `←` / `→` and confirm with `Enter`. For multi-question approvals, select each section and submit them together.
-- **Chat / Split / Multi**: Use the unified tab bar to switch from the terminal to conversation history, side-by-side history, or a multi-session grid.
+- **Chat / Multi**: Use the unified tab bar to switch from the terminal to conversation history, or to a multi-pane grid where terminals, chats and other views sit side by side.
 - **Files**: Click the project group's Files entry or right-click a session card → Open Files Tab. Preview files in the right pane and use the context menu for copy/open/move/rename actions.
 - **Git**: Click a branch badge or press `Ctrl+Shift+G` to open the Git view for the current session. Commit all stages the whole working tree with `git add -A`, then runs `git commit` only after Review.
 - **Terminal input**: Type directly in the input field and press `Enter` to send. Use `Shift+Enter` for a newline.

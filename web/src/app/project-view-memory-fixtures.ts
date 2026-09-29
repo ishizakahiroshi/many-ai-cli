@@ -28,8 +28,8 @@ import {
 const BOX_A = '/src/box-alpha';
 const BOX_B = '/src/box-bravo';
 
-test('タブ名は既知の 10 種だけを通す', () => {
-  assert.equal(VALID_TAB_NAME_LIST.length, 10);
+test('タブ名は既知の 9 種だけを通す', () => {
+  assert.equal(VALID_TAB_NAME_LIST.length, 9);
   for (const name of VALID_TAB_NAME_LIST) assert.ok(isValidTabName(name));
   for (const bogus of ['', 'Terminal', 'workbench', 'chat ', null, undefined, 3, {}]) {
     assert.equal(isValidTabName(bogus), false);
@@ -40,6 +40,8 @@ test('未知のタブ名は捨てずに既定へ落とす', () => {
   assert.equal(normalizeTabName('git'), 'git');
   assert.equal(normalizeTabName('workbench'), DEFAULT_TAB_NAME);
   assert.equal(normalizeTabName(undefined), DEFAULT_TAB_NAME);
+  // 廃止した split を記憶していた箱は既定（terminal）で開く
+  assert.equal(normalizeTabName('split'), DEFAULT_TAB_NAME);
   assert.equal(normalizeTabName({ tab: 'git' }), DEFAULT_TAB_NAME);
 });
 

@@ -38,6 +38,7 @@ test('saved layout rejects duplicate session and singleton chat placements', () 
 test('unknown and non-placeable tabs become empty slots', () => {
   const normalized = normalizeFlexibleLayout(layout([tab('unknown'), tab('multi')]));
   assert.deepEqual(normalized?.slots, [null, null]);
+  // 廃止した split タブを保存していた古い配置も、空きスロットへ落ちる
   assert.deepEqual(normalizeFlexibleLayout(layout([tab('split'), tab('approval')]))?.slots,
     [null, tab('approval')]);
   assert.deepEqual(normalizeFlexibleLayout(layout([tab('terminal', 1), null]))?.slots,
