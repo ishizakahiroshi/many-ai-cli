@@ -84,6 +84,20 @@ const ALLOWED_EMAIL_DOMAINS = [
   // ここに各プロジェクトの公開窓口ドメインを追記する（例: 'manabi-map.app'）
 ];
 
+// 一致した値そのものはレポートへ出さない。
+// このレポートは CI のログと端末のスクロールバックに残り、どちらも保持される。
+// 公開リポの Actions ログは誰でも読めるので、検知した秘密をそこへ書き出しては
+// 走査器自身が漏洩経路になる。突き合わせに要る情報（長さ・先頭末尾 1 文字）だけ残し、
+// 中身は file:line を開いて確認させる。
+// Do not print the matched value. This report lands in CI logs and terminal scrollback,
+// both retained and public for public repos; writing a detected secret there makes the
+// scanner its own leak path.
+function maskMatch(matched) {
+  const s = String(matched);
+  if (s.length <= 2) return `<${s.length} chars, masked>`;
+  return `${s[0]}...${s[s.length - 1]} <${s.length} chars, masked>`;
+}
+
 function isAllowedEmail(matched) {
   const email = matched.toLowerCase();
   if (ALLOWED_EMAILS.includes(email)) return true;
@@ -524,7 +538,7 @@ function formatHitsText(hits, mode) {
   lines.push('');
   for (const h of hits) {
     lines.push(`  ${h.file}:${h.lineNumber}`);
-    lines.push(`    matched : '${h.matched}'`);
+    lines.push(`    matched : ${maskMatch(h.matched)}`);
     lines.push(`    source  : ${h.source}`);
     lines.push(`    suggest : ${h.suggestion}`);
     lines.push('');
