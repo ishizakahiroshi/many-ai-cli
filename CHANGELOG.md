@@ -11,6 +11,10 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Empty Multi-pane slots can now be removed in one click.** A slot that sits
+  in a row (or column) with no view in it shows a "Remove this row" (or
+  "Remove this column") button. It shrinks the layout, for example from 2×2 to
+  2×1, and never removes a row or column that still holds a view.
 - **Usage for a profile whose login cannot be confirmed is now marked as not
   current.** The last retrieved values are kept, and the Usage panel and the
   active session's Usage row show that they may be out of date, with the time

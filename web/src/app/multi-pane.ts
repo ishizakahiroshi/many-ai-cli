@@ -673,6 +673,22 @@ export class MultiPaneManager {
     label.textContent = `${this._t('pane_slot', 'スロット')} ${idx + 1}`;
     el.appendChild(label);
 
+    // 空きだけの段（または列）に属するスロットには、その線ごと消すボタンを出す
+    const line = this._emptyLineOf(idx);
+    if (line) {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'empty-remove';
+      removeBtn.type = 'button';
+      removeBtn.textContent = line.axis === 'row'
+        ? `✕ ${this._t('pane_remove_empty_row', 'この段を消す')}`
+        : `✕ ${this._t('pane_remove_empty_col', 'この列を消す')}`;
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.removeEmptyLine(line.axis, line.index);
+      });
+      el.appendChild(removeBtn);
+    }
+
     // B: 空スロットもドロップ先にする（末尾への移動）
     this._wireDropTarget(el, idx);
 
@@ -1033,6 +1049,51 @@ export class MultiPaneManager {
     this._saveCustomLayouts();
     this.render();
     this._maybeAutoCollapse(layout);
+    return true;
+  }
+
+  /** idx のスロットが属する、空きだけの段（優先）または列。消せる線が無ければ null。 */
+  _emptyLineOf(idx) {
+    const { cols, rows } = this;
+    const row = Math.floor(idx / cols);
+    const col = idx % cols;
+    if (rows > 1 && Array.from({ length: cols }, (_, c) => row * cols + c).every(i => !this.slots[i])) {
+      return { axis: 'row', index: row };
+    }
+    if (cols > 1 && Array.from({ length: rows }, (_, r) => r * cols + col).every(i => !this.slots[i])) {
+      return { axis: 'col', index: col };
+    }
+    return null;
+  }
+
+  /**
+   * 空きだけの段（axis='row'）または列（axis='col'）を消してレイアウトを詰める。
+   * 中身のあるスロットは消さない（空きでなければ false を返して何もしない）。
+   * 段・列を減らす処理は setLayout に任せ、ここでは残るスロットの並び替えと
+   * フォーカス位置の付け替えだけを行う。
+   */
+  removeEmptyLine(axis, index) {
+    const oldCols = this.cols;
+    const oldRows = this.rows;
+    const count = oldCols * oldRows;
+    const onLine = (i) => (axis === 'row' ? Math.floor(i / oldCols) : i % oldCols) === index;
+    if ((axis !== 'row' && axis !== 'col') || !Number.isInteger(index) || index < 0 ||
+        index >= (axis === 'row' ? oldRows : oldCols) ||
+        (axis === 'row' ? oldRows : oldCols) < 2 ||
+        Array.from({ length: count }, (_, i) => i).some(i => onLine(i) && this.slots[i])) return false;
+
+    const keptIdx = Array.from({ length: count }, (_, i) => i).filter(i => !onLine(i));
+    const layout = this._currentCustomLayout();
+    if (layout) layout.slots = keptIdx.map(i => layout.slots[i] || null);
+
+    let nextFocus = keptIdx.indexOf(this.focusedIdx);
+    if (nextFocus < 0) nextFocus = Math.max(0, keptIdx.findIndex(i => this.slots[i]));
+    const nextMobile = keptIdx.indexOf(this.mobileActiveSlot);
+    this.focusedIdx = nextFocus;
+    this.mobileActiveSlot = nextMobile < 0 ? nextFocus : nextMobile;
+
+    this.setLayout(axis === 'col' ? oldCols - 1 : oldCols, axis === 'row' ? oldRows - 1 : oldRows);
+    this.picker?.syncBadge();
     return true;
   }
 

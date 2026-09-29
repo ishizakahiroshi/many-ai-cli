@@ -205,6 +205,8 @@
   "pane_move": "ペインを移動",
   "pane_remove": "ペインの配置を外す",
   "pane_slot": "スロット",
+  "pane_remove_empty_row": "この段を消す",
+  "pane_remove_empty_col": "この列を消す",
   "pane_placement_empty": "空き",
   "pane_placement_view": "画面",
   "pane_placement_move_to": "移動先を選ぶ",

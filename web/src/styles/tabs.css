@@ -68,6 +68,12 @@ body.pane-resizing .xterm { pointer-events: none; }
   background: var(--bg-deep); border: 1px dashed var(--line);
   color: var(--muted); font-size: 0.75rem; cursor: default;
 }
+.pane-slot.empty .empty-remove {
+  margin-top: var(--space-1); padding: 2px 8px; font-size: 0.7rem;
+  color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 4px; cursor: pointer;
+}
+.pane-slot.empty .empty-remove:hover { color: var(--text); border-color: var(--accent); }
 .pane-slot .pane-header {
   flex-shrink: 0; height: 24px; background: var(--bg-elev);
   border-bottom: 1px solid var(--line);

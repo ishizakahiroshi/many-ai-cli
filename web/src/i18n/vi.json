@@ -205,6 +205,8 @@
   "pane_move": "Di chuyển ô",
   "pane_remove": "Bỏ ô khỏi bố cục",
   "pane_slot": "Ô",
+  "pane_remove_empty_row": "Xóa hàng này",
+  "pane_remove_empty_col": "Xóa cột này",
   "pane_placement_empty": "Trống",
   "pane_placement_view": "Màn hình",
   "pane_placement_move_to": "Chọn vị trí đến",

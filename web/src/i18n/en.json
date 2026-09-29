@@ -205,6 +205,8 @@
   "pane_move": "Move pane",
   "pane_remove": "Remove pane placement",
   "pane_slot": "Slot",
+  "pane_remove_empty_row": "Remove this row",
+  "pane_remove_empty_col": "Remove this column",
   "pane_placement_empty": "Empty",
   "pane_placement_view": "View",
   "pane_placement_move_to": "Choose destination",
