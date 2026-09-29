@@ -17,6 +17,10 @@
 //     Always add a path that reclaims the leftover on the NEXT start.
 //   - Reclaiming requires recording what we wrote. If what is on disk differs,
 //     somebody else has touched it since: leave it alone.
+//   - Restore means byte-for-byte. Test the inject/remove round trip by comparing
+//     bytes, never with TrimSpace or Contains: a restore that leaves one newline
+//     behind per round trip passes those and grows the user's file every session
+//     (internal/wrapper/injected_blocks_roundtrip_test.go).
 //   - Put the generated filename in .gitignore too, but .gitignore does not
 //     apply to already-tracked files, so anything committed needs git rm.
 //   - Anything committed BEFORE the reclaim runs never reaches the reclaim path

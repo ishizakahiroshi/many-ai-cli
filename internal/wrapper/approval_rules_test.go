@@ -260,3 +260,78 @@ func TestInjectRulesClaudeImportIsIdempotent(t *testing.T) {
 		t.Fatalf("claude import count = %d, want 1\n%s", got, string(data))
 	}
 }
+
+// Hub はセッションの接続で import 行を差し込み、終了や次回起動時の回収で取り除く。
+// この往復を何度繰り返しても、利用者の CLAUDE.md は元のバイト列へ戻らなければならない
+// （docs/local/bugfix_claude-import-removal-leaves-blank-lines_2026-09-29.md C1）。
+func TestRemoveRulesClaudeImportRoundTripRestoresOriginal(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		original string
+	}{
+		{name: "ends with newline", original: "# rules\n\nbody\n"},
+		{name: "no trailing newline", original: "# rules\n\nbody"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withTempHome(t)
+			path := filepath.Join(t.TempDir(), "CLAUDE.md")
+			if err := os.WriteFile(path, []byte(tc.original), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			for i := 0; i < 3; i++ {
+				if err := InjectRules("claude", path); err != nil {
+					t.Fatalf("InjectRules #%d failed: %v", i+1, err)
+				}
+				if err := RemoveRules("claude", path); err != nil {
+					t.Fatalf("RemoveRules #%d failed: %v", i+1, err)
+				}
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != tc.original {
+				t.Fatalf("3 inject/remove round trips changed the file:\nwant: %q\ngot:  %q", tc.original, string(data))
+			}
+		})
+	}
+}
+
+// 差し込んだ後に利用者が追記したり改行コードを変えたりして、末尾の形が崩れていても、
+// import 行と差し込み時に足した空行 1 行だけを落とし、利用者の内容は残す。
+func TestRemoveRulesClaudeImportDropsInjectedBlankLineWhenReshaped(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "user appended after the import line",
+			content: "# rules\n\n" + claudeImportLine + "\nadded later\n",
+			want:    "# rules\nadded later\n",
+		},
+		{
+			name:    "file converted to CRLF",
+			content: "# rules\r\n\r\n" + claudeImportLine + "\r\n",
+			want:    "# rules\r\n",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			withTempHome(t)
+			path := filepath.Join(t.TempDir(), "CLAUDE.md")
+			if err := os.WriteFile(path, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := RemoveRules("claude", path); err != nil {
+				t.Fatalf("RemoveRules failed: %v", err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(data) != tc.want {
+				t.Fatalf("RemoveRules result:\nwant: %q\ngot:  %q", tc.want, string(data))
+			}
+		})
+	}
+}

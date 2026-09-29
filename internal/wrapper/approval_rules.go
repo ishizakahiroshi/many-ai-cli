@@ -30,7 +30,9 @@ const legacySharedBlockEnd = "<!-- /any-ai-cli:approval-rules -->"
 // が拾う）。version 22 で前置きの代替表現を「箇条書き（`- `）」から「短い段落か 1 行 1 項目の
 // 地の文」へ改めた（利用者のグローバル規約「many-ai-cli 配下では行頭の `- ` を使わない」と
 // 矛盾していたため。ダッシュボードは Markdown を描画しないので記号がそのまま画面に出る）。
-const rulesVersion = "23"
+// version 24 でリテラル引用禁止の理由から事件 ID と非公開 docs のパスを外した（全利用者の
+// 全プロジェクトで読み込まれる文面のため）。
+const rulesVersion = "24"
 
 // ApprovalRulesResidueNeedle は、置き去りになった承認ルールブロックを探すための
 // 検索文字列。旧名 any-ai-cli は新名 many-ai-cli の部分文字列（many = "m" + any）
@@ -74,7 +76,7 @@ var rulesFileContent = strings.Join([]string{
 	"- 「OPEN マーカー」「CLOSE マーカー」（または「開始マーカー」「終了マーカー」）",
 	"- 「DONE 開始マーカー」「DONE 終了マーカー」",
 	"- 「承認マーカー」「完了マーカー」と総称で済ませる",
-	"理由: Web ダッシュボード側の hub-marker-filter は prose 内のリテラル引用を本物マーカーと区別できず、開始マーカーが現れた瞬間から対応する終了マーカーまで（あるいは終了マーカーが来ないまま応答が終わる場合は応答末尾まで）の本文を UI に表示しなくなる。結果、ユーザーから見ると AI 応答が途中でぷっつり切れて再送を強いられる（2026-06-23 セッション #8 で多発・docs/local/bugfix_hub-marker-filter-prose-literal-collision_2026-06-23.md）。",
+	"理由: Web ダッシュボード側の hub-marker-filter は prose 内のリテラル引用を本物マーカーと区別できず、開始マーカーが現れた瞬間から対応する終了マーカーまで（あるいは終了マーカーが来ないまま応答が終わる場合は応答末尾まで）の本文を UI に表示しなくなる。結果、ユーザーから見ると AI 応答が途中でぷっつり切れて再送を強いられる。",
 	"なお、本ファイル `approval-rules.md` 自身は AI に承認マーカー仕様を教える文書として例示が必要なため、本文中にリテラルがそのまま現れる。これは AI が本ファイルを Read する瞬間の話であり、AI のターン出力に乗らない限り filter には届かない。AI は本ファイルを Read した後の **自分のターン出力で同じ引用を真似しない** こと。",
 	"",
 	"- YES/NO:",
@@ -386,13 +388,7 @@ func RemoveRules(provider, path string) error {
 	var newContent string
 	switch {
 	case provider == "claude":
-		var kept []string
-		for _, line := range strings.Split(string(content), "\n") {
-			if strings.TrimSpace(line) != claudeImportLine {
-				kept = append(kept, line)
-			}
-		}
-		newContent = strings.Join(kept, "\n")
+		newContent = removeClaudeImport(string(content))
 	case providerUsesSharedBlock(provider):
 		// 旧名 any-ai-cli マーカーのブロックも除去対象（旧バイナリからの移行）。
 		blockRe := regexp.MustCompile(blockRemovalPattern(
@@ -407,6 +403,30 @@ func RemoveRules(provider, path string) error {
 		return nil
 	}
 	return os.WriteFile(path, []byte(newContent), 0o644) // #nosec G703 G306 -- provider 既知の instruction file パスのみ（HTTP 入力なし）。共有ドキュメントのため 0644 が意図
+}
+
+// removeClaudeImport は appendClaudeImport が末尾へ足した "\n<import 行>\n" を取り除く。
+// 差し込んだときの形が末尾に残っていれば、その文字列だけを落として元のバイト列へ戻す。
+// 利用者が後ろへ追記した・改行コードを変えた等で形が崩れていれば、import 行と、その直前の
+// 空行 1 行（差し込み時に足した改行の分）だけを落とす。import 行だけを落とすと、足した改行が
+// 往復のたびに 1 行ずつ積み残る（bugfix_claude-import-removal-leaves-blank-lines_2026-09-29.md）。
+func removeClaudeImport(content string) string {
+	injected := "\n" + claudeImportLine + "\n"
+	if strings.HasSuffix(content, injected) && strings.Count(content, claudeImportLine) == 1 {
+		return strings.TrimSuffix(content, injected)
+	}
+	lines := strings.Split(content, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.TrimSpace(line) != claudeImportLine {
+			kept = append(kept, line)
+			continue
+		}
+		if n := len(kept); n > 0 && strings.TrimSpace(kept[n-1]) == "" {
+			kept = kept[:n-1]
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 // blockRemovalPattern はブロック除去用の正規表現本体を組み立てる。start/end の
