@@ -10,15 +10,19 @@
   gap: var(--space-1);
   padding: 6px 4px 4px;
   background: var(--bg);
+  /* サイドバー幅に合わせてボタンを縮める（狭いと右端のアイコンが切れるため）。
+     ボタン 7 個・gap 6 本ぶん（24px）を引いた残りを等分し、18px〜32px に収める。 */
+  container-type: inline-size;
+  --nsb-size: clamp(18px, calc((100cqw - 24px) / 7), 32px);
 }
 
 #new-session-btn.new-session-sidebar-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+  flex: 0 0 var(--nsb-size, 32px);
+  width: var(--nsb-size, 32px);
+  height: var(--nsb-size, 32px);
   background: var(--accent-soft);
   color: var(--accent-text);
   border: 1px solid var(--accent);
@@ -32,7 +36,7 @@
 }
 #new-session-btn.new-session-sidebar-btn:hover { background: var(--accent); color: var(--bg); opacity: 1; }
 #new-session-btn.new-session-sidebar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.new-session-sidebar-icon { width: 17px; height: 17px; display: block; }
+.new-session-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 .new-session-btn-label {
   position: absolute;
   width: 1px;
@@ -50,14 +54,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--nsb-size, 32px);
+  height: var(--nsb-size, 32px);
   background: var(--bg-elev, #181c24);
   color: var(--accent-text, #93c5fd);
   border: 1px solid var(--line, #2a3040);
   border-radius: var(--radius-md);
   cursor: pointer;
-  font-size: 1rem;
+  font-size: calc(var(--nsb-size, 32px) * 0.5);
   flex-shrink: 0;
   padding: 0;
   transition: background 0.15s, border-color 0.15s;
@@ -67,14 +71,15 @@
   border-color: var(--accent, #3b82f6);
   color: #fff;
 }
-.routine-sidebar-icon { width: 17px; height: 17px; display: block; }
+.routine-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 
 #kill-all-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  flex-shrink: 0;
+  width: var(--nsb-size, 32px);
+  height: var(--nsb-size, 32px);
   background: rgba(244,63,94,0.06);
   color: var(--danger);
   border: 1px solid rgba(244,63,94,0.34);
@@ -86,8 +91,8 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
 .kill-all-icon {
-  width: 17px;
-  height: 17px;
+  width: calc(var(--nsb-size, 32px) * 0.53);
+  height: calc(var(--nsb-size, 32px) * 0.53);
   display: block;
 }
 #kill-all-btn:hover {
@@ -104,8 +109,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--nsb-size, 32px);
+  height: var(--nsb-size, 32px);
   background: var(--accent-soft);
   color: var(--accent-text);
   border: 1px solid var(--accent);
@@ -117,7 +122,7 @@
   flex-shrink: 0;
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
-.orchestration-icon { width: 17px; height: 17px; display: block; }
+.orchestration-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 .orchestration-sidebar-btn:hover { background: var(--accent); color: var(--bg); opacity: 1; }
 .orchestration-sidebar-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
