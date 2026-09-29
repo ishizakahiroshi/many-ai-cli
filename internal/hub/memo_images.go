@@ -163,7 +163,7 @@ func (s *Server) handleMemoImages(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusNotFound, "not_found", "image not found")
 			return
 		}
-		data, err := os.ReadFile(filepath.Join(s.memos.imagesDir, name))
+		data, err := os.ReadFile(filepath.Join(s.memos.imagesDir, name)) // #nosec G703 -- name は直前の memoImageNameRe（hex 32 桁 + 固定拡張子）で検証済みで、区切り文字や .. を含み得ない
 		if err != nil {
 			writeJSONError(w, http.StatusNotFound, "not_found", "image not found")
 			return
