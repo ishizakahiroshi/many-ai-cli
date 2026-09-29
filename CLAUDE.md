@@ -1,6 +1,7 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
+> 最終更新: 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
+> 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
 > 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
 
 > **このファイルは索引であって本文ではない。** 全 AI セッションで全文がロードされるので、本文を置くと全員のコンテキストを毎回消費する。詳細は各行が指す正本を読む。タスク別の詳細は `CLAUDE/*.md`。
@@ -19,14 +20,12 @@
 
 **仕様の正本**は README（公開仕様）とソースコード（実装仕様）。v0.3.x の設計書は [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) へ退避した（非公開・履歴）。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
 
-v0.8.0 まで出荷済み。v0.4.0 で Workbench と Hub 内蔵チャットプロキシを撤去、v0.5.0 で `setup` / `doctor` / autoapproval、v0.6.0 で transcript ベースのチャット本文、v0.7.0 で承認同一性の一本化とトレイ常駐、v0.8.0 で引き継ぎ看板・複数サブスクリプション・relay ループ・Command Code provider を追加した。
-
 ## 用語・名称
 
 | 項目 | 値 |
 |------|------|
 | プロダクト名 / バイナリ名 | `many-ai-cli`（Windows: `many-ai-cli.exe`） |
-| サブコマンド | `serve` / `wrap <provider>` / `shell-init` / `setup` / `doctor` / `tray` / `stop` / `status` / `uninstall` / `version` |
+| サブコマンド | `serve` / `connect` / `setup` / `doctor` / `issue` / `wrap <provider>`（`<provider>` 単体でも同じ）/ `shell-init` / `stop` / `status` / `tray` / `profile-export` / `log-clean` / `uninstall` / `version`。ほかに `provider` と隠しサブコマンド `usage-relay` / `orchestrate`（正本は `cmd/many-ai-cli/main.go` のサブコマンド分岐） |
 | Hub URL | `http://127.0.0.1:47777/?token=<random>` |
 | 設定ファイル | `~/.many-ai-cli/config.yaml`（Win: `%USERPROFILE%\.many-ai-cli\config.yaml`） |
 | ログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt` |
@@ -43,9 +42,7 @@ Go（クロスコンパイルで Win/Mac/Linux 単一バイナリ）/ PTY は `c
 cmd/many-ai-cli/main.go   単一バイナリのエントリポイント
 internal/hub/             HTTP+WS / セッション管理 / attach / spawn
 internal/wrapper/         PTY ラッパー（OS 別実装）/ attach inject
-internal/                 ほか approval / attach / config / doctor / hubruntime / launcher /
-                          log / notify / orchestrate / proto / sessionlog / sessionstore /
-                          shell / subscription / tray / uninstall / usagerelay / wslutil
+internal/                 ほか機能別パッケージ（一覧と役割は .omitnix/index.json）
 web/src/                  フロントソース（web/dist/ は生成物・gitignore）
 docs/local/               設計書・plan 等（非公開）
 ```
