@@ -222,6 +222,48 @@ export function cycleDialogFocus(root: HTMLElement, event: KeyboardEvent): boole
 // internal/provider/update.go; DEFAULT_UPDATE_TIMEOUT_SECONDS mirrors
 // defaultUpdateTimeoutSec there. Both are display-only here (an empty form
 // field means "use the server's default", never a literal 0 sent to save).
+// The edit form has its own fields for the icon letters and color, so the advanced JSON is shown without
+// those two keys. Anything else in presentation stays where it is.
+export function presentationWithoutIconFields(presentation: unknown): Record<string, unknown> | undefined {
+  if (!presentation || typeof presentation !== 'object' || Array.isArray(presentation)) return undefined;
+  const rest: Record<string, unknown> = { ...(presentation as Record<string, unknown>) };
+  delete rest.icon_text;
+  delete rest.color;
+  return Object.keys(rest).length > 0 ? rest : undefined;
+}
+
+// Combines presentation from the advanced JSON with the icon form fields. A filled-in field wins; an empty
+// field adds nothing (so a value typed straight into the JSON still reaches the Hub, which validates it, and
+// a cleared field leaves nothing behind). Returns undefined when nothing is left, so the definition does not
+// carry an empty presentation object.
+export function mergeIconPresentation(
+  advanced: unknown,
+  form: { icon_text?: string; color?: string },
+): Record<string, unknown> | undefined {
+  const fromJson = (advanced && typeof advanced === 'object' && !Array.isArray(advanced))
+    ? advanced as Record<string, unknown>
+    : {};
+  const merged: Record<string, unknown> = { ...fromJson };
+  if (form.icon_text) merged.icon_text = form.icon_text;
+  if (form.color) merged.color = form.color;
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+// AI のアイコンに選べる画像の上限と形式。Hub（internal/hub/provider_icon_handlers.go の providerIconMaxBytes と
+// avatarImageAllowed）と同じ規則で、ここは送る前に理由を出すための先回りの確認。最終判断は Hub が中身から行う
+// ので、ブラウザが種類を返さない（空）ファイルは通す。SVG は種類が image/svg+xml なのでここで止まる。
+export const MAX_ICON_IMAGE_BYTES = 512 * 1024;
+const ICON_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
+export type IconImageFileCheck = { ok: true } | { ok: false; reason: 'type' | 'size' };
+
+export function checkIconImageFile(file: { type?: string; size: number }): IconImageFileCheck {
+  const type = String(file.type || '').trim().toLowerCase();
+  if (file.size <= 0 || (type !== '' && !ICON_IMAGE_MIME_TYPES.has(type))) return { ok: false, reason: 'type' };
+  if (file.size > MAX_ICON_IMAGE_BYTES) return { ok: false, reason: 'size' };
+  return { ok: true };
+}
+
 export const MAX_UPDATE_TIMEOUT_SECONDS = 3600;
 export const DEFAULT_UPDATE_TIMEOUT_SECONDS = 300;
 

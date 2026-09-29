@@ -16,6 +16,7 @@ import {
   type UsageWindowInput,
 } from './usage-limit.js';
 import { hasProviderCapability } from './provider-store.js';
+import { fillProviderIconSlots, providerDisplayName, providerIconHtml } from './provider-icon.js';
 import { PROVIDER_ORDER_CHANGED_EVENT, sortByProviderOrder } from './provider-order.js';
 import { activeSessionId, sessions } from './state.js';
 
@@ -419,7 +420,10 @@ function renderInlineUsage(): void {
   const session = activeSessionId === null ? null : sessions.get(activeSessionId);
   const provider = target?.provider || String(session?.provider || '');
   const busy = !!target && inlineRefreshBusyKey === `${target.provider}:${target.id}`;
-  const providerLabel = provider ? provider.charAt(0).toUpperCase() + provider.slice(1) : 'Usage';
+  // AI 名はカード・起動パネルと同じ providerDisplayName()。アイコンもカードと同じ 14px。
+  // セッションが無いときは AI が決まらないのでアイコンは出さない。
+  const providerLabel = provider ? providerDisplayName(provider) : 'Usage';
+  const providerIcon = session && provider ? providerIconHtml(provider, 14) : '';
   const providerData = usageData?.providers.find((item) => item.provider === provider);
   const profile = target && providerData?.profiles.find((item) => item.id === target.id);
   const windows = profile ? compactWindows(provider, profile) : [];
@@ -443,7 +447,7 @@ function renderInlineUsage(): void {
   }
   const freshness: UsageFreshness = profile && !message ? usageFreshness(profile.auth_status, windows.length > 0) : 'current';
   const stale = freshness !== 'current';
-  const identity = `<div class="inline-usage-identity"><strong title="${escapeHtml(providerLabel)}">${escapeHtml(providerLabel)}</strong><span title="${escapeHtml(profile?.name || target?.id || '')}">${escapeHtml(profile?.name || target?.id || '')}${profile ? ` · ${escapeHtml(profilePlan(provider, profile))}` : ''}</span></div>`;
+  const identity = `<div class="inline-usage-identity"><strong class="inline-usage-provider" title="${escapeHtml(providerLabel)}">${providerIcon}<bdi class="inline-usage-provider-name">${escapeHtml(providerLabel)}</bdi></strong><span title="${escapeHtml(profile?.name || target?.id || '')}">${escapeHtml(profile?.name || target?.id || '')}${profile ? ` · ${escapeHtml(profilePlan(provider, profile))}` : ''}</span></div>`;
   const center = message
     ? `<span class="inline-usage-message${inlineRefreshError ? ' inline-usage-message--error' : ''}" title="${escapeHtml(message)}">${escapeHtml(message)}</span>`
     : `<div class="inline-usage-center${stale ? ' inline-usage-center--stale-auth' : ''}">${windows.map(({ label, window }) => meter(label, window, true)).join('')}</div>`;
@@ -843,6 +847,8 @@ function applyProviderOrderToPanel(): void {
 export function initUsagePanel(dropdown: HTMLElement): void {
   if (panelRoot === dropdown) return;
   panelRoot = dropdown;
+  // ドロップダウン各行のアイコンは index.html に図形を複製せず、空の器へ provider-icon.ts が入れる。
+  fillProviderIconSlots(dropdown);
   inlineRoot = document.getElementById('session-inline-usage');
   document.addEventListener('session-usage-target-changed', onInlineTargetChanged);
   // settings.ts initializes the dropdown while modules are still evaluating.

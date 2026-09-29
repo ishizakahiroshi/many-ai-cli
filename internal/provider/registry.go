@@ -64,6 +64,7 @@ func Build(layers Layers, adapters AdapterCatalog) (*Registry, []Diagnostic) {
 			Origin:       definition.EffectiveSource.Origin,
 			Revision:     registry.revision,
 			Capabilities: definition.Capabilities,
+			Presentation: sanitizePresentation(definition.Presentation),
 		})
 	}
 	sortDiagnostics(registry.diagnostics)

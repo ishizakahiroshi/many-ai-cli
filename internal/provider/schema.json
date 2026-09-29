@@ -27,7 +27,13 @@
     "models": {"type": "object"},
     "capabilities": {"type": "object", "additionalProperties": {"type": "boolean"}},
     "adapters": {"type": "object"},
-    "presentation": {"type": "object"},
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "icon_text": {"type": "string", "maxLength": 16},
+        "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{6}$"}
+      }
+    },
     "approval_pattern_source": {"type": "string", "maxLength": 512},
     "source": {"type": "object"},
     "update": {

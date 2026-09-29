@@ -34,31 +34,15 @@
     <div id="summary" data-i18n="loading">...</div>
     <button id="reconnect-btn" hidden>↺ <span data-i18n="reconnect">reconnect</span></button>
     <div class="usage-menu" id="usage-menu">
-      <button class="usage-menu-btn" id="usage-menu-btn" aria-haspopup="true" aria-expanded="false">
-        <!-- 図形の使い分け（丸＝単体で起動できるもの / 角丸＝Claude・Codex からラップして使う route。
-             ローカルかクラウドかではない）の正本は web/src/app/session-list.ts の providerIconHtml。
-             ここはその図形を静的 SVG で複製しているだけなので、形を変えるときは両方を揃える。 -->
-        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 14" width="90" height="14" aria-hidden="true">
-          <circle class="prov-shape claude" cx="5" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter claude" x="5" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">C</text>
-          <circle class="prov-shape codex" cx="15" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter codex" x="15" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">X</text>
-          <circle class="prov-shape grok" cx="25" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter grok" x="25" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">G</text>
-          <circle class="prov-shape opencode" cx="35" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter opencode" x="35" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <circle class="prov-shape command-code" cx="45" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter command-code" x="45" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">M</text>
-          <circle class="prov-shape copilot" cx="55" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter copilot" x="55" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">P</text>
-          <circle class="prov-shape cursor-agent" cx="65" cy="7" r="4.5" stroke-width="1.6"/>
-          <text class="prov-letter cursor-agent" x="65" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">r</text>
-          <rect class="prov-shape ollama" x="70.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter ollama" x="75" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">O</text>
-          <rect class="prov-shape lm-studio" x="80.5" y="2.5" width="9" height="9" rx="2" stroke-width="1.6"/>
-          <text class="prov-letter lm-studio" x="85" y="7" text-anchor="middle" dominant-baseline="central" font-size="5" font-weight="bold" font-family="sans-serif">L</text>
+      <!-- aria-labelledby: 720px 以下では文字（span）を display:none にするため、隠れていても名前を引ける参照で付ける。
+           data-i18n-tooltip は既存キー usage_menu_btn を流用（Hub メニューと同じ作法）。 -->
+      <button class="usage-menu-btn" id="usage-menu-btn" data-i18n-tooltip="usage_menu_btn" aria-labelledby="usage-menu-label" aria-haspopup="true" aria-expanded="false">
+        <svg class="usage-menu-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 18a8 8 0 1 1 16 0"/>
+          <line x1="12" y1="18" x2="15.5" y2="12.5"/>
         </svg>
-        <span data-i18n="usage_menu_btn">Usage</span>
+        <span id="usage-menu-label" data-i18n="usage_menu_btn">Usage</span>
         <svg class="usage-menu-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
       <!-- data-wheel-native: このドロップダウンは overflow:auto の自前スクロール領域を持つ。
@@ -76,17 +60,17 @@
         <div class="usage-dropdown-col">
         <div class="usage-dropdown-section-title" data-i18n="usage_contract_group">契約の残量</div>
         <a id="usage-link-claude" data-usage-provider="claude" class="usage-dropdown-item" href="https://claude.ai/settings/usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">C</text></svg>
+          <span class="usage-item-icon" data-provider-icon="claude" aria-hidden="true"></span>
           <span class="usage-item-name">Claude</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
         <a id="usage-link-codex" data-usage-provider="codex" class="usage-dropdown-item" href="https://chatgpt.com/codex/cloud/settings/analytics#usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">X</text></svg>
+          <span class="usage-item-icon" data-provider-icon="codex" aria-hidden="true"></span>
           <span class="usage-item-name">Codex</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
         <a id="usage-link-grok" data-usage-provider="grok" class="usage-dropdown-item" href="https://grok.com/?_s=usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">G</text></svg>
+          <span class="usage-item-icon" data-provider-icon="grok" aria-hidden="true"></span>
           <span class="usage-item-name">Grok Build</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
@@ -94,42 +78,42 @@
         <div class="usage-dropdown-col">
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-copilot" class="usage-dropdown-item" href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">P</text></svg>
+          <span class="usage-item-icon" data-provider-icon="copilot" aria-hidden="true"></span>
           <span class="usage-item-name">Copilot</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-cursor-agent" class="usage-dropdown-item" href="https://cursor.com/dashboard" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">r</text></svg>
+          <span class="usage-item-icon" data-provider-icon="cursor-agent" aria-hidden="true"></span>
           <span class="usage-item-name">Cursor Agent</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-opencode" class="usage-dropdown-item" href="https://opencode.ai/go" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
+          <span class="usage-item-icon" data-provider-icon="opencode" aria-hidden="true"></span>
           <span class="usage-item-name">OpenCode</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-command-code" class="usage-dropdown-item" href="https://commandcode.ai/usage" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">M</text></svg>
+          <span class="usage-item-icon" data-provider-icon="command-code" aria-hidden="true"></span>
           <span class="usage-item-name">Command Code</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-unavailable-row">
         <a id="usage-link-ollama" class="usage-dropdown-item" href="https://ollama.com/settings" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">O</text></svg>
+          <span class="usage-item-icon" data-provider-icon="ollama" aria-hidden="true"></span>
           <span class="usage-item-name">Ollama</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a><span class="usage-unavailable" data-i18n="usage_unavailable_label">取得不可</span><button type="button" class="usage-info" aria-expanded="false" aria-label="説明">i</button><span class="usage-info-bubble" role="tooltip" hidden data-i18n="usage_unavailable_tooltip">CLI のコマンドで usage を取得できません。Web にアクセスしてご自身で確認してください。</span>
         </div>
         <div class="usage-dropdown-section-title" data-i18n="usage_local_group">ローカル実行 — 上限が無いので数字は出ない</div>
         <a id="usage-link-lm-studio" class="usage-dropdown-item" href="http://localhost:1234" target="_blank" rel="noopener noreferrer">
-          <svg class="usage-item-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect class="prov-shape lm-studio" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter lm-studio" x="8" y="8" text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif">L</text></svg>
+          <span class="usage-item-icon" data-provider-icon="lm-studio" aria-hidden="true"></span>
           <span class="usage-item-name">LM Studio</span>
           <svg class="usage-item-ext" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10" width="9" height="9" aria-hidden="true"><path d="M1.5 1.5h7v7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         </a>
@@ -1178,6 +1162,28 @@
       <div class="settings-row">
         <label class="settings-label" for="provider-enrollment-executable" data-i18n="settings_ai_providers_executable">Executable or path</label>
         <input id="provider-enrollment-executable" class="settings-input-text" autocomplete="off" required>
+      </div>
+      <div class="provider-enrollment-icon">
+        <h3 data-i18n="settings_ai_providers_icon_heading">Icon</h3>
+        <div class="settings-note" data-i18n="settings_ai_providers_icon_hint">Change the letters and color of this AI's icon. Leave both empty to keep the default. The shape (circle or rounded square) cannot be changed.</div>
+        <div class="settings-row provider-enrollment-icon-row">
+          <span id="provider-enrollment-icon-preview" class="provider-enrollment-icon-preview" aria-hidden="true"></span>
+          <label class="settings-label" for="provider-enrollment-icon-text" data-i18n="settings_ai_providers_icon_text">Icon letters (1-2 characters)</label>
+          <input id="provider-enrollment-icon-text" class="settings-input-text provider-enrollment-icon-text" autocomplete="off" maxlength="8">
+        </div>
+        <div class="settings-row provider-enrollment-icon-row">
+          <label class="settings-label" for="provider-enrollment-icon-color" data-i18n="settings_ai_providers_icon_color">Icon color</label>
+          <input id="provider-enrollment-icon-color" class="provider-enrollment-icon-color" type="color" value="#6b7280">
+          <button id="provider-enrollment-icon-reset" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_reset">Use the default icon</button>
+        </div>
+        <div class="settings-row provider-enrollment-icon-row">
+          <span class="settings-label" data-i18n="settings_ai_providers_icon_image">Icon image</span>
+          <button id="provider-enrollment-icon-image-pick" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_image_pick">Choose an image</button>
+          <button id="provider-enrollment-icon-image-remove" class="settings-inline-btn" type="button" data-i18n="settings_ai_providers_icon_image_remove">Remove the image</button>
+          <input id="provider-enrollment-icon-image-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+        </div>
+        <div class="settings-note" data-i18n="settings_ai_providers_icon_image_hint">PNG, JPEG, GIF or WebP, up to 512 KB (SVG cannot be used). The image is cut to the icon's shape and replaces the letters. It is saved when you save this AI.</div>
+        <div id="provider-enrollment-icon-image-note" class="settings-note" hidden></div>
       </div>
       <div class="provider-enrollment-update">
         <h3 data-i18n="settings_ai_providers_update_heading">Version and update</h3>

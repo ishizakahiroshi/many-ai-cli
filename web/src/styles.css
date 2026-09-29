@@ -449,7 +449,9 @@ header {
   background: var(--bg-hover, rgba(255,255,255,0.06));
   color: var(--text);
 }
-.usage-item-icon { flex-shrink: 0; }
+/* 器（<span data-provider-icon>）。中の svg は provider-icon.ts が入れる。inline の svg が行の高さを
+   広げないよう flex にして 16px の枠に収める。 */
+.usage-item-icon { flex-shrink: 0; display: flex; align-items: center; width: 16px; height: 16px; }
 .usage-item-name { flex: 1; }
 .usage-item-ext  { flex-shrink: 0; opacity: 0.35; }
 .usage-dropdown-section-title {
@@ -2239,6 +2241,10 @@ header {
 .inline-usage-side span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inline-usage-identity span,
 .inline-usage-side .usage-profile-meta { color: var(--muted-2); }
+/* AI 名の行は「アイコン(14px) + 名前」。名前だけが省略記号で切れ、アイコンは常に残す。行高は 14px + 12px = 26px で 33px の枠に収まる。 */
+.inline-usage-identity .inline-usage-provider { display: flex; align-items: center; gap: 4px; overflow: visible; }
+.inline-usage-provider .card-provider-icon { width: 14px; height: 14px; margin-right: 0; }
+.inline-usage-provider-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inline-usage-center { display: flex; flex-direction: column; justify-content: center; gap: 1px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
 .inline-usage-window { min-width: 0; }
 .inline-usage-window .usage-meter-line { height: 13px; margin: 0; gap: 4px; }

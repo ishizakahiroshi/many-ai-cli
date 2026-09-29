@@ -1465,6 +1465,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, devMode bool, version st
 	mux.HandleFunc("/api/providers", s.handleProviders)
 	mux.HandleFunc("/api/providers/", s.handleProviderRoute)
 	mux.HandleFunc("/api/provider-distributions/", s.handleProviderDistributions)
+	mux.HandleFunc("/api/provider-icons/", s.handleProviderIcon)
 	mux.HandleFunc("/api/bug-report/preview", s.handleBugReportPreview)
 	mux.HandleFunc("/api/bug-report/finalize", s.handleBugReportFinalize)
 	mux.HandleFunc("/api/doctor", s.handleDoctor)

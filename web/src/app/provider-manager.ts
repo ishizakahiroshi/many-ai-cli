@@ -6,12 +6,15 @@ import {
 } from './cli-availability.js';
 import { fetchInstallLinkDefaults, missingCliRowsHtml, mountCliMaintenance, type CliMaintenanceHandle } from './cli-maintenance.js';
 import {
+  checkIconImageFile,
   createRequestGuard,
   cycleDialogFocus,
   duplicateProviderDraft,
   formatDiagnosticMessages,
   isBuiltinProviderID,
+  mergeIconPresentation,
   originLabelKey,
+  presentationWithoutIconFields,
   providerErrorMessage,
   providerStatusKind,
   providerUpdateFormValuesFromUpdate,
@@ -33,10 +36,12 @@ import {
   loadProviderSummaries,
   recoverProvider,
   removeProvider as requestRemoveProvider,
+  removeProviderIconImage,
   resetProviderOverride,
   restoreProviderBackup,
   restoreProviderRevision,
   saveProviderDefinition,
+  uploadProviderIconImage,
   validateProviderDefinition,
   verifyProviderBackup,
   type ProviderEffectiveDefinition,
@@ -45,9 +50,26 @@ import {
   type ProviderRevisionRecord,
   type ProviderSummary,
 } from './provider-store.js';
+import {
+  isValidIconColor,
+  isValidIconText,
+  providerDefaultIconColor,
+  providerIconLoadedImageHref,
+  providerIconPreviewHtml,
+} from './provider-icon.js';
 import { appConfirm } from './settings.js';
 
 type ProviderFormState = { id: string; revision: string; isBuiltin: boolean; pending: boolean } | null;
+
+// The icon image is not part of the definition: it is chosen in the form but only sent (or removed) after
+// the definition itself has been saved, so cancelling the dialog changes nothing.
+//   keep   - leave whatever the Hub has
+//   set    - upload `file` after saving; `previewUrl` is a blob: URL for the form's preview only
+//   remove - delete the Hub's image after saving
+type IconImageDraft =
+  | { kind: 'keep' }
+  | { kind: 'set'; file: File; previewUrl: string }
+  | { kind: 'remove' };
 
 function tx(key: string, fallback: string, vars: Record<string, unknown> = {}): string {
   let value = t(key, vars);
@@ -83,6 +105,10 @@ function definitionForAdvancedPreview(definition: ProviderEffectiveDefinition): 
   delete rest.schema_version;
   delete rest.id;
   delete rest.display_name;
+  // The icon letters and color have their own form fields, so they are not repeated here.
+  const presentation = presentationWithoutIconFields(rest.presentation);
+  if (presentation) rest.presentation = presentation;
+  else delete rest.presentation;
   if (Object.keys(rest).length === 0) return '';
   return JSON.stringify(rest, null, 2);
 }
@@ -100,6 +126,14 @@ function initProviderManager(): void {
   const idInput = document.getElementById('provider-enrollment-id') as HTMLInputElement | null;
   const labelInput = document.getElementById('provider-enrollment-label') as HTMLInputElement | null;
   const executableInput = document.getElementById('provider-enrollment-executable') as HTMLInputElement | null;
+  const iconPreview = document.getElementById('provider-enrollment-icon-preview') as HTMLElement | null;
+  const iconTextInput = document.getElementById('provider-enrollment-icon-text') as HTMLInputElement | null;
+  const iconColorInput = document.getElementById('provider-enrollment-icon-color') as HTMLInputElement | null;
+  const iconResetButton = document.getElementById('provider-enrollment-icon-reset') as HTMLButtonElement | null;
+  const iconImagePickButton = document.getElementById('provider-enrollment-icon-image-pick') as HTMLButtonElement | null;
+  const iconImageRemoveButton = document.getElementById('provider-enrollment-icon-image-remove') as HTMLButtonElement | null;
+  const iconImageFileInput = document.getElementById('provider-enrollment-icon-image-file') as HTMLInputElement | null;
+  const iconImageNote = document.getElementById('provider-enrollment-icon-image-note') as HTMLElement | null;
   const updateEnabledInput = document.getElementById('provider-enrollment-update-enabled') as HTMLInputElement | null;
   const updateVersionArgsInput = document.getElementById('provider-enrollment-update-version-args') as HTMLInputElement | null;
   const updateExecutableInput = document.getElementById('provider-enrollment-update-executable') as HTMLInputElement | null;
@@ -122,6 +156,8 @@ function initProviderManager(): void {
   const historyRevisionsList = document.getElementById('provider-history-revisions');
   const historyBackupsList = document.getElementById('provider-history-backups');
   if (!list || !addButton || !status || !overlay || !form || !title || !idInput || !labelInput || !executableInput
+    || !iconPreview || !iconTextInput || !iconColorInput || !iconResetButton
+    || !iconImagePickButton || !iconImageRemoveButton || !iconImageFileInput || !iconImageNote
     || !updateEnabledInput || !updateVersionArgsInput || !updateExecutableInput || !updateArgsInput || !updateTimeoutInput || !updateLoginNote || !updateArgsRequiredNote || !updateStatusNote
     || !advancedInput || !validateButton || !saveButton || !cancelButton || !closeButton || !result
     || !historyOverlay || !historyPanel || !historyCloseButton || !historyStatus || !historyResetButton || !historyRevisionsList || !historyBackupsList) return;
@@ -155,6 +191,70 @@ function initProviderManager(): void {
   let historyAbort: AbortController | null = null;
   let historyProvider: ProviderSummary | null = null;
   const historyGuard = createRequestGuard();
+
+  // The icon color picker always holds some color, so "not chosen" has to be tracked separately:
+  // an unchosen color is left out of the saved definition and the AI keeps its default color.
+  let iconColorChosen = false;
+
+  // The picture side of the icon (see IconImageDraft). `iconImageExisting` is whether the Hub holds a picture
+  // for the AI being edited when the form opened.
+  let iconImageDraft: IconImageDraft = { kind: 'keep' };
+  let iconImageExisting = false;
+
+  const iconImageWillShow = (): boolean =>
+    iconImageDraft.kind === 'set' || (iconImageDraft.kind === 'keep' && iconImageExisting);
+
+  const iconImagePreviewHref = (): string => {
+    if (iconImageDraft.kind === 'set') return iconImageDraft.previewUrl;
+    if (iconImageDraft.kind === 'keep' && iconImageExisting && editing) return providerIconLoadedImageHref(editing.id);
+    return '';
+  };
+
+  const syncIconPreview = (): void => {
+    const providerId = editing?.id || idInput.value.trim() || labelInput.value.trim();
+    iconPreview.innerHTML = providerIconPreviewHtml(
+      providerId,
+      { icon_text: iconTextInput.value.trim(), color: iconColorChosen ? iconColorInput.value : undefined, image_href: iconImagePreviewHref() },
+      32,
+    );
+    iconImageRemoveButton.disabled = !iconImageWillShow();
+    iconResetButton.disabled = !iconColorChosen && iconTextInput.value.trim() === '' && !iconImageWillShow();
+    if (iconImageDraft.kind === 'set') {
+      iconImageNote.textContent = tx('settings_ai_providers_icon_image_chosen', 'Selected: {name}. It is saved when you save this AI.', { name: iconImageDraft.file.name });
+      iconImageNote.hidden = false;
+    } else {
+      iconImageNote.textContent = '';
+      iconImageNote.hidden = true;
+    }
+  };
+
+  // Forgets any chosen picture and says whether the AI being opened already has one on the Hub.
+  const setIconImageState = (existing: boolean): void => {
+    if (iconImageDraft.kind === 'set') URL.revokeObjectURL(iconImageDraft.previewUrl);
+    iconImageDraft = { kind: 'keep' };
+    iconImageExisting = existing;
+    iconImageFileInput.value = '';
+  };
+
+  // "Remove the image" and "Use the default icon": the Hub's picture (if any) is deleted when the AI is saved.
+  const stageIconImageRemoval = (): void => {
+    const existing = iconImageExisting;
+    setIconImageState(existing);
+    if (existing) iconImageDraft = { kind: 'remove' };
+    syncIconPreview();
+  };
+
+  // Puts the icon fields into the state "use the default" (or into the given saved values) and
+  // redraws the preview. Only values that pass the same check as the Hub are taken.
+  const setIconFields = (presentation?: unknown): void => {
+    const saved = (presentation && typeof presentation === 'object' ? presentation : {}) as { icon_text?: unknown; color?: unknown };
+    iconTextInput.value = isValidIconText(saved.icon_text) ? saved.icon_text : '';
+    iconColorChosen = isValidIconColor(saved.color);
+    iconColorInput.value = iconColorChosen
+      ? (saved.color as string).toLowerCase()
+      : providerDefaultIconColor(editing?.id || idInput.value.trim());
+    syncIconPreview();
+  };
 
   const setStatus = (message: string, warning = false): void => {
     status.textContent = message;
@@ -255,6 +355,13 @@ function initProviderManager(): void {
     if (updateResult.ok === false) {
       return { ok: false, message: tx(updateResult.error.key, updateResult.error.fallback) };
     }
+    // The icon fields win over presentation in the advanced JSON where they are filled in; an empty
+    // field means "use the default" (see mergeIconPresentation).
+    const iconText = iconTextInput.value.trim();
+    if (iconText && !isValidIconText(iconText)) {
+      return { ok: false, message: tx('settings_ai_providers_icon_text_invalid', 'Icon letters must be 1 or 2 characters.') };
+    }
+    const iconForm = { icon_text: iconText, color: iconColorChosen ? iconColorInput.value.toUpperCase() : '' };
     const base: Record<string, unknown> = {
       schema_version: 1,
       id: idInput.value.trim(),
@@ -263,7 +370,11 @@ function initProviderManager(): void {
       update: updateResult.update,
     };
     const advancedRaw = advancedInput.value.trim();
-    if (!advancedRaw) return { ok: true, definition: base };
+    if (!advancedRaw) {
+      const presentation = mergeIconPresentation(undefined, iconForm);
+      if (presentation) base.presentation = presentation;
+      return { ok: true, definition: base };
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(advancedRaw);
@@ -282,15 +393,16 @@ function initProviderManager(): void {
       ? parsedObject.update as Record<string, unknown>
       : {};
     const baseUpdate = base.update as Record<string, unknown>;
-    return {
-      ok: true,
-      definition: {
-        ...parsedObject,
-        ...base,
-        launch: { ...parsedLaunch, ...baseLaunch },
-        update: { ...parsedUpdate, ...baseUpdate },
-      },
+    const definition: Record<string, unknown> = {
+      ...parsedObject,
+      ...base,
+      launch: { ...parsedLaunch, ...baseLaunch },
+      update: { ...parsedUpdate, ...baseUpdate },
     };
+    const presentation = mergeIconPresentation(parsedObject.presentation, iconForm);
+    if (presentation) definition.presentation = presentation;
+    else delete definition.presentation;
+    return { ok: true, definition };
   };
 
   const currentDefinitionOrShowError = (): Record<string, unknown> | null => {
@@ -325,6 +437,8 @@ function initProviderManager(): void {
     labelInput.value = value?.display_name || '';
     executableInput.value = '';
     executableInput.required = true;
+    setIconImageState(!!value?.icon_image_version);
+    setIconFields();
     applyUpdateFormValues(providerUpdateFormValuesFromUpdate(undefined));
     updateStatusNote.hidden = true;
     updateStatusNote.textContent = '';
@@ -351,6 +465,7 @@ function initProviderManager(): void {
     detailAbort = null;
     editing = null;
     idTouched = false;
+    setIconImageState(false);
     overlay.hidden = true;
     idInput.disabled = false;
     setFormBusy(false);
@@ -518,6 +633,7 @@ function initProviderManager(): void {
     executableInput.value = typeof launch.executable === 'string' ? launch.executable : '';
     const candidates = Array.isArray(launch.executable_candidates) ? launch.executable_candidates : [];
     executableInput.required = !(isBuiltin && !executableInput.value && candidates.length > 0);
+    setIconFields(definition.presentation);
     applyUpdateFormValues(providerUpdateFormValuesFromUpdate(definition.update));
     renderUpdateStatus(definition.update, isBuiltin, definition.field_origins);
     advancedInput.value = definitionForAdvancedPreview(definition);
@@ -876,6 +992,9 @@ function initProviderManager(): void {
     if (!definition) return;
     if (editing?.pending || saving) return;
     const submittedEditing = editing ? { ...editing } : null;
+    // Captured now: hideForm() forgets the draft, and the form could be closed while the save is in flight.
+    const submittedImage: IconImageDraft = iconImageDraft;
+    const submittedImageExisting = iconImageExisting;
     const requestToken = detailGuard.begin();
     saving = true;
     setFormBusy(true);
@@ -908,9 +1027,27 @@ function initProviderManager(): void {
       setResult(providerFailureText(mutation), 'error');
       return;
     }
+    // The picture goes to the Hub only now that the AI itself is saved (a new AI does not exist before that).
+    const imageFailure = await applyIconImageDraft(savedId, submittedImage, submittedImageExisting);
     hideForm();
     document.dispatchEvent(new CustomEvent('provider-enrollment-saved', { detail: { id: savedId } }));
     await load();
+    // load() rewrites the status line, so the warning is set after it.
+    if (imageFailure) setStatus(imageFailure, true);
+  };
+
+  // Sends or deletes the AI's icon picture. Returns a message when it failed (the AI itself is already saved).
+  const applyIconImageDraft = async (id: string, draft: IconImageDraft, existing: boolean): Promise<string> => {
+    let failure: ProviderRequestFailureLike | null = null;
+    if (draft.kind === 'set') {
+      const uploaded = await uploadProviderIconImage(id, draft.file);
+      if (uploaded.ok === false && uploaded.kind !== 'aborted') failure = uploaded;
+    } else if (draft.kind === 'remove' && existing) {
+      const removed = await removeProviderIconImage(id);
+      if (removed.ok === false && removed.kind !== 'aborted') failure = removed;
+    }
+    if (!failure) return '';
+    return tx('settings_ai_providers_icon_image_save_failed', 'The AI was saved, but its icon image could not be saved. {reason}', { reason: providerFailureText(failure) });
   };
 
   const removeProvider = async (provider: ProviderSummary): Promise<void> => {
@@ -995,9 +1132,45 @@ function initProviderManager(): void {
   labelInput.addEventListener('input', () => {
     if (editing || idTouched) return;
     idInput.value = suggestProviderId(labelInput.value);
+    syncIconPreview();
   });
   idInput.addEventListener('input', () => {
     idTouched = true;
+    syncIconPreview();
+  });
+  iconTextInput.addEventListener('input', syncIconPreview);
+  iconColorInput.addEventListener('input', () => {
+    iconColorChosen = true;
+    syncIconPreview();
+  });
+  iconResetButton.addEventListener('click', () => {
+    setIconFields();
+    stageIconImageRemoval();
+    iconTextInput.focus();
+  });
+  iconImagePickButton.addEventListener('click', () => iconImageFileInput.click());
+  iconImageRemoveButton.addEventListener('click', () => {
+    stageIconImageRemoval();
+    iconImagePickButton.focus();
+  });
+  iconImageFileInput.addEventListener('change', () => {
+    const file = iconImageFileInput.files?.[0];
+    if (!file) return;
+    const check = checkIconImageFile(file);
+    if (check.ok === false) {
+      iconImageFileInput.value = '';
+      setResult(
+        check.reason === 'size'
+          ? tx('settings_ai_providers_icon_image_too_large', 'The image is larger than 512 KB. Choose a smaller one.')
+          : tx('settings_ai_providers_icon_image_bad_type', 'Choose a PNG, JPEG, GIF or WebP image. SVG cannot be used.'),
+        'error',
+      );
+      return;
+    }
+    setResult('', '');
+    if (iconImageDraft.kind === 'set') URL.revokeObjectURL(iconImageDraft.previewUrl);
+    iconImageDraft = { kind: 'set', file, previewUrl: URL.createObjectURL(file) };
+    syncIconPreview();
   });
   updateArgsInput.addEventListener('input', syncUpdateAvailability);
   document.addEventListener('provider-enrollment-open', () => showForm());

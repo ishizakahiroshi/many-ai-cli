@@ -296,6 +296,15 @@
 .provider-enrollment-update { width: 100%; margin: 4px 0 2px; }
 .provider-enrollment-update h3 { margin: 6px 0 2px; font-size: 0.82rem; color: var(--muted); }
 .provider-enrollment-update .settings-note { display: block; padding: 0 0 4px; }
+.provider-enrollment-icon { width: 100%; margin: 4px 0 2px; }
+.provider-enrollment-icon h3 { margin: 6px 0 2px; font-size: 0.82rem; color: var(--muted); }
+.provider-enrollment-icon .settings-note { display: block; padding: 0 0 4px; }
+.provider-enrollment-icon .settings-note[hidden] { display: none; }
+.provider-enrollment-icon-row { align-items: center; gap: 8px; }
+.provider-enrollment-icon-preview { display: inline-flex; flex: 0 0 auto; }
+.provider-enrollment-icon-preview:empty { display: none; }
+.provider-enrollment-form .provider-enrollment-icon-text { width: 5em; flex: 0 0 auto; }
+.provider-enrollment-icon-color { width: 40px; height: 28px; padding: 0; border: 1px solid var(--border, #444); background: none; cursor: pointer; }
 .provider-enrollment-advanced { width: 100%; }
 .provider-enrollment-advanced summary {
   cursor: pointer;

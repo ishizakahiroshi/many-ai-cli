@@ -33,6 +33,10 @@ import { captureTerminalView, restoreTerminalView, terminalViewFollows } from '.
 // 循環になる（scripts/check-web-module-init.mjs が拾う TDZ の型）ため、循環を作らない
 // memo-model.ts（path-detect.js しか import しない葉モジュール）からだけ読む。
 import { MEMOS_CHANGED_EVENT, openMemoCountForCwd } from './memo-model.js';
+// provider アイコンは末端モジュール provider-icon.ts が持つ（他モジュールを import しない）。
+// このファイルの内部でも使うので import し、既存の import 元のために再 export する。
+import { providerDisplayName, providerIconHtml, safeClassToken } from './provider-icon.js';
+export { providerDisplayName, providerIconHtml, safeClassToken };
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -420,85 +424,8 @@ export function stateActivityDecoration(s) {
   return { className: '', iconKind: 'dot', label: baseLabel };
 }
 
-export function safeClassToken(value) {
-  const cleaned = String(value || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
-  return cleaned || 'unknown';
-}
-
-export function providerDisplayName(provider) {
-  const key = String(provider || '').toLowerCase();
-  const labels = {
-    claude: 'Claude',
-    codex: 'Codex',
-    copilot: 'Copilot',
-    'cursor-agent': 'Cursor Agent',
-    ollama: 'Ollama',
-    'lm-studio': 'LM Studio',
-    opencode: 'OpenCode',
-    grok: 'Grok Build',
-    'command-code': 'Command Code',
-  };
-  return labels[key] || String(provider || '');
-}
-
-// provider アイコンの図形は 2 種類あり、使い分けは「単体で動くかどうか」で決まる。
-//
-//   丸（circle）  : それ単体で起動できるもの。`many-ai-cli wrap <provider>` の対象。
-//   角丸（rect）  : 単体では動かず、Claude や Codex のセッションからラップして使うもの
-//                   （モデル選択で選ぶ route。spawn-panel.ts の resolveRoute を参照）。
-//
-// **「ローカル実行かクラウドか」ではない。** Ollama はクラウドモデルも持つので、その軸で
-// 読み替えると新しいアイコンを足すときに形を取り違える（2026-08-30 に実際に誤読があった）。
-// 角丸なのは Ollama が単体で動かないからで、ローカルだからではない。
-//
-// この関数が 9 provider ぶんの図形の単一ソース。index.html の .usage-menu-icon は同じ図形を
-// 静的 SVG で複製しているので、形を変えるときは両方を揃える。
-//
-// iconText: 同梱 9 provider に当たらなかったとき（利用者が追加した AI）の頭文字を
-// 明示指定する（plan_provider-cli-update_c4_list-ui.md: 「presentation.icon_text が
-// あればそれを使う」）。省略時は従来どおり provider（id）の先頭 1 文字を使う。色は
-// 既定の .prov-shape のままで、新しい色の受け口はここでは作らない。
-export function providerIconHtml(provider, size = 16, iconText?: string) {
-  const key = String(provider || '').toLowerCase();
-  const parsedSize = Number(size);
-  const safeSize = Number.isFinite(parsedSize) && parsedSize > 0 ? Math.min(Math.floor(parsedSize), 64) : 16;
-  const base = `class="card-provider-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${safeSize}" height="${safeSize}" aria-hidden="true"`;
-  const txt  = `text-anchor="middle" dominant-baseline="central" font-size="7.5" font-weight="bold" font-family="sans-serif"`;
-  if (key === 'claude') {
-    return `<svg ${base}><circle class="prov-shape claude" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter claude" x="8" y="8" ${txt}>C</text></svg>`;
-  }
-  if (key === 'codex') {
-    return `<svg ${base}><circle class="prov-shape codex" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter codex" x="8" y="8" ${txt}>X</text></svg>`;
-  }
-  if (key === 'copilot') {
-    return `<svg ${base}><circle class="prov-shape copilot" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter copilot" x="8" y="8" ${txt}>P</text></svg>`;
-  }
-  if (key === 'cursor-agent') {
-    return `<svg ${base}><circle class="prov-shape cursor-agent" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter cursor-agent" x="8" y="8" ${txt}>r</text></svg>`;
-  }
-  if (key === 'ollama') {
-    return `<svg ${base}><rect class="prov-shape ollama" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter ollama" x="8" y="8" ${txt}>O</text></svg>`;
-  }
-  if (key === 'lm-studio') {
-    return `<svg ${base}><rect class="prov-shape lm-studio" x="1" y="1" width="14" height="14" rx="3" stroke-width="2"/><text class="prov-letter lm-studio" x="8" y="8" ${txt}>L</text></svg>`;
-  }
-  if (key === 'opencode') {
-    return `<svg ${base}><circle class="prov-shape opencode" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter opencode" x="8" y="8" ${txt}>O</text></svg>`;
-  }
-  if (key === 'grok') {
-    return `<svg ${base}><circle class="prov-shape grok" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter grok" x="8" y="8" ${txt}>G</text></svg>`;
-  }
-  if (key === 'command-code') {
-    return `<svg ${base}><circle class="prov-shape command-code" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter command-code" x="8" y="8" ${txt}>M</text></svg>`;
-  }
-  const source = (iconText && iconText.trim()) || String(provider || '?').trim();
-  const letter = escapeHtml((source[0] || '?').toUpperCase());
-  return `<svg ${base}><circle class="prov-shape" cx="8" cy="8" r="6" stroke-width="2"/><text class="prov-letter" x="8" y="8" ${txt}>${letter}</text></svg>`;
-}
+// provider アイコンの定義（図形・頭文字・色）と表示名（providerDisplayName）は provider-icon.ts が単一ソース。
+// 呼び出し元 10 ファイルの import を変えずに済ませるため、ここから再 export する。
 
 // モデル名は provider が返す opaque な値をそのまま表示する。命名規則を推測して
 // 略称・family・衝突回避を作ると、新しい provider/model のたびに保守が発生する。

@@ -1,4 +1,5 @@
 import { apiFetch } from './util.js';
+import { applyProviderPresentation } from './provider-icon.js';
 
 export {
   BUILTIN_PROVIDER_CAPABILITIES,
@@ -23,6 +24,10 @@ export type ProviderSummary = {
   origin: string;
   revision: string;
   capabilities: ProviderCapabilities;
+  // 利用者が設定した AI アイコンの頭文字と色。Hub が検査に通ったものだけを載せる（無ければ省略）。
+  presentation?: { icon_text?: string; color?: string };
+  // 利用者が AI のアイコンに画像を選んでいるときだけ付く短い版。画像 URL の ?v= に使う（差し替え直後の古い画像を避ける）。
+  icon_image_version?: string;
 };
 
 export type ProviderDiagnostic = {
@@ -134,6 +139,8 @@ export async function loadProviderSummaries(options?: { includeDisabled?: boolea
     const body = await response.json();
     if (!body || !Array.isArray(body.providers)) return null;
     cacheProviderCapabilities(body.providers);
+    // 一覧を取るたびに、利用者が設定したアイコンの頭文字と色を全画面へ反映する（起動時の取得・保存後の取り直しも同じ経路）。
+    applyProviderPresentation(body.providers);
     const includeDisabled = options?.includeDisabled === true;
     return {
       revision: typeof body.revision === 'string' ? body.revision : '',
@@ -238,6 +245,42 @@ export async function removeProvider(id: string, expectedRevision: string, optio
     options?.signal,
   );
   return providerMutationOutcome(result);
+}
+
+// AI のアイコンに使う画像。PUT は画像の中身をそのまま送る（形式は Hub が中身から判定する）。
+// 送る前の確認（形式・512 KB）は provider-manager-view.ts の checkIconImageFile が受け持つ。
+export async function uploadProviderIconImage(
+  id: string,
+  file: Blob,
+  options?: { signal?: AbortSignal },
+): Promise<{ ok: true } | ProviderRequestFailure> {
+  let body: ArrayBuffer;
+  try {
+    body = await file.arrayBuffer();
+  } catch (_) {
+    return { ok: false, kind: 'network' };
+  }
+  const result = await providerFetchJSON(
+    `/api/provider-icons/${encodeURIComponent(id)}`,
+    { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream', Accept: 'application/json' }, body },
+    options?.signal,
+  );
+  if (result.outcome === 'aborted') return { ok: false, kind: 'aborted' };
+  if (result.outcome === 'network') return { ok: false, kind: 'network' };
+  if (result.outcome === 'http-error') return providerHTTPFailure(result.status, result.body);
+  return { ok: true };
+}
+
+export async function removeProviderIconImage(id: string, options?: { signal?: AbortSignal }): Promise<{ ok: true } | ProviderRequestFailure> {
+  const result = await providerFetchJSON(
+    `/api/provider-icons/${encodeURIComponent(id)}`,
+    { method: 'DELETE', headers: { Accept: 'application/json' } },
+    options?.signal,
+  );
+  if (result.outcome === 'aborted') return { ok: false, kind: 'aborted' };
+  if (result.outcome === 'network') return { ok: false, kind: 'network' };
+  if (result.outcome === 'http-error') return providerHTTPFailure(result.status, result.body);
+  return { ok: true };
 }
 
 export async function restoreProviderRevision(

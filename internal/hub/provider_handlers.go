@@ -168,7 +168,7 @@ func (s *Server) handleProviders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, providerListResponse{
 		Revision:    registry.Revision(),
-		Providers:   registry.List(),
+		Providers:   providerSummariesWithIcons(registry),
 		Diagnostics: append(registry.Diagnostics(), providerCommandDiagnostics(registry)...),
 	})
 }
@@ -475,6 +475,9 @@ func (s *Server) handleProviderDelete(w http.ResponseWriter, r *http.Request, id
 		s.writeProviderFailure(w, http.StatusNotFound, "provider_delete_failed", err)
 		return
 	}
+	// The picture the user chose for this AI goes with it; a later AI that
+	// reuses the id must not inherit it.
+	s.removeProviderIcon(id)
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
 		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return
@@ -551,6 +554,10 @@ func (s *Server) handleProviderReset(w http.ResponseWriter, r *http.Request, id 
 		s.writeProviderHistoryError(w, "provider_reset_failed", err)
 		return
 	}
+	// "Reset to distributed default" also puts the icon back: the letters and
+	// color went with the override, so the picture goes too. Leaving it would
+	// keep the AI looking customized right after a reset.
+	s.removeProviderIcon(id)
 	if diagnostics, err := s.reloadProviderRegistry(); err != nil {
 		s.writeProviderFailure(w, http.StatusInternalServerError, "provider_reload_failed", err)
 		return

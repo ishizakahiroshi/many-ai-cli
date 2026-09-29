@@ -192,6 +192,17 @@ type Summary struct {
 	Origin       Origin            `json:"origin"`
 	Revision     string            `json:"revision"`
 	Capabilities CapabilitySummary `json:"capabilities"`
+	// Presentation carries the icon letter / color the settings screen lets a
+	// user change (presentation.icon_text / presentation.color). Only values
+	// that pass validation are listed; it is omitted when neither is set.
+	Presentation *PresentationDefinition `json:"presentation,omitempty"`
+	// IconImageVersion is set only when the user has given this AI a picture
+	// for its icon. The picture is a file the Hub keeps outside the provider
+	// definition (internal/hub/provider_icon_handlers.go), so the registry
+	// never knows it; the Hub fills this in when it answers the list. The web
+	// UI puts it after "?v=" on the picture's URL so a replaced picture is
+	// never served from the browser cache.
+	IconImageVersion string `json:"icon_image_version,omitempty"`
 }
 
 type Severity string

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -17,7 +18,12 @@ const (
 	MaxArgLength       = 1024
 )
 
+// MaxIconTextGraphemes is how many user-visible characters presentation.icon_text
+// may hold: the icon is a 16px badge, so one or two letters is all that fits.
+const MaxIconTextGraphemes = 2
+
 var providerIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+var iconColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func ValidateDefinition(raw []byte, adapters AdapterCatalog) ([]Diagnostic, error) {
@@ -98,9 +104,13 @@ func validateDefinitionObject(object map[string]json.RawMessage, definition Defi
 	if definition.Presentation != nil {
 		if err := validateText(definition.Presentation.IconText, "presentation.icon_text", false); err != nil {
 			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_presentation", Severity: SeverityError, Field: "presentation.icon_text", Message: err.Error()})
+		} else if !validIconText(definition.Presentation.IconText) {
+			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_presentation", Severity: SeverityError, Field: "presentation.icon_text", Message: fmt.Sprintf("presentation.icon_text must be 1 to %d visible characters without surrounding whitespace", MaxIconTextGraphemes)})
 		}
-		if len(definition.Presentation.Color) > MaxStringLength || containsControl(definition.Presentation.Color) {
-			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_presentation", Severity: SeverityError, Field: "presentation.color", Message: "presentation color is invalid"})
+		// The color reaches a CSS custom property in the browser, so only a
+		// plain #RRGGBB is accepted: anything else could smuggle in other CSS.
+		if !validIconColor(definition.Presentation.Color) {
+			diagnostics = append(diagnostics, Diagnostic{Code: "invalid_presentation", Severity: SeverityError, Field: "presentation.color", Message: "presentation.color must be a #RRGGBB hex color"})
 		}
 	}
 	if definition.Update != nil {
@@ -290,6 +300,81 @@ func knownCapability(key string) bool {
 	default:
 		return false
 	}
+}
+
+// validIconColor accepts an empty value (not set) or exactly #RRGGBB.
+func validIconColor(value string) bool {
+	return value == "" || iconColorPattern.MatchString(value)
+}
+
+// validIconText accepts an empty value (not set) or 1 to MaxIconTextGraphemes
+// visible characters with no control characters and no surrounding whitespace.
+func validIconText(value string) bool {
+	if value == "" {
+		return true
+	}
+	if len(value) > MaxStringLength || strings.TrimSpace(value) != value {
+		return false
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	count := iconGraphemeCount(value)
+	return count >= 1 && count <= MaxIconTextGraphemes
+}
+
+// iconGraphemeCount approximates the number of user-perceived characters
+// without a segmentation library: combining marks, variation selectors,
+// emoji skin-tone modifiers and tag characters join the previous character, a
+// zero-width joiner glues the next rune on, and two regional indicators make
+// one flag. It can differ from a full segmenter on exotic scripts; the
+// browser applies its own Intl.Segmenter check before it draws anything.
+func iconGraphemeCount(value string) int {
+	count := 0
+	joined := false
+	regional := 0
+	for _, r := range value {
+		switch {
+		case r == 0x200D:
+			joined = true
+		case unicode.In(r, unicode.Mn, unicode.Me, unicode.Mc) || (r >= 0x1F3FB && r <= 0x1F3FF) || (r >= 0xE0020 && r <= 0xE007F):
+			// joins the previous character
+		case joined:
+			joined = false
+		case r >= 0x1F1E6 && r <= 0x1F1FF:
+			regional++
+			if regional%2 == 1 {
+				count++
+			}
+		default:
+			regional = 0
+			count++
+		}
+	}
+	return count
+}
+
+// sanitizePresentation keeps only the parts of a stored presentation that
+// pass validation. A definition already on disk with a bad value must not
+// break loading or reach the browser, so the list API sends what is safe and
+// drops the rest instead of failing.
+func sanitizePresentation(p *PresentationDefinition) *PresentationDefinition {
+	if p == nil {
+		return nil
+	}
+	var out PresentationDefinition
+	if p.IconText != "" && validIconText(p.IconText) {
+		out.IconText = p.IconText
+	}
+	if p.Color != "" && validIconColor(p.Color) {
+		out.Color = p.Color
+	}
+	if out == (PresentationDefinition{}) {
+		return nil
+	}
+	return &out
 }
 
 func containsControl(value string) bool {

@@ -42,6 +42,24 @@ Release artifacts are published at
 - **Notification sound has a 0–100 volume slider**, independent of system volume.
   It applies to the default beep, custom sounds and test playback. Zero mutes
   the sound; 100 preserves the previous level. The setting is saved per browser.
+- **The letters and color of each AI's icon can now be changed in Settings → AI CLI integrations.**
+  Open an AI's edit dialog and use the new **Icon** fields (1–2 letters, and a
+  color). Saving changes that AI's icon everywhere at once (session cards,
+  sidebar, status bar, chat, Usage) without reloading, and it stays after a
+  reload. Leave a field empty to keep the shipped default; **Reset to
+  distributed default** restores it. The shape stays fixed, and the color must
+  be `#RRGGBB`.
+- **An AI's icon can also be a picture (PNG, JPEG, GIF or WebP, up to 512 KB).**
+  In the same **Icon** section, choose an image and save: it replaces the letters
+  everywhere at once, cut to the icon's shape with the colored ring kept, and
+  **Remove the image** brings the letters back. SVG is refused because it can
+  carry script. The picture is stored as
+  `~/.many-ai-cli/provider_icons/<id>.bin`, and is deleted together with a
+  custom AI or when a built-in AI is reset to its distributed default.
+- **The active session's Usage row now shows the AI's icon before its name.**
+  It is the same icon as on the session card, and the name now uses the same
+  spelling as the card (for example "Grok Build"). On narrow widths the name is
+  shortened with an ellipsis while the icon stays visible.
 - **The handoff session list now shows when each session started (and ended),
   its branch, and its predecessor/successor link.** Rows display a relative
   "N minutes/hours/days ago" time, an abbreviated branch name, and a clickable
@@ -58,6 +76,7 @@ Release artifacts are published at
   open memo count.
 
 ### Changed
+- **The header's Usage button now shows a single gauge icon** instead of a row of nine AI-colored icons, so the button stays narrow and does not grow as AIs are added. It keeps a translated accessible name and tooltip at narrow widths.
 - **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
 - **Chat shows user messages and AI replies by default.** Tool-only records and
   progress details stay hidden until “Show tool and progress details” is enabled;
