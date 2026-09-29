@@ -113,6 +113,13 @@ Release artifacts are published at
   the other device's changes.
 
 ### Fixed
+- **Pasting into the work memo and other text fields stays in that field.**
+  Pasting five or more lines (or more than 300 characters) into the memo box,
+  the file editor, the commit message or any other text field turned the text
+  into a "Pasted text" chip on the input bar at the bottom instead, and an
+  image pasted into the memo box was also added to the input bar's
+  attachments. The input bar now collects only pastes aimed at itself or at no
+  text field.
 - **The Detached Grid launcher shows readable labels again.** Its title,
   presets and buttons were shown as raw translation keys such as `dgl_title`.
 - **Renaming a session card no longer breaks routine completion tracking or

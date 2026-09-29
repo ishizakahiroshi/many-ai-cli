@@ -152,8 +152,19 @@ if (agentLogBtn) {
   window.addEventListener('resize', closeAgentLogPopup);
 }
 
+// 下の入力欄以外の文字入力欄（作業メモ・ファイル編集・コミット本文など）への貼り付けは
+// その欄に任せる。ここで拾うと、長文はチップ・画像は添付として下の入力欄へ持っていかれる
+// （bugfix_memo-paste-goes-to-composer_2026-09-30.md）。端末（xterm）は自分で伝播を止めるので届かない。
+const TEXT_INPUT_TYPES = new Set(['text', 'search', 'url', 'email', 'tel', 'password', 'number']);
+function isOtherTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement) || target === inputEl) return false;
+  if (target.isContentEditable || target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLInputElement && TEXT_INPUT_TYPES.has(target.type);
+}
+
 window.addEventListener('paste', (e) => {
   if (activeSessionId === null) return;
+  if (isOtherTextField(e.target)) return;
   const items = e.clipboardData?.items;
   if (!items) return;
 

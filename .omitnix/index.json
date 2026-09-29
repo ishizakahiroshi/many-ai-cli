@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "3d80400647de86d92a11ea632c7ef72c0c86b811",
+    "commit": "feb29820b29e6729e1186ccbb009be9c446f2f15",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1116,
-    "analyzed": 909,
+    "discovered": 1117,
+    "analyzed": 910,
     "unresolved": 6,
     "unknown": 1,
     "unclaimed": 200,
@@ -27771,6 +27771,36 @@
         "summary": {
           "state": "value",
           "value": "Whisper 録音用 AudioWorklet プロセッサ。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/attachments-paste-target.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
