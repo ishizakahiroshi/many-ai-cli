@@ -1,6 +1,7 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
+import { isDetachedTabView } from './detached-view-mode.js';
 import { CHAT_HISTORY_USER_TURN_MARKER, _elapsedTimerInterval, activeSessionId, addToSessionOrder, autoDismissTimers, chatHistory, deriveProjectKeyFromCwd, isSessionLiveRenderedInMultiPane, maybeAutoSwitchToNextApproval, pendingAutoSwitch, removeApprovalAutoSwitchTarget, sessions, set__elapsedTimerInterval, set_activeSessionId, set_pendingAutoSwitch, terminals, utf8Decoder, utf8Encoder } from './state.js';
 import { dismissSession, removeLocalSession, requestSessionDismiss, resetAllLocalSessionHistory, resetLocalSessionHistory, updateInputAffordance } from '../app.js';
 import { migratePinnedSessionsOnce, activateSession, render, renderSessionList, renderSessionStateUpdate, updateCardLiveInfo, updateMainTabStatus, updateShellBadge, updateTabNotification } from './session-list.js';
@@ -165,6 +166,13 @@ window.addEventListener('online', _ensureWsAlive);
 window.addEventListener('pageshow', _ensureWsAlive);
 
 export function _sendRegister() {
+  // 別窓タブモード（/?view=detached-tab）は端末を表示しないので、PTY の大きさの主導権も
+  // 新規セッションの既定サイズも名乗らない（Hub の claimResizeOwnership は session 0 と
+  // 寸法 0 を無視する）。plan_detached-tab-windows.md C2
+  if (isDetachedTabView()) {
+    ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols: 0, rows: 0, ui_active_session_id: 0 }));
+    return;
+  }
   const { cols, rows } = estimateRegisterTerminalSize();
   ws.send(JSON.stringify({ type: 'register', role: 'ui', token, cols, rows, ui_active_session_id: activeSessionId || _lastActiveSessionIdBeforeDisconnect || 0 }));
 }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "c8aa7eaf60397f94c2f6bce10018cd882da2c892",
+    "commit": "8b75f8a5ac19ff2b4e7c87fc7810b9611bbeec36",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1108,
-    "analyzed": 901,
+    "discovered": 1112,
+    "analyzed": 905,
     "unresolved": 6,
     "unknown": 1,
     "unclaimed": 200,
@@ -22608,6 +22608,66 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/detached-view-mode.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "detached-view-mode.ts — 別窓タブモード（/?view=detached-tab&tab=<名前>）の判定だけを持つ葉モジュール。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/detached-view.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "detached-view.ts — タブ 1 枚・作業メモを別窓で開く（/?view=detached-tab&tab=<名前>）。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/done-summary-fixtures.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -26063,6 +26123,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/window-channel.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "window-channel.ts — Hub の本体の窓と別窓（/?view=detached-tab）の連絡路。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/workflow-modal.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -26651,6 +26741,32 @@
     },
     {
       "path": "web/src/styles/detached-grid.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/styles/detached-view.css",
       "adapter": "css",
       "status": "analyzed",
       "fields": {

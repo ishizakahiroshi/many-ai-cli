@@ -41,6 +41,7 @@ import { captureTerminalView, restoreTerminalView, terminalViewFollows } from '.
 import { detectSupport } from '../vendor/vtype-core/index.js';
 import type { NVIDIANIMSettingsStatus } from '../types/proto.js';
 import { invalidateSpawnModelGroups } from './spawn-model-groups.js';
+import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
 
 // Extracted from app.js. Keep classic-script global scope; no module wrapper.
 
@@ -314,6 +315,8 @@ export function _getAudioCtx() {
 }
 
 export function playNotificationSound() {
+  // 別窓タブモードでは鳴らさない（本体の窓も同じ WS 通知を受けて鳴らすので二重になる）。
+  if (isDetachedTabView()) return;
   if (localStorage.getItem(STORAGE_NOTIFY_SOUND_ENABLED_KEY) !== '1') return;
   const volume = getNotificationVolume() / 100;
   if (volume === 0) return;
@@ -361,6 +364,7 @@ export async function requestDesktopNotificationPermission() {
 }
 
 export function showDesktopApprovalNotification(sessionId) {
+  if (isDetachedTabView()) return; // 通知音と同じく本体の窓だけが出す
   if (!desktopNotificationsEnabled()) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const sess = sessions.get(sessionId);
@@ -407,6 +411,7 @@ function firstSentenceOf(text: string): string {
 // showDesktopApprovalNotification と同じ形。tag だけ別にして、承認通知とは別枠で
 // 通知が積み上がる/置き換わるようにする。
 export function showDesktopTurnEndNotification(sessionId: number, runningStartedAt?: number): void {
+  if (isDetachedTabView()) return; // 通知音と同じく本体の窓だけが出す
   if (!desktopNotificationsEnabled()) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const sess = sessions.get(sessionId);
@@ -2916,6 +2921,11 @@ export function rememberTabForOpenProject(name: string): void {
 // C2 公開 API: タブを切り替える
 export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
+  // 別窓タブモードは開いたタブ 1 枚に固定する。承認の自動移動などで別のタブへ切り替わらないよう、
+  // どの経路から呼ばれても固定したタブへ置き換える。作業メモの別窓は display-area を使わない。
+  const detachedTab = detachedTabName();
+  if (detachedTab === 'memo') return;
+  if (detachedTab && name !== detachedTab) name = detachedTab;
   if (!VALID_TAB_NAMES.has(name)) return;
 
   // Capture before hiding either view. Chat owns its own position through this event.

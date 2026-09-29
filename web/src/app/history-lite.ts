@@ -1,6 +1,9 @@
 // P-10: deliberately small persisted-session workbench. It does not revive the
 // removed chat proxy; all data comes from sessionstore and the existing log API.
 import { apiFetch, showToast } from './util.js';
+import { t } from '../i18n.js';
+import { isDetachedTabView } from './detached-view-mode.js';
+import { requestMainWindow } from './window-channel.js';
 
 type Overview = Record<string, any>;
 type Message = { id: number; ts: string; role: string; rawText?: string; normalizedText?: string };
@@ -55,6 +58,15 @@ function sendToSpawn() {
   if (!selected) return;
   const prompt = selectedText();
   navigator.clipboard?.writeText(prompt).catch(() => {});
+  if (isDetachedTabView()) {
+    // 別窓では起動画面（サイドバーの中にある）を隠しているので、本体の窓で開いてもらう。
+    const provider = selected.provider || 'claude';
+    const cwd = selected.cwd || '';
+    void requestMainWindow({ type: 'open-spawn', provider, cwd }).then((ok) => {
+      showToast(ok ? '選択 transcript をクリップボードへコピーし、本体の窓で新規セッションを開きました' : t('detached_main_window_missing'), undefined, ok ? 1800 : 4000);
+    });
+    return;
+  }
   const open = (window as any).openSpawnFor;
   if (typeof open === 'function') open(selected.provider || 'claude', selected.cwd || '');
   showToast('選択 transcript をクリップボードへコピーし、新規セッションを開きました');

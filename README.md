@@ -102,6 +102,7 @@ The install-status list (first-run screen, and Settings → AI CLI integrations)
 - **Chat history and multi-pane view** — read a bubble-style conversation history, search/filter it, or place it beside the live terminal in a Multi pane
 - **Multi-pane tab** — watch multiple live sessions at once in a configurable grid
 - **Detached Session Grid** — pop AI or Shell sessions out into a separate browser window as a standalone grid view; the Hub keeps managing approvals and session state
+- **Tabs in their own window** — right-click a tab (Chat, Files, Git, Review, History, Approvals, Subagents, Multi) or the work memo button and choose "Open in new window" to keep that view on another monitor; session-specific views can follow the session selected in the main window or stay pinned
 - **Shell sessions** — spawn a plain interactive shell (PowerShell / bash / sh) as a regular Hub session alongside AI sessions; AI-specific features (approval injection, Chat, token bar) are automatically disabled for shell sessions
 - **Files tab** — browse project files, preview Markdown/code, copy paths, create folders, save text files with conflict detection, rename/move, and delete empty folders from the Hub
 - **Git view** — inspect branch history, commit details, changed files, diffs, fetch refs, and run `git pull --ff-only` without leaving the Hub

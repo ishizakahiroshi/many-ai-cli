@@ -11,6 +11,14 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Tabs and the work memo can now open in their own window.** Right-click a
+  tab (Chat, Files, Git, Review, History, Approvals, Subagents, Multi) or the
+  work memo button and choose "Open in new window", so the view can stay on
+  another monitor. Session-specific views follow the session selected in the
+  main window by default, and can be pinned to the current session instead.
+  The detached window does not resize the terminal or repeat notification
+  sounds, and actions that need the main window (opening a session, the new
+  session panel) are handed back to it.
 - **Empty Multi-pane slots can now be removed in one click.** A slot that sits
   in a row (or column) with no view in it shows a "Remove this row" (or
   "Remove this column") button. It shrinks the layout, for example from 2×2 to
@@ -91,6 +99,8 @@ Release artifacts are published at
   the other device's changes.
 
 ### Fixed
+- **The Detached Grid launcher shows readable labels again.** Its title,
+  presets and buttons were shown as raw translation keys such as `dgl_title`.
 - **Renaming a session card no longer breaks routine completion tracking or
   reattach matching.** The Hub now keys those lookups on a fixed launch-time
   label instead of the editable display label. The card's right-click "Change

@@ -1,0 +1,58 @@
+/* detached-view.css — タブ 1 枚・作業メモの別窓（/?view=detached-tab）。
+   plan: docs/local/plan_detached-tab-windows.md C2 / C4。
+   body.detached-tab-mode は detached-view.ts が付ける。 */
+
+body.detached-tab-mode header { display: none; }
+body.detached-tab-mode #app { height: 100dvh; }
+/* token-statusbar を隠すので、その高さぶんの下余白も要らない */
+body.detached-tab-mode { --tsb-bottom-offset: 0px; }
+
+#detached-tab-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev, #181c24);
+  font-size: 0.82rem;
+}
+.detached-tab-title { flex-shrink: 0; color: var(--text); }
+.detached-tab-session {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-2, #9aa4b2);
+}
+.detached-tab-spacer { flex: 1; }
+.detached-follow-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.detached-follow-toggle button {
+  padding: 2px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-soft, var(--muted));
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+.detached-follow-toggle button + button { border-left: 1px solid var(--line); }
+.detached-follow-toggle button.active { background: var(--accent, #3b82f6); color: #fff; }
+
+/* 作業メモの別窓: ドロワーを右端の浮き窓ではなく、窓いっぱいの面として出す */
+#detached-memo-host { flex: 1; min-height: 0; display: flex; }
+#memo-drawer.memo-drawer--window {
+  position: static;
+  flex: 1;
+  width: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}

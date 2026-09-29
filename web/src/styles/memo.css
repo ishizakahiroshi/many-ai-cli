@@ -35,6 +35,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.memo-drawer-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.memo-drawer-close[hidden] { display: none; }
+.memo-drawer-popout,
 .memo-drawer-close {
   flex-shrink: 0;
   border: none;
@@ -45,6 +48,7 @@
   padding: 2px 4px;
   cursor: pointer;
 }
+.memo-drawer-popout:hover,
 .memo-drawer-close:hover { color: var(--text); }
 .memo-drawer-description {
   margin: 0;

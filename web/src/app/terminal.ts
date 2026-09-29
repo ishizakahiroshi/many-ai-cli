@@ -1,5 +1,6 @@
 // --- ESM imports (generated) ---
 import { cleanCopiedText, cleanOneLineText, showToast } from './util.js';
+import { detachedTabName, isDetachedTabView } from './detached-view-mode.js';
 import { t as ti18n } from '../i18n.js';
 import { FONTSIZE_MAP, STORAGE_FONTSIZE_KEY } from './user-prefs.js';
 import { currentXtermTheme } from './theme-tokens.js';
@@ -2289,6 +2290,9 @@ function probeSendOutcome(sessionId, cols, rows, reason, outcome) {
 }
 
 export function sendResize(sessionId, cols, rows, reason = 'unknown', resizeIdentity: any = null) {
+  // 別窓タブモードは端末を表示しない（マルチだけは端末を並べるので、別窓グリッドと同じく送る）。
+  // 表示していない端末の寸法で PTY を動かさない。plan_detached-tab-windows.md C2
+  if (isDetachedTabView() && detachedTabName() !== 'multi') return;
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     probeSendOutcome(sessionId, cols, rows, reason, 'ws-closed');
   }

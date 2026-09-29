@@ -18,6 +18,10 @@ import {
   totalOpenMemoCount,
 } from './memo-model.js';
 import type { Memo } from './memo-model.js';
+// 別窓（plan_detached-tab-windows.md C4）。どちらも何も import しない葉モジュール。
+import { isDetachedTabView, openDetachedTabWindow } from './detached-view-mode.js';
+import { onWindowMessage, postWindowMessage, requestMainWindow } from './window-channel.js';
+import { showToast } from './util.js';
 
 // C4（バッジ）向けの通知。件数そのものは getOpenMemoCountForProject / totalOpenMemoCount を
 // 都度呼んで取る（このイベントは「取り直せ」のシグナルであって件数を運ばない）。
@@ -46,6 +50,12 @@ function notifyMemosChanged(): void {
   setSharedMemoCache(cache);
   updateMemoButtonBadge();
   window.dispatchEvent(new CustomEvent(MEMOS_CHANGED_EVENT));
+}
+
+// 自分の窓で足した・直した・消したときだけ、ほかの窓へ「取り直して」と伝える。
+// refresh() からは呼ばない（受けた窓が取り直すたびに流し返すと往復が止まらない）。
+function announceMemosChangedToOtherWindows(): void {
+  postWindowMessage({ type: 'memos-changed' });
 }
 
 function ensureMemoButtonBadge(): HTMLElement | null {
@@ -149,6 +159,7 @@ function applyUpdate(updated: Memo): void {
   const idx = cache.findIndex((m) => m.id === updated.id);
   if (idx >= 0) cache[idx] = updated; else cache.push(updated);
   notifyMemosChanged();
+  announceMemosChangedToOtherWindows();
   renderList();
 }
 
@@ -174,6 +185,7 @@ async function removeMemo(memo: Memo): Promise<void> {
     await request(`/api/memos/${encodeURIComponent(memo.id)}`, { method: 'DELETE' });
     cache = cache.filter((m) => m.id !== memo.id);
     notifyMemosChanged();
+    announceMemosChangedToOtherWindows();
     renderList();
   } catch (error) { showFeedback(error); }
 }
@@ -227,6 +239,13 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   launch.type = 'button';
   launch.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (isDetachedTabView()) {
+      // 別窓では起動画面（サイドバーの中にある）を隠しているので、本体の窓で開いてもらう。
+      void requestMainWindow({ type: 'open-spawn', cwd: memo.project, prompt: memo.text }).then((ok) => {
+        if (!ok) showToast(t('detached_main_window_missing'), undefined, 4000);
+      });
+      return;
+    }
     openSpawnPanelWith({ cwd: memo.project, prompt: memo.text });
   });
   const del = node('button', t('memo_delete'), 'memo-row-delete');
@@ -296,6 +315,7 @@ async function submitNewMemo(): Promise<void> {
     const { memo } = await request<{ memo: Memo }>('/api/memos', body('POST', payload));
     cache.push(memo);
     notifyMemosChanged();
+    announceMemosChangedToOtherWindows();
     inputEl.value = '';
     renderList();
   } catch (error) {
@@ -326,7 +346,21 @@ function ensureDrawer(): HTMLElement {
   closeBtn.type = 'button';
   closeBtn.setAttribute('aria-label', t('memo_close'));
   closeBtn.addEventListener('click', () => closeDrawer());
-  header.append(titleWrap, closeBtn);
+  const headerActions = node('div', '', 'memo-drawer-header-actions');
+  if (!isDetachedTabView()) {
+    // サブモニターへ常駐させたいとき用。ドロワーを閉じ、同じ中身を別窓で開く。
+    const popOut = node('button', '🗗', 'memo-drawer-popout');
+    popOut.type = 'button';
+    popOut.title = t('detached_open_in_window');
+    popOut.setAttribute('aria-label', t('detached_open_in_window'));
+    popOut.addEventListener('click', () => {
+      closeDrawer();
+      openDetachedTabWindow('memo', activeSessionId);
+    });
+    headerActions.append(popOut);
+  }
+  headerActions.append(closeBtn);
+  header.append(titleWrap, headerActions);
 
   // 見出し・説明文で「自分用のメモ」と明示する（AI が書く引き継ぎ看板とは別物）。
   const description = node('p', t('memo_description'), 'memo-drawer-description');
@@ -356,7 +390,28 @@ export function openMemoDrawer(): void {
   updateSubtitle();
   void refresh();
 }
-function closeDrawer(): void { if (drawer) drawer.hidden = true; }
+function closeDrawer(): void {
+  // 別窓では閉じる先が無い（閉じると空の窓が残る）。閉じるボタンも出していない。
+  if (drawer && !isDetachedTabView()) drawer.hidden = true;
+}
+
+/**
+ * 作業メモの別窓（/?view=detached-tab&tab=memo）。ドロワーと同じ中身を host の中に
+ * 全面で出す（plan_detached-tab-windows.md C4）。detached-view.ts が i18n-ready 後に呼ぶ。
+ */
+export function mountMemoWindow(host: HTMLElement): void {
+  const el = ensureDrawer();
+  el.classList.add('memo-drawer--window');
+  el.querySelector<HTMLElement>('.memo-drawer-close')?.setAttribute('hidden', '');
+  host.append(el);
+  openMemoDrawer();
+}
+
+/** 表示中のセッション（＝新しいメモの分類先）が変わったときに見出しを直す。 */
+export function refreshMemoContext(): void {
+  updateSubtitle();
+  renderList();
+}
 function toggleDrawer(): void {
   const el = ensureDrawer();
   if (el.hidden) openMemoDrawer(); else closeDrawer();
@@ -373,4 +428,9 @@ if (typeof document !== 'undefined') {
   // i18n-ready 起動と同じ合図で一度だけ先読みする。ensureDrawer() は非表示のまま
   // ドロワーを組み立てるだけなので見た目には出ない（openMemoDrawer と同じ refresh 経路）。
   document.addEventListener('i18n-ready', () => { ensureDrawer(); void refresh(); }, { once: true });
+  // ほかの窓（本体・作業メモの別窓）でメモが変わったら取り直す。件数バッジを揃えるため、
+  // ドロワーを開いていなくても取り直す。
+  onWindowMessage((msg) => {
+    if (msg.type === 'memos-changed' && drawer) void refresh();
+  });
 }

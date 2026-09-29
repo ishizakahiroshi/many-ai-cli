@@ -323,7 +323,12 @@ export function openDetachedGridLauncher(opts?: {
   overlay.id = 'detached-grid-launcher-overlay';
   overlay.className = 'detached-grid-launcher-overlay aac-wheel-overlay';
 
-  const tw = typeof window.t === 'function' ? window.t : (k: string, fb?: string) => fb || k;
+  // window.t の 2 番目の引数は埋め込み値であって既定の文言ではない。キーが未登録だと
+  // キー名そのものが返るので、それを「未登録」とみなして既定の文言へ倒す。
+  const tw = (k: string, fb: string): string => {
+    const v = typeof window.t === 'function' ? window.t(k) : k;
+    return v && v !== k ? v : fb;
+  };
 
   // プリセットリストを生成
   const presetListHtml = DETACHED_PRESETS.map(p => {

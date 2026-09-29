@@ -33,6 +33,8 @@ import { captureTerminalView, restoreTerminalView, terminalViewFollows } from '.
 // 循環になる（scripts/check-web-module-init.mjs が拾う TDZ の型）ため、循環を作らない
 // memo-model.ts（path-detect.js しか import しない葉モジュール）からだけ読む。
 import { MEMOS_CHANGED_EVENT, openMemoCountForCwd } from './memo-model.js';
+// 別窓タブモードの判定。何も import しない葉モジュール（循環を作らない）。
+import { forwardDetachedActivate, isDetachedTabView } from './detached-view-mode.js';
 // provider アイコンは末端モジュール provider-icon.ts が持つ（他モジュールを import しない）。
 // このファイルの内部でも使うので import し、既存の import 元のために再 export する。
 import { providerDisplayName, providerIconHtml, safeClassToken } from './provider-icon.js';
@@ -209,6 +211,10 @@ export function activateSessionForMultiPane(id) {
 window.activateSessionForMultiPane = activateSessionForMultiPane;
 
 export function activateSession(id) {
+  // 別窓タブモード（/?view=detached-tab）では本体の処理を走らせない。PTY の大きさの主導権を
+  // Hub へ名乗り出る・入力欄や承認パネルに触る・スポーン確認を開く、はどれも本体の窓の仕事。
+  // 表示するセッションは detached-view.ts が決める（plan_detached-tab-windows.md C2）。
+  if (isDetachedTabView()) { forwardDetachedActivate(id); return; }
   const wasWorkspace = document.getElementById('multi-view')?.dataset.paneMode === 'workspace' &&
     !document.getElementById('multi-view')?.hidden;
   const previousArea = document.getElementById('display-area');

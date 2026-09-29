@@ -33,6 +33,7 @@ import './app/pane-placement-menu.js';
 import './app/pwa.js';
 import { initTokenStatusbar } from './app/token-statusbar.js';
 import { initDetachedGridMode } from './app/detached-grid.js';
+import { initDetachedTabMode } from './app/detached-view.js';
 import { initServerModal } from './app/server-modal.js';
 import { initWorkflowProgress } from './app/workflow-modal.js';
 import { initLiveStatusColor } from './app/live-status-color.js';
@@ -59,6 +60,8 @@ import { initJevOptIn } from './app/jev-opt-in.js';
 initTokenStatusbar();
 // detached-grid モード判定（/?view=detached-grid の場合のみ初期化）
 initDetachedGridMode();
+// タブ 1 枚・作業メモの別窓（/?view=detached-tab）。本体の窓では窓どうしの連絡と右クリックの配線
+initDetachedTabMode();
 // 🖥 Server モーダル（内蔵リモート接続）の配線
 initServerModal();
 // Workflow ライブ進捗ピル + モーダルのポーリング開始
