@@ -1,6 +1,7 @@
 # many-ai-cli コーディング規約
 
-> 最終更新: 2026-09-27 05:23:16 — 調査用のログ・追跡・監視機能全般を purge で分離し、リリースへ混ぜない方針を明文化
+> 最終更新: 2026-09-30(水) 09:59:46 — 実物と食い違っていた記述を直した（削除済みの package-lock.json・無い detector.go・古いサブコマンド列挙・設計書を正本とする行）
+> 2026-09-27 05:23:16 — 調査用のログ・追跡・監視機能全般を purge で分離し、リリースへ混ぜない方針を明文化
 > 2026-09-21(月) 21:31:33 — v0.3.x 設計書の退避先へリンクを付け替えた
 
 `many-ai-cli` は単一 Go バイナリ（Hub 常駐 + ラッパー）+ 静的 TypeScript フロント（`web/dist/` を `go:embed`）。v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](../docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md)
@@ -38,7 +39,7 @@
 ### Web TypeScript
 
 - **構成:** `web/src/` が静的 HTML/CSS/TypeScript ソース。`bun run build` が esbuild でファイル単位に `web/dist/` へ出力し、Go は `web/dist/` を `go:embed` で取り込む。
-- **パッケージマネージャ (C8):** **`web/` 以下は bun のみを使う。npm / pnpm / yarn は使わない。** 依存の追加・更新は必ず `bun add` / `bun install` 経由で行い、`bun.lock` を唯一の真実として扱う。`web/package-lock.json` が残っているのは互換性のためだが**手動で更新しない**（drift 検知 CI job が warning を出す・詳細は `web/README.md`）。
+- **パッケージマネージャ (C8):** **`web/` 以下は bun のみを使う。npm / pnpm / yarn は使わない。** 依存の追加・更新は必ず `bun add` / `bun install` 経由で行い、`bun.lock` を唯一の真実として扱う。`web/package-lock.json` は削除済みで、`web/.gitignore` が追跡を止めている（誤って `npm install` で作られて PR に入ると、`validate.yml` の CI job が warning を出す）。
 - **モジュール:** app コードは native ESM。import パスは出力後に有効な `.js` 拡張子を維持する（例: `import './state.js'`）。
 - **vendor:** xterm / marked / DOMPurify / highlight は `web/src/vendor/` の classic script を維持し、型は `web/src/types/vendor.d.ts` で補う。バージョンと upstream URL は `web/src/vendor/THIRD_PARTY_LICENSES.txt` に集約（CVE 手動照合用）。
 - **型安全:** `tsconfig.json` は `strict: true` / `allowJs: false`。難所の動的 DOM・window 互換は明示 `any` と `TODO(ts)` で棚卸しし、無断で `// @ts-nocheck` に逃がさない。
@@ -48,7 +49,7 @@
 
 | ディレクトリ | 役割 |
 |---|---|
-| `cmd/many-ai-cli/` | サブコマンドディスパッチ（`serve` / `wrap` / `shell-init` / `stop` / `status`）のみ。ロジックは `internal/` |
+| `cmd/many-ai-cli/` | サブコマンドの振り分けのみ（一覧は `CLAUDE.md` の用語表）。ロジックは `internal/` |
 | `internal/hub/` | HTTP サーバ・WebSocket・セッション管理・承認キュー |
 | `internal/wrapper/` | PTY ラップ・出力監視・承認検出・Hub への送信 |
 | `internal/shell/` | `shell-init` 出力（bash/zsh/PowerShell 用シェル関数） |
@@ -59,14 +60,14 @@
 
 ## 共通実装の使い方
 
-新規実装前に既存共通化を確認すること。以下は実装が進んだら追記する暫定スケルトン。
+新規実装前に既存共通化を確認すること。以下は主な置き場（全ファイルの索引は `.omitnix/index.json`）。
 
 | リソース | 置き場所 | 用途 |
 |---|---|---|
 | WS メッセージ型 | `internal/proto/messages.go` | ラッパー ⇄ Hub ⇄ ブラウザ で共有 |
 | 設定読み込み | `internal/config/config.go` | デフォルトマージ・YAML パース |
 | PTY 抽象 | `internal/wrapper/pty_unix.go` / `pty_windows.go` | OS 差異吸収 |
-| 承認検出 | `internal/wrapper/detector.go` | パターンマッチ・デバウンス・ANSI 除去 |
+| 承認の記録・同一性 | `internal/hub/approval_record.go` / `internal/hub/approval_identity.go` | 承認の表示と重複の抑止（`CLAUDE.md` の設計原則の索引） |
 | ログ出力 | `internal/log/log.go` | JSONL + 生 PTY ログ |
 
 ## 設計上の制約（実装時に守る）
@@ -78,13 +79,12 @@
 - **PTY の生バイト列を WS の JSON にそのまま入れない**（base64 エンコード）
 - **`config.yaml` に手書きされうるセクションを足すときは、寛容な `UnmarshalYAML` を持たせる。** `yaml.v3` は 1 項目の型不一致で `Unmarshal` 全体を失敗させ、`config.LoadOrCreate` はそれを破損とみなして `config.yaml` を `.bak` へ退避し既定を再生成する。**token も作り直されるので Hub URL が変わる。** 解釈できない要素だけ捨てて残りを活かす（前例: `SessionOrderIDs`・`SubscriptionProfiles`）。あわせて、任意機能の設定不備は `Validate()`（＝起動を止める）ではなく `Warnings()` へ入れる
 
-## 承認検出の実装方針（detector.go）
+## 承認検出の実装方針
 
-- ANSI エスケープを除去してからパターンマッチ
-- 同一プロンプトの再描画はデバウンス（直近 500ms は同一として扱う）
-- 「カーソルが特定行で停止している」を確定条件に追加
-- パターンは `config.yaml` の `providers.<provider>.patterns` で外部化（CLI バージョンアップ追従）
-- 承認解決後は `approval_resolved` を Hub に送り、UI のカードを自動消去
+設計の決まりは `CLAUDE.md` の設計原則の索引（承認の同一性・承認の表示）と、そこから指す正本のファイルにある。
+
+- PTY 出力は ANSI エスケープを除去してから照合する
+- 照合パターンは `resources/approval-patterns/<provider>.md` に置き、Hub が取り込む（`internal/config/config.go` の `ApprovalPatternSources`。`resources/` は `main` へ push した時点で全利用者へ配信される）
 
 ## 日付・時刻表示
 
@@ -105,7 +105,7 @@
 - **Go:** `go test ./...` で単体テスト。PTY 関連は OS 別 build tag で分岐したテストファイル（`_unix_test.go` / `_windows_test.go`）
 - **Web:** `bun run check`（TypeScript）+ `bun run test`（approval-parser fixtures）。Hub 起動 → モックラッパー → UI 操作の E2E は未整備のため、フロント大変更後は手動ブラウザ確認が必要。
   - **AI の確認では `bun run test` も `bun --cwd web test` も使わない。** package の `test` は先頭で `bun run build` を実行して `web/dist` を書き換える（ビルドはユーザーが行う決まり）。ビルドせずに走らせるには、`web` ディレクトリで `bun test ./tests/<name>.test.ts`、fixture なら `bun test ./src/app/<name>-fixtures.ts` を使う（2026-09-23 と 2026-09-24 に同じ取り違えが 2 回）
-- **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示、設計書 §9 のレイアウト通りに動くか確認
+- **手動検証:** 4 ペイン（Claude × 2 / Codex × 2）並列起動 + Hub UI を別画面で常時表示して動作を確認する（画面の仕様は README とソースが正本）
 
 ### `go test ./...` の赤は、切り分けてから自分の変更を疑う
 

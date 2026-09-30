@@ -1,6 +1,7 @@
 # many-ai-cli 開発ガイド
 
-> 最終更新: 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
+> 最終更新: 2026-09-30(水) 10:00:45 — 冒頭の対応 CLI を Provider 行に合わせた
+> 2026-09-29(火) 21:14:45 — prompt-audit の指摘で、古くなった版数の段落を削り、サブコマンド表を現行の分岐に合わせ、`internal/` の列挙を索引への参照に替えた
 > 2026-09-28(月) 19:34:08 — 設計原則の索引「引き継ぎ看板と…」の行に、作業メモ（`memo_store.go`）に書かれたパスも `isPathMentionedInMemos` 経由で読み取り専用に開ける旨を追記（plan_memo-panel.md C4）
 > 2026-09-26(土) 01:08:47 — 引き継ぎメモの表示を、記録済みパスに対する明示的な Markdown プレビューとして設計原則の索引へ反映。索引化の経緯（2026-08-19）: 常時ロード分が 5 週間で 129 → 269 行に倍増したため「制定」節の本文を正本へ移した。再肥大は `scripts/check-claude-md.mjs` が CI で止める
 
@@ -16,7 +17,7 @@
 
 ## プロジェクト概要
 
-**many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
+**many-ai-cli** — 複数のAIコーディングCLI（Claude Code / Codex CLI など。対応一覧は下の用語表の Provider 行）を並列で動かすときの **承認操作・進捗監視を 1 画面の Web ダッシュボードで一元管理** するツール。単一 Go バイナリ（Hub 常駐 + ラッパー機能）+ ブラウザ UI（xterm.js / TypeScript）。
 
 **仕様の正本**は README（公開仕様）とソースコード（実装仕様）。v0.3.x の設計書は [docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md](docs/local/archive/v0.3.x/v0.3.x-many-ai-cli-design.md) へ退避した（非公開・履歴）。リリースごとの変更は [CHANGELOG.md](CHANGELOG.md)。**実装状況をここに書き写さない**（すぐ古くなり、二重管理になる）。
 

@@ -1,6 +1,7 @@
 # many-ai-cli ビルド・配布・デプロイ
 
-> 最終更新: 2026-09-27 05:23:16 — 調査用機能全件のリリース前 purge と共通検査への導線を追加
+> 最終更新: 2026-09-30(水) 09:59:15 — 実物と食い違っていた記述を直した（make build は WSL へ送らない・Go の版・go:embed の場所・CGO・ログの場所など）。古いサブコマンド一覧と v0.1〜v0.3 の手動配布の節を削った
+> 2026-09-27 05:23:16 — 調査用機能全件のリリース前 purge と共通検査への導線を追加
 
 `many-ai-cli` は **Go 単一バイナリ + go:embed フロント** の構成。サーバーへのデプロイは無し（ユーザー PC にバイナリを置くだけ）。
 
@@ -10,8 +11,8 @@ v0.3.x 設計書（非公開・履歴）: [../docs/local/archive/v0.3.x/v0.3.x-m
 
 リリース前に調査用のログ・追跡・監視・計測機能を全件 `debug-purge` し、`node scripts/check-instrumentation.mjs --release` を通す。方針と分離方法は [coding.md の「調査用機能の分離と purge」](coding.md#調査用機能の分離と-purge)、台帳は `instrumentation.json`。GitHub Release workflow とローカル GoReleaser の before hook の両方で検査し、未パージなら止める。ビルド対象からの除外と、パージ完了は別の条件である。
 
-- Go 1.22+
-- Node.js 20+（ビルドスクリプト `scripts/build.mjs` と `node --test` の実行用）
+- Go 1.26.8+（`go.mod` の `go` 行が正本）
+- Node.js 20+（フロントのビルドスクリプト `web/scripts/build.mjs`、`scripts/` の検査スクリプト、`node --test` の実行用）
 - Bun 1.3+（フロント `web/` の依存取得・スクリプト起動用。npm は使わない）
 - フロントは事前に `web/dist/` をビルドし、Go の `//go:embed web/dist` で同梱
 
@@ -28,7 +29,7 @@ cd ..
 `web/bunfig.toml` の `minimumReleaseAge` で公開直後バージョンの取得も遅延させている。
 CI / goreleaser では `bun install --frozen-lockfile` を使い lockfile との一致を強制する。
 
-`web/dist/` が `internal/hub/` の `embed.FS` に取り込まれる前提で実装すること。
+`web/dist/` は `web/web.go` の `//go:embed all:dist` で取り込まれる。
 `git archive HEAD` などでソーススナップショットを展開した場合も、archive には `web/dist/` が含まれないため、展開後に必ず同じフロントビルドを実行してから Go ビルドする。
 
 ### Go バイナリビルド（クロスコンパイル）
@@ -49,33 +50,35 @@ GOOS=linux GOARCH=amd64 go build -o dist/linux/many-ai-cli ./cmd/many-ai-cli
 
 ### CGO の扱い
 
-- 標準は `CGO_ENABLED=0`（純 Go ビルド）を目指す
-- PTY ライブラリが CGO 必須の場合は OS 別に build tag で分離し、Linux/Mac は CGO 有効・Windows は ConPTY API を使う純 Go 実装に倒す方針
-- 詳細は実装時に決める。決まったら本ドキュメントに追記
+- 全ターゲット `CGO_ENABLED=0`（純 Go ビルド）。正本は `.goreleaser.yaml` と `Makefile` の `build-linux`
+- PTY は Unix が `creack/pty`、Windows が ConPTY（`aymanbagabas/go-pty`）で、どちらも CGO を使わない
 
 ### Windows での開発フロー
 
 **ローカルビルドは原則 `make build` を使う**。`go build` を素で叩くと `go-winres` がスキップされて、`cmd/many-ai-cli/rsrc_windows_*.syso`（アプリアイコン等の Windows リソース）が古いまま `dist/many-ai-cli.exe` に embed される。
 
-#### Makefile ターゲット一覧（v0.2.0 時点）
+#### Makefile ターゲット一覧
 
 種類が増えてきたのでここに集約する。**他所に分散させない**。
 
 | ターゲット | 出力物 / 動作 | 使う場面 |
 |---|---|---|
-| `make build` | 下 4 つ（windows + launcher + linux + deploy-wsl）を順に実行 | 通常はこれ 1 本。Windows.exe・統合ランチャー・Linux ELF を作って WSL 側へ自動転送まで完了する |
+| `make build` | 下の windows + launcher + linux を順に実行（WSL へは送らない） | 通常はこれ 1 本。Windows.exe・統合ランチャー・Linux ELF を作る |
+| `make build-web` | `web/dist/`（`web` で `bun install` と `bun run build`） | フロントだけ作り直したいとき。`build-windows` と `build-linux` はこれを先に実行する |
 | `make build-windows` | `dist/many-ai-cli.exe` | Windows 本体だけ作り直したいとき（go-winres → go build） |
 | `make build-launcher` | `dist/many-ai-cli-launcher.exe` | 統合ランチャー（`winres/winres-launcher.json` のアイコン付き）だけ作り直したいとき |
 | `make build-linux` | `dist/linux/many-ai-cli` | Linux ELF（`CGO_ENABLED=0 GOOS=linux GOARCH=amd64`）だけ作り直したいとき |
-| `make deploy-wsl` | `dist/linux/many-ai-cli` → WSL `~/.local/bin/many-ai-cli`（cp + chmod +x） | Linux バイナリだけ作り直した後、WSL に再転送だけしたいとき。中身は `scripts/deploy-wsl.ps1` |
+| `make deploy-wsl` | `dist/linux/many-ai-cli` → WSL `~/.local/bin/many-ai-cli`（cp + chmod +x） | Linux バイナリを WSL へ送りたいとき（`make build` の後に続けて実行する）。中身は `scripts/deploy-wsl.ps1` |
 | `make run` | `build-windows` 後に `dist/many-ai-cli.exe serve` | ローカルで Hub をすぐ立ち上げたいとき |
 | `make clean` | `dist/` 配下と `cmd/*/rsrc_windows_*.syso` を削除 | リソース埋め込みを作り直したいとき |
+| `make fmt-check` / `make fmt` | `scripts/check-gofmt.mjs` で gofmt との差を確かめる / 整形する | Go ファイルの整形を確かめたいとき |
+| `make debug-purge id=<id>` / `make debug-restore id=<id>` | 調査用機能の撤去 / 復元 | リリース前（`coding.md` の「調査用機能の分離と purge」） |
 
 ```bash
 # 通常はこれだけ
 make build
 # 出力: dist/many-ai-cli.exe / dist/many-ai-cli-launcher.exe / dist/linux/many-ai-cli
-# 加えて WSL ~/.local/bin/many-ai-cli が最新に差し替わる
+# WSL の ~/.local/bin/many-ai-cli も差し替えるときは続けて make deploy-wsl
 ```
 
 #### `make deploy-wsl` の中身
@@ -93,20 +96,13 @@ make build
 #### 直接 `go build` を叩いてよいケース
 
 - 急ぎの動作確認で **アイコン/バージョン情報の更新が不要**と分かっているとき
-- `winres/winres.json` / `winres/winres-wsl.json` を編集していないとき
+- `winres/winres.json` / `winres/winres-launcher.json` を編集していないとき
 
 それ以外（特にリリース手前・ユーザーに配布する `dist/` を作るとき）は必ず `make build` を使うこと。クロスコンパイル（macOS 向け）は下記「Go バイナリビルド（クロスコンパイル）」のコマンドを使い、`go-winres` は Windows 専用なのでスキップする。
 
 詳細な Windows 開発環境は `windows_setup.md` を参照。
 
 ## 配布
-
-### v0.1〜v0.3 の手動配布（暫定）
-
-手動でビルド成果物を共有：
-- Windows: `many-ai-cli.exe` を `%LOCALAPPDATA%\Programs\many-ai-cli\` に配置 → PATH 追加
-- macOS: `many-ai-cli` を `/usr/local/bin/` または `~/bin/` に配置
-- Linux: 同上
 
 ### Windows 配布導線の原則
 
@@ -134,7 +130,7 @@ Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows 
 
 ## go:embed の運用
 
-- `internal/hub/embed.go`（仮）に `//go:embed all:web/dist` を書く想定
+- 取り込みは `web/web.go` の `//go:embed all:dist`
 - `web/dist/` が空のままビルドすると `embed: no matching files found` で失敗するので、CI / Makefile / 手元手順で **必ず先にフロントをビルド**してから Go ビルド
 - 開発時のホットリロードは未整備（Vite は不採用・esbuild のみ）。フロント変更時は `cd web && bun run build` で `web/dist/` を再生成してから Go ビルド／Hub 再起動する
 
@@ -143,8 +139,8 @@ Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows 
 | 種別 | 全 OS 共通の表記 | 実体 |
 |---|---|---|
 | 設定 | `~/.many-ai-cli/config.yaml` | Win: `%USERPROFILE%\.many-ai-cli\config.yaml` |
-| ログ（JSONL） | `~/.many-ai-cli/logs/YYYYMMDD.jsonl` | 同上 |
-| PTY ログ | `~/.many-ai-cli/logs/sessions/<id>.log` | 同上 |
+| Hub のログ | `~/.many-ai-cli/logs/hub.log` | 同上 |
+| セッションのログ | `~/.many-ai-cli/logs/sessions/<provider>_<日時>_<folder>_s<id>.log/.jsonl/.txt` | 同上 |
 
 `os.UserHomeDir()` を使い、`/` ハードコードを避けること。
 
@@ -159,27 +155,8 @@ Hub は引き続き `127.0.0.1` 固定で bind し、外部公開用の Windows 
 6. ブラウザで http://127.0.0.1:47777/?token=... を開いて動作確認
 ```
 
-UI 確認は実機ブラウザで実施。Hub UI のレイアウトは設計書 §9 のスクリーンショットと一致するか目視確認すること。
+UI 確認は実機ブラウザで実施する（画面の仕様は README とソースが正本）。
 
-## サブコマンド一覧（実装時参照）
+## サブコマンド一覧
 
-```
-many-ai-cli serve [--open] [--port N]
-    Hub単体を起動
-
-many-ai-cli wrap <provider> [args...]
-    ラッパーとしてCLIを起動
-
-many-ai-cli shell-init
-    シェル統合用のスクリプトを標準出力へ
-    eval "$(many-ai-cli shell-init)" で取り込む
-
-many-ai-cli stop
-    動作中のHubを停止
-
-many-ai-cli status
-    Hubの状態確認・接続中セッション数
-
-many-ai-cli --version / -v
-many-ai-cli --help / -h
-```
+一覧は `CLAUDE.md` の用語表にある（正本は `cmd/many-ai-cli/main.go` のサブコマンド分岐）。ここには写さない。

@@ -1,6 +1,7 @@
 # many-ai-cli Windows 開発環境
 
-> 最終更新: 2026-07-05(日) 10:50:11 — 旧パス cli-popup・Vue 拡張・Vite/旧環境変数の陳腐化記述を修正
+> 最終更新: 2026-09-30(水) 10:00:04 — Go の版と改行コードの記述を実物に合わせ、設計書を正本とする行を直した
+> 2026-07-05(日) 10:50:11 — 旧パス cli-popup・Vue 拡張・Vite/旧環境変数の陳腐化記述を修正
 
 開発端末は Windows 11。`many-ai-cli` 自体はクロスプラットフォーム（Win/Mac/Linux）だが、本ドキュメントは作者の環境固有の手順をまとめる。
 
@@ -8,13 +9,13 @@
 
 | ツール | 用途 | 備考 |
 |---|---|---|
-| Go 1.22+ | 本体ビルド | `winget install GoLang.Go` または公式インストーラ |
+| Go 1.26.8+（`go.mod` が正本） | 本体ビルド | `winget install GoLang.Go` または公式インストーラ |
 | Node.js 20+ | フロント (`web/`) ビルドスクリプト実行 | `winget install OpenJS.NodeJS.LTS` |
 | Bun 1.3+ | フロント (`web/`) 依存取得・スクリプト起動 | `winget install Oven-sh.Bun` |
 | Git | バージョン管理 | Git Bash (MSYS2) 同梱 |
 | VS Code | エディタ | Go・ESLint 拡張 |
 | PowerShell 7+ (`pwsh`) | スクリプト・タイムスタンプ取得 | 本リポジトリのコマンドはすべて `pwsh` 想定 |
-| Git Bash (MSYS2) | bash 互換シェル | 設計書のクロスコンパイルコマンド実行用 |
+| Git Bash (MSYS2) | bash 互換シェル | `deployment.md` のクロスコンパイルコマンド実行用 |
 
 ## ローカル開発フロー
 
@@ -68,8 +69,8 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 
 ### 改行コード
 
-- `.gitattributes` で `* text=auto eol=lf` を基本にする（実装着手時に整備）
-- Windows ネイティブのファイル（`.bat` / `.ps1`）のみ `eol=crlf`
+- `.gitattributes` は `* text=auto` で、Windows の working tree では CRLF になる（`gofmt` との比べ方は `coding.md` の「`gofmt -l` はこのリポジトリでは使えない」）
+- 改行を固定しているのは `.gitattributes` に個別に書いたものだけ（`*.sh`・`.githooks/*` は `eol=lf`、`*.ps1` は `eol=crlf` など）
 
 ### Windows Defender / SmartScreen
 
@@ -97,7 +98,7 @@ $d = Get-Date; "{0}({1}) {2}" -f $d.ToString("yyyy-MM-dd"), "日月火水木金�
 
 ## 4 ペイン手動テスト手順
 
-設計書 §9 の Hub UI 動作確認用：
+Hub UI の動作確認用：
 
 1. Windows Terminal で 4 ペイン分割
 2. 各ペインで `cd D:\dev\project-X` してから `many-ai-cli.exe wrap <provider>` を起動（または `MANY_AI_CLI_AUTO=1` + `eval "$(many-ai-cli.exe shell-init)"` 経由）
