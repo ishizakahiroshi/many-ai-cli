@@ -152,6 +152,8 @@
 }
 .memo-row-launch:hover { color: #fff; border-color: var(--accent, #3b82f6); background: var(--accent, #3b82f6); }
 .memo-row-delete:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); }
+.memo-row-delete-armed,
+.memo-row-delete-armed:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); font-weight: 600; }
 .memo-sidebar-icon { width: calc(var(--nsb-size, 32px) * 0.53); height: calc(var(--nsb-size, 32px) * 0.53); display: block; }
 
 /* C4: 件数バッジ（ボタン本体・セッション一覧の行）。0 件のときは要素ごと hidden にする。 */

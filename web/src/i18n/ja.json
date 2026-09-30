@@ -2242,7 +2242,7 @@
   "memo_done_toggle": "完了（{count}）",
   "memo_edit_hint": "ダブルクリックで編集",
   "memo_delete": "削除",
-  "memo_delete_confirm": "このメモを削除しますか?",
+  "memo_delete_confirm_now": "本当に削除",
   "memo_mark_done": "完了にする",
   "memo_launch": "ここから起動",
   "memo_empty": "メモはまだありません。",

@@ -265,7 +265,6 @@ async function updateText(memo: Memo, text: string): Promise<void> {
 }
 
 async function removeMemo(memo: Memo): Promise<void> {
-  if (!window.confirm(t('memo_delete_confirm'))) return;
   try {
     await request(`/api/memos/${encodeURIComponent(memo.id)}`, { method: 'DELETE' });
     cache = cache.filter((m) => m.id !== memo.id);
@@ -345,7 +344,24 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   });
   const del = node('button', t('memo_delete'), 'memo-row-delete');
   del.type = 'button';
-  del.addEventListener('click', (e) => { e.stopPropagation(); void removeMemo(memo); });
+  // ブラウザ標準の確認ダイアログは使わない（画面の隅に出て、押した場所から遠い）。
+  // 1 回目の押下でボタン自身が「本当に削除」に変わり、同じ位置をもう一度押すと消える。
+  // 3 秒放置・フォーカス移動・マウスが離れたら元に戻す。
+  let armTimer: number | undefined;
+  const disarm = (): void => {
+    window.clearTimeout(armTimer);
+    del.classList.remove('memo-row-delete-armed');
+    del.textContent = t('memo_delete');
+  };
+  del.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (del.classList.contains('memo-row-delete-armed')) { disarm(); void removeMemo(memo); return; }
+    del.classList.add('memo-row-delete-armed');
+    del.textContent = t('memo_delete_confirm_now');
+    armTimer = window.setTimeout(disarm, 3000);
+  });
+  del.addEventListener('blur', disarm);
+  del.addEventListener('mouseleave', disarm);
   actions.append(launch, del);
 
   row.append(checkbox, rowBody, actions);

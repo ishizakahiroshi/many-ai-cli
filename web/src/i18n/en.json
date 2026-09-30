@@ -2242,7 +2242,7 @@
   "memo_done_toggle": "Done ({count})",
   "memo_edit_hint": "Double-click to edit",
   "memo_delete": "Delete",
-  "memo_delete_confirm": "Delete this memo?",
+  "memo_delete_confirm_now": "Really delete",
   "memo_mark_done": "Mark done",
   "memo_launch": "Launch from here",
   "memo_empty": "No memos yet.",
