@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Selecting text in a full-screen CLI now scrolls when you drag past the
+  edge.** CLIs that draw on the alternate screen (such as Claude Code in its
+  full-screen mode) keep their history themselves, so dragging a selection
+  below the bottom or above the top of the terminal used to stop at the edge.
+  The terminal now asks the CLI to scroll one step at a time while the pointer
+  stays past the edge, and keeps the lines that scroll out of view. Copy, the
+  right-click menu and "Add to input" include those lines, and a label at the
+  edge of the terminal shows how many lines the selection continues beyond the
+  screen. If the screen changes in a way that cannot be followed, the
+  selection is cleared with a notice instead of copying text with gaps.
 - **File paths can now be saved to the work memo from the path menu.** The
   menu that opens on a path in the terminal, chat, Files tree and elsewhere has
   a new "Save to work memo" item. It adds the full path as a memo, grouped under

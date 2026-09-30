@@ -2,6 +2,7 @@
 import { inputEl } from '../app.js';
 import { canPageAltBuffer, disableWebglRenderer, enableWebglRenderer, releaseHiddenWebglRenderers, scrollAltBufferPage, termArea } from './terminal.js';
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
+import { ensureAltDragSelect } from './alt-drag-select-view.js';
 import { openProjectKey } from './state.js';
 import { projectKeyForSession } from './sidebar-tree.js';
 import { isValidTabName } from './project-view-memory.js';
@@ -1362,6 +1363,7 @@ export class MultiPaneManager {
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
           ensureAltScrollRail(session.id, t);
+          ensureAltDragSelect(session.id, t);
           enableWebglRenderer(t);
           t.everAttached = true;
           if (typeof window.flushPendingTerminalChunks === 'function') {

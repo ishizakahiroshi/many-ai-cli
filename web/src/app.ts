@@ -9,6 +9,7 @@ import { activateSession, render, renderSessionList, switchSessionByTab } from '
 import { orderSessions } from './app/state.js';
 import { canFitTerminal, fitTerminalPreservingBottom, isTerminalAtBottom, refitActiveTerminalAfterLayout, refitAndStickTerminalToBottomAfterLayoutSettles, resumeTerminalBottomFollow, scrollTerminalToBottomSoon, sendResize, suppressPtyResizeForInputLayout, updateScrollLockBtn } from './app/terminal.js';
 import { disposeAltScrollRail } from './app/alt-scroll-rail-view.js';
+import { altDragSelectionText, disposeAltDragSelect } from './app/alt-drag-select-view.js';
 import { QUICK_CMD_SLOTS, appConfirm, appConfirmShutdown, appConfirmTypedDanger, appLegacyResetNotice, applyFontSize, applyLang, applyTheme, attachDoneSummaryNotifyToggle, attachTokenStatusbarToggle, attachTurnEndNotifyToggle, getActiveTriggerPhrase, getQuickCommand, loadApprovalSettings, loadSlashCmdSources, loadUsageLinkSettings, quickCommandButtonId, quickCommandDefault, saveUsageLinkSettings, sessionLazyLoaded, sessionViewMode, stripTrailingTriggerPhrase, textEndsWithTriggerPhrase, updateChatCountBadge } from './app/settings.js';
 import { ws } from './app/ws-client.js';
 import { setMultiQuestionBannerVisible } from './app/approval-ui.js';
@@ -1044,7 +1045,7 @@ inputEl.addEventListener('keydown', (e) => {
     // xterm.js 選択中はクリップボードにコピーして SIGINT を送らない
     const xt = terminals.get(activeSessionId);
     if (xt?.term.hasSelection()) {
-      const text = cleanCopiedText(xt.term.getSelection());
+      const text = cleanCopiedText(altDragSelectionText(activeSessionId, xt.term));
       if (text) {
         navigator.clipboard.writeText(text).catch(() => {});
         stagePastedText(text, { force: true });
@@ -1718,6 +1719,7 @@ export function removeLocalSession(id) {
   const t = terminals.get(id);
   if (t) { try { t.term.dispose(); } catch (_) {} terminals.delete(id); }
   try { disposeAltScrollRail(id); } catch (_) {}
+  try { disposeAltDragSelect(id); } catch (_) {}
   removeApprovalAutoSwitchTarget(id);
   forgetApprovalSession(id);
   forgetAnsweredApprovals(id);

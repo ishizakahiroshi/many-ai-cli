@@ -35,6 +35,7 @@ import { encodeWheelSeq, initialMouseModeTrackerState, isX10CoordinateSafe, scan
 import { extractCodexLiveStatusFromLines, extractCopilotLiveStatusFromLines, extractCursorAgentLiveStatusFromLines } from './live-status.js';
 import { doneSummaryDisplayText, doneSummaryKindSuffix, getDoneSummary } from './done-summary.js';
 import { altScrollNotchesUp, beginAltScrollNotch, cancelAltScrollNotch, confirmAltScrollNotch, ensureAltScrollRail, hasPendingAltScrollNotch, requestEdge, requestNotches, stepNotches, updateAltScrollRail } from './alt-scroll-rail-view.js';
+import { altDragSelectionText, ensureAltDragSelect } from './alt-drag-select-view.js';
 import {
   resolveTerminalHistoryStrategy,
   terminalHistoryCapabilitiesForProvider,
@@ -217,7 +218,7 @@ export function ensureTerminal(id) {
     if (event.type !== 'keydown') return true;
     if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'c') return true;
     if (!term.hasSelection()) return true;
-    copyTerminalSelectionText(term.getSelection()).catch(() => {});
+    copyTerminalSelectionText(altDragSelectionText(id, term)).catch(() => {});
     return false;
   });
   // モーダル表示中はホイールで背後の端末がスクロールしないよう、xterm にホイールを無視させる。
@@ -662,6 +663,8 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
     // 代替画面バッファの provider は xterm のスクロールバーが原理的に出ないため、
     // 同じ見た目・同じ位置の疑似レールを差し込む（表示条件はレール側で判定する）。
     ensureAltScrollRail(id, t);
+    // 同じく代替画面では、ドラッグ選択が端を越えたら CLI へスクロールを送って選択を続ける。
+    ensureAltDragSelect(id, t);
     enableWebglRenderer(t);
     fitTerminalPreservingBottom(t, id);
     if (!t.scrollHandlerInstalled) {
@@ -742,7 +745,7 @@ export function whenLayoutReady(id, container, attempt = 0, generation = null) {
     }
     container.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      const sel = t.term.getSelection();
+      const sel = altDragSelectionText(id, t.term);
       if (sel) openTermCtxMenu(e.clientX, e.clientY, sel, id);
     });
   } else if (attempt < TERMINAL_LAYOUT_READY_MAX_FRAMES) {

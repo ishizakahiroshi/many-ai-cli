@@ -686,6 +686,31 @@
   background: #8b92ff;
 }
 
+/* 代替画面でドラッグ選択が画面の外まで続いているときの案内（alt-drag-select-view.ts）。
+   続きの行は画面に見えないので、コピーに含まれることをここで伝える。
+   クリックやドラッグを邪魔しないよう pointer-events は受けない。 */
+.xterm .alt-drag-carry {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  background: #4f5bd5;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.xterm .alt-drag-carry.is-below {
+  top: auto;
+  bottom: 6px;
+}
+.xterm .alt-drag-carry[hidden] {
+  display: none;
+}
+
 
 /* Input bar / terminal adjacent panels */
 /* 入力バー外枠 — padding-bottom: token-statusbar の高さ分（fixed 要素が attach-panel に被るのを防ぐ）。

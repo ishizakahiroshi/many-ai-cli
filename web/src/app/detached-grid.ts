@@ -14,6 +14,7 @@ import {
   scrollAltBufferPage,
 } from './terminal.js';
 import { ensureAltScrollRail, requestEdge } from './alt-scroll-rail-view.js';
+import { ensureAltDragSelect } from './alt-drag-select-view.js';
 import { sessions } from './state.js';
 import type { SessionSnapshot } from '../types/proto.js';
 
@@ -405,6 +406,7 @@ export class DetachedGridManager {
         if (container.clientWidth > 0 && container.clientHeight > 0) {
           t.term.open(container);
           ensureAltScrollRail(session.id, t);
+          ensureAltDragSelect(session.id, t);
           enableWebglRenderer(t);
           t.everAttached = true;
           if (typeof window.flushPendingTerminalChunks === 'function') {
