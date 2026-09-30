@@ -27,12 +27,14 @@ on:
         default: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -50,6 +52,16 @@ jobs:
             runner: macos-13
             cmake_flags: "-DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF"
     steps:
+      - name: Validate whisper_tag input
+        shell: bash
+        env:
+          WHISPER_TAG: ${{ inputs.whisper_tag }}
+        run: |
+          if [[ ! "$WHISPER_TAG" =~ ^v[0-9]+(\.[0-9]+)+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error title=invalid tag::whisper_tag '$WHISPER_TAG' is invalid. Expected format like 'v1.8.6'."
+            exit 1
+          fi
+
       - name: Install build deps (Linux)
         if: startsWith(matrix.runner, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends build-essential cmake git

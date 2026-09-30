@@ -124,6 +124,8 @@ jobs:
 
       # SBOM 生成用 syft（.goreleaser.yaml の sboms セクションが参照）
       - uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          syft-version: "v1.41.1"
 
       # Validate の instrumentation job と同じ source invariant を release 自身でも
       # credential を渡す前に再確認する。tag push と Validate は別 trigger のため、

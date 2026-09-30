@@ -16,6 +16,8 @@ name: OpenWiki Update (disabled)
 on:
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   disabled:
     runs-on: ubuntu-latest

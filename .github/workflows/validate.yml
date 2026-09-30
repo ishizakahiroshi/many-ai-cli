@@ -137,6 +137,7 @@ jobs:
   # すると、1 チャネルの都合でリリース全体が止まる構造へ逆戻りするため。
   release-token-scopes:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
     env:
       PUBLISH_TOKEN: ${{ secrets.PUBLISH_GITHUB_TOKEN }}
     steps:

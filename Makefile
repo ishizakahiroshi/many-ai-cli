@@ -37,7 +37,7 @@ GO_TAGS           ?= maidebug
 
 .PHONY: build build-web build-windows build-launcher build-linux deploy-wsl clean run fmt fmt-check debug-purge debug-restore
 
-build: build-windows build-launcher build-linux deploy-wsl
+build: build-windows build-launcher build-linux
 
 build-web:
 	cd web && bun install && bun run build -- --debug
