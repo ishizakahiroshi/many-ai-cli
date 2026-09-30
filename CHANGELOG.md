@@ -20,11 +20,20 @@ Release artifacts are published at
 - **Tabs and the work memo can now open in their own window.** Right-click a
   tab (Chat, Files, Git, Review, History, Approvals, Subagents, Multi) or the
   work memo button and choose "Open in new window", so the view can stay on
-  another monitor. Session-specific views follow the session selected in the
-  main window by default, and can be pinned to the current session instead.
+  another monitor. It opens as a separate browser window rather than a new
+  tab, so it can be dragged to another monitor right away; if the browser
+  blocks the pop-up, a message explains how to allow it. Session-specific
+  views follow the session selected in the main window by default, and can be
+  pinned to the current session instead.
   The detached window does not resize the terminal or repeat notification
   sounds, and actions that need the main window (opening a session, the new
   session panel) are handed back to it.
+- **File previews can now open in their own window.** The file preview dialog
+  has a new 🗗 button, and the path menu has "Open in new window". Both open
+  the file in a separate browser window that you can move to another monitor.
+  Opening another file later reuses that window and only swaps its content,
+  so the window stays where you put it. A window in edit mode keeps its edits
+  and does not switch.
 - **Images can now be pasted into the work memo.** Press Ctrl+V or drop an
   image file on the memo input to attach screenshots (PNG, JPEG, GIF, WebP;
   up to 10 per memo, 10 MB each), and a memo can be saved with images only.

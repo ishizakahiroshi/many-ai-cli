@@ -2290,11 +2290,15 @@
   "detached_tab_title_orchestration": "サブエージェント",
   "detached_tab_title_multi": "マルチ",
   "detached_tab_title_memo": "作業メモ",
+  "detached_tab_title_file": "ファイル",
   "detached_no_session": "セッションなし",
   "detached_follow": "本体に追従",
   "detached_fixed": "固定",
   "detached_follow_tooltip": "本体の窓で選んだセッションに合わせて表示を切り替えます",
   "detached_fixed_tooltip": "本体の窓で選び直しても、今のセッションのまま表示します",
   "detached_hub_tooltip": "Hub の本体の窓を前に出します（無ければ開きます）",
-  "detached_main_window_missing": "Hub の本体の窓が見つかりません。⊞ Hub で本体の窓を開いてから、もう一度操作してください。"
+  "detached_main_window_missing": "Hub の本体の窓が見つかりません。⊞ Hub で本体の窓を開いてから、もう一度操作してください。",
+  "detached_popup_blocked": "ブラウザがポップアップを止めたため、別窓を開けませんでした。アドレスバー右端のアイコンから、このサイトのポップアップを許可してください。",
+  "files_popout_editing": "編集中は別窓に移せません。保存するか破棄してから、もう一度押してください。",
+  "files_window_editing": "この窓で編集中のため、別のファイルに切り替えませんでした。保存するか破棄してから、もう一度開いてください。"
 }

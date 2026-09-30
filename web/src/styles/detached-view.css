@@ -48,6 +48,16 @@ body.detached-tab-mode { --tsb-bottom-offset: 0px; }
 
 /* 作業メモの別窓: ドロワーを右端の浮き窓ではなく、窓いっぱいの面として出す */
 #detached-memo-host { flex: 1; min-height: 0; display: flex; }
+
+/* ファイルの別窓（plan_file-preview-popout-window.md C1）: モーダルの中身（.aac-file-modal-body）と
+   同じく、ツールバーの下で本文だけがスクロールする縦並びの面にする */
+#detached-file-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
 #memo-drawer.memo-drawer--window {
   position: static;
   flex: 1;

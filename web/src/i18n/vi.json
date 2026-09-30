@@ -2290,11 +2290,15 @@
   "detached_tab_title_orchestration": "Tác tử con",
   "detached_tab_title_multi": "Multi",
   "detached_tab_title_memo": "Ghi chú công việc",
+  "detached_tab_title_file": "Tệp",
   "detached_no_session": "Không có phiên",
   "detached_follow": "Theo cửa sổ chính",
   "detached_fixed": "Cố định",
   "detached_follow_tooltip": "Chuyển theo phiên bạn chọn ở cửa sổ chính",
   "detached_fixed_tooltip": "Giữ nguyên phiên này kể cả khi chọn phiên khác ở cửa sổ chính",
   "detached_hub_tooltip": "Đưa cửa sổ Hub chính lên trước (hoặc mở nếu chưa có)",
-  "detached_main_window_missing": "Không tìm thấy cửa sổ Hub chính. Hãy mở bằng ⊞ Hub rồi thử lại."
+  "detached_main_window_missing": "Không tìm thấy cửa sổ Hub chính. Hãy mở bằng ⊞ Hub rồi thử lại.",
+  "detached_popup_blocked": "Trình duyệt đã chặn cửa sổ bật lên nên không mở được cửa sổ. Hãy cho phép cửa sổ bật lên cho trang này từ biểu tượng ở cuối thanh địa chỉ.",
+  "files_popout_editing": "Không thể chuyển tệp sang cửa sổ riêng khi đang chỉnh sửa. Hãy lưu hoặc hủy thay đổi rồi thử lại.",
+  "files_window_editing": "Cửa sổ này đang ở chế độ chỉnh sửa nên chưa hiển thị tệp khác. Hãy lưu hoặc hủy thay đổi rồi mở lại."
 }

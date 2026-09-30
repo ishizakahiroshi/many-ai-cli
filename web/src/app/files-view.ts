@@ -24,7 +24,9 @@ function isPathUnderOrEqual(child: any, parent: any): boolean {
 
 // capturedId が生存セッションならそれを返す。死んでいれば filesRoot / gitRoot 配下の
 // 生存セッション（activeSessionId 優先）を返す。該当が無ければ capturedId（無ければ ''）。
-function resolveLiveSessionId(capturedId: any, filesRoot?: any, gitRoot?: any): any {
+// ファイルの別窓を開くときも使う（path-links.ts。別窓はセッション一覧が届く前に読み込みを始めるので、
+// 開き元で生きているセッションを決めて渡す）。
+export function resolveLiveSessionId(capturedId: any, filesRoot?: any, gitRoot?: any): any {
   const capNum = (capturedId === '' || capturedId == null) ? null : Number(capturedId);
   const capValid = capNum != null && !Number.isNaN(capNum);
   if (capValid && sessions.has(capNum as number)) return capNum;
@@ -3054,6 +3056,10 @@ export const FilesPreview = (function () {
         editBtn.disabled = true;
         loadFile(absPath, relPath);
       },
+      // 別窓へ移す・別窓の中身を差し替えるときに見る（path-links.ts / detached-view.ts）。
+      // 表示中のパスは、Markdown のリンクで移っていると開いたときのパスと違う。
+      isEditing: () => editMode,
+      currentPath: () => currentAbsPath,
     };
   }
 

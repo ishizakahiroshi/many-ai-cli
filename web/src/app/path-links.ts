@@ -2,8 +2,10 @@
 import { t } from '../i18n.js';
 import { apiFetch, showToast, token } from './util.js';
 import { sessions } from './state.js';
-import { FilesTabManager, FilesPreview } from './files-view.js';
+import { FilesTabManager, FilesPreview, resolveLiveSessionId } from './files-view.js';
 import { saveTextToMemo } from './memo-model.js';
+import { openDetachedFileWindow } from './detached-view-mode.js';
+import type { DetachedWindowSize } from './detached-view-mode.js';
 import {
   findPathCandidates,
   isAbsolutePath,
@@ -132,6 +134,15 @@ export function showPathPopup(filePath, clientX, clientY, sessionId, pathType = 
       key: 'link_open_modal',
       action: () => openFileModal(filePath, sessionId),
     });
+    items.push({
+      icon: '🗗',
+      key: 'detached_open_in_window',
+      action: () => {
+        const cwd = resolveFilePreviewCwd(filePath, sessionId);
+        if (!cwd) { showToast(t('link_open_error')); return; }
+        openFileInWindow(filePath, sessionId, cwd);
+      },
+    });
   }
   if (!isDir) {
     items.push(getPathOpenItem(filePath, sessionId));
@@ -222,9 +233,48 @@ export function closeFileModal() {
   }
 }
 
+/** プレビューの起点（相対パス表示と FilesPreview の filesRoot / gitRoot）。モーダルと別窓で同じ決め方にする。 */
+export function resolveFilePreviewCwd(filePath, sessionId, cwdOverride = '') {
+  return sessions.get(sessionId)?.cwd || cwdOverride || dirnameForPath(filePath);
+}
+
+/**
+ * 入れ物に FilesPreview をツリー無しで載せ、1 ファイルを読む。モーダル（openFileModal）と
+ * ファイルの別窓（detached-view.ts）が使う。戻り値のツールバーへ、呼び出し側が自分のボタンを足す。
+ */
+export function mountSingleFilePreview(host, filePath, sessionId, cwd) {
+  FilesPreview.bind(host, { sessionId, gitRoot: cwd, filesRoot: cwd });
+
+  // FilesPreview 内蔵の閉じる(✕)はプレビューを空にするだけで入れ物は残るため隠す。
+  const toolbar = host.querySelector('.files-preview-toolbar') as HTMLElement | null;
+  if (toolbar) {
+    toolbar.querySelectorAll('.files-preview-toolbar-btn[data-preview-close]').forEach((b) => {
+      (b as HTMLElement).hidden = true;
+    });
+  }
+
+  // _filesPreview は FilesPreview.bind が要素へ動的に付与する外部 API（files-view.ts 参照）。
+  // 型定義上は存在しないため any 経由でアクセスする。
+  const preview = (host as any)._filesPreview;
+  if (preview) preview.loadFile(filePath, computeRelPath(cwd, filePath));
+  return toolbar;
+}
+
+/**
+ * ファイルのプレビューを別窓で開く（モーダルの 🗗 とパスのメニューから）。
+ * サブモニターへ置いた窓があれば、その窓の中身が差し替わる。開けたら true。
+ */
+export function openFileInWindow(filePath, sessionId, cwd, size: DetachedWindowSize | null = null) {
+  // 別窓はセッション一覧が届く前に読み込みを始めるので、生きているセッションをここで決めて渡す
+  // （閉じたセッションの ID のままだと、Hub は起動ディレクトリ基準で許可を判定する）。
+  const liveSid = Number(resolveLiveSessionId(sessionId, cwd, cwd)) || 0;
+  if (openDetachedFileWindow(filePath, liveSid, cwd, size)) return true;
+  showToast(t('detached_popup_blocked'), undefined, 6000);
+  return false;
+}
+
 export function openFileModal(filePath, sessionId, cwdOverride = '') {
-  const ses = sessions.get(sessionId);
-  const cwd = ses?.cwd || cwdOverride || dirnameForPath(filePath);
+  const cwd = resolveFilePreviewCwd(filePath, sessionId, cwdOverride);
   if (!cwd) { showToast(t('link_open_error')); return; }
   closeFileModal(); // 二重起動防止
 
@@ -248,16 +298,27 @@ export function openFileModal(filePath, sessionId, cwdOverride = '') {
   };
   document.addEventListener('keydown', fileModalKeyHandler, true);
 
-  // FilesPreview を単体バインド（ツリー無し）。モーダルなので filesRoot/gitRoot は cwd 起点。
-  FilesPreview.bind(body, { sessionId, gitRoot: cwd, filesRoot: cwd });
-
-  // FilesPreview 内蔵の閉じる(✕)はプレビューを空にするだけでモーダルは残るため隠し、
-  // モーダル全体を閉じる専用ボタンに差し替える。
-  const toolbar = body.querySelector('.files-preview-toolbar');
+  // モーダルなので filesRoot/gitRoot は cwd 起点。内蔵の ✕ の代わりに、モーダル全体を閉じる専用ボタンを置く。
+  const toolbar = mountSingleFilePreview(body, filePath, sessionId, cwd);
   if (toolbar) {
-    toolbar.querySelectorAll('.files-preview-toolbar-btn[data-preview-close]').forEach((b) => {
-      (b as HTMLElement).hidden = true;
+    // サブモニターへ置いて表示しておきたいとき用。モーダルを閉じ、同じファイルを別窓で開く
+    // （作業メモのドロワーの 🗗 と同じ文言・同じ動き）。
+    const popOut = document.createElement('button');
+    popOut.className = 'files-preview-toolbar-btn';
+    popOut.title = t('detached_open_in_window');
+    popOut.setAttribute('aria-label', t('detached_open_in_window'));
+    popOut.textContent = '🗗';
+    popOut.addEventListener('click', () => {
+      const preview = (body as any)._filesPreview;
+      if (preview?.isEditing?.()) { showToast(t('files_popout_editing'), undefined, 5000); return; }
+      // Markdown のリンクで別のファイルへ移っていることがあるので、開いたときではなく表示中のパスを渡す
+      const current = preview?.currentPath?.() || filePath;
+      // 別窓はモーダルと同じ大きさで開く（位置はブラウザ任せ。サブモニターへは自分で動かす）
+      const rect = panel.getBoundingClientRect();
+      if (openFileInWindow(current, sessionId, cwd, { width: rect.width, height: rect.height })) closeFileModal();
     });
+    toolbar.appendChild(popOut);
+
     const modalClose = document.createElement('button');
     modalClose.className = 'files-preview-toolbar-btn';
     modalClose.title = t('files_preview_close_tooltip') || 'Close';
@@ -265,12 +326,6 @@ export function openFileModal(filePath, sessionId, cwdOverride = '') {
     modalClose.addEventListener('click', () => closeFileModal());
     toolbar.appendChild(modalClose);
   }
-
-  const relPath = computeRelPath(cwd, filePath);
-  // _filesPreview は FilesPreview.bind が要素へ動的に付与する外部 API（files-view.ts 参照）。
-  // 型定義上は存在しないため any 経由でアクセスする。
-  const preview = (body as any)._filesPreview;
-  if (preview) preview.loadFile(filePath, relPath);
 }
 
 export function basenameForPath(filePath) {

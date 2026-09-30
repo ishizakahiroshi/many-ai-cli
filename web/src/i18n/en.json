@@ -2290,11 +2290,15 @@
   "detached_tab_title_orchestration": "Subagents",
   "detached_tab_title_multi": "Multi",
   "detached_tab_title_memo": "Work memo",
+  "detached_tab_title_file": "File",
   "detached_no_session": "No session",
   "detached_follow": "Follow main window",
   "detached_fixed": "Pin",
   "detached_follow_tooltip": "Switch to whichever session you select in the main window",
   "detached_fixed_tooltip": "Keep showing this session even when you select another one in the main window",
   "detached_hub_tooltip": "Bring the main Hub window to the front (or open it)",
-  "detached_main_window_missing": "The main Hub window was not found. Open it with ⊞ Hub, then try again."
+  "detached_main_window_missing": "The main Hub window was not found. Open it with ⊞ Hub, then try again.",
+  "detached_popup_blocked": "The browser blocked the pop-up, so the window could not be opened. Allow pop-ups for this site from the icon at the right end of the address bar.",
+  "files_popout_editing": "You can't move the file to its own window while editing. Save or discard your changes, then try again.",
+  "files_window_editing": "This window is in edit mode, so the other file was not shown here. Save or discard your changes, then open it again."
 }

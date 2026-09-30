@@ -2933,9 +2933,9 @@ export function rememberTabForOpenProject(name: string): void {
 export let _setActiveTabRecursion = false;
 export function setActiveTab(sid, name) {
   // 別窓タブモードは開いたタブ 1 枚に固定する。承認の自動移動などで別のタブへ切り替わらないよう、
-  // どの経路から呼ばれても固定したタブへ置き換える。作業メモの別窓は display-area を使わない。
+  // どの経路から呼ばれても固定したタブへ置き換える。作業メモとファイルの別窓は display-area を使わない。
   const detachedTab = detachedTabName();
-  if (detachedTab === 'memo') return;
+  if (detachedTab === 'memo' || detachedTab === 'file') return;
   if (detachedTab && name !== detachedTab) name = detachedTab;
   if (!VALID_TAB_NAMES.has(name)) return;
 

@@ -1,5 +1,5 @@
-// detached-view.ts — タブ 1 枚・作業メモを別窓で開く（/?view=detached-tab&tab=<名前>）。
-// plan: docs/local/plan_detached-tab-windows.md C2〜C5
+// detached-view.ts — タブ 1 枚・作業メモ・ファイル 1 枚を別窓で開く（/?view=detached-tab&tab=<名前>）。
+// plan: docs/local/plan_detached-tab-windows.md C2〜C5 / docs/local/plan_file-preview-popout-window.md C1
 //
 // 別窓グリッド（detached-grid.ts）と同じく、アプリ全体を読み込んだうえで要らない部分を隠す。
 // 各タブの描画コードには手を入れず、setActiveTab() で 1 枚を全面に出すだけ。
@@ -17,18 +17,26 @@ import { setActiveTab, updateChatCountBadge } from './settings.js';
 import { activateSession } from './session-list.js';
 import { rewireChatHistorySub } from './chat-history.js';
 import { openSpawnPanelWith } from './spawn-panel.js';
-import { basenameForPath, getOrCreatePathPopup, renderPathPopupItems } from './path-links.js';
+import {
+  basenameForPath,
+  dirnameForPath,
+  getOrCreatePathPopup,
+  mountSingleFilePreview,
+  renderPathPopupItems,
+} from './path-links.js';
 import { providerDisplayName } from './provider-icon.js';
 import { mountMemoWindow, refreshMemoContext } from './memo-panel.js';
 import {
   DETACHED_TAB_NAMES,
+  OPEN_FILE_MESSAGE_TYPE,
   SESSION_BOUND_DETACHED_TABS,
+  buildDetachedFileUrl,
   detachedTabParams,
   isMainHubWindow,
   openDetachedTabWindow,
   setDetachedActivateHandler,
 } from './detached-view-mode.js';
-import type { DetachedTabName } from './detached-view-mode.js';
+import type { DetachedTabName, DetachedTabParams, OpenFileMessage } from './detached-view-mode.js';
 import { ackWindowRequest, onWindowMessage, postWindowMessage, requestMainWindow } from './window-channel.js';
 
 const FOLLOW_STORAGE_KEY = 'many-ai-cli-detached-follow';
@@ -84,7 +92,23 @@ let initialSessionId = 0;
 let pendingFollowId: number | null = null;
 let sessionLabelEl: HTMLElement | null = null;
 
+// ファイルの別窓（tab=file）で表示中のファイル。開き元からの postMessage で差し替わる。
+interface FileTarget { path: string; sessionId: number; cwd: string }
+let fileTarget: FileTarget | null = null;
+let fileHost: HTMLElement | null = null;
+let fileLabelEl: HTMLElement | null = null;
+
 function updateBar(): void {
+  if (detachedTab === 'file') {
+    const name = fileTarget ? (basenameForPath(fileTarget.path) || fileTarget.path) : '';
+    if (fileLabelEl) {
+      fileLabelEl.textContent = name;
+      fileLabelEl.title = fileTarget?.path || '';
+    }
+    // タスクバーで見分けられるよう、ファイル名を先頭に出す
+    document.title = `${name} — many-ai-cli`;
+    return;
+  }
   if (sessionLabelEl) sessionLabelEl.textContent = sessionLabel(activeSessionId);
   if (detachedTab) document.title = `${tabTitle(detachedTab)} — ${sessionLabel(activeSessionId)} — many-ai-cli`;
 }
@@ -93,6 +117,9 @@ function updateBar(): void {
 function showDetachedSession(id: number): void {
   if (!detachedTab || !sessions.has(id)) return;
   set_activeSessionId(id);
+  // ファイルの別窓は開いたファイルに固定。activeSessionId は session-list.ts の render() が
+  // 自動選択を繰り返さないように入れるだけ（下のタブ向けの処理は要らない）。
+  if (detachedTab === 'file') return;
   try { rewireChatHistorySub(id); } catch (_) { /* チャット以外のタブでは無くてよい */ }
   updateChatCountBadge();
   if (detachedTab === 'memo') refreshMemoContext();
@@ -133,6 +160,13 @@ function buildBar(tab: DetachedTabName): HTMLElement {
   title.className = 'detached-tab-title';
   title.textContent = tabTitle(tab);
   bar.append(title);
+
+  if (tab === 'file') {
+    // セッションの表示と追従 / 固定の切り替えは出さない（ファイルは本体の選択に追従しない）
+    fileLabelEl = document.createElement('span');
+    fileLabelEl.className = 'detached-tab-session';
+    bar.append(fileLabelEl);
+  }
 
   if (SESSION_BOUND_DETACHED_TABS.has(tab)) {
     sessionLabelEl = document.createElement('span');
@@ -195,9 +229,45 @@ async function askMain(msg: Parameters<typeof requestMainWindow>[0]): Promise<vo
   if (!ok) showToast(t('detached_main_window_missing'), undefined, 4000);
 }
 
-function initDetachedWindow(tab: DetachedTabName, sessionId: number): void {
+// ─── ファイルの別窓（tab=file）─────────────────────────────────────────────
+
+function showFileInWindow(): void {
+  if (!fileHost || !fileTarget) return;
+  // 差し替えのたびに載せ直す（ファイルごとに session と起点が違いうるため、bind からやり直す）
+  const cwd = fileTarget.cwd || dirnameForPath(fileTarget.path);
+  mountSingleFilePreview(fileHost, fileTarget.path, fileTarget.sessionId || '', cwd);
+  updateBar();
+}
+
+/** 開き元（openDetachedFileWindow）から、表示するファイルの差し替えを受ける。 */
+function onOpenFileMessage(event: MessageEvent): void {
+  if (event.origin !== window.location.origin) return;
+  const msg = event.data as OpenFileMessage | null;
+  if (!msg || typeof msg !== 'object' || msg.type !== OPEN_FILE_MESSAGE_TYPE) return;
+  if (typeof msg.path !== 'string' || !msg.path) return;
+  // 編集中の内容を黙って捨てない
+  if ((fileHost as any)?._filesPreview?.isEditing?.()) {
+    showToast(t('files_window_editing'), undefined, 5000);
+    return;
+  }
+  const sessionId = Number(msg.sessionId);
+  fileTarget = {
+    path: msg.path,
+    sessionId: Number.isInteger(sessionId) && sessionId > 0 ? sessionId : 0,
+    cwd: typeof msg.cwd === 'string' ? msg.cwd : '',
+  };
+  // 窓を読み直したときも同じファイルが出るよう、URL を今のファイルへ合わせる
+  try {
+    history.replaceState(history.state, '', buildDetachedFileUrl(fileTarget.path, fileTarget.sessionId, fileTarget.cwd));
+  } catch (_) { /* 失敗しても表示は差し替わっている */ }
+  showFileInWindow();
+}
+
+function initDetachedWindow(params: DetachedTabParams): void {
+  const { tab, sessionId } = params;
   detachedTab = tab;
   initialSessionId = sessionId;
+  if (tab === 'file') fileTarget = { path: params.path, sessionId, cwd: params.cwd };
   document.body.classList.add('detached-tab-mode');
   for (const id of HIDE_IDS) {
     const el = document.getElementById(id);
@@ -216,13 +286,20 @@ function initDetachedWindow(tab: DetachedTabName, sessionId: number): void {
       host.id = 'detached-memo-host';
       if (column) column.append(host); else document.body.append(host);
       mountMemoWindow(host);
+    } else if (tab === 'file') {
+      fileHost = document.createElement('div');
+      fileHost.id = 'detached-file-host';
+      if (column) column.append(fileHost); else document.body.append(fileHost);
+      showFileInWindow();
     }
     updateBar();
   });
 
-  if (tab === 'memo') {
+  if (tab === 'memo' || tab === 'file') {
+    // どちらも display-area（タブの表示面）を使わず、自前の入れ物に出す
     const stack = document.getElementById('display-stack');
     if (stack) { stack.hidden = true; stack.style.display = 'none'; }
+    if (tab === 'file') window.addEventListener('message', onOpenFileMessage);
   } else if (!SESSION_BOUND_DETACHED_TABS.has(tab)) {
     // セッションに依存しないタブはセッションが 1 つも無くても出す。
     setActiveTab(null, tab);
@@ -289,7 +366,9 @@ function showOpenInWindowMenu(event: MouseEvent, tab: DetachedTabName): void {
   renderPathPopupItems(popup, [{
     icon: '🗗',
     key: 'detached_open_in_window',
-    action: () => openDetachedTabWindow(tab, activeSessionId),
+    action: () => {
+      if (!openDetachedTabWindow(tab, activeSessionId)) showToast(t('detached_popup_blocked'), undefined, 6000);
+    },
   }], event.clientX, event.clientY);
 }
 
@@ -308,6 +387,6 @@ function wireOpenInWindowMenus(): void {
 
 export function initDetachedTabMode(): void {
   const params = detachedTabParams();
-  if (params) initDetachedWindow(params.tab, params.sessionId);
+  if (params) initDetachedWindow(params);
   else if (isMainHubWindow()) initMainWindow();
 }

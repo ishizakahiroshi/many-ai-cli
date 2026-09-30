@@ -496,8 +496,9 @@ function ensureDrawer(): HTMLElement {
     popOut.title = t('detached_open_in_window');
     popOut.setAttribute('aria-label', t('detached_open_in_window'));
     popOut.addEventListener('click', () => {
-      closeDrawer();
-      openDetachedTabWindow('memo', activeSessionId);
+      // 開けなかった（ポップアップが止められた）ときはドロワーを残して案内する
+      if (openDetachedTabWindow('memo', activeSessionId)) closeDrawer();
+      else showToast(t('detached_popup_blocked'), undefined, 6000);
     });
     headerActions.append(popOut);
   }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7cb3de34360a01390258ba72d4f585bbad6f6edf",
+    "commit": "37508d42881d9683229cbc0d9dd4a8d9401f515a",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1118,
-    "analyzed": 911,
+    "discovered": 1119,
+    "analyzed": 912,
     "unresolved": 6,
     "unknown": 1,
     "unclaimed": 200,
@@ -22724,6 +22724,36 @@
       "unresolved": []
     },
     {
+      "path": "web/src/app/detached-view-mode-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "detached-view-mode-fixtures.ts — 別窓の URL の組み立てと読み取りの往復を確かめる。"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "web/src/app/detached-view-mode.ts",
       "adapter": "tsjs",
       "status": "analyzed",
@@ -22760,7 +22790,7 @@
       "fields": {
         "summary": {
           "state": "value",
-          "value": "detached-view.ts — タブ 1 枚・作業メモを別窓で開く（/?view=detached-tab&tab=<名前>）。"
+          "value": "detached-view.ts — タブ 1 枚・作業メモ・ファイル 1 枚を別窓で開く（/?view=detached-tab&tab=<名前>）。"
         },
         "authentication": {
           "state": "not_configured"
