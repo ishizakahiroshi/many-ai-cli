@@ -317,7 +317,13 @@ function positionPopover(): void {
   const btn = btnEl();
   if (!btn || !popover) return;
   const r = btn.getBoundingClientRect();
-  popover.style.top = `${Math.round(r.bottom + 6)}px`;
+  // 下に収まればボタンの下、収まらなければ上に出す。どちらでも端にはみ出さないよう押さえる。
+  const h = popover.offsetHeight;
+  const below = r.bottom + 6;
+  const above = r.top - 6 - h;
+  const wantTop = below + h <= window.innerHeight - 8 ? below : above;
+  const top = Math.max(8, Math.min(wantTop, window.innerHeight - h - 8));
+  popover.style.top = `${Math.round(top)}px`;
   // 右端はみ出しを避けてボタン左端基準で配置（最大幅は CSS 側）。
   const left = Math.max(8, Math.min(r.left, window.innerWidth - popover.offsetWidth - 8));
   popover.style.left = `${Math.round(left)}px`;

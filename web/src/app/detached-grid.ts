@@ -815,7 +815,8 @@ function _insertHubOpenButton(): void {
 
   // header の末尾に挿入（settings-btn の前）
   const settingsBtn = document.getElementById('settings-btn');
-  if (settingsBtn) {
+  // settings-btn が header の外（左パネル下のフッター）にあっても落ちないよう、直接の子のときだけ insertBefore
+  if (settingsBtn && settingsBtn.parentNode === header) {
     header.insertBefore(btn, settingsBtn);
   } else {
     header.appendChild(btn);

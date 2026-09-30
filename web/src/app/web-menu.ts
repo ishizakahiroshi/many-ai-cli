@@ -19,9 +19,10 @@ export function initWebMenu(): void {
       margin,
       Math.min(anchor.right - menu.width, window.innerWidth - menu.width - margin),
     );
+    // フッターのボタンの上に開く。上端にはみ出すときだけ margin で押さえる。
     const top = Math.max(
       margin,
-      Math.min(anchor.bottom + 4, window.innerHeight - menu.height - margin),
+      Math.min(anchor.top - 4 - menu.height, window.innerHeight - menu.height - margin),
     );
     dropdown.style.top = `${top}px`;
     dropdown.style.left = `${left}px`;

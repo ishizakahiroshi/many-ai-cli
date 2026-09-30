@@ -574,12 +574,20 @@ export function initUsageDropdown() {
   initUsagePanel(dropdown);
 
   const positionDropdown = () => {
+    // フッターのボタンの上に開く。bottom 基準にして、中身が後から伸びても
+    // ボタンから離れない。上端に届かないよう max-height をボタン上の空きに絞る。
     const rect = btn.getBoundingClientRect();
     const margin = 6;
-    dropdown.style.top = `${Math.min(rect.bottom + 4, window.innerHeight - margin)}px`;
-    dropdown.style.left = '50%';
+    const gap = 4;
+    dropdown.style.top = 'auto';
+    dropdown.style.bottom = `${Math.max(margin, window.innerHeight - rect.top + gap)}px`;
+    dropdown.style.maxHeight = `${Math.max(120, rect.top - gap - margin)}px`;
+    // 横はボタンの左端に合わせ、左右の端にはみ出すなら押し戻す（表示前は幅 0）。
+    const width = dropdown.offsetWidth;
+    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - width - margin));
+    dropdown.style.left = `${left}px`;
     dropdown.style.right = 'auto';
-    dropdown.style.transform = 'translateX(-50%)';
+    dropdown.style.transform = 'none';
   };
 
   const closeDropdown = () => {
@@ -604,10 +612,13 @@ export function initUsageDropdown() {
       closeDropdown();
       return;
     }
-    positionDropdown();
     dropdown.hidden = false;
+    positionDropdown();
     btn.setAttribute('aria-expanded', 'true');
-    void refreshUsagePanel();
+    // 中身の更新で幅が変わることがあるので、終わったら横位置を取り直す。
+    void Promise.resolve(refreshUsagePanel()).then(() => {
+      if (!dropdown.hidden) positionDropdown();
+    });
   });
 
   // xterm 等で stopPropagation されると bubble phase の document リスナーまで届かないため、

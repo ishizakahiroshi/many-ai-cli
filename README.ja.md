@@ -358,7 +358,7 @@ Windows zip の推奨手順:
    - Hub が起動し、ブラウザが自動で開きます（`http://127.0.0.1:47777/?token=<token>`）
    - すでに Hub が起動済みの場合は、ブラウザを開くだけで終了します
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI のセッションを起動する
-4. Hub を意図的に停止するときは、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使う
+4. Hub を意図的に停止するときは、Hub UI の左パネル下部（フッター）の Hub メニューにある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使う
 
 ### リリース成果物の検証（チェックサム + 署名）
 
@@ -401,7 +401,7 @@ sha256sum -c SHA256SUMS.txt
 2. 以後はデスクトップのショートカットを**ダブルクリック**するだけです。Windows はタスクトレイにアイコンが出るので、クリックして **「Hub を開く」** を選ぶと、止まっていれば起動してからブラウザで開きます（`http://127.0.0.1:47777/?token=<token>`）。macOS / Linux は「Many AI Hub Start」で黒いコンソールウィンドウと一緒にブラウザが開きます。
 3. ブラウザの Hub UI 左下の **「+ 新しいセッション」** をクリックし、使う AI CLI（claude / codex / copilot / cursor-agent / opencode / grok / command-code）のセッションを起動します。承認待ちが発生すると入力欄の下にアクションバーが出るので、クリックまたはキーボードで操作します。
 
-止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI 右上の `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
+止めるときは、トレイメニューの **「Hub を停止」**（Windows）、デスクトップの **「Many AI Hub Stop」**（macOS / Linux）、Hub UI の左パネル下部（フッター）の Hub メニューにある `⏻` ボタン、または別ターミナルで `many-ai-cli stop` を使います。ターミナルから直接起動したい場合は従来どおり `many-ai-cli serve --open` も使えます。
 
 > **すでに旧バージョンを使っている場合**: `setup` をもう一度実行すると「MANY-AI-CLI」が追加されますが、**既存の「Start」「Stop」の 2 個はそのまま残ります**（引き続き動きます）。トレイに移行して不要になったら手動で削除してください。`setup` が勝手に消すことはありません。旧名「Many AI Hub」は同じトレイ起動なので、`setup` が「MANY-AI-CLI」に置き換えます。
 
@@ -1246,7 +1246,7 @@ wrapper の Hub への WebSocket が切れたとき、wrapper は **Hub の HTTP
 - `hub.wrapper_reconnect_grace_sec` — `0` で再接続を無効化（旧来の「即 kill」動作）。範囲 `0`–`86400` 秒（最大 24 時間）。デフォルト `3600`（60 分）。設定パネルからも分単位で変更可。**新しいセッションにのみ適用**され、走行中のセッションは spawn 時の値を保持します。
 - `hub.idle_timeout_min` — UI 未接続のとき Hub が wrapper を生かしておく時間。`0` で無効。範囲 `0`–`1440` 分。設定パネルからも変更可。
 
-クリーンに停止するには、Hub UI 右上の `⏻` ボタンまたは `many-ai-cli stop` を使ってください。コンソールウィンドウを閉じた場合は、即 kill ではなく Hub の復帰待ちになります。
+クリーンに停止するには、Hub UI の左パネル下部（フッター）の Hub メニューにある `⏻` ボタンまたは `many-ai-cli stop` を使ってください。コンソールウィンドウを閉じた場合は、即 kill ではなく Hub の復帰待ちになります。
 
 ---
 
@@ -1300,7 +1300,7 @@ many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript
 
 ## バグを報告する
 
-Hub UI 右上の **バグ報告**、または `many-ai-cli issue` を使います。どちらも GitHub を開く前に送信全文を表示し、外部へ渡す直前に機密情報スクラブを再実行します。
+Hub UI の左パネル下部（フッター）の Hub メニューにある **バグ報告**、または `many-ai-cli issue` を使います。どちらも GitHub を開く前に送信全文を表示し、外部へ渡す直前に機密情報スクラブを再実行します。
 
 ```bash
 many-ai-cli issue "承認ボタンを1回押しても閉じない"

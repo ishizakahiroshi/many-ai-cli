@@ -410,7 +410,7 @@ If you still want to use the exe straight from the extracted zip, the previous f
    - The Hub starts and your browser opens automatically at `http://127.0.0.1:47777/?token=<token>`
    - If a Hub is already running, your browser is reopened against the existing instance
 3. In the Hub UI, click **"+ New Session"** to launch a wrapped AI CLI session
-4. To stop the Hub intentionally, use the `⏻` button in the top-right of the Hub UI, or run `many-ai-cli stop` from another terminal
+4. To stop the Hub intentionally, use the `⏻` button in the Hub menu at the bottom of the left panel (footer) of the Hub UI, or run `many-ai-cli stop` from another terminal
 
 ### Verify Release Artifacts (Checksum + Signature)
 
@@ -453,7 +453,7 @@ Whichever install path you used, the next steps are the same.
 2. From now on, just **double-click the desktop shortcut**. On Windows a tray icon appears; click it and choose **"Hub を開く"** to start the Hub if needed and open it in your browser at `http://127.0.0.1:47777/?token=<token>`. On macOS and Linux, "Many AI Hub Start" opens a console window alongside the browser.
 3. In the Hub UI, click **"+ New Session"** in the lower left to launch one of the wrapped AI CLIs (claude / codex / copilot / cursor-agent / opencode / grok / command-code). When an approval prompt appears, an action bar shows up under the input — click a button or use the keyboard.
 
-To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the top-right of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
+To stop, use the tray menu's **"Hub を停止"** (Windows), **"Many AI Hub Stop"** on your desktop (macOS / Linux), the `⏻` button in the Hub menu at the bottom of the left panel (footer) of the Hub UI, or `many-ai-cli stop` from another terminal. If you prefer a terminal, `many-ai-cli serve --open` still works.
 
 > **Upgrading from an earlier version?** The tray does not appear just because you installed a newer binary — **run `setup` once** to get the "MANY-AI-CLI" shortcut and the sign-in entry. Doing so **leaves your existing "Start" and "Stop" icons in place** — they keep working. Delete them yourself once you have switched to the tray; `setup` will never remove them for you. An older desktop icon named "Many AI Hub" is the same launcher under the previous name; `setup` replaces it with "MANY-AI-CLI".
 
@@ -1313,7 +1313,7 @@ Configuration knobs in `~/.many-ai-cli/config.yaml`:
 - `hub.wrapper_reconnect_grace_sec` — `0` disables reconnect (legacy "kill immediately" behavior). Range `0`–`86400` seconds (up to 24 h). Default `3600` (60 min). Also editable in Settings (in minutes). **Applies to new sessions only** — running sessions keep the value they were spawned with.
 - `hub.idle_timeout_min` — how long the Hub keeps wrappers alive when no UI is connected. `0` disables. Range `0`–`1440` minutes. Also editable in Settings.
 
-For a clean shutdown, prefer the `⏻` button in the Hub UI top-right or `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
+For a clean shutdown, prefer the `⏻` button in the Hub menu at the bottom of the left panel (footer) of the Hub UI or `many-ai-cli stop`; closing the console window now leaves wrappers waiting for the Hub to come back rather than killing them right away.
 
 ---
 
@@ -1367,7 +1367,7 @@ many-ai-cli log-clean ~/.many-ai-cli/logs/sessions/<session>.jsonl -o transcript
 
 ## Reporting a bug
 
-Use **Report bug** in the top-right of the Hub UI, or run `many-ai-cli issue`. Both paths show the complete report before opening GitHub and run a final confidential-data scrub immediately before the handoff.
+Use **Report bug** in the Hub menu at the bottom of the left panel (footer) of the Hub UI, or run `many-ai-cli issue`. Both paths show the complete report before opening GitHub and run a final confidential-data scrub immediately before the handoff.
 
 ```bash
 many-ai-cli issue "Approval buttons do not close after one click"
