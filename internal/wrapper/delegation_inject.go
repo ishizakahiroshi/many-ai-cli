@@ -34,7 +34,7 @@ import (
 const (
 	delegationBlockStart  = "<!-- many-ai-cli:delegation -->"
 	delegationBlockEnd    = "<!-- /many-ai-cli:delegation -->"
-	delegationFileVersion = "1"
+	delegationFileVersion = "2" // 2: 子に使える provider の一覧に command-code を足した
 )
 
 // DelegationResidueNeedle は置き去りブロックを探すための検索文字列。

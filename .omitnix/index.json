@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "feb29820b29e6729e1186ccbb009be9c446f2f15",
+    "commit": "7cb3de34360a01390258ba72d4f585bbad6f6edf",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,8 +134,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1117,
-    "analyzed": 910,
+    "discovered": 1118,
+    "analyzed": 911,
     "unresolved": 6,
     "unknown": 1,
     "unclaimed": 200,
@@ -5422,6 +5422,35 @@
     },
     {
       "path": "internal/hub/debug_ui_freeze_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "internal/hub/delegation_providers_test.go",
       "adapter": "go",
       "status": "analyzed",
       "fields": {

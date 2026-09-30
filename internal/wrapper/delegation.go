@@ -59,8 +59,8 @@ const delegationPromptText = `many-ai-cli: you can delegate work to child AI ses
 Do not call the Hub HTTP API or handle its auth token directly; these subcommands do it for you.
 
 Which AI runs the child: pass --provider only when the user named one. The exact accepted values are
-claude, codex, copilot, cursor-agent, opencode and grok — all lowercase, and nothing else is accepted
-("Codex", "ChatGPT", "GPT-5" are rejected). When the user did not name one, omit --provider: the Hub
+claude, codex, copilot, cursor-agent, opencode, grok and command-code — all lowercase, and nothing else
+is accepted ("Codex", "ChatGPT", "GPT-5" are rejected). When the user did not name one, omit --provider: the Hub
 reuses whatever ran that role last time, and falls back to this session's own provider. The user can
 change it in the approval dialog, and that choice is remembered for the role.
 
@@ -69,6 +69,13 @@ Do not spawn on your own initiative for ordinary tasks: every child costs a sepa
 context. Ask the user in one line if you are unsure. Start a relay only when the user explicitly
 asks for it — the relay drives several children over multiple rounds without asking again.
 `
+
+// DelegationPromptText は委譲案内の本文を返す。本文に挙げる provider の一覧が Hub の受け付ける
+// provider（internal/hub の orchestrationProviders）とずれていないことを、hub 側のテストが
+// これで確かめる。一覧を 2 か所で持っていて、command-code を足したときに案内だけ取り残された。
+func DelegationPromptText() string {
+	return delegationPromptText
+}
 
 // DelegationEnvName は Hub が spawn 時に渡す ON / OFF。"1" のときだけ有効。
 // Hub 経由でないセッション（`many-ai-cli wrap claude` を手で起動した場合）は
