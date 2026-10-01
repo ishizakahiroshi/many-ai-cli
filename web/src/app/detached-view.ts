@@ -155,6 +155,9 @@ function onFollowMessage(sessionId: number | null): void {
 function buildBar(tab: DetachedTabName): HTMLElement {
   const bar = document.createElement('div');
   bar.id = 'detached-tab-bar';
+  // display-area の外に置くので、印が無いと terminal.ts の document wheel が
+  // 隠れた端末へ転送し、本体の CLI までスクロールさせる（下の 2 つの入れ物も同じ）
+  bar.setAttribute('data-wheel-native', '');
 
   const title = document.createElement('strong');
   title.className = 'detached-tab-title';
@@ -284,11 +287,13 @@ function initDetachedWindow(params: DetachedTabParams): void {
     if (tab === 'memo') {
       const host = document.createElement('div');
       host.id = 'detached-memo-host';
+      host.setAttribute('data-wheel-native', '');
       if (column) column.append(host); else document.body.append(host);
       mountMemoWindow(host);
     } else if (tab === 'file') {
       fileHost = document.createElement('div');
       fileHost.id = 'detached-file-host';
+      fileHost.setAttribute('data-wheel-native', '');
       if (column) column.append(fileHost); else document.body.append(fileHost);
       showFileInWindow();
     }
