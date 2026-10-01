@@ -19,6 +19,8 @@ import { hasProviderCapability } from './provider-store.js';
 import { fillProviderIconSlots, providerDisplayName, providerIconHtml } from './provider-icon.js';
 import { PROVIDER_ORDER_CHANGED_EVENT, sortByProviderOrder } from './provider-order.js';
 import { activeSessionId, sessions } from './state.js';
+// settings.ts と循環するが、openSettingsSection は呼び出し時にしか使わない（読み込み時に読まない）。
+import { openSettingsSection } from './settings.js';
 
 interface UsageWindow {
   used_percent?: number;
@@ -648,12 +650,10 @@ function bindProbeButtons(): void {
 
 function openSubscriptionSettings(provider: string, id: string): void {
   const settings = document.getElementById('settings-panel') as HTMLElement | null;
-  const settingsButton = document.getElementById('settings-btn');
   if (!settings) return;
-  if (settings.hidden) settingsButton?.click();
+  // 設定を開き、サブスクリプションの節を選ぶ（パネルが閉じていれば #settings-btn の click も通る）。
+  openSettingsSection('subscriptions');
   const reveal = () => {
-    const section = settings.querySelector<HTMLDetailsElement>('details[data-section="subscriptions"]');
-    if (section) section.open = true;
     const row = Array.from(settings.querySelectorAll<HTMLElement>('.subs-row')).find((candidate) => (
       candidate.dataset.provider === provider && candidate.dataset.id === id
     ));

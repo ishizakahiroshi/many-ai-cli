@@ -205,6 +205,8 @@ function updateSummary(): void {
   if (!el) return;
   const count = cachedProviders.reduce((n, entry) => n + entry.profiles.length, 0);
   el.textContent = count === 0 ? t('subs_summary_none') : t('subs_summary_count', { count });
+  // 左ナビの現在値は各節の span の写しなので、書き換えたらナビへ知らせる（settings.ts が受ける）。
+  document.dispatchEvent(new CustomEvent('settings-current-updated'));
 }
 
 function rowContext(el: Element): { provider: string; id: string } | null {

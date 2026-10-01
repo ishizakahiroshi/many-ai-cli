@@ -1206,27 +1206,6 @@ export function isWheelTargetExcluded(target) {
   return false;
 }
 
-export function routeWheelToOpenSettingsPanel(e) {
-  const panel = document.getElementById('settings-panel');
-  if (!panel || panel.hidden) return false;
-  const body = panel.querySelector('.settings-body');
-  if (!body) return false;
-
-  if (e.target instanceof Element && body.contains(e.target)) {
-    return false;
-  }
-
-  const unit = e.deltaMode === WheelEvent.DOM_DELTA_LINE
-    ? 24
-    : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
-      ? Math.max(1, body.clientHeight)
-      : 1;
-  body.scrollTop += e.deltaY * unit;
-  e.preventDefault();
-  e.stopPropagation();
-  return true;
-}
-
 export function getWheelTargetSessionId(target) {
   if (!(target instanceof Element)) return activeSessionId;
 
@@ -1253,12 +1232,10 @@ export function getWheelTargetSessionId(target) {
 // → capture phase で wheel を奪い、scrollLines() を同期で呼んで isUserScrolling を
 //    確実に立ててから xterm に伝播させない。
 document.addEventListener('wheel', (e) => {
-  if (routeWheelToOpenSettingsPanel(e)) return;
-
-  // モーダル/オーバーレイ（about-panel / model-picker / new-session-panel 等）表示中は、
+  // モーダル/オーバーレイ（settings-panel / about-panel / model-picker / new-session-panel 等）表示中は、
   // この document レベルハンドラが背後ターミナルを scrollLines しないよう早期 return する。
-  // settings-panel は上の routeWheelToOpenSettingsPanel が先に処理するのでここに来ても問題ない
-  //（body 内なら return false → ここで早期 return しネイティブスクロールに任せる）。
+  // settings-panel は画面全体を覆い、左ナビと右ペインがそれぞれ自分でスクロールするので、
+  // ネイティブスクロールに任せる（以前の「パネル外のホイールを右ペインへ回す」処理は不要）。
   // ここを抜くと、モーダルの非スクロール領域でのホイールが背後 CLI に転送されてしまう。
   if (isModalOverlayOpen()) return;
 

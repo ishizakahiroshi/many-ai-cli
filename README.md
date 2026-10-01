@@ -1053,13 +1053,13 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 
 - **Header**
   - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`.
-  - Right edge: `⏻` (stop the Hub) and `Settings` (language, theme, timeouts, log dir, etc.).
 - **Left sidebar (session list)**
   - Top: `+ New Session` button (opens the spawn dialog). The provider list ends with **Add AI CLI**, which opens the same dialog as **Settings → AI CLI integrations**.
   - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
   - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
   - Completed and errored sessions stay in the list until you click `×`.
+  - Fixed footer at the bottom: `Usage`, `Hub` (stopping the Hub is in this menu) and `Settings`. `Settings` opens a full-screen settings screen: pick an item in the left nav (General / Connections & plans / Input / Approvals & notifications / Maintenance) and only that item shows on the right. A search box at the top left narrows the items; close it with the `Close` button or Esc.
 - **Right pane (terminal + input)**
   - Top bar: active session's provider and cwd, plus `↑ to top` to scroll the PTY buffer back to the start.
   - Center: PTY output rendered live with xterm.js.

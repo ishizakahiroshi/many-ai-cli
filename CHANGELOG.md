@@ -122,6 +122,7 @@ Release artifacts are published at
 
 ### Changed
 - **The Settings, Usage and Hub buttons moved from the top-right header to a footer fixed at the bottom of the left panel.** Usage and Hub menus now open upward. The footer is hidden at 720 px and below (use the drawer buttons as before) and in detached windows.
+- **Settings is now a full-screen screen with a left nav and a right pane, and the Basic/All switch is gone.** Pick one of the 24 items in the nav (grouped as General / Connections & plans / Input / Approvals & notifications / Maintenance, with current values and a search box) and only that item shows on the right. Close it with the Close button or Esc; at 720 px and below it becomes a list screen followed by a detail screen with a Back button. The last selected item is remembered.
 - **The header's Usage button now shows a single gauge icon** instead of a row of nine AI-colored icons, so the button stays narrow and does not grow as AIs are added. It keeps a translated accessible name and tooltip at narrow widths.
 - **The sidebar's new-session control is now a compact 32×32 px plus icon**, matching the neighboring icon buttons while retaining its translated accessible name and tooltip.
 - **Chat shows user messages and AI replies by default.** Tool-only records and

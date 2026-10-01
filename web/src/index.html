@@ -39,6 +39,7 @@
 
   <div id="settings-panel" class="aac-wheel-overlay" hidden>
     <div class="settings-header">
+      <button id="settings-back-btn" type="button" class="settings-header-btn settings-back-btn" data-i18n="settings_back">← 戻る</button>
       <img src="/icon.svg" class="settings-app-icon" alt="">
       <div>
         <div class="settings-app-name">MANY-AI-CLI</div>
@@ -50,17 +51,17 @@
         <button id="settings-close-btn" class="settings-header-btn settings-header-btn-close" data-i18n="settings_close" data-i18n-tooltip="settings_close">✕</button>
       </div>
     </div>
-    <div class="settings-body">
+    <div class="settings-layout">
+    <nav id="settings-nav" class="settings-nav" aria-label="Settings sections">
       <div class="settings-ia-toolbar" role="search">
-        <div class="settings-ia-level" role="group" aria-label="Settings level">
-          <button type="button" class="settings-ia-level-btn active" data-settings-level="basic" data-i18n="settings_level_basic">かんたん</button>
-          <button type="button" class="settings-ia-level-btn" data-settings-level="all" data-i18n="settings_level_all">すべて</button>
-        </div>
-        <label class="settings-ia-search-label" for="settings-search-input">設定を検索</label>
-        <input id="settings-search-input" class="settings-ia-search" type="search" placeholder="項目名・現在値・説明を検索" autocomplete="off">
+        <label class="settings-ia-search-label" for="settings-search-input" data-i18n="settings_search_label">設定を検索</label>
+        <input id="settings-search-input" class="settings-ia-search" type="search" data-i18n-placeholder="settings_search_placeholder" placeholder="項目名・現在値・説明を検索" autocomplete="off">
         <p id="settings-search-status" class="settings-search-status" aria-live="polite"></p>
       </div>
-      <details class="settings-section" data-section="general" data-settings-level="basic">
+      <div id="settings-nav-list" class="settings-nav-list"></div>
+    </nav>
+    <div class="settings-body">
+      <details class="settings-section" data-section="general" data-group="basic">
         <summary class="settings-section-title"><span data-i18n="settings_general">General</span><span class="settings-section-current" data-section="general"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -207,7 +208,7 @@
           <div class="settings-note" data-i18n="settings_ui_side_desc">セッションカード・入力欄のツール群・開閉／閉じるボタン（⊟／⊞／✕）・確認ポップアップを、それぞれ独立して好きな側へ置けます。「既定」は更新前と同じ配置です。入力欄の ⇄ ボタンはこれらをまとめて反対側へ倒します（下ドックの確認ポップアップは動きません）。この設定はこのブラウザにのみ保存されます（スマホ幅ではカード列は常に左のドロワーで、確認ポップアップも必ず下に出ます）。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="appearance">
+      <details class="settings-section" data-section="appearance" data-group="basic">
         <summary class="settings-section-title"><span data-i18n="settings_appearance">外観</span><span class="settings-section-current" data-section="appearance"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row settings-avatar-preview-row">
@@ -232,7 +233,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="token-statusbar" data-settings-level="basic">
+      <details class="settings-section" data-section="token-statusbar" data-group="basic">
         <summary class="settings-section-title"><span data-i18n="settings_token_statusbar">Token/Cost Statusbar</span><span class="settings-section-current" data-section="token-statusbar"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -247,7 +248,7 @@
           <div id="tsb-segments-toggles" class="tsb-segments-toggles"></div>
         </div>
       </details>
-      <details class="settings-section" data-section="session" data-settings-level="basic">
+      <details class="settings-section" data-section="session" data-group="basic">
         <summary class="settings-section-title"><span data-i18n="settings_session">Session</span><span class="settings-section-current" data-section="session"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -307,7 +308,7 @@
         </div>
       </details>
       <!-- 🖥 内蔵リモート接続（SSH / WSL）。旧ヘッダー Server ボタンから移設（利用頻度が低いため設定内へ）。 -->
-      <details class="settings-section" data-section="server-connections">
+      <details class="settings-section" data-section="server-connections" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_server_section">リモート接続（SSH / WSL）</span><span class="settings-section-current" data-section="server-connections"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -319,7 +320,7 @@
           <div class="settings-note" data-i18n="settings_server_manage_desc">SSH / WSL 先の Hub への接続プロファイルの追加・接続・切断を行います。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="subscriptions">
+      <details class="settings-section" data-section="subscriptions" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_subscriptions">サブスクリプション</span><span class="settings-section-current" data-section="subscriptions"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_subscriptions_desc">Keep more than one signed-in account per AI CLI and pick which one a session uses. many-ai-cli only points the official CLI at a separate config directory — it never reads or stores your tokens.</div>
@@ -328,7 +329,7 @@
           <div class="settings-note" data-i18n="settings_subscriptions_isolation_note">A profile switches the CLI's whole config directory, so per-profile sessions do not see the global memory file, skills, or past conversations of your default profile.</div>
         </div>
       </details>
-      <details class="settings-section" data-section="ai-providers" data-settings-level="basic">
+      <details class="settings-section" data-section="ai-providers" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_ai_providers">AI CLI integrations</span><span class="settings-section-current" data-section="ai-providers"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_ai_providers_desc">Manage built-in and user-added command line providers. Basic registration needs only a display name and executable.</div>
@@ -342,7 +343,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="nvidia-nim">
+      <details class="settings-section" data-section="nvidia-nim" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_nim_title">NVIDIA NIM for OpenCode</span><span class="settings-section-current" data-section="nvidia-nim"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_nim_desc">NVIDIA NIM is available only through OpenCode's Chat Completions compatible provider.</div>
@@ -367,7 +368,7 @@
           <div class="settings-note" id="nvidia-nim-test-result" role="status" aria-live="polite" hidden></div>
         </div>
       </details>
-      <details class="settings-section" data-section="jev" data-settings-level="basic">
+      <details class="settings-section" data-section="jev" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_jev_title">Jev evaluation (optional)</span><span class="settings-section-current" data-section="jev"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_jev_desc">Evaluate text with TypeSafe Jev on request. The result is for display only and does not change AI selection.</div>
@@ -380,7 +381,7 @@
           <div id="jev-result" class="settings-note" role="status" aria-live="polite"></div>
         </div>
       </details>
-      <details class="settings-section" data-section="remote-auth">
+      <details class="settings-section" data-section="remote-auth" data-group="conn">
         <summary class="settings-section-title"><span data-i18n="settings_remote_auth">リモートアクセス保護</span><span class="settings-section-current" data-section="remote-auth"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -405,7 +406,7 @@
           <div id="remote-pin-exposed-hint" class="settings-note settings-note-warn" data-i18n="settings_remote_pin_exposed_hint" hidden>allowed_hosts / trusted_networks が設定されていますが PIN は未設定です。遠隔経路は token だけで通ります。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="doctor">
+      <details class="settings-section" data-section="doctor" data-group="maint">
         <summary class="settings-section-title"><span data-i18n="settings_doctor_title">環境診断</span><span class="settings-section-current" data-section="doctor"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -416,7 +417,7 @@
           <div class="settings-note" data-i18n="settings_doctor_desc">この端末だけを確認します。トークンや個人情報は表示・送信しません。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="log">
+      <details class="settings-section" data-section="log" data-group="maint">
         <summary class="settings-section-title"><span data-i18n="settings_log">Log Settings</span><button id="log-dir-btn" class="log-dir-btn" data-i18n-tooltip="loading">📁</button><a id="log-dir-path" class="log-dir-path"></a><span class="settings-section-current" data-section="log"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -460,7 +461,7 @@
           <div class="settings-note" data-i18n="settings_applies_on_restart">Applied on next start</div>
         </div>
       </details>
-      <details class="settings-section settings-section--danger" data-section="danger" data-settings-level="all">
+      <details class="settings-section settings-section--danger" data-section="danger" data-group="maint">
         <summary class="settings-section-title"><span>危険な操作</span><span class="settings-section-current" data-section="danger">データの削除・リセット</span></summary>
         <div class="settings-section-body">
           <p class="settings-danger-intro">復元できない操作です。実行前に対象の確認と操作名の入力が必要です。</p>
@@ -486,7 +487,7 @@
           <div class="settings-note" data-i18n="settings_attachments_purge_desc">Deletes all saved attachment folders. Folders of running sessions are kept.</div>
         </div>
       </details>
-      <details class="settings-section" data-section="approval-hub" data-settings-level="basic">
+      <details class="settings-section" data-section="approval-hub" data-group="approval">
         <summary class="settings-section-title"><span data-i18n="settings_approval_hub">承認ボタン機能</span><span class="settings-section-current" data-section="approval-hub"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -527,7 +528,7 @@
           <div class="settings-note" data-i18n="settings_approval_hub_desc">AI の承認を画面のボタンで操作できます。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="approval-patterns">
+      <details class="settings-section" data-section="approval-patterns" data-group="approval">
         <summary class="settings-section-title"><span data-i18n="settings_approval_patterns_title">承認検出パターン</span><span class="settings-section-current" data-section="approval-patterns"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_approval_patterns_desc">承認 UI を検出するための文言。CLI のメッセージが変わったり、誤検出する場合に調整できます。</div>
@@ -562,7 +563,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="voice">
+      <details class="settings-section" data-section="voice" data-group="input">
         <summary class="settings-section-title"><span data-i18n="settings_voice_title">音声入力</span><span class="settings-section-current" data-section="voice"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row settings-row--stacked">
@@ -665,7 +666,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="trigger">
+      <details class="settings-section" data-section="trigger" data-group="input">
         <summary class="settings-section-title"><span data-i18n="settings_trigger_title">自動送信トリガー</span><span class="settings-section-current" data-section="trigger"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -681,7 +682,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="file-open">
+      <details class="settings-section" data-section="file-open" data-group="input">
         <summary class="settings-section-title"><span data-i18n="settings_file_open_title">ファイルリンク</span><span class="settings-section-current" data-section="file-open"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_file_open_desc">ターミナルや Files のファイルパスは OS 既定の関連付けアプリで開きます。ターミナルアプリのみ指定できます。</div>
@@ -696,7 +697,7 @@
           <div id="settings-terminal-app-effective" class="settings-effective-command"></div>
         </div>
       </details>
-      <details class="settings-section" data-section="notify-sound">
+      <details class="settings-section" data-section="notify-sound" data-group="approval">
         <summary class="settings-section-title"><span data-i18n="settings_notify_sound">通知音</span><span class="settings-section-current" data-section="notify-sound"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -815,7 +816,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="quick-cmd">
+      <details class="settings-section" data-section="quick-cmd" data-group="input">
         <summary class="settings-section-title"><span data-i18n="settings_quick_cmd_title">クイックコマンド</span><span class="settings-section-current" data-section="quick-cmd"></span></summary>
         <div class="settings-section-body">
           <datalist id="quick-cmd-presets">
@@ -885,7 +886,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="input-tools">
+      <details class="settings-section" data-section="input-tools" data-group="input">
         <summary class="settings-section-title"><span data-i18n="settings_input_tools_title">入力補助ツール表示</span><span class="settings-section-current" data-section="input-tools"></span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -903,7 +904,7 @@
           <div class="settings-note" data-i18n="settings_input_tools_desc">入力欄の /clear・/model・/ ▾・⌫ ボタンの表示を画面幅ごとに切り替えます。既定は PC=表示・スマホ=非表示（省スペース）です。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="deferred-enter">
+      <details class="settings-section" data-section="deferred-enter" data-group="input">
         <summary class="settings-section-title"><span>複数行ペースト送信</span><span class="settings-section-current">安全な確定待ち</span></summary>
         <div class="settings-section-body">
           <div class="settings-row">
@@ -921,7 +922,7 @@
           <div class="settings-note">長い複数行ペーストは、CLI の入力欄が落ち着いてから確定します。送信中は入力欄の下からキャンセルできます。</div>
         </div>
       </details>
-      <details class="settings-section" data-section="usage-links">
+      <details class="settings-section" data-section="usage-links" data-group="maint">
         <summary class="settings-section-title"><span data-i18n="settings_usage_links_title">Usage Links</span><span class="settings-section-current" data-section="usage-links"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_usage_links_desc">Header usage links. Leave blank to use the default URL.</div>
@@ -971,7 +972,7 @@
           </div>
         </div>
       </details>
-      <details class="settings-section" data-section="slash-src">
+      <details class="settings-section" data-section="slash-src" data-group="maint">
         <summary class="settings-section-title"><span data-i18n="settings_slash_src_title">スラッシュコマンドソース</span><span class="settings-section-current" data-section="slash-src"></span></summary>
         <div class="settings-section-body">
           <div class="settings-note" data-i18n="settings_slash_src_note">公式ドキュメントから自動取得します。必要な場合だけ URL を上書きしてください。</div>
@@ -1014,6 +1015,7 @@
         <button class="settings-link-btn" id="settings-readme-btn" data-i18n="settings_readme_btn">README</button>
         <button class="settings-link-btn" id="settings-licenses-btn" data-i18n="settings_about_btn">About &amp; Licenses</button>
       </div>
+    </div>
     </div>
   </div>
   <div id="provider-enrollment-overlay" class="provider-enrollment-overlay aac-wheel-overlay" hidden>

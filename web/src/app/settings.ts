@@ -1273,9 +1273,25 @@ export function applyLang(lang) {
   if (sel) sel.value = l;
 }
 
+// 720px 以下は「一覧 → 詳細」の 2 画面。詳細画面のとき #settings-panel に付くクラス（CSS は settings.css）。
+const SETTINGS_DETAIL_CLASS = 'settings-detail-open';
+const settingsMobileMql = (typeof window !== 'undefined' && typeof window.matchMedia === 'function')
+  ? window.matchMedia('(max-width: 720px)') : null;
+
+function setSettingsDetailScreen(detail: boolean): void {
+  document.getElementById('settings-panel')?.classList.toggle(SETTINGS_DETAIL_CLASS, detail);
+}
+
+// 720px を超える幅に戻ったらクラスを外す（次に狭くしたとき詳細画面から始まらないように）。
+settingsMobileMql?.addEventListener('change', () => {
+  if (!settingsMobileMql.matches) setSettingsDetailScreen(false);
+});
+
 export function setSettingsPanelOpen(open: boolean): void {
   const panel = document.getElementById('settings-panel');
   if (!panel) return;
+  // 閉じていた設定を開き直すときは一覧画面から始める（外から節を指定して開く場合は、そのあと詳細へ進む）。
+  if (open && panel.hidden) setSettingsDetailScreen(false);
   panel.hidden = !open;
   document.getElementById('settings-btn')?.setAttribute('aria-expanded', String(open));
 }
@@ -1320,6 +1336,11 @@ function syncSettingsPanelButton(): void {
     }
     if (panel.hidden) maybeAutoSwitchToNextApproval();
   });
+  document.getElementById('settings-back-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setSettingsDetailScreen(false);
+    document.getElementById('settings-nav')?.scrollTo?.({ top: 0 });
+  });
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1338,11 +1359,22 @@ function syncSettingsPanelButton(): void {
     });
   }
 
-  document.addEventListener('click', (e) => {
-    if (!panel.hidden && !panel.contains(e.target)) {
-      setSettingsPanelOpen(false);
-      maybeAutoSwitchToNextApproval();
+  // 設定は画面全体を覆うので、外側クリックでは閉じない。閉じるのは「閉じる」ボタンと Esc。
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.isComposing || e.defaultPrevented || panel.hidden) return;
+    // 確認ダイアログ・別のモーダルが前面にあるときは、Esc をそちらへ渡す（設定は閉じない）。
+    const frontOverlay = Array.from(document.querySelectorAll<HTMLElement>('.aac-wheel-overlay'))
+      .some((el) => el !== panel && !el.hidden && getComputedStyle(el).display !== 'none');
+    if (frontOverlay) return;
+    // 720px 以下の詳細画面では、Esc は「一覧へ戻る」。一覧画面では閉じる。
+    if (settingsMobileMql?.matches && panel.classList.contains(SETTINGS_DETAIL_CLASS)) {
+      setSettingsDetailScreen(false);
+      return;
     }
+    setSettingsPanelOpen(false);
+    maybeAutoSwitchToNextApproval();
+  });
+  document.addEventListener('click', (e) => {
     if (pathPopupEl && !pathPopupEl.hidden && !pathPopupEl.contains(e.target)) {
       pathPopupEl.hidden = true;
     }
@@ -1424,22 +1456,131 @@ function syncSettingsPanelButton(): void {
 })();
 
 // =============================================================================
-// P-53: Settings の情報設計（かんたん/すべて、検索、直リンク）
+// 設定画面の情報設計（左ナビ + 右ペイン・検索・直リンク・前回の選択）
 // =============================================================================
-const SETTINGS_IA_LEVEL_KEY = 'many-ai-cli.settings-level';
+const SETTINGS_LAST_SECTION_KEY = 'many-ai-cli.settings-last-section';
 
-// C3（plan_ux-notify-palette-review_c3_palette.md）: コマンドパレットの「設定を開く」
-// コマンド用。initSettingsInformationArchitecture() の中で定義される節オープン処理
-// （openDeepLink と共有）を、ここへ差し込んでおく。
+// コマンドパレットの「設定を開く」コマンド・#settings/<id> 直リンク用。
+// initSettingsInformationArchitecture() の中で定義される節オープン処理を、ここへ差し込んでおく。
 let _openSettingsSectionImpl: ((sectionId?: string) => void) | null = null;
+
+// 左ナビ + 右ペイン: 選んだ節だけを右ペインに出す。initSettingsNav() が差し込む。
+let _selectSettingsNavSection: ((sectionId: string, persist?: boolean) => void) | null = null;
+// ナビの項目名（言語切替に追従）と現在値（各節の .settings-section-current の写し）を合わせる。
+let _syncSettingsNav: (() => void) | null = null;
+// 検索で一致した節だけをナビに残す。null なら全項目。
+let _filterSettingsNav: ((visibleIds: ReadonlySet<string> | null) => void) | null = null;
+// ナビに並んでいる順の節 id（検索結果の「先頭」を決める）。
+let _listSettingsNavIds: (() => string[]) | null = null;
+
+// グループ名は settings_group_<id>（i18n）。辞書の読み込みは非同期なので、文字は _syncSettingsNav で入れる。
+const SETTINGS_NAV_GROUPS: readonly string[] = ['basic', 'conn', 'input', 'approval', 'maint'];
+
+function initSettingsNav(): void {
+  const list = document.getElementById('settings-nav-list');
+  const body = document.querySelector<HTMLElement>('#settings-panel .settings-body');
+  const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section][data-group]'));
+  if (!list || !body || sections.length === 0) return;
+
+  // <details> は常時 open。見出しのクリックでも閉じない。
+  sections.forEach((section) => {
+    section.open = true;
+    section.addEventListener('toggle', () => { if (!section.open) section.open = true; });
+    section.querySelector('summary')?.addEventListener('click', (e) => e.preventDefault());
+  });
+
+  const sectionLabel = (section: HTMLElement): string =>
+    (section.querySelector('summary > span:first-child')?.textContent || section.dataset.section || '').trim();
+  const items = new Map<string, HTMLButtonElement>();
+  const groups: Array<{ id: string; title: HTMLElement; ids: string[] }> = [];
+  for (const groupId of SETTINGS_NAV_GROUPS) {
+    const members = sections.filter((section) => section.dataset.group === groupId);
+    if (members.length === 0) continue;
+    const title = document.createElement('div');
+    title.className = 'settings-nav-group-title';
+    list.appendChild(title);
+    const ids: string[] = [];
+    members.forEach((section) => {
+      const id = section.dataset.section as string;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'settings-nav-item' + (section.classList.contains('settings-section--danger') ? ' settings-nav-item--danger' : '');
+      btn.dataset.section = id;
+      const label = document.createElement('span');
+      label.className = 'settings-nav-item-label';
+      const current = document.createElement('span');
+      current.className = 'settings-nav-item-current';
+      btn.append(label, current);
+      btn.addEventListener('click', () => {
+        _selectSettingsNavSection?.(id);
+        setSettingsDetailScreen(true);
+      });
+      items.set(id, btn);
+      ids.push(id);
+      list.appendChild(btn);
+    });
+    groups.push({ id: groupId, title, ids });
+  }
+
+  _syncSettingsNav = () => {
+    groups.forEach(({ id, title }) => { title.textContent = t('settings_group_' + id); });
+    sections.forEach((section) => {
+      const btn = items.get(section.dataset.section as string);
+      if (!btn) return;
+      const label = btn.querySelector('.settings-nav-item-label');
+      const current = btn.querySelector('.settings-nav-item-current');
+      if (label) label.textContent = sectionLabel(section);
+      if (current) current.textContent = (section.querySelector('summary .settings-section-current')?.textContent || '').trim();
+    });
+  };
+  _filterSettingsNav = (visibleIds) => {
+    items.forEach((btn, id) => { btn.hidden = !!visibleIds && !visibleIds.has(id); });
+    groups.forEach(({ title, ids }) => { title.hidden = !!visibleIds && !ids.some((id) => visibleIds.has(id)); });
+  };
+  _listSettingsNavIds = () => groups.flatMap((group) => group.ids);
+  _selectSettingsNavSection = (sectionId: string, persist = true) => {
+    if (!items.has(sectionId)) return;
+    sections.forEach((section) => { section.hidden = section.dataset.section !== sectionId; });
+    items.forEach((btn, id) => btn.classList.toggle('active', id === sectionId));
+    body.scrollTop = 0;
+    if (persist) {
+      try { localStorage.setItem(SETTINGS_LAST_SECTION_KEY, sectionId); } catch (_) {}
+    }
+    _syncSettingsNav?.();
+    items.get(sectionId)?.scrollIntoView({ block: 'nearest' });
+    sections.find((section) => section.dataset.section === sectionId)?.dispatchEvent(new CustomEvent('settings-section-selected'));
+  };
+
+  // 前回選んだ節を復元する。無ければ（保存なし・節が無くなった）先頭。
+  let initial = sections[0].dataset.section as string;
+  try {
+    const saved = localStorage.getItem(SETTINGS_LAST_SECTION_KEY);
+    if (saved && items.has(saved)) initial = saved;
+  } catch (_) {}
+  _syncSettingsNav();
+  _selectSettingsNavSection(initial, false);
+
+  // 言語切替・設定を開き直したときに、見出しの文言（data-i18n で差し替わる）と現在値をナビへ写す。
+  document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(() => _syncSettingsNav?.()));
+  // 節が閉じることはもう無い（toggle での再描画は効かない）ので、設定を変えたら該当節の現在値を描き直す。
+  body.addEventListener('change', (e) => {
+    const id = (e.target instanceof Element ? e.target.closest<HTMLElement>('.settings-section[data-section]') : null)?.dataset.section;
+    if (!id) return;
+    window.setTimeout(() => renderSettingsSummary(id), 100);
+  });
+  // subscriptions.ts のように現在値を自分で書く節は、書いたあとこのイベントでナビへ知らせる。
+  document.addEventListener('settings-current-updated', () => _syncSettingsNav?.());
+  // 辞書の読み込みが済んだら、グループ名と項目名を現在の言語で入れ直す。
+  document.addEventListener('i18n-ready', () => _syncSettingsNav?.());
+}
 
 /**
  * 指定した設定セクション（data-section の値。例: "notify-sound" / "approval-hub"）を
- * 開く。まず `#settings-btn` の click を模して開く（パネルが既に開いているときは
+ * 選んで開く。まず `#settings-btn` の click を模して開く（パネルが既に開いているときは
  * 模さない — #settings-btn 自身の click ハンドラは hidden === true を見て開閉を
  * トグルするため、開いている状態で click するとむしろ閉じてしまう）。これにより
  * app.ts 側の `#settings-btn` click ハンドラが行う設定読み込み（通知音・承認設定等）
- * を通してから節を開ける。節を開く処理そのものは openDeepLink と共有する。
+ * を通してから節を選べる。節を選ぶ処理そのものは openDeepLink と共有する。
  */
 export function openSettingsSection(sectionId: string): void {
   const panel = document.getElementById('settings-panel') as HTMLElement | null;
@@ -1453,73 +1594,59 @@ export function openSettingsSection(sectionId: string): void {
     _openSettingsSectionImpl(sectionId);
     return;
   }
-  // フォールバック: IA 未初期化（DOM 不足）でも <details> だけは開く。
-  const section = document.querySelector<HTMLDetailsElement>(`.settings-section[data-section="${CSS.escape(sectionId)}"]`);
-  if (section) {
-    section.open = true;
-    requestAnimationFrame(() => section.scrollIntoView({ block: 'start', behavior: 'smooth' }));
-  }
+  _selectSettingsNavSection?.(sectionId);
 }
 
 function initSettingsInformationArchitecture(): void {
   const panel = document.getElementById('settings-panel');
   const search = document.getElementById('settings-search-input') as HTMLInputElement | null;
   const status = document.getElementById('settings-search-status');
-  // セクションの <details> も同じ data-settings-level（かんたん/すべての分類）を持つので、
-  // 属性だけで拾うとセクション内のクリックで表示種別が切り替わる。切替ボタンの入れ物に絞る。
-  const levelButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.settings-ia-level [data-settings-level]'));
   const sections = Array.from(document.querySelectorAll<HTMLDetailsElement>('.settings-section[data-section]'));
-  if (!panel || !search || levelButtons.length === 0 || sections.length === 0) return;
+  if (!panel || !search || !status || sections.length === 0) return;
 
-  let level = localStorage.getItem(SETTINGS_IA_LEVEL_KEY) === 'all' ? 'all' : 'basic';
-  const apply = () => {
+  // 項目名・現在値・説明に一致した節だけをナビに残す。selectFirst なら先頭の一致を右ペインに出す。
+  const apply = (selectFirst: boolean) => {
     const query = search.value.trim().toLocaleLowerCase();
-    let matches = 0;
+    if (!query) {
+      _filterSettingsNav?.(null);
+      status.textContent = '';
+      return;
+    }
+    const matched = new Set<string>();
     sections.forEach((section) => {
-      const isBasic = section.dataset.settingsLevel === 'basic';
       const currentValues = Array.from(section.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select'))
         .map((control) => control instanceof HTMLInputElement && control.type === 'checkbox'
           ? (control.checked ? 'on enabled' : 'off disabled')
           : control.value)
         .join(' ');
       const text = `${section.textContent || ''} ${currentValues}`.toLocaleLowerCase();
-      const matched = !query || text.includes(query);
-      const visible = query ? matched : (level === 'all' || isBasic);
-      section.classList.toggle('settings-ia-hidden', !visible);
-      section.classList.toggle('settings-search-match', !!query && matched);
-      if (query && matched) {
-        matches++;
-        section.open = true;
-      }
+      if (text.includes(query)) matched.add(section.dataset.section as string);
     });
-    levelButtons.forEach((button) => button.classList.toggle('active', button.dataset.settingsLevel === level));
-    if (query) {
-      status.textContent = matches ? `${matches} 件のセクションに一致` : '一致する設定はありません';
-    } else {
-      status.textContent = level === 'basic' ? 'よく使う設定を表示中。詳細は「すべて」から開けます。' : 'すべての設定を表示中。';
+    _filterSettingsNav?.(matched);
+    status.textContent = matched.size ? t('settings_search_matched', { n: matched.size }) : t('settings_search_none');
+    if (selectFirst) {
+      const first = (_listSettingsNavIds?.() ?? []).find((id) => matched.has(id));
+      // 検索のための自動選択は「前回の選択」として覚えない。
+      if (first) _selectSettingsNavSection?.(first, false);
     }
   };
+  search.addEventListener('input', () => apply(true));
 
-  levelButtons.forEach((button) => button.addEventListener('click', () => {
-    level = button.dataset.settingsLevel === 'all' ? 'all' : 'basic';
-    try { localStorage.setItem(SETTINGS_IA_LEVEL_KEY, level); } catch (_) {}
-    apply();
-  }));
-  search.addEventListener('input', apply);
-  document.getElementById('settings-btn')?.addEventListener('click', () => requestAnimationFrame(apply));
-
-  // C3: #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を開く本体。
+  // #settings/<id> ハッシュと openSettingsSection() の両方から呼べる、節を選ぶ本体。
   const openSection = (sectionId?: string) => {
     setSettingsPanelOpen(true);
-    if (!sectionId) { apply(); return; }
+    if (!sectionId) return;
     const section = sections.find((item) => item.dataset.section === sectionId);
     if (!section) return;
-    level = 'all';
-    search.value = '';
-    section.open = true;
-    apply();
+    if (search.value) {
+      search.value = '';
+      apply(false);
+    }
+    renderSettingsSummary();
+    _selectSettingsNavSection?.(sectionId);
+    // 外から節を指定して開いたときは、最初から詳細画面（720px 以下）。
+    setSettingsDetailScreen(true);
     requestAnimationFrame(() => {
-      section.scrollIntoView({ block: 'start', behavior: 'smooth' });
       (section.querySelector('input, select, button') as HTMLElement | null)?.focus();
     });
   };
@@ -1529,7 +1656,7 @@ function initSettingsInformationArchitecture(): void {
     openSection(match[1]);
   };
   window.addEventListener('hashchange', openDeepLink);
-  requestAnimationFrame(() => { apply(); openDeepLink(); });
+  requestAnimationFrame(openDeepLink);
   _openSettingsSectionImpl = openSection;
 }
 
@@ -1577,6 +1704,7 @@ export function appConfirmTypedDanger(opts: { title: string; message: string; co
   });
 }
 
+initSettingsNav();
 initSettingsInformationArchitecture();
 
 // ---- C5: 表示モード固定 (soft lock) 設定 ----
@@ -2238,7 +2366,8 @@ initSettingsInformationArchitecture();
   document.addEventListener('user-info-ready', initFromGlobals, { once: true });
   const sectionEl = document.querySelector('.settings-section[data-section="appearance"]');
   if (sectionEl) {
-    sectionEl.addEventListener('toggle', () => { if (sectionEl.open) initFromGlobals(); });
+    // 節は常時 open で toggle が起きないので、ナビで選ばれたときに読み直す。
+    sectionEl.addEventListener('settings-section-selected', () => initFromGlobals());
   }
 
   let _nameDebounce = null;
@@ -3985,14 +4114,17 @@ const SUMMARY_RENDERERS: Record<string, SummaryRenderer> = {
 export function renderSettingsSummary(sectionId?: string): void {
   const ids = sectionId ? [sectionId] : Object.keys(SUMMARY_RENDERERS);
   for (const id of ids) {
+    // 現在値を自分で書く節（subscriptions 等）は描画関数が無いので触らない。
+    if (!SUMMARY_RENDERERS[id]) continue;
     const el = document.querySelector(`.settings-section-current[data-section="${id}"]`) as HTMLElement | null;
     if (!el) continue;
     try {
-      el.textContent = SUMMARY_RENDERERS[id]?.() ?? '';
+      el.textContent = SUMMARY_RENDERERS[id]();
     } catch (_) {
       el.textContent = '';
     }
   }
+  _syncSettingsNav?.();
 }
 
 // 各 <details> の toggle で自セクションを再描画する。

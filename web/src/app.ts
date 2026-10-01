@@ -2136,20 +2136,6 @@ inputEl.addEventListener('blur', (e) => {
     });
   }
 
-  (function () {
-    const KEY = 'many-ai-cli.settings-section-state';
-    let state = {};
-    try { state = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { state = {}; }
-    document.querySelectorAll('.settings-section[data-section]').forEach((el) => {
-      const id = el.dataset.section;
-      if (state[id]) el.open = true;
-      el.addEventListener('toggle', () => {
-        state[id] = el.open;
-        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (_) {}
-      });
-    });
-  })();
-
   const approvalToggleInput = document.getElementById('approval-toggle-input');
   if (approvalToggleInput) {
     approvalToggleInput.addEventListener('change', async () => {
