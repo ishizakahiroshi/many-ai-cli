@@ -1202,7 +1202,7 @@ header {
 #session-list > * { flex-shrink: 0; }
 .session-footer {
   position: sticky;
-  bottom: 0;
+  bottom: calc(var(--tsb-bottom-offset, 22px) + env(safe-area-inset-bottom));
   z-index: 2;
   margin: auto -8px -8px;
   padding: 6px;
@@ -1217,6 +1217,9 @@ header {
 .session-footer > .usage-menu,
 .session-footer > .web-menu { flex: 1 1 0; min-width: 0; margin-left: 0; display: flex; }
 .session-footer > #settings-btn { flex: 1 1 0; min-width: 0; }
+/* 歯車は枠いっぱい、Usage の半円は枠の下半分だけだったので見た目の大きさが揃っていなかった。
+   外寸は 14px で固定し、メーターは同じ枠を使う円弧にする。 */
+.session-footer .footer-action-icon { width: 14px; height: 14px; flex-shrink: 0; }
 .session-footer #settings-btn,
 .session-footer .usage-menu-btn,
 .session-footer .web-menu-btn {
@@ -1229,6 +1232,14 @@ header {
 /* ドロップダウンは上向きに開く（位置は TS 側）。影も上向きにする。 */
 #usage-dropdown,
 #web-menu-dropdown { box-shadow: 0 -8px 20px rgba(0,0,0,0.4); }
+/* トークンバーは position:fixed で画面下端を覆う。端末列は --tsb-bottom-offset で避けている。
+   sticky の bottom だけで上げる（padding も足すと二重に空く）。
+   バーが無いときは下の 8px padding を残し、負の margin で下端へ敷く。 */
+@media (min-width: 721px) {
+  #session-list {
+    padding-bottom: max(0px, calc(8px - var(--tsb-bottom-offset, 22px)));
+  }
+}
 @container (max-width: 235px) {
   .session-footer #settings-btn > span,
   .session-footer .usage-menu-btn > span,
