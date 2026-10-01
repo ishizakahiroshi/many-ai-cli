@@ -27,7 +27,7 @@ import type { Memo } from './memo-model.js';
 // 別窓（plan_detached-tab-windows.md C4）。どちらも何も import しない葉モジュール。
 import { isDetachedTabView, openDetachedTabWindow } from './detached-view-mode.js';
 import { onWindowMessage, postWindowMessage, requestMainWindow } from './window-channel.js';
-import { showToast } from './util.js';
+import { showToast, COPY_ICON, flashCopied } from './util.js';
 
 // C4（バッジ）向けの通知。件数そのものは getOpenMemoCountForProject / totalOpenMemoCount を
 // 都度呼んで取る（このイベントは「取り直せ」のシグナルであって件数を運ばない）。
@@ -364,6 +364,21 @@ function buildMemoRow(memo: Memo, project: string): HTMLElement {
   del.addEventListener('blur', disarm);
   del.addEventListener('mouseleave', disarm);
   actions.append(launch, del);
+  // 本文のコピー（アプリ共通の 📋 → ✓）。画像だけのメモは本文が無いので出さない。
+  if (memo.text) {
+    const copy = node('button', COPY_ICON, 'memo-row-copy');
+    copy.type = 'button';
+    copy.title = t('copy_to_clipboard');
+    copy.setAttribute('aria-label', t('copy_to_clipboard'));
+    copy.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(memo.text).then(
+        () => flashCopied(copy),
+        () => showToast(t('settings_doctor_copy_failed'), undefined, 3000),
+      );
+    });
+    actions.append(copy);
+  }
 
   row.append(checkbox, rowBody, actions);
   return row;

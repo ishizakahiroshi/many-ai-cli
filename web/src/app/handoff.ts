@@ -119,7 +119,7 @@ function showHandoffNotifyBanner(
     <div class="handoff-notify-actions">
       <button type="button" class="handoff-notify-action">${escapeHtml(tx('handoff_notify_action', '引き継ぎを準備'))}</button>
       ${noteButton}
-      <button type="button" class="handoff-notify-dismiss" aria-label="${escapeHtml(tx('handoff_notify_dismiss', '閉じる'))}">×</button>
+      <button type="button" class="handoff-notify-dismiss" aria-label="${escapeHtml(tx('handoff_notify_dismiss', '閉じる'))}">✕</button>
     </div>`;
   document.body.appendChild(el);
   noteBanners.set(sessionID, el);

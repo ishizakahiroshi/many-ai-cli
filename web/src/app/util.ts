@@ -181,6 +181,18 @@ export function cleanCopiedText(linesOrText: string | string[] | null | undefine
     .join('\n');
 }
 
+// コピー操作のアイコンはアプリ全体でこの 1 組に揃える（📋 → 押した直後だけ ✓）。
+// 新しいコピーボタンは別の記号（⧉ ⎘ 等）や文字ラベルを使わず、これを使う。
+export const COPY_ICON = '📋';
+export const COPIED_ICON = '✓';
+
+/** コピーボタンの表示を一瞬 ✓ にして、ms 後に 📋 へ戻す。 */
+export function flashCopied(btn: HTMLElement, ms = 1000): void {
+  btn.textContent = COPIED_ICON;
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = COPY_ICON; btn.classList.remove('copied'); }, ms);
+}
+
 export async function copyCleanText(linesOrText: string | string[] | null | undefined, anchor?: ToastAnchor): Promise<void> {
   const text = cleanCopiedText(linesOrText);
   if (!text) return;

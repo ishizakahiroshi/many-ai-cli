@@ -725,14 +725,14 @@ export function updatePushButtonLabel(btn, wt) {
     m.className = 'git-ctx-menu';
     m.innerHTML = `
       <div class="ctx-header" data-ctx-header>commit</div>
-      <button data-action="copy-short"><span class="ctx-icon">#</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_short', 'Copy short hash'))}</span><span class="ctx-hint" data-hint-short></span></button>
-      <button data-action="copy-full"><span class="ctx-icon">⎘</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_full', 'Copy full hash'))}</span><span class="ctx-hint" data-hint-full></span></button>
+      <button data-action="copy-short"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_short', 'Copy short hash'))}</span><span class="ctx-hint" data-hint-short></span></button>
+      <button data-action="copy-full"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_full', 'Copy full hash'))}</span><span class="ctx-hint" data-hint-full></span></button>
       <div class="ctx-sep"></div>
-      <button data-action="copy-subject"><span class="ctx-icon">✎</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_subject', 'Copy subject'))}</span></button>
-      <button data-action="copy-message"><span class="ctx-icon">¶</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_message', 'Copy message (subject + body)'))}</span></button>
-      <button data-action="copy-hash-subject"><span class="ctx-icon">⇋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_hash_subject', 'Copy hash + subject'))}</span></button>
+      <button data-action="copy-subject"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_subject', 'Copy subject'))}</span></button>
+      <button data-action="copy-message"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_message', 'Copy message (subject + body)'))}</span></button>
+      <button data-action="copy-hash-subject"><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_hash_subject', 'Copy hash + subject'))}</span></button>
       <div class="ctx-sep"></div>
-      <button data-action="copy-github-url" data-ctx-gh><span class="ctx-icon">↗</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_github', 'Copy GitHub link'))}</span><span class="ctx-hint" data-hint-gh></span></button>
+      <button data-action="copy-github-url" data-ctx-gh><span class="ctx-icon">📋</span><span class="ctx-label">${_esc(_gt('git_ctx_copy_github', 'Copy GitHub link'))}</span><span class="ctx-hint" data-hint-gh></span></button>
     `;
     document.body.appendChild(m);
     m.addEventListener('click', (e) => {
@@ -1539,8 +1539,8 @@ export function updatePushButtonLabel(btn, wt) {
           <div class="info-label">SHA</div>
           <div class="info-value info-sha">
             <span class="info-sha-value">${_esc(c.hash || '')}</span>
-            <button class="info-mini-btn" data-action="copy-full">⎘ Copy</button>
-            <button class="info-mini-btn" data-action="copy-github-url" ${ghDisabled}>↗ GH</button>
+            <button class="info-mini-btn" data-action="copy-full" title="Copy">📋</button>
+            <button class="info-mini-btn" data-action="copy-github-url" ${ghDisabled}>📋 GH</button>
           </div>
 
           <div class="info-label">PARENTS</div>

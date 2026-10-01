@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { apiFetch, escapeHtml, showToast, ti18n } from './util.js';
+import { apiFetch, escapeHtml, showToast, ti18n, COPY_ICON, COPIED_ICON } from './util.js';
 import { activeSessionId, sessions } from './state.js';
 import { callOpenApi, computeRelPath, copyPathText, getFilesAssetUrl, isAnyAiCliPreviewable, isImagePath, isMediaPath, isVideoPath, showPathPopup } from './path-links.js';
 import { findUrlCandidates } from './url-detect.js';
@@ -1474,7 +1474,7 @@ export const FilesTreeView = (function () {
     const reloadBtn = document.createElement('button');
     reloadBtn.className = 'files-tree-toolbar-btn';
     reloadBtn.title = t('files_tree_reload_tooltip') || 'Reload';
-    reloadBtn.textContent = '🔄';
+    reloadBtn.textContent = '↻';
 
     const openFolderBtn = document.createElement('button');
     openFolderBtn.className = 'files-tree-toolbar-btn';
@@ -2323,8 +2323,8 @@ export const FilesPreview = (function () {
       btn.type = 'button';
       btn.className = 'files-preview-code-copy-btn';
       btn.dataset.filesSkipSearch = '1';
-      const defaultLabel = t('files_preview_code_copy_label') || 'Copy';
-      const copiedLabel = t('files_preview_code_copied_label') || 'Copied';
+      const defaultLabel = COPY_ICON;
+      const copiedLabel = COPIED_ICON;
       btn.textContent = defaultLabel;
       btn.title = t('files_preview_code_copy_tooltip') || 'Copy code';
       btn.addEventListener('click', async (e) => {
@@ -2364,8 +2364,8 @@ export const FilesPreview = (function () {
       btn.type = 'button';
       btn.className = 'files-preview-table-copy-btn';
       btn.dataset.filesSkipSearch = '1';
-      const defaultLabel = t('files_preview_table_copy_label') || 'Copy table';
-      const copiedLabel = t('files_preview_table_copied_label') || 'Copied';
+      const defaultLabel = COPY_ICON;
+      const copiedLabel = COPIED_ICON;
       btn.textContent = defaultLabel;
       btn.title = t('files_preview_table_copy_tooltip') || 'Copy table';
       btn.addEventListener('click', async (e) => {
@@ -2488,13 +2488,13 @@ export const FilesPreview = (function () {
     const searchBtn = document.createElement('button');
     searchBtn.className = 'files-preview-toolbar-btn';
     searchBtn.title = t('files_preview_search_tooltip') || 'Search in page';
-    searchBtn.textContent = '🔎';
+    searchBtn.textContent = '🔍';
     searchBtn.disabled = true;
 
     const reloadBtn = document.createElement('button');
     reloadBtn.className = 'files-preview-toolbar-btn';
     reloadBtn.title = t('files_preview_reload_tooltip') || 'Reload';
-    reloadBtn.textContent = '🔄';
+    reloadBtn.textContent = '↻';
     reloadBtn.disabled = true;
 
     const editBtn = document.createElement('button');

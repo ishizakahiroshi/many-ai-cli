@@ -150,6 +150,19 @@
   cursor: pointer;
   white-space: nowrap;
 }
+.memo-row-copy {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft, var(--muted));
+  font: inherit;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.memo-row-copy:hover { color: var(--text); border-color: var(--line-soft, var(--line)); }
+.memo-row-copy.copied { color: #86efac; }
 .memo-row-launch:hover { color: #fff; border-color: var(--accent, #3b82f6); background: var(--accent, #3b82f6); }
 .memo-row-delete:hover { color: #fff; border-color: var(--danger, #e06c75); background: var(--danger, #e06c75); }
 .memo-row-delete-armed,

@@ -790,7 +790,7 @@ function ensureTermCtxMenu() {
     });
     m.appendChild(btn);
   };
-  mkItem('term_ctx_copy', 'コピー', '⎘', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
+  mkItem('term_ctx_copy', 'コピー', '📋', (sel, anchor) => copyTerminalSelectionText(sel, { anchor }).catch(() => {}));
   mkItem('term_ctx_copy_oneline', '1行コピー', '⇥', (sel, anchor) => copyTerminalSelectionText(sel, { oneLine: true, anchor }).catch(() => {}));
   mkItem('term_ctx_send_selection', 'そのまま送信', '➤', (sel, anchor, sessionId) => sendSelectionDirect(sel, { anchor, sessionId }));
   mkItem('term_ctx_add_to_input', '入力欄に追加', '＋', (sel, anchor) => addSelectionToInput(sel, { anchor }));

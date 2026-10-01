@@ -373,7 +373,7 @@ function renderTemplateRow(row: HTMLElement, template: PromptTemplate, panel: HT
   const actions = document.createElement('div');
   actions.className = 'prompt-template-actions';
   actions.append(
-    makeActionButton('✏', text('template_edit', '編集'), (event) => {
+    makeActionButton('✏️', text('template_edit', '編集'), (event) => {
       event.preventDefault();
       event.stopPropagation();
       editingBody = template.body;

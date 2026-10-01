@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { copyCleanText } from './util.js';
+import { copyCleanText, COPY_ICON } from './util.js';
 import { appendTextWithLinks } from './url-links.js';
 import { sendText } from '../app.js';
 import { scanBuffer } from './terminal.js';
@@ -86,7 +86,7 @@ function renderExpandPopup(sessionId, lines, clientX, clientY, loading, opts: { 
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
     copyBtn.className = 'expand-popup-copy';
-    copyBtn.textContent = '⧉';
+    copyBtn.textContent = COPY_ICON;
     copyBtn.title = t('copy_to_clipboard');
     copyBtn.setAttribute('aria-label', t('copy_to_clipboard'));
     copyBtn.addEventListener('click', () => {

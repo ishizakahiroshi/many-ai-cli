@@ -3325,7 +3325,7 @@ export function openCardCtxMenu(x, y, sid) {
     `<button type="button" data-action="open-in-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenInGrid)}</span></button>` +
     `<button type="button" data-action="open-project-grid"><span class="ico">⊞</span><span>${escapeHtml(labelOpenProjectGrid)}</span></button>` +
     `<div class="card-ctx-sep"></div>` +
-    `<button type="button" data-action="rename"><span class="ico">✎</span><span>${escapeHtml(labelRename)}</span></button>` +
+    `<button type="button" data-action="rename"><span class="ico">✏️</span><span>${escapeHtml(labelRename)}</span></button>` +
     `<button type="button" data-action="move-front"><span class="ico">⇧</span><span>${escapeHtml(labelMoveFront)}</span></button>` +
     `<button type="button" data-action="color"><span class="ico">●</span><span>${escapeHtml(labelColor)}</span></button>` +
     `<button type="button" data-action="note"><span class="ico">☰</span><span>${escapeHtml(labelNote)}</span></button>` +
