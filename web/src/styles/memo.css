@@ -26,33 +26,33 @@
 #memo-drawer[hidden] { display: none; }
 .memo-drawer-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-shrink: 0; }
 .memo-drawer-title-wrap { min-width: 0; }
-.memo-drawer-title { margin: 0; font-size: 1rem; }
+.memo-drawer-title { margin: 0; font-size: var(--fs-lg); }
 .memo-drawer-subtitle {
   margin: 4px 0 0;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   color: var(--muted-2, #9aa4b2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .memo-drawer-header-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+/* ✕ の見た目は close-button.css が持つ。ここは寸法の上書きと flex 上の振る舞いだけ。 */
+.memo-drawer-close { flex-shrink: 0; --close-btn-fs: 1rem; --close-btn-pad: 2px 4px; }
 .memo-drawer-close[hidden] { display: none; }
-.memo-drawer-popout,
-.memo-drawer-close {
+.memo-drawer-popout {
   flex-shrink: 0;
   border: none;
   background: transparent;
   color: var(--muted-2, #9aa4b2);
-  font-size: 1rem;
+  font-size: var(--icon-btn-fs);
   line-height: 1;
   padding: 2px 4px;
   cursor: pointer;
 }
-.memo-drawer-popout:hover,
-.memo-drawer-close:hover { color: var(--text); }
+.memo-drawer-popout:hover { color: var(--text); }
 .memo-drawer-description {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   color: var(--muted-2, #9aa4b2);
   line-height: 1.5;
   flex-shrink: 0;
@@ -68,10 +68,10 @@
   background: var(--bg, #14171f);
   color: var(--text);
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   resize: vertical;
 }
-.memo-plaintext-note { margin: 0; font-size: 0.68rem; color: var(--muted-2, #9aa4b2); }
+.memo-plaintext-note { margin: 0; font-size: var(--fs-2xs); color: var(--muted-2, #9aa4b2); }
 .memo-input-dragover .memo-input { border-color: var(--accent, #3b82f6); border-style: dashed; }
 /* 画像のサムネイル（入力欄の下＝追加前、メモの行＝保存済み）。 */
 .memo-input-images,
@@ -105,17 +105,17 @@
   cursor: pointer;
 }
 .memo-image-remove:hover { background: var(--danger, #e06c75); }
-.memo-row-text-empty { color: var(--muted-2, #9aa4b2); font-size: 0.72rem; }
-.memo-feedback { margin: 0; font-size: 0.76rem; color: var(--danger, #f87171); white-space: pre-wrap; flex-shrink: 0; }
+.memo-row-text-empty { color: var(--muted-2, #9aa4b2); font-size: var(--fs-xs); }
+.memo-feedback { margin: 0; font-size: var(--fs-sm); color: var(--danger, #f87171); white-space: pre-wrap; flex-shrink: 0; }
 .memo-feedback:empty { margin: 0; }
 .memo-list { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.memo-empty { margin: 0; font-size: 0.78rem; color: var(--muted-2, #9aa4b2); }
+.memo-empty { margin: 0; font-size: var(--fs-sm); color: var(--muted-2, #9aa4b2); }
 .memo-group { display: flex; flex-direction: column; gap: 6px; }
-.memo-group-heading { display: flex; align-items: baseline; gap: 6px; font-size: 0.78rem; min-width: 0; }
+.memo-group-heading { display: flex; align-items: baseline; gap: 6px; font-size: var(--fs-sm); min-width: 0; }
 .memo-group-heading strong { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .memo-group-count { color: var(--muted-2, #9aa4b2); flex-shrink: 0; }
 .memo-group-rows { display: flex; flex-direction: column; gap: 6px; }
-.memo-group-done { font-size: 0.76rem; }
+.memo-group-done { font-size: var(--fs-sm); }
 .memo-group-done summary { cursor: pointer; color: var(--muted-2, #9aa4b2); }
 .memo-group-done .memo-group-rows { margin-top: 6px; }
 .memo-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
@@ -123,7 +123,7 @@
 .memo-row-done .memo-row-text { text-decoration: line-through; }
 .memo-row-check { margin-top: 3px; flex-shrink: 0; }
 .memo-row-body { flex: 1; min-width: 0; }
-.memo-row-text { font-size: 0.8rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.memo-row-text { font-size: var(--fs-sm); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
 .memo-row-edit {
   width: 100%;
   box-sizing: border-box;
@@ -134,7 +134,7 @@
   background: var(--bg, #14171f);
   color: var(--text);
   font: inherit;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   resize: vertical;
 }
 .memo-row-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
@@ -146,7 +146,7 @@
   background: transparent;
   color: var(--text-soft, var(--muted));
   font: inherit;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -157,7 +157,7 @@
   background: transparent;
   color: var(--text-soft, var(--muted));
   font: inherit;
-  font-size: 0.68rem;
+  font-size: var(--icon-btn-fs);
   line-height: 1.2;
   cursor: pointer;
 }

@@ -10,6 +10,8 @@
    次のものは意図して対象外にしてある（理由は docs/local/plan_close-button-style-unification.md）。
      - .ph-close / .main-tab-close … タブ・ペインヘッダ内に収まる寸法で、hover で出現する等の別挙動を持つ
      - .mas-close / .mtl-detail-close … モバイルのタップ領域（44px / 36px）
+     - .cwd-dropdown-close … 隣の「履歴クリア / お気に入りクリア」と同じ枠線つき pill 列の一員
+     - .wf-pill-dismiss … ワークフロー pill 内の区切り線つき部品（color: inherit・opacity で pill と一体）
      - .multi-question-banner-close / .expand-popup-close / .first-run-tour-close /
        .session-search-close / .review-close-btn / .settings-header-btn-close
        … 隣のボタンとルールを共有する枠線つきボタン。✕ だけ剥がすとボタン列の中で揃わなくなる
@@ -28,7 +30,11 @@
 .bug-report-close,
 .detail-close,
 .git-commit-close,
-.git-turn-close-btn {
+.git-turn-close-btn,
+.memo-drawer-close,
+.provider-enrollment-close,
+.about-x-btn,
+.handoff-notify-dismiss {
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -57,7 +63,11 @@
 .bug-report-close:hover,
 .detail-close:hover,
 .git-commit-close:hover,
-.git-turn-close-btn:hover {
+.git-turn-close-btn:hover,
+.memo-drawer-close:hover,
+.provider-enrollment-close:hover,
+.about-x-btn:hover,
+.handoff-notify-dismiss:hover {
   background: var(--danger-bg);
   color: var(--danger);
 }
@@ -78,6 +88,9 @@
 .git-turn-close-btn { --close-btn-pad: 4px 6px; }
 /* Git 詳細ペインのヘッダは行の高さが固定なので、縦 padding を足さず横だけ広く取る。 */
 .detail-close { --close-btn-pad: 0 12px; }
+/* .about-x-btn / .handoff-notify-dismiss は styles.css 本体に個別ルールが残っており、それを消すまでそちらが勝つ。 */
+.handoff-notify-dismiss { --close-btn-fs: 1rem; --close-btn-pad: 2px 7px; }
+.about-x-btn { --close-btn-fs: var(--fs-md); }
 
 /* ヘッダ内で右端へ押し出すもの。 */
 .usage-dropdown-close,
@@ -99,6 +112,8 @@ body.close-left :is(
   .mc-modal-close,
   .bug-report-close,
   .dgl-close,
+  .provider-enrollment-close,
+  .about-x-btn,
   .tsb-sent-close,
   .session-search-close,
   .spawn-web-dir-close,
@@ -123,4 +138,4 @@ body.close-left :is(.tsb-detail-close, .pane-slot .ph-close, .settings-header-ac
 }
 
 /* ボタンが群になっているヘッダでは、群の中でも ✕ を先頭へ。 */
-body.close-left :is(.expand-popup-close, .settings-header-btn-close) { order: -1; }
+body.close-left :is(.expand-popup-close, .settings-header-btn-close, .memo-drawer-close) { order: -1; }

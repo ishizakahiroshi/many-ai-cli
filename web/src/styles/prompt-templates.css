@@ -2,9 +2,9 @@
 #prompt-template-palette { position: absolute; z-index: 90; right: 0; bottom: calc(100% + 7px); width: min(460px, calc(100vw - 20px)); padding: 8px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--bg-elev); box-shadow: 0 12px 30px rgba(0,0,0,.28); }
 #prompt-template-search { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: var(--bg); }
 .prompt-template-mode { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 7px; }
-.prompt-template-mode-label { color: var(--text); font-size: .8rem; }
-.prompt-template-mode-note { margin-top: 3px; color: var(--muted); font-size: .7rem; line-height: 1.35; }
-#prompt-template-list { display: grid; gap: 3px; overflow: auto; margin-top: 7px; border-top: 1px solid var(--line-soft); padding-top: 7px; color: var(--muted); font-size: .8rem; }
+.prompt-template-mode-label { color: var(--text); font-size: var(--fs-sm); }
+.prompt-template-mode-note { margin-top: 3px; color: var(--muted); font-size: var(--fs-xs); line-height: 1.35; }
+#prompt-template-list { display: grid; gap: 3px; overflow: auto; margin-top: 7px; border-top: 1px solid var(--line-soft); padding-top: 7px; color: var(--muted); font-size: var(--fs-sm); }
 .prompt-template-row { display: flex; align-items: center; gap: 3px; min-width: 0; }
 /* touch-action: none はタッチでのドラッグ並べ替え中にリストがスクロールするのを防ぐ */
 .prompt-template-drag { flex: 0 0 auto; width: 18px; height: 25px; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--muted-2); background: transparent; font: inherit; line-height: 1; cursor: grab; touch-action: none; opacity: 0; transition: opacity .12s; }
@@ -19,9 +19,9 @@
 .prompt-template-action { width: 25px; height: 25px; padding: 0; border: 0; border-radius: var(--radius-sm); color: var(--muted-2); background: transparent; cursor: pointer; }
 .prompt-template-action:hover, .prompt-template-action:focus-visible { color: var(--text); background: var(--accent-soft); }
 .prompt-template-editor { display: grid; gap: 5px; width: 100%; }
-.prompt-template-editor-input { width: 100%; min-height: 62px; resize: vertical; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--accent); border-radius: var(--radius-sm); color: var(--text); background: var(--bg); font: inherit; font-size: .8rem; line-height: 1.45; }
+.prompt-template-editor-input { width: 100%; min-height: 62px; resize: vertical; box-sizing: border-box; padding: 7px 8px; border: 1px solid var(--accent); border-radius: var(--radius-sm); color: var(--text); background: var(--bg); font: inherit; font-size: var(--fs-sm); line-height: 1.45; }
 .prompt-template-editor-actions { display: flex; justify-content: flex-end; gap: 5px; }
-.prompt-template-editor-actions button, .prompt-template-add, .prompt-template-undo button { padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; font-size: .75rem; cursor: pointer; }
+.prompt-template-editor-actions button, .prompt-template-add, .prompt-template-undo button { padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); background: transparent; font: inherit; font-size: var(--fs-sm); cursor: pointer; }
 .prompt-template-editor-save, .prompt-template-add { border-color: var(--accent) !important; color: var(--accent-text) !important; }
 .prompt-template-editor-actions button:hover, .prompt-template-add:hover, .prompt-template-undo button:hover { background: var(--accent-soft); }
 .prompt-template-add { width: 100%; text-align: left; }
@@ -29,7 +29,7 @@
 .prompt-template-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--radius-sm); color: var(--muted); background: var(--accent-soft); }
 @media (pointer: coarse) { .prompt-template-actions, .prompt-template-drag { opacity: 1; } }
 #prompt-template-conflict { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
-#prompt-template-conflict p { margin: 0 0 8px; font-size: .8rem; }
+#prompt-template-conflict p { margin: 0 0 8px; font-size: var(--fs-sm); }
 #prompt-template-conflict button { display: block; width: 100%; margin-top: 6px; min-height: 44px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 /* PC: パレット全体に高さの上限を持たせ、一覧がその中で伸縮する（モバイルは下の 720px 側が担当）。hidden を殺さないよう :not([hidden]) を付ける */
 @media (min-width: 721px) {

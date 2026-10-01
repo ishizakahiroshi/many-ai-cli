@@ -9,7 +9,7 @@
   border-radius: var(--radius-md);
   width: 28px;
   height: 28px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   cursor: pointer;
   flex-shrink: 0;
   line-height: 1;
@@ -36,7 +36,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 3px 8px;
-  font-size: 1rem;
+  font-size: var(--fs-lg);
   line-height: 1;
   cursor: pointer;
   font-family: inherit;
@@ -86,7 +86,7 @@
   border-radius: var(--radius-md);
   width: 28px;
   height: 28px;
-  font-size: 0.9rem;
+  font-size: var(--fs-body);
   cursor: pointer;
   flex-shrink: 0;
   line-height: 1;
@@ -136,7 +136,7 @@
   border-radius: 50%;
   border: 1.5px solid;
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--fs-body);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,7 +167,7 @@
   top: 50%;
   transform: translateY(-50%);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--fg-muted, #9ca3af);
   pointer-events: none;
 }
@@ -194,7 +194,7 @@
 }
 .voice-diagnostic-status {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--muted);
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -208,7 +208,7 @@
   border-left: 3px solid var(--warn);
   background: rgba(245, 158, 11, 0.08);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.55;
 }
 .voice-diagnostic-guide-title {

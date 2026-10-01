@@ -49,14 +49,14 @@
 }
 .spawn-confirm-title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: var(--fs-lg);
   font-weight: 700;
   color: var(--text);
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 .spawn-confirm-parent {
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -80,11 +80,11 @@
   grid-template-columns: max-content minmax(0, 1fr);
   gap: 5px var(--space-3);
   align-items: baseline;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 .spawn-confirm-meta dt {
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .spawn-confirm-meta dd {
@@ -95,7 +95,7 @@
 }
 .spawn-confirm-meta dd.spawn-confirm-path {
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.76rem;
+  font-size: var(--fs-sm);
   color: var(--text-soft);
   word-break: break-all;
 }
@@ -108,7 +108,7 @@
    実際に渡る形のまま出すので、等幅で折り返す。 */
 .spawn-confirm-approval-flags {
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   overflow-wrap: anywhere;
 }
 .spawn-confirm-approval-none {
@@ -122,19 +122,19 @@
 .spawn-confirm-approval-tools {
   display: block;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   overflow-wrap: anywhere;
 }
 /* 段 2 を選んだのに全許可へ落ちた旨。黙って落とさないための表示なので警告色。 */
 .spawn-confirm-approval-fallback {
   display: block;
   color: var(--danger);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
 }
 /* 高リスク権限の確認を自動で通す旨。危険側の情報なので警告色に寄せる。 */
 .spawn-confirm-approval-risk {
   color: var(--danger);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 /* C4: 親セッションが既に消えている場合の警告文。 */
@@ -145,7 +145,7 @@
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: var(--danger);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
 }
 
 /* ── 変更できる情報（CLI / モデル） ── */
@@ -161,7 +161,7 @@
   min-width: 0;
 }
 .spawn-confirm-field-label {
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
 }
 .spawn-confirm-provider-row {
@@ -196,7 +196,7 @@
   align-items: center;
   gap: var(--space-1);
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   line-height: 1;
   cursor: pointer;
 }
@@ -223,7 +223,7 @@
   gap: 2px;
 }
 .spawn-confirm-trust-note {
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   opacity: 0.85;
 }
 
@@ -234,7 +234,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   margin-bottom: var(--space-1);
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
 }
 .spawn-confirm-prompt-note { color: var(--warn); }
@@ -250,7 +250,7 @@
   background: var(--bg);
   color: var(--text-soft);
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.76rem;
+  font-size: var(--fs-sm);
   line-height: 1.55;
   /* 折り返さないと長い 1 行（絶対パス等）が右へ突き抜けて読めなくなる。 */
   white-space: pre-wrap;
@@ -267,13 +267,13 @@
 .spawn-confirm-status {
   margin: 0;
   padding: 0 16px;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--text-soft);
   flex-shrink: 0;
 }
 .spawn-confirm-status[hidden] { display: none; }
 .spawn-confirm-processing {
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   color: var(--muted);
 }
 
@@ -295,7 +295,7 @@
   background: transparent;
   color: var(--muted);
   font-family: inherit;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }

@@ -15,7 +15,7 @@
   align-items: center;
   justify-content: center;
   padding: 4px 8px;
-  font-size: 1rem;
+  font-size: var(--fs-lg);
   line-height: 1;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
   min-height: var(--control-h-sm);
@@ -60,8 +60,8 @@
   background: var(--bg-elev2);
   flex-shrink: 0;
 }
-.mc-head-icon { font-size: 1.1rem; }
-.mc-head-title { font-weight: 600; font-size: 0.95rem; color: var(--text); }
+.mc-head-icon { font-size: var(--fs-xl); }
+.mc-head-title { font-weight: 600; font-size: var(--fs-lg); color: var(--text); }
 .mc-head-reshow { margin-left: auto; }
 /* .mc-modal-close の見た目は /styles/close-button.css にある。ここは隣接時の間隔だけ。 */
 .mc-head-reshow + .mc-modal-close { margin-left: 8px; }
@@ -71,7 +71,7 @@
   background: var(--danger-bg);
   border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
   color: var(--danger);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   border-radius: var(--radius-md);
   padding: 6px 10px;
   line-height: 1.5;
@@ -92,23 +92,23 @@
 
 /* P-29: 途中中断しても同じ番号から再開する4手順。狭い画面では横スクロールで番号を保持する。 */
 .mc-setup-progress { display: flex; gap: 4px; list-style: none; padding: 0; margin: 0 0 14px; overflow-x: auto; }
-.mc-setup-progress-item { flex: 1 0 76px; font-size: 0.62rem; line-height: 1.3; color: var(--muted); border-bottom: 2px solid var(--line-soft); padding: 0 2px 5px; }
+.mc-setup-progress-item { flex: 1 0 76px; font-size: var(--fs-2xs); line-height: 1.3; color: var(--muted); border-bottom: 2px solid var(--line-soft); padding: 0 2px 5px; }
 .mc-setup-progress-item.active { color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
 .mc-setup-progress-item.done { color: var(--green-text); border-color: var(--green); }
 .mc-setup-back { display: inline-block; margin: -2px 0 8px; }
 .mc-test-approval { background: var(--bg-elev2); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 12px; }
 .mc-test-approval-title { font-weight: 600; color: var(--text); }
-.mc-test-approval-state { color: var(--muted); font-size: 0.75rem; margin: 5px 0 10px; }
+.mc-test-approval-state { color: var(--muted); font-size: var(--fs-sm); margin: 5px 0 10px; }
 .mc-test-approval-actions { display: flex; gap: var(--space-2); }
 
 .mc-q {
-  font-size: 0.95rem;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--text);
   margin: 4px 0 10px;
 }
 .mc-q-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.mc-sub { color: var(--muted); font-size: 0.78rem; margin: -2px 0 12px; line-height: 1.6; }
+.mc-sub { color: var(--muted); font-size: var(--fs-sm); margin: -2px 0 12px; line-height: 1.6; }
 
 /* 選択肢ボタン */
 .mc-choice {
@@ -124,7 +124,7 @@
   padding: 12px 14px;
   margin-bottom: 9px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
   font-family: inherit;
   transition: border-color 0.12s, background 0.12s;
 }
@@ -132,8 +132,8 @@
 .mc-choice-ico { font-size: 1.5rem; line-height: 1; flex-shrink: 0; }
 .mc-choice-t { display: flex; flex-direction: column; min-width: 0; }
 .mc-choice-nm { font-weight: 600; }
-.mc-choice-ds { color: var(--muted); font-size: 0.72rem; margin-top: 2px; line-height: 1.5; }
-.mc-choice-note { color: var(--muted); font-size: 0.66rem; margin-top: 3px; opacity: 0.78; }
+.mc-choice-ds { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; line-height: 1.5; }
+.mc-choice-note { color: var(--muted); font-size: var(--fs-2xs); margin-top: 3px; opacity: 0.78; }
 .mc-badge-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .mc-choice-col { flex: 1; flex-direction: column; align-items: center; text-align: center; gap: var(--space-2); }
 
@@ -141,7 +141,7 @@
 
 .mc-badge {
   display: inline-block;
-  font-size: 0.62rem;
+  font-size: var(--fs-2xs);
   padding: 1px 7px;
   border-radius: var(--radius-xl);
   margin-top: 5px;
@@ -167,9 +167,9 @@
 }
 .mc-qr-canvas { width: 100%; height: 100%; image-rendering: pixelated; }
 .mc-qr-blur { filter: blur(8px); cursor: pointer; }
-.mc-qr-fallback { color: #b00; font-size: 0.7rem; text-align: center; padding: 8px; }
+.mc-qr-fallback { color: #b00; font-size: var(--fs-xs); text-align: center; padding: 8px; }
 .mc-reveal-hint {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--warn);
   cursor: pointer;
   background: none;
@@ -178,12 +178,12 @@
   text-decoration: underline;
   padding: 2px 4px;
 }
-.mc-cap { font-size: 0.7rem; color: var(--muted); text-align: center; line-height: 1.5; word-break: break-all; }
+.mc-cap { font-size: var(--fs-xs); color: var(--muted); text-align: center; line-height: 1.5; word-break: break-all; }
 .mc-cap-warn { text-align: left; color: var(--muted); margin: -2px 0 8px; }
 
 /* 第三者アプリ免責（推奨アプリの直下に常設） */
 .mc-thirdparty-note {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   line-height: 1.5;
   margin: 6px 0 0;
@@ -201,7 +201,7 @@
   padding: 8px 10px;
   margin: 8px 0;
   font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
 }
 .mc-cmd-text { word-break: break-all; flex: 1; }
@@ -214,7 +214,7 @@
   border-radius: var(--radius-md);
   padding: 4px 10px;
   cursor: pointer;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   white-space: nowrap;
   font-family: inherit;
   flex-shrink: 0;
@@ -229,7 +229,7 @@
   border-radius: var(--radius-md);
   color: var(--text);
   font-family: Consolas, monospace;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   padding: 8px;
   resize: vertical;
 }
@@ -245,13 +245,13 @@
   border-radius: var(--radius-lg);
   padding: 10px 12px;
   margin-top: 8px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--text);
   text-decoration: none;
 }
 .mc-applink:hover { border-color: var(--accent); }
-.mc-applink-ico { font-size: 1.1rem; }
-.mc-applink-url { color: var(--accent-text); font-size: 0.7rem; }
+.mc-applink-ico { font-size: var(--fs-xl); }
+.mc-applink-url { color: var(--accent-text); font-size: var(--fs-xs); }
 
 /* セグメント切替 */
 .mc-seg { display: flex; gap: var(--space-2); margin: 0 0 10px; }
@@ -263,7 +263,7 @@
   border-radius: var(--radius-md);
   padding: 7px;
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-family: inherit;
 }
 .mc-seg-btn.on { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
@@ -273,7 +273,7 @@
 .mc-feat-cell {
   flex: 1;
   text-align: center;
-  font-size: 0.66rem;
+  font-size: var(--fs-2xs);
   border-radius: var(--radius-md);
   padding: 6px 2px;
   border: 1px solid var(--line);
@@ -282,12 +282,12 @@
   align-items: center;
   gap: 2px;
 }
-.mc-feat-ic { font-size: 0.95rem; }
+.mc-feat-ic { font-size: var(--fs-lg); }
 .mc-feat-cell.ok { color: var(--green-text); border-color: color-mix(in srgb, var(--green) 40%, transparent); background: var(--green-bg); }
 .mc-feat-cell.ng { color: var(--muted); background: var(--bg-deep); }
 
 .mc-ctx-note {
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   border-radius: var(--radius-md);
   padding: 8px 10px;
   margin: 2px 0 10px;
@@ -297,19 +297,19 @@
 .mc-ctx-ng { color: var(--warn-text); background: color-mix(in srgb, var(--warn-bg) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
 
 /* 比較表 */
-.mc-cmp { width: 100%; border-collapse: collapse; font-size: 0.68rem; margin: 6px 0; }
+.mc-cmp { width: 100%; border-collapse: collapse; font-size: var(--fs-2xs); margin: 6px 0; }
 .mc-cmp th, .mc-cmp td { border: 1px solid var(--line); padding: 6px 7px; text-align: center; color: var(--text); }
 .mc-cmp th { background: var(--bg-elev2); color: var(--accent-text); }
 .mc-cmp .mc-cmp-h { text-align: left; color: var(--muted); }
 
 /* 同意ゲート */
-.mc-risk { font-size: 0.74rem; color: var(--muted); line-height: 1.7; }
+.mc-risk { font-size: var(--fs-xs); color: var(--muted); line-height: 1.7; }
 .mc-risk b { color: var(--danger); }
 .mc-chk {
   display: flex;
   gap: var(--space-2);
   align-items: flex-start;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--text);
   background: var(--bg-elev2);
   border: 1px solid var(--line);
@@ -328,7 +328,7 @@
   border-radius: var(--radius-md);
   padding: 7px 14px;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   font-family: inherit;
 }
 .mc-nav-btn:hover { color: var(--text); border-color: var(--line-soft); }
@@ -339,7 +339,7 @@
 .mc-link {
   color: var(--accent-text);
   cursor: pointer;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   text-decoration: underline;
   background: none;
   border: 0;
@@ -351,7 +351,7 @@
 .mc-hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
 
 .mc-error {
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--danger);
   background: var(--danger-bg);
   border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
@@ -359,10 +359,10 @@
   padding: 10px 12px;
   line-height: 1.6;
 }
-.mc-loading { font-size: 0.8rem; color: var(--muted); text-align: center; padding: 24px 0; }
+.mc-loading { font-size: var(--fs-sm); color: var(--muted); text-align: center; padding: 24px 0; }
 
 .mc-notify-test { margin: 8px 0 2px; }
-.mc-home-hint { font-size: 0.7rem; color: var(--muted); line-height: 1.6; margin: 6px 0 2px; }
+.mc-home-hint { font-size: var(--fs-xs); color: var(--muted); line-height: 1.6; margin: 6px 0 2px; }
 
 /* ── 状態駆動 UI（Tailscale 自己診断 / OpenSSH 状態）─────────────────────────── */
 
@@ -370,7 +370,7 @@
 .mc-status {
   display: inline-flex;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 600;
   border-radius: var(--radius-xl);
   padding: 3px 11px;
@@ -384,12 +384,12 @@
 
 /* serve_inactive 状態のウィザード内有効化ボタン */
 .mc-ts-enable { display: flex; justify-content: center; margin: 8px 0 10px; }
-.mc-ts-enable-btn { padding: 8px 18px; font-size: 0.85rem; }
+.mc-ts-enable-btn { padding: 8px 18px; font-size: var(--fs-md); }
 .mc-ts-enable-btn:disabled { opacity: 0.6; cursor: progress; }
 
 /* env_kind 連動メッセージ（remote/remote-tunnel 時のリモート注記） */
 .mc-ts-remote-note {
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   color: var(--accent-text);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
@@ -401,7 +401,7 @@
 
 /* Funnel 警告（チェックを外す） */
 .mc-ts-funnel-warn {
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   color: var(--danger);
   background: var(--danger-bg);
   border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
@@ -418,7 +418,7 @@
   width: 100%;
   margin: 4px 0 10px;
   padding: 10px 14px;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
 }
 
 /* 公開を停止ボタン（danger 寄りのアウトライン） */
@@ -427,7 +427,7 @@
   width: 100%;
   margin: 12px 0 8px;
   padding: 9px 14px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   color: var(--danger);
@@ -446,7 +446,7 @@
   border-radius: var(--radius-md);
   color: var(--text);
   font-family: Consolas, monospace;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   padding: 8px 10px;
   margin: 4px 0 8px;
 }

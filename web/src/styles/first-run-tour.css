@@ -25,7 +25,7 @@
 }
 
 .first-run-tour-head { justify-content: space-between; }
-.first-run-tour-progress { color: var(--muted); font-size: 0.78rem; }
+.first-run-tour-progress { color: var(--muted); font-size: var(--fs-sm); }
 .first-run-tour-close,
 .first-run-tour-later,
 .first-run-tour-secondary {
@@ -52,7 +52,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
   line-height: 1.55;
 }
 .first-run-tour-preview--2 { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }

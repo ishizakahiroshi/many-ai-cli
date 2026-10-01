@@ -29,31 +29,31 @@
   flex: none;
   flex-wrap: wrap;
 }
-.review-title { font-weight: 700; font-size: 13px; }
+.review-title { font-weight: 700; font-size: var(--fs-sm); }
 .review-scope-label {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-2xs);
 }
 .review-scope-label select {
   max-width: 250px;
   min-width: 170px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 3px 7px;
 }
 .review-repo {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 40%;
 }
-.review-branch { color: var(--muted); font-size: 11px; }
+.review-branch { color: var(--muted); font-size: var(--fs-2xs); }
 .review-spacer { flex: 1; }
-.review-stat { font-size: 12px; color: var(--muted); }
+.review-stat { font-size: var(--fs-sm); color: var(--muted); }
 .review-mode-group { display: flex; gap: 4px; }
 .review-mode-group .git-icon-btn.active {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
@@ -79,7 +79,7 @@
   overflow: auto;
   padding: 8px;
 }
-.review-message { padding: 24px; text-align: center; color: var(--muted); font-size: 13px; }
+.review-message { padding: 24px; text-align: center; color: var(--muted); font-size: var(--fs-sm); }
 .review-message.error { color: var(--danger); }
 
 .review-file { margin-bottom: 12px; border-radius: 6px; }
@@ -88,7 +88,7 @@
 }
 .review-file-header { position: sticky; top: 0; z-index: 1; }
 .review-file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.review-empty-diff { padding: 8px 12px; color: var(--muted); font-size: 12px; }
+.review-empty-diff { padding: 8px 12px; color: var(--muted); font-size: var(--fs-sm); }
 .review-raw {
   margin: 0;
   padding: 8px 12px;
@@ -160,13 +160,13 @@
 .review-tree-pane input[type="search"] {
   width: 100%;
   box-sizing: border-box;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   padding: 4px 8px;
 }
 .review-tree { flex: 1; overflow: auto; }
 .review-tree-dir {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   padding: 4px 2px 2px;
   overflow: hidden;
@@ -187,7 +187,7 @@
 .review-tree-file:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); }
 .review-tree-file.selected { outline: 1.5px solid var(--accent); }
 .review-tree-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.review-tree-empty { color: var(--muted); font-size: 12px; padding: 8px 4px; }
+.review-tree-empty { color: var(--muted); font-size: var(--fs-sm); padding: 8px 4px; }
 
 /* ターン完了カードは #terminal-area-wrapper の上端へ絶対配置で重ねる（フローに置かない）。
    フローに置くと出入りのたび #terminal-area が縮む／戻り、そのたび pty_resize が飛んで
@@ -231,7 +231,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .git-turn-card-summary strong {
   overflow: hidden;
@@ -252,7 +252,7 @@
   padding: 4px 14px;
   background: var(--text);
   color: var(--bg);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 700;
   cursor: pointer;
 }

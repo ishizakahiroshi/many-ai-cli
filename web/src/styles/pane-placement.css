@@ -27,7 +27,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-elev);
   color: var(--text);
-  font-size: .75rem;
+  font-size: var(--fs-sm);
   pointer-events: none;
 }
 .pane-drop-preview-cell {
@@ -45,7 +45,7 @@
   pointer-events: auto;
 }
 .pane-drop-preview-cell strong { font-size: clamp(1rem, 2.2vw, 1.45rem); }
-.pane-drop-preview-cell span { font-size: .78rem; overflow-wrap: anywhere; }
+.pane-drop-preview-cell span { font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .pane-drop-preview-cell.candidate {
   border-style: dashed;
   border-color: var(--accent);
@@ -132,7 +132,7 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
   padding: 12px;
   border-bottom: 1px solid var(--line);
 }
-.pane-placement-dialog h2 { flex: 1; margin: 0; font-size: .95rem; }
+.pane-placement-dialog h2 { flex: 1; margin: 0; font-size: var(--fs-lg); }
 .pane-placement-cancel,
 .pane-placement-choice {
   min-height: 44px;
@@ -152,7 +152,7 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
 }
 .pane-placement-choice { text-align: left; overflow-wrap: anywhere; }
 .pane-placement-choice:hover { border-color: var(--accent); background: var(--bg-deep); }
-.pane-placement-empty { margin: 0; padding: 8px 4px; color: var(--muted); font-size: .8rem; }
+.pane-placement-empty { margin: 0; padding: 8px 4px; color: var(--muted); font-size: var(--fs-sm); }
 
 /* The compact switcher changes presentation only; saved grid dimensions stay intact. */
 #compact-pane-switcher { display: none; }
@@ -168,7 +168,7 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
     border-bottom: 1px solid var(--line);
     background: var(--bg-elev);
   }
-  .compact-pane-label { flex: 1; min-width: 0; font-size: .75rem; color: var(--muted); }
+  .compact-pane-label { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--muted); }
   #compact-pane-select {
     display: block;
     width: 100%;
@@ -217,7 +217,7 @@ body.close-left .pane-slot .ph-close { order: 0; margin-right: 0; }
     border-radius: var(--radius-sm);
     background: var(--bg);
     color: var(--text);
-    font-size: 1rem;
+    font-size: var(--fs-lg);
   }
 }
 @media (pointer: coarse) {

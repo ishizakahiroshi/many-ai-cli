@@ -22,11 +22,11 @@
   padding-bottom: 8px;
 }
 .shortcut-help-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
-.shortcut-help-header strong { color: var(--text); font-size: .95rem; }
+.shortcut-help-header strong { color: var(--text); font-size: var(--fs-lg); }
 .shortcut-help-close { border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--muted); cursor: pointer; padding: 5px 9px; }
 .shortcut-help-close:hover { color: var(--accent-text); border-color: var(--accent); }
 .shortcut-help-table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-.shortcut-help-table td { padding: 7px 16px; color: var(--text-soft); font-size: .85rem; border-bottom: 1px solid var(--line); }
+.shortcut-help-table td { padding: 7px 16px; color: var(--text-soft); font-size: var(--fs-md); border-bottom: 1px solid var(--line); }
 .shortcut-help-key { white-space: nowrap; }
 .shortcut-help-key kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg-soft); color: var(--accent-text); font: .8rem/1.4 "Cascadia Code", Consolas, monospace; }
 @media (max-width: 560px) {

@@ -74,8 +74,8 @@
   flex-direction: column;
   gap: var(--space-2);
 }
-.expose-pop-title { font-weight: 600; font-size: 0.9rem; color: var(--text); }
-.expose-pop-msg { font-size: 0.78rem; color: var(--muted); line-height: 1.6; }
+.expose-pop-title { font-weight: 600; font-size: var(--fs-body); color: var(--text); }
+.expose-pop-msg { font-size: var(--fs-sm); color: var(--muted); line-height: 1.6; }
 .expose-pop-warn {
   color: var(--warn-text);
   background: color-mix(in srgb, var(--warn-bg) 35%, transparent);
@@ -94,10 +94,10 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 8px 10px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 .expose-pop-link:hover { border-color: var(--accent); }
-.expose-pop-link-ico { font-size: 1rem; }
+.expose-pop-link-ico { font-size: var(--fs-lg); }
 .expose-pop-refresh {
   align-self: flex-start;
   background: none;
@@ -105,7 +105,7 @@
   color: var(--accent-text);
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   padding: 2px 0;
 }
 .expose-pop-refresh:hover { text-decoration: underline; }

@@ -34,14 +34,14 @@
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
-.server-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.server-modal-title { font-size: var(--fs-body); font-weight: 700; color: var(--text); }
 .server-modal-title::before { content: "🖥 "; }
 /* .server-modal-close の見た目は /styles/close-button.css（閉じるボタンの名簿）にある。 */
 .server-modal-icon-btn {
   background: transparent;
   border: none;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
   cursor: pointer;
   padding: 2px 6px;
   border-radius: var(--radius-sm);
@@ -57,7 +57,7 @@
 }
 
 .server-modal-status {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--text-soft);
   background: var(--bg-soft);
   border-radius: var(--radius-md);
@@ -70,7 +70,7 @@
 
 .server-modal-empty {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   text-align: center;
   padding: 18px 12px;
   line-height: 1.6;
@@ -110,7 +110,7 @@
 
 .server-profile-name {
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--fs-md);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -120,19 +120,19 @@
 .server-profile-state {
   flex: 0 0 auto;
   margin-left: auto;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
 }
-.server-profile-state::before { content: "○"; font-size: 0.7rem; }
+.server-profile-state::before { content: "○"; font-size: var(--fs-xs); }
 .server-profile-state.is-connected { color: var(--green-text); }
 .server-profile-state.is-connected::before { content: "●"; color: var(--green); }
 .server-profile-state.is-idle { color: var(--muted-2); }
 
 .server-profile-detail {
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   margin-top: 3px;
   overflow: hidden;
@@ -142,7 +142,7 @@
 
 .server-profile-actions { flex: 0 0 auto; display: flex; gap: var(--space-2); }
 
-.server-row-btn { font-size: 0.74rem; padding: 4px 11px; }
+.server-row-btn { font-size: var(--fs-xs); padding: 4px 11px; }
 
 /* ── 共通ボタン ── */
 .server-btn-primary,
@@ -151,7 +151,7 @@
   font-family: inherit;
   border-radius: var(--radius-md);
   padding: 6px 13px;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   border: 1px solid var(--line);
   transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
 }
@@ -177,7 +177,7 @@
 }
 .server-add-summary {
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   color: var(--accent-text);
   list-style: none;
   user-select: none;
@@ -188,7 +188,7 @@
 .server-add-form { margin-top: 10px; display: flex; flex-direction: column; gap: var(--space-2); }
 .server-field { display: flex; align-items: center; gap: var(--space-3); }
 .server-field[hidden] { display: none; }
-.server-field-label { flex: 0 0 110px; font-size: 0.78rem; color: var(--text-soft); }
+.server-field-label { flex: 0 0 110px; font-size: var(--fs-sm); color: var(--text-soft); }
 .server-input,
 .server-select {
   flex: 1 1 auto;
@@ -198,14 +198,14 @@
   border-radius: var(--radius-md);
   color: var(--text);
   padding: 6px 9px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-family: inherit;
 }
 .server-input:focus,
 .server-select:focus { outline: none; border-color: var(--accent); }
 
 .server-add-error {
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--danger);
   background: var(--danger-bg);
   border-radius: var(--radius-md);
@@ -225,6 +225,6 @@
   padding: 10px 12px;
 }
 .server-fetch-box[hidden] { display: none; }
-.server-fetch-title { font-size: 0.8rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
-.server-fetch-hint { font-size: 0.72rem; color: var(--text-soft); line-height: 1.45; margin-bottom: 8px; }
+.server-fetch-title { font-size: var(--fs-sm); font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.server-fetch-hint { font-size: var(--fs-xs); color: var(--text-soft); line-height: 1.45; margin-bottom: 8px; }
 .server-fetch-candidate { margin-top: 8px; }

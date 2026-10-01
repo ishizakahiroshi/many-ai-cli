@@ -16,7 +16,7 @@ body.detached-tab-mode { --tsb-bottom-offset: 0px; }
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-elev, #181c24);
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
 }
 .detached-tab-title { flex-shrink: 0; color: var(--text); }
 .detached-tab-session {
@@ -40,7 +40,7 @@ body.detached-tab-mode { --tsb-bottom-offset: 0px; }
   background: transparent;
   color: var(--text-soft, var(--muted));
   font: inherit;
-  font-size: 0.76rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 .detached-follow-toggle button + button { border-left: 1px solid var(--line); }

@@ -132,7 +132,7 @@
   width: 100%;
   border-collapse: collapse;
   margin: 6px 0 4px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
 }
 .spawn-role-table th, .spawn-role-table td {
   padding: 4px 6px;
@@ -140,7 +140,7 @@
   text-align: left;
   vertical-align: middle;
 }
-.spawn-role-table th { color: var(--muted); font-weight: 600; font-size: 0.74rem; }
+.spawn-role-table th { color: var(--muted); font-weight: 600; font-size: var(--fs-xs); }
 .spawn-role-table tr:last-child td { border-bottom: none; }
 .spawn-role-table td:first-child { white-space: nowrap; font-weight: 600; }
 .spawn-role-cli, .spawn-role-model {
@@ -150,7 +150,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 3px 5px;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-family: inherit;
 }
 .spawn-role-model:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -173,7 +173,7 @@
   flex: 0 0 auto;
   gap: var(--space-1);
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
@@ -211,7 +211,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 5px 7px;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   font-family: inherit;
   line-height: 1.2;
   text-align: left;
@@ -249,7 +249,7 @@
 .spawn-provider-trigger-chevron {
   justify-self: center;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   line-height: 1;
 }
 .spawn-provider-list {
@@ -280,7 +280,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   gap: var(--space-2);
   padding: 4px 6px;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   color: var(--text);
 }
 .spawn-provider-option.is-missing {
@@ -288,7 +288,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .spawn-provider-option-missing {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .spawn-cli-missing-note {
@@ -308,7 +308,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   width: 14px;
   text-align: center;
   color: var(--accent);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 700;
 }
 .spawn-cwd-row { display: flex; gap: var(--space-1); align-items: center; }
@@ -318,7 +318,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 #spawn-model-refresh.is-loading { opacity: 0.5; pointer-events: none; }
 .spawn-model-clear { min-width: 26px; padding-left: 0; padding-right: 0; }
 .spawn-model-discover { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-.spawn-btn-browse { flex-shrink: 0; background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: var(--radius-sm); padding: 3px 7px; cursor: pointer; font-size: 0.85rem; line-height: 1; }
+.spawn-btn-browse { flex-shrink: 0; background: transparent; border: 1px solid var(--line); color: var(--fg); border-radius: var(--radius-sm); padding: 3px 7px; cursor: pointer; font-size: var(--fs-md); line-height: 1; }
 .spawn-btn-browse:hover { background: var(--bg-elev2); }
 .spawn-btn-browse:disabled { opacity: 0.4; cursor: not-allowed; }
 .cwd-combobox { position: relative; flex: 1; display: flex; }
@@ -331,7 +331,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .cwd-dropdown-item {
   display: flex; align-items: center; gap: var(--space-1);
-  padding: 4px 6px 4px 4px; cursor: pointer; font-size: 0.82rem; color: var(--text);
+  padding: 4px 6px 4px 4px; cursor: pointer; font-size: var(--fs-md); color: var(--text);
 }
 .cwd-dropdown-item:hover,
 .cwd-dropdown-item:focus { background: var(--line); outline: none; }
@@ -342,13 +342,13 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .cwd-dropdown-mark { background: var(--warning, #f6c343); color: #1a1a1a; border-radius: 2px; padding: 0 1px; }
 /* セクション見出し（★お気に入り / 履歴）: 非選択・非ホバー・キーボード/D&D 対象外 */
 .cwd-dropdown-header {
-  padding: 4px 6px 2px 6px; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em;
+  padding: 4px 6px 2px 6px; font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.02em;
   color: var(--muted); text-transform: uppercase; cursor: default; user-select: none;
 }
 .cwd-dropdown-header:hover { background: transparent; }
 .cwd-dropdown-fav {
   flex-shrink: 0; background: transparent; border: none; color: var(--muted);
-  cursor: pointer; font-size: 0.85rem; padding: 1px 3px; border-radius: var(--radius-sm); line-height: 1;
+  cursor: pointer; font-size: var(--fs-md); padding: 1px 3px; border-radius: var(--radius-sm); line-height: 1;
   opacity: 0.45; transition: opacity 0.1s, color 0.1s;
 }
 /* お気に入り済みは常時はっきり表示、未登録は薄表示→ホバー/フォーカスで濃く */
@@ -358,7 +358,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .cwd-dropdown-fav:hover { color: var(--warning, #f6c343); }
 .cwd-dropdown-del {
   flex-shrink: 0; background: transparent; border: none; color: var(--muted);
-  cursor: pointer; font-size: 0.8rem; padding: 1px 4px; border-radius: var(--radius-sm); line-height: 1; opacity: 0;
+  cursor: pointer; font-size: var(--fs-sm); padding: 1px 4px; border-radius: var(--radius-sm); line-height: 1; opacity: 0;
   transition: opacity 0.1s;
 }
 .cwd-dropdown-item:hover .cwd-dropdown-del,
@@ -400,7 +400,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .cwd-dropdown-chip {
   background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 0.78rem;
+  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: var(--fs-sm);
   font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
 }
@@ -409,7 +409,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
 }
 .chip-count {
-  font-size: 0.7rem; color: var(--muted); font-family: inherit;
+  font-size: var(--fs-xs); color: var(--muted); font-family: inherit;
 }
 /* chip 行右側: 履歴/お気に入りの一括削除ボタン群 */
 .cwd-dropdown-chip-actions {
@@ -418,7 +418,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .cwd-dropdown-clear-history,
 .cwd-dropdown-clear-favorites {
   background: transparent; color: var(--muted); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 8px; font: inherit; font-size: 0.72rem;
+  border-radius: 999px; padding: 3px 8px; font: inherit; font-size: var(--fs-xs);
   cursor: pointer; line-height: 1; white-space: nowrap;
 }
 .cwd-dropdown-clear-history:hover,
@@ -428,7 +428,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .cwd-dropdown-close {
   background: transparent; color: var(--muted); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 7px; font: inherit; font-size: 0.72rem;
+  border-radius: 999px; padding: 3px 7px; font: inherit; font-size: var(--fs-xs);
   cursor: pointer; line-height: 1;
 }
 .cwd-dropdown-close:hover {
@@ -440,7 +440,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 .cwd-dropdown-chip-launcher {
   background: var(--bg); color: var(--text); border: 1px solid var(--line-soft);
-  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: 0.78rem;
+  border-radius: 999px; padding: 3px 9px; font: inherit; font-size: var(--fs-sm);
   font-family: ui-monospace, Menlo, Consolas, monospace; cursor: pointer;
   display: inline-flex; align-items: center; gap: 4px;
 }
@@ -450,8 +450,8 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .cwd-dropdown-chip-launcher.is-active {
   border-color: var(--accent); background: var(--accent-soft); color: var(--accent-text);
 }
-.cwd-dropdown-chip-launcher .chip-icon { font-size: 0.85rem; line-height: 1; }
-.cwd-dropdown-chip-launcher .chip-caret { font-size: 0.7rem; opacity: 0.7; }
+.cwd-dropdown-chip-launcher .chip-icon { font-size: var(--fs-md); line-height: 1; }
+.cwd-dropdown-chip-launcher .chip-caret { font-size: var(--fs-xs); opacity: 0.7; }
 .cwd-dropdown-chip-popover {
   display: none;
   position: absolute; top: 100%; left: 0;
@@ -483,7 +483,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 /* 0 件案内 */
 .cwd-dropdown-no-match {
-  padding: 6px 8px; font-size: 0.8rem; color: var(--muted); cursor: default; user-select: none;
+  padding: 6px 8px; font-size: var(--fs-sm); color: var(--muted); cursor: default; user-select: none;
 }
 .cwd-dropdown-no-match:hover { background: transparent; }
 
@@ -494,18 +494,18 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 5px 8px;
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   font-family: inherit;
   outline: none;
 }
 .spawn-select:focus,
 .spawn-input:focus { border-color: var(--accent); }
-.spawn-input { font-family: Consolas, monospace; font-size: 0.78rem; }
+.spawn-input { font-family: Consolas, monospace; font-size: var(--fs-sm); }
 
 /* plan_session-handoff-board_c4_prompted-spawn.md C2: 最初に渡す指示（任意）欄。
    spawn-input の見た目を引き継ぎつつ、複数行入力向けに resize と行間だけ足す。 */
 .spawn-initial-prompt-row { display: flex; flex-direction: column; gap: 4px; }
-.spawn-field-label { font-size: 0.76rem; color: var(--muted); }
+.spawn-field-label { font-size: var(--fs-sm); color: var(--muted); }
 .spawn-textarea {
   width: 100%;
   box-sizing: border-box;
@@ -526,7 +526,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 
 @media (max-width: 520px) {
   .spawn-provider-row { gap: var(--space-1); }
-  .spawn-remember-approval-label { font-size: 0.68rem; }
+  .spawn-remember-approval-label { font-size: var(--fs-2xs); }
   .spawn-provider-trigger {
     grid-template-columns: 15px minmax(0, 1fr) 10px;
     gap: var(--space-1);
@@ -553,7 +553,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 4px 10px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   font-family: inherit;
 }
@@ -565,7 +565,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   padding: 4px 10px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   font-family: inherit;
 }
@@ -595,8 +595,8 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   flex-direction: column;
   gap: var(--space-3);
 }
-.model-picker-title { font-size: 0.9rem; font-weight: 700; }
-.model-picker-current { font-size: 0.76rem; color: var(--muted); }
+.model-picker-title { font-size: var(--fs-body); font-weight: 700; }
+.model-picker-current { font-size: var(--fs-sm); color: var(--muted); }
 .model-picker-input {
   width: 100%;
   background: var(--bg);
@@ -604,7 +604,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 7px 9px;
-  font-size: 0.83rem;
+  font-size: var(--fs-md);
 }
 .model-picker-recent { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .model-picker-chip {
@@ -613,16 +613,16 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 4px 8px;
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 .model-picker-chip:hover { color: var(--text); border-color: var(--line-soft); }
-.model-picker-note { font-size: 0.73rem; color: var(--muted); }
+.model-picker-note { font-size: var(--fs-xs); color: var(--muted); }
 .model-picker-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
 .model-picker-btn {
   border-radius: var(--radius-md);
   padding: 6px 12px;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--text);
@@ -633,12 +633,12 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   background: var(--accent);
   color: #fff;
 }
-.model-picker-check { display: flex; gap: var(--space-2); align-items: center; font-size: 0.75rem; color: var(--muted); }
+.model-picker-check { display: flex; gap: var(--space-2); align-items: center; font-size: var(--fs-sm); color: var(--muted); }
 .spawn-risk-label {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 0.75rem;
+  font-size: var(--fs-sm);
   color: var(--warn-text);
   cursor: pointer;
 }
@@ -664,7 +664,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   line-height: 1;
   cursor: pointer;
 }
@@ -676,7 +676,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   .spawn-inline-help-btn {
     width: 24px;
     height: 24px;
-    font-size: 0.8rem;
+    font-size: var(--fs-sm);
   }
 }
 
@@ -697,7 +697,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 }
 
 .spawn-detached-label {
-  font-size: 0.76rem;
+  font-size: var(--fs-sm);
   color: var(--muted);
   white-space: nowrap;
   min-width: 72px;
@@ -714,7 +714,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--text);
   cursor: pointer;
   padding: 2px 6px 2px 4px;
@@ -766,7 +766,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 4px 8px;
-  font-size: 0.73rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   display: flex;
   gap: var(--space-2);
@@ -807,7 +807,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
 }
-.spawn-web-dir-title { font-size: 0.92rem; font-weight: 700; }
+.spawn-web-dir-title { font-size: var(--fs-body); font-weight: 700; }
 /* .spawn-web-dir-close の見た目は /styles/close-button.css にある。 */
 .spawn-web-dir-pathrow {
   display: flex;
@@ -819,7 +819,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   flex: 1;
   min-width: 0;
   font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm, 6px);
@@ -841,7 +841,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
 .spawn-web-dir-go:hover { border-color: var(--accent); color: var(--accent-text, var(--accent)); }
 .spawn-web-dir-status {
   margin: 0 14px 6px;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--muted);
 }
 .spawn-web-dir-status.is-error { color: var(--danger, #ef4444); }
@@ -860,7 +860,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   padding: 8px 10px;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
-  font-size: 0.86rem;
+  font-size: var(--fs-md);
 }
 .spawn-web-dir-item:hover,
 .spawn-web-dir-item:focus {
@@ -878,7 +878,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   padding: 18px 10px;
   text-align: center;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: var(--fs-md);
 }
 .spawn-web-dir-actions {
   display: flex;
@@ -892,7 +892,7 @@ body.spawn-provider-list-open #hub-tooltip { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm, 6px);
   padding: 7px 12px;
-  font-size: 0.84rem;
+  font-size: var(--fs-md);
   cursor: pointer;
   font-family: inherit;
   background: var(--bg);

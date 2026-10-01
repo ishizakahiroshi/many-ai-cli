@@ -16,7 +16,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: var(--radius-xl);
   font-family: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
@@ -36,7 +36,7 @@
   font: inherit;
   cursor: pointer;
 }
-.wf-pill-open::before { content: "⚙"; font-size: 0.85rem; }
+.wf-pill-open::before { content: "⚙"; font-size: var(--fs-md); }
 .wf-pill-dismiss {
   padding: 0 8px;
   background: transparent;
@@ -44,7 +44,7 @@
   border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent);
   color: inherit;
   font: inherit;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   opacity: 0.55;
   cursor: pointer;
 }
@@ -93,9 +93,9 @@
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
-.wf-modal-title { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.wf-modal-title { font-size: var(--fs-body); font-weight: 700; color: var(--text); }
 .wf-modal-title::before { content: "⚙ "; }
-.wf-modal-counts { font-size: 0.74rem; color: var(--muted); white-space: nowrap; }
+.wf-modal-counts { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 /* .wf-modal-close の見た目と margin-left:auto は /styles/close-button.css にある。 */
 
 .wf-modal-body {
@@ -106,7 +106,7 @@
 
 .wf-modal-empty {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-md);
   text-align: center;
   padding: 24px 12px;
   line-height: 1.6;
@@ -114,7 +114,7 @@
 
 .wf-modal-name {
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--accent-text);
   margin-bottom: 10px;
 }
@@ -125,7 +125,7 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
   color: var(--text-soft);
-  font-size: 0.76rem;
+  font-size: var(--fs-sm);
 }
 
 /* 進捗バー */
@@ -149,7 +149,7 @@
   right: 8px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--text);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
@@ -159,7 +159,7 @@
 .wf-phase { margin-bottom: 12px; }
 .wf-phase:last-child { margin-bottom: 0; }
 .wf-phase-title {
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -177,7 +177,7 @@
 }
 .wf-agent-label {
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -189,7 +189,7 @@
   margin-left: auto;
   color: var(--muted);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .wf-agent-icon {
@@ -217,14 +217,14 @@
   padding: 1px 8px 3px calc(8px + 13px + var(--space-2));
   color: var(--muted);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .wf-agent-result {
   margin: 2px 0 2px calc(8px + 13px + var(--space-2));
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
 }
 .wf-agent-result > summary {
   cursor: pointer;
@@ -241,7 +241,7 @@
   border-radius: var(--radius-sm);
   color: var(--text-soft);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 220px;
@@ -257,7 +257,7 @@
 .wf-completed-title {
   margin-bottom: 6px;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
 }
 .wf-completed-list { display: flex; flex-direction: column; gap: 3px; }
@@ -266,7 +266,7 @@
   padding: 2px 8px;
   color: var(--text-soft);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -294,7 +294,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  font-size: 0.74rem;
+  font-size: var(--fs-xs);
   font-weight: 700;
   color: var(--muted);
   letter-spacing: 0.05em;
@@ -314,7 +314,7 @@
   white-space: nowrap;
   color: var(--muted-2);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
 }
 /* 「最後の動き N 秒前」だけアクセント色にして、進んでいることに気づきやすくする
    （Q3: 色でしきい値は作らない。動いているかどうかの合図だけ）。 */
@@ -327,7 +327,7 @@
   padding: 4px 8px;
   color: var(--muted);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
 }
 /* 走行中の子の「今のツール」の行（完成イメージ S-02 の `.tool`）。既存の
    .wf-agent-last-tool と padding・色・フォントはそろえつつ、C11 で種別・モデル
@@ -340,7 +340,7 @@
   padding: 1px 8px 3px calc(8px + 13px + var(--space-2));
   color: var(--muted);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
 }
 .wf-subagent-tool-text {
   overflow: hidden;
@@ -364,6 +364,6 @@
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-text);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }

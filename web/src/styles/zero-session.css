@@ -1,34 +1,34 @@
 #terminal-area-wrapper { position: relative; }
 #zero-session-empty-state { position: absolute; inset: 0; z-index: 8; display: grid; place-items: center; padding: clamp(20px, 5vw, 56px); background: var(--bg); overflow: auto; }
 .zero-session-card { width: min(680px, 100%); text-align: center; }
-.zero-session-kicker { color: var(--accent); font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.zero-session-kicker { color: var(--accent); font-size: var(--fs-sm); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .zero-session-card h1 { margin: 10px 0 8px; color: var(--text); font-size: clamp(1.45rem, 3vw, 2rem); }
 .zero-session-intro { margin: 0 auto 26px; max-width: 560px; color: var(--muted); line-height: 1.65; }
 .zero-session-steps { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: zero-step; text-align: left; }
 .zero-session-steps li { display: flex; gap: 14px; padding: 16px 18px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; counter-increment: zero-step; }
-.zero-session-steps li::before { content: counter(zero-step); flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-text, #fff); font-size: .82rem; font-weight: 700; }
+.zero-session-steps li::before { content: counter(zero-step); flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--accent-text, #fff); font-size: var(--fs-md); font-weight: 700; }
 .zero-session-steps li > div { flex: 1; }
-.zero-session-steps strong { display: block; font-size: .95rem; color: var(--text); }
-.zero-session-steps span { display: block; margin-top: 4px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
-.zero-session-footer { display: flex; justify-content: center; gap: 10px; margin-top: 24px; color: var(--muted-2); font-size: .85rem; }
+.zero-session-steps strong { display: block; font-size: var(--fs-lg); color: var(--text); }
+.zero-session-steps span { display: block; margin-top: 4px; color: var(--muted); font-size: var(--fs-md); line-height: 1.55; }
+.zero-session-footer { display: flex; justify-content: center; gap: 10px; margin-top: 24px; color: var(--muted-2); font-size: var(--fs-md); }
 .zero-session-footer button { border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .zero-session-footer button:hover { color: var(--text); text-decoration: underline; }
-.zero-session-cli-heading { margin: 0 0 10px; color: var(--text); font-size: .9rem; font-weight: 600; }
+.zero-session-cli-heading { margin: 0 0 10px; color: var(--text); font-size: var(--fs-body); font-weight: 600; }
 .zero-session-cli-list { display: grid; gap: 8px; margin: 0 auto 12px; padding: 0; max-width: 420px; list-style: none; text-align: left; }
 .zero-session-cli-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 10px; }
-.zero-session-cli-label { color: var(--text); font-size: .9rem; }
-.zero-session-cli-copy { border: 0; background: transparent; color: var(--accent); font-family: inherit; font-size: .86rem; cursor: pointer; }
+.zero-session-cli-label { color: var(--text); font-size: var(--fs-body); }
+.zero-session-cli-copy { border: 0; background: transparent; color: var(--accent); font-family: inherit; font-size: var(--fs-md); cursor: pointer; }
 .zero-session-cli-copy:hover { text-decoration: underline; }
-.zero-session-cli-hint { margin: 0 auto 8px; max-width: 520px; color: var(--muted); font-size: .86rem; line-height: 1.55; }
+.zero-session-cli-hint { margin: 0 auto 8px; max-width: 520px; color: var(--muted); font-size: var(--fs-md); line-height: 1.55; }
 .zero-session-install-list { max-width: 520px; margin: 0 auto 20px; }
 .zero-session-cli-item-installed { border-color: var(--ok, #2e7d32); }
 .zero-session-cli-check { flex: none; color: var(--ok, #2e7d32); font-weight: 700; }
-.zero-session-cli-status { flex: none; color: var(--muted); font-size: .82rem; }
+.zero-session-cli-status { flex: none; color: var(--muted); font-size: var(--fs-md); }
 .zero-session-cli-item-missing .zero-session-cli-status { color: var(--warn, #d4a017); }
-.zero-session-cli-install-link { flex: none; color: var(--accent); font-size: .86rem; text-decoration: none; }
+.zero-session-cli-install-link { flex: none; color: var(--accent); font-size: var(--fs-md); text-decoration: none; }
 .zero-session-cli-install-link:hover { text-decoration: underline; }
-.zero-session-cli-install-unavailable { flex: none; color: var(--muted); font-size: .82rem; }
-.zero-session-missing-still { margin: 12px auto 0; max-width: 520px; color: var(--warn, #d4a017); font-size: .86rem; line-height: 1.55; }
+.zero-session-cli-install-unavailable { flex: none; color: var(--muted); font-size: var(--fs-md); }
+.zero-session-missing-still { margin: 12px auto 0; max-width: 520px; color: var(--warn, #d4a017); font-size: var(--fs-md); line-height: 1.55; }
 .zero-session-recheck { font-weight: 600; color: var(--text) !important; }
 /* 導入状況があるとき: 狭い幅では導入状況を上・手順は 1 行に畳む。広い幅では左に手順・右に導入状況。
    幅はサイドバーを除いた表示領域で判定するので container query を使う。 */
@@ -43,7 +43,7 @@
 .zero-session-card.has-status .zero-session-footer { margin-top: 0; }
 .zero-session-card.has-status .zero-session-guide { order: 1; }
 .zero-session-card.has-status .zero-session-status { order: 2; }
-.zero-session-steps-toggle { align-self: center; margin: 0 auto 12px; display: block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; background: var(--bg-elev); color: var(--muted); font: inherit; font-size: .86rem; cursor: pointer; }
+.zero-session-steps-toggle { align-self: center; margin: 0 auto 12px; display: block; border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; background: var(--bg-elev); color: var(--muted); font: inherit; font-size: var(--fs-md); cursor: pointer; }
 .zero-session-steps-toggle:hover { color: var(--text); border-color: var(--accent); }
 .zero-session-card.is-steps-collapsed .zero-session-steps { display: none; }
 @container (min-width: 1040px) {

@@ -17,10 +17,10 @@
   gap: var(--space-2);
   margin-bottom: 6px;
 }
-.subs-provider-name { font-size: 0.85rem; color: var(--text); }
+.subs-provider-name { font-size: var(--fs-md); color: var(--text); }
 .subs-envvar {
   font-family: var(--font-mono, monospace);
-  font-size: 0.68rem;
+  font-size: var(--fs-2xs);
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -44,13 +44,13 @@
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  font-size: 0.7rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   flex-shrink: 0;
 }
 /* 表示名（編集可）と ID（不変・認証ディレクトリ名）を見た目で分ける。
    ラベルは地の文、ID 実体は env var バッジと同じ mono のチップにする。 */
-.subs-id-label { font-size: 0.66rem; opacity: 0.8; }
+.subs-id-label { font-size: var(--fs-2xs); opacity: 0.8; }
 .subs-id-value {
   font-family: var(--font-mono, monospace);
   border: 1px solid var(--line);
@@ -58,7 +58,7 @@
   padding: 0 5px;
 }
 .subs-status {
-  font-size: 0.72rem;
+  font-size: var(--fs-xs);
   color: var(--muted);
   flex: 1 1 140px;
   min-width: 0;
@@ -99,7 +99,7 @@
 /* 本文が長いので既定の確認ダイアログ（420px）より広く取る。 */
 .subs-consent-dialog { width: min(560px, 100%); }
 .subs-consent-dialog .confirm-message { max-height: 46vh; overflow-y: auto; }
-.subs-consent-link { margin-top: 8px; font-size: 0.78rem; }
+.subs-consent-link { margin-top: 8px; font-size: var(--fs-sm); }
 .subs-consent-link a { color: var(--accent); }
 /* 積んでいるあいだ出し続ける注意。行を詰めず、一覧の下で独立して読めるようにする。 */
 .subs-stacking-note { margin-top: 10px; line-height: 1.55; }
