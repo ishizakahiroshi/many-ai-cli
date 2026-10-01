@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "d94338ead90e2eeaeb9d180f6da4aa26d8258ac6",
+    "commit": "d19eb2729d9c2d007cb76edf89b67b9179fe62e7",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,9 +134,9 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1122,
-    "analyzed": 915,
-    "unresolved": 6,
+    "discovered": 1123,
+    "analyzed": 917,
+    "unresolved": 5,
     "unknown": 1,
     "unclaimed": 200,
     "skipped_by_config": 0
@@ -12403,6 +12403,35 @@
       "unresolved": []
     },
     {
+      "path": "internal/hub/ui_origin_cookie.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "internal/hub/usage_hook_handler.go",
       "adapter": "go",
       "status": "analyzed",
@@ -21506,7 +21535,7 @@
     {
       "path": "web/src/app.ts",
       "adapter": "tsjs",
-      "status": "unresolved",
+      "status": "analyzed",
       "fields": {
         "summary": {
           "state": "none_observed",
@@ -21527,113 +21556,11 @@
           "value": []
         },
         "screen_to_api": {
-          "state": "value",
-          "value": [
-            "/api/approval/*?token=*",
-            "/api/approval/disable?token=*",
-            "/api/attachments/purge?token=*",
-            "/api/auto-approval/simulate?token=*&n=100",
-            "/api/doctor?token=*",
-            "/api/handoff-intent-mode?token=*",
-            "/api/idle-timeout?token=*",
-            "/api/input-config?token=*",
-            "/api/kill-all?token=*",
-            "/api/log-config?token=*",
-            "/api/logs/legacy-notice?token=*",
-            "/api/logs/purge?token=*",
-            "/api/open-dir?token=*",
-            "/api/orchestration-config?token=*",
-            "/api/reconnect-grace?token=*",
-            "/api/session-store/reset?token=*",
-            "/api/shutdown?token=*",
-            "/api/slash-cmd-sources?token=*",
-            "/api/slash-commands?provider=**&token=*",
-            "/api/terminal-color?token=*"
-          ]
+          "state": "none_observed",
+          "value": []
         }
       },
-      "unresolved": [
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/slash-commands?provider=**&token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/kill-all?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/shutdown?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/terminal-color?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/handoff-intent-mode?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/idle-timeout?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/reconnect-grace?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/log-config?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/open-dir?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/session-store/reset?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/logs/purge?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/attachments/purge?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval/*?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/orchestration-config?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/auto-approval/simulate?token=*&n=100"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/slash-cmd-sources?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/approval/disable?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/logs/legacy-notice?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/input-config?token=*"
-        },
-        {
-          "code": "dynamic_endpoint",
-          "detail": "part of this address is filled in at run time: /api/doctor?token=*"
-        }
-      ]
+      "unresolved": []
     },
     {
       "path": "web/src/app/action-bar-resize.ts",

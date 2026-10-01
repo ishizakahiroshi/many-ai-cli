@@ -180,6 +180,17 @@ export function looksLikePathWrapContinuation(
 
 export type WrapContinuation = (prev: PathWrapRow, next: PathWrapRow, cols?: number) => boolean;
 
+// xterm の buffer.getLine() は内部が環状配列で、行数が上限まで埋まったバッファ（全画面 CLI の
+// 代替画面、満杯のスクロールバック）では範囲外の index でも先頭側の行を返し、undefined にならない。
+// そのまま expandLogicalPathLine に渡すと、折り返し行だけが続く画面で同じ行を回り続けて
+// UI スレッドが止まる（2026-10-01 のフリーズ）。行数の範囲外は必ず null にする。
+export function boundedRowGetter(
+  length: number,
+  read: (index: number) => PathWrapRow | null,
+): (index: number) => PathWrapRow | null {
+  return (index) => (index >= 0 && index < length ? read(index) : null);
+}
+
 // continues を差し替えると、パス以外（URL など）の折り返しも同じ手順で 1 本に戻せる。
 export function expandLogicalPathLine(
   getRow: (index: number) => PathWrapRow | null,

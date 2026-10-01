@@ -13,6 +13,7 @@ import {
   ABS_UNIX_PATH_RE,
   ABS_WIN_PATH_RE,
   REL_PATH_RE,
+  boundedRowGetter,
   expandLogicalPathLine,
   isLikelyRelPath,
   isTerminalPathStartBoundary,
@@ -278,8 +279,7 @@ export function ensureTerminal(id) {
           }
           return width;
         };
-        const getRow = (index: number): PathWrapRow | null => {
-          if (index < 0) return null;
+        const getRow = boundedRowGetter(buf.length, (index: number): PathWrapRow | null => {
           const line = buf.getLine(index);
           if (!line) return null;
           return {
@@ -287,7 +287,7 @@ export function ensureTerminal(id) {
             isWrapped: !!line.isWrapped,
             contentWidth: contentWidthOf(line),
           };
-        };
+        });
         // xterm の soft wrap（isWrapped）に加え、CLI が入れた改行によるパス・URL の分断も結合する
         const finishExpand = stage('links.expand', buf.length);
         const { start, end } = expandLogicalPathLine(getRow, y - 1, term.cols, looksLikeLinkWrapContinuation);

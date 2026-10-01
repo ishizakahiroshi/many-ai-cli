@@ -4,6 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   ABS_WIN_PATH_RE,
+  boundedRowGetter,
   expandLogicalPathLine,
   findPathCandidates,
   isPathContinuationText,
@@ -224,6 +225,22 @@ test('expandLogicalPathLine: ラベル行とは結合しない', () => {
     row('変更ファイル: D:\\src\\bar.md'),
   ];
   assert.equal(expandLogicalPathLine(getter(rows), 0).end, 0);
+});
+
+test('boundedRowGetter: 範囲外で先頭へ巻き戻るバッファでも全行折り返しで止まる', () => {
+  // xterm の環状バッファと同じく、範囲外の index が先頭側の行を返す読み出し
+  const length = 29;
+  let reads = 0;
+  const cyclicRead = (_index: number) => {
+    reads++;
+    if (reads > 10_000) throw new Error('row reader did not terminate');
+    return row('x'.repeat(10), { wrapped: true, width: 10 });
+  };
+  assert.equal(cyclicRead(length + 3).isWrapped, true);
+  const getRow = boundedRowGetter(length, (i) => cyclicRead(i % length));
+  assert.equal(getRow(length), null);
+  assert.equal(getRow(-1), null);
+  assert.deepEqual(expandLogicalPathLine(getRow, 5, 80), { start: 0, end: length - 1 });
 });
 
 const PREVIEWABLE_EXT_RE = /\.(md|markdown|ts|tsx|json|jsonl)$/i;
