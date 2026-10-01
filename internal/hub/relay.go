@@ -865,6 +865,9 @@ func (s *Server) startRelay(parentID int, req relayStartRequest) (*proto.RelaySt
 	}
 	s.relayBoardLocked(run, fmt.Sprintf("relay started plan=%s mode=%s impl=%s/%s strong=%s review=%s/%s max_rounds=%d escalate_after=%d base=%s",
 		planPath, mode, impl.Provider, impl.Model, strongText, review.Provider, review.Model, maxRounds, escalateAfter, run.baseCommit))
+	if orch := s.snapshotCfg().Orchestration; orch.ChildFullBypassEnabled() && orch.ChildPermissionDefaultTier() == config.PermissionPresetFull {
+		s.relayBoardLocked(run, "relay permission: unattended children default to full bypass (orchestration.child_full_bypass / child_permission_default); set false or a safer default, or per-role permission_preset, to tighten")
+	}
 	s.relayEventLocked(run, proto.RelayEvent{Kind: relayEventStarted, C: 1, Text: filepath.Base(planPath), Commit: run.baseCommit})
 	if err := s.relaySpawn(run, relayRoleImplementation, s.relayImplementationPrompt(run)); err != nil {
 		s.relayFinishLocked(run, relayStateStopped, relayReasonSpawnError, err.Error())

@@ -4,7 +4,17 @@
 //
 // vtype-core は src/vendor/vtype-core/ に置いた写しを読む（scripts/sync-vtype-core.mjs を参照）。
 import { appLangToRecognitionLang, createVoiceInput, graceSecondsToSilenceMs } from '../vendor/vtype-core/index.js';
-import { token } from './util.js';
+import type { FetchLike } from '../vendor/vtype-core/index.js';
+import { apiFetch } from './util.js';
+
+// vtype-core's FetchInitLike.body is unknown; bridge to apiFetch (Cookie + Bearer).
+const whisperApiFetch: FetchLike = (url, init) =>
+  apiFetch(url, {
+    method: init.method,
+    headers: init.headers,
+    body: init.body as BodyInit,
+    signal: init.signal as AbortSignal | undefined,
+  });
 import {
   DEFAULT_VOICE_GRACE_SEC,
   STORAGE_LANG_KEY,
@@ -25,8 +35,8 @@ export const voiceInput = createVoiceInput({
   },
   whisper: {
     endpoint: '/api/voice/transcribe',
-    // 空でも ?token= を付ける（従来の URL と同じ形）。
-    token,
+    // Cookie / Bearer via apiFetch — do not put Hub token in ?token= (F-WEB-07).
+    fetch: whisperApiFetch,
     recorderWorklet: { url: RECORDER_WORKLET_URL, processorName: 'many-ai-cli-whisper-recorder' },
     autoStop: () => localStorage.getItem(STORAGE_VOICE_WHISPER_AUTO_STOP_KEY) !== '0',
     autoStopSilenceMs: () => graceSecondsToSilenceMs(localStorage.getItem(STORAGE_VOICE_GRACE_KEY), DEFAULT_VOICE_GRACE_SEC),

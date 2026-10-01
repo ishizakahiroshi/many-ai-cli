@@ -1430,9 +1430,8 @@ export function openSpawnPanelWith(opts: { cwd: string; prompt: string }): void 
 
   // C2: detached-grid URL を生成して別窓で開く
   function openDetachedGrid(sessionId: number, layout: string): void {
-    const params = new URLSearchParams(window.location.search);
-    const tokenVal = params.get('token') || token;
-    const url = `/?view=detached-grid&layout=${encodeURIComponent(layout)}&session_ids=${sessionId}&token=${tokenVal}`;
+    // Cookie session / localStorage bootstrap — no &token= in shared navigation URL (F-WEB-07).
+    const url = `/?view=detached-grid&layout=${encodeURIComponent(layout)}&session_ids=${sessionId}`;
     window.open(url, '_blank');
   }
 

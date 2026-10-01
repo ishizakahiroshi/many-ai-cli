@@ -2,7 +2,7 @@
 // 非モーダル: showModal() は使わず、開いたままターミナルを操作できる（data-wheel-native）。
 // グループ化・並び順・件数の純粋ロジックは memo-model.ts にある。
 import { t } from '../i18n.js';
-import { apiFetch, token } from './util.js';
+import { apiFetch } from './util.js';
 import { openLightbox } from './lightbox.js';
 import { activeSessionId, sessions } from './state.js';
 import { openSpawnPanelWith } from './spawn-panel.js';
@@ -50,7 +50,8 @@ let pendingImagesEl: HTMLElement;
 const inflightUploads = new Set<Promise<void>>();
 
 function memoImageUrl(name: string): string {
-  return `/api/memo-images/${encodeURIComponent(name)}?token=${encodeURIComponent(token)}`;
+  // Cookie (MANY_AI_CLI_token) is enough for same-origin <img>; avoid ?token= in HTML/URL bar.
+  return `/api/memo-images/${encodeURIComponent(name)}`;
 }
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text = '', className = ''): HTMLElementTagNameMap[K] {

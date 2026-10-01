@@ -2,7 +2,7 @@ import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
 import { DEFAULT_NOTIFY_SOUND_VOLUME, setNotificationVolume } from './app/notification-volume.js';
-import { cleanCopiedText, showToast, token } from './app/util.js';
+import { apiFetch, cleanCopiedText, showToast } from './app/util.js';
 import { DEFAULT_VOICE_GRACE_SEC, STORAGE_APPROVAL_AUTO_SWITCH_KEY, STORAGE_AUTO_APPROVAL_ENABLED_KEY, STORAGE_HIGH_RISK_CONFIRMATION_MODE_KEY, STORAGE_MOBILE_VOICE_HINT_SHOWN_KEY, STORAGE_NOTIFY_SOUND_CUSTOM_KEY, STORAGE_VOICE_WHISPER_AUTO_SUBMIT_KEY, _putUserPrefsNow, getDefaultTriggerPhrase, getDefaultWakeWordPhrase, setUserPref, setVoiceEngine } from './app/user-prefs.js';
 import { DOUBLE_SEND_GUARD_MS, actionBarFocusIdx, actionBarShownAt, activeSessionId, batchFreeText, approvalAutoSwitchQueue, autoDismissTimers, batchSelections, composeEndSendTimer, isComposing, lastDoSendAt, maybeAutoSwitchToNextApproval, pendingSend, removeApprovalAutoSwitchTarget, removeFromSessionOrder, sequentialChoiceCache, sessionInputState, sessions, set_actionBarFocusIdx, set_activeSessionId, set_composeEndSendTimer, set_isComposing, set_lastDoSendAt, set_pendingSend, terminals, forgetAllAnsweredApprovals, forgetAnsweredApprovals } from './app/state.js';
 import { activateSession, render, renderSessionList, switchSessionByTab } from './app/session-list.js';
@@ -758,7 +758,7 @@ async function ensureSlashCommands(provider, sessionId = activeSessionId) {
   slashCmdLoading.add(key);
   try {
     const sidParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
-    const resp = await fetch(`/api/slash-commands?provider=${provider}${sidParam}&token=${token}`);
+    const resp = await apiFetch(`/api/slash-commands?provider=${provider}${sidParam}`);
     if (!resp.ok) { slashCmdRetryAfter.set(key, Date.now() + 60_000); return; }
     const data = await resp.json();
     setSlashCmdCache(provider, data.cmds, sessionId);
@@ -1824,7 +1824,7 @@ inputEl.addEventListener('blur', (e) => {
     if (!ok) return;
     killAllBtns.forEach((button) => { button.disabled = true; });
     try {
-      await fetch(`/api/kill-all?token=${token}`, { method: 'POST' });
+      await apiFetch('/api/kill-all', { method: 'POST' });
     } catch (_) {}
     killAllBtns.forEach((button) => { button.disabled = false; });
   }));
@@ -1853,12 +1853,12 @@ inputEl.addEventListener('blur', (e) => {
     }
 
     if (result.action === 'sessions') {
-      try { await fetch(`/api/kill-all?token=${token}`, { method: 'POST' }); } catch (_) {}
-      try { await fetch(`/api/shutdown?token=${token}`, { method: 'POST' }); } catch (_) {}
+      try { await apiFetch('/api/kill-all', { method: 'POST' }); } catch (_) {}
+      try { await apiFetch('/api/shutdown', { method: 'POST' }); } catch (_) {}
       window.close();
     } else {
       try {
-        await fetch(`/api/shutdown?token=${token}`, { method: 'POST' });
+        await apiFetch('/api/shutdown', { method: 'POST' });
       } catch (_) {}
       window.close();
     }
@@ -1889,7 +1889,7 @@ inputEl.addEventListener('blur', (e) => {
   async function loadTerminalColor() {
     if (!terminalColorEl) return;
     try {
-      const res = await fetch(`/api/terminal-color?token=${token}`);
+      const res = await apiFetch('/api/terminal-color');
       if (!res.ok) return;
       const cfg = await res.json();
       if (cfg && typeof cfg.terminal_color === 'string') terminalColorEl.value = cfg.terminal_color;
@@ -1899,7 +1899,7 @@ inputEl.addEventListener('blur', (e) => {
   async function saveTerminalColor() {
     if (!terminalColorEl) return;
     try {
-      await fetch(`/api/terminal-color?token=${token}`, {
+      await apiFetch('/api/terminal-color', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ terminal_color: terminalColorEl.value }),
@@ -1912,7 +1912,7 @@ inputEl.addEventListener('blur', (e) => {
   async function loadHandoffIntentMode() {
     if (!handoffIntentModeEl) return;
     try {
-      const res = await fetch(`/api/handoff-intent-mode?token=${token}`);
+      const res = await apiFetch('/api/handoff-intent-mode');
       if (!res.ok) return;
       const cfg = await res.json();
       if (cfg && typeof cfg.intent_mode === 'string') handoffIntentModeEl.value = cfg.intent_mode;
@@ -1922,7 +1922,7 @@ inputEl.addEventListener('blur', (e) => {
   async function saveHandoffIntentMode() {
     if (!handoffIntentModeEl) return;
     try {
-      await fetch(`/api/handoff-intent-mode?token=${token}`, {
+      await apiFetch('/api/handoff-intent-mode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intent_mode: handoffIntentModeEl.value }),
@@ -1933,7 +1933,7 @@ inputEl.addEventListener('blur', (e) => {
   async function loadIdleTimeout() {
     if (!idleTimeoutEl) return;
     try {
-      const res = await fetch(`/api/idle-timeout?token=${token}`);
+      const res = await apiFetch('/api/idle-timeout');
       if (!res.ok) return;
       const cfg = await res.json();
       idleTimeoutEl.value = cfg.idle_timeout_min;
@@ -1946,7 +1946,7 @@ inputEl.addEventListener('blur', (e) => {
     const min = Number.isFinite(raw) ? Math.max(0, Math.min(1440, raw)) : 60;
     idleTimeoutEl.value = String(min);
     try {
-      await fetch(`/api/idle-timeout?token=${token}`, {
+      await apiFetch('/api/idle-timeout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idle_timeout_min: min }),
@@ -1957,7 +1957,7 @@ inputEl.addEventListener('blur', (e) => {
   async function loadReconnectGrace() {
     if (!reconnectGraceEl) return;
     try {
-      const res = await fetch(`/api/reconnect-grace?token=${token}`);
+      const res = await apiFetch('/api/reconnect-grace');
       if (!res.ok) return;
       const cfg = await res.json();
       const sec = Number(cfg.wrapper_reconnect_grace_sec) || 0;
@@ -1971,7 +1971,7 @@ inputEl.addEventListener('blur', (e) => {
     const min = Number.isFinite(raw) ? Math.max(0, Math.min(1440, raw)) : 60;
     reconnectGraceEl.value = String(min);
     try {
-      await fetch(`/api/reconnect-grace?token=${token}`, {
+      await apiFetch('/api/reconnect-grace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wrapper_reconnect_grace_sec: min * 60 }),
@@ -1981,7 +1981,7 @@ inputEl.addEventListener('blur', (e) => {
 
   async function loadLogConfig() {
     try {
-      const res = await fetch(`/api/log-config?token=${token}`);
+      const res = await apiFetch('/api/log-config');
       if (!res.ok) return;
       const cfg = await res.json();
       logEnabledEl.checked  = cfg.enabled;
@@ -2012,7 +2012,7 @@ inputEl.addEventListener('blur', (e) => {
     const path = btn.dataset.tooltip;
     if (!path || path === t('loading')) return;
     try {
-      const res = await fetch(`/api/open-dir?token=${token}`, {
+      const res = await apiFetch('/api/open-dir', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kind }),
@@ -2064,7 +2064,7 @@ inputEl.addEventListener('blur', (e) => {
       if (!ok) return;
       sessionStoreResetBtn.disabled = true;
       try {
-        const res = await fetch(`/api/session-store/reset?token=${token}`, { method: 'POST' });
+        const res = await apiFetch('/api/session-store/reset', { method: 'POST' });
         if (!res.ok) {
           showToast(t('settings_history_reset_failed'), sessionStoreResetBtn);
           return;
@@ -2093,7 +2093,7 @@ inputEl.addEventListener('blur', (e) => {
       if (!ok) return;
       logsPurgeBtn.disabled = true;
       try {
-        const res = await fetch(`/api/logs/purge?token=${token}`, { method: 'POST' });
+        const res = await apiFetch('/api/logs/purge', { method: 'POST' });
         if (!res.ok) {
           showToast(t('settings_logs_purge_failed'), logsPurgeBtn);
           return;
@@ -2122,7 +2122,7 @@ inputEl.addEventListener('blur', (e) => {
       if (!ok) return;
       attachmentsPurgeBtn.disabled = true;
       try {
-        const res = await fetch(`/api/attachments/purge?token=${token}`, { method: 'POST' });
+        const res = await apiFetch('/api/attachments/purge', { method: 'POST' });
         if (!res.ok) {
           showToast(t('settings_attachments_purge_failed'), attachmentsPurgeBtn);
           return;
@@ -2155,7 +2155,7 @@ inputEl.addEventListener('blur', (e) => {
     approvalToggleInput.addEventListener('change', async () => {
       const endpoint = approvalToggleInput.checked ? 'enable' : 'disable';
       try {
-        await fetch(`/api/approval/${endpoint}?token=${token}`, { method: 'POST' });
+        await apiFetch(`/api/approval/${endpoint}`, { method: 'POST' });
       } catch (_) {}
     });
   }
@@ -2171,7 +2171,7 @@ inputEl.addEventListener('blur', (e) => {
 	async function loadBoardNotifyMode() {
 		if (!boardNotifyModeEl) return;
 		try {
-			const res = await fetch(`/api/orchestration-config?token=${token}`);
+			const res = await apiFetch('/api/orchestration-config');
 			if (!res.ok) return;
 			const cfg = await res.json();
 			const mode = String(cfg.board_notify_mode || 'soft-notify');
@@ -2190,7 +2190,7 @@ inputEl.addEventListener('blur', (e) => {
 	async function saveBoardNotifyMode() {
 		if (!boardNotifyModeEl) return;
 		try {
-			await fetch(`/api/orchestration-config?token=${token}`, {
+			await apiFetch('/api/orchestration-config', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value, spawn_confirm_mode: spawnConfirmModeEl?.value || 'on', spawn_confirm_providers: (spawnConfirmProvidersEl?.value || '').split(',').map(v => v.trim()).filter(Boolean), child_timeout_seconds: Math.max(60, Math.min(86400, Number(orchestrationChildTimeoutEl?.value || 900))), timeout_respawn: Boolean(orchestrationTimeoutRespawnEl?.checked) }),
@@ -2215,7 +2215,7 @@ inputEl.addEventListener('blur', (e) => {
     autoApprovalSimulateBtn.addEventListener('click', async () => {
       const result = document.getElementById('auto-approval-simulate-result');
       try {
-        const res = await fetch(`/api/auto-approval/simulate?token=${encodeURIComponent(token || '')}&n=100`);
+        const res = await apiFetch('/api/auto-approval/simulate?n=100');
         const data = res.ok ? await res.json() : null;
         if (result) result.textContent = data ? `${data.total || 0}件中 ${data.matched || 0}件が一致（危険操作は除外）` : 'シミュレーションに失敗しました';
       } catch (_) { if (result) result.textContent = 'シミュレーションに失敗しました'; }
@@ -2224,7 +2224,7 @@ inputEl.addEventListener('blur', (e) => {
 
   async function saveLogConfig() {
     try {
-      await fetch(`/api/log-config?token=${token}`, {
+      await apiFetch('/api/log-config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2253,7 +2253,7 @@ inputEl.addEventListener('blur', (e) => {
       'command-code': (document.getElementById('slash-src-command-code')?.value || '').trim(),
     };
     try {
-      await fetch(`/api/slash-cmd-sources?token=${token}`, {
+      await apiFetch('/api/slash-cmd-sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -2381,7 +2381,7 @@ inputEl.addEventListener('blur', (e) => {
     const approvalToggleInput = document.getElementById('approval-toggle-input');
     if (approvalToggleInput) {
       approvalToggleInput.checked = false;
-      try { await fetch(`/api/approval/disable?token=${token}`, { method: 'POST' }); } catch (_) {}
+      try { await apiFetch('/api/approval/disable', { method: 'POST' }); } catch (_) {}
     }
 
     const slashClaudeEl = document.getElementById('slash-src-claude');
@@ -2419,19 +2419,19 @@ inputEl.addEventListener('blur', (e) => {
   // 表示後はフラグを立てて二度と出さない。
   (async () => {
     try {
-      const res = await fetch(`/api/logs/legacy-notice?token=${token}`);
+      const res = await apiFetch('/api/logs/legacy-notice');
       if (!res.ok) return;
       const data = await res.json();
       if (!data.show) return;
       const choice = await appLegacyResetNotice();
       if (!choice) {
         // 閉じる/Escape: 変更なし。ただし再表示はしない（フラグだけ立てる）。
-        try { await fetch(`/api/logs/legacy-notice?token=${token}`, { method: 'POST' }); } catch (_) {}
+        try { await apiFetch('/api/logs/legacy-notice', { method: 'POST' }); } catch (_) {}
         return;
       }
       // フラグを立てつつ、選択したログ記録設定（オン/オフ）も保存する。
       try {
-        await fetch(`/api/logs/legacy-notice?token=${token}`, {
+        await apiFetch('/api/logs/legacy-notice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ enable_logging: choice.enableLogging }),
@@ -2439,8 +2439,8 @@ inputEl.addEventListener('blur', (e) => {
       } catch (_) {}
       // チェックされた削除対象だけ実行（実行中セッションのぶんは各 purge 側で保護）。
       const tasks: Promise<Response>[] = [];
-      if (choice.deleteLogs) tasks.push(fetch(`/api/logs/purge?token=${token}`, { method: 'POST' }));
-      if (choice.deleteAttachments) tasks.push(fetch(`/api/attachments/purge?token=${token}`, { method: 'POST' }));
+      if (choice.deleteLogs) tasks.push(apiFetch('/api/logs/purge', { method: 'POST' }));
+      if (choice.deleteAttachments) tasks.push(apiFetch('/api/attachments/purge', { method: 'POST' }));
       if (tasks.length === 0) {
         showToast(t('legacy_logs_notice_done'));
         return;
@@ -2498,7 +2498,7 @@ inputEl.addEventListener('blur', (e) => {
   async function loadDeferredEnterConfig() {
     if (!deferredEnterEl) return;
     try {
-      const res = await fetch(`/api/input-config?token=${encodeURIComponent(token || '')}`);
+      const res = await apiFetch('/api/input-config');
       if (!res.ok) return;
       const cfg = await res.json();
       deferredEnterOverrideMs = Number(cfg?.deferred_enter_ms) || 0;
@@ -2509,7 +2509,7 @@ inputEl.addEventListener('blur', (e) => {
     deferredEnterEl.addEventListener('change', async () => {
       const ms = Number(deferredEnterEl.value) || 0;
       try {
-        const res = await fetch(`/api/input-config?token=${encodeURIComponent(token || '')}`, {
+        const res = await apiFetch('/api/input-config', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deferred_enter_ms: ms }),
         });
         if (!res.ok) throw new Error('save failed');
@@ -2549,7 +2549,7 @@ inputEl.addEventListener('blur', (e) => {
     result.replaceChildren();
     addText(result, 'settings-note', t('settings_doctor_running'));
     try {
-      const response = await fetch(`/api/doctor?token=${encodeURIComponent(token || '')}`);
+      const response = await apiFetch('/api/doctor');
       if (!response.ok) throw new Error(String(response.status));
       const report = await response.json();
       result.replaceChildren();
@@ -2702,7 +2702,7 @@ inputEl.addEventListener('blur', (e) => {
     try {
       const method = forceRefresh ? 'POST' : 'GET';
       const sidParam = sessionId ? `&session_id=${encodeURIComponent(sessionId)}` : '';
-      const resp = await fetch(`/api/slash-commands?provider=${provider}${sidParam}&token=${token}`, { method });
+      const resp = await apiFetch(`/api/slash-commands?provider=${provider}${sidParam}`, { method });
       if (!resp.ok) {
         const txt = await resp.text();
         if (resp.status === 404) {

@@ -95,8 +95,10 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 	s.cfgMu.Lock()
 	prevToken := s.cfg.Token
 	prevSecret := s.cfg.AuthCookieSecret
+	prevUIOrigin := s.uiOriginSecret
 	s.cfg.Token = newToken
 	s.cfg.AuthCookieSecret = newSecret
+	s.uiOriginSecret = "" // invalidate Hub-minted UI-origin capability cookies
 	s.cfgMu.Unlock()
 	if err := s.persistConfig(); err != nil {
 		// persist に失敗するとディスクは旧値のまま、in-memory は新値になり、
@@ -105,6 +107,7 @@ func (s *Server) handleAuthRevokeAll(w http.ResponseWriter, r *http.Request) {
 		s.cfgMu.Lock()
 		s.cfg.Token = prevToken
 		s.cfg.AuthCookieSecret = prevSecret
+		s.uiOriginSecret = prevUIOrigin
 		s.cfgMu.Unlock()
 		writeJSONError(w, http.StatusInternalServerError, "internal", "failed to persist config")
 		return

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"many-ai-cli/internal/config"
 	"many-ai-cli/internal/proto"
 )
 
@@ -54,9 +55,10 @@ func relayAPIStartBody(plan string, mode string) relayStartJSON {
 		rolePointers[role] = &assignment
 	}
 	return relayStartJSON{
-		PlanPath: plan,
-		Mode:     mode,
-		Roles:    rolePointers,
+		PlanPath:                   plan,
+		Mode:                       mode,
+		Roles:                      rolePointers,
+		AcknowledgeChildFullBypass: true,
 	}
 }
 
@@ -266,7 +268,7 @@ func TestHandleRelayStartUsesRoleMappingAndReportsNotGit(t *testing.T) {
 	plan := writeRelayPlan(t, h, "mapping.md")
 	h.parent.OrchestrationID = "mapped"
 	h.s.orchestration.roles["mapped"] = relayTestRoles(false)
-	body := relayStartJSON{PlanPath: plan, Mode: relayModeSameTree}
+	body := relayStartJSON{PlanPath: plan, Mode: relayModeSameTree, AcknowledgeChildFullBypass: true}
 	code, got := relayAPICall(t, h.s, http.MethodPost, "/api/sessions/1/relay", body)
 	if code != http.StatusOK || !got.OK {
 		t.Fatalf("mapped role start status=%d response=%+v", code, got)
@@ -351,5 +353,63 @@ func TestHandleOrchestrationConfigExposesRelayBudget(t *testing.T) {
 	}
 	if rr.Code != http.StatusOK || got.MaxChildren != 7 {
 		t.Fatalf("config status=%d response=%+v", rr.Code, got)
+	}
+}
+
+func TestRelayRequiresFullBypassAck(t *testing.T) {
+	fullRoles := map[string]orchestrationRoleAssignment{
+		"implementation": {Provider: "codex", Model: "gpt"},
+		"review":         {Provider: "claude", Model: "opus"},
+	}
+	presetRoles := map[string]orchestrationRoleAssignment{
+		"implementation": {Provider: "codex", Model: "gpt", PermissionPreset: config.PermissionPresetBounded},
+		"review":         {Provider: "claude", Model: "opus", PermissionPreset: config.PermissionPresetAttended},
+	}
+
+	cfg := config.OrchestrationConfig{}
+	if !relayRequiresFullBypassAck(cfg, fullRoles) {
+		t.Fatal("default full bypass must require ack")
+	}
+	if !relayRequiresFullBypassAck(cfg, nil) {
+		t.Fatal("empty roles with default full bypass must require ack")
+	}
+	if relayRequiresFullBypassAck(cfg, presetRoles) {
+		t.Fatal("every role with an explicit preset must not require ack")
+	}
+
+	off := false
+	cfg.ChildFullBypass = &off
+	if relayRequiresFullBypassAck(cfg, fullRoles) {
+		t.Fatal("child_full_bypass=false must not require ack")
+	}
+
+	cfg = config.OrchestrationConfig{ChildPermissionDefault: config.PermissionPresetBounded}
+	if relayRequiresFullBypassAck(cfg, fullRoles) {
+		t.Fatal("safer child_permission_default must not require ack")
+	}
+}
+
+func TestHandleRelayStartRequiresFullBypassAck(t *testing.T) {
+	s := newTestServer()
+	s.cfg.Hub.AllowLoopbackWithoutToken = true
+	parent := registerTestSession(s, 1, "codex")
+	parent.CWD = t.TempDir()
+	plan := filepath.Join(parent.CWD, "plan.md")
+	if err := os.WriteFile(plan, []byte("# plan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, got := relayAPICall(t, s, http.MethodPost, "/api/sessions/1/relay", map[string]any{
+		"plan_path": plan,
+		"roles": map[string]any{
+			"implementation": map[string]any{"provider": "codex", "model": "gpt-5"},
+			"review":         map[string]any{"provider": "claude", "model": "opus"},
+		},
+	})
+	if code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, detail=%s", code, got.Detail)
+	}
+	if got.Error != "full_bypass_acknowledgment_required" {
+		t.Fatalf("error = %q, want full_bypass_acknowledgment_required", got.Error)
 	}
 }
