@@ -289,9 +289,13 @@ export function attachDoneSummaryNotifyToggle(): void {
   }
 
   let cur = null;
+  // 右クリックメニューを出した要素。ポインタがその要素から出るまで再表示しない
+  // （子要素への mouseover で出し直すと、メニューの上にツールチップが重なる）。
+  let suppressed = null;
   document.addEventListener('mouseover', e => {
     const t = e.target.closest('[data-tooltip]');
     if (!t || !t.dataset.tooltip) { tip.style.display = 'none'; cur = null; return; }
+    if (t === suppressed) return;
     cur = t;
     tip.textContent = t.dataset.tooltip;
     tip.style.display = 'block';
@@ -301,9 +305,15 @@ export function attachDoneSummaryNotifyToggle(): void {
     if (tip.style.display === 'block') pos(e.clientX, e.clientY);
   });
   document.addEventListener('mouseout', e => {
+    if (suppressed && !suppressed.contains(e.relatedTarget)) suppressed = null;
     if (cur && !cur.contains(e.relatedTarget)) { tip.style.display = 'none'; cur = null; }
   });
   document.addEventListener('click',  () => { tip.style.display = 'none'; cur = null; });
+  // 右クリックメニュー側が stopPropagation するので capture で拾う。
+  document.addEventListener('contextmenu', e => {
+    suppressed = e.target.closest?.('[data-tooltip]') || null;
+    tip.style.display = 'none'; cur = null;
+  }, true);
   document.addEventListener('scroll', () => { tip.style.display = 'none'; cur = null; }, true);
 })();
 
