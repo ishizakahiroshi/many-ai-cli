@@ -581,7 +581,14 @@ export function refreshMemoContext(): void {
 }
 function toggleDrawer(): void {
   const el = ensureDrawer();
-  if (el.hidden) openMemoDrawer(); else closeDrawer();
+  if (!el.hidden) { closeDrawer(); return; }
+  // 既定は別窓（サブモニターへ常駐させる使い方が主）。開けなかった（ポップアップが
+  // 止められた）ときだけ、これまでのドロワーで開いて案内する。
+  if (!isDetachedTabView()) {
+    if (openDetachedTabWindow('memo', activeSessionId)) return;
+    showToast(t('detached_popup_blocked'), undefined, 6000);
+  }
+  openMemoDrawer();
 }
 
 // node:test が純関数だけ import するとき document は無い。配線を走らせない
