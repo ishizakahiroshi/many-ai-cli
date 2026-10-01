@@ -3,7 +3,7 @@
 // プリセット → session 起動 / URL 生成ロジックを集約する。
 // spawn-panel.ts や session-list.ts から呼び出して二重化を防ぐ。
 
-import { apiFetch, token, escapeHtml } from './util.js';
+import { apiFetch, escapeHtml } from './util.js';
 import { sessions } from './state.js';
 import { calcDetachedLayout, openDetachedGridForSessions } from './session-list.js';
 import {
@@ -97,11 +97,11 @@ export const DETACHED_PRESETS: DetachedPreset[] = [
 
 /** Detached Grid URL を生成する（session ids 既知の場合）。 */
 export function buildDetachedGridUrl(sessionIds: number[], layout?: string): string {
-  const params = new URLSearchParams(window.location.search);
-  const tokenVal = params.get('token') || token;
+  // Same-origin window.open sends MANY_AI_CLI_token cookie; util.ts also reads localStorage.
+  // Keep token out of the shared navigation URL (F-WEB-07).
   const resolvedLayout = layout || calcDetachedLayout(sessionIds.length);
   const idsStr = sessionIds.join(',');
-  return `/?view=detached-grid&layout=${encodeURIComponent(resolvedLayout)}&session_ids=${idsStr}&token=${tokenVal}`;
+  return `/?view=detached-grid&layout=${encodeURIComponent(resolvedLayout)}&session_ids=${idsStr}`;
 }
 
 /**

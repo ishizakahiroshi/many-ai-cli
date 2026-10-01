@@ -1011,9 +1011,12 @@ Release artifacts are published at
   approval, and mobile-connect now use cookie-primary `apiFetch` as well.
 - Provider Registry UI (`provider-store.ts`) and the relay dialog now use
   cookie-primary `apiFetch` instead of `?token=` (F-WEB-07). Remaining
-  query-token surfaces in `app.ts`, memo images, voice, and detached-grid
-  navigation URLs are tightened separately; Hub launch URLs still use
-  `?token=` (D-11).
+  Hub UI query-token surfaces in `app.ts` (kill-all/shutdown/settings/
+  approval/etc.), memo image `<img>` URLs, whisper `/api/voice/transcribe`
+  (via `apiFetch`), detached-grid navigation, and files-asset/download
+  preview URLs now rely on Cookie / Bearer instead of `?token=` in the URL
+  bar or HTML attributes. Intentional Hub launch / mobile-connect share
+  URLs may still carry `?token=` (D-11).
 - Starting a relay through the HTTP API now requires
   `acknowledge_child_full_bypass:true` when unattended children would still get
   the built-in full permission tier (F-AI-01). The relay dialog Start button and

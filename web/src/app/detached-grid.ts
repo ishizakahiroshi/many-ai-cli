@@ -1,5 +1,5 @@
 // detached-grid.ts — C1: 別窓 Session Grid の基盤
-// URL: /?view=detached-grid&layout=2x2&session_ids=1,2,3,4&token=...
+// URL: /?view=detached-grid&layout=2x2&session_ids=1,2,3,4 (auth via cookie / localStorage)
 //
 // 別窓専用の表示マネージャ。session の生死・承認・終了は Hub 本体が管理する。
 // このモジュールは表示（xterm attach / resize / focus）だけを担当する。
@@ -808,11 +808,8 @@ function _insertHubOpenButton(): void {
   btn.textContent = '⊞ Hub';
   btn.title = 'Hub 本体を開く';
   btn.addEventListener('click', () => {
-    // 現在の origin (token なし) で Hub 本体を開く
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const hubUrl = token ? `/?token=${token}` : '/';
-    window.open(hubUrl, '_blank');
+    // Same-origin cookie / localStorage auth — keep token out of the URL (F-WEB-07).
+    window.open('/', '_blank');
   });
 
   // header の末尾に挿入（settings-btn の前）

@@ -1,6 +1,6 @@
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
-import { apiFetch, escapeHtml, ti18n, token } from './util.js';
+import { apiFetch, escapeHtml, ti18n } from './util.js';
 import { activeSessionId, collapsedGroups, dragOverCardEl, dragOverGroupEl, dragSrcGroupKey, dragSrcId, groupOrder, openProjectKey, orderSessions, projectFavorites, saveCollapsedNodes, saveGroupOrder, saveProjectFavorites, saveSessionOrder, sessionOrder, sessions, set_actionBarFocusIdx, set_activeSessionId, set_dragOverCardEl, set_dragOverGroupEl, set_dragSrcGroupKey, set_dragSrcId, set_groupOrder, set_openProjectKey, terminals } from './state.js';
 import { NO_PROJECT_KEY, buildSidebarTree, flattenSidebarTree, moveToSiblingFront, projectBoxKeyAfterSessionCardSelection, projectKeyForSession } from './sidebar-tree.js';
 import { STORAGE_SIDEBAR_PIN_MIGRATED_KEY, isTurnEndBellOff, setTurnEndBellOff, setUserPref } from './user-prefs.js';
@@ -1883,9 +1883,8 @@ export function calcDetachedLayout(count: number): string {
 export function openDetachedGridForSessions(sessionIds: number[]): void {
   if (sessionIds.length === 0) return;
   const layout = calcDetachedLayout(sessionIds.length);
-  const params = new URLSearchParams(window.location.search);
-  const tokenVal = params.get('token') || token;
   const idsStr = sessionIds.join(',');
-  const url = `/?view=detached-grid&layout=${encodeURIComponent(layout)}&session_ids=${idsStr}&token=${tokenVal}`;
+  // Cookie session / localStorage bootstrap — no &token= in shared navigation URL (F-WEB-07).
+  const url = `/?view=detached-grid&layout=${encodeURIComponent(layout)}&session_ids=${idsStr}`;
   window.open(url, '_blank');
 }
