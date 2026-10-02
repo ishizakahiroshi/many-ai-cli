@@ -1,5 +1,5 @@
-// 入力欄の下段ボタン列（■送信/停止・🎤・▤・クイックコマンド・/ ▾・⌫ 等）を
-// ドラッグ&ドロップで並べ替える。統合タブバーの並べ替え（tab-bar-order.ts）と同じ操作感。
+// 入力欄の下段ボタン列の旧並び順を復元する互換層。
+// 現在の移動操作は各ボタンの取っ手による自由配置へ統一する。
 //
 // 設計メモ:
 //  - DOM は動かさず、CSS の order だけで並びを変える。DOM 順は ⇄（左右切替・app.ts の
@@ -13,11 +13,14 @@
 //  - HTML5 の drag&drop はタッチ端末では発火しない。並べ替えはデスクトップ専用で、
 //    order を効かせる CSS もデスクトップのメディアクエリ内だけに置いてある。
 //  - 並び順は localStorage にブラウザ単位で保存する（端末ごとに好みが違うため）。
+//  - 各ボタンの自由配置は input-icon-position.ts が個別に管理する。
 
 import { onUiSideChange, toolsOnLeft } from './ui-side.js';
+import { initInputIconPositions, resetInputIconPositions, refreshInputIconPositions } from './input-icon-position.js';
 
 const STORAGE_KEY = 'inputToolsOrder';
 const CUSTOM_CLASS = 'custom-tool-order';
+const desktop = () => window.matchMedia('(min-width: 721px) and (not (pointer: coarse))').matches;
 
 // 並べ替えの対象。#input-tools の子も同じ階層として扱う。
 // モバイル専用のボタン（＋ / ⌨）と ⇄ 自身、テキスト欄は対象外。
@@ -116,6 +119,7 @@ function applyOrder(): void {
   // ⇄ は常にツール列の外側の端（右側なら右端・左側なら左端）
   flip?.style.setProperty('--tool-order', toolsOnLeft() ? '0' : String(visual.length + 1));
   wrap.classList.add(CUSTOM_CLASS);
+  refreshInputIconPositions();
 }
 
 function persistVisualOrder(visual: string[]): void {
@@ -126,6 +130,7 @@ function persistVisualOrder(visual: string[]): void {
 /** 入力欄ツールの並びを既定（⇄ が組む DOM 順）へ戻す。 */
 export function resetInputToolsOrder(): void {
   try { localStorage.removeItem(STORAGE_KEY); } catch (_) { /* noop */ }
+  resetInputIconPositions();
   applyOrder();
 }
 
@@ -141,7 +146,8 @@ export function initInputToolsOrder(): void {
   if (!wrap) return;
 
   applyOrder();
-  onUiSideChange(() => applyOrder());
+  initInputIconPositions();
+  onUiSideChange(() => { applyOrder(); refreshInputIconPositions(); });
 
   // ▤ はラッパー（パレットを含む）ではなくボタン側を掴ませる。
   // ラッパーごと draggable にすると、パレット内の検索欄で文字を選択できなくなる。
@@ -149,12 +155,12 @@ export function initInputToolsOrder(): void {
     const el = document.getElementById(id);
     if (!el) return;
     const handle = id === 'prompt-template-wrap' ? document.getElementById('prompt-template-toggle') : el;
-    if (handle) handle.draggable = true;
+    if (handle) handle.draggable = false;
   });
 
   wrap.addEventListener('dragstart', (e: DragEvent) => {
     const item = itemOf(e.target);
-    if (!item) return;
+    if (!item || !desktop()) return;
     dragSrc = item;
     item.classList.add('tool-dragging');
     if (e.dataTransfer) {
@@ -170,12 +176,13 @@ export function initInputToolsOrder(): void {
     clearDropMarks(wrap);
   });
 
-  // ボタン上なら左右半分でその前後へ落とす。ボタン以外（テキスト欄・余白）には落とさない。
+  // ボタンの左右半分でその前後へ落とす。
   // 並べ替え中は既定のドロップを常に止める。止めないとテキスト欄に落としたとき
   // dataTransfer の ID 文字列が入力欄へ挿入される。
   wrap.addEventListener('dragover', (e: DragEvent) => {
     if (!dragSrc) return;
     e.preventDefault();
+    e.stopPropagation();
     const item = itemOf(e.target);
     clearDropMarks(wrap);
     if (!item || item === dragSrc) {
@@ -191,6 +198,7 @@ export function initInputToolsOrder(): void {
   wrap.addEventListener('drop', (e: DragEvent) => {
     if (!dragSrc) return;
     e.preventDefault();
+    e.stopPropagation();
     const item = itemOf(e.target);
     clearDropMarks(wrap);
     if (!item || item === dragSrc) return;

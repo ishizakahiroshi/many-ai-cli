@@ -861,6 +861,45 @@ body.pc-input-tools-off #input-tools { display: none; }
 .tool-drop-before { box-shadow: -2px 0 0 0 var(--accent); }
 .tool-drop-after  { box-shadow: 2px 0 0 0 var(--accent); }
 
+/* Independent handles keep movement separate from normal button clicks. */
+#input-wrap { position: relative; }
+#send-btn, #voice-btn { position: relative; }
+#input-wrap .input-icon-positioned {
+  position: absolute;
+  left: var(--input-icon-x);
+  top: var(--input-icon-y);
+  margin: 0;
+  z-index: 3;
+}
+.input-icon-grip {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 0;
+  padding: 0;
+  z-index: 4;
+  background: var(--bg-elev);
+  color: var(--muted-2);
+  font: 14px/1 system-ui;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.input-icon-grip:hover { color: var(--text); }
+.input-icon-grip:active { cursor: grabbing; }
+.input-icon-moving { outline: 2px solid var(--accent); }
+.input-icon-slot { flex-shrink: 0; pointer-events: none; }
+#input-tools:has(.input-icon-positioned) { overflow: visible; }
+@media (max-width: 720px) {
+  body.mobile-has-session:not(.mobile-home-view) #voice-btn.input-icon-movable:not([hidden]) {
+    display: flex !important;
+  }
+}
+
 /* スマホでは入力欄ツールバーの左右切替ボタンは用途がないため非表示 */
 @media (max-width: 720px), (pointer: coarse) {
   #tools-flip-btn { display: none; }

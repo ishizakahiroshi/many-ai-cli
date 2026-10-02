@@ -11,6 +11,11 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Place input controls independently where you need them.** Send, microphone,
+  clear input, templates, quick commands and the other input toolbar buttons each
+  have a small grip. Drag it with a mouse or touch to move that control anywhere
+  within the input box. Positions are saved in this browser and kept inside the
+  box on resize. The input toolbar order reset restores all positions.
 - **Selecting text in a full-screen CLI now scrolls when you drag past the
   edge.** CLIs that draw on the alternate screen (such as Claude Code in its
   full-screen mode) keep their history themselves, so dragging a selection
