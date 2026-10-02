@@ -253,6 +253,18 @@ test('findPathCandidates: バッククォート囲みの Windows パスから閉
   assert.equal(PREVIEWABLE_EXT_RE.test(found[0].text), true);
 });
 
+test('findPathCandidates: 括弧で囲んだパスの後ろの「。」と日本語までリンクにしない', () => {
+  const text = '確認済み (/C:/work/sample/docs/design_x.html)。画面で使う権限情報の反映や表示条件に問題';
+  const found = findPathCandidates(text);
+  assert.ok(found.length >= 1);
+  for (const c of found) {
+    assert.equal(/[。画]/.test(c.text), false, c.text);
+    assert.equal(c.text.endsWith('.html'), true, c.text);
+  }
+  const rel = findPathCandidates('(docs/local/a.html)、次に');
+  assert.equal(rel[0].text, 'docs/local/a.html');
+});
+
 test('findPathCandidates: 単引用符と二重引用符の囲みも拡張子で終わる', () => {
   const single = "'D:\\src\\foo\\bar.ts'";
   const double = '"D:\\src\\foo\\bar.md"';

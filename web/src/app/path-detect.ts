@@ -28,11 +28,15 @@ function stripTrailingPathPunctuation(text: string): string {
   return text.slice(0, start) + text.slice(last.index + 1);
 }
 
+// 拡張子の直後に（閉じ括弧・引用符・句読点を挟んで）全角/日本語が続くときの切り落とし。
+// 「(/path/a.html)。画面で…」のように括弧や「。」「、」越しに日本語が続いても、そこで切る。
+const EXT_THEN_CJK_RE = /(\.[a-zA-Z0-9]{1,15})[)\]}>'"`,;:]*\s*[　-ヿ㐀-鿿＀-￯].*$/u;
+
 export function trimTerminalPathCandidate(path: string): string {
   let text = stripTrailingPathPunctuation(String(path || '').trim());
   // 拡張子の直後に全角/日本語が続く場合はそこで切る（相対パス・Unix 絶対パスにも適用）。
   // Windows 絶対パスは下の trimWindowsPathCandidate で同等処理を行う。
-  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
+  text = text.replace(EXT_THEN_CJK_RE, '$1');
   if (/^[A-Za-z]:[\\/]/.test(text)) text = trimWindowsPathCandidate(text);
   text = stripTerminalLineSuffix(text);
   return text;
@@ -41,7 +45,7 @@ export function trimTerminalPathCandidate(path: string): string {
 export function trimWindowsPathCandidate(path: string): string {
   let text = String(path || '');
   text = text.replace(/([\\/])\s+.*$/, '$1');
-  text = text.replace(/(\.[a-zA-Z0-9]{1,15})\s*[぀-ヿ㐀-鿿＀-￯一-鿿].*$/u, '$1');
+  text = text.replace(EXT_THEN_CJK_RE, '$1');
   text = stripWindowsDescription(text);
   if (/[A-Za-z]$/.test(text)) {
     let start = text.length - 1;
