@@ -160,7 +160,7 @@ relay loop は 1 つの plan を implementation → review → fix の順で、C
 - `orchestrate` のサブコマンドは `spawn` / `send` / `relay` の 3 つ。名前を間違えると使える名前を並べて返す。
 - Hub UI: 指揮者セッションカードまたは orchestration dashboard の relay dialog を開く。役割表で CLI・モデル・subscription profile・権限の段を役割ごとに選べ、次の relay まで記憶される。
 
-既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、`orchestration.max_children_per_parent` が上限です（既定値 4、通常の relay なら 2 本分）。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
+既定では専用 git worktree を作り、branch `many-ai-cli/relay/<orchestration_id>` で動かします。各 C の commit はその branch に積まれます。Hub は自動 merge しないので、branch を確認してから利用者の branch へ自分で merge してください。1 つの親から複数 relay を走らせられますが、自動生成の上限 `orchestration.max_children_per_parent` が適用されます（初期値10、通常の relay なら5本分。設定画面で1〜256に変更可能）。個別に人が承認した子や画面から直接起動した子は、自動生成の上限や全体セッション枠とは独立して、親ごとに256まで起動できます。枠には開いたままの子（完了済みで未終了の子を含む）と起動予約を数えます。既存の保存済み設定値は維持します。2 本の relay が同じファイルを編集した場合、その競合は merge 時に解決します。
 
 通常は cheap な implementation model と、任意の strong implementation model の二段構えです。既定では review に 2 回続けて失敗した C、または plan の C に `[strong]` を付けた C を、空き枠があれば strong role へ渡します。2 本を同時に strong へ上げる想定なら上限 6 以上を用意してください。`--same-tree` は明示的な例外で、子が利用者の working tree を直接編集するため、同じ tree を別の AI や利用者が並行編集してはいけません。
 

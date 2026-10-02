@@ -18,6 +18,25 @@ func TestDefaultConfigOpensBrowser(t *testing.T) {
 	}
 }
 
+func TestDefaultOrchestrationChildCapacity(t *testing.T) {
+	cfg := defaultConfig(t.TempDir())
+	cfg.applyDefaults()
+	if cfg.Orchestration.MaxChildrenPerParent != 10 || cfg.Orchestration.MaxTotalSessions != 257 {
+		t.Fatalf("default orchestration limits = %d/%d, want 10/257", cfg.Orchestration.MaxChildrenPerParent, cfg.Orchestration.MaxTotalSessions)
+	}
+}
+
+func TestOrchestrationChildLimitNormalizesRange(t *testing.T) {
+	for _, tc := range []struct{ raw, want int }{{0, 10}, {-1, 10}, {4, 4}, {10, 10}, {256, 256}, {257, 256}} {
+		cfg := defaultConfig(t.TempDir())
+		cfg.Orchestration.MaxChildrenPerParent = tc.raw
+		cfg.applyDefaults()
+		if cfg.Orchestration.MaxChildrenPerParent != tc.want {
+			t.Fatalf("raw=%d normalized=%d, want=%d", tc.raw, cfg.Orchestration.MaxChildrenPerParent, tc.want)
+		}
+	}
+}
+
 func TestNVIDIANIMConfigDefaultsDisabledAndContainsNoCredentialField(t *testing.T) {
 	cfg := defaultConfig(t.TempDir())
 	if cfg.NVIDIANIM.Enabled {

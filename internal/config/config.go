@@ -1585,10 +1585,13 @@ func (cfg *Config) applyDefaults() {
 		cfg.Orchestration.MaxDepth = 1
 	}
 	if cfg.Orchestration.MaxChildrenPerParent <= 0 {
-		cfg.Orchestration.MaxChildrenPerParent = 4
+		cfg.Orchestration.MaxChildrenPerParent = 10
+	}
+	if cfg.Orchestration.MaxChildrenPerParent > 256 {
+		cfg.Orchestration.MaxChildrenPerParent = 256
 	}
 	if cfg.Orchestration.MaxTotalSessions <= 0 {
-		cfg.Orchestration.MaxTotalSessions = 16
+		cfg.Orchestration.MaxTotalSessions = 257
 	}
 	// orchestration の時間閾値は 2026-07-04 実測（実装子が 40 分正常稼働・
 	// 120s idle 警告は 3 連続偽陽性）に基づく。短い時間駆動閾値は AI 子セッション

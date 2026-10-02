@@ -16,6 +16,11 @@ Release artifacts are published at
   have a small grip. Drag it with a mouse or touch to move that control anywhere
   within the input box. Positions are saved in this browser and kept inside the
   box on resize. The input toolbar order reset restores all positions.
+- **Child limits now distinguish human approval from automatic creation.**
+  Individually approved children and children launched from the UI allow up to
+  256 per parent. Automatic creation defaults to 10, adjustable from 1 to 256
+  in Settings. Limit errors report the actual session/reservation count and
+  maximum instead of incorrectly blaming pending confirmations.
 - **Selecting text in a full-screen CLI now scrolls when you drag past the
   edge.** CLIs that draw on the alternate screen (such as Claude Code in its
   full-screen mode) keep their history themselves, so dragging a selection

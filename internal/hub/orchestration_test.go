@@ -1974,22 +1974,22 @@ func Test_registerSpawnConfirmation_supersedesSameParentRole(t *testing.T) {
 func Test_registerSpawnConfirmation_enforcesParentAndGlobalLimits(t *testing.T) {
 	s := newTestServer()
 	s.cfg.Orchestration.MaxChildrenPerParent = 2
-	// The shared admission ledger counts live parent sessions as well as
-	// pending child slots: two parents + three pending confirmations exactly
-	// fill a total budget of five.
+	// Legacy automatic limits must not block the human approval route.
 	s.cfg.Orchestration.MaxTotalSessions = 5
 	parent := registerTestSession(s, 1, "codex")
 	otherParent := registerTestSession(s, 2, "codex")
 
 	first := registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "role-a", Provider: "codex"})
-	registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: "role-b", Provider: "codex"})
-	if rejected, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "role-c", Provider: "codex"}); err == nil || rejected != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || err.detail != "pending spawn confirmations per parent" {
+	for i := 1; i < 256; i++ {
+		registerTestSpawnConfirmation(t, s, parent, spawnChildRequest{Role: fmt.Sprintf("role-%d", i), Provider: "codex"})
+	}
+	if rejected, err := s.registerSpawnConfirmation(parent, "", spawnChildRequest{Role: "overflow", Provider: "codex"}); err == nil || rejected != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || !strings.Contains(err.detail, "sessions and reserved slots=256, max=256") {
 		t.Fatalf("parent limit result = pending=%v err=%v, want 429 orchestration_limit per-parent", rejected, err)
 	}
 
 	registerTestSpawnConfirmation(t, s, otherParent, spawnChildRequest{Role: "role-a", Provider: "codex"})
-	if accepted, err := s.registerSpawnConfirmation(otherParent, "", spawnChildRequest{Role: "role-b", Provider: "codex"}); err == nil || accepted != nil || err.status != http.StatusTooManyRequests || err.code != "orchestration_limit" || err.detail != "pending spawn confirmations total" {
-		t.Fatalf("global limit result = pending=%v err=%v, want 429 total", accepted, err)
+	if accepted, err := s.registerSpawnConfirmation(otherParent, "", spawnChildRequest{Role: "role-b", Provider: "codex"}); err != nil || accepted == nil {
+		t.Fatalf("human approval across parents = pending=%v err=%v, want success", accepted, err)
 	}
 
 	// Re-registering the same parent+role replaces one slot even at the
@@ -2069,7 +2069,7 @@ func Test_registerSpawnConfirmation_concurrentLimit(t *testing.T) {
 	s.cfg.Orchestration.MaxTotalSessions = 16
 	parent := registerTestSession(s, 1, "codex")
 
-	const attempts = 12
+	const attempts = 270
 	results := make(chan *spawnHTTPError, attempts)
 	var wg sync.WaitGroup
 	for i := 0; i < attempts; i++ {
@@ -2095,8 +2095,8 @@ func Test_registerSpawnConfirmation_concurrentLimit(t *testing.T) {
 			t.Fatalf("unexpected concurrent registration error: %v", err)
 		}
 	}
-	if accepted != s.cfg.Orchestration.MaxChildrenPerParent {
-		t.Fatalf("concurrent accepted registrations = %d, want %d", accepted, s.cfg.Orchestration.MaxChildrenPerParent)
+	if accepted != 256 {
+		t.Fatalf("concurrent accepted registrations = %d, want 256", accepted)
 	}
 	if got := len(s.pendingSpawnConfirmationMessages()); got != accepted {
 		t.Fatalf("pending confirmation messages = %d, want %d", got, accepted)
@@ -2112,7 +2112,8 @@ func Test_handleSpawnChild_pendingLimitReturns429(t *testing.T) {
 	parent := registerTestSession(s, 1, "codex")
 	parent.CWD = t.TempDir()
 
-	for _, role := range []string{"role-a", "role-b"} {
+	for i := 0; i < 256; i++ {
+		role := fmt.Sprintf("role-%d", i)
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		req := orchestrationRequest(http.MethodPost, "/api/sessions/1/spawn-child", spawnChildRequest{Provider: "codex", Role: role})
@@ -2133,11 +2134,11 @@ func Test_handleSpawnChild_pendingLimitReturns429(t *testing.T) {
 	if rr.Code != http.StatusTooManyRequests {
 		t.Fatalf("rejected pending request status = %d, want %d: %s", rr.Code, http.StatusTooManyRequests, rr.Body.String())
 	}
-	if !strings.Contains(rr.Body.String(), `"error":"orchestration_limit"`) || !strings.Contains(rr.Body.String(), "pending spawn confirmations per parent") {
+	if !strings.Contains(rr.Body.String(), `"error":"orchestration_limit"`) || !strings.Contains(rr.Body.String(), "sessions and reserved slots=256, max=256") {
 		t.Fatalf("rejected pending request body = %s, want orchestration_limit per-parent", rr.Body.String())
 	}
-	if got := len(s.pendingSpawnConfirmationMessages()); got != 2 {
-		t.Fatalf("pending confirmation messages after rejection = %d, want 2", got)
+	if got := len(s.pendingSpawnConfirmationMessages()); got != 256 {
+		t.Fatalf("pending confirmation messages after rejection = %d, want 256", got)
 	}
 }
 

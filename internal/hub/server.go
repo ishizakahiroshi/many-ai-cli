@@ -733,9 +733,22 @@ type wrapperConn struct {
 	// 同じ wrapper か」を判定するのに使う（reattachIdentityMatches）。
 	// sessions/wrappers へ載せる前に sessionsMu 配下で 1 度だけ書く。
 	pid int
+	// awaitingAck / held は register の応答順序の保証（sendMu 配下）。wrapper は register
+	// の応答の最初のフレームが registered でないと起動に失敗するので、registered を
+	// 送るまでに来た pty_resize 等は held に溜め、registered の直後に流す
+	// （register_ack_order_test.go）。
+	awaitingAck bool
+	held        []any
 }
 
 func newWrapperConn(ws *websocket.Conn) *wrapperConn { return &wrapperConn{ws: ws} }
+
+// holdUntilRegistered は registered を送るまで、他のフレームを送らず溜めるようにする。
+func (c *wrapperConn) holdUntilRegistered() {
+	c.sendMu.Lock()
+	c.awaitingAck = true
+	c.sendMu.Unlock()
+}
 
 func (c *wrapperConn) send(m any) (err error) {
 	if c == nil {
@@ -743,6 +756,26 @@ func (c *wrapperConn) send(m any) (err error) {
 	}
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+	if c.awaitingAck {
+		if pm, ok := m.(proto.Message); !ok || pm.Type != "registered" {
+			c.held = append(c.held, m)
+			return nil
+		}
+		c.awaitingAck = false
+		held := c.held
+		c.held = nil
+		err = c.sendLocked(m)
+		for _, h := range held {
+			if err == nil {
+				err = c.sendLocked(h)
+			}
+		}
+		return err
+	}
+	return c.sendLocked(m)
+}
+
+func (c *wrapperConn) sendLocked(m any) (err error) {
 	if c.sendFunc != nil {
 		return c.sendFunc(m)
 	}

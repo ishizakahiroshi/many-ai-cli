@@ -554,9 +554,9 @@ func (s *Server) writeRelayAPIError(w http.ResponseWriter, status int, code stri
 	}
 	var limit errOrchestrationLimit
 	if errors.As(err, &limit) {
-		detail := fmt.Sprintf("relay running=%d max_children_per_parent=%d; raise orchestration.max_children_per_parent to run more", limit.Running, limit.Max)
-		if limit.Limit != "children_per_parent" {
-			detail = fmt.Sprintf("%s; %s", limit.Error(), detail)
+		detail := limit.Error()
+		if limit.Limit == "children_per_parent" {
+			detail = fmt.Sprintf("%s; relay running=%d max_children_per_parent=%d; dismiss open children or adjust the automatic child limit in Settings (up to 256)", detail, limit.Running, limit.Max)
 		}
 		writeJSONError(w, http.StatusTooManyRequests, "orchestration_limit", detail)
 		return

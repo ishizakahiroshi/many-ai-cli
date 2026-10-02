@@ -466,6 +466,20 @@ func (s *Server) reserveOrchestrationChildren(parentID, slots int, cfg config.Or
 // orchestrationAdmissionMu and orchestration.mu. excludeID is used when a
 // same-role confirmation is replaced in one admission transaction.
 func (s *Server) reserveOrchestrationChildrenLocked(parentID, childCount, totalSessions int, cfg config.OrchestrationConfig, slots int, kind, excludeID string) (string, error) {
+	// Confirmation reservations and direct browser requests have a human
+	// decision before dispatch. All autonomous paths retain the harness cap.
+	childLimit := cfg.MaxChildrenPerParent
+	if childLimit <= 0 {
+		childLimit = 10
+	}
+	humanApproved := kind == "spawn-confirmation" || kind == "spawn-ui"
+	if childLimit > 256 || humanApproved {
+		childLimit = 256
+	}
+	// Automatic aggregate budgets must allow one parent and its configured
+	// capacity, even with a legacy total budget of 16. Human requests use only
+	// their per-parent cap, so automatic aggregate limits cannot block approval.
+	totalLimit := max(cfg.MaxTotalSessions, childLimit+1)
 	parentReserved, totalReserved := 0, 0
 	for id, admission := range s.orchestration.childAdmissions {
 		if id == excludeID || admission.Slots <= 0 {
@@ -482,11 +496,11 @@ func (s *Server) reserveOrchestrationChildrenLocked(parentID, childCount, totalS
 			running++
 		}
 	}
-	if childCount+parentReserved+slots > cfg.MaxChildrenPerParent {
-		return "", errOrchestrationLimit{Limit: "children_per_parent", Running: running, Max: cfg.MaxChildrenPerParent}
+	if childCount+parentReserved+slots > childLimit {
+		return "", errOrchestrationLimit{Limit: "children_per_parent", Running: running, Used: childCount + parentReserved, Max: childLimit}
 	}
-	if totalSessions+totalReserved+slots > cfg.MaxTotalSessions {
-		return "", errOrchestrationLimit{Limit: "total_sessions", Running: running, Max: cfg.MaxTotalSessions}
+	if !humanApproved && totalSessions+totalReserved+slots > totalLimit {
+		return "", errOrchestrationLimit{Limit: "total_sessions", Running: running, Used: totalSessions + totalReserved, Max: totalLimit}
 	}
 	if s.orchestration.childAdmissions == nil {
 		s.orchestration.childAdmissions = map[string]orchestrationChildAdmission{}
@@ -658,11 +672,7 @@ func (s *Server) registerSpawnConfirmation(parent *session, requestedProvider st
 		s.orchestrationAdmissionMu.Unlock()
 		var limit errOrchestrationLimit
 		if errors.As(admissionErr, &limit) {
-			detail := "pending spawn confirmations total"
-			if limit.Limit == "children_per_parent" {
-				detail = "pending spawn confirmations per parent"
-			}
-			return nil, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: detail}
+			return nil, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: limit.Error()}
 		}
 		return nil, &spawnHTTPError{status: http.StatusInternalServerError, code: "orchestration_limit", detail: admissionErr.Error()}
 	}
@@ -1366,17 +1376,18 @@ func (s *Server) performSpawnWithAdmission(parentID int, requestedProvider, prov
 	admissionID := strings.TrimSpace(existingAdmissionID)
 	if !s.orchestrationAdmissionMatches(admissionID, parentID, 1) {
 		var err error
-		admissionID, err = s.reserveOrchestrationChildren(parentID, 1, cfg, "spawn")
+		kind := "spawn"
+		if body.Origin == launchOriginUI {
+			kind = "spawn-ui"
+		}
+		admissionID, err = s.reserveOrchestrationChildren(parentID, 1, cfg, kind)
 		if err != nil {
 			if errors.Is(err, errOrchestrationAdmissionParentNotFound) {
 				return childSpawnResult{}, &spawnHTTPError{status: http.StatusNotFound, code: "not_found", detail: "parent session not found"}
 			}
 			var limit errOrchestrationLimit
 			if errors.As(err, &limit) {
-				detail := "max children per parent reached"
-				if limit.Limit == "total_sessions" {
-					detail = "max total sessions reached"
-				}
+				detail := limit.Error()
 				s.notifyOrchestrationError(parentID, limit.Limit, detail)
 				return childSpawnResult{}, &spawnHTTPError{status: http.StatusTooManyRequests, code: "orchestration_limit", detail: detail}
 			}

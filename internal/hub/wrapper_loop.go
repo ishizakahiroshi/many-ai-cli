@@ -271,6 +271,7 @@ func (s *Server) wrapperLoop(conn *websocket.Conn, reg proto.Message) {
 	s.sessions[id] = ses
 	wc := newWrapperConn(conn)
 	wc.pid = reg.PID
+	wc.holdUntilRegistered()
 	s.wrappers[id] = wc
 	s.sessionsMu.Unlock()
 	if initCols == 0 || initRows == 0 {

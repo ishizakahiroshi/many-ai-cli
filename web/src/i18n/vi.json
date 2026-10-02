@@ -1,4 +1,7 @@
 {
+  "settings_auto_child_limit": "Giới hạn phiên con tự động cho mỗi phiên cha",
+  "settings_auto_child_limit_desc": "Mặc định 10, có thể đổi từ 1 đến 256. Phiên con được duyệt riêng hoặc tạo từ giao diện có giới hạn 256 cho mỗi phiên cha. Tính cả phiên đang mở và chỗ đã đặt trước.",
+  "settings_orchestration_save_failed": "Không thể lưu cài đặt điều phối. Vui lòng thử lại.",
   "loading": "Đang tải...",
   "first_run_tour_open_tooltip": "Mở tour 60 giây",
   "first_run_tour_settings_btn": "Tour 60 giây",

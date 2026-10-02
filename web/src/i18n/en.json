@@ -1,4 +1,7 @@
 {
+  "settings_auto_child_limit": "Automatic children per parent",
+  "settings_auto_child_limit_desc": "Default 10, adjustable from 1 to 256. Children approved individually or launched from the UI allow up to 256 per parent. Counts include open children and reserved slots.",
+  "settings_orchestration_save_failed": "Could not save orchestration settings. Please try again.",
   "loading": "Loading...",
   "first_run_tour_open_tooltip": "Open the 60-second tour",
   "first_run_tour_settings_btn": "60-second tour",

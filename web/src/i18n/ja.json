@@ -1,4 +1,7 @@
 {
+  "settings_auto_child_limit": "親ごとの自動生成の子の上限",
+  "settings_auto_child_limit_desc": "初期値10、1〜256に変更できます。個別に人が承認した子や画面から起動した子は、親ごとに256まで。開いたままの子と起動予約を数えます。",
+  "settings_orchestration_save_failed": "オーケストレーション設定を保存できませんでした。もう一度お試しください。",
   "loading": "読み込み中...",
   "first_run_tour_open_tooltip": "60 秒ツアーを開く",
   "first_run_tour_settings_btn": "60 秒ツアー",

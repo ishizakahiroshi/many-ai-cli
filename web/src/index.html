@@ -301,6 +301,11 @@
           </div>
           <div class="settings-note">Before an orchestration child starts, approve it, adjust its provider/model, or refuse it. Refusals are written to the orchestration board.</div>
           <div class="settings-row">
+            <label class="settings-label" for="orchestration-max-children" data-i18n="settings_auto_child_limit">Automatic children per parent</label>
+            <input id="orchestration-max-children" type="number" min="1" max="256" step="1" class="settings-input-number" value="10">
+          </div>
+          <div class="settings-note" data-i18n="settings_auto_child_limit_desc">Default 10, adjustable from 1 to 256. Children approved individually or launched from the UI allow up to 256 per parent. Counts include open children and reserved slots.</div>
+          <div class="settings-row">
             <span class="settings-label">Child timeout (seconds)</span>
             <input id="orchestration-child-timeout" type="number" min="60" max="86400" class="settings-input-number" value="900">
             <label><input id="orchestration-timeout-respawn" type="checkbox"> Retry once</label>

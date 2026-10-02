@@ -382,7 +382,7 @@ func (s *Server) handleInputConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleOrchestrationConfig exposes only the UI-safe orchestration preference.
-// Limits and worktree fields intentionally remain config-file managed.
+// The autonomous child limit is editable; human-approved children allow 256.
 func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Request) {
 	if !s.guard(w, r, http.MethodGet, http.MethodPost) {
 		return
@@ -405,6 +405,7 @@ func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Reques
 			SpawnConfirmProviders []string                `json:"spawn_confirm_providers"`
 			ChildTimeoutSeconds   int                     `json:"child_timeout_seconds"`
 			TimeoutRespawn        bool                    `json:"timeout_respawn"`
+			MaxChildrenPerParent  *int                    `json:"max_children_per_parent"`
 		}
 		if !decodeJSON(w, r, &body) {
 			return
@@ -417,7 +418,14 @@ func (s *Server) handleOrchestrationConfig(w http.ResponseWriter, r *http.Reques
 			writeJSONError(w, http.StatusBadRequest, "invalid_child_timeout", "child_timeout_seconds must be between 60 and 86400")
 			return
 		}
+		if body.MaxChildrenPerParent != nil && (*body.MaxChildrenPerParent < 1 || *body.MaxChildrenPerParent > 256) {
+			writeJSONError(w, http.StatusBadRequest, "invalid_child_limit", "max_children_per_parent must be between 1 and 256")
+			return
+		}
 		s.cfgMu.Lock()
+		if body.MaxChildrenPerParent != nil {
+			s.cfg.Orchestration.MaxChildrenPerParent = *body.MaxChildrenPerParent
+		}
 		s.cfg.Orchestration.BoardNotifyMode = body.BoardNotifyMode
 		s.cfg.Orchestration.SpawnConfirmMode = body.SpawnConfirmMode
 		s.cfg.Orchestration.SpawnConfirmProviders = append([]string(nil), body.SpawnConfirmProviders...)

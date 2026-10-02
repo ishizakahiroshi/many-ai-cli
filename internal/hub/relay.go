@@ -151,11 +151,12 @@ func (e errRelayExecutionMode) Unwrap() error { return e.Err }
 type errOrchestrationLimit struct {
 	Limit   string // depth | children_per_parent | total_sessions
 	Running int
+	Used    int // Live sessions plus reserved slots in the limiting budget.
 	Max     int
 }
 
 func (e errOrchestrationLimit) Error() string {
-	return fmt.Sprintf("orchestration limit %s reached (relays in progress=%d, max=%d)", e.Limit, e.Running, e.Max)
+	return fmt.Sprintf("orchestration limit %s reached (sessions and reserved slots=%d, max=%d)", e.Limit, e.Used, e.Max)
 }
 
 // relayDeps are the side effects of the state machine. A nil field means the

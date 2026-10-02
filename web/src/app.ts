@@ -1876,6 +1876,7 @@ inputEl.addEventListener('blur', (e) => {
 	const spawnConfirmProvidersRow = document.getElementById('spawn-confirm-providers-row');
 	const orchestrationChildTimeoutEl = document.getElementById('orchestration-child-timeout') as HTMLInputElement | null;
 	const orchestrationTimeoutRespawnEl = document.getElementById('orchestration-timeout-respawn') as HTMLInputElement | null;
+	const orchestrationMaxChildrenEl = document.getElementById('orchestration-max-children') as HTMLInputElement | null;
   const logEnabledEl               = document.getElementById('log-enabled');
   const logSessionEnabledEl        = document.getElementById('log-session-enabled');
   const logMaxSizeEl               = document.getElementById('log-max-size');
@@ -2170,18 +2171,21 @@ inputEl.addEventListener('blur', (e) => {
 			}
 			if (orchestrationChildTimeoutEl) orchestrationChildTimeoutEl.value = String(cfg.child_timeout_seconds || 900);
 			if (orchestrationTimeoutRespawnEl) orchestrationTimeoutRespawnEl.checked = Boolean(cfg.timeout_respawn);
+			if (orchestrationMaxChildrenEl) orchestrationMaxChildrenEl.value = String(cfg.max_children_per_parent || 10);
 		} catch (_) {}
 	}
 
 	async function saveBoardNotifyMode() {
 		if (!boardNotifyModeEl) return;
+		if (orchestrationMaxChildrenEl && !orchestrationMaxChildrenEl.reportValidity()) return;
 		try {
-			await apiFetch('/api/orchestration-config', {
+			const res = await apiFetch('/api/orchestration-config', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value, spawn_confirm_mode: spawnConfirmModeEl?.value || 'on', spawn_confirm_providers: (spawnConfirmProvidersEl?.value || '').split(',').map(v => v.trim()).filter(Boolean), child_timeout_seconds: Math.max(60, Math.min(86400, Number(orchestrationChildTimeoutEl?.value || 900))), timeout_respawn: Boolean(orchestrationTimeoutRespawnEl?.checked) }),
+				body: JSON.stringify({ board_notify_mode: boardNotifyModeEl.value, spawn_confirm_mode: spawnConfirmModeEl?.value || 'on', spawn_confirm_providers: (spawnConfirmProvidersEl?.value || '').split(',').map(v => v.trim()).filter(Boolean), child_timeout_seconds: Math.max(60, Math.min(86400, Number(orchestrationChildTimeoutEl?.value || 900))), timeout_respawn: Boolean(orchestrationTimeoutRespawnEl?.checked), max_children_per_parent: Number(orchestrationMaxChildrenEl?.value || 10) }),
 			});
-		} catch (_) {}
+			if (!res.ok) throw new Error('save failed');
+		} catch (_) { showToast(t('settings_orchestration_save_failed')); }
 	}
   const autoApprovalInput = document.getElementById('auto-approval-enabled-input');
   if (autoApprovalInput) {
@@ -2471,6 +2475,7 @@ inputEl.addEventListener('blur', (e) => {
 	if (spawnConfirmProvidersEl) spawnConfirmProvidersEl.addEventListener('change', () => void saveBoardNotifyMode());
 	if (orchestrationChildTimeoutEl) orchestrationChildTimeoutEl.addEventListener('change', () => void saveBoardNotifyMode());
 	if (orchestrationTimeoutRespawnEl) orchestrationTimeoutRespawnEl.addEventListener('change', () => void saveBoardNotifyMode());
+	if (orchestrationMaxChildrenEl) orchestrationMaxChildrenEl.addEventListener('change', () => void saveBoardNotifyMode());
   logEnabledEl.addEventListener('change', saveLogConfig);
   if (logSessionEnabledEl) logSessionEnabledEl.addEventListener('change', saveLogConfig);
   logMaxSizeEl.addEventListener('change', saveLogConfig);
