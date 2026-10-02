@@ -27,7 +27,7 @@ var secretPatterns = []*regexp.Regexp{
 	// 値長 6 文字以上に限定して通常テキストの過剰マスクを抑える。区切りは = または :。
 	// group1 はマッチ先頭から始まる必要がある（prefix 保持ロジックが m[0:len(group1)] を残すため）。
 	// DB_PASSWORD= のように接頭辞付きキー名も group1 に取り込んで丸ごと残す。
-	regexp.MustCompile(`(?i)((?:[A-Z0-9]+_)?(?:PASSWORD|PASSWD|PWD|SECRET|ACCESS_KEY|SECRET_KEY|AUTH_TOKEN|API_TOKEN|ACCESS_TOKEN)\s*[=:]\s*)\S{6,}`),
+	regexp.MustCompile(`(?i)((?:[A-Z0-9]+_)?(?:PASSWORD|PASSWD|PWD|SECRET|ACCESS_KEY|SECRET_KEY|AUTH_TOKEN|API_TOKEN|ACCESS_TOKEN)(?:\\?["'])?\s*[=:]\s*(?:\\?["'])?)\S{6,}`),
 	// Anthropic / OpenAI トークン: sk-ant-... / sk-...
 	regexp.MustCompile(`sk-(?:ant-)?[A-Za-z0-9_\-]{20,}`),
 	// xAI / Grok, Cohere, Mistral provider tokens.

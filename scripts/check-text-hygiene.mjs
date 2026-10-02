@@ -44,11 +44,11 @@ const EXCLUDE = [
 
 // バイナリは対象外。git がバイナリと判定したものを除く。
 function textFiles() {
-  const out = execFileSync('git', ['ls-files', '--eol'], { cwd: repoRoot, encoding: 'utf8' });
+  // -z: パスを引用符・八進エスケープにせず NUL 区切りで受ける（日本語名の取りこぼし防止）
+  const out = execFileSync('git', ['ls-files', '--eol', '-z'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   const files = [];
-  for (const line of out.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+  for (const line of out.split('\0')) {
+    if (!line) continue;
     // 例: "i/lf    w/crlf  attr/text=auto  	path/to/file"
     const tab = line.indexOf('\t');
     if (tab < 0) continue;

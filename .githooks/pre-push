@@ -42,14 +42,19 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if [ "$local_sha" = "$zero" ]; then
     continue
   fi
+  # -z: 日本語名・引用符入りのパスが八進エスケープで返り .go の判定を外すのを防ぐ。
+  # パイプにすると git の失敗が見えなくなるので、一旦ファイルへ受けて終了コードを取る。
+  range_tmp=$(mktemp) || exit 1
   if [ "$remote_sha" = "$zero" ]; then
     # 新規 branch: どのリモートにも無いコミットが触ったファイル
-    range_files=$(git log --format='' --name-only "$local_sha" --not --remotes 2>/dev/null) || range_files=''
+    git log --format='' --name-only -z "$local_sha" --not --remotes >"$range_tmp" 2>/dev/null
     range_ok=$?
   else
-    range_files=$(git diff --name-only "$remote_sha" "$local_sha" 2>/dev/null)
+    git diff --name-only -z "$remote_sha" "$local_sha" >"$range_tmp" 2>/dev/null
     range_ok=$?
   fi
+  range_files=$(tr '\0' '\n' <"$range_tmp")
+  rm -f "$range_tmp"
   if [ "$range_ok" -ne 0 ]; then
     # 範囲が取れない（remote sha のオブジェクトが手元に無い等）ときは安全側に倒す
     go_changed=1

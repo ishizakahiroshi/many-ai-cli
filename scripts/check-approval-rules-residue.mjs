@@ -82,14 +82,15 @@ function checkWiring() {
 }
 
 function stagedTargets() {
-  const out = git(['diff', '--cached', '--name-only', '--diff-filter=ACMR']);
-  return out.split('\n').map(s => s.trim()).filter(Boolean)
+  // -z: 日本語名・引用符入りのパスを八進エスケープで返させない（読めず取りこぼすため）
+  const out = git(['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']);
+  return out.split('\0').filter(Boolean)
     .filter(p => TARGET_BASENAMES.has(path.basename(p)));
 }
 
 function trackedTargets() {
-  const out = git(['ls-tree', '-r', '--name-only', 'HEAD']);
-  return out.split('\n').map(s => s.trim()).filter(Boolean)
+  const out = git(['ls-tree', '-r', '--name-only', '-z', 'HEAD']);
+  return out.split('\0').filter(Boolean)
     .filter(p => TARGET_BASENAMES.has(path.basename(p)));
 }
 

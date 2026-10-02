@@ -43,7 +43,17 @@ var (
 	findSideEffectRe   = regexp.MustCompile(`(?i)\bfind\b[^\n]*\s-(?:exec|execdir|ok|okdir|delete|fls|fprint|fprint0|fprintf)\b`)
 	gitOutputOptionRe  = regexp.MustCompile(`(?i)\bgit\b[^\n]*\s--output\b`)
 	gitBranchCommandRe = regexp.MustCompile(`(?i)^\s*git\s+branch(?:\s|$)`)
+	// externalCommandOptionRe catches search-tool options that name another
+	// executable to run, even when the command begins with a low-risk prefix.
+	externalCommandOptionRe = regexp.MustCompile(`(?i)(?:^|\s)["']?--(?:pre|hostname-bin)(?:=|\s|["']|$)`)
 )
+
+// HasExternalCommandOption reports whether the command passes an option that
+// names an external executable to a search tool. Such commands are never
+// read-only, regardless of their leading command name.
+func HasExternalCommandOption(command string) bool {
+	return externalCommandOptionRe.MatchString(command)
+}
 
 // Summarize extracts conservative display facts from an already ANSI-stripped
 // approval prompt.  Unknown commands are mid risk: a missing parser match must
@@ -87,7 +97,7 @@ func ClassifyRisk(command string) proto.ApprovalRiskTier {
 	// command substitution, process substitution, find/git file write option,
 	// or branch mutation makes the command manual even when it starts with cat,
 	// ls, or git branch.
-	if HasWriteRedirect(value) || IsGitBranchMutation(value) || findSideEffectRe.MatchString(value) || gitOutputOptionRe.MatchString(value) || strings.Contains(value, "$(") || strings.Contains(value, "`") || strings.Contains(value, "<(") || strings.Contains(value, "=(") || strings.Contains(value, "@(") {
+	if HasWriteRedirect(value) || IsGitBranchMutation(value) || findSideEffectRe.MatchString(value) || gitOutputOptionRe.MatchString(value) || HasExternalCommandOption(value) || strings.Contains(value, "$(") || strings.Contains(value, "`") || strings.Contains(value, "<(") || strings.Contains(value, "=(") || strings.Contains(value, "@(") {
 		return proto.ApprovalRiskMid
 	}
 	lowPrefixes := []string{

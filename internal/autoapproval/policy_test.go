@@ -20,6 +20,9 @@ func TestEvaluateKeepsHardBlocksManual(t *testing.T) {
 		"cat `cat cmd.txt`",
 		"cat /dev/null > ./important.txt",
 		"git branch -D feature",
+		"rg --pre ./tool pattern .",
+		"rg --pre=./tool pattern .",
+		"rg --hostname-bin ./tool pattern .",
 	} {
 		if got := p.Evaluate(command, ".", proto.ApprovalRiskLow); got.Allowed {
 			t.Fatalf("%q was allowed: %+v", command, got)
