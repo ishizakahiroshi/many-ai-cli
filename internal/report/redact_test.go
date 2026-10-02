@@ -54,6 +54,11 @@ func TestRedactKnownSecretPatterns(t *testing.T) {
 		{"credentials field", "aws_credentials=syntheticAwsCredentials123", "syntheticAwsCredentials123"},
 		{"session key field", "session_key: syntheticSessionKey123", "syntheticSessionKey123"},
 		{"signing key field", "signing_key=syntheticSigningKey123", "syntheticSigningKey123"},
+		// 引用符付きキー（構造化表現・escape 済み表現）。
+		{"quoted key object", `{"password":"syntheticQuotedPassword123"}`, "syntheticQuotedPassword123"},
+		{"quoted key with spaces", `{"client_secret" : "syntheticQuotedSecret123"}`, "syntheticQuotedSecret123"},
+		{"escaped quoted key", `{\"api_token\":\"syntheticEscapedToken123\"}`, "syntheticEscapedToken123"},
+		{"single quoted key", `{'passphrase': 'syntheticSingleQuoted123'}`, "syntheticSingleQuoted123"},
 	}
 
 	if len(tests) < 20 {

@@ -40,6 +40,16 @@ func TestMaskSecretsPasswordAndDSN(t *testing.T) {
 			keep:   "ACCESS_TOKEN=",
 		},
 		{
+			name:   "quoted key object",
+			input:  `{"PASSWORD":"syntheticQuotedValue"}`,
+			secret: "syntheticQuotedValue",
+		},
+		{
+			name:   "escaped quoted key",
+			input:  `{\"ACCESS_TOKEN\":\"syntheticEscapedValue\"}`,
+			secret: "syntheticEscapedValue",
+		},
+		{
 			name:   "postgres DSN credentials",
 			input:  "postgres://user:secretpw@host:5432/db",
 			secret: "secretpw",

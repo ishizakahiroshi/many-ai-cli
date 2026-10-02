@@ -41,7 +41,8 @@ const secretKeyPattern = `(?i)(\b[a-z0-9_-]*(?:` +
 	`secret|token|password|passwd|passphrase|credentials?|` +
 	// 秘密を示す修飾語が付いたときだけ対象にする語
 	`(?:api|auth|access|client|private|secret|signing|encryption|master|session|refresh|vapid|pin)[_-]?(?:key|hash)` +
-	`)\b\s*[:=]\s*)["']?[^\s,"';&?#}]+["']?`
+	// キー名の直後に閉じ引用符（JSON の `"key":` や escape 済みの `\"key\":`）が来る形も対象にする。
+	`)\b(?:\\?["'])?\s*[:=]\s*)(?:\\?["'])?[^\s,"';&?#}]+["']?`
 
 var (
 	// ドライブレターは固定しない。開発ルートが C: 以外（実例: D:\dev への移設）へ
