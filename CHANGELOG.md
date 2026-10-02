@@ -134,6 +134,9 @@ Release artifacts are published at
   the other device's changes.
 
 ### Fixed
+- **The Settings icon stays at the bottom while Settings is open.** The same
+  Settings, Usage and Hub buttons remain available, and the settings list can
+  scroll past them.
 - **Pasting into the work memo and other text fields stays in that field.**
   Pasting five or more lines (or more than 300 characters) into the memo box,
   the file editor, the commit message or any other text field turned the text

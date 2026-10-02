@@ -1214,6 +1214,13 @@ header {
   /* 幅が足りないときはラベルを隠してアイコンだけにする（下の @container）。 */
   container-type: inline-size;
 }
+/* 設定画面が開いても、同じ左下の入口を前面に残して歯車から閉じられるようにする。 */
+@media (min-width: 721px) {
+  body:has(#settings-panel:not([hidden])) .session-footer {
+    z-index: 1001;
+    bottom: 0;
+  }
+}
 .session-footer > .usage-menu,
 .session-footer > .web-menu { flex: 1 1 0; min-width: 0; margin-left: 0; display: flex; }
 .session-footer > #settings-btn { flex: 1 1 0; min-width: 0; }

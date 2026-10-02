@@ -120,6 +120,11 @@
   overscroll-behavior: contain;
   border-right: 1px solid var(--line);
 }
+/* 設定中も残る操作列と、目次・右配置時の設定項目の末尾が重ならないようにする。 */
+@media (min-width: 721px) {
+  #settings-panel:not([hidden]) .settings-nav-list { padding-bottom: 64px; }
+  body.sidebar-right #settings-panel:not([hidden]) .settings-body { padding-bottom: 64px; }
+}
 .settings-nav-group-title {
   padding: 10px 14px 4px;
   font-size: var(--fs-xs);
