@@ -65,8 +65,9 @@ const DEBUG_INDEX_IMPORT_RE = /^\s*import\s+'\.\/([\w.-]+)\.js';/gm;
 const MAIDEBUG_TAG_RE = /^\/\/go:build\s+maidebug\b/m;
 
 function trackedFiles() {
-  const out = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' });
-  return out.split('\n').map(s => s.trim()).filter(Boolean);
+  // -z: 日本語名・引用符入りのパスを八進エスケープで返させない
+  const out = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  return out.split('\0').filter(Boolean);
 }
 
 // due は日付（YYYY-MM-DD）。以前は版数で持ち、台帳の currentVersion と比べていたが、

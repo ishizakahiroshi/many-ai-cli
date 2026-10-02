@@ -8,7 +8,7 @@
 // 新しい watchlist テーブルは作らない（id 正典・名前派生の kb 設計を維持）。
 
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -383,18 +383,21 @@ function getStructuralPatterns() {
 
 // === File listing per mode ===
 
+// -z で NUL 区切りにする。付けないと git は日本語名・空白/引用符入りの名前を
+// "\343\201..." のように八進エスケープして引用符で囲んで返し、readFileSync が開けず取りこぼす。
+function gitList(args) {
+  return execFileSync('git', args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+    .split('\0').filter(Boolean);
+}
 function getFilesByMode(mode) {
   try {
     switch (mode) {
       case 'staged':
-        return execSync('git diff --cached --name-only --diff-filter=ACM', { encoding: 'utf8' })
-          .trim().split('\n').filter(Boolean);
+        return gitList(['diff', '--cached', '--name-only', '-z', '--diff-filter=ACM']);
       case 'files-from-diff':
-        return execSync('git diff --name-only --diff-filter=ACM HEAD', { encoding: 'utf8' })
-          .trim().split('\n').filter(Boolean);
+        return gitList(['diff', '--name-only', '-z', '--diff-filter=ACM', 'HEAD']);
       case 'all-tracked':
-        return execSync('git ls-files', { encoding: 'utf8' })
-          .trim().split('\n').filter(Boolean);
+        return gitList(['ls-files', '-z']);
       case 'packaged':
         console.error('ERROR: --packaged mode not yet implemented (TODO: read npm pack output for layer 4)');
         process.exit(2);
