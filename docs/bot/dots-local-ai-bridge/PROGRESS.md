@@ -1,17 +1,17 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 19:05:49 JST
+> 最終更新: 2026-10-03(土) 19:10:19 JST
 
 ## 現在地
 
 - 受付番号：#5。C1の調査・比較HTML・順位付けを受付し、固定版 INSTRUCTIONS.md / REVIEW.md を読了。
-- 段階：複数方式を比較するC2_TEST_PLANとFINDINGS/HTMLの更新原稿が完成。静的検査・独立レビューへ進む。実表示QAの全項目検収とC2接続実験・構築は未着手。
+- 段階：複数方式のC2試験設計・文書更新・静的検査・独立再レビューが完了し、既存draft PR #8へ公開。全表示項目/スマホQAとC2接続実験・構築は未実施。
 - ソース基準：`21d0bc7935a2c4696fb89ccff2e324157a528c2d`。
 - 指示commit・作業起点：`c2822a8f39a18809bca8fe9484f1c84bd387f64b`。
 - 専用文書branch：`docs/dots-bridge-c1-comparison-20261003`。指示branch `docs/dots-local-ai-bridge-c1-20261003` は変更しない。
 - 参考：指示branchの `59300409408c24d6040445d77733da7c5b55d2e8` はSlack送信状態の更新のみ。固定指示・レビュー差分なしを確認。起点は変更しない。
 - 初稿公開SHA：`df1e01f80daf3641361eee0939549c74baa98d97`。draft PR：[#8](https://github.com/ishizakahiroshi/many-ai-cli/pull/8)。独立レビュー対象のローカルSHA：`6f41211f05dbe56578c0b6c41352a89a09c64744`（同一tree `8a35556ec1e6c9ec2edce6ac7d0f3d32854122f2`）。
-- 次の一手：C2_TEST_PLANを作成し、MCP EventsとSlack Socketの同課題比較、共通queue、複数入口/復旧試験、役割別検収を具体化する。実装・接続試験は行わない。
+- 次の一手：ローカル指揮者が固定成果headと稼働版を照合し、本人が追加実装・設定・Build・起動・外部試験の許可範囲を判断する。C2は設計のみで自動着手しない。
 
 ## 開始時の能力確認
 
@@ -129,7 +129,7 @@
 - [C2_TEST_PLAN](C2_TEST_PLAN.md)の10節に、構成/設定、既存APIと新規ファイル案、同課題比較、UX、複数入口/復旧、再開の種類、役割別検収、将来コマンド、予算/撤収、採用/引き継ぎを記載。FINDINGS/HTMLの旧試行フローを置換。
 - Hub基準ソース・関連testを読んだ。起動POSTはrequest_idのみ、run一覧/詳細GETで相関。動的prompt・AI認証の自動継承は前提にせず、専用mailboxを新規adapter契約として提案。コード/test/依存は未変更。
 - 新しいローカルセッションの読順：この現行方針 → 固定d533a72 → C2_TEST_PLAN → FINDINGS基準ソース → PUBLIC_RESEARCH → 固定成果headのdiff。最初の操作は対象head/稼働版/追加許可の照合。
-- 次の一手：静的検査・独立レビューで旧方針残留と二重実行/共通障害を確認し、固定SHAを公開する。現在許可されるのは文書作成/検査/commit/push/既存draft PR更新のみ。
+- 原稿時点の次工程だった静的検査・独立レビュー・公開は完了し、結果を下記へ記録。現在許可されるのは文書作成/検査/commit/push/既存draft PR更新のみ。
 
 - 設計稿静的検査：7方式の往復14図＋共通queue図1件、108リンク、51 ID、重複ID/内部anchor/相対リンク欠損なし。旧PUBLIC_RESEARCHのC2節リンクはFINDINGSの互換anchorで現行方針へ接続。外部asset 0。HTML約45KB、C2_TEST_PLAN約33KB。実画面QAは未実施。
 - C2_TEST_PLAN追加をomitnix鮮度検査が検知したため生成。discovered 1134→1135、unclaimed 206→207、既存analyzed 922と解析警告は変わらない。
@@ -140,4 +140,15 @@
 - 中1：既存wrapperがCLIへHub tokenを環境変数で渡す事実を追加。新bridgeでmailbox/prompt/log/relayへ秘密を広げない条件と、既存同一OSユーザーの信頼境界を区別した。製品認証は変更しない。
 - 中2：配送のroute_epochと実行所有権のexecution_epochを分離。経路切替中でも元runの正常結果を受理し、論理outbox1件へ配送する契約とfake testを追加。旧実行所有者の結果拒否を別検査にした。
 - 低1：通常の本人製品Buildはmake buildへ揃えた。新規adapterのprototype Buildは別途許可する将来コマンドとして分離。いずれも未実行。
-- 修正版の独立再レビューと公開head照合を続ける。C2実装・試験・設定・起動は未実施。
+- 修正版21d31abcの独立再レビュー合格、公開b4140a02とのtree一致を独立確認済み。中2件・低1件は解消し、未解決指摘なし。C2実装・試験・設定・起動は未実施。
+
+## 複数方式C2設計の提出証跡
+
+- 本文公開head：`b4140a02b0aa32d4150967a6c27e0877c66eeab9`。再レビュー対象ローカルSHA：`21d31abc1cfa920cd659642b0e7e43aac651697d`。同一tree `03136f2752afaaab0b8e5e355df74c0e7f84c706` をGitHub読戻しと独立確認で照合。
+- 本文：[C2_TEST_PLAN](C2_TEST_PLAN.md)、[FINDINGS](FINDINGS.md)、[comparison.html](comparison.html)。今回の変更はこの3文書＋PROGRESS＋必要な生成index。固定指示とPUBLIC_RESEARCHの既存調査記録は変更せず、現行方針への案内を追加した。
+- 最終ボードは本文提出後のPROGRESSだけの差分。ボードheadはこのファイルのGit履歴とPR headで追跡し、本文レビューSHAと区別する。
+- 検証：git diff --check、HTML静的検査（7方式15図108リンク51 ID、外部asset0）、Markdown fence、secrets-scan構造検査、承認ルール混入、omitnix鮮度、instrumentation合格。非公開watchlistは未実施。作成担当による製品Build/実機testは未実行。既存PR CIの結果は別に記録する。
+- CIスナップショット（2026-10-03 10:08 UTC、本文head b4140a02）：secret-scan成功、Validate実行中。前回成果head855786adの両workflow成功、初回755db76のmacOS失敗は別の履歴。最新headの確定結果はPR checks/PR本文を参照する。
+- 未確認：本人アカウントでのplugin/app/購読可否、別Bot→dots起動、MCP/Slack間でのdots同job続行、本人PC/Hub/CLI実動、実費/遅延、全表示項目/スマホQA。これらを設計完成やCI成功で合格にしない。
+- 引き継ぎ：上記本文headを固定して新しいローカル指揮セッションへ渡せる。読む順序と最初の操作はC2_TEST_PLAN §10。本人操作は権限/契約/必要な起動/UX判断、ローカル指揮者は内部test/実機一往復/複数入口・復旧検収、dotsは別途許可後の実装/mock test/独立レビューを担当する。
+- 暫定運用は本人の返信通知確認→ローカルAIへ「#5の進捗を見て」→認可済みSlack/GitHub取得。自動通知・定期監視・自動起動はまだない。
