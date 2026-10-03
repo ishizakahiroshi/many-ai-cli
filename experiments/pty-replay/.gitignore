@@ -1,0 +1,4 @@
+/bin/
+/fixtures/generated/
+/results/
+/rust/target/
