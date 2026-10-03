@@ -1,8 +1,9 @@
-# C1 shared API handoff candidate
+# C1 reviewed shared API handoff
 
-This is the testable handoff surface for the next implementation lanes. It remains
-subject to independent review of the exact next code SHA; it is not application
-acceptance. The Go behavior oracle is 21d0bc7; review diff base is 6b0fb8e.
+C1 at e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a passed independent review and
+103 tests. The handoff is released to implementation lanes; it is not application
+acceptance. Additive interfaces below carry their own later receipts. The Go
+behavior oracle is 21d0bc7; review diff base is 6b0fb8e.
 
 ## Ownership
 
@@ -20,6 +21,12 @@ second config, storage, session manager or process abstraction.
   nullable values and base64 rules. Plain Serde DTO reads accept canonical internal
   values and are not an equivalent wire parser. Extend the schema/fixtures for
   other wire records before using the compatibility decoder with them.
+- Additive HTTP boundary: `proto::decode_http_json<T: GoWire>` decodes one value
+  without EOF, using the caller's explicit `GoWire::SCHEMAS`. Route-specific body
+  limits stay with the service; do not use it for whole-frame WS messages.
+- `proto::time` centralizes RFC3339 seconds/nanoseconds, runtime-local timezone,
+  explicit fixed-offset formatting and Go-compatible parsing. Do not hand-roll
+  independent storage/approval/launcher calendar conversions.
 - `proto::provider::*`: complete provider data/registry persistence DTOs. Use
   `provider::to_go_json` for typed values whose bytes enter Go-compatible hashes;
   JSON value equality alone is insufficient for signatures/digests.

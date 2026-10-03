@@ -1,0 +1,1617 @@
+{
+  "baseline_go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "note": "Implementation coverage only. No route is accepted by inventory presence. Native/browser/remote/provider acceptance remains pending.",
+  "routes": [
+    {
+      "path": "/",
+      "source_handler": "handleIndex",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/app-entry.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/app.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/app/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/debug/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/styles.css",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/styles/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/icon.svg",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/icons/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/manifest.webmanifest",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/sw.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/whisper-recorder-worklet.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/i18n.js",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/i18n/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/vendor/",
+      "source_handler": "staticHandler",
+      "status": "partial",
+      "implementation": "rust/src/hub/assets.rs",
+      "fixture": "rust/src/hub/tests.rs::service_reauth_page_cookie_and_public_assets_policy",
+      "remaining": "Range/conditional requests, URL cleaning, full asset route fixture matrix, device notification and live browser acceptance pending"
+    },
+    {
+      "path": "/approval-patterns/",
+      "source_handler": "handleApprovalPatternAsset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/ws",
+      "source_handler": "handleWS",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/info",
+      "source_handler": "handleInfo",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/jev/evaluate",
+      "source_handler": "handleJevEvaluate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/providers",
+      "source_handler": "handleProviders",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/providers/",
+      "source_handler": "handleProviderRoute",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/provider-distributions/",
+      "source_handler": "handleProviderDistributions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/provider-icons/",
+      "source_handler": "handleProviderIcon",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/bug-report/preview",
+      "source_handler": "handleBugReportPreview",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/bug-report/finalize",
+      "source_handler": "handleBugReportFinalize",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/doctor",
+      "source_handler": "handleDoctor",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/mobile-connect",
+      "source_handler": "handleMobileConnect",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/mobile-connect/tailscale",
+      "source_handler": "handleTailscaleStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/mobile-connect/tailscale/serve",
+      "source_handler": "handleTailscaleServe",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/auth/revoke-all",
+      "source_handler": "handleAuthRevokeAll",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/status",
+      "source_handler": "handleAuthStatus",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/login",
+      "source_handler": "handleAuthLogin",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/logout",
+      "source_handler": "handleAuthLogout",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/auth/set-pin",
+      "source_handler": "handleAuthSetPIN",
+      "status": "partial",
+      "implementation": "rust/src/hub/pin.rs + router.rs",
+      "fixture": "rust/src/hub/tests.rs::service_pin_* / service_remote_pin_*",
+      "remaining": "Core revoke effects, concurrent auth transitions, device notification, full route integration pending"
+    },
+    {
+      "path": "/api/net-hint",
+      "source_handler": "handleNetHint",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/avatar",
+      "source_handler": "handleAvatar",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/spawn",
+      "source_handler": "handleSpawn",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/spawn-grid",
+      "source_handler": "handleSpawnGrid",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session/",
+      "source_handler": "handleSessionMetaAPI",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/sessions/",
+      "source_handler": "handleSessionAPI",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/pick-directory",
+      "source_handler": "handlePickDirectory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/path-exists",
+      "source_handler": "handlePathExists",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/list-subdirs",
+      "source_handler": "handleListSubdirs",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/pick-file",
+      "source_handler": "handlePickFile",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-default-file",
+      "source_handler": "handleOpenDefaultFile",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-folder",
+      "source_handler": "handleOpenFolder",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-terminal",
+      "source_handler": "handleOpenTerminal",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/terminal-app",
+      "source_handler": "handleTerminalApp",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/kill-all",
+      "source_handler": "handleKillAll",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/shutdown",
+      "source_handler": "handleShutdown",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/log-config",
+      "source_handler": "handleLogConfig",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/session-chat",
+      "source_handler": "handleSessionChat",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-log",
+      "source_handler": "handleSessionLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/agent-log",
+      "source_handler": "handleAgentLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/agent-log/open",
+      "source_handler": "handleOpenAgentLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/agent-chat",
+      "source_handler": "handleAgentChat",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/grok-history",
+      "source_handler": "handleGrokHistory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-search",
+      "source_handler": "handleSessionSearch",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-history",
+      "source_handler": "handleSessionHistory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval-history",
+      "source_handler": "handleApprovalHistory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-store/reset",
+      "source_handler": "handleSessionStoreReset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-store/prune-transcript-noise",
+      "source_handler": "handleSessionStorePruneTranscriptNoise",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/logs/purge",
+      "source_handler": "handleLogsPurge",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/logs/legacy-notice",
+      "source_handler": "handleLegacyLogsNotice",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/attachments/purge",
+      "source_handler": "handleAttachmentsPurge",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/open-dir",
+      "source_handler": "handleOpenDir",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/idle-timeout",
+      "source_handler": "handleIdleTimeout",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/terminal-color",
+      "source_handler": "handleTerminalColor",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/handoff-intent-mode",
+      "source_handler": "handleHandoffIntentMode",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/handoff",
+      "source_handler": "handleHandoffList",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/handoff/",
+      "source_handler": "handleHandoffItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/reconnect-grace",
+      "source_handler": "handleReconnectGrace",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/input-config",
+      "source_handler": "handleInputConfig",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/orchestration-config",
+      "source_handler": "handleOrchestrationConfig",
+      "status": "partial",
+      "implementation": "rust/src/hub/settings.rs::handle",
+      "fixture": "rust/src/hub/tests.rs::service_settings_*",
+      "remaining": "Live HTTP/Web caller and core configuration consumption acceptance pending"
+    },
+    {
+      "path": "/api/subscriptions",
+      "source_handler": "handleSubscriptions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscriptions/",
+      "source_handler": "handleSubscriptionsItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscription-usage",
+      "source_handler": "handleSubscriptionUsage",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscription-usage/refresh",
+      "source_handler": "handleCodexUsageRefresh",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/subscription-usage/probe",
+      "source_handler": "handleSubscriptionUsageProbe",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/notify-config",
+      "source_handler": "handleNotifyConfig",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/notify-test",
+      "source_handler": "handleNotifyTest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/notify-generate-topic",
+      "source_handler": "handleNotifyGenerateTopic",
+      "status": "partial",
+      "implementation": "rust/src/hub/router.rs",
+      "fixture": null,
+      "remaining": "Dedicated response fixture and live HTTP route acceptance pending"
+    },
+    {
+      "path": "/api/nvidia-nim",
+      "source_handler": "handleNVIDIANIMSettings",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/nvidia-nim/key",
+      "source_handler": "handleNVIDIANIMKeyDelete",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/nvidia-nim/test",
+      "source_handler": "handleNVIDIANIMTest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/encoding-check",
+      "source_handler": "handleEncodingCheck",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/status",
+      "source_handler": "handleApprovalStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/enable",
+      "source_handler": "handleApprovalEnable",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/disable",
+      "source_handler": "handleApprovalDisable",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/dismiss",
+      "source_handler": "handleApprovalDismiss",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval/batch",
+      "source_handler": "handleApprovalBatch",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval-action/",
+      "source_handler": "handleOneTapApproval",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/attach",
+      "source_handler": "handleAttach",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/slash-cmd-sources",
+      "source_handler": "handleSlashCmdSources",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/slash-commands",
+      "source_handler": "handleSlashCommands",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/usage-link-defaults",
+      "source_handler": "handleUsageLinkDefaults",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/install-link-defaults",
+      "source_handler": "handleInstallLinkDefaults",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-versions",
+      "source_handler": "handleCLIVersions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-updates",
+      "source_handler": "handleCLIUpdatesCreate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-updates/",
+      "source_handler": "handleCLIUpdatesItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/cli-update-eligibility",
+      "source_handler": "handleCLIUpdateEligibility",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/models",
+      "source_handler": "handleModels",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval-patterns",
+      "source_handler": "handleApprovalPatterns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/approval-patterns/",
+      "source_handler": "handleApprovalPatternsItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-list",
+      "source_handler": "handleFilesList",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-content",
+      "source_handler": "handleFilesContent",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-asset",
+      "source_handler": "handleFilesAsset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-download",
+      "source_handler": "handleFilesDownload",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-roots",
+      "source_handler": "handleFilesRoots",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-move",
+      "source_handler": "handleFilesMove",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-rename",
+      "source_handler": "handleFilesRename",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-mkdir",
+      "source_handler": "handleFilesMkdir",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-create",
+      "source_handler": "handleFilesCreate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-save",
+      "source_handler": "handleFilesSave",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/files-delete-dir",
+      "source_handler": "handleFilesDeleteDir",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-log",
+      "source_handler": "handleGitLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-show",
+      "source_handler": "handleGitShow",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-refs",
+      "source_handler": "handleGitRefs",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-status",
+      "source_handler": "handleGitStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-diff",
+      "source_handler": "handleGitDiff",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-turns",
+      "source_handler": "handleGitTurns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-turn-diff",
+      "source_handler": "handleGitTurnDiff",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-commit-all",
+      "source_handler": "handleGitCommitAll",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-commit-message",
+      "source_handler": "handleGitCommitMessage",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-fetch",
+      "source_handler": "handleGitFetch",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-pull",
+      "source_handler": "handleGitPull",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/git-push",
+      "source_handler": "handleGitPush",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/user-prefs/notify-sound-custom",
+      "source_handler": "handleUserPrefsNotifySoundCustom",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/user-prefs/avatar",
+      "source_handler": "handleUserPrefsAvatarUpload",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/user-prefs",
+      "source_handler": "handleUserPrefs",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/routines",
+      "source_handler": "handleRoutines",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/routines/",
+      "source_handler": "handleRoutines",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/routine-runs",
+      "source_handler": "handleRoutineRuns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/routine-runs/",
+      "source_handler": "handleRoutineRuns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/memos",
+      "source_handler": "handleMemos",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/memos/",
+      "source_handler": "handleMemos",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/memo-images",
+      "source_handler": "handleMemoImages",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/memo-images/",
+      "source_handler": "handleMemoImages",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/auto-approval/status",
+      "source_handler": "handleAutoApprovalStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/auto-approval/simulate",
+      "source_handler": "handleAutoApprovalSimulation",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/push/status",
+      "source_handler": "handlePushStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/push/vapid-public-key",
+      "source_handler": "handlePushVAPIDPublicKey",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/push/subscriptions",
+      "source_handler": "handlePushSubscriptions",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/voice/transcribe",
+      "source_handler": "handleVoiceTranscribe",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/status",
+      "source_handler": "handleWhisperStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/install",
+      "source_handler": "handleWhisperInstall",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/uninstall",
+      "source_handler": "handleWhisperUninstall",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/start",
+      "source_handler": "handleWhisperStart",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/whisper/stop",
+      "source_handler": "handleWhisperStop",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/session-usage",
+      "source_handler": "handleSessionUsage",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers",
+      "source_handler": "handleServers",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers/connect",
+      "source_handler": "handleServerConnect",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers/connect/status",
+      "source_handler": "handleServerConnectStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/servers/disconnect",
+      "source_handler": "handleServerDisconnect",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "path": "/api/profiles/fetch",
+      "source_handler": "handleProfilesFetch",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    }
+  ],
+  "dynamic_operations": [
+    {
+      "pattern": "/approval-patterns/{provider}[.official|.custom].json",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleApprovalPatternAsset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/validate",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderValidate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderDetail",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}",
+      "methods": [
+        "PATCH"
+      ],
+      "source_handler": "handleProviderPatch",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}",
+      "methods": [
+        "DELETE"
+      ],
+      "source_handler": "handleProviderDelete",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/history",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderHistory",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/history/{revision}/diff",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderHistoryDiff",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/reset",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderReset",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/restore",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderRestore",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/backups",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderBackups",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/backups/{backup}/verify",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderBackupVerify",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/backups/{backup}/restore",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderBackupRestore",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/providers/{id}/recovery",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source_handler": "handleProviderRecovery",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/status",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderDistributionStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/diff",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleProviderDistributionDiff",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/check",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderDistributionCheck",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/accept",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderDistributionAccept",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-distributions/rollback",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleProviderDistributionRollback",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/provider-icons/{id}",
+      "methods": [
+        "GET",
+        "PUT",
+        "DELETE"
+      ],
+      "source_handler": "handleProviderIcon",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/session/{id}/meta",
+      "methods": [
+        "PATCH"
+      ],
+      "source_handler": "handleSessionMeta",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/meta",
+      "methods": [
+        "PATCH"
+      ],
+      "source_handler": "handleSessionMeta",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/spawn-child",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSpawnChild",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/spawn-confirm",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSpawnConfirmation",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/send-child",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSendChild",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/inject",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSessionInject",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/children",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleSessionChildren",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleRelayGet",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayStart",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay-stop",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayStop",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay-resume",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayResume",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/sessions/{id}/relay-cleanup",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRelayCleanup",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/handoff/{id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleHandoffItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/handoff/{id}/note",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleHandoffNoteRequest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/handoff/{id}/manual-note",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleHandoffManualNoteSave",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/update",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionUpdate",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/remove",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionRemove",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/test",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionTest",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/subscriptions/login",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleSubscriptionLogin",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-action/{action_token}",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleOneTapApproval",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/cli-updates/{job_id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleCLIUpdateJobStatus",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/cli-updates/{job_id}/{provider_id}/log",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleCLIUpdateJobLog",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-patterns/profile",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "source_handler": "handleApprovalProfile",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-patterns/copy-official",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleApprovalCopyOfficial",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/approval-patterns/{provider}[/{ignored_suffix}]",
+      "methods": [
+        "PUT"
+      ],
+      "source_handler": "handleApprovalPatternsItem",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/routines/{id}",
+      "methods": [
+        "GET",
+        "PUT",
+        "DELETE"
+      ],
+      "source_handler": "handleRoutines",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/routines/{id}/runs",
+      "methods": [
+        "POST"
+      ],
+      "source_handler": "handleRoutines",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/routine-runs/{id}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleRoutineRuns",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/memos/{id}",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "source_handler": "handleMemos",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    },
+    {
+      "pattern": "/api/memo-images/{basename}",
+      "methods": [
+        "GET"
+      ],
+      "source_handler": "handleMemoImages",
+      "status": "unresolved",
+      "implementation": null,
+      "fixture": null
+    }
+  ]
+}

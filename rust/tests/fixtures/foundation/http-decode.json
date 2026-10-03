@@ -1,0 +1,158 @@
+[
+  {
+    "error": false,
+    "input": "{}",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "null",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"COUNT\":3,\"unknown\":1e9999}",
+    "value": {
+      "count": 3,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"count\":1} {\"count\":2}",
+    "value": {
+      "count": 1,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"count\":1} malformed",
+    "value": {
+      "count": 1,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "nullgarbage",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"count\":1,\"count\":null}",
+    "value": {
+      "count": 1,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": true,
+    "input": "{\"count\":\"bad\",\"count\":1}"
+  },
+  {
+    "error": false,
+    "input": "{\"nested\":{\"enabled\":true},\"NESTED\":{\"text\":\"preserved\"}}",
+    "value": {
+      "count": 0,
+      "nested": {
+        "enabled": true,
+        "text": "preserved"
+      },
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"nested\":{\"enabled\":true},\"nested\":null}",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"names\":[\"first\",\"second\"],\"names\":[null],\"names\":[null,null]}",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": [
+        "first",
+        "second"
+      ]
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"names\":[\"first\"],\"names\":[],\"names\":[null]}",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": [
+        ""
+      ]
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"nested\":{\"text\":\"\\ud800\"}}",
+    "value": {
+      "count": 0,
+      "nested": {
+        "enabled": false,
+        "text": "�"
+      },
+      "names": null
+    }
+  },
+  {
+    "error": true,
+    "input": "{\"nested\":7,\"nested\":{}}"
+  },
+  {
+    "error": true,
+    "input": ""
+  },
+  {
+    "error": true,
+    "input": " "
+  },
+  {
+    "error": true,
+    "input": "[1]"
+  },
+  {
+    "error": true,
+    "input": "{\"count\":1"
+  },
+  {
+    "error": true,
+    "input": "{\"count\":1.0}"
+  },
+  {
+    "error": false,
+    "input": "{\"count\":-0}",
+    "value": {
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  }
+]

@@ -1,22 +1,22 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 14:30:21
+> 最終更新: 2026-10-03(土) 14:57:25
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
 Baseline Go SHA: 21d0bc7935a2c4696fb89ccff2e324157a528c2d.
 Instruction/implementation branch: feat/rust-migration.
 PR base: develop.
-Current state: C1 foundation in progress in an isolated clean clone; the operator has started execution.
-Rust implementation: shared foundation, CLI/provider inventories and configuration/process contracts implemented. Independent review confirmed the three P1 repairs at 0bad886; the remaining Go JSON decoder P2 repair is validated and awaits exact-SHA re-review. Application callers, routes and both functional binaries remain pending.
+Current state: reviewed C1 handoff released; C2/C3 implementation and C4 source integration in progress in the isolated clone. Draft PR #9 targets develop.
+Rust implementation: C1 independently reviewed at e7c1c18. The next scoped checkpoint implements pure terminal/replay/input, the HTTP/auth/settings kernel, and provider update planning/execution, with 149 passing tests. Real session/transport integration, remaining routes, launcher and functional binaries remain pending.
 
 | Stage | Owner | State | Evidence / next action |
 |---|---|---|---|
-| C1 foundation | dots integration owner | in_progress | Three P1 repairs independently verified at 0bad886; final JSON decoder repair awaits re-review. Shared API handoff candidate exists; downstream implementation and acceptance remain pending. |
-| C2 core | dots core lane | pending | After C1, parallel with C3/C4 |
-| C3 services | dots services lane | pending | After C1, parallel with C2/C4 |
-| C4 launcher/delivery | dots launcher lane | pending | After C1, parallel with C2/C3 |
-| C5 integration/PR | dots integration owner; Codex independent review | pending | Complete traceability; build/test/CI; open develop draft PR |
+| C1 foundation | dots integration owner | reviewed | Independent Codex PASS at e7c1c18; 103 tests and shared handoff reviewed. Additive HTTP/time APIs below require their own caller review. |
+| C2 core | dots core + disjoint storage lanes | in_progress | Terminal/replay/input checkpoint: 15 tests / 200 Go snapshots. Storage/approval implementation in progress; native/caller integration pending. |
+| C3 services | dots services + disjoint files lanes | in_progress | Hub kernel 19 tests, updater 8 tests; 27 routes partial / 128 unresolved / 0 accepted. Files/profiles and remaining services in progress. |
+| C4 launcher/delivery | dots integration owner | in_progress | Source/caller mapping and shared timestamp/profile/process needs; functional launcher and packaging still pending. |
+| C5 integration/PR | dots integration owner; Codex independent review | in_progress | [Develop draft PR #9](https://github.com/ishizakahiroshi/many-ai-cli/pull/9) open; final integration/review/CI/artifacts pending. |
 | C6 manual/data/cutover | operator; Codex evidence review | pending | Candidate accepted, rollback rehearsal, real devices, stability |
 
 ## Delivery, acknowledgment and capabilities
@@ -39,8 +39,8 @@ The following checkpoint is based on the published progress commit `f48c6086a2be
 | Go behavioral oracle | 21d0bc7935a2c4696fb89ccff2e324157a528c2d |
 | Initial instruction commit | 6b0fb8e198750245ef8b4b475fbac9070db0ac3e |
 | Progress checkpoint read before this supplement | f48c6086a2be662233f09d051373a716ca44ce6a; progress-only commit |
-| Implementation code SHA | Latest published C1 repair 0bad88656776904a320e8b9fc22442185b86c137; next JSON repair SHA recorded by subsequent receipt |
-| Reviewed code SHA / reviewer | 0bad88656776904a320e8b9fc22442185b86c137 / independent Codex foundation re-review: 103 tests and three P1 fixes verified; JSON decoder P2 changes required; subsequent code is not covered |
+| Implementation code SHA | Latest independently reviewed C1 code e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a; next C2/C3 checkpoint SHA recorded in subsequent receipt |
+| Reviewed code SHA / reviewer | e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a / independent Codex foundation re-review PASS; 103 tests/fmt/clippy and 63 regenerated decoder cases verified; subsequent code is not covered |
 | Board update commit | Read actual commit from GitHub history, or record it in a later receipt; no self-reference |
 | Supplemental instruction revision | dots records the published revision it actually reads; supplement is not a new task |
 
@@ -234,3 +234,40 @@ An isolated dependency feasibility probe outside the repository also compiled pi
 Next: publish the source-changing decoder repair, obtain narrow independent re-review, then release tested shared APIs to C2/C3/C4 with exclusive ownership. Native/resources/caller integration and all application acceptance gates remain pending. No Hub, paid provider, real SSH host, daily data, merge, release or cutover was used.
 
 Pre-publication checks: `go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...` exited 0. Staged secrets scan exited 0 (8 files, four structural patterns; private watchlists unavailable), approval-residue/text-hygiene/instrumentation checks and `git diff --cached --check` exited 0. This is not a full history secret scan.
+
+## 2026-10-03(土) 14:57:25 JST — reviewed C1 handoff and first C2/C3 checkpoint
+
+Independent review PASS: [e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a](https://github.com/ishizakahiroshi/many-ai-cli/commit/e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a). The reviewer regenerated the 63-case Go decoder oracle, reran all 103 tests/fmt/clippy, confirmed the prior YAML/privacy/process fixes were unchanged, and found the shared handoff viable within documented boundaries. This does not review the additional implementation below.
+
+[Draft PR #9](https://github.com/ishizakahiroshi/many-ai-cli/pull/9) was created against develop at that reviewed SHA. It explicitly remains WIP. C2 terminal and C3 services were released in parallel; separate storage and files/Git/attachment lanes have exclusive directories. Only the integration owner changes shared interfaces, dependencies, binary wiring and this ledger.
+
+Scoped implementation being checkpointed:
+- C2 terminal: exact source width ranges, streaming VT bytes/UTF8/CSI/string sequences, cursor/wide-cell erasure, reset/resize/scrollback, replay retention/alternate-screen prefix, input ACK/reconnect/resend/caps. Fifteen tests compare 200 actual Go snapshots over every two-way byte split and chunk sizes 1–17. Actual SessionEngine/transport/epoch/native PTY integration is pending.
+- Deliberate source discrepancy: the Go parser loses split ESC-backslash string terminators. The requested chunk-equivalence contract is implemented and separately tested as a strengthening, not mislabeled oracle equality. PrimingQueue is currently a generic unbound helper; its capacity is not permission to change the Go UI queue's live disconnect policy.
+- C3 HTTP kernel: token/method/Host/Origin order, trusted/local/logical-remote distinctions, PIN cookie/nonce/device/expiry/lockout, reauthentication/static assets, six persisted settings handlers, body decoding and failure behavior. Nineteen focused tests pass. Its complete route coverage ledger has 155 registrations / 49 dynamic operations, 27 partial routes, 128 unresolved and zero accepted. There is no live Axum/WS listener or browser acceptance yet; revocation effects require the actual core driver.
+- C3 updater: immutable independently resolved updater argv owns eligibility/preview/log/execution. Eight tests exercise launch=A/update=B, missing B without A fallback, secondary candidates, synthetic B execution, timeout/spawn failure and lease release. HTTP job/caller integration remains pending.
+- Shared HTTP decoder accepts explicit service DTO schemas and exactly one JSON value like Go Decoder.Decode, preserving the separate whole-frame WS boundary. Twenty actual-Go cases pass. Settings zero-disable persistence/reload has a new regression; the source Save call does apply defaults, but those defaults do not overwrite idle/reconnect/log-retention zeros, so no unsafe persistence bypass was added.
+- Shared timestamp helpers use pinned chrono calendars and runtime-local or explicit offsets, matching 100 Go format and 18 parser cases, including pre-epoch/year-zero, fractional precision, comma fractions and tolerated offset bounds.
+- New pinned dependency/feature and public advisory receipts cover SQLite/PTY/HTTP/crypto/TOML/regex/time foundations. All 204 locked packages were compared to the official RustSec snapshot; 59 matching advisory/version rows are patched/unaffected. This is not cargo-audit, a full vendor audit or a license/SBOM acceptance.
+
+Executed receipts:
+- Full `cargo test --offline --locked --manifest-path rust/Cargo.toml`: exit 0, 149 tests, none ignored. Binary unit targets still have zero tests and do not establish functional binaries.
+- `cargo clippy --offline --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings`: exit 0. Formatting applied to the frozen registered snapshot; final fmt-check is rerun before staging.
+- Bundled SQLite 3.53.2 external-content FTS5 fixture: passed against the actual crate dependency. Linux source compilation passes.
+- Expanded `cargo check --locked --manifest-path rust/Cargo.toml --lib --target x86_64-pc-windows-msvc`: exit 101 at libsqlite3-sys C build because this Linux executor has no MSVC lib.exe. The pure-Rust C1 cross-target receipts remain valid only for their earlier SHA; this dependency stage needs clean native Windows/macOS CI toolchains and execution receipts.
+- Intermediate failures: a C3 macro parse transient blocked the first C2 test build and was fixed/retested by its owner; an updater test incorrectly expected normalized force rather than the source's raw empty default and was corrected; a timestamp test exposed Go's positive +00:00 after negative sub-minute offset truncation and the formatter was fixed. These are not discarded acceptance failures.
+
+Next: publish this scoped checkpoint and request independent review while continuing storage/approval, real HTTP/WS/session wiring, handle-safe files, profile/settings merge and launcher/library integration. Go/cmd/Web sources remain unchanged. C2/C3 unit/corpus success does not accept whole K groups, native cleanup, real providers/remotes/devices, copied-data rollback or cutover.
+
+Pre-publication: terminal oracle generator and provenance are included; regeneration reproduced the committed 200-case corpus. Go staticcheck exited 0. Staged structural secret scan (private watchlists unavailable), approval-residue, text-hygiene, instrumentation, fmt-check and diff-check exited 0. These do not substitute for independent review or full-history secret scanning.
+
+
+### First PR CI feedback at e7c1c18
+
+[Validate run](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37100527486) passed the three Go OS tests, staticcheck, govulncheck, Web and other reported guards, but gosec failed on the added config fixture generator's argv-selected file read. The generator now accepts bounded stdin (`--stdin`), avoiding arbitrary path input; canonical and tolerant oracle readback are rechecked.
+
+[PR secret-scan run](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37100527479) reported three generic-api-key matches in the historical 756b281 services source-hash map (lines 1999, 2042, 2049). Each is a SHA-256 digest of public baseline Go source: auth_handlers.go, nvidia_nim_handlers.go and pin_auth.go, respectively. All inventory hashes were recomputed against 21d0bc7 and matched. Schema v2 separates file keys and labeled sha256 objects to avoid future ambiguous formatting. `.gitleaksignore` contains only those three exact commit/path/rule/line fingerprints; default rules and all other history remain scanned. This narrow false-positive handling requires independent review. No matching secret bytes are included in this ledger, and no history rewrite or broad path/rule exclusion was used. The next CI result remains pending.
+
+The first live-checkout gosec rerun encountered in-progress, unstaged standalone generators from other lanes (duplicate main declarations and a synthetic rollback-root read). Those are excluded from this immutable checkpoint and were returned to their owners for correction. Validation is repeated from the staged-index-only snapshot rather than reporting a contaminated workspace scan as this checkpoint's result. Canonical and tolerant config oracle outputs after the stdin change match their committed fixtures byte-for-byte.
+
+The staged-index-only snapshot passed both gosec v2.27.1 (high severity/high confidence) and staticcheck v0.7.0, exit 0. Its first scan could not obtain VCS stamping because it is an exported index, so the successful static-analysis rerun set process-local GOFLAGS=-buildvcs=false; this is not a release-build identity receipt. Existing Go/Web source stays frozen, and CI on the next actual commit remains the authoritative remote rerun.

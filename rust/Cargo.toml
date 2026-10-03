@@ -27,7 +27,18 @@ base64 = "=0.22.1"
 getrandom = "=0.4.3"
 url = "=2.5.8"
 serde-saphyr = "=1.3.0"
-tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal"] }
+tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal", "net"] }
+
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled", "backup", "hooks"] }
+portable-pty = "=0.9.0"
+axum = { version = "=0.8.9", features = ["ws", "multipart"] }
+bcrypt = "=0.19.3"
+hmac = "=0.13.0"
+sha2 = "=0.11.0"
+toml_edit = "=0.25.15"
+subtle = "=2.6.1"
+regex = "=1.13.1"
+chrono = { version = "=0.4.45", default-features = false, features = ["std", "clock"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.190"

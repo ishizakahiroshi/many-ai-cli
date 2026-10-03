@@ -6,3 +6,9 @@ pub mod process;
 pub mod proto;
 
 pub mod asset_contract;
+
+pub mod hub;
+
+pub mod terminal;
+
+pub mod update;

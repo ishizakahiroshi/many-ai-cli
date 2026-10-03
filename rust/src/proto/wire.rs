@@ -11,6 +11,8 @@ use std::fmt;
 
 pub trait GoWire: DeserializeOwned {
     const GO_TYPE: &'static str;
+    /// Additional service schemas. Shared protocol schemas remain available.
+    const SCHEMAS: &'static [Schema] = &[];
 }
 pub struct Field {
     pub name: &'static str,
@@ -54,9 +56,10 @@ fn fold(name: &str) -> String {
         })
         .collect()
 }
-fn schema(kind: &str) -> Option<&'static Schema> {
-    super::generated::WIRE_SCHEMA
+fn schema(kind: &str, extra: &'static [Schema]) -> Option<&'static Schema> {
+    extra
         .iter()
+        .chain(super::generated::WIRE_SCHEMA.iter())
         .find(|s| s.name == kind)
 }
 // Keep slice backing elements while repeated fields are decoded. Go reuses
@@ -86,13 +89,18 @@ impl Decoded {
         }
     }
 }
-fn merge(kind: &str, old: Option<Decoded>, raw: &RawValue) -> Result<Decoded, serde_json::Error> {
+fn merge(
+    kind: &str,
+    old: Option<Decoded>,
+    raw: &RawValue,
+    extra: &'static [Schema],
+) -> Result<Decoded, serde_json::Error> {
     let source = raw.get();
     if let Some(inner) = kind.strip_prefix('*') {
         if source == "null" {
             return Ok(Decoded::Leaf(Value::Null));
         }
-        return merge(inner, old, raw);
+        return merge(inner, old, raw, extra);
     }
     if let Some(inner) = kind.strip_prefix("[]") {
         if source == "null" {
@@ -124,7 +132,7 @@ fn merge(kind: &str, old: Option<Decoded>, raw: &RawValue) -> Result<Decoded, se
             } else {
                 None
             };
-            let next = merge(inner, previous, item)?;
+            let next = merge(inner, previous, item, extra)?;
             if i < values.len() {
                 values[i] = next;
             } else {
@@ -140,11 +148,11 @@ fn merge(kind: &str, old: Option<Decoded>, raw: &RawValue) -> Result<Decoded, se
         let Object(fields) = serde_json::from_str(source)?;
         let mut map = old.and_then(Decoded::object).unwrap_or_default();
         for (key, v) in fields {
-            map.insert(key, merge(inner, None, &v)?);
+            map.insert(key, merge(inner, None, &v, extra)?);
         }
         return Ok(Decoded::Object(map));
     }
-    if let Some(schema) = schema(kind) {
+    if let Some(schema) = schema(kind, extra) {
         if source == "null" {
             return Ok(old.unwrap_or_else(|| Decoded::Object(BTreeMap::new())));
         }
@@ -153,7 +161,7 @@ fn merge(kind: &str, old: Option<Decoded>, raw: &RawValue) -> Result<Decoded, se
         for (key, v) in fields {
             if let Some(field) = schema.fields.iter().find(|f| fold(f.name) == fold(&key)) {
                 let previous = map.remove(field.name);
-                map.insert(field.name.into(), merge(field.kind, previous, &v)?);
+                map.insert(field.name.into(), merge(field.kind, previous, &v, extra)?);
             }
             // Unknown fields are syntax-checked raw values, not numbers or DTOs.
             // In particular an ignored 1e1000 must not overflow an f64 here.
@@ -299,5 +307,16 @@ pub fn decode<T: GoWire>(bytes: &[u8]) -> Result<T, serde_json::Error> {
     let bytes = go_unicode(bytes);
     check_depth(&bytes)?;
     let raw: Box<RawValue> = serde_json::from_slice(&bytes)?;
-    serde_json::from_value(merge(T::GO_TYPE, None, &raw)?.finish())
+    serde_json::from_value(merge(T::GO_TYPE, None, &raw, T::SCHEMAS)?.finish())
+}
+
+/// Match one encoding/json Decoder.Decode call: validate/decode the first value,
+/// ignoring subsequent values or trailing data. HTTP callers enforce their
+/// route-specific body limit before calling; WS callers instead use `decode`.
+pub fn decode_http_json<T: GoWire>(bytes: &[u8]) -> Result<T, serde_json::Error> {
+    let bytes = go_unicode(bytes);
+    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
+    let raw = Box::<RawValue>::deserialize(&mut deserializer)?;
+    check_depth(raw.get().as_bytes())?;
+    serde_json::from_value(merge(T::GO_TYPE, None, &raw, T::SCHEMAS)?.finish())
 }

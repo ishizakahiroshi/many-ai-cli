@@ -106,4 +106,6 @@ mod tests {
 pub mod provider;
 
 pub mod wire;
-pub use wire::decode as decode_wire;
+pub use wire::{decode as decode_wire, decode_http_json};
+
+pub mod time;

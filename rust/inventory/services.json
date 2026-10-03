@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "task": "#3 many-ai-cli Rust migration C1 service preparation",
   "baseline_go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
   "source_index": {
@@ -1988,141 +1988,411 @@
     "internal/hub/approval_batch_test.go:66#TestApprovalBatchRejectsOversizedBodyBeforeSideEffects": {"id":"internal/hub/approval_batch_test.go:66#TestApprovalBatchRejectsOversizedBodyBeforeSideEffects","name":"TestApprovalBatchRejectsOversizedBodyBeforeSideEffects","source":{"file":"internal/hub/approval_batch_test.go","line":66},"end_line":88,"signature":"func TestApprovalBatchRejectsOversizedBodyBeforeSideEffects(t *testing.T)"}
   },
   "source_hashes": {
-    "internal/hub/agent_chat_handler.go": "aad52315fb0eb79f31beaceeb7c4e3e0765a5c63801b1851437b21e4880ded14",
-    "internal/hub/agent_log_handler.go": "db06da967de617bf9ca15b0ee028e5721f33ea0644925f96378c4834b0f3fb58",
-    "internal/hub/approval_action.go": "7093fb347857a8de5d334927921e205eed355e97050a28dab3efaa801c2247aa",
-    "internal/hub/approval_batch.go": "365e58cbd7c131ba7c83484dc1c3e1b84f138243c089ba78d068484472b15a25",
-    "internal/hub/approval_handler.go": "ecb6c19c0dbd36fed62dccad1fe878edf5d772d377c8cd39fdd89c4b9384ce68",
-    "internal/hub/approval_native.go": "dc14b10925ab3b5fbcca1f525a8b327be953e72f81f9afedbef4274d6f939220",
-    "internal/hub/approval_patterns.go": "2b2af1bd69ebce2bb7f6a844ebed36c1c8d3e8845367db0b3a28ac69b6787e25",
-    "internal/hub/approval_record.go": "95710497ecb505009b6e52f7f7c8f5d283acf2cc2d6ac2d9ba875fa674f821ff",
-    "internal/hub/auth_handlers.go": "dbf46b29cbed5d8866026f26bf865e7f47dd2358709ea10f5288320cc0ed4339",
-    "internal/hub/auto_approval.go": "41fbe90a5005093dc4059ed43f44d92821bf057682aac780da7d113485cd17a0",
-    "internal/hub/bug_report_handler.go": "d810a56e461ef5fe7b8d0ccb57186065415d3e4810523e68af690699a8b5c537",
-    "internal/hub/cli_update.go": "369f98b525c4739a959d2c4a154da89cd44e56c27b2e48df7467d5ed2d512312",
-    "internal/hub/cli_version.go": "419aa2c0710af0d016107c6dae20a334cbd60ec3b6b81937f5c9ce8b54e74793",
-    "internal/hub/doctor_handler.go": "072a17e7a3694022ed6b2e5f0c7f96a546b5c614212b67151d20772bc32536a1",
-    "internal/hub/encoding_check.go": "9b441e537dc4b07d36d23e4b3b1ba7ea433d5ce65b332d9498c20936c01d088c",
-    "internal/hub/files_content.go": "9ecbf0a053f248a3032b485f4aee8c06ec11ee5dd61e52fa2c90e4be86cef6af",
-    "internal/hub/files_create.go": "087fcf04c59896225c665e9665f6bf35bd9c589f2e7e2b9dbe975d124274a237",
-    "internal/hub/files_delete.go": "d1c6772b185682611edcfa7075a249b4f6f7ca247d6e57089116a4de6a8da5fc",
-    "internal/hub/files_list.go": "6da908256e52a143369ac003424318b6fd8cbc41496cb14677c739397a939f89",
-    "internal/hub/files_mkdir.go": "e1f432b7df816a1fe25939a5d60a9cd8bfb0a471b7cef43cb5cf177358a26e6c",
-    "internal/hub/files_move.go": "d7336b961f6cde5d03760a485f0b0004c003322630c681a30446cb95874fa47a",
-    "internal/hub/files_rename.go": "d7db4727a9aa08d73fc52d65d05d5af35637b4a094ed1d2a7197c30c627b0ea1",
-    "internal/hub/files_roots.go": "549f787e0c63040583384afd29a20c3f7a8d9c6d06e161000cac89c7b7ffb433",
-    "internal/hub/files_save.go": "ace3a88b2a1e4100d3287878179f00e12f754e866b0828cb313ee2b4bf098ad9",
-    "internal/hub/files_scope.go": "52c690dd5a916726db9590380d1f2d722ee316d72cdb62765bd7affb274afec9",
-    "internal/hub/git_commit.go": "0f1d503ae3f53307c7df2b2c47349c7f034850c6b196146f380e25e28d3222b1",
-    "internal/hub/git_commit_ai.go": "83b18a54df819cdc0b3243ac0c6dd0507ad5f9cbeaffa1d38b013de5540423c2",
-    "internal/hub/git_diff.go": "8bc1f2eb6dbe56f3c9e184944e9f7b8438284a6d2e0e01e7ad7088703a23056a",
-    "internal/hub/git_fetch.go": "73f8382ee07f18d4347c2b42e07e973e0317acdd26a56344bcaa8f4fe4239896",
-    "internal/hub/git_log.go": "7c815d51f393a1d8a24884661f973912ea0541f0d716d45036e67e08ee4e6075",
-    "internal/hub/git_pull.go": "6c20c67ad6853198885a55a641f05d03083f7f3b4acd9a408614c0b7ad660dd9",
-    "internal/hub/git_push.go": "66c2c6893f3e91573de2ea9929ef44d12893102de3ef3c02f61e01aaf2c236df",
-    "internal/hub/git_refs.go": "d1619612a3d6895196bea51f84e742d84f15933095950a708644227c95c33378",
-    "internal/hub/git_show.go": "af618b2bdc5a6fd5aa8217e24a98c0b8ee9a0aa84b04980428cf4a5cd239d77f",
-    "internal/hub/git_status.go": "052fb64cc4d5dd7808e400d965172df1a3dc80c4b1809de5cc9c6523d3c8cd8c",
-    "internal/hub/git_turns.go": "2e88c6002b970fdfd8f51aef384e6677fa92db328978041568fd79c64a8c9729",
-    "internal/hub/grok_history_handler.go": "af672f754f7c7a6d54d8824eb2485571831591807ab42bab1b0f61a277acda3f",
-    "internal/hub/handoff.go": "604be60f4561977b0f90bfb6d013842ac5a32f264f0acfad239c7296825131a7",
-    "internal/hub/handoff_handler.go": "0f28435975df00e3a92017557f26ab778c023e9012b9be764aae40ab56fb9e95",
-    "internal/hub/http_helpers.go": "6175da5759f10b3d17fb6c664ce38102a15ee9029658af6f05d6c1bc146be450",
-    "internal/hub/input_gate.go": "6426fb5ae7b96c00ce427d02389ea837a4e988dd7adb021573c4c793656a2a1b",
-    "internal/hub/jev_evaluate.go": "e8a5e7bb9043fd02123cd0cebe04db04e46bfd869318136b12596d2bb8640eba",
-    "internal/hub/lifecycle.go": "9cdc574f91e0d94d3ecc372e4f10156e0362ffb7f4bcf7788da879d274a20458",
-    "internal/hub/memo_handlers.go": "4bb209bb2ecc85f8b15a2eb954fd5a35a3ed93479825287eed9799505e737b77",
-    "internal/hub/memo_images.go": "b2c0789d189f8e798b60e7bd11c38e0576989348e565450120c7cd31291cb6c4",
-    "internal/hub/misc_handlers.go": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2",
-    "internal/hub/mobile_connect.go": "d3f89a8e4ede420de751b474b65c89d13953d61c78424ed092675236c4626667",
-    "internal/hub/models_handlers.go": "693920d5e3df0a427194bdf1cf6a4e81ffaec7bb6fc5e80c7b371b29d6a46adb",
-    "internal/hub/nvidia_nim_handlers.go": "5c9b0963cc1b03592a21f1eb44aa47b01a3b91388fe0ca1119a629f2a967638a",
-    "internal/hub/open_handlers.go": "9b7d795e309295a375a4176ce29a4c8feca220493a9f9e73c369b42a1bfa069d",
-    "internal/hub/orchestration.go": "f841f9fc7f5cae69abaf9acbe303fab047f151dd2d383545a86351f4af749d01",
-    "internal/hub/pin_auth.go": "a8c6742c741a2824f88ea9331a6da3826635052a130bcb95120c1f6a9b7cca17",
-    "internal/hub/profiles_fetch.go": "529eab6fadff6d43149bf4009a7f9552497700d21a265871505b10eaf74b0c7a",
-    "internal/hub/provider_distribution_handlers.go": "100dd43dd468e187bd9fbfc3c021fafb003edb7971e88b2e4e6035b2ff3c9118",
-    "internal/hub/provider_handlers.go": "da6a88e7e7ef8ad4e31b77f6e11782b9ab0dfa5ad90338f05d238f13d2d2661c",
-    "internal/hub/provider_icon_handlers.go": "7236590d115278dad04f313a10008371b39daa647f30cbddd6120d26dfba62bf",
-    "internal/hub/purge_handlers.go": "a839b1334e238f170fc44a3b8542843a9fb4775f15e9381021cbc7f7556ce4d7",
-    "internal/hub/push.go": "d6372c1178ba6d2472f3470685852fe17ab5d4e12098131036b48f95093e9756",
-    "internal/hub/relay_api.go": "c93edb3639433cdbdfceac296210b0f541c98f50b41313ca3033d5001f272500",
-    "internal/hub/routine_handlers.go": "ab958a2b355c60f630bd627b390b7329d0891e47da8bc95d61658c1088e684c8",
-    "internal/hub/routine_runner.go": "f967d2acabaf3cbb40d234f8742d0ecbb2463a3e6c1ff509e9253cb8a83260e7",
-    "internal/hub/server.go": "1e38b7353fc41f2b4d91607bcd7f72ec3f1b96f35b057f91348ac3ddd400dadd",
-    "internal/hub/servers.go": "fbc0558ba0d30d4ef9bd030834de80d9bd53d8f036dab2e9b5b78650bbc67add",
-    "internal/hub/session_log_handler.go": "6766e2b5cf8781e5afa0f9ffd08530cb963c8774533a704a78371fc20807d959",
-    "internal/hub/session_meta.go": "ebeac28bce96627eab05cafb9aeabfd973735a833ff6ac29f4b3f8760e848443",
-    "internal/hub/session_store_handlers.go": "48c03a346610444d0a64c55f28f7aa2d7dac1bf8281dc02e8456c244c7b35c0a",
-    "internal/hub/settings_handlers.go": "a578911fbb261327f2ad18f0a18a2312c65e4fabb2f2be64629f99ecf9524d81",
-    "internal/hub/slash_handlers.go": "5b41726909d5300f4e984ef25fb831bbeb1b37465386f795836c431028090f93",
-    "internal/hub/spawn_handler.go": "ea1c66767aa00caf248a555a2d9eeba0239f11f5ebb6f5310ef09e363c8ec279",
-    "internal/hub/subscription_usage_handlers.go": "1cde8affab8432a6994b96d1bfae8cd62bba70db145c060b7372747155adb3ab",
-    "internal/hub/subscriptions_handlers.go": "26fab00854722a0d16aba7fedf2a3e217b76a382885d0d60280008adc2b44473",
-    "internal/hub/tailscale_handlers.go": "589a4de285c304361dedff51ffb247ca6088ece85f294aa54d4778e0315f9fa7",
-    "internal/hub/ui_broadcast.go": "c36fece7135e9c205be0a3c580d8ee1d08389e8b3ea362ee5c1a69c0af9bcf97",
-    "internal/hub/usage_stat.go": "488235e8a030595701665c91f809e9d82c6e12cb3e745ae0051a0d876ed8cbed",
-    "internal/hub/user_prefs_handlers.go": "6dd1c6d9ee4d1b1a3076e51f5ba13b2e15aa53d596b165f8811feadde520118d",
-    "internal/hub/voice_transcribe.go": "1c99d906192a258128e5d62a3e27ba19cf60d77f2a6e56c78bca1833bec9d13b",
-    "internal/hub/whisper_manage.go": "06b8a597a87958a75528cd24382d330f0f5ae72ecf52ae604cf0ac1e8001a776",
-    "internal/hub/wrapper_loop.go": "bd43421c6f931caea8d60e98e8a5f69ca6491a9ea4cd6d8432bb008caacc2b74",
-    "internal/proto/messages.go": "2ce7013b9083f952deaf5be8157cea77ff33b95354e91d22bb1bb146f9df2193",
-    "internal/hub/git_common.go": "d5a9a079072ea0638eb57bf87f415b3200b19c1fd2673100c5871e2d0ab397ea",
-    "internal/hub/approval_patterns_custom.go": "1b7529dfae35df5e1fca129d67ceae52bdfdd2aa3e4e9adb26d8fed20dbab044",
-    "internal/provider/recovery.go": "84ccb147ced76ed68118e7801649ffa7eed833458ab1961329ca223eeffd7aac",
-    "internal/launcher/export.go": "94a3c1bd59233228985a9128d28e391a639b5654b217f132d318399599f508af",
-    "internal/hub/subagent_source_claude.go": "61989ec3407b7c7a2a4d14399b049e7f44a0526ba2445aa3b3aadc265d594e7a",
-    "internal/hub/tailscale_probe.go": "d27cf264f55be39a890ae949e8e796501197af423363a3b5b9f6a8869307787f",
-    "internal/handoff/handoff.go": "623b45d3cb674c7d909e6b1d48ea38d3fc0933a14afa909bc17515896d86e9db",
-    "internal/config/custom_provider.go": "190d55b47b3e7ee9f5e079e75dcef4fa95c71b7002181a590df72a039381777d",
-    "internal/wrapper/opencode_config.go": "340c4338035a6ebd4f305df3e48190ddb18035c7df1e5ab64bd034d895cd87e8",
-    "internal/hub/debug_ui_freeze.go": "f687fedbd70a7bcec92645cb9df275416e974a9388261179d899c435a4d493b9",
-    "internal/config/headless.go": "2a90ed738382c874fbd48f8b536ddea2856490aa03cb2690e88284dbdec8f78a",
-    "internal/provider/schema.go": "90ec0701a67263fb7295d1e718d81fdbf6e3879c0e836f30a9578762d06f47dd",
-    "internal/subscription/adapter.go": "b25a761ab49d304f85c2d15424e0740cc9df11d8fe7c02327a115fcfc34db3a8",
-    "internal/hub/workflow_journal.go": "05c8d9bcbdcddfcd8be9bfc59e37ec2e9ac4f2723cd9c1c520c5fbbf86b02c52",
-    "internal/notify/notify.go": "b1d9b05cb4b4a01359eac0fd96f13331bfba953b1acc5ebbdca8f41491105879",
-    "internal/doctor/doctor.go": "3cd39706792efbaedc42c6090e908dde07cd8401049f4a07dd3f23124d6681b4",
-    "internal/wrapper/staleguard.go": "dc495aa59ed17f9edc70b336dc22724dfde1d8a5762f92758024ba003e8ad285",
-    "internal/provider/distribution_diff.go": "83f7b8e4561d2156c521793764c41c4e75793dae6c87e115ee76dc0ef702b6e9",
-    "internal/orchestrate/orchestrate.go": "8446bb24c3ac470f58ee86ed08568d29ef49470d5cd40e37043a62722f6b270e",
-    "internal/hub/workflow_task_detail.go": "2bdd5e4df6565ac32e1ef4757b94a0d533148bc1ab285f3f67de321419fb7e5a",
-    "internal/config/config.go": "b487210ee59a19cec4270534a5539d563afe6a171f1e5ecab34fd2942bf45a16",
-    "internal/autoapproval/policy.go": "5a0aba69c43cc71cf8effa565b0a8e5d532637f7a88eecf71a1694ffdbc04c4b",
-    "internal/sessionstore/store.go": "b3fff0a6c0710483d32412e8f6dc8cb0b166be0ac366c7b0d7e0927126412721",
-    "internal/hub/relay_store.go": "e8c13e57b906f346fbc4d722f3d6689efe1238620348dcc1ac8042806b15daee",
-    "internal/hub/usage_probe.go": "40d522dfbd593a9e315ad2427d133bd018e0e0934c50281571f3ac72613a498c",
-    "internal/headless/format_claude_stream_json.go": "26ddd12deb14f729327a08def5d259310ac7b3db6a417abb8954b6bba3b60b8b",
-    "internal/hub/subscription_usage.go": "e9bf3acce144571a5e9df7168add9aa960638d8748bf1c5ef916bdb5ff486ada",
-    "internal/hub/memo_store.go": "33e14cee70548289c93e2b452312e6294b6d524f550728afd2f7c3bc720d27a2",
-    "internal/hub/approval_rules_state.go": "690b2a77b19b191ff2648722c61b8e84cdd5f80abbec8c20e73448c246944864",
-    "internal/hub/agent_chat_parse.go": "589f78887faa15bacb0a2dd2f2b47862df39133c8b334f147be539de403e7f8b",
-    "internal/usagelocal/grok.go": "bc24d1aa79ae31d47458330d376b2d407ca5dfe4e351fb0e6807d6c66553cbdd",
-    "internal/usagelocal/codex.go": "40a86775624f9140b3691149bcec4ea48edefa1c7a2942884716502955308220",
-    "internal/usagelocal/usagelocal.go": "99445d57b5aff6acf2876dbef484732605926a3d920f7cf2cda8d48d42e34a7e",
-    "internal/subscription/codex_usage_appserver.go": "d79be1dd919879138661fb5c6f28c1c1455d0f78278e157a5f34c1b0be29cf41",
-    "internal/launcher/profile.go": "3d3eb7432c985d80ae83406c297405ccac11688b6629c9606774fcd5b7de29f8",
-    "internal/hubruntime/runtime.go": "58c065b0ed2de1ca574daf7229723d5217a013883061074d33046048b2da9423",
-    "internal/launcher/ui_server.go": "dd5c5d716beca84fa93960e16c9a70ccd91c7d3463127ccbd19a297330fef94d",
-    "internal/launcher/active.go": "7c00b94c60a447398568b72d740fa714e3e49e11d9040c3255baf3d8d27855ab",
-    "internal/usagerelay/usagerelay.go": "01a163259e3fb52268e63c1b4577bd05291c29082689611d905099aaf5794180",
-    "internal/provider/history.go": "d76ae0d51ec30a44f537bbb8dbfec78c54f3a9854b718192572cb7161d2a45f2",
-    "internal/hub/subagent_source_codex.go": "57b9c7234e327e961f389b5f8f052f055370bcf169cb8f8da8c4590e096294a2",
-    "internal/hub/subagent_source_grok.go": "5bee3acde286420d94309988bc3d58f175f7637b69aa54376667eeb7f3d9b184",
-    "internal/clitrust/claude.go": "da6a7a4f929c097c2415313624c9aedab3f172f6e9138cff956d5c55aef70974",
-    "internal/hub/usage_link_fetch.go": "49938f6ba458c2f4837ca3bf426c20f06c4dd67aaf12856b4807844f4f5c577e",
-    "internal/subscription/claude.go": "24bb0027c5c04b54abe5f967bdf521275eaab3257c3ce8f2b049d12e184289a7",
-    "internal/hub/session_activity.go": "4ccf3c9ead43ab6cacd11eb16cef93ddc77af84fafded41937e5e73c9e5f475c",
-    "internal/hub/slash_cmd_fetch.go": "27314c2b29689a1c19e9770cbe6f62ec2255ffbcc45e5f5b223776c67454fadf",
-    "internal/provider/distribution.go": "fa158e378ae00ad715ed158bcc5bdca340dd9a15dbb00312631f809328698533",
-    "internal/provider/adapters.go": "899d370080dec30ab7e1e65ac0834d25751d0feb574196319a3bd657f380cf7b",
-    "internal/nvidianim/client.go": "5d30334735d3252d85cd0616669db3ae3fd30e87fde136c841b8d37d6f54fe98",
-    "internal/subscription/resolve.go": "09fb82146881ad83482d18ad3397912edf38dfdb2debe429ee069c738e14e32b",
-    "internal/config/subscription.go": "5251e3e45fd4e957ab5ddb196f6726c3be502d0181d8d3b84b44929f8d23a52c",
-    "internal/hub/routine_store.go": "1d54e709cc6f8478e4fdaa29aa84c07afdbd549ad3e2d8e66a0bb7d60c4f3efd",
-    "internal/hub/relay.go": "524485d983c6702724881f4368496d8c8b34ca0af9384a36d444f1057f9bd725",
-    "internal/sessionlog/transcript.go": "4d626763e3ffc6df46dc071fe93fd63dbea6f975725c9f2cca15673b614f5793",
-    "internal/hub/models_fetch.go": "67a9fe77ae93112924ea4d709f0025174a873713f55fc473492b424ad6a645d1"
+    "internal/hub/agent_chat_handler.go": {
+      "sha256": "aad52315fb0eb79f31beaceeb7c4e3e0765a5c63801b1851437b21e4880ded14"
+    },
+    "internal/hub/agent_log_handler.go": {
+      "sha256": "db06da967de617bf9ca15b0ee028e5721f33ea0644925f96378c4834b0f3fb58"
+    },
+    "internal/hub/approval_action.go": {
+      "sha256": "7093fb347857a8de5d334927921e205eed355e97050a28dab3efaa801c2247aa"
+    },
+    "internal/hub/approval_batch.go": {
+      "sha256": "365e58cbd7c131ba7c83484dc1c3e1b84f138243c089ba78d068484472b15a25"
+    },
+    "internal/hub/approval_handler.go": {
+      "sha256": "ecb6c19c0dbd36fed62dccad1fe878edf5d772d377c8cd39fdd89c4b9384ce68"
+    },
+    "internal/hub/approval_native.go": {
+      "sha256": "dc14b10925ab3b5fbcca1f525a8b327be953e72f81f9afedbef4274d6f939220"
+    },
+    "internal/hub/approval_patterns.go": {
+      "sha256": "2b2af1bd69ebce2bb7f6a844ebed36c1c8d3e8845367db0b3a28ac69b6787e25"
+    },
+    "internal/hub/approval_record.go": {
+      "sha256": "95710497ecb505009b6e52f7f7c8f5d283acf2cc2d6ac2d9ba875fa674f821ff"
+    },
+    "internal/hub/auth_handlers.go": {
+      "sha256": "dbf46b29cbed5d8866026f26bf865e7f47dd2358709ea10f5288320cc0ed4339"
+    },
+    "internal/hub/auto_approval.go": {
+      "sha256": "41fbe90a5005093dc4059ed43f44d92821bf057682aac780da7d113485cd17a0"
+    },
+    "internal/hub/bug_report_handler.go": {
+      "sha256": "d810a56e461ef5fe7b8d0ccb57186065415d3e4810523e68af690699a8b5c537"
+    },
+    "internal/hub/cli_update.go": {
+      "sha256": "369f98b525c4739a959d2c4a154da89cd44e56c27b2e48df7467d5ed2d512312"
+    },
+    "internal/hub/cli_version.go": {
+      "sha256": "419aa2c0710af0d016107c6dae20a334cbd60ec3b6b81937f5c9ce8b54e74793"
+    },
+    "internal/hub/doctor_handler.go": {
+      "sha256": "072a17e7a3694022ed6b2e5f0c7f96a546b5c614212b67151d20772bc32536a1"
+    },
+    "internal/hub/encoding_check.go": {
+      "sha256": "9b441e537dc4b07d36d23e4b3b1ba7ea433d5ce65b332d9498c20936c01d088c"
+    },
+    "internal/hub/files_content.go": {
+      "sha256": "9ecbf0a053f248a3032b485f4aee8c06ec11ee5dd61e52fa2c90e4be86cef6af"
+    },
+    "internal/hub/files_create.go": {
+      "sha256": "087fcf04c59896225c665e9665f6bf35bd9c589f2e7e2b9dbe975d124274a237"
+    },
+    "internal/hub/files_delete.go": {
+      "sha256": "d1c6772b185682611edcfa7075a249b4f6f7ca247d6e57089116a4de6a8da5fc"
+    },
+    "internal/hub/files_list.go": {
+      "sha256": "6da908256e52a143369ac003424318b6fd8cbc41496cb14677c739397a939f89"
+    },
+    "internal/hub/files_mkdir.go": {
+      "sha256": "e1f432b7df816a1fe25939a5d60a9cd8bfb0a471b7cef43cb5cf177358a26e6c"
+    },
+    "internal/hub/files_move.go": {
+      "sha256": "d7336b961f6cde5d03760a485f0b0004c003322630c681a30446cb95874fa47a"
+    },
+    "internal/hub/files_rename.go": {
+      "sha256": "d7db4727a9aa08d73fc52d65d05d5af35637b4a094ed1d2a7197c30c627b0ea1"
+    },
+    "internal/hub/files_roots.go": {
+      "sha256": "549f787e0c63040583384afd29a20c3f7a8d9c6d06e161000cac89c7b7ffb433"
+    },
+    "internal/hub/files_save.go": {
+      "sha256": "ace3a88b2a1e4100d3287878179f00e12f754e866b0828cb313ee2b4bf098ad9"
+    },
+    "internal/hub/files_scope.go": {
+      "sha256": "52c690dd5a916726db9590380d1f2d722ee316d72cdb62765bd7affb274afec9"
+    },
+    "internal/hub/git_commit.go": {
+      "sha256": "0f1d503ae3f53307c7df2b2c47349c7f034850c6b196146f380e25e28d3222b1"
+    },
+    "internal/hub/git_commit_ai.go": {
+      "sha256": "83b18a54df819cdc0b3243ac0c6dd0507ad5f9cbeaffa1d38b013de5540423c2"
+    },
+    "internal/hub/git_diff.go": {
+      "sha256": "8bc1f2eb6dbe56f3c9e184944e9f7b8438284a6d2e0e01e7ad7088703a23056a"
+    },
+    "internal/hub/git_fetch.go": {
+      "sha256": "73f8382ee07f18d4347c2b42e07e973e0317acdd26a56344bcaa8f4fe4239896"
+    },
+    "internal/hub/git_log.go": {
+      "sha256": "7c815d51f393a1d8a24884661f973912ea0541f0d716d45036e67e08ee4e6075"
+    },
+    "internal/hub/git_pull.go": {
+      "sha256": "6c20c67ad6853198885a55a641f05d03083f7f3b4acd9a408614c0b7ad660dd9"
+    },
+    "internal/hub/git_push.go": {
+      "sha256": "66c2c6893f3e91573de2ea9929ef44d12893102de3ef3c02f61e01aaf2c236df"
+    },
+    "internal/hub/git_refs.go": {
+      "sha256": "d1619612a3d6895196bea51f84e742d84f15933095950a708644227c95c33378"
+    },
+    "internal/hub/git_show.go": {
+      "sha256": "af618b2bdc5a6fd5aa8217e24a98c0b8ee9a0aa84b04980428cf4a5cd239d77f"
+    },
+    "internal/hub/git_status.go": {
+      "sha256": "052fb64cc4d5dd7808e400d965172df1a3dc80c4b1809de5cc9c6523d3c8cd8c"
+    },
+    "internal/hub/git_turns.go": {
+      "sha256": "2e88c6002b970fdfd8f51aef384e6677fa92db328978041568fd79c64a8c9729"
+    },
+    "internal/hub/grok_history_handler.go": {
+      "sha256": "af672f754f7c7a6d54d8824eb2485571831591807ab42bab1b0f61a277acda3f"
+    },
+    "internal/hub/handoff.go": {
+      "sha256": "604be60f4561977b0f90bfb6d013842ac5a32f264f0acfad239c7296825131a7"
+    },
+    "internal/hub/handoff_handler.go": {
+      "sha256": "0f28435975df00e3a92017557f26ab778c023e9012b9be764aae40ab56fb9e95"
+    },
+    "internal/hub/http_helpers.go": {
+      "sha256": "6175da5759f10b3d17fb6c664ce38102a15ee9029658af6f05d6c1bc146be450"
+    },
+    "internal/hub/input_gate.go": {
+      "sha256": "6426fb5ae7b96c00ce427d02389ea837a4e988dd7adb021573c4c793656a2a1b"
+    },
+    "internal/hub/jev_evaluate.go": {
+      "sha256": "e8a5e7bb9043fd02123cd0cebe04db04e46bfd869318136b12596d2bb8640eba"
+    },
+    "internal/hub/lifecycle.go": {
+      "sha256": "9cdc574f91e0d94d3ecc372e4f10156e0362ffb7f4bcf7788da879d274a20458"
+    },
+    "internal/hub/memo_handlers.go": {
+      "sha256": "4bb209bb2ecc85f8b15a2eb954fd5a35a3ed93479825287eed9799505e737b77"
+    },
+    "internal/hub/memo_images.go": {
+      "sha256": "b2c0789d189f8e798b60e7bd11c38e0576989348e565450120c7cd31291cb6c4"
+    },
+    "internal/hub/misc_handlers.go": {
+      "sha256": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2"
+    },
+    "internal/hub/mobile_connect.go": {
+      "sha256": "d3f89a8e4ede420de751b474b65c89d13953d61c78424ed092675236c4626667"
+    },
+    "internal/hub/models_handlers.go": {
+      "sha256": "693920d5e3df0a427194bdf1cf6a4e81ffaec7bb6fc5e80c7b371b29d6a46adb"
+    },
+    "internal/hub/nvidia_nim_handlers.go": {
+      "sha256": "5c9b0963cc1b03592a21f1eb44aa47b01a3b91388fe0ca1119a629f2a967638a"
+    },
+    "internal/hub/open_handlers.go": {
+      "sha256": "9b7d795e309295a375a4176ce29a4c8feca220493a9f9e73c369b42a1bfa069d"
+    },
+    "internal/hub/orchestration.go": {
+      "sha256": "f841f9fc7f5cae69abaf9acbe303fab047f151dd2d383545a86351f4af749d01"
+    },
+    "internal/hub/pin_auth.go": {
+      "sha256": "a8c6742c741a2824f88ea9331a6da3826635052a130bcb95120c1f6a9b7cca17"
+    },
+    "internal/hub/profiles_fetch.go": {
+      "sha256": "529eab6fadff6d43149bf4009a7f9552497700d21a265871505b10eaf74b0c7a"
+    },
+    "internal/hub/provider_distribution_handlers.go": {
+      "sha256": "100dd43dd468e187bd9fbfc3c021fafb003edb7971e88b2e4e6035b2ff3c9118"
+    },
+    "internal/hub/provider_handlers.go": {
+      "sha256": "da6a88e7e7ef8ad4e31b77f6e11782b9ab0dfa5ad90338f05d238f13d2d2661c"
+    },
+    "internal/hub/provider_icon_handlers.go": {
+      "sha256": "7236590d115278dad04f313a10008371b39daa647f30cbddd6120d26dfba62bf"
+    },
+    "internal/hub/purge_handlers.go": {
+      "sha256": "a839b1334e238f170fc44a3b8542843a9fb4775f15e9381021cbc7f7556ce4d7"
+    },
+    "internal/hub/push.go": {
+      "sha256": "d6372c1178ba6d2472f3470685852fe17ab5d4e12098131036b48f95093e9756"
+    },
+    "internal/hub/relay_api.go": {
+      "sha256": "c93edb3639433cdbdfceac296210b0f541c98f50b41313ca3033d5001f272500"
+    },
+    "internal/hub/routine_handlers.go": {
+      "sha256": "ab958a2b355c60f630bd627b390b7329d0891e47da8bc95d61658c1088e684c8"
+    },
+    "internal/hub/routine_runner.go": {
+      "sha256": "f967d2acabaf3cbb40d234f8742d0ecbb2463a3e6c1ff509e9253cb8a83260e7"
+    },
+    "internal/hub/server.go": {
+      "sha256": "1e38b7353fc41f2b4d91607bcd7f72ec3f1b96f35b057f91348ac3ddd400dadd"
+    },
+    "internal/hub/servers.go": {
+      "sha256": "fbc0558ba0d30d4ef9bd030834de80d9bd53d8f036dab2e9b5b78650bbc67add"
+    },
+    "internal/hub/session_log_handler.go": {
+      "sha256": "6766e2b5cf8781e5afa0f9ffd08530cb963c8774533a704a78371fc20807d959"
+    },
+    "internal/hub/session_meta.go": {
+      "sha256": "ebeac28bce96627eab05cafb9aeabfd973735a833ff6ac29f4b3f8760e848443"
+    },
+    "internal/hub/session_store_handlers.go": {
+      "sha256": "48c03a346610444d0a64c55f28f7aa2d7dac1bf8281dc02e8456c244c7b35c0a"
+    },
+    "internal/hub/settings_handlers.go": {
+      "sha256": "a578911fbb261327f2ad18f0a18a2312c65e4fabb2f2be64629f99ecf9524d81"
+    },
+    "internal/hub/slash_handlers.go": {
+      "sha256": "5b41726909d5300f4e984ef25fb831bbeb1b37465386f795836c431028090f93"
+    },
+    "internal/hub/spawn_handler.go": {
+      "sha256": "ea1c66767aa00caf248a555a2d9eeba0239f11f5ebb6f5310ef09e363c8ec279"
+    },
+    "internal/hub/subscription_usage_handlers.go": {
+      "sha256": "1cde8affab8432a6994b96d1bfae8cd62bba70db145c060b7372747155adb3ab"
+    },
+    "internal/hub/subscriptions_handlers.go": {
+      "sha256": "26fab00854722a0d16aba7fedf2a3e217b76a382885d0d60280008adc2b44473"
+    },
+    "internal/hub/tailscale_handlers.go": {
+      "sha256": "589a4de285c304361dedff51ffb247ca6088ece85f294aa54d4778e0315f9fa7"
+    },
+    "internal/hub/ui_broadcast.go": {
+      "sha256": "c36fece7135e9c205be0a3c580d8ee1d08389e8b3ea362ee5c1a69c0af9bcf97"
+    },
+    "internal/hub/usage_stat.go": {
+      "sha256": "488235e8a030595701665c91f809e9d82c6e12cb3e745ae0051a0d876ed8cbed"
+    },
+    "internal/hub/user_prefs_handlers.go": {
+      "sha256": "6dd1c6d9ee4d1b1a3076e51f5ba13b2e15aa53d596b165f8811feadde520118d"
+    },
+    "internal/hub/voice_transcribe.go": {
+      "sha256": "1c99d906192a258128e5d62a3e27ba19cf60d77f2a6e56c78bca1833bec9d13b"
+    },
+    "internal/hub/whisper_manage.go": {
+      "sha256": "06b8a597a87958a75528cd24382d330f0f5ae72ecf52ae604cf0ac1e8001a776"
+    },
+    "internal/hub/wrapper_loop.go": {
+      "sha256": "bd43421c6f931caea8d60e98e8a5f69ca6491a9ea4cd6d8432bb008caacc2b74"
+    },
+    "internal/proto/messages.go": {
+      "sha256": "2ce7013b9083f952deaf5be8157cea77ff33b95354e91d22bb1bb146f9df2193"
+    },
+    "internal/hub/git_common.go": {
+      "sha256": "d5a9a079072ea0638eb57bf87f415b3200b19c1fd2673100c5871e2d0ab397ea"
+    },
+    "internal/hub/approval_patterns_custom.go": {
+      "sha256": "1b7529dfae35df5e1fca129d67ceae52bdfdd2aa3e4e9adb26d8fed20dbab044"
+    },
+    "internal/provider/recovery.go": {
+      "sha256": "84ccb147ced76ed68118e7801649ffa7eed833458ab1961329ca223eeffd7aac"
+    },
+    "internal/launcher/export.go": {
+      "sha256": "94a3c1bd59233228985a9128d28e391a639b5654b217f132d318399599f508af"
+    },
+    "internal/hub/subagent_source_claude.go": {
+      "sha256": "61989ec3407b7c7a2a4d14399b049e7f44a0526ba2445aa3b3aadc265d594e7a"
+    },
+    "internal/hub/tailscale_probe.go": {
+      "sha256": "d27cf264f55be39a890ae949e8e796501197af423363a3b5b9f6a8869307787f"
+    },
+    "internal/handoff/handoff.go": {
+      "sha256": "623b45d3cb674c7d909e6b1d48ea38d3fc0933a14afa909bc17515896d86e9db"
+    },
+    "internal/config/custom_provider.go": {
+      "sha256": "190d55b47b3e7ee9f5e079e75dcef4fa95c71b7002181a590df72a039381777d"
+    },
+    "internal/wrapper/opencode_config.go": {
+      "sha256": "340c4338035a6ebd4f305df3e48190ddb18035c7df1e5ab64bd034d895cd87e8"
+    },
+    "internal/hub/debug_ui_freeze.go": {
+      "sha256": "f687fedbd70a7bcec92645cb9df275416e974a9388261179d899c435a4d493b9"
+    },
+    "internal/config/headless.go": {
+      "sha256": "2a90ed738382c874fbd48f8b536ddea2856490aa03cb2690e88284dbdec8f78a"
+    },
+    "internal/provider/schema.go": {
+      "sha256": "90ec0701a67263fb7295d1e718d81fdbf6e3879c0e836f30a9578762d06f47dd"
+    },
+    "internal/subscription/adapter.go": {
+      "sha256": "b25a761ab49d304f85c2d15424e0740cc9df11d8fe7c02327a115fcfc34db3a8"
+    },
+    "internal/hub/workflow_journal.go": {
+      "sha256": "05c8d9bcbdcddfcd8be9bfc59e37ec2e9ac4f2723cd9c1c520c5fbbf86b02c52"
+    },
+    "internal/notify/notify.go": {
+      "sha256": "b1d9b05cb4b4a01359eac0fd96f13331bfba953b1acc5ebbdca8f41491105879"
+    },
+    "internal/doctor/doctor.go": {
+      "sha256": "3cd39706792efbaedc42c6090e908dde07cd8401049f4a07dd3f23124d6681b4"
+    },
+    "internal/wrapper/staleguard.go": {
+      "sha256": "dc495aa59ed17f9edc70b336dc22724dfde1d8a5762f92758024ba003e8ad285"
+    },
+    "internal/provider/distribution_diff.go": {
+      "sha256": "83f7b8e4561d2156c521793764c41c4e75793dae6c87e115ee76dc0ef702b6e9"
+    },
+    "internal/orchestrate/orchestrate.go": {
+      "sha256": "8446bb24c3ac470f58ee86ed08568d29ef49470d5cd40e37043a62722f6b270e"
+    },
+    "internal/hub/workflow_task_detail.go": {
+      "sha256": "2bdd5e4df6565ac32e1ef4757b94a0d533148bc1ab285f3f67de321419fb7e5a"
+    },
+    "internal/config/config.go": {
+      "sha256": "b487210ee59a19cec4270534a5539d563afe6a171f1e5ecab34fd2942bf45a16"
+    },
+    "internal/autoapproval/policy.go": {
+      "sha256": "5a0aba69c43cc71cf8effa565b0a8e5d532637f7a88eecf71a1694ffdbc04c4b"
+    },
+    "internal/sessionstore/store.go": {
+      "sha256": "b3fff0a6c0710483d32412e8f6dc8cb0b166be0ac366c7b0d7e0927126412721"
+    },
+    "internal/hub/relay_store.go": {
+      "sha256": "e8c13e57b906f346fbc4d722f3d6689efe1238620348dcc1ac8042806b15daee"
+    },
+    "internal/hub/usage_probe.go": {
+      "sha256": "40d522dfbd593a9e315ad2427d133bd018e0e0934c50281571f3ac72613a498c"
+    },
+    "internal/headless/format_claude_stream_json.go": {
+      "sha256": "26ddd12deb14f729327a08def5d259310ac7b3db6a417abb8954b6bba3b60b8b"
+    },
+    "internal/hub/subscription_usage.go": {
+      "sha256": "e9bf3acce144571a5e9df7168add9aa960638d8748bf1c5ef916bdb5ff486ada"
+    },
+    "internal/hub/memo_store.go": {
+      "sha256": "33e14cee70548289c93e2b452312e6294b6d524f550728afd2f7c3bc720d27a2"
+    },
+    "internal/hub/approval_rules_state.go": {
+      "sha256": "690b2a77b19b191ff2648722c61b8e84cdd5f80abbec8c20e73448c246944864"
+    },
+    "internal/hub/agent_chat_parse.go": {
+      "sha256": "589f78887faa15bacb0a2dd2f2b47862df39133c8b334f147be539de403e7f8b"
+    },
+    "internal/usagelocal/grok.go": {
+      "sha256": "bc24d1aa79ae31d47458330d376b2d407ca5dfe4e351fb0e6807d6c66553cbdd"
+    },
+    "internal/usagelocal/codex.go": {
+      "sha256": "40a86775624f9140b3691149bcec4ea48edefa1c7a2942884716502955308220"
+    },
+    "internal/usagelocal/usagelocal.go": {
+      "sha256": "99445d57b5aff6acf2876dbef484732605926a3d920f7cf2cda8d48d42e34a7e"
+    },
+    "internal/subscription/codex_usage_appserver.go": {
+      "sha256": "d79be1dd919879138661fb5c6f28c1c1455d0f78278e157a5f34c1b0be29cf41"
+    },
+    "internal/launcher/profile.go": {
+      "sha256": "3d3eb7432c985d80ae83406c297405ccac11688b6629c9606774fcd5b7de29f8"
+    },
+    "internal/hubruntime/runtime.go": {
+      "sha256": "58c065b0ed2de1ca574daf7229723d5217a013883061074d33046048b2da9423"
+    },
+    "internal/launcher/ui_server.go": {
+      "sha256": "dd5c5d716beca84fa93960e16c9a70ccd91c7d3463127ccbd19a297330fef94d"
+    },
+    "internal/launcher/active.go": {
+      "sha256": "7c00b94c60a447398568b72d740fa714e3e49e11d9040c3255baf3d8d27855ab"
+    },
+    "internal/usagerelay/usagerelay.go": {
+      "sha256": "01a163259e3fb52268e63c1b4577bd05291c29082689611d905099aaf5794180"
+    },
+    "internal/provider/history.go": {
+      "sha256": "d76ae0d51ec30a44f537bbb8dbfec78c54f3a9854b718192572cb7161d2a45f2"
+    },
+    "internal/hub/subagent_source_codex.go": {
+      "sha256": "57b9c7234e327e961f389b5f8f052f055370bcf169cb8f8da8c4590e096294a2"
+    },
+    "internal/hub/subagent_source_grok.go": {
+      "sha256": "5bee3acde286420d94309988bc3d58f175f7637b69aa54376667eeb7f3d9b184"
+    },
+    "internal/clitrust/claude.go": {
+      "sha256": "da6a7a4f929c097c2415313624c9aedab3f172f6e9138cff956d5c55aef70974"
+    },
+    "internal/hub/usage_link_fetch.go": {
+      "sha256": "49938f6ba458c2f4837ca3bf426c20f06c4dd67aaf12856b4807844f4f5c577e"
+    },
+    "internal/subscription/claude.go": {
+      "sha256": "24bb0027c5c04b54abe5f967bdf521275eaab3257c3ce8f2b049d12e184289a7"
+    },
+    "internal/hub/session_activity.go": {
+      "sha256": "4ccf3c9ead43ab6cacd11eb16cef93ddc77af84fafded41937e5e73c9e5f475c"
+    },
+    "internal/hub/slash_cmd_fetch.go": {
+      "sha256": "27314c2b29689a1c19e9770cbe6f62ec2255ffbcc45e5f5b223776c67454fadf"
+    },
+    "internal/provider/distribution.go": {
+      "sha256": "fa158e378ae00ad715ed158bcc5bdca340dd9a15dbb00312631f809328698533"
+    },
+    "internal/provider/adapters.go": {
+      "sha256": "899d370080dec30ab7e1e65ac0834d25751d0feb574196319a3bd657f380cf7b"
+    },
+    "internal/nvidianim/client.go": {
+      "sha256": "5d30334735d3252d85cd0616669db3ae3fd30e87fde136c841b8d37d6f54fe98"
+    },
+    "internal/subscription/resolve.go": {
+      "sha256": "09fb82146881ad83482d18ad3397912edf38dfdb2debe429ee069c738e14e32b"
+    },
+    "internal/config/subscription.go": {
+      "sha256": "5251e3e45fd4e957ab5ddb196f6726c3be502d0181d8d3b84b44929f8d23a52c"
+    },
+    "internal/hub/routine_store.go": {
+      "sha256": "1d54e709cc6f8478e4fdaa29aa84c07afdbd549ad3e2d8e66a0bb7d60c4f3efd"
+    },
+    "internal/hub/relay.go": {
+      "sha256": "524485d983c6702724881f4368496d8c8b34ca0af9384a36d444f1057f9bd725"
+    },
+    "internal/sessionlog/transcript.go": {
+      "sha256": "4d626763e3ffc6df46dc071fe93fd63dbea6f975725c9f2cca15673b614f5793"
+    },
+    "internal/hub/models_fetch.go": {
+      "sha256": "67a9fe77ae93112924ea4d709f0025174a873713f55fc473492b424ad6a645d1"
+    }
   },
   "remaining_gates": [
     "C1 shared-interface freeze",

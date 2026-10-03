@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gopkg.in/yaml.v3"
+	"io"
 	"many-ai-cli/internal/config"
 	"os"
 	"reflect"
@@ -42,7 +43,15 @@ func fill(v reflect.Value) {
 func main() {
 	var c config.Config
 	if len(os.Args) > 1 {
-		data, e := os.ReadFile(os.Args[1])
+		if len(os.Args) != 2 || os.Args[1] != "--stdin" {
+			fmt.Fprintln(os.Stderr, "usage: oracle [--stdin]")
+			os.Exit(2)
+		}
+		data, e := io.ReadAll(io.LimitReader(os.Stdin, 8*1024*1024+1))
+		if len(data) > 8*1024*1024 {
+			fmt.Fprintln(os.Stderr, "synthetic YAML exceeds limit")
+			os.Exit(1)
+		}
 		if e != nil {
 			panic(e)
 		}

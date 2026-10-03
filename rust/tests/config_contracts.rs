@@ -550,3 +550,25 @@ fn existing_config_read_always_restores_private_directory() {
     );
     assert_eq!(std::fs::read(file).unwrap(), original);
 }
+
+#[test]
+fn settings_persistence_preserves_zero_disable_values() {
+    let (_root, _installed, paths) = trial();
+    let path = paths.resource(Resource::Config);
+    let store =
+        ConfigStore::load_or_create(paths.clone(), || Ok("synthetic-token".into())).unwrap();
+    let snapshot = store.snapshot().unwrap();
+    let mut next = snapshot.config;
+    next.hub.idle_timeout_min = 0;
+    next.hub.wrapper_reconnect_grace_sec = 0;
+    next.log.session_retention_days = 0;
+    next.log.attachment_retention_days = 0;
+    let saved = store.persist(snapshot.revision, next).unwrap();
+    let reloaded = Config::from_yaml(&std::fs::read_to_string(path).unwrap(), &paths).unwrap();
+    for config in [&saved.config, &reloaded] {
+        assert_eq!(config.hub.idle_timeout_min, 0);
+        assert_eq!(config.hub.wrapper_reconnect_grace_sec, 0);
+        assert_eq!(config.log.session_retention_days, 0);
+        assert_eq!(config.log.attachment_retention_days, 0);
+    }
+}
