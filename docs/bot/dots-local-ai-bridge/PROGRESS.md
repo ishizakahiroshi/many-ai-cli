@@ -1,17 +1,17 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 17:51:00 JST
+> 最終更新: 2026-10-03(土) 18:03:51 JST
 
 ## 現在地
 
 - 受付番号：#5。C1の調査・比較HTML・順位付けを受付し、固定版 INSTRUCTIONS.md / REVIEW.md を読了。
-- 段階：公開実践例8件の追加調査・文書反映が完了し、静的確認と独立レビューへ進む。実表示QAは環境制約により未実施。C2接続実験・構築は未着手。
+- 段階：公開実践例8件の追加調査・文書反映・静的確認・独立再レビューが完了し、既存draft PR #8へ公開。実表示QAは環境制約により未実施。C2接続実験・構築は未着手。
 - ソース基準：`21d0bc7935a2c4696fb89ccff2e324157a528c2d`。
 - 指示commit・作業起点：`c2822a8f39a18809bca8fe9484f1c84bd387f64b`。
 - 専用文書branch：`docs/dots-bridge-c1-comparison-20261003`。指示branch `docs/dots-local-ai-bridge-c1-20261003` は変更しない。
 - 参考：指示branchの `59300409408c24d6040445d77733da7c5b55d2e8` はSlack送信状態の更新のみ。固定指示・レビュー差分なしを確認。起点は変更しない。
 - 初稿公開SHA：`df1e01f80daf3641361eee0939549c74baa98d97`。draft PR：[#8](https://github.com/ishizakahiroshi/many-ai-cli/pull/8)。独立レビュー対象のローカルSHA：`6f41211f05dbe56578c0b6c41352a89a09c64744`（同一tree `8a35556ec1e6c9ec2edce6ac7d0f3d32854122f2`）。
-- 次の一手：公開事例を5〜10件の目安で絞り、PUBLIC_RESEARCH・FINDINGS・HTML・候補別C2手順を更新し、独立レビューへ回す。C1からC2へ自動移行しない。
+- 次の一手：最終headのCIを確認し、本人が表示とC2実施可否を判断する。C1からC2へ自動移行しない。
 
 ## 開始時の能力確認
 
@@ -93,7 +93,7 @@
 - 7候補の順位変更なし。MCP Eventsはdots対応の公式根拠、Socketはローカルbridge実例があるがdots間往復未確認。n8nは中継部品、Claude Channelsはローカル入力部品の別案。
 - 新しい制約：対応表の永続化≠待ちjobの永続化、MCP呼出し待ち≠死んだAIの起動、Bot除外と過去の再帰課金報告、sampleのdemo認証/メモリ保持。
 - Xでは対象一往復の原典を得られず、noteの2件は本文取得エラー。追加のMCP/dots・poll・A2A検索で順位を変える根拠が増えず終了。取得制限の迂回なし。
-- 静的検査・独立レビューの対象SHAと提出headは確定後に記録。実画面QAとC2は未実施を維持。
+- 静的検査・独立再レビュー完了。対象SHAと公開headは下記へ記録。実画面QAとC2は未実施を維持。
 
 - 追加稿の静的確認：7方式・14図・8事例、リンク106件、ID51件、重複ID/内部anchor/ローカル相対パス欠損なし。外部asset読込0、ja/viewport/600px幅CSSを確認。HTMLは約44KB。実表示QA合格の意味ではない。
 - PUBLIC_RESEARCH追加後のomitnix鮮度検査が1件追加を検知したため生成。coverage 1133→1134、unclaimed 205→206、analyzed 922のまま。既存解析警告は変更せず記録。
@@ -102,5 +102,15 @@
 
 - 初回レビュー対象ローカルSHA：`380b5109506dbbc770d4056745717ea9b96fac0d`、tree `3d0da77bf670727ebbb96078c2d8456cc19f02f3`。
 - 中1件：R2のfresh headless resumeは実行中TUIへ注入できず、TUIとの同時書込みで会話が分岐する。固定READMEのHandoff modelを根拠にPUBLIC_RESEARCH/FINDINGS/HTMLへ追記し、C2の既存session案では単一書込み担当を条件にした。最小試験の新規合成runは維持。
-- 低1件：初回C1の提出証跡を見出し・本文で明示し、追加稿の未完了レビューと区別。修正後SHAの再レビュー待ち。
+- 低1件：初回C1の提出証跡を見出し・本文で明示し、追加稿の未完了レビューと区別。修正後aa475acの再レビュー合格、未解決指摘なし。
 - 初回追加稿の公開処理：index blobとtree作成は完了したが、commit作成が取消で終了。ref更新未実行、remote headは受付時の1d70de9を確認。本文の提出完了とは扱わない。
+
+## 追加調査の提出証跡
+
+- 本文公開head：`fe661daed613c815967823cd042f99ccb977395a`。親は受付head `1d70de98797670907e1435dc88ca9896ecf3e797`。初回公開処理の中断後にremoteを照合し、修正済み本文を専用branchへ公開した。
+- 独立再レビュー対象ローカルSHA：`aa475ac5d53c2fbd1962cc83cda9d70dcf911ecd`。公開headと同一tree `6be7469fb3c5a181f4543e5546d843f6a70b996f` をGitHub読戻しで確認。中1件・低1件は解消。
+- [PUBLIC_RESEARCH](PUBLIC_RESEARCH.md)、[FINDINGS](FINDINGS.md)、[比較HTML](comparison.html)、PROGRESSの4文書と必要な生成indexのみが今回の差分。7候補の順位変更なし、8事例と候補別C2検証条件を追加。
+- 静的検査、git diff --check、secrets-scan構造検査、承認ルール混入検査、omitnix鮮度、pre-push instrumentation合格。非公開watchlistは利用できず未実施。製品のbuild/test・外部通信実験は未実施。
+- CIスナップショット（2026-10-03 09:02 UTC、本文head fe661da）：secret-scan成功、Validate実行中。受付head 1d70de9は両workflow成功。初回head 755db76のmacOS Go失敗の原因・再現性は未確定のままで、本体修正やテスト緩和はしていない。最新headの確定結果はPR checksとPR本文を参照。
+- この後は提出証跡としてPROGRESSだけを更新する。最終ボードheadはこのファイルのGit履歴とPR headから確認でき、本文のレビューtreeと区別する。
+- 未実施：実ブラウザ/スマホ表示の全項目QA、dotsと別Botの往復、plugin登録/購読、本人PC/Hub/CLI実動、実費・遅延、C2接続実験。必要な本人操作はFINDINGSの候補別条件へ記載。
