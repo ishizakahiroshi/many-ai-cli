@@ -1,6 +1,6 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 18:57:54 JST
+> 最終更新: 2026-10-03(土) 19:05:49 JST
 
 ## 現在地
 
@@ -133,3 +133,11 @@
 
 - 設計稿静的検査：7方式の往復14図＋共通queue図1件、108リンク、51 ID、重複ID/内部anchor/相対リンク欠損なし。旧PUBLIC_RESEARCHのC2節リンクはFINDINGSの互換anchorで現行方針へ接続。外部asset 0。HTML約45KB、C2_TEST_PLAN約33KB。実画面QAは未実施。
 - C2_TEST_PLAN追加をomitnix鮮度検査が検知したため生成。discovered 1134→1135、unclaimed 206→207、既存analyzed 922と解析警告は変わらない。
+
+## 複数方式設計稿のレビュー修正
+
+- 初稿ローカルSHA：`39727c19b9daf0b3ff6a2648e354de8f3d3ae682`。公開head：`b24bb82857c5ea6e5527d0f4858936fc6adb1ca6`。同一tree `f40501b77489cf469da4dd9cbd1356222fe3716f`。
+- 中1：既存wrapperがCLIへHub tokenを環境変数で渡す事実を追加。新bridgeでmailbox/prompt/log/relayへ秘密を広げない条件と、既存同一OSユーザーの信頼境界を区別した。製品認証は変更しない。
+- 中2：配送のroute_epochと実行所有権のexecution_epochを分離。経路切替中でも元runの正常結果を受理し、論理outbox1件へ配送する契約とfake testを追加。旧実行所有者の結果拒否を別検査にした。
+- 低1：通常の本人製品Buildはmake buildへ揃えた。新規adapterのprototype Buildは別途許可する将来コマンドとして分離。いずれも未実行。
+- 修正版の独立再レビューと公開head照合を続ける。C2実装・試験・設定・起動は未実施。

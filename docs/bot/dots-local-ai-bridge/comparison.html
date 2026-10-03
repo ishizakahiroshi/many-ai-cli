@@ -19,11 +19,11 @@
 <tr><td>同一報告が二経路から到着</td><td>意味イベント・Hub run・回答・完了が各1件</td><td>同IDで本文が違えば競合停止</td></tr>
 <tr><td>遅延・順序逆転</td><td>古いsequenceで状態を巻き戻さず、前提を欠く完了は保留</td><td>順序を推測して完了扱いしない</td></tr>
 <tr><td>自己返信ループ</td><td>outbox由来のechoを除外、余分なAI起動0</td><td>任意Bot許可やdot返信の一律除外で代用しない</td></tr>
-<tr><td>主経路停止と元経路復帰</td><td>同jobで補助へ移管、旧epochの後着を実行しない</td><td>別dots会話の同job続行が不明なら自動切替不可</td></tr>
+<tr><td>主経路停止と元経路復帰</td><td>配送のroute epochだけを変更し、元runのexecution epochと正常回答を維持。旧配送は重複/状態照合</td><td>別dots会話の同job続行が不明なら自動切替不可</td></tr>
 <tr><td>途中クラッシュ</td><td>inbox/outbox/launch intentと元Hub runを照合</td><td>lease切れだけで新runを起こさない</td></tr>
 </tbody></table></div>
 <p>fakeによる網羅検査と、ローカル指揮者による内部/実機検収を区別する。実機で確認できない点は未検証を残す。PC電源断やHub/CLI強制終了は基本試験へ含めず、必要なら本人が追加許可する。</p>
-<details><summary>Hub共通ゲートと追加実装の境界</summary><p>既存の起動POSTはrequest_idだけを受け、動的promptは渡せない。新規提案のworkerが専用cwdの合成mailboxを用意し、固定manual routineから新規AIを起動する。新規AIへ現在の会話の認証やconnectorを継承できるとは仮定しない。</p><p>launch intentをPOST前に保存。active中はdispatchせず、応答喪失は既存run一覧/詳細を照合する。別runへの永続aliasや未確認状態を別request_idで隠さない。live tool待ち・既存session resume・fresh run・dots同job続行は別物。既存session案にはTUI/bridgeの単一writerが必要。</p><p>提案ファイルはcmd/dots-bridge-c2/main.go、internal/dotsbridge配下のprotocol/store/MCP/Slack/Hub adapterとfake tests。まだ存在せず、既存Hub APIとは分ける。既存SQLite依存を再利用する案で、#3 Rustの作業やHub既存DBへ手を入れない。</p></details>
+<details><summary>Hub共通ゲートと追加実装の境界</summary><p>既存の起動POSTはrequest_idだけを受け、動的promptは渡せない。新規提案のworkerが専用cwdの合成mailboxを用意し、固定manual routineから新規AIを起動する。新規AIへ現在の会話の認証やconnectorを継承できるとは仮定しない。ただし既存wrapperはCLIへHub tokenを環境変数で渡す。新bridgeは秘密をmailbox/ログ/relayへ拡散せず、既存OSユーザーの信頼境界を維持する。</p><p>launch intentをPOST前に保存。active中はdispatchせず、応答喪失は既存run一覧/詳細を照合する。別runへの永続aliasや未確認状態を別request_idで隠さない。live tool待ち・既存session resume・fresh run・dots同job続行は別物。既存session案にはTUI/bridgeの単一writerが必要。配送epochと実行所有権のepochを分け、経路切替で正常なrun結果を捨てない。</p><p>提案ファイルはcmd/dots-bridge-c2/main.go、internal/dotsbridge配下のprotocol/store/MCP/Slack/Hub adapterとfake tests。まだ存在せず、既存Hub APIとは分ける。既存SQLite依存を再利用する案で、#3 Rustの作業やHub既存DBへ手を入れない。</p></details>
 <h3>UX・費用・役割</h3>
 <p>M/S/Hを、本人の設定/開始/承認/復旧操作数、質問後の続行、完了回収、区間遅延、会話の見やすさ、PC復帰、維持負担、費用で比較する。全項目は未実測。二件だけでSLAやp95を主張しない。</p>
 <ul><li>dots：別途許可後の実装・mock自動テスト・独立レビュー。</li><li>ローカル指揮者：稼働版の照合、内部テスト、実機一往復、複数入口と復旧の検収。</li><li>本人：アカウント設定、必要な起動、費用上限、UXと採用判断。</li></ul>

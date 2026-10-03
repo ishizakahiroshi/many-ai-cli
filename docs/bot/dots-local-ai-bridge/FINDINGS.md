@@ -1,6 +1,6 @@
 # dots とローカルAIの連携方式 調査結果
 
-> 最終更新: 2026-10-03(土) 18:57:54 JST
+> 最終更新: 2026-10-03(土) 19:05:49 JST
 
 ## 結論
 
@@ -190,6 +190,8 @@ OpenAIのMCP Eventsはplugin登録・認証・購読が前提で、webhookとcal
 | 採用判断 | 主経路、補助/手動回収、GitHub記録を決める。queue/auth/PC/dots共通障害では別入口も代替にならない | 本人。独立レビュー済み証跡を参照 |
 
 Hub既存POSTはrequest_idだけを受け、動的promptは渡せない。新規提案のlocal workerが専用cwd内の合成mailboxを用意し、固定manual routineが読む契約とする。既存GETのrun一覧/詳細で相関する。active中はdispatchを止め、別runへのrequest_id aliasや応答喪失はneeds_reconcile。別IDを増やして再起動しない。AIのauth/connector/cwdを現在の会話から継承する前提にも立たない。
+
+配送先を変えるroute_epochと実行所有権のexecution_epochを分け、通常の経路切替は起動済runの回答を無効化しない。既存wrapperはCLIへHub tokenを環境変数で渡すため、bridgeが秘密をmailbox/ログ/relayへ広げない条件と既存OSユーザーの信頼境界を区別する。
 
 live tool待ち、既存session再開、fresh run、dots同job続行は別の証跡。最小ローカル試験はfresh run。既存session案を後で採用する場合はTUI/bridgeの単一writerを別検証する。session対応表が残るだけでは未処理job復旧の合格にしない。
 

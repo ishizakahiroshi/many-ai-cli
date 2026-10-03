@@ -1,6 +1,6 @@
 # dots とローカルAIの複数経路を比較するC2試験設計
 
-> 最終更新: 2026-10-03(土) 18:56:20 JST
+> 最終更新: 2026-10-03(土) 19:05:49 JST
 
 ## 目的と現在の許可範囲
 
@@ -79,6 +79,7 @@ MのUI導線は[公式接続手順](https://developers.openai.com/plugins/deploy
 | [routine_store.go](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/internal/hub/routine_store.go) | 保存後にメモリ公開。starting/running/waitingがactive。result_availableとfinishedは別。cwdは実在する狭い絶対directory |
 | [http_helpers.go](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/internal/hub/http_helpers.go) | Bearer認証を受理し、Host/Origin等のguardがある。workerはlocalhostへ既存認証で接続し、Hub tokenをrelayへ送らない |
 | [routine_test.go](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/internal/hub/routine_test.go) | ConcurrentAdmissionAndRetryRemainOneRunはactive中の別IDも完了後まで同じrunへ戻ることを検証。SaveFailure、HTTPCreateRunAndReadStableDetail、FailedLaunchAndPersistenceRestartKeepIdempotency、MissingAfterRestartNeverReplaysPrompt、IdleWithoutCompletionNeedsConfirmationも読取済み |
+| [wrapper.go](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/internal/wrapper/wrapper.go#L1460-L1487) | 既存wrapperは実CLIへMANY_AI_CLI_HUB_TOKENを環境変数で渡す。headlessにも同じ受渡しがある。bridgeで秘密を増やさない設計と、既存同一OSユーザーの信頼境界を分ける |
 | [go.mod](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/go.mod)、[sessionstore/store.go](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/internal/sessionstore/store.go) | Go 1.26.8、modernc.org/sqlite v1.54.0、golang.org/x/netが既存依存。SQLiteを使う実例あり。Hub既存DBへbridgeテーブルを直接追加しない |
 
 この読取りで製品テストは実行していない。ソースと関連テストは基準から無変更。Rust版に同じAPIがあるとは断定しない。
@@ -103,12 +104,18 @@ MのUI導線は[公式接続手順](https://developers.openai.com/plugins/deploy
 ### 新規adapterの接続契約案
 
 - **relay入口**：新規MCP tool名bridge_put_event／bridge_get_job、新規HTTP /v1/events、/v1/local/claim、/v1/local/result。いずれも提案名で、OpenAIや既存HubのAPIではない。toolは認可されたjobへの質問/停止状態/完了のみを保存する。
-- **封筒**：campaign_id、case_id、job_id、logical_message_id、phase、question_id、sequence、source、source_event_id、sender、route_epoch、payload_hash、received_at、expires_at。署名やtokenは監査記録に含めない。
+- **封筒**：campaign_id、case_id、job_id、logical_message_id、phase、question_id、sequence、source、source_event_id、sender、route_epoch、execution_epoch、payload_hash、received_at、expires_at。署名やtokenは監査記録に含めない。
 - **重複**：sourceとsource_event_idの組で配送重複を除外。同じ報告を二経路へ載せる場合はlogical_message_idを同じにする。job_idだけでは複数の正当な段階を潰すため不足。同IDで本文hashが違えば競合として停止する。
 - **Slack相関**：専用threadとjobを事前登録。合成本文にjob/phase/question/logical_message識別を付ける。識別子欠落・sender不一致・未知threadは隔離し、自然文だけから新しいjobや権限を推測しない。MCPとSlackで意味が一致するか試験する。
-- **永続化**：ACKはinbox保存後。状態変更とoutbox登録を同じDB transactionへ入れる。PCはDBファイルを共有マウントせず認証APIでclaim。lease/epochにより古いworkerの結果を拒否する。DBが止まれば受付成功を返さない。
-- **ローカルmailbox**：専用cwd内の提案ファイル .bridge-c2/input.jsonへclaim済みjobをatomicに配置。固定routine promptはこの合成入力を読んで .bridge-c2/answer.jsonへjob_id/question_id/epoch/answerを書き、結果を報告する。workerがrun完了とresult_available、JSON整合を確認してoutboxへ返す。部分ファイルやprocess終了だけでは送信しない。
-- **権限分離**：AIにはSlack/MCP/Hub tokenを与えない。workerが通信を担う。ローカルAIのauth・読書き許可はそのproviderの既存設定で別途確認する。入力から任意shell/prompt/cwdを組み立てない。
+- **永続化**：ACKはinbox保存後。状態変更とoutbox登録を同じDB transactionへ入れる。PCはDBファイルを共有マウントせず認証APIでclaim。execution lease/fencingにより旧workerの結果を拒否する。route_epochは配送経路の選択だけに使い、実行所有権のepochと分ける。DBが止まれば受付成功を返さない。
+- **ローカルmailbox**：専用cwd内の提案ファイル .bridge-c2/input.jsonへclaim済みjobをatomicに配置。固定routine promptはこの合成入力を読んで .bridge-c2/answer.jsonへjob_id/question_id/execution_epoch/answerを書き、結果を報告する。workerがrun完了とresult_available、JSON整合を確認してoutboxへ返す。部分ファイルやprocess終了だけでは送信しない。
+- **秘密を広げない境界**：新bridgeはSlack/MCP/Hubの秘密をmailbox・prompt・ログへ書かず、Hub tokenをrelayへ送らない。workerがbridge通信を担う。ただし既存wrapperはCLIへHub tokenを環境変数で渡すため、AIがHub認証情報を持たない隔離は実現していない。同一OSユーザーの既存信頼境界とproviderの権限制御に依存する。token削除や製品の認証変更は今回の提案済み機能ではない。入力から任意shell/prompt/cwdを組み立てない。
+
+### 配送のepochと実行のepoch
+
+route_epochはoutbox配送先・配送attemptの世代。execution_epochはlocal workerがjob/runを担当する所有権の世代で、mailboxと結果へ記録する。M→Sの通常切替で変えるのはroute_epochだけであり、起動済みrunのexecution_epoch/request_id/run_idは維持する。正常な元runの回答を受理し、現在選んだ経路の同じ論理outboxへ一度だけ載せる。経路切替を再起動理由にしない。
+
+execution_epochの更新は、元worker/runを照合して所有権移譲を確定した場合だけ。旧実行所有者からの遅い結果は拒否して証跡を残す。旧routeからの後着inboxは保存・重複/状態照合し、単に経路が古いだけで妥当な元runの回答・完了を捨てない。旧outbox配送leaseでの再送と自動的な経路戻しは認めない。送信済みか不明なattemptはneeds_reconcileとし、別経路へ盲目的に再送しない。物理配送のexactly-once保証と、論理処理/AI実行を一度に抑える条件は区別する。
 
 ### 起動の不確実性とrequest_id
 
@@ -158,7 +165,7 @@ MCP Eventsのdots利用可否、Slackのworkspace/app承認・履歴制限、rel
 | 遅延・順序逆転 | fixtureの質問/blocked/回答/完了を入替え、古いsequenceを後着させる | 状態を巻き戻さず保留/拒否を記録。前提を満たさない完了を確定しない |
 | 自己返信ループ | 自分のoutbox返信・ACK・完了通知を再受信 | origin/phase/jobで除外し、追加AI起動0。許可されたdotの返信まで一律Bot除外しない |
 | 主経路停止 | 質問保存後、主経路の配送adapterだけを停止。共通queueとHubは動作を維持 | queueのoutboxを補助へ明示移管、同jobの回答とdots続行を確認。補助が別dots会話なら相関可能性を実測し、未知なら自動切替不可 |
-| 元経路の復帰 | route_epochを進めて切替後、元経路の古い配送を到着させる | 旧epochを実行しない。自動で往復切替しない。元経路へ戻すのは状態照合後の明示操作 |
+| 元経路の復帰 | route_epochだけを進めて切替後、元経路の後着と起動済みrunの結果を受ける | 元runの正当なexecution_epochの回答を受理し、現経路の論理outboxへ1回。旧配送leaseは再送せず、後着inboxは重複/状態照合。元経路へ戻すのは明示操作 |
 | 途中クラッシュ | fakeでは保存前後、POST前後、結果保存前後で停止。実機は許可済み専用workerを質問保存後／起動後に中断して再開 | inbox/outbox/launch intentとHub runを照合。保存済jobを失わず、未知runを再起動しない。単なるsession mapping保存だけでは不十分 |
 
 実機のPC電源断・Hub/CLI強制終了は基本試験へ含めない。まず専用receiver/workerの停止で境界を確認し、本当のPC停止復帰が必要なら本人が追加許可して実施する。アプリ停止模擬と電源断耐性を別欄へ記録する。
@@ -197,20 +204,22 @@ go test -race ./internal/dotsbridge/... -count=1
 go vet ./internal/dotsbridge/... ./cmd/dots-bridge-c2
 ```
 
-必須の新規test名案はTestCrossIngressDedup、TestOutOfOrder、TestSelfReplyIgnored、TestRouteFailoverAndReturn、TestCrashReconcile、TestHubAliasCollision、TestStaleLeaseCannotLaunch、TestMailboxResultCorrelation。packageやtestが未作成なら検査不能であり、no tests to runを合格にしない。fake以外の外部接続やAI起動をこれらへ混ぜない。race対応toolchainがなければその検査は未実施として分離する。
+必須の新規test名案はTestCrossIngressDedup、TestOutOfOrder、TestSelfReplyIgnored、TestRouteFailoverAndReturn、TestCrashReconcile、TestHubAliasCollision、TestStaleLeaseCannotLaunch、TestMailboxResultCorrelation、TestInFlightRouteSwitchKeepsResult、TestStaleExecutionOwnerRejected。追加2件は「run実行中→経路切替→元runの正常回答→論理outbox1件」と「所有権移譲後の旧execution_epoch結果の拒否」を別々に検証する。packageやtestが未作成なら検査不能であり、no tests to runを合格にしない。fake以外の外部接続やAI起動をこれらへ混ぜない。race対応toolchainがなければその検査は未実施として分離する。
 
-本人側のローカル指揮者が、Build許可後にCIと同じfrontend前提を用意するコマンド（既存lockを使う。製品依存定義は変更しない）：
+本人が通常の製品Buildを行う経路は、[CLAUDE.mdの規約](https://github.com/ishizakahiroshi/many-ai-cli/blob/21d0bc7935a2c4696fb89ccff2e324157a528c2d/CLAUDE.md#ai-作業共通ルール)に従いmake build。ローカル指揮者は本人が用意したweb/distを使って下記の既存Hub試験を実行する。bun run build単体を通常手順へ置かない。いずれもBuild/内部試験の追加許可後に行う：
 
 ```sh
-cd web
-bun install --frozen-lockfile
-bun run build
-cd ..
+make build
 go test ./internal/hub -run '^TestRoutine(ConcurrentAdmissionAndRetryRemainOneRun|SaveFailureDoesNotLaunchOrChangeMemory|HTTPCreateRunAndReadStableDetail|FailedLaunchAndPersistenceRestartKeepIdempotency|MissingAfterRestartNeverReplaysPrompt|IdleWithoutCompletionNeedsConfirmation)$' -count=1
+```
+
+追加adapter専用の試験binaryは新規提案なので、通常製品make buildにはまだ含まれない。実装後に本人がこのprototype Buildを個別許可する場合だけ、出力directoryを用意して次を実行する（Makefileへ組み込む変更は別判断）：
+
+```sh
 go build -o ./out/dots-bridge-c2 ./cmd/dots-bridge-c2
 ```
 
-Bun版は基準CIの1.3.14。Windowsでは生成物に.exeを付ける。上記のHub試験は起動stub/httptestを使う既存testを選んでおり、実機一往復の代替ではない。フロント生成・Build・provider起動は本人側が行う。
+参考として基準CIはBun 1.3.14でfrontendを生成するが、その個別手順を通常ローカルBuildの代替にはしない。Windowsでは生成物に.exeを付ける。上記のHub試験は起動stub/httptestを使う既存testを選んでおり、実機一往復の代替ではない。フロント生成・Build・provider起動は本人側が行う。
 
 次のCLIは**追加実装するインターフェース案**であり、今は実行不能。実装後のhelpと照合して確定する。設定fileは秘密の値ではなく本人管理のsecret参照を持つ。
 
@@ -243,7 +252,7 @@ localのmax-jobsはcampaign内の候補単位で累積2件の上限。件数をD
 | 判断対象 | 暫定候補／役割 | 共通障害・残る実装 | 本人が決める事項 |
 |---|---|---|---|
 | 主経路 | MかS。両者の同課題結果・UXで選ぶ。公式根拠上はMが有力だが未決定 | queue、PC/Hub、auth、dotsの同job続行。bridgeとlocal workerが必要 | 設定負担、待ち時間、会話UX、費用を受け入れるか |
-| 補助経路 | 主経路以外のM/S、必要ならH。部分成立なら手動回収用に限定 | 別入口でも共有queue/認証/PC/dots障害を代替しない。route_epoch/状態照合が必要 | 自動切替を許可するか、手動で止めて回収するか |
+| 補助経路 | 主経路以外のM/S、必要ならH。部分成立なら手動回収用に限定 | 別入口でも共有queue/認証/PC/dots障害を代替しない。route_epochとexecution_epochの分離/状態照合が必要 | 自動切替を許可するか、手動で止めて回収するか |
 | GitHub記録 | 指示・成果・レビュー・検収の固定記録 | 原則起動を担当しない。Webhook/poll追加は実益と起動根拠がある場合だけ | 記録先と公開可能な証跡範囲 |
 | 追加実装 | §3の新規bridge、adapter、fake tests、operator guide | Go基準と稼働版差、認証・保存、単一writer。製品内部APIを作った前提にしない | 実装対象branch/範囲、設定/送信/Build/実機試験の許可 |
 | 全候補未成立 | route固有とqueue/auth/PC/dotsの共通原因を分離 | 条件待ちはfailedと区別。入口を増やして共通障害を隠さない | 条件整備、設計変更、暫定手動運用の継続 |
