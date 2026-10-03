@@ -194,6 +194,11 @@ func (w *Worker) Reconcile(ctx context.Context, l Lease, now time.Time) (Intent,
 	if err != nil {
 		return i, err
 	}
+	// A committed result is terminal for launch reconciliation. Re-entering a
+	// worker after result commit must not roll answered back to running.
+	if i.State == "collected" {
+		return i, nil
+	}
 	runs, err := w.Hub.List(ctx, i.RoutineID)
 	if err == nil {
 		for _, r := range runs {

@@ -1,6 +1,6 @@
 # #5 C2 offline 実装看板
 
-> 最終更新: 2026-10-03(土) 20:02:48 JST
+> 最終更新: 2026-10-03(土) 20:10:47 JST
 
 ## context配分
 
@@ -31,3 +31,7 @@ branch: `feat/dots-bridge-c2-offline-20261003`
 [実装契約・操作ガイド](C2_OPERATOR_GUIDE.md) / [設計PR #8](https://github.com/ishizakahiroshi/many-ai-cli/pull/8)
 
 [実装Draft PR #10](https://github.com/ishizakahiroshi/many-ai-cli/pull/10)
+
+## #3 Rust移植との統合境界
+
+この実装はGo基準 `21d0bc7935a2c4696fb89ccff2e324157a528c2d` に固定し、#3のbranch/workspace/Rust/Hubには触れていない。将来developへ両方を統合するとき、CHANGELOGや生成indexの共通行は競合しうる。Rust Hubとこのbridgeのrequest/run/session/instance、active alias、GET回収、result_availableの互換性は未検証で、別の契約統合テストが必要。branchが別であることだけから実行時互換を保証しない。ここでは実接続やRust作業へ範囲を広げない。

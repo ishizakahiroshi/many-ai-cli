@@ -99,6 +99,22 @@ func (w *Worker) Collect(ctx context.Context, l Lease, raw []byte, now time.Time
 		if cause == "" && (answer.JobID != j.ID || answer.QuestionID != cur.QuestionID || answer.ExecutionEpoch != cur.ExecutionEpoch || answer.RequestID != cur.RequestID || answer.RunID != cur.Run.ID || answer.HubInstanceID != cur.Run.HubInstanceID || answer.SessionID != cur.Run.SessionID || answer.DispatchNonce != cur.Nonce || !cur.Consumed || answer.Answer != "青" || answer.Task != cur.Input) {
 			cause = "result correlation mismatch"
 		}
+		// A fully correlated answer already committed to the logical outbox is
+		// immutable evidence. A later duplicate cannot reopen a completed/held
+		// job merely because the deadline passed or the Hub is unavailable.
+		if cause == "" {
+			old, oe := getOutbox(tx, j.ID)
+			if oe == nil {
+				if old.Payload != answer.Answer || cur.State != "collected" {
+					held = true
+					return hold(tx, j, "answer payload conflict")
+				}
+				return nil
+			}
+			if !errors.Is(oe, sql.ErrNoRows) {
+				return oe
+			}
+		}
 		if cause == "" && (runErr != nil || run.identity() != cur.Run.identity() || run.Status != "finished" || !run.ResultAvailable) {
 			cause = "run result unavailable or unverified"
 		}
@@ -125,17 +141,6 @@ func (w *Worker) Collect(ctx context.Context, l Lease, raw []byte, now time.Time
 				return nil
 			}
 			return hold(tx, j, cause)
-		}
-		old, e := getOutbox(tx, j.ID)
-		if e == nil {
-			if old.Payload != answer.Answer {
-				held = true
-				return hold(tx, j, "answer payload conflict")
-			}
-			return nil
-		}
-		if !errors.Is(e, sql.ErrNoRows) {
-			return e
 		}
 		o := Outbox{ID: "answer:" + digest([]string{j.ID, j.QuestionID}), JobID: j.ID, Payload: answer.Answer, Route: j.Route, RouteEpoch: j.RouteEpoch, State: "pending"}
 		if e = putOutbox(tx, o); e != nil {

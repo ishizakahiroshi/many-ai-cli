@@ -41,7 +41,7 @@ func Open(path string) (*Store, error) {
 	if err = f.Close(); err != nil {
 		return nil, err
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(abs)}
+	u := sqliteFileURL(filepath.ToSlash(abs))
 	db, err := sql.Open("sqlite", u.String()+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)&_txlock=immediate")
 	if err != nil {
 		return nil, err
@@ -72,6 +72,16 @@ func Open(path string) (*Store, error) {
 	}
 	return s, nil
 }
+
+// SQLite file URIs require a slash before a Windows drive, otherwise net/url
+// renders the drive as an authority (file://C:/...), which SQLite rejects.
+func sqliteFileURL(path string) url.URL {
+	if len(path) > 1 && path[1] == ':' {
+		path = "/" + path
+	}
+	return url.URL{Scheme: "file", Path: path}
+}
+
 func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) transaction(point string, fn func(*sql.Tx) error) error {
 	tx, err := s.db.Begin()

@@ -1,6 +1,6 @@
 # C2 offline prototype 実装契約
 
-> 最終更新: 2026-10-03(土) 20:02:48 JST
+> 最終更新: 2026-10-03(土) 20:10:47 JST
 
 ## 固定基準と範囲
 
@@ -80,3 +80,7 @@ Windowsではbinary名に`.exe`を付け、出力directoryを対応shellで作�
 4. M/S同じ合成課題の実同job続行、7区間時刻、UX操作数、停止/再接続、費用を別々に測る。fakeの合格から本番対応/主経路採用/常設監視を宣言しない。
 
 `.omitnix/index.json` は基準branchの生成物（omitnix 0.1.3、生成commit 51f37cb）を保持。検証済みgeneratorがこの環境に無いため未再生成。手書きで生成完了に見せず、ローカル指揮者が通常の `omitnix` と `omitnix --check` で確認する。
+
+## #3 Rust移植との統合境界
+
+この実装はGo基準 `21d0bc7935a2c4696fb89ccff2e324157a528c2d` に固定し、#3のbranch/workspace/Rust/Hubには触れていない。将来developへ両方を統合するとき、CHANGELOGや生成indexの共通行は競合しうる。Rust Hubとこのbridgeのrequest/run/session/instance、active alias、GET回収、result_availableの互換性は未検証で、別の契約統合テストが必要。branchが別であることだけから実行時互換を保証しない。ここでは実接続やRust作業へ範囲を広げない。

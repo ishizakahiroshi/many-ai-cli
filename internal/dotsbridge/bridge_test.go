@@ -848,3 +848,88 @@ func TestQuarantinedNonceIsNotExported(t *testing.T) {
 		t.Fatal("local recovery evidence lost")
 	}
 }
+
+func TestWorkerRestartAfterResultDoesNotRollBackAnswer(t *testing.T) {
+	r := makeRig(t)
+	r.launch(t)
+	must(t, r.w.Collect(context.Background(), r.l, r.answer(t), r.now))
+	r.reopen(t)
+	i, err := r.w.Launch(context.Background(), r.l, r.now)
+	must(t, err)
+	if i.State != "collected" {
+		t.Fatal(i.State)
+	}
+	j, err := r.s.Job(r.j.ID)
+	must(t, err)
+	if j.State != "answered" {
+		t.Fatal("result rolled back", j.State)
+	}
+	o, err := r.s.BeginDelivery(j.ID, j.Route, j.RouteEpoch, r.now)
+	must(t, err)
+	must(t, r.s.FinishDelivery(o, Delivered, 0, r.now))
+	_, err = r.s.Ingest(event(j, "completed", 3, "done", j.Route), r.now)
+	must(t, err)
+	j, err = r.s.Job(j.ID)
+	must(t, err)
+	if j.State != "completed" {
+		t.Fatal(j.State)
+	}
+	p, _ := r.h.Counts()
+	if p != 1 {
+		t.Fatal(p)
+	}
+}
+
+func TestSQLiteFileURLHasNoWindowsAuthority(t *testing.T) {
+	for _, p := range []string{"X:/synthetic/bridge #1.db", "/tmp/bridge #1.db"} {
+		u := sqliteFileURL(p)
+		if u.Host != "" || strings.Contains(u.String(), "file://X:") {
+			t.Fatal(u.String())
+		}
+		if !strings.Contains(u.String(), "%23") {
+			t.Fatal("fragment not escaped", u.String())
+		}
+	}
+}
+
+func TestDuplicateAnswerPreservesCompletedState(t *testing.T) {
+	for _, condition := range []string{"deadline", "hub_unavailable", "stopped"} {
+		t.Run(condition, func(t *testing.T) {
+			r := makeRig(t)
+			r.launch(t)
+			raw := r.answer(t)
+			must(t, r.w.Collect(context.Background(), r.l, raw, r.now))
+			o, err := r.s.BeginDelivery(r.j.ID, RouteM, 1, r.now)
+			must(t, err)
+			must(t, r.s.FinishDelivery(o, Delivered, 0, r.now))
+			_, err = r.s.Ingest(event(r.j, "completed", 3, "done", RouteM), r.now)
+			must(t, err)
+			when := r.now
+			switch condition {
+			case "deadline":
+				when = r.j.ExpiresAt
+			case "hub_unavailable":
+				r.h.HideHistory(true)
+			case "stopped":
+				must(t, r.s.Stop(r.now))
+			}
+			must(t, r.w.Collect(context.Background(), r.l, raw, when))
+			j, err := r.s.Job(r.j.ID)
+			must(t, err)
+			if j.State != "completed" || count(t, r.s, "outbox") != 1 {
+				t.Fatal(j.State)
+			}
+			var a Answer
+			must(t, json.Unmarshal(raw, &a))
+			a.DispatchNonce = "wrong"
+			bad, err := json.Marshal(a)
+			must(t, err)
+			requireHeld(t, r.w.Collect(context.Background(), r.l, bad, when))
+			j, err = r.s.Job(r.j.ID)
+			must(t, err)
+			if j.State != "completed" {
+				t.Fatal("mismatch altered completed job", j.State)
+			}
+		})
+	}
+}

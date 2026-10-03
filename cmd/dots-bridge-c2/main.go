@@ -93,7 +93,7 @@ func runCommand(command string, args []string, stdout, stderr io.Writer) int {
 	} else {
 		// Read/stop commands must not initialize an empty queue when a path is
 		// mistyped. Open performs the database's own identity validation.
-		info, err := os.Stat(*dbPath)
+		info, err := os.Stat(*dbPath) // #nosec G703 -- Explicit operator-selected local ledger, never an event path; Open verifies exclusive bridge ownership.
 		if err != nil {
 			return fail(stderr, exitFailure, "database_unavailable", "the existing bridge database is unavailable")
 		}
