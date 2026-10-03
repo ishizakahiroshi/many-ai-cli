@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "11f2b968588e516b435a79d0fc24b39881b48659",
+    "commit": "d5e0d022490d55ef26b446f5317bba06be5798b4",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -80,7 +80,11 @@
           ".rs"
         ],
         "capabilities": [
-          "summary"
+          "authentication",
+          "authorization",
+          "reads",
+          "summary",
+          "writes"
         ]
       },
       {
@@ -134,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1135,
+    "discovered": 1136,
     "analyzed": 922,
     "unresolved": 5,
     "unknown": 1,
-    "unclaimed": 207,
+    "unclaimed": 208,
     "skipped_by_config": 0
   },
   "files": [
@@ -785,6 +789,14 @@
     },
     {
       "path": "docs/bot/dots-local-ai-bridge/FINDINGS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/dots-local-ai-bridge/IMPLEMENTATION_OFFLINE.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
