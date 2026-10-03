@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "toolchain": {
+    "rust": "1.90.0",
+    "rust_archive_sha256": "bff8974f2d3ee6c0e6ac926b533f65bbdd3697d2c2b925bdae5f45b9eed10a67",
+    "official_manifest": "https://static.rust-lang.org/dist/channel-rust-1.90.0.toml",
+    "go": "1.26.8",
+    "go_archive_sha256": "d0f743b33e8d8945e6b1f432edd15785c70507121d6e2a723b21285eddf8b57b",
+    "go_source": "https://go.dev/dl/?mode=json&include=all",
+    "bun": "1.3.14",
+    "bun_archive_sha256": "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
+    "bun_release": "https://github.com/oven-sh/bun/releases/tag/bun-v1.3.14"
+  },
+  "dependencies": [
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "scope": "dependencies",
+      "features": [
+        "derive"
+      ],
+      "official_source": "https://docs.rs/crate/serde/1.0.229",
+      "registry_checksum": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.151",
+      "scope": "dependencies",
+      "features": [],
+      "official_source": "https://docs.rs/crate/serde_json/1.0.151",
+      "registry_checksum": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "base64",
+      "version": "0.22.1",
+      "scope": "dependencies",
+      "features": [],
+      "official_source": "https://docs.rs/crate/base64/0.22.1",
+      "registry_checksum": "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.4.3",
+      "scope": "dependencies",
+      "features": [],
+      "official_source": "https://docs.rs/crate/getrandom/0.4.3",
+      "registry_checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "url",
+      "version": "2.5.8",
+      "scope": "dependencies",
+      "features": [],
+      "official_source": "https://docs.rs/crate/url/2.5.8",
+      "registry_checksum": "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "serde-saphyr",
+      "version": "1.3.0",
+      "scope": "dependencies",
+      "features": [],
+      "official_source": "https://docs.rs/crate/serde-saphyr/1.3.0",
+      "registry_checksum": "b8050abb251097357e24aff63ba2c52a6309ecb7d23a5474023df960a02694d8",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "tokio",
+      "version": "1.53.1",
+      "scope": "dependencies",
+      "features": [
+        "rt-multi-thread",
+        "macros",
+        "process",
+        "io-util",
+        "time",
+        "sync",
+        "signal"
+      ],
+      "official_source": "https://docs.rs/crate/tokio/1.53.1",
+      "registry_checksum": "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed",
+      "license": "MIT",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "tempfile",
+      "version": "3.27.0",
+      "scope": "dev-dependencies",
+      "features": [],
+      "official_source": "https://docs.rs/crate/tempfile/3.27.0",
+      "registry_checksum": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "libc",
+      "version": "0.2.190",
+      "scope": "cfg(unix)",
+      "features": [],
+      "official_source": "https://docs.rs/crate/libc/0.2.190",
+      "registry_checksum": "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    },
+    {
+      "name": "windows-sys",
+      "version": "0.61.2",
+      "scope": "cfg(windows)",
+      "features": [
+        "Win32_Foundation",
+        "Win32_Security",
+        "Win32_Security_Authorization",
+        "Win32_Storage_FileSystem",
+        "Win32_System_Threading",
+        "Win32_System_JobObjects",
+        "Win32_System_Memory"
+      ],
+      "official_source": "https://docs.rs/crate/windows-sys/0.61.2",
+      "registry_checksum": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
+      "target_acceptance": "pending native builds on all four targets"
+    }
+  ],
+  "notes": [
+    "Versions/features verified against official crate documentation, registry metadata and fetched upstream Cargo source. Cargo.lock pins transitive versions and checksums.",
+    "This ledger is not an advisory clearance or license/SBOM acceptance. Those gates remain pending.",
+    "serde-saphyr avoids abandoned serde_yaml and does not enable filesystem include extensions."
+  ],
+  "lockfile_sha256": "f5a4c75b188d77eb2a411b6a40c8e75da5a6fe71a426cce93ae40f95f9998fb7"
+}

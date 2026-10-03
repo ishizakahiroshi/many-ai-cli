@@ -1,0 +1,140 @@
+{
+  "Approval": {
+    "Enabled": false,
+    "FirstLaunchShown": false
+  },
+  "Hub": {
+    "AutoShutdown": false,
+    "IdleTimeoutMin": 0,
+    "LogDir": "",
+    "OpenBrowser": false,
+    "Port": 48888,
+    "StaleBinaryAutoRestart": false,
+    "TerminalColor": "",
+    "WrapperReconnectGraceSec": 0,
+    "WrapperSendWriteTimeoutSec": 0
+  },
+  "Log": {
+    "attachment_max_total_mb": 0,
+    "attachment_retention_days": 0,
+    "compress": false,
+    "enabled": false,
+    "legacy_logs_notice_shown": false,
+    "max_backups": 0,
+    "max_size_mb": 0,
+    "session_enabled": false,
+    "session_max_size_mb": 0,
+    "session_retention_days": 0
+  },
+  "TerminalApp": "",
+  "approval_pattern_sources": {},
+  "approval_profiles": {},
+  "custom_providers": [
+    {
+      "command": "\"C:\\Synthetic Folder\\cli.exe\" --mode=test",
+      "headless": {
+        "args": [
+          "--print"
+        ],
+        "format": "text",
+        "prompt_via": "arg"
+      },
+      "id": "custom"
+    },
+    {
+      "command": "duplicate",
+      "id": "custom"
+    },
+    {
+      "command": "collide",
+      "id": "claude"
+    }
+  ],
+  "handoff": {},
+  "input": {},
+  "lm_studio": {},
+  "notify": {},
+  "nvidia_nim": {},
+  "ollama": {},
+  "orchestration": {},
+  "slash_cmd_sources": {
+    "claude": "",
+    "codex": "",
+    "command-code": "",
+    "copilot": "",
+    "cursor-agent": "",
+    "grok": "",
+    "opencode": ""
+  },
+  "spawn": {
+    "last_model": {
+      "claude": "old-model",
+      "codex": "legacy-model"
+    }
+  },
+  "subscriptions": {
+    "claude": [
+      {
+        "default_wins_keys": [
+          "theme",
+          "7"
+        ],
+        "dir": "short",
+        "enabled": false,
+        "id": "work",
+        "name": "Work",
+        "settings_sync": false
+      },
+      {
+        "id": "duplicate",
+        "profile_owned_keys": [
+          "plugins",
+          "theme"
+        ]
+      }
+    ],
+    "future-provider": [
+      {
+        "id": "future",
+        "plan": "basic"
+      }
+    ]
+  },
+  "user_prefs": {
+    "approval": {},
+    "desktop_notifications": {},
+    "display": {},
+    "done_summary_notify": {},
+    "notify_sound": {},
+    "push_notifications": {},
+    "quick_cmds": {
+      "show1": false,
+      "show2": true
+    },
+    "session_order": [
+      10,
+      5,
+      7,
+      -1
+    ],
+    "spawn": {
+      "last_model": {
+        "claude": "new-model"
+      }
+    },
+    "template_send": {},
+    "token_statusbar": {},
+    "trigger": {},
+    "usage_links": {},
+    "voice": {},
+    "workflow_completion_notify": {}
+  },
+  "voice": {
+    "whisper": {}
+  },
+  "workflow": {
+    "journal_enabled": false,
+    "subagent_tree_enabled": false,
+    "task_detail_enabled": false
+  }
+}

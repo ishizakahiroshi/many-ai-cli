@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 12:44:28
+> 最終更新: 2026-10-03(土) 13:01:07
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
@@ -8,11 +8,11 @@ Baseline Go SHA: 21d0bc7935a2c4696fb89ccff2e324157a528c2d.
 Instruction/implementation branch: feat/rust-migration.
 PR base: develop.
 Current state: C1 foundation in progress in an isolated clean clone; the operator has started execution.
-Rust implementation: source inventory and shared contracts being prepared. Rust/Go/Web builds and manual acceptance have not run. The operator has now approved isolated official-source toolchain installation; verified downloads are being attempted.
+Rust implementation: initial shared foundation implemented; final C1 configuration and interface tests are being integrated. Isolated toolchains and locked Web build succeeded. Application callers, routes and both functional binaries remain pending.
 
 | Stage | Owner | State | Evidence / next action |
 |---|---|---|---|
-| C1 foundation | dots integration owner | in_progress | Instructions and fixed baseline read; inventory/root/interfaces next. Build validation blocked on absent approved toolchains. |
+| C1 foundation | dots integration owner | in_progress | Initial foundation code and source inventories exist; final C1 validation is in progress. All downstream implementation and acceptance remain pending. |
 | C2 core | dots core lane | pending | After C1, parallel with C3/C4 |
 | C3 services | dots services lane | pending | After C1, parallel with C2/C4 |
 | C4 launcher/delivery | dots launcher lane | pending | After C1, parallel with C2/C3 |
@@ -30,7 +30,7 @@ The following checkpoint is based on the published progress commit `f48c6086a2be
 | Instruction read | dots reports reading initial commit 6b0fb8e and 00–06 briefs | Bot self-report in C1 checkpoint |
 | Start conversation | Private locator maintained by operator; not supplied to this checkout | Do not expose private Slack/thread identifiers publicly |
 | Execution capabilities | dots initially reported missing Rust/Bun/Go, then reported isolated installation authorization and downloads pending | Preserve checkpoint times; tools usable, fetch complete and tests pass need distinct receipts |
-| Instruction supplement acknowledgment | Pending | dots records revision read at its next checkpoint |
+| Instruction supplement acknowledgment | dots read revision 30c37b78fca608718fe3bc6597bada162ffb4547 before this code checkpoint | Bot self-report; unchanged task #3 scope |
 
 ## Revision identities
 
@@ -109,3 +109,60 @@ The operator explicitly approved installing required pinned official toolchains 
 - Services review counted 155 server registrations; dynamic suffix handling and caller/auth/shape inventories are still being expanded.
 
 Next: obtain and hash-check official Rust/Bun/Go inputs, create testable C1 interfaces, and preserve all unimplemented routes as pending. No C2/C3/C4 implementation release yet.
+
+## 2026-10-03(土) 12:54:40 JST — C1 implementation checkpoint preparation
+
+Owner: dots integration owner, with exclusive C1 config-model and shared-core subparts. State: in_progress, not API-frozen or accepted yet.
+Changed paths: new rust/Cargo.toml, Cargo.lock, rust-toolchain.toml, build.rs, src/{bin,proto,config,process}, cli.rs/assets.rs, tests/fixtures/oracle, scripts and inventory; this progress file. Existing Go/Web sources remain unchanged.
+
+Toolchain blocker resolved: operator-authorized official-source archives downloaded and SHA-256 verified before isolated installation. Rust/Cargo 1.90.0, Go 1.26.8 and Bun 1.3.14 version commands exited 0. Exact official archive identities and direct dependency features/provenance are recorded in rust/inventory/dependencies.json. All four supported Rust standard-library targets were hash-verified; native linkers/devices are separate pending gates.
+
+Implementation scope at this checkpoint:
+- All 22 baseline protocol structs/302 tagged fields; 44 synthetic Go-generated zero/filled golden cases; explicit base64 bytes, omitted zero fields, false activity, pointer false and null/empty required arrays.
+- Explicit disjoint trial root/resource paths, legacy database basename, private atomic replacement and source-level Windows ACL/replacement adapter.
+- Cancellable bounded subprocess capture with actual-child environment tests, output caps, readers before prompt write, timeout and descendant-held pipe bounds. Windows Job attachment/real OS behavior is not accepted from source checks.
+- Shared typed session/storage/approval/input/spawn/update interfaces; all 34 Store method names and typed caller records, distinct identities/epochs, verified-origin grants and atomic admission/registration-gap exclusion helpers.
+- Typed configuration model and Go-generated synthetic fixtures now integrating. Launcher and main runtime commands remain explicitly unintegrated; the entries fail clearly rather than claiming success or delegating to Go.
+- Exhaustive source inventories: 31 main CLI dispatch forms, 155 route registrations, 49 dynamic operations and downstream source/test references. The inventory lists outstanding work; source test discovery does not mean those tests ran in Rust.
+
+Executed command receipts (task-only tool/cache paths supplied through process-local environment):
+- `cd web && bun install --frozen-lockfile && bun run check && bun run build`: exit 0; existing generated Web source hash 019c3e80ec0f, instrumentation off. No Web source edited.
+- `python3 rust/scripts/generate-proto.py`: exit 0. `go run ./rust/tests/oracle > rust/tests/fixtures/foundation/proto-golden.json`: exit 0.
+- First `cargo test --manifest-path rust/Cargo.toml`: exit 101, 14 passed/1 failed; the descendant-pipe fixture exposed polling a completed JoinHandle again after timeout. Fixed by keeping a single owned join coordinator and abort handles; regression retained.
+- Repeated `cargo test --manifest-path rust/Cargo.toml`: exit 0, 15 unit tests plus 1 golden test (44 cases). Binary test counts were zero and are not CLI acceptance.
+- `cargo test --locked --manifest-path rust/Cargo.toml --test shared_contracts`: exit 0, 16 tests. `cargo test --locked --manifest-path rust/Cargo.toml --lib`: exit 0, 28 tests at that point.
+- Initial `cargo check --locked --manifest-path rust/Cargo.toml --all-targets --target x86_64-pc-windows-msvc`: exit 101, invalid std::size_of import. Corrected to std::mem::size_of; repeated Windows target check exited 0.
+- `cargo check --locked --manifest-path rust/Cargo.toml --all-targets --target x86_64-apple-darwin` and same for `aarch64-apple-darwin`: exit 0 each for the initial foundation. Recheck final shared/config code before freeze. These are source compilation, not produced native binaries.
+- Initial foundation `cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings`: exit 0. After shared/config integration, exit 101 on seven style/large-enum findings; fixes and final rerun pending in this checkpoint preparation.
+- `go test ./internal/proto ./internal/config ./internal/securefile ./internal/launcher`: exit 0 across all four unchanged baseline packages.
+- `go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...`: first two attempts failed on non-writable default sumdb/cache locations; rerun with task-local GOPATH/XDG_CACHE_HOME exited 0. No shared/home settings changed.
+- Official RustSec database comparison: 77 resolved registry packages, 19 matching advisory/version rows, all selected versions patched/unaffected at the recorded snapshot. See rust/inventory/advisory-receipt.json. This is a source/range comparison, not cargo-audit or proof against unknown vulnerabilities.
+
+Intentional strengthening under review: a held provider-spawn lease closes the baseline launch-before-registration update gap. Full async storage shutdown drain remains a requested strengthening for C2, not already implemented. Configuration recovery behavior follows the Go backup/regeneration path for actual parse failure, while malformed optional sections retain their tolerant decoders.
+
+Next: final configuration/golden/interface tests, fmt/clippy/all-target source checks and staged secret/residue checks; publish a durable code checkpoint before C2/C3/C4 start. C1 is not declared finished yet. HTTP/WS callers, PTY, SQLite implementation, approval/transcript integration, services, launcher, distribution, complete CLI behavior, clean CI/native artifacts, browser/OS/provider acceptance, copied-data rollback and cutover all remain pending.
+
+## 2026-10-03(土) 12:57:53 JST — C1 validated code checkpoint
+
+State: C1 in_progress. The shared foundation slice is validated locally; downstream application compatibility is not claimed.
+
+- `cargo fmt --manifest-path rust/Cargo.toml -- --check`: final formatting check follows the formatter; no manual formatting bypass.
+- `cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings`: exit 0 after fixing the seven code findings plus a nine-argument object-safety test helper. No lint suppression added.
+- `cargo test --locked --manifest-path rust/Cargo.toml`: exit 0, 29 library unit tests + 18 configuration contracts + 1 protocol golden test (44 Go-generated cases) + 16 shared contracts + 3 compile-fail doctests = 67 tests. No ignored tests. The two binary unit targets have zero tests and are not counted as functional binary acceptance.
+- Final `cargo check --locked --manifest-path rust/Cargo.toml --all-targets --target x86_64-pc-windows-msvc`, `x86_64-apple-darwin`, `aarch64-apple-darwin`: each exit 0 after configuration/shared interface integration.
+- `cargo build --locked --manifest-path rust/Cargo.toml --bins`: exit 0, Linux diagnostic candidate entry binaries only. Runtime main/launcher functionality is still pending.
+- All 41 typed configuration structs/233 source fields have synthetic Go projection fixtures. Tolerant optional input, secret-free public projection, preserved corrupt-config backup/regeneration, private save/failed replacement/stale revision and trial path validation passed.
+
+Outstanding C1/integration items before unqualified API freeze: inspect shared interface usability with implementation owners; provider legacy definition conversion, WSL-launcher log-root selection, exhaustive runtime resource propagation and native version/resource packaging are still caller/build integrations. No downstream module may report application success from these interfaces alone. Trial resource path checks do not establish adversarial filesystem rename/symlink-race acceptance; OS-root handle based mutation remains part of files/launcher integration.
+
+Next durable commit includes this ledger and the complete tested foundation slice. Continue remaining C1 integration contracts, then C2/C3/C4 with exclusive ownership. Full K/A acceptance and C6 remain pending.
+
+### Supplemental instructions acknowledged before publication
+
+Read owner supplement 30c37b78fca608718fe3bc6597bada162ffb4547 (README, 00-contracts, 05-integration-review and board additions) after the pre-publication branch check. Preserved the owner's concurrent additions; this remains coordination task #3 many-ai-cli rust, distinct from task #1 benchmark, #2 MANYHub and #4 school, not GitHub issue/PR 3. Initial instruction SHA remains 6b0fb8e; Go oracle remains 21d0bc7. Implementation review will diff from the initial instruction commit and identify instruction supplements separately. No independent review SHA exists yet.
+
+Added the synthetic `historical_reads_and_new_write_validation_are_separate` fixture: legacy numeric-string session IDs and an unknown optional section load without changing file/token; a newly invalid allowed host is rejected on write; supported data survives an explicit valid write/reload. This does not accept older SQLite schemas or launcher versions, which remain C2/C4 fixtures. Final count after this added case will be recorded from its actual run.
+
+Public progress reports are self-reported execution receipts until independently reviewed. Private conversation locators are intentionally absent.
+
+Final supplement fixture rerun: `cargo test --locked --manifest-path rust/Cargo.toml --test config_contracts` exit 0, 19 tests. `cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings` exit 0. The final suite now comprises 68 tests (29 units, 19 config, 1 protocol golden/44 cases, 16 shared, 3 compile-fail docs). The last full-suite receipt was 67 tests before the isolated added fixture; its targeted rerun is the new evidence.

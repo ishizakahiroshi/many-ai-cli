@@ -1,0 +1,56 @@
+token: synthetic-stable-token
+auth_cookie_secret: synthetic-cookie-key
+remote_pin_hash: synthetic-pin-hash
+hub:
+  port: 48888
+  open_browser: false
+workflow:
+  journal_enabled: false
+user_prefs:
+  session_order: [10, ' 5 ', bad, 7.0, 2.5, false, {}, -1]
+  quick_cmds:
+    show1: false
+    show2: true
+  spawn:
+    last_model:
+      claude: new-model
+spawn:
+  last_model:
+    claude: old-model
+    codex: legacy-model
+subscriptions:
+  claude:
+    - id: work
+      name: Work
+      enabled: false
+      settings_sync: false
+      profile_owned_keys: 1
+      default_wins_keys: [theme, {}, 7]
+      dir: short
+    - nonsense
+    - name: missing-id
+    - id: duplicate
+      profile_owned_keys: [plugins, {}, theme]
+  future-provider:
+    - id: future
+      plan: basic
+  malformed: nonsense
+custom_providers:
+  - id: custom
+    command: '"C:\Synthetic Folder\cli.exe" --mode=test'
+    headless:
+      args: [--print]
+      format: text
+      prompt_via: arg
+  - id: custom
+    command: duplicate
+  - id: claude
+    command: collide
+  - id: broken
+    command: cli
+    headless: wrong-type
+  - id: no-command
+  - junk
+voice:
+  whisper:
+    hallucination_phrases: []

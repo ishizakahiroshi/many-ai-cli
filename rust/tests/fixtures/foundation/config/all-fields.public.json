@@ -1,0 +1,338 @@
+{
+  "Approval": {
+    "Enabled": true,
+    "FirstLaunchShown": true
+  },
+  "Hub": {
+    "AutoShutdown": true,
+    "IdleTimeoutMin": 17,
+    "LogDir": "synthetic-日本語",
+    "OpenBrowser": true,
+    "Port": 17,
+    "StaleBinaryAutoRestart": true,
+    "TerminalColor": "synthetic-日本語",
+    "WrapperReconnectGraceSec": 17,
+    "WrapperSendWriteTimeoutSec": 17,
+    "allow_loopback_without_token": true,
+    "allowed_hosts": [
+      "synthetic-日本語"
+    ],
+    "env_kind": "synthetic-日本語",
+    "trusted_networks": [
+      "synthetic-日本語"
+    ]
+  },
+  "Log": {
+    "attachment_max_total_mb": 17,
+    "attachment_retention_days": 17,
+    "compress": true,
+    "enabled": true,
+    "legacy_logs_notice_shown": true,
+    "max_backups": 17,
+    "max_size_mb": 17,
+    "session_enabled": true,
+    "session_max_size_mb": 17,
+    "session_retention_days": 17
+  },
+  "TerminalApp": "synthetic-日本語",
+  "approval_pattern_sources": {
+    "claude": "synthetic-日本語",
+    "codex": "synthetic-日本語",
+    "command-code": "synthetic-日本語",
+    "common": "synthetic-日本語",
+    "copilot": "synthetic-日本語",
+    "cursor-agent": "synthetic-日本語",
+    "grok": "synthetic-日本語",
+    "opencode": "synthetic-日本語"
+  },
+  "approval_profiles": {
+    "claude": "synthetic-日本語",
+    "codex": "synthetic-日本語",
+    "command-code": "synthetic-日本語",
+    "common": "synthetic-日本語",
+    "copilot": "synthetic-日本語",
+    "cursor-agent": "synthetic-日本語",
+    "grok": "synthetic-日本語",
+    "opencode": "synthetic-日本語"
+  },
+  "custom_providers": [
+    {
+      "approval_pattern_source": "synthetic-日本語",
+      "command": "synthetic-日本語",
+      "headless": {
+        "args": [
+          "synthetic-日本語"
+        ],
+        "format": "synthetic-日本語",
+        "prompt_via": "synthetic-日本語"
+      },
+      "id": "synthetic-日本語",
+      "label": "synthetic-日本語"
+    }
+  ],
+  "handoff": {
+    "enabled": true,
+    "intent_mode": "synthetic-日本語",
+    "note_on_threshold": "synthetic-日本語",
+    "notify_remaining_percent": 17,
+    "retention_days": 17
+  },
+  "input": {
+    "deferred_enter_ms": 17
+  },
+  "lm_studio": {
+    "allow_private_hosts": true,
+    "base_url": "synthetic-日本語"
+  },
+  "local_models": [
+    {
+      "id": "synthetic-日本語",
+      "label": "synthetic-日本語"
+    }
+  ],
+  "models_source": "synthetic-日本語",
+  "notify": {
+    "backends": [
+      {
+        "topic": "synthetic-日本語",
+        "type": "synthetic-日本語",
+        "url": "synthetic-日本語"
+      }
+    ],
+    "events": [
+      "synthetic-日本語"
+    ],
+    "include_body": true
+  },
+  "nvidia_nim": {
+    "enabled": true
+  },
+  "ollama": {
+    "allow_private_hosts": true,
+    "base_url": "synthetic-日本語"
+  },
+  "orchestration": {
+    "board_notify_mode": "synthetic-日本語",
+    "bounded_allowed_tools": {
+      "synthetic": [
+        "synthetic-日本語"
+      ]
+    },
+    "child_execution_mode": "synthetic-日本語",
+    "child_full_bypass": true,
+    "child_permission_default": "synthetic-日本語",
+    "child_startup_fail_enabled": true,
+    "child_startup_grace_seconds": 17,
+    "child_startup_kill": true,
+    "child_timeout_seconds": 17,
+    "idle_done_threshold_seconds": 17,
+    "max_children_per_parent": 17,
+    "max_depth": 17,
+    "max_timeout_respawns": 17,
+    "max_total_sessions": 17,
+    "relay_execution_mode": "synthetic-日本語",
+    "spawn_confirm_mode": "synthetic-日本語",
+    "spawn_confirm_providers": [
+      "synthetic-日本語"
+    ],
+    "timeout_respawn": true,
+    "worktree_auto": true,
+    "worktree_dir_root": "synthetic-日本語"
+  },
+  "slash_cmd_sources": {
+    "claude": "synthetic-日本語",
+    "codex": "synthetic-日本語",
+    "command-code": "synthetic-日本語",
+    "copilot": "synthetic-日本語",
+    "cursor-agent": "synthetic-日本語",
+    "grok": "synthetic-日本語",
+    "opencode": "synthetic-日本語"
+  },
+  "spawn": {
+    "last_model": {
+      "synthetic": "synthetic-日本語"
+    }
+  },
+  "subscriptions": {
+    "synthetic": [
+      {
+        "default_wins_keys": [
+          "synthetic-日本語"
+        ],
+        "dir": "synthetic-日本語",
+        "enabled": true,
+        "id": "synthetic-日本語",
+        "name": "synthetic-日本語",
+        "plan": "synthetic-日本語",
+        "profile_dir": "synthetic-日本語",
+        "profile_owned_keys": [
+          "synthetic-日本語"
+        ],
+        "settings_sync": true
+      }
+    ]
+  },
+  "user_prefs": {
+    "approval": {
+      "auto_approval_enabled": true,
+      "auto_switch": true,
+      "high_risk_confirmation_mode": "synthetic-日本語"
+    },
+    "avatar": "synthetic-日本語",
+    "collapsed_nodes": [
+      "synthetic-日本語"
+    ],
+    "cwd_favorites": [
+      "synthetic-日本語"
+    ],
+    "cwd_history": [
+      "synthetic-日本語"
+    ],
+    "desktop_notifications": {
+      "enabled": true
+    },
+    "display": {
+      "custom_themes": [
+        {
+          "contrast": 17,
+          "hue": 17,
+          "id": "synthetic-日本語",
+          "mode": "synthetic-日本語",
+          "name": "synthetic-日本語"
+        }
+      ],
+      "font_size": "synthetic-日本語",
+      "lang": "synthetic-日本語",
+      "live_status_bg": "synthetic-日本語",
+      "live_status_fg": "synthetic-日本語",
+      "locked_mode": "synthetic-日本語",
+      "theme": "synthetic-日本語"
+    },
+    "display_name": "synthetic-日本語",
+    "done_summary_notify": {
+      "enabled": true
+    },
+    "group_order": [
+      "synthetic-日本語"
+    ],
+    "migrated_from_localstorage": true,
+    "notify_sound": {
+      "custom_file": "synthetic-日本語",
+      "custom_mime": "synthetic-日本語",
+      "enabled": true,
+      "type": "synthetic-日本語"
+    },
+    "open_project": "synthetic-日本語",
+    "project_favorites": [
+      "synthetic-日本語"
+    ],
+    "project_views": {
+      "synthetic": {
+        "session_id": 17,
+        "tab": "synthetic-日本語"
+      }
+    },
+    "push_notifications": {
+      "enabled": true
+    },
+    "quick_cmds": {
+      "cmd1": "synthetic-日本語",
+      "cmd2": "synthetic-日本語",
+      "cmd3": "synthetic-日本語",
+      "cmd4": "synthetic-日本語",
+      "cmd5": "synthetic-日本語",
+      "show1": true,
+      "show2": true,
+      "show3": true,
+      "show4": true,
+      "show5": true
+    },
+    "session_order": [
+      17
+    ],
+    "sidebar_pin_migrated": true,
+    "spawn": {
+      "defaults": {
+        "synthetic": "synthetic-日本語"
+      },
+      "delegation_auto": true,
+      "last_model": {
+        "synthetic": "synthetic-日本語"
+      },
+      "role_effort": {
+        "synthetic": "synthetic-日本語"
+      },
+      "role_permission": {
+        "synthetic": "synthetic-日本語"
+      },
+      "role_provider": {
+        "synthetic": "synthetic-日本語"
+      },
+      "worktree_auto": true,
+      "worktree_cleanup": "synthetic-日本語"
+    },
+    "template_send": {
+      "immediate": true
+    },
+    "templates": [
+      {
+        "body": "synthetic-日本語",
+        "label": "synthetic-日本語",
+        "providers": [
+          "synthetic-日本語"
+        ],
+        "tags": [
+          "synthetic-日本語"
+        ]
+      }
+    ],
+    "token_statusbar": {
+      "enabled": true,
+      "segments": {
+        "synthetic": true
+      }
+    },
+    "trigger": {
+      "enabled": true,
+      "phrase": "synthetic-日本語"
+    },
+    "usage_links": {
+      "claude": "synthetic-日本語",
+      "codex": "synthetic-日本語",
+      "command-code": "synthetic-日本語",
+      "copilot": "synthetic-日本語",
+      "cursor-agent": "synthetic-日本語",
+      "grok": "synthetic-日本語",
+      "opencode": "synthetic-日本語"
+    },
+    "usage_probe_model": "synthetic-日本語",
+    "voice": {
+      "grace_seconds": 17,
+      "input_disabled": true,
+      "wake_word_enabled": true,
+      "wake_word_phrase": "synthetic-日本語"
+    },
+    "workflow_completion_notify": {
+      "enabled": true
+    }
+  },
+  "voice": {
+    "whisper": {
+      "hallucination_phrases": [
+        "synthetic-日本語"
+      ],
+      "language": "synthetic-日本語",
+      "managed": true,
+      "model": "synthetic-日本語",
+      "request_path": "synthetic-日本語",
+      "server_port": 17,
+      "server_url": "synthetic-日本語",
+      "timeout_seconds": 17
+    }
+  },
+  "workflow": {
+    "journal_enabled": true,
+    "subagent_tree_enabled": true,
+    "task_detail_enabled": true
+  }
+}

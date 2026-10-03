@@ -1,0 +1,598 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "commands": [
+    {
+      "name": "<no arguments>",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "version",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+    },
+    {
+      "name": "--version",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+    },
+    {
+      "name": "-v",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+    },
+    {
+      "name": "serve",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "connect",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "profile-export",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "status",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "tray",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "doctor",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "stop",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "log-clean",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "uninstall",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "shell-init",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "setup",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "issue",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "provider",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "wrap",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "claude",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "codex",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "copilot",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "cursor-agent",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "opencode",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "grok",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "command-code",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "usage-relay",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "orchestrate",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    },
+    {
+      "name": "-h",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+    },
+    {
+      "name": "--help",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+    },
+    {
+      "name": "help",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+    },
+    {
+      "name": "<configured custom provider ID>",
+      "dispatch": "rust/src/cli.rs::parse",
+      "caller_status": "pending"
+    }
+  ],
+  "entry_sources": [
+    {
+      "source": "cmd/many-ai-cli/main.go",
+      "sha256": "a6fd98b94bd0939f970a11e24c3a0a140fa615567d3eea4d6e599ddf4e7a0568",
+      "cases": [
+        {
+          "line": 63,
+          "case": "case sig := <-sigCh:"
+        },
+        {
+          "line": 66,
+          "case": "case <-ctx.Done():"
+        },
+        {
+          "line": 205,
+          "case": "case \"version\", \"--version\", \"-v\":"
+        },
+        {
+          "line": 211,
+          "case": "case \"serve\":"
+        },
+        {
+          "line": 237,
+          "case": "case \"connect\":"
+        },
+        {
+          "line": 266,
+          "case": "case \"profile-export\":"
+        },
+        {
+          "line": 294,
+          "case": "case \"status\":"
+        },
+        {
+          "line": 296,
+          "case": "case \"tray\":"
+        },
+        {
+          "line": 301,
+          "case": "case \"doctor\":"
+        },
+        {
+          "line": 318,
+          "case": "case \"stop\":"
+        },
+        {
+          "line": 320,
+          "case": "case \"log-clean\":"
+        },
+        {
+          "line": 340,
+          "case": "case \"uninstall\":"
+        },
+        {
+          "line": 351,
+          "case": "case \"shell-init\":"
+        },
+        {
+          "line": 354,
+          "case": "case \"setup\":"
+        },
+        {
+          "line": 363,
+          "case": "case \"issue\":"
+        },
+        {
+          "line": 365,
+          "case": "case \"provider\":"
+        },
+        {
+          "line": 367,
+          "case": "case \"wrap\":"
+        },
+        {
+          "line": 372,
+          "case": "case \"claude\", \"codex\", \"copilot\", \"cursor-agent\", \"opencode\", \"grok\", \"command-code\":"
+        },
+        {
+          "line": 374,
+          "case": "case \"usage-relay\":"
+        },
+        {
+          "line": 378,
+          "case": "case \"orchestrate\":"
+        },
+        {
+          "line": 388,
+          "case": "case \"-h\", \"--help\", \"help\":"
+        }
+      ],
+      "flags": [
+        {
+          "line": 213,
+          "declaration": "open := fs.Bool(\"open\", false, \"open browser\")"
+        },
+        {
+          "line": 214,
+          "declaration": "port := fs.Int(\"port\", 0, \"port\")"
+        },
+        {
+          "line": 215,
+          "declaration": "dev := fs.Bool(\"dev\", false, \"serve web assets from ./web/ (no recompile needed)\")"
+        },
+        {
+          "line": 216,
+          "declaration": "debug := fs.Bool(\"debug\", false, \"enable debug logging\")"
+        },
+        {
+          "line": 242,
+          "declaration": "profileName := fs.String(\"profile\", \"\", \"profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)\")"
+        },
+        {
+          "line": 243,
+          "declaration": "useLast := fs.Bool(\"last\", false, \"connect using the last-used profile\")"
+        },
+        {
+          "line": 271,
+          "declaration": "asJSON := fs.Bool(\"json\", false, \"output as JSON\")"
+        },
+        {
+          "line": 272,
+          "declaration": "name := fs.String(\"name\", \"\", \"profile display name (default: hostname)\")"
+        },
+        {
+          "line": 273,
+          "declaration": "host := fs.String(\"host\", \"\", \"public host to advertise first (overrides auto-detected IP; e.g. for Docker)\")"
+        },
+        {
+          "line": 274,
+          "declaration": "cwd := fs.String(\"cwd\", \"\", \"remote working directory (default: current directory)\")"
+        },
+        {
+          "line": 275,
+          "declaration": "hubPort := fs.Int(\"hub-port\", 0, \"fixed hub port (0 = auto-select)\")"
+        },
+        {
+          "line": 303,
+          "declaration": "asJSON := fs.Bool(\"json\", false, \"output as JSON\")"
+        },
+        {
+          "line": 322,
+          "declaration": "out := fs.String(\"o\", \"\", \"output transcript path\")"
+        },
+        {
+          "line": 342,
+          "declaration": "purge := fs.Bool(\"purge\", false, \"バイナリ本体も削除する\")"
+        }
+      ]
+    },
+    {
+      "source": "cmd/many-ai-cli/issue.go",
+      "sha256": "d935f29996288c9351f8e84cfa12edfc3fa1adf43d7896827b823514e5c18fd6",
+      "cases": [
+        {
+          "line": 178,
+          "case": "case \"\", \"claude\", \"codex\", \"copilot\", \"cursor-agent\", \"opencode\", \"grok\", \"command-code\":"
+        }
+      ],
+      "flags": [
+        {
+          "line": 66,
+          "declaration": "titleFlag := fs.String(\"title\", \"\", \"GitHub issue title\")"
+        },
+        {
+          "line": 67,
+          "declaration": "provider := fs.String(\"provider\", \"\", \"active provider\")"
+        },
+        {
+          "line": 68,
+          "declaration": "dryRun := fs.Bool(\"dry-run\", false, \"print the redacted report without opening GitHub\")"
+        }
+      ]
+    },
+    {
+      "source": "cmd/many-ai-cli-launcher/main.go",
+      "sha256": "8631501bd1e09e4d0ef21c4cf047754491c413a9af40670573d1f08d1bb495a3",
+      "cases": [],
+      "flags": [
+        {
+          "line": 45,
+          "declaration": "profileName := fs.String(\"profile\", \"\", \"profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)\")"
+        },
+        {
+          "line": 46,
+          "declaration": "useLast := fs.Bool(\"last\", false, \"connect using the last-used profile\")"
+        },
+        {
+          "line": 47,
+          "declaration": "openUI := fs.Bool(\"ui\", false, \"open the profile selection UI in the browser\")"
+        }
+      ]
+    }
+  ],
+  "environment_reads": [
+    {
+      "name": "COMSPEC",
+      "source": "internal/execpath/execpath_windows.go",
+      "line": 42
+    },
+    {
+      "name": "CODEX_HOME",
+      "source": "internal/hub/approval_handler.go",
+      "line": 162
+    },
+    {
+      "name": "CLAUDE_CONFIG_DIR",
+      "source": "internal/hub/approval_handler.go",
+      "line": 179
+    },
+    {
+      "name": "TYPESAFE_API_KEY",
+      "source": "internal/hub/jev_evaluate.go",
+      "line": 51
+    },
+    {
+      "name": "USERNAME",
+      "source": "internal/hub/misc_handlers.go",
+      "line": 47
+    },
+    {
+      "name": "USER",
+      "source": "internal/hub/misc_handlers.go",
+      "line": 50
+    },
+    {
+      "name": "USERNAME",
+      "source": "internal/hub/mobile_connect.go",
+      "line": 35
+    },
+    {
+      "name": "USER",
+      "source": "internal/hub/mobile_connect.go",
+      "line": 37
+    },
+    {
+      "name": "LOCALAPPDATA",
+      "source": "internal/hub/path_expand_windows.go",
+      "line": 157
+    },
+    {
+      "name": "SSH_CONNECTION",
+      "source": "internal/hub/runtime.go",
+      "line": 101
+    },
+    {
+      "name": "SSH_CLIENT",
+      "source": "internal/hub/runtime.go",
+      "line": 104
+    },
+    {
+      "name": "SSH_TTY",
+      "source": "internal/hub/runtime.go",
+      "line": 104
+    },
+    {
+      "name": "MANY_AI_CLI_HOST_LABEL",
+      "source": "internal/hub/runtime.go",
+      "line": 107
+    },
+    {
+      "name": "MANY_AI_CLI_ENV_KIND",
+      "source": "internal/hub/runtime.go",
+      "line": 159
+    },
+    {
+      "name": "CODEX_HOME",
+      "source": "internal/hub/slash_cmd_fetch.go",
+      "line": 295
+    },
+    {
+      "name": "CLAUDE_CONFIG_DIR",
+      "source": "internal/hub/slash_cmd_fetch.go",
+      "line": 307
+    },
+    {
+      "name": "PATH",
+      "source": "internal/hub/spawn_command.go",
+      "line": 24
+    },
+    {
+      "name": "OPENCODE_CONFIG_CONTENT",
+      "source": "internal/hub/spawn_handler.go",
+      "line": 132
+    },
+    {
+      "name": "MANY_AI_CLI_PUBLIC_HOST",
+      "source": "internal/hub/tailscale_probe.go",
+      "line": 231
+    },
+    {
+      "name": "USERNAME",
+      "source": "internal/launcher/export.go",
+      "line": 39
+    },
+    {
+      "name": "USER",
+      "source": "internal/launcher/export.go",
+      "line": 41
+    },
+    {
+      "name": "MANY_AI_CLI_PUBLIC_HOST",
+      "source": "internal/launcher/export.go",
+      "line": 127
+    },
+    {
+      "name": "SSH_CONNECTION",
+      "source": "internal/launcher/export.go",
+      "line": 141
+    },
+    {
+      "name": "LOCALAPPDATA",
+      "source": "internal/setupcmd/setup_windows.go",
+      "line": 28
+    },
+    {
+      "name": "APPDATA",
+      "source": "internal/setupcmd/setup_windows.go",
+      "line": 160
+    },
+    {
+      "name": "COMSPEC",
+      "source": "internal/subscription/cliexec.go",
+      "line": 70
+    },
+    {
+      "name": "APPDATA",
+      "source": "internal/uninstall/uninstall_windows.go",
+      "line": 25
+    },
+    {
+      "name": "SHELL",
+      "source": "internal/wrapper/detect_shell_unix.go",
+      "line": 53
+    },
+    {
+      "name": "PATH",
+      "source": "internal/wrapper/diagnose.go",
+      "line": 47
+    },
+    {
+      "name": "SHELL",
+      "source": "internal/wrapper/pty_unix.go",
+      "line": 153
+    },
+    {
+      "name": "COMSPEC",
+      "source": "internal/wrapper/pty_windows.go",
+      "line": 171
+    },
+    {
+      "name": "CODEX_HOME",
+      "source": "internal/wrapper/usage_hooks.go",
+      "line": 255
+    },
+    {
+      "name": "MANY_AI_CLI_HUB_PORT",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1279
+    },
+    {
+      "name": "MANY_AI_CLI_USAGE_PROBE",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1930
+    },
+    {
+      "name": "MANY_AI_CLI_SUBSCRIPTION_LOGIN",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1931
+    },
+    {
+      "name": "MANY_AI_CLI_USAGE_PROBE",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1984
+    },
+    {
+      "name": "MANY_AI_CLI_SUBSCRIPTION_LOGIN",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1985
+    },
+    {
+      "name": "CODEX_HOME",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 2022
+    },
+    {
+      "name": "CLAUDE_CONFIG_DIR",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 2022
+    },
+    {
+      "name": "MANY_AI_CLI",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 2066
+    },
+    {
+      "name": "WSL_INTEROP",
+      "source": "internal/wslutil/wslutil_unix.go",
+      "line": 17
+    },
+    {
+      "name": "WSL_DISTRO_NAME",
+      "source": "internal/wslutil/wslutil_unix.go",
+      "line": 17
+    },
+    {
+      "name": "MANY_AI_CLI_WSL_LAUNCHER",
+      "source": "internal/wslutil/wslutil_unix.go",
+      "line": 28
+    }
+  ],
+  "limitations": [
+    "Case/flag scans are discovery records; delegated command function flags and env precedence require source-caller fixtures.",
+    "Existing Go config loads before all commands, including version/help; current Rust diagnostic entry has not ported that side effect.",
+    "Launcher execution remains explicitly unavailable until integration, not a success stub."
+  ],
+  "launcher": {
+    "source": "cmd/many-ai-cli-launcher/main.go",
+    "parser": "rust/src/cli.rs::parse_launcher",
+    "flags": [
+      "--profile",
+      "--last",
+      "--ui",
+      "--help",
+      "-h"
+    ],
+    "default": "open selection UI after profiles load/validation",
+    "entry_effect_order": [
+      "ConfigureConsoleUTF8",
+      "StartupBanner",
+      "parse flags",
+      "LoadProfiles",
+      "Validate",
+      "UI or SelectProfile",
+      "Connect"
+    ],
+    "runtime_status": "pending C4 caller/UI/connection implementation",
+    "parser_fixture": "cli::launcher_tests::launcher_defaults_and_go_flags"
+  }
+}
