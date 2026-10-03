@@ -49,6 +49,61 @@ pub fn mask_secrets(value: &str) -> String {
     }
     URL_SECRET.replace_all(&out, "${1}***${3}").into_owned()
 }
+/// Byte-preserving sessionlog.MaskSecrets. Go regexp treats each invalid UTF-8
+/// byte as one U+FFFD rune while capture offsets still address the original
+/// bytes. Rebuild the projection/index map after each sequential regex pass;
+/// never substitute sentinels or duplicate the pattern table.
+pub fn mask_secret_bytes(value: &[u8]) -> Vec<u8> {
+    let mut out = value.to_vec();
+    for regex in SECRETS.iter() {
+        out = replace_raw_spans(&out, regex, false);
+    }
+    replace_raw_spans(&out, &URL_SECRET, true)
+}
+fn raw_span_map(raw: &[u8]) -> Vec<usize> {
+    let mut map = vec![0];
+    let mut offset = 0;
+    while offset < raw.len() {
+        let valid = match std::str::from_utf8(&raw[offset..]) {
+            Ok(text) => text.len(),
+            Err(error) => error.valid_up_to(),
+        };
+        if valid > 0 {
+            map.extend(offset + 1..=offset + valid);
+            offset += valid;
+        } else {
+            // The Go projection emits three UTF-8 bytes for exactly one invalid
+            // source byte. Regex Unicode capture boundaries never split them.
+            map.extend([offset, offset, offset + 1]);
+            offset += 1;
+        }
+    }
+    map
+}
+fn replace_raw_spans(raw: &[u8], regex: &Regex, url_password: bool) -> Vec<u8> {
+    let projected = crate::proto::wire::go_utf8_lossy(raw);
+    let map = raw_span_map(raw);
+    debug_assert_eq!(map.len(), projected.len() + 1);
+    let mut result = Vec::with_capacity(raw.len());
+    let mut cursor = 0;
+    for captures in regex.captures_iter(&projected) {
+        let whole = captures.get(0).expect("matched regex has capture zero");
+        let start = map[whole.start()];
+        let end = map[whole.end()];
+        result.extend_from_slice(&raw[cursor..start]);
+        if let Some(prefix) = captures.get(1) {
+            result.extend_from_slice(&raw[start..map[prefix.end()]]);
+        }
+        result.extend_from_slice(b"***");
+        if url_password {
+            let suffix = captures.get(3).expect("URL password pattern has suffix");
+            result.extend_from_slice(&raw[map[suffix.start()]..map[suffix.end()]]);
+        }
+        cursor = end;
+    }
+    result.extend_from_slice(&raw[cursor..]);
+    result
+}
 pub(super) fn visible(value: &str) -> String {
     let mut out = value.to_owned();
     for re in ANSI.iter() {

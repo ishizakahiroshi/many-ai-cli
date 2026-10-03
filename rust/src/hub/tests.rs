@@ -293,17 +293,125 @@ fn service_settings_clamps_preserves_owned_flags_and_rejects_invalid_values() {
     );
 }
 #[test]
-fn service_settings_failed_persistence_does_not_publish() {
+fn service_settings_failed_save_publishes_all_six_callers_without_changing_files() {
+    let cases = [
+        (
+            "/api/log-config",
+            r#"{"enabled":true,"session_enabled":true,"max_size_mb":9,"max_backups":2}"#,
+            serde_json::json!([true, true, 9, 2]),
+        ),
+        (
+            "/api/terminal-color",
+            r#"{"terminal_color":"off"}"#,
+            serde_json::json!("off"),
+        ),
+        (
+            "/api/handoff-intent-mode",
+            r#"{"intent_mode":"turn-summary"}"#,
+            serde_json::json!("turn-summary"),
+        ),
+        (
+            "/api/reconnect-grace",
+            r#"{"wrapper_reconnect_grace_sec":123}"#,
+            serde_json::json!(123),
+        ),
+        (
+            "/api/input-config",
+            r#"{"deferred_enter_ms":321}"#,
+            serde_json::json!(321),
+        ),
+        (
+            "/api/orchestration-config",
+            r#"{"board_notify_mode":"interrupt","spawn_confirm_mode":"providers","spawn_confirm_providers":["codex"],"child_timeout_seconds":123,"timeout_respawn":true,"max_children_per_parent":7}"#,
+            serde_json::json!(["interrupt", "providers", ["codex"], 123, true, 7]),
+        ),
+    ];
+    for (path, body, expected) in cases {
+        let (_dir, router) = router();
+        let destination = router.paths.resource(crate::config::Resource::Config);
+        // An existing nonempty directory deterministically defeats replacement
+        // even for a privileged test UID. Its contents must remain unchanged.
+        std::fs::create_dir(&destination).unwrap();
+        let retained = destination.join("retained.yaml");
+        let prior = router.config.snapshot().unwrap();
+        let prior_bytes = prior.config.to_private_yaml().unwrap().into_bytes();
+        std::fs::write(&retained, &prior_bytes).unwrap();
+        let mut request = request();
+        request.path = path.into();
+        request.body = body.as_bytes().into();
+        let response = router.handle(&request, 1000).response;
+        assert_eq!(response.status, 500, "{path}");
+        assert_eq!(json_response(&response)["error"], "save_failed", "{path}");
+        let after = router.config.snapshot().unwrap();
+        assert_eq!(after.revision, prior.revision + 1, "{path}");
+        let cfg = after.config;
+        let observed = match path {
+            "/api/log-config" => serde_json::json!([
+                cfg.log.enabled,
+                cfg.log.session_enabled,
+                cfg.log.max_size_mb,
+                cfg.log.max_backups
+            ]),
+            "/api/terminal-color" => serde_json::json!(cfg.hub.terminal_color),
+            "/api/handoff-intent-mode" => serde_json::json!(cfg.handoff.intent_mode),
+            "/api/reconnect-grace" => serde_json::json!(cfg.hub.wrapper_reconnect_grace_sec),
+            "/api/input-config" => serde_json::json!(cfg.input.deferred_enter_ms),
+            "/api/orchestration-config" => serde_json::json!([
+                cfg.orchestration.board_notify_mode,
+                cfg.orchestration.spawn_confirm_mode,
+                cfg.orchestration.spawn_confirm_providers,
+                cfg.orchestration.child_timeout_seconds,
+                cfg.orchestration.timeout_respawn,
+                cfg.orchestration.max_children_per_parent
+            ]),
+            _ => unreachable!(),
+        };
+        assert_eq!(observed, expected, "{path}");
+        assert_eq!(std::fs::read(&retained).unwrap(), prior_bytes, "{path}");
+        assert_eq!(
+            std::fs::read_dir(&destination).unwrap().count(),
+            1,
+            "{path}"
+        );
+        assert_eq!(
+            std::fs::read_dir(router.paths.root()).unwrap().count(),
+            1,
+            "temporary files must be cleaned on {path}"
+        );
+    }
+}
+#[test]
+fn service_orchestration_empty_and_null_provider_inputs_both_project_null() {
     let (_dir, router) = router();
-    std::fs::create_dir(router.paths.resource(crate::config::Resource::Config)).unwrap();
-    let mut r = request();
-    r.path = "/api/terminal-color".into();
-    r.body = br#"{"terminal_color":"off"}"#.to_vec();
-    assert_eq!(router.handle(&r, 1000).response.status, 500);
+    let mut request = request();
+    request.path = "/api/orchestration-config".into();
+    request.method = "GET".into();
+    let response = router.handle(&request, 1000).response;
+    assert_eq!(response.status, 200);
     assert_eq!(
-        router.config.snapshot().unwrap().config.hub.terminal_color,
-        ""
+        json_response(&response)["spawn_confirm_providers"],
+        serde_json::Value::Null
     );
+    for providers in [
+        serde_json::Value::Null,
+        serde_json::json!([]),
+        serde_json::json!(["codex"]),
+    ] {
+        request.method = "POST".into();
+        request.body = serde_json::to_vec(&serde_json::json!({"board_notify_mode":"soft-notify","spawn_confirm_mode":"providers","spawn_confirm_providers":providers,"child_timeout_seconds":60})).unwrap();
+        assert_eq!(router.handle(&request, 1000).response.status, 200);
+        request.method = "GET".into();
+        let response = router.handle(&request, 1000).response;
+        let expected = if providers.as_array().is_some_and(|items| !items.is_empty()) {
+            providers
+        } else {
+            serde_json::Value::Null
+        };
+        assert_eq!(
+            json_response(&response)["spawn_confirm_providers"],
+            expected
+        );
+    }
 }
 #[test]
 fn service_settings_body_limit_applies_to_first_value_only() {

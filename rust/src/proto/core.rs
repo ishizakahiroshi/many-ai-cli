@@ -20,7 +20,7 @@
 use super::{is_false, is_zero, null_default};
 use crate::{
     config::RuntimePaths,
-    process::{Cancellation, ExitOutcome, ProcessPlan},
+    process::{Cancellation, ProcessPlan},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1155,7 +1155,9 @@ pub struct RegisterRequest {
     /// Exact register DTO, already authenticated by the transport. Token/home
     /// fields are internal and never copied wholesale into SessionSnapshot.
     pub message: super::Message,
-    pub spawn_attempt: Option<SpawnAttemptId>,
+    /// Untrusted, optional one-use claim from the wrapper handshake. Only core
+    /// resolves this to a server-owned admission; invalid claims never fall back.
+    pub spawn_proof: Option<String>,
 }
 #[derive(Clone)]
 pub struct ReattachRequest {
@@ -1183,7 +1185,9 @@ pub struct OutputChunk {
 pub struct SessionEnd {
     /// Wrapper-declared state remains independent of exit code/signal.
     pub declared_state: String,
-    pub outcome: ExitOutcome,
+    /// Go's wire `int` is signed 64-bit on supported platforms. It is not an OS
+    /// process exit status and must not be narrowed to the latter's i32 domain.
+    pub exit_code: i64,
     pub reason: String,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1242,26 +1246,32 @@ pub trait SessionCore:
     + SpawnAdmission
     + ProviderUpdateAdmission
     + WrappedSessionSpawner
-    + SpawnConfirmations
     + Send
     + Sync
 {
-    fn register(
-        &self,
+    fn register<'a>(
+        &'a self,
         request: RegisterRequest,
         connection: WrapperConnectionId,
         now: SystemTime,
-    ) -> Result<Registration, SessionError>;
-    fn reattach(
-        &self,
+    ) -> CoreFuture<'a, Result<Registration, SessionError>>;
+    fn reattach<'a>(
+        &'a self,
         request: ReattachRequest,
         connection: WrapperConnectionId,
         now: SystemTime,
-    ) -> Result<Reattachment, SessionError>;
+    ) -> CoreFuture<'a, Result<Reattachment, SessionError>>;
     fn snapshot(&self, session: LiveSessionId) -> Option<SessionSnapshot>;
     fn snapshots(&self) -> Vec<SessionSnapshot>;
     fn details(&self, session: LiveSessionId) -> Option<SessionDetails>;
     fn active_ids(&self) -> Vec<LiveSessionId>;
+    /// Release only the matching terminal startup failure. An HTTP waiter
+    /// timeout/drop alone is not evidence that an accepted child cannot register.
+    fn spawn_failed(
+        &self,
+        attempt: SpawnAttemptId,
+        provider: &str,
+    ) -> Result<CoreEffects, SessionError>;
     fn is_current(&self, binding: SessionBinding) -> bool;
     /// C3 workflow/transcript/done observers update the same state owner rather
     /// than retaining a parallel mutable session map. Full binding is validated.
@@ -1294,7 +1304,7 @@ pub trait SessionCore:
         session: LiveSessionId,
         size: TerminalSize,
         now: SystemTime,
-    ) -> ResizeOutcome;
+    ) -> (ResizeOutcome, CoreEffects);
     fn reset_history(
         &self,
         session: LiveSessionId,
@@ -1302,6 +1312,18 @@ pub trait SessionCore:
     ) -> Result<CoreEffects, SessionError>;
     fn dismiss(&self, session: LiveSessionId, now: SystemTime)
     -> Result<CoreEffects, SessionError>;
+    fn reset_history_from_ui(
+        &self,
+        ui: UiBinding,
+        session: LiveSessionId,
+        now: SystemTime,
+    ) -> Result<CoreEffects, SessionError>;
+    fn dismiss_from_ui(
+        &self,
+        ui: UiBinding,
+        session: LiveSessionId,
+        now: SystemTime,
+    ) -> Result<CoreEffects, SessionError>;
     fn stop(
         &self,
         session: LiveSessionId,
@@ -1318,8 +1340,19 @@ pub trait SessionCore:
         &self,
         ui: UiBinding,
         active: Option<LiveSessionId>,
+        initial_size: Option<TerminalSize>,
     ) -> Result<UiPriming, SessionError>;
+    /// Nonempty drains keep priming active. Apply the batch, repeat, and only
+    /// an empty drain atomically transitions the UI to live delivery.
     fn finish_ui_priming(&self, ui: UiBinding) -> Result<CoreEffects, SessionError>;
+    fn broadcast_ui(&self, message: super::Message) -> CoreEffects;
+    fn broadcast_git_turn(&self, event: GitTurnNotification) -> CoreEffects;
+    /// Accept work atomically with the same membership check used by revoke.
+    /// Accepted operations retain this guard until their I/O is complete.
+    fn authorize_ui_work(&self, ui: UiBinding) -> Result<Box<dyn AcceptedUiWork>, SessionError>;
+    /// Revoke removes membership first, then drains accepted work outside locks.
+    /// New/queued work cannot enter while this waits; accepted work is not killed.
+    fn drain_ui_work(&self, ui: UiBinding) -> CoreFuture<'_, ()>;
     /// Source: ui_active_session and the pre-enqueue input ownership claim.
     /// A missing/zero size still changes ownership and never creates a prompt epoch.
     fn claim_ui_session(
@@ -1348,6 +1381,29 @@ pub trait SessionCore:
     /// Invalidates queued UI work/connections while retaining wrapper bindings.
     fn invalidate_all_ui(&self) -> CoreEffects;
     fn subscribe(&self) -> Box<dyn CoreEventSubscription>;
+}
+/// Opaque RAII authorization lease owned by the single SessionCore. Dropping
+/// the lease releases accepted-work accounting even on future cancellation.
+pub trait AcceptedUiWork: Send {}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub enum GitTurnType {
+    #[default]
+    #[serde(rename = "git_turn")]
+    GitTurn,
+}
+/// The one non-Message Hub broadcast in the fixed Go source (git_turns.go).
+/// It must use the same core-owned UI priming queue as ordinary protocol frames.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct GitTurnNotification {
+    pub r#type: GitTurnType,
+    pub session_id: i64,
+    pub turn: i64,
+    pub started_at: String,
+    pub ended_at: String,
+    pub files_changed: i64,
+    pub added: i64,
+    pub removed: i64,
 }
 pub struct UiPriming {
     pub hub_instance: String,
@@ -1614,6 +1670,12 @@ pub enum PersistenceEffect {
         session: LiveSessionId,
         meta: SessionCardMeta,
     },
+    /// Input auto-title persistence follows already accepted/sent input and
+    /// reports degradation without converting it to a failed user operation.
+    CardMetaBestEffort {
+        session: LiveSessionId,
+        meta: SessionCardMeta,
+    },
     SessionState {
         session: LiveSessionId,
         state: String,
@@ -1625,7 +1687,7 @@ pub enum PersistenceEffect {
         last: String,
     },
     EndSession {
-        session: LiveSessionId,
+        binding: SessionBinding,
         state: String,
         reason: String,
         ended_at: SystemTime,
@@ -1739,14 +1801,50 @@ pub enum CoreEffect {
         binding: UiBinding,
         message: super::Message,
     },
+    /// Source broadcasts are best-effort. A failed UI writer is closed/reported
+    /// without vetoing already accepted wrapper or persistence work.
+    SendUiBestEffort {
+        binding: UiBinding,
+        message: super::Message,
+    },
     Broadcast(super::Message),
+    BroadcastGitTurn(GitTurnNotification),
+    SendUiGitTurn {
+        binding: UiBinding,
+        event: GitTurnNotification,
+        best_effort: bool,
+    },
     Persist(PersistenceEffect),
+    PersistBound {
+        binding: SessionBinding,
+        scope: PersistenceBindingScope,
+        effect: PersistenceEffect,
+        order: Box<dyn PersistenceOrder>,
+    },
     Notify(CoreEvent),
     CancelSession {
         binding: SessionBinding,
         reason: StopReason,
     },
+    /// Closes exactly the stale socket, even after a replacement binding exists.
+    /// This never terminates the wrapper's PTY/process owner.
+    CloseWrapper {
+        binding: SessionBinding,
+    },
+    DrainUi(UiBinding),
     CloseUi(UiBinding),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PersistenceBindingScope {
+    Incarnation,
+    ExactWrapper,
+}
+/// Core reserves this cancellation-safe ticket while producing persistence
+/// effects. The driver waits immediately before DB/journal application and
+/// drops it immediately afterward, never holding it across socket I/O.
+/// Dropping an unapplied ticket skips that position, not any later work.
+pub trait PersistenceOrder: Send + Sync {
+    fn wait(&self) -> CoreFuture<'_, ()>;
 }
 /// Ordering is significant: close old approval ledger entry before inserting a
 /// new record reusing its sig; registered must precede outbound wrapper effects.
@@ -1785,6 +1883,16 @@ pub trait CoreEventPublisher: Send + Sync {
 /// not a competing session map. C3 delegates Persist here and propagates errors.
 pub trait PersistenceEffectSink: Send + Sync {
     fn apply(&self, effect: PersistenceEffect) -> Result<(), SessionError>;
+    fn apply_bound(
+        &self,
+        _binding: SessionBinding,
+        _scope: PersistenceBindingScope,
+        _effect: PersistenceEffect,
+    ) -> Result<(), SessionError> {
+        Err(SessionError::InvalidRequest(
+            "bound persistence adapter is not implemented".into(),
+        ))
+    }
 }
 
 /// Source: orchestration.go spawnChildRequest. Claims confer no authority.
@@ -2118,6 +2226,9 @@ pub enum ProviderCommandPurpose {
 }
 #[derive(Clone)]
 pub struct WrappedSpawnSpec {
+    /// Internal admission correlation; never serialized onto conductor JSON.
+    pub spawn_attempt: Option<SpawnAttemptId>,
+    pub registration_proof: Option<SpawnRegistrationProof>,
     pub provider: String,
     pub cwd: std::path::PathBuf,
     pub model: String,
@@ -2138,6 +2249,20 @@ pub struct WrappedSpawnSpec {
     pub usage_probe: bool,
     pub grants: InternalSpawnGrants,
     pub cancellation: TaskCancellation,
+}
+pub const SPAWN_PROOF_HEADER: &str = "x-many-ai-internal-spawn-proof";
+pub const SPAWN_PROOF_ENV: &str = "MANY_AI_CLI_INTERNAL_SPAWN_PROOF";
+/// Ephemeral internal correlation, not human approval. Never Debug/Serialize or
+/// persist this value; wrapper removes the environment entry before provider exec.
+#[derive(Clone)]
+pub struct SpawnRegistrationProof(String);
+impl SpawnRegistrationProof {
+    pub(crate) fn issue() -> std::io::Result<Self> {
+        crate::process::random_token().map(Self)
+    }
+    pub fn as_header_value(&self) -> &str {
+        &self.0
+    }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChildSpawnResult {

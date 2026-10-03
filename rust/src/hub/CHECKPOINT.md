@@ -6,11 +6,21 @@ Existing Go application and Web TypeScript remain unchanged.
 
 ## Tested slice
 
-- Hub: 27 guard/settings/PIN/auth-port/network-policy tests, followed by five actual
-  loopback HTTP/file-stream tests. The latter exercise token-before-method/Host
-  with an unfinished advertised body, nanosecond-accurate PIN lockout boundaries, first-value JSON response without waiting
-  for trailing body bytes, the actual 10-second HTTP/1 header deadline, bounded
-  multipart held-file streaming, and partial-effect failure response semantics.
+- Hub: 57 tests pass in the latest frozen full run (the earlier focused run had 56). The existing guard/settings/
+  PIN/auth-port/network-policy and five HTTP/file-stream tests remain green.
+  Fourteen socket/effect tests exercise acknowledgement ordering, a reserved
+  writer before core publication, stale binding isolation, bounded writes,
+  explicit best-effort broadcasts, ordered persistence tickets and typed Git
+  events. Five first-frame/auth/framing tests cover whole-value Go decoding and
+  bounded internal registration proofs. Five real loopback RFC6455 tests use
+  the actual SessionEngine for UI snapshots, existing Web text input, output,
+  reattach acknowledgement/old-socket closure, signed-64-bit declared exits and
+  accepted paste/Enter draining across revocation. They use synthetic roots,
+  socket peers and explicitly unavailable provider spawning.
+- Files/Git/attachments: 39 focused tests pass, including independent append
+  handles, private creation/repair, symlink/FIFO/renamed-parent cases, journal
+  injection, and a test-owned TZ=Asia/Tokyo subprocess proving local RFC3339
+  Git-turn timestamps without mutating the parent test environment.
 - Profile: 16 tests. Eight fixed-Go registry cases cover layer precedence,
   revisions encoded with shared Go-compatible typed bytes, builtin collisions,
   explicit overrides, diagnostics and capabilities. Nine fixed-Go validation
@@ -65,7 +75,8 @@ reported by the dedicated files lane. Windows private ACL creation and native
 reparse/rename behavior remain unaccepted.
 
 The router can connect actual files and memo services via explicit constructors.
-Core WebSocket lifecycle/effect driver, spawn/dynamic operations, provider
+The WebSocket lifecycle/effect driver now has focused real-core loopback evidence.
+Production bootstrap and service observers, spawn/dynamic operations, provider
 persistence/distribution/history, usage/NIM, routine lifecycle, outbound
 notification/push and voice/native runtime remain unfinished. Unsupported paths
 never return placeholder success. route_coverage.json tracks all 155 registered
@@ -89,3 +100,63 @@ transport read-task alias, and applies equivalent initializers/control flow.
 PIN limiter deadlines/TTL bookkeeping now use nanosecond arithmetic with
 full request timestamps; signed cookie expiry remains Unix seconds as in Go.
 Fractional boundaries are covered without weakening the timing assertions.
+
+
+## Transport/capability follow-up verification
+
+Latest focused commands used the pinned toolchain, locked offline dependencies,
+a task-owned compact `CARGO_TARGET_DIR`,
+`CARGO_INCREMENTAL=0`, zero dev/test debug info and two build jobs. Each whole
+process had a 180-second deadline; no parallel Cargo was used.
+
+- `cargo test --locked --offline --manifest-path rust/Cargo.toml --lib hub:: -- --nocapture`: 56 passed, exit 0.
+- `cargo test --locked --offline --manifest-path rust/Cargo.toml --lib files:: -- --nocapture`: 39 passed, exit 0.
+- `cargo clippy --locked --offline --manifest-path rust/Cargo.toml --lib --tests -- -D warnings`: exit 0.
+
+Corrections before these passing runs: qualified the shared register method;
+fixed the actual Web input direction (`text` from UI, `data` to wrapper);
+preserved the minimal `reattach_ack` including mandatory false token_statusbar;
+reserved pending writers before asynchronous core publication; separated the
+input/ping pumps so an awaited UI write cannot suspend accepted PTY work; and
+applied the focused collapsible-if lint repair.
+
+Actual attachment entry points require `FilesService::with_history` using the
+same C2 journal as the effect driver. No direct SQLite fallback bypasses the log
+gate. The production journal warns/continues for source-tolerated history errors;
+an explicitly failing injected sink is reported after the attachment save and is
+not retried. Native Windows ACL/reparse/append behavior remains unaccepted.
+The new directory helper restricts only the requested final existing directory;
+existing ancestors retain their policy. Existing hard-link alias behavior has
+been raised separately and is not claimed to be resolved by no-follow handles.
+
+Live `/api/log-config` and `/api/input-config` changes still need the actual
+runtime journal/timing refresh wiring. Voice/notification sources and 32 prepared
+tests remain outside this registered checkpoint pending dependency registration
+and execution. All 155 route registrations and 49 dynamic operations remain in the
+coverage inventory; component implementation is not route acceptance.
+
+
+## Frozen aggregate verification and settings correction
+
+The integration owner verified **430 passing tests** in the index-only frozen
+snapshot on 2026-10-03. This includes the registered Hub/files/profile/memo/
+scheduling/updater slice and shared/core/launcher components. The new wrapper,
+voice and notification lanes were excluded. Full-snapshot fmt, strict all-targets clippy, gosec and staticcheck subsequently
+passed. Staticcheck required an explicit writable isolated cache; the earlier
+focused C3 strict lib/tests clippy receipt above remains separately valid.
+
+The six existing settings callers now use the shared source-specific
+`publish_then_persist_legacy` entry. Their Go handlers publish the mutation before
+Save. The previous Rust implementation and its rollback fixture incorrectly
+assumed transactional publication. The replacement fixture covers all six routes:
+failed persistence returns 500/save_failed, leaves the new values and revision
+visible in memory, preserves existing filesystem contents and removes temporary
+files. Auth, token and PIN mutation handlers were not changed by this correction.
+An additional fixture confirms null and empty orchestration provider lists both
+project to JSON null; the already-correct projection code was retained.
+
+The owned receipt metadata still reports **57 partial / 98 unresolved registered
+routes, zero accepted routes**, with all 155 registrations and 49 dynamic
+operations retained. The aggregate test count is not production, browser, native,
+remote, provider, audio/model or notification acceptance. Actual runtime config
+consumer wiring and remaining service/capability integration remain open.

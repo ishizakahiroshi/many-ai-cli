@@ -1,22 +1,18 @@
-use std::{
-    fs::{self, OpenOptions},
-    io::{self, Write},
-    path::Path,
-    sync::atomic::{AtomicU64, Ordering},
-};
-static NEXT: AtomicU64 = AtomicU64::new(1);
+use std::{fs, io, path::Path};
+/// Private append-only file under a capability-walked parent. Each write uses
+/// the kernel append offset; existing log bodies are never read and rewritten.
+pub fn open_append(path: &Path) -> io::Result<fs::File> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("append destination has no parent"))?;
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| io::Error::other("append destination has no UTF-8 filename"))?;
+    crate::files::safe_fs::Dir::open_or_create_private(parent)?.open_append(name)
+}
 pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
-    fs::create_dir_all(path)?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-    }
-    #[cfg(windows)]
-    {
-        super::private_windows::restrict(path, true)?;
-    }
-    Ok(())
+    crate::files::safe_fs::Dir::open_or_create_private(path).map(|_| ())
 }
 /// Same-directory exclusive temporary file, fsync, atomic replacement, directory sync.
 /// A failed write/rename keeps the previous destination intact and removes our temporary file.
@@ -24,50 +20,11 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let parent = path
         .parent()
         .ok_or_else(|| io::Error::other("destination has no parent"))?;
-    ensure_private_dir(parent)?;
     let name = path
         .file_name()
-        .ok_or_else(|| io::Error::other("destination has no filename"))?
-        .to_string_lossy();
-    let (temporary, mut file) = loop {
-        let temporary = parent.join(format!(
-            ".{name}.tmp-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let mut options = OpenOptions::new();
-        options.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        match options.open(&temporary) {
-            Ok(file) => break (temporary, file),
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(e) => return Err(e),
-        }
-    };
-    let result = (|| {
-        #[cfg(windows)]
-        super::private_windows::restrict(&temporary, false)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-        drop(file);
-        #[cfg(not(windows))]
-        fs::rename(&temporary, path)?;
-        #[cfg(windows)]
-        super::private_windows::replace(&temporary, path)?;
-        #[cfg(unix)]
-        {
-            fs::File::open(parent)?.sync_all()?;
-        }
-        Ok(())
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| io::Error::other("destination has no UTF-8 filename"))?;
+    crate::files::safe_fs::Dir::open_or_create_private(parent)?.replace(name, bytes, 0o600)
 }
 #[cfg(test)]
 mod tests {

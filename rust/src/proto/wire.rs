@@ -231,6 +231,13 @@ fn append_go_utf8(out: &mut Vec<u8>, mut bytes: &[u8]) {
         }
     }
 }
+/// Go string-to-JSON text projection: each invalid UTF-8 byte becomes one
+/// replacement rune, unlike Rust's grouping of some incomplete byte sequences.
+pub fn go_utf8_lossy(bytes: &[u8]) -> String {
+    let mut out = Vec::with_capacity(bytes.len());
+    append_go_utf8(&mut out, bytes);
+    String::from_utf8(out).expect("Go UTF-8 projection is valid")
+}
 fn go_unicode(bytes: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
@@ -325,6 +332,51 @@ pub fn decode_http_json<T: GoWire>(bytes: &[u8]) -> Result<T, serde_json::Error>
     let raw = Box::<RawValue>::deserialize(&mut deserializer)?;
     check_depth(raw.get().as_bytes())?;
     serde_json::from_value(merge(T::GO_TYPE, None, &raw, T::SCHEMAS)?.finish())
+}
+
+/// First-value map/interface boundary (not a struct decoder): exact object keys,
+/// last duplicate wins, every number decoded as Go float64, and Go Unicode
+/// replacement. The bounded generic projection accepts at most 128 containers;
+/// this explicit resource boundary is narrower than Go's syntax depth limit.
+pub fn decode_http_value(bytes: &[u8]) -> Result<Value, serde_json::Error> {
+    fn project(raw: &RawValue, depth: usize) -> Result<Value, serde_json::Error> {
+        if depth > 128 {
+            return Err(error("generic JSON projection exceeds safe depth"));
+        }
+        let source = raw.get();
+        match source.as_bytes().first() {
+            Some(b'{') => {
+                let Object(fields) = serde_json::from_str(source)?;
+                let mut out = serde_json::Map::new();
+                for (name, value) in fields {
+                    // Validate earlier duplicate numbers too: Go retains their
+                    // error even if a subsequent assignment would be valid.
+                    out.insert(name, project(&value, depth + 1)?);
+                }
+                Ok(Value::Object(out))
+            }
+            Some(b'[') => {
+                let values: Vec<Box<RawValue>> = serde_json::from_str(source)?;
+                values
+                    .iter()
+                    .map(|v| project(v, depth + 1))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Value::Array)
+            }
+            Some(b'"' | b'n' | b't' | b'f') => serde_json::from_str(source),
+            _ => {
+                let number: f64 = serde_json::from_str(source)?;
+                serde_json::Number::from_f64(number)
+                    .map(Value::Number)
+                    .ok_or_else(|| error("invalid Go float64"))
+            }
+        }
+    }
+    let bytes = go_unicode(bytes);
+    let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
+    let raw = Box::<RawValue>::deserialize(&mut deserializer)?;
+    check_depth(raw.get().as_bytes())?;
+    project(&raw, 0)
 }
 
 fn json_whitespace(bytes: &[u8], i: &mut usize) {

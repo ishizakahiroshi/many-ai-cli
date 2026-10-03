@@ -14,6 +14,45 @@ use tokio::{
     sync::{broadcast, watch},
 };
 
+/// Go hubruntime.PIDAlive compatibility. Liveness alone never establishes
+/// identity: callers must also authenticate/probe the recorded endpoint.
+pub fn pid_alive(pid: i64) -> bool {
+    if pid <= 0 {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        // Signal zero performs a liveness/permission check, never sends a signal.
+        unsafe { libc::kill(pid, 0) == 0 }
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{
+            Foundation::CloseHandle,
+            System::Threading::{
+                GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            },
+        };
+        // Go converts its int to uint32 for OpenProcess; retain that wire quirk.
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid as u32) };
+        if handle.is_null() {
+            return false;
+        }
+        let mut code = 0;
+        let ok = unsafe { GetExitCodeProcess(handle, &mut code) } != 0;
+        unsafe {
+            CloseHandle(handle);
+        }
+        // Source deliberately accepts the documented STILL_ACTIVE/exit259 ambiguity.
+        ok && code == 259
+    }
+    #[cfg(not(any(unix, windows)))]
+    false
+}
+
 /// Generate the same 32-byte lowercase hex token shape as the Go baseline.
 pub fn random_token() -> io::Result<String> {
     let mut bytes = [0u8; 32];
@@ -71,6 +110,12 @@ pub struct ProcessPlan {
     pub timeout: Duration,
     pub output_cap: usize,
     pub pipe_drain_timeout: Duration,
+}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SpawnOptions {
+    /// Windows background launcher children must not create a console window.
+    /// This augments, never replaces, suspended Job-assignment containment.
+    pub no_window: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExitOutcome {
@@ -163,11 +208,18 @@ impl ManagedProcess {
         plan: ProcessPlan,
         event_capacity: usize,
     ) -> (Self, broadcast::Receiver<ProcessEvent>) {
+        Self::spawn_owned_with_options(plan, event_capacity, SpawnOptions::default())
+    }
+    pub fn spawn_owned_with_options(
+        plan: ProcessPlan,
+        event_capacity: usize,
+        options: SpawnOptions,
+    ) -> (Self, broadcast::Receiver<ProcessEvent>) {
         let cancel = Cancellation::default();
         let (events, receiver) = broadcast::channel(event_capacity.max(1));
         let task_cancel = cancel.clone();
         let task = tokio::spawn(async move {
-            run_observed(&plan, &task_cancel, Some(events))
+            run_observed(&plan, &task_cancel, Some(events), options)
                 .await
                 .map_err(ProcessFailure::from)
         });
@@ -233,13 +285,16 @@ impl Drop for OwnedRunGuard {
 }
 
 pub async fn run_capped(plan: &ProcessPlan, cancel: &Cancellation) -> io::Result<ProcessOutput> {
-    run_observed(plan, cancel, None).await
+    run_observed(plan, cancel, None, SpawnOptions::default()).await
 }
 async fn run_observed(
     plan: &ProcessPlan,
     cancel: &Cancellation,
     events: Option<broadcast::Sender<ProcessEvent>>,
+    options: SpawnOptions,
 ) -> io::Result<ProcessOutput> {
+    #[cfg(not(windows))]
+    let _ = options;
     if cancel.is_cancelled() {
         return Ok(ProcessOutput {
             stdout: vec![],
@@ -292,7 +347,11 @@ async fn run_observed(
     {
         // No child code may run before Job attachment; otherwise it can escape
         // containment by spawning descendants in the start/attach gap.
-        cmd.creation_flags(windows_sys::Win32::System::Threading::CREATE_SUSPENDED);
+        let mut flags = windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+        if options.no_window {
+            flags |= windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+        }
+        cmd.creation_flags(flags);
     }
     let mut child = cmd.spawn()?;
     if let Some(events) = &events {

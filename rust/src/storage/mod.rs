@@ -5,7 +5,7 @@ mod history;
 mod repository;
 mod schema;
 mod text;
-pub use text::mask_secrets;
+pub use text::{mask_secret_bytes, mask_secrets};
 mod writer;
 
 use crate::{

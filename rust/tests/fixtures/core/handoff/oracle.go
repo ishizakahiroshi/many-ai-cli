@@ -1,0 +1,10 @@
+//go:build ignore
+// Synthetic exported-API oracle; Go source 21d0bc7935a2c4696fb89ccff2e324157a528c2d.
+package main
+import("encoding/json";"os";"many-ai-cli/internal/handoff";"fmt";"strings")
+type test struct{ID int `json:"id"`; Records []handoff.Record `json:"records"`; Rendered string `json:"rendered"`; Sanitized []handoff.Record `json:"sanitized"`}
+func main(){all:=[][]handoff.Record{nil,{{Kind:"session_start",Provider:"codex",HandoffFrom:7}},{{Kind:"session_start",SessionID:42,TS:"2026-10-03T01:02:03Z",Provider:"claude",CWD:"/synthetic/project",Branch:"work",Model:"model",SubscriptionID:"profile"},{Kind:"note",Note:"/synthetic/note.md"},{Kind:"transcript",Transcript:"/synthetic/log.jsonl"},{Kind:"intent",Text:"next step",WorkDoc:"/synthetic/plan.md"},{Kind:"done",Text:"[success] one thing",TS:"2026-10-03T01:03:03Z"},{Kind:"git_turn",Commit:"0123456789abcdef",CommitSubject:"日本語 \"quote\"\nline\ttext",Files:[]string{"a","b"},Turn:3},{Kind:"session_end",Text:"completed",TS:"2026-10-03T02:03:03Z"}},{{Kind:"future_kind",Text:strings.Repeat("日",322),Files:[]string{},Note:"/synthetic/no-read.md"},{Kind:"done",Text:"TOKEN=synthetic-value password=synthetic-password"}}}
+var many []handoff.Record;for i:=0;i<12;i++{many=append(many,handoff.Record{Kind:"done",Text:fmt.Sprint(i)})};for i:=0;i<10;i++{many=append(many,handoff.Record{Kind:"git_turn",Turn:i,Files:[]string{"file"}})};all=append(all,many)
+var files []string;for i:=0;i<23;i++{files=append(files,fmt.Sprintf("path%d",i))};all=append(all,[]handoff.Record{{Kind:"done",Files:files,Text:"prefix"}})
+all=append(all,[]handoff.Record{{Kind:"git_turn",Commit:"abcdefghij😀suffix",CommitSubject:"quote\u00a0\u200b\a\b\f\v\u007f"}})
+var out []test;for _,records:=range all{var sanitized []handoff.Record;for _,r:=range records{sanitized=append(sanitized,handoff.Sanitize(r))};out=append(out,test{0,records,handoff.RenderMarkdown(0,records),sanitized})};enc:=json.NewEncoder(os.Stdout);enc.SetIndent("","  ");if err:=enc.Encode(out);err!=nil{panic(err)}}

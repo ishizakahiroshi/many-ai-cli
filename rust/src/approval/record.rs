@@ -286,6 +286,16 @@ impl ApprovalState {
         }
         true
     }
+    /// History reset closes the record without resolving a row that is about
+    /// to be deleted. Keep the wire version monotonic and advance only the
+    /// approval epoch; terminal replay and input sequence domains are untouched.
+    pub fn reset_history(&mut self, now: SystemTime) -> CoreEffects {
+        let effects = self.close(ApprovalCloseReason::HistoryReset, "", now);
+        self.consumed = None;
+        self.native_clear_misses = 0;
+        self.advance_epoch();
+        effects
+    }
     pub fn wire_snapshot(&self) -> proto::ApprovalSessionState {
         proto::ApprovalSessionState {
             session_id: self.session.0,

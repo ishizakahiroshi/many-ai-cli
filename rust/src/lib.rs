@@ -16,6 +16,9 @@ pub mod update;
 pub mod approval;
 pub mod storage;
 
+pub mod application;
 pub mod files;
+pub mod launcher;
+pub mod orchestration;
 pub mod profile;
 pub mod routine;

@@ -132,9 +132,10 @@
     {
       "path": "/ws",
       "source_handler": "handleWS",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/websocket.rs",
+      "fixture": "rust/src/hub/ws_transport_tests.rs",
+      "remaining": "Five actual loopback tests with SessionEngine and19 socket/auth unit tests pass. Production bootstrap, real browser/native wrapper, notification/usage/transcript observers, internal launch-proof end-to-end and remaining orchestration capability acceptance are pending."
     },
     {
       "path": "/api/info",
@@ -474,9 +475,10 @@
     {
       "path": "/api/attachments/purge",
       "source_handler": "handleAttachmentsPurge",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/open-dir",
@@ -676,9 +678,10 @@
     {
       "path": "/api/attach",
       "source_handler": "handleAttach",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/slash-cmd-sources",
@@ -760,163 +763,186 @@
     {
       "path": "/api/files-list",
       "source_handler": "handleFilesList",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-content",
       "source_handler": "handleFilesContent",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-asset",
       "source_handler": "handleFilesAsset",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-download",
       "source_handler": "handleFilesDownload",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-roots",
       "source_handler": "handleFilesRoots",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-move",
       "source_handler": "handleFilesMove",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-rename",
       "source_handler": "handleFilesRename",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-mkdir",
       "source_handler": "handleFilesMkdir",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-create",
       "source_handler": "handleFilesCreate",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-save",
       "source_handler": "handleFilesSave",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/files-delete-dir",
       "source_handler": "handleFilesDeleteDir",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-log",
       "source_handler": "handleGitLog",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-show",
       "source_handler": "handleGitShow",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-refs",
       "source_handler": "handleGitRefs",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-status",
       "source_handler": "handleGitStatus",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-diff",
       "source_handler": "handleGitDiff",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-turns",
       "source_handler": "handleGitTurns",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-turn-diff",
       "source_handler": "handleGitTurnDiff",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-commit-all",
       "source_handler": "handleGitCommitAll",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-commit-message",
       "source_handler": "handleGitCommitMessage",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-fetch",
       "source_handler": "handleGitFetch",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-pull",
       "source_handler": "handleGitPull",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/git-push",
       "source_handler": "handleGitPush",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/files/mod.rs",
+      "fixture": "rust/src/files/git_tests.rs",
+      "remaining": "39 synthetic component tests pass, including owned Git processes and descriptor-safe mutations. Actual binary/browser/native caller acceptance remains pending; Git-turn/handoff service observer and actual attachment journal injection must be connected at bootstrap."
     },
     {
       "path": "/api/user-prefs/notify-sound-custom",
@@ -1617,5 +1643,20 @@
       "implementation": "rust/src/routine/memo.rs",
       "fixture": "rust/src/routine/tests.rs::memo_*"
     }
-  ]
+  ],
+  "verification_receipt": {
+    "reported_at_utc": "2026-10-03T09:17:31Z",
+    "snapshot": "integration-owner index-only frozen export before publication",
+    "aggregate_tests_passed": 430,
+    "aggregate_tests_failed": 0,
+    "included_c3": "registered hub/files/profile/update/routine memo and schedule components",
+    "excluded_new_lanes": [
+      "wrapper",
+      "voice",
+      "notify"
+    ],
+    "current_full_static_guards": "fmt, strict all-targets clippy, gosec and staticcheck passed; staticcheck rerun with isolated cache",
+    "scope_caution": "Synthetic component and loopback evidence only; no accepted production/browser/native/remote/provider/audio/model/notification route claim.",
+    "settings_correction": "Six source-specific settings writes publish before failed Save; 500, updated memory/revision, unchanged filesystem fixtures passed. Correct empty/null orchestration projection retained."
+  }
 }

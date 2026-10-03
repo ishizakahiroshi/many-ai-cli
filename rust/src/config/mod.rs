@@ -13,3 +13,4 @@ pub mod provider_legacy;
 pub use provider_legacy::legacy_provider_definitions;
 
 mod yaml_nodes;
+pub use yaml_nodes::{YamlDecodeError, YamlField, YamlSchema, decode_yaml_schema};

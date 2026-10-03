@@ -1,9 +1,8 @@
-//! Windows private ACL and atomic replacement adapter. Native acceptance remains separate.
-use std::{io, os::windows::ffi::OsStrExt, path::Path, ptr};
+//! Windows handle-based private ACL adapter. Native acceptance remains separate.
+use std::{io, ptr};
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE, LocalFree},
     Security::{Authorization::*, *},
-    Storage::FileSystem::{MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW},
     System::Threading::{GetCurrentProcess, OpenProcessToken},
 };
 struct Handle(HANDLE);
@@ -22,14 +21,6 @@ impl Drop for Local {
         }
     }
 }
-fn wide(path: &Path) -> io::Result<Vec<u16>> {
-    let v: Vec<u16> = path.as_os_str().encode_wide().collect();
-    if v.contains(&0) {
-        return Err(io::Error::other("path contains null"));
-    }
-    Ok(v.into_iter().chain([0]).collect())
-}
-
 /// Owns a protected security descriptor for atomic private creation. Keep this
 /// guard alive through CreateFile/CreateDirectory; its attributes do not inherit
 /// ambient ACLs. Callers still own path/reparse containment checks.
@@ -132,36 +123,4 @@ impl PrivateSecurity {
         }
         Ok(())
     }
-}
-pub fn restrict(path: &Path, is_dir: bool) -> io::Result<()> {
-    let path = wide(path)?;
-    let descriptor = PrivateSecurity::for_current_user(is_dir)?;
-    // SAFETY: nul-terminated path and owned descriptor remain alive for call.
-    if unsafe {
-        SetFileSecurityW(
-            path.as_ptr(),
-            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-            descriptor.descriptor.0,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
-}
-pub fn replace(from: &Path, to: &Path) -> io::Result<()> {
-    let from = wide(from)?;
-    let to = wide(to)?;
-    // SAFETY: nul-terminated UTF-16 paths remain live for the call.
-    if unsafe {
-        MoveFileExW(
-            from.as_ptr(),
-            to.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
 }

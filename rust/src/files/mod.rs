@@ -12,7 +12,7 @@ mod time;
 use crate::{
     config::paths::RuntimePaths,
     hub::http::{Request, Response},
-    proto::core::{LiveSessionId, SessionCore, SessionStorage},
+    proto::core::{LiveSessionId, PersistenceEffectSink, SessionCore, SessionStorage},
 };
 pub use git::{GitTurnCompleted, GitTurnSnapshot, GitTurnState};
 use std::path::PathBuf;
@@ -29,6 +29,7 @@ pub struct FilesService {
     /// Explicit per-command environment overlays, useful for isolated Git runners.
     pub git_environment: std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
     pub turns: std::sync::Mutex<GitTurnState>,
+    history: Option<std::sync::Arc<dyn PersistenceEffectSink>>,
 }
 impl FilesService {
     pub fn new(hub_cwd: PathBuf, paths: RuntimePaths) -> Self {
@@ -38,7 +39,14 @@ impl FilesService {
             git_executable: resolve_git(),
             git_environment: Default::default(),
             turns: std::sync::Mutex::new(GitTurnState::default()),
+            history: None,
         }
+    }
+    /// The actual C2 journal applies the source logging gate and writes both
+    /// JSONL and SQLite exactly once. A direct SQLite fallback would bypass it.
+    pub fn with_history(mut self, history: std::sync::Arc<dyn PersistenceEffectSink>) -> Self {
+        self.history = Some(history);
+        self
     }
     pub fn cwd(&self, request: &Request, core: &dyn SessionCore) -> PathBuf {
         request

@@ -74,13 +74,14 @@ pub const PATHS: &[&str] = &[
     "/api/orchestration-config",
 ];
 fn save(store: &ConfigStore, snapshot: ConfigSnapshot, value: Value) -> Response {
-    match store.persist(snapshot.revision, snapshot.config) {
+    match store.publish_then_persist_legacy(snapshot.revision, snapshot.config) {
         Ok(_) => Response::json(200, &value),
         Err(e) => Response::error(500, "save_failed", &format!("save failed: {e}")),
     }
 }
-/// Caller has applied the full guard. All writes publish only after private
-/// persistence succeeds, using the shared configuration revision owner.
+/// Caller has applied the full guard. These six Go handlers publish their
+/// field mutations before Save, so a failed save remains visible in memory.
+/// The explicit shared legacy entry retains revision/trial-path protections.
 pub fn handle(request: &Request, store: &ConfigStore, paths: &RuntimePaths) -> Response {
     let mut snap = match store.snapshot() {
         Ok(s) => s,

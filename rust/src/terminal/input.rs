@@ -26,6 +26,11 @@ pub struct InputState {
     initial_gate: Option<SystemTime>,
 }
 impl InputState {
+    /// Cold reattach must start above the wrapper's processed/received range;
+    /// warm reattach keeps any higher locally allocated sequence.
+    pub fn observe_high_watermark(&mut self, sequence: InputSeq) {
+        self.sequence = self.sequence.max(sequence.0);
+    }
     pub fn set_initial_gate(&mut self, now: SystemTime) {
         self.initial_gate = Some(now);
     }

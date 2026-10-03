@@ -1,0 +1,469 @@
+[
+  {
+    "length": 0,
+    "suffix": "",
+    "lines": null
+  },
+  {
+    "length": 0,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "length": 0,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "length": 0,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 1,
+        "sha256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+      }
+    ]
+  },
+  {
+    "length": 0,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 5,
+        "sha256": "0cce5dbfe4ccbb5ac6d13b8875e8d975c3cea79f6acb612ca700436c1809d919"
+      }
+    ]
+  },
+  {
+    "length": 1,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 1,
+        "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+      }
+    ]
+  },
+  {
+    "length": 1,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 1,
+        "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+      }
+    ]
+  },
+  {
+    "length": 1,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 1,
+        "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+      }
+    ]
+  },
+  {
+    "length": 1,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 2,
+        "sha256": "896dfdaceccde1790c65d5cf32aa62d534947892db8caf916ec499f84f3ae398"
+      }
+    ]
+  },
+  {
+    "length": 1,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 6,
+        "sha256": "756b9152df39a3eae91117252d5856c0f6bf8246ac364072a3e6416981588c56"
+      }
+    ]
+  },
+  {
+    "length": 65535,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 65535,
+        "sha256": "09ab7495d3e61a76f0deb12cb0306f0696cbb17ffc12131368c7a939f12f56d3"
+      }
+    ]
+  },
+  {
+    "length": 65535,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 65535,
+        "sha256": "09ab7495d3e61a76f0deb12cb0306f0696cbb17ffc12131368c7a939f12f56d3"
+      }
+    ]
+  },
+  {
+    "length": 65535,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 65535,
+        "sha256": "09ab7495d3e61a76f0deb12cb0306f0696cbb17ffc12131368c7a939f12f56d3"
+      }
+    ]
+  },
+  {
+    "length": 65535,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 65536,
+        "sha256": "15512b92a63d51f3d13e085e74150413c4344af4076c00e6b71f55263ad7076b"
+      }
+    ]
+  },
+  {
+    "length": 65535,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 65540,
+        "sha256": "70d3f22b319ccd705194e301c2e3ac13fade7d2b1e422bbf998bb2b1ae21ddc9"
+      }
+    ]
+  },
+  {
+    "length": 65536,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 65536,
+        "sha256": "1f8745f0d2d1387ec1af2211a3cf417b2e9e885e853472649c1d979d0e9370e3"
+      }
+    ]
+  },
+  {
+    "length": 65536,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 65536,
+        "sha256": "1f8745f0d2d1387ec1af2211a3cf417b2e9e885e853472649c1d979d0e9370e3"
+      }
+    ]
+  },
+  {
+    "length": 65536,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 65536,
+        "sha256": "1f8745f0d2d1387ec1af2211a3cf417b2e9e885e853472649c1d979d0e9370e3"
+      }
+    ]
+  },
+  {
+    "length": 65536,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 65537,
+        "sha256": "d2764ddb1cdc1052d77ad1940df48b9665c3004262502569d76c960330bb6fc6"
+      }
+    ]
+  },
+  {
+    "length": 65536,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 65541,
+        "sha256": "bf155b1ea11459a7174b5ad808dd4b580e4d49cf02d2e8e078a022026b86667e"
+      }
+    ]
+  },
+  {
+    "length": 1048575,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 1048575,
+        "sha256": "f7ddf2723b5663ba2a2e2c642355c78ce5cfca89b5c21c5dde226334e31fb340"
+      }
+    ]
+  },
+  {
+    "length": 1048575,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 1048575,
+        "sha256": "f7ddf2723b5663ba2a2e2c642355c78ce5cfca89b5c21c5dde226334e31fb340"
+      }
+    ]
+  },
+  {
+    "length": 1048575,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 1048575,
+        "sha256": "f7ddf2723b5663ba2a2e2c642355c78ce5cfca89b5c21c5dde226334e31fb340"
+      }
+    ]
+  },
+  {
+    "length": 1048575,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "6dcb6627e277e4585b77b4d6b1ce7cc207237f53b19ce2137e0c0c595727adb5"
+      }
+    ]
+  },
+  {
+    "length": 1048575,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 1048580,
+        "sha256": "013336df223dd508bdea4ae57fcc6d7ef714ff682cd8a7817572e02002a0a120"
+      }
+    ]
+  },
+  {
+    "length": 1048576,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      }
+    ]
+  },
+  {
+    "length": 1048576,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "length": 1048576,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "length": 1048576,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1,
+        "sha256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+      }
+    ]
+  },
+  {
+    "length": 1048576,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 5,
+        "sha256": "0cce5dbfe4ccbb5ac6d13b8875e8d975c3cea79f6acb612ca700436c1809d919"
+      }
+    ]
+  },
+  {
+    "length": 1048577,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1,
+        "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+      }
+    ]
+  },
+  {
+    "length": 1048577,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1,
+        "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+      }
+    ]
+  },
+  {
+    "length": 1048577,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1,
+        "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+      }
+    ]
+  },
+  {
+    "length": 1048577,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 2,
+        "sha256": "896dfdaceccde1790c65d5cf32aa62d534947892db8caf916ec499f84f3ae398"
+      }
+    ]
+  },
+  {
+    "length": 1048577,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 6,
+        "sha256": "756b9152df39a3eae91117252d5856c0f6bf8246ac364072a3e6416981588c56"
+      }
+    ]
+  },
+  {
+    "length": 2097152,
+    "suffix": "",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      }
+    ]
+  },
+  {
+    "length": 2097152,
+    "suffix": "\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "length": 2097152,
+    "suffix": "\r\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  {
+    "length": 2097152,
+    "suffix": "\r",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1,
+        "sha256": "9d1e0e2d9459d06523ad13e28a4093c2316baafe7aec5b25f30eba2e113599c4"
+      }
+    ]
+  },
+  {
+    "length": 2097152,
+    "suffix": "\rmore\n",
+    "lines": [
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 1048576,
+        "sha256": "8f990ba0b577b51cf009ea049368c16bbda1b21e1b93be07a824758bb253c39b"
+      },
+      {
+        "length": 5,
+        "sha256": "0cce5dbfe4ccbb5ac6d13b8875e8d975c3cea79f6acb612ca700436c1809d919"
+      }
+    ]
+  }
+]

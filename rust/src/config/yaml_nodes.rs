@@ -19,9 +19,20 @@ const CORE_TAG: &str = "tag:yaml.org,2002:";
 
 /// Resource exhaustion must not trigger corrupt-file backup or token rotation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum YamlDecodeError {
+pub enum YamlDecodeError {
     Syntax,
     ResourceLimit,
+}
+
+/// Caller-owned YAML schema. Unknown fields are skipped as YAML nodes before
+/// JSON conversion, preserving the same lexical scalar rules as main config.
+pub struct YamlSchema {
+    pub name: &'static str,
+    pub fields: &'static [YamlField],
+}
+pub struct YamlField {
+    pub name: &'static str,
+    pub kind: &'static str,
 }
 impl std::fmt::Display for YamlDecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -137,6 +148,14 @@ impl Document {
 }
 
 pub(super) fn decode_config(text: &str) -> Result<Value, YamlDecodeError> {
+    decode_yaml_schema(text, "Config", &[])
+}
+
+pub fn decode_yaml_schema(
+    text: &str,
+    root_kind: &str,
+    schemas: &'static [YamlSchema],
+) -> Result<Value, YamlDecodeError> {
     if text.len() > MAX_BYTES {
         return Err(YamlDecodeError::ResourceLimit);
     }
@@ -158,15 +177,31 @@ pub(super) fn decode_config(text: &str) -> Result<Value, YamlDecodeError> {
     Decoder {
         document: &document,
         steps: 0,
+        schemas,
     }
-    .project(root, "Config", 0)
+    .project(root, root_kind, 0)
 }
 
 struct Decoder<'a> {
     document: &'a Document,
     steps: usize,
+    schemas: &'static [YamlSchema],
 }
 impl Decoder<'_> {
+    fn fields(&self, kind: &str) -> Vec<(&'static str, &'static str)> {
+        if let Some(found) = self.schemas.iter().find(|item| item.name == kind) {
+            found.fields.iter().map(|f| (f.name, f.kind)).collect()
+        } else {
+            schema(kind).iter().map(|f| (f.yaml, f.kind)).collect()
+        }
+    }
+    fn incompatible(&self, kind: &str) -> Value {
+        if kind.starts_with("[]") || kind.starts_with("map[") || !self.fields(kind).is_empty() {
+            Value::Bool(false)
+        } else {
+            Value::Array(Vec::new())
+        }
+    }
     fn charge(&mut self, depth: usize) -> Result<(), YamlDecodeError> {
         self.steps += 1;
         if depth > MAX_DEPTH || self.steps > MAX_EXPANSION_STEPS {
@@ -303,7 +338,7 @@ impl Decoder<'_> {
         };
         if let Some(inner) = kind.strip_prefix("[]") {
             let Node::Sequence(items) = &self.document.nodes[id] else {
-                return Ok(incompatible(kind));
+                return Ok(self.incompatible(kind));
             };
             let mut output = Vec::new();
             for &item in items {
@@ -322,7 +357,7 @@ impl Decoder<'_> {
         }
         if let Some(inner) = kind.strip_prefix("map[string]") {
             let Some(pairs) = self.pairs(id, depth + 1)? else {
-                return Ok(incompatible(kind));
+                return Ok(self.incompatible(kind));
             };
             let mut output = Map::new();
             for (name, value) in pairs {
@@ -330,49 +365,39 @@ impl Decoder<'_> {
             }
             return Ok(Value::Object(output));
         }
-        let fields = schema(kind);
+        let fields = self.fields(kind);
         if !fields.is_empty() {
             let Some(pairs) = self.pairs(id, depth + 1)? else {
-                return Ok(incompatible(kind));
+                return Ok(self.incompatible(kind));
             };
             let mut output = Map::new();
             for (name, value) in pairs {
                 // Critically, no JSON conversion, resolution or alias expansion of
                 // unknown values occurs here, even for non-string keys/NaN below.
-                if let Some(field) = fields.iter().find(|field| field.yaml == name) {
-                    output.insert(name, self.project(value, field.kind, depth + 1)?);
+                if let Some((_, field_kind)) = fields.iter().find(|field| field.0 == name) {
+                    output.insert(name, self.project(value, field_kind, depth + 1)?);
                 }
             }
             return Ok(Value::Object(output));
         }
         let Node::Scalar(scalar) = &self.document.nodes[id] else {
-            return Ok(incompatible(kind));
+            return Ok(self.incompatible(kind));
         };
         Ok(match kind {
             "int" => scalar
                 .integer_value()
                 .map(Value::from)
-                .unwrap_or_else(|| incompatible(kind)),
+                .unwrap_or_else(|| self.incompatible(kind)),
             "bool" => scalar
                 .boolean_value()
                 .map(Value::Bool)
-                .unwrap_or_else(|| incompatible(kind)),
+                .unwrap_or_else(|| self.incompatible(kind)),
             "any-session-id" => scalar.session_id_value(),
             _ => scalar
                 .string_value()?
                 .map(Value::String)
-                .unwrap_or_else(|| incompatible(kind)),
+                .unwrap_or_else(|| self.incompatible(kind)),
         })
-    }
-}
-
-fn incompatible(kind: &str) -> Value {
-    // Shapes deliberately incompatible with the requested schema type. The
-    // existing normalizer retains its source-grounded optional-section policy.
-    if kind.starts_with("[]") || kind.starts_with("map[") || !schema(kind).is_empty() {
-        Value::Bool(false)
-    } else {
-        Value::Array(Vec::new())
     }
 }
 
@@ -486,12 +511,12 @@ impl Scalar {
             Resolved::Null => Value::Null,
             Resolved::Boolean(value) => Value::Bool(value),
             Resolved::Integer(value) => Value::from(value),
-            Resolved::Unsigned(_) => incompatible("any-session-id"),
+            Resolved::Unsigned(_) => Value::Array(Vec::new()),
             Resolved::Float(value) => Number::from_f64(value)
                 .map(Value::Number)
                 .unwrap_or(Value::Null),
             Resolved::String => Value::String(self.text.clone()),
-            Resolved::Invalid => incompatible("any-session-id"),
+            Resolved::Invalid => Value::Array(Vec::new()),
         }
     }
 }

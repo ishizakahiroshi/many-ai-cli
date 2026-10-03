@@ -1,0 +1,116 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "files": {
+    "go.mod": {
+      "sha256": "dcfc0c9c8e9b7a8c154d384db296c8710607da840c2779f0a0854937e0be5806"
+    },
+    "go.sum": {
+      "sha256": "1725dc7adb94ef1531ed538139fec49113ba5e23e8f85f3c2eb06e9798a0eff4"
+    },
+    "internal/launcher/connector_for.go": {
+      "sha256": "6f20dd2cfedb9a4dfd1ca33e308e6c5a827aa55cdd282b498b174fa97b76232f"
+    },
+    "internal/launcher/browser_windows.go": {
+      "sha256": "f018c888b860e55e1ebb307d80043e56bc3fd34a3c583f0030138f62a3d00d3e"
+    },
+    "internal/launcher/import.go": {
+      "sha256": "6d70bd693f231a3c58398782869f7e60dd25b53c7237e8678a2c582ee736b371"
+    },
+    "internal/launcher/console_unix.go": {
+      "sha256": "0cc66826412eef45fc6aa865c70143fa151fb8f1038e4a2360a14c8a54d4a26e"
+    },
+    "internal/launcher/connect.go": {
+      "sha256": "b7f4b8eeb4fabac8d5097a4868d27e583aea27f58f544b58240ace5cfa8cc825"
+    },
+    "internal/launcher/profile.go": {
+      "sha256": "3d3eb7432c985d80ae83406c297405ccac11688b6629c9606774fcd5b7de29f8"
+    },
+    "internal/launcher/console_windows.go": {
+      "sha256": "f7ce3589a7010154349f8b945113235c4551cbba3018ffe21e5b327874703397"
+    },
+    "internal/launcher/active.go": {
+      "sha256": "7c00b94c60a447398568b72d740fa714e3e49e11d9040c3255baf3d8d27855ab"
+    },
+    "internal/launcher/connector_wsl_windows.go": {
+      "sha256": "077be87de56608d4c3971c75a259b427328eb77b1fb43fbc85a281d25215ffb3"
+    },
+    "internal/launcher/connector.go": {
+      "sha256": "139c3f8cb678410f22f471558291d4b32349ceef0ceda4f82fda8c36d99e401a"
+    },
+    "internal/launcher/proc_attr_other.go": {
+      "sha256": "3134efd73bcf33285e70de1fc74419b78dcfaed68cf748450315360fb26acca0"
+    },
+    "internal/launcher/proc_attr_windows.go": {
+      "sha256": "748710308e717edd52df20b15e58b8ba48e6d008a9ba42d84e3fa348296b1301"
+    },
+    "internal/launcher/shell.go": {
+      "sha256": "cf21d1d0c45e878c823b14f6f7f13a59d1a26cfd1bc2e5b477754300e8eaabfa"
+    },
+    "internal/launcher/connector_ssh_unix.go": {
+      "sha256": "e4fcccd38824471813713cea0f7282d98e6eddc05303c6403e7dc18ee1e912e5"
+    },
+    "internal/launcher/active_filelock_unix.go": {
+      "sha256": "72d8facaa7d2756f1c98b134263e738c72a07ba9ea560924bca2ce3d8c3b6b2b"
+    },
+    "internal/launcher/connector_ssh_windows.go": {
+      "sha256": "bdbe280b32d158c0a9797fb55d960c61a4254420cb86d4da287dccf7ca223832"
+    },
+    "internal/launcher/connector_ssh.go": {
+      "sha256": "ebee421b0340222798988b2a1984a8455e94975ca65720a252a6675941e62714"
+    },
+    "internal/launcher/pid.go": {
+      "sha256": "8ceca50ed49b6ebf3e8a4b15d2519bd520c1ab63b182de0a13468d084d0d9eaa"
+    },
+    "internal/launcher/ui_server.go": {
+      "sha256": "dd5c5d716beca84fa93960e16c9a70ccd91c7d3463127ccbd19a297330fef94d"
+    },
+    "internal/launcher/active_filelock_windows.go": {
+      "sha256": "575dcc5e8d3b381d6ceb5b1133f1653d32d2b1987076a3d82003ce007dfd8492"
+    },
+    "internal/launcher/connector_wsl_unix.go": {
+      "sha256": "1d266e2aa78173c6fbcde52c02c5709bd53f42c6a109aa713f82ed59009fc060"
+    },
+    "internal/launcher/export.go": {
+      "sha256": "94a3c1bd59233228985a9128d28e391a639b5654b217f132d318399599f508af"
+    },
+    "internal/launcher/browser_unix.go": {
+      "sha256": "7fcc94bc1e0882f718d04ebed2906fb8cf90ace3421a1af44b103a90184b0c62"
+    },
+    "internal/launcher/banner.go": {
+      "sha256": "8f58eba27de4831fa8347f673aabb9d737b1fe53af081a70b41a107554337bb0"
+    },
+    "internal/launcher/scan.go": {
+      "sha256": "5dba0c1a3898ed05611f3ef5176c297fe50e100687207ab32068c720d35025c3"
+    },
+    "internal/launcher/port.go": {
+      "sha256": "4cea1ccfe472d08a05ddd2603845ef8b042902550d8e1d6ff4d643b4f47de4c0"
+    },
+    "internal/launcher/ui/index.html": {
+      "sha256": "9bac180bb7bf6d15d24bf677b38e65d2ab2a43cdff1a681283ca25eadebd9c44"
+    },
+    "internal/securefile/securefile_other.go": {
+      "sha256": "69f869197e5931b6353638fda818f71ef948654cd4b0deb1d80bc41da658d077"
+    },
+    "internal/securefile/securefile.go": {
+      "sha256": "4ea99b562da17fce5845d224014b15d6c625608650e40498f31242532ab6dbd1"
+    },
+    "internal/securefile/atomic.go": {
+      "sha256": "3d3ff3c1e43e5156c51461bffc7b21a78c5a66d27a36dd52368e730a06bb42d7"
+    },
+    "internal/securefile/securefile_windows.go": {
+      "sha256": "8a268089885cda34dc61a5140edc4157a24f97d19115547eaf9f3d729e5014a4"
+    },
+    "internal/hubruntime/pid_windows.go": {
+      "sha256": "3b31a475bb8039e503cbdd999375a89074f0d7c148aed55b2652601794c12b6b"
+    },
+    "internal/hubruntime/pid_unix.go": {
+      "sha256": "6f91d83f60b19da19cb3e83b687aa807b97ec340867a70677175aa458aea41fa"
+    },
+    "internal/hubruntime/runtime.go": {
+      "sha256": "58c065b0ed2de1ca574daf7229723d5217a013883061074d33046048b2da9423"
+    },
+    "internal/hubruntime/pid.go": {
+      "sha256": "5acf08e65f69d3e1d76dfd7c8ecf2f8e300aede201294d22a1bb836590d2c94b"
+    }
+  }
+}

@@ -572,3 +572,144 @@ fn settings_persistence_preserves_zero_disable_values() {
         assert_eq!(config.log.attachment_retention_days, 0);
     }
 }
+
+#[test]
+fn explicit_legacy_publish_first_preserves_failure_memory_and_revision() {
+    let (_root, _installed, paths) = trial();
+    let store = ConfigStore::new(paths.clone(), Config::defaults(&paths)).unwrap();
+    std::fs::create_dir(paths.resource(Resource::Config)).unwrap();
+    let initial = store.snapshot().unwrap();
+    let mut next = initial.config.clone();
+    next.user_prefs.display_name = "synthetic published before failure".into();
+    assert!(
+        store
+            .publish_then_persist_legacy(initial.revision, next.clone())
+            .is_err()
+    );
+    let current = store.snapshot().unwrap();
+    assert_eq!(
+        current.config.user_prefs.display_name,
+        next.user_prefs.display_name
+    );
+    assert_eq!(current.revision, initial.revision + 1);
+    assert!(matches!(
+        store.publish_then_persist_legacy(initial.revision, initial.config),
+        Err(ConfigError::Conflict { .. })
+    ));
+    let mut invalid = current.config.clone();
+    // Trial-owned log/worktree defaults intentionally override saved paths.
+    // Explicit subscription profile directories must instead be rejected.
+    invalid.subscriptions.insert(
+        "codex".into(),
+        vec![SubscriptionProfile {
+            id: "synthetic-outside".into(),
+            profile_dir: paths
+                .root()
+                .parent()
+                .unwrap()
+                .join("outside")
+                .to_string_lossy()
+                .into(),
+            ..Default::default()
+        }],
+    );
+    assert!(
+        store
+            .publish_then_persist_legacy(current.revision, invalid)
+            .is_err()
+    );
+    assert_eq!(store.snapshot().unwrap().revision, current.revision);
+    let mut ordinary = current.config.clone();
+    ordinary.user_prefs.display_name = "must remain transactional".into();
+    assert!(store.persist(current.revision, ordinary).is_err());
+    assert_eq!(store.snapshot().unwrap().config, current.config);
+}
+
+#[test]
+fn notify_nullable_lists_survive_memory_boundary() {
+    let p = paths();
+    let nil = Config::from_yaml("notify: {backends: null, events: null}\n", &p).unwrap();
+    let empty = Config::from_yaml("notify: {backends: [], events: []}\n", &p).unwrap();
+    assert_eq!(
+        serde_json::to_value(&nil.notify).unwrap()["backends"],
+        Value::Null
+    );
+    assert_eq!(
+        serde_json::to_value(&nil.notify).unwrap()["events"],
+        Value::Null
+    );
+    assert_eq!(
+        serde_json::to_value(&empty.notify).unwrap()["backends"],
+        json!([])
+    );
+    assert_eq!(
+        serde_json::to_value(&empty.notify).unwrap()["events"],
+        json!([])
+    );
+}
+
+#[test]
+fn caller_yaml_schema_preserves_lexemes_and_skips_unknown_yaml_nodes() {
+    static SCHEMAS: &[YamlSchema] = &[YamlSchema {
+        name: "SyntheticLauncher",
+        fields: &[
+            YamlField {
+                name: "name",
+                kind: "string",
+            },
+            YamlField {
+                name: "port",
+                kind: "int",
+            },
+            YamlField {
+                name: "args",
+                kind: "[]string",
+            },
+        ],
+    }];
+    let value = decode_yaml_schema(
+        "name: 00123\nport: 0123\nargs: [null, TRUE, 0xFF]\nfuture: {[a,b]: .nan}\n",
+        "SyntheticLauncher",
+        SCHEMAS,
+    )
+    .unwrap();
+    assert_eq!(
+        value,
+        json!({"name":"00123","port":83,"args":["TRUE","0xFF"]})
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn loaded_config_keeps_owned_directory_after_path_replacement() {
+    use std::os::unix::fs::symlink;
+    let base = tempfile::tempdir().unwrap();
+    let root = base.path().join("owned");
+    let moved = base.path().join("moved");
+    let outside = base.path().join("outside");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    let paths = RuntimePaths::trial(&root, 49199, &base.path().join("installed")).unwrap();
+    let store = ConfigStore::load_or_create(paths, || Ok("synthetic-config-token".into())).unwrap();
+    let before = store.snapshot().unwrap();
+    let mut next = before.config;
+    next.user_prefs.display_name = "held directory update".into();
+    // Controlled replacement after validation but before Save I/O. The test
+    // hook performs only an owned synthetic rename, never production work.
+    store
+        .publish_then_persist_legacy_with(before.revision, next, |_| {
+            std::fs::rename(&root, &moved).unwrap();
+            symlink(&outside, &root).unwrap();
+        })
+        .unwrap();
+    assert!(!outside.join("config.yaml").exists());
+    assert!(
+        std::fs::read_to_string(moved.join("config.yaml"))
+            .unwrap()
+            .contains("held directory update")
+    );
+    assert!(private_io::write_atomic(&root.join("must-not-follow"), b"fixture").is_err());
+    assert!(!outside.join("must-not-follow").exists());
+    let current = store.snapshot().unwrap();
+    assert!(store.persist(current.revision, current.config).is_err());
+}

@@ -132,6 +132,25 @@ impl ServiceRouter {
         self.workspace = Some(workspace);
         self
     }
+    /// Called only while the WebSocket owner holds core's accepted UI guard.
+    pub(crate) fn record_ws_attachment(
+        &self,
+        message: &crate::proto::Message,
+    ) -> Result<(), crate::proto::core::SessionError> {
+        let (Some(files), Some(core)) = (&self.files, &self.core) else {
+            return Err(crate::proto::core::SessionError::InvalidRequest(
+                "attachment service is not initialized".into(),
+            ));
+        };
+        files
+            .record_ws_attachment(message, core.as_ref(), self.storage.as_deref())
+            .map_err(|_| {
+                crate::proto::core::SessionError::Storage(crate::proto::core::StorageError {
+                    kind: crate::proto::core::StorageErrorKind::Write,
+                    detail: "attachment operation failed".into(),
+                })
+            })
+    }
     pub async fn handle_async(&self, request: &Request, now: i64) -> Dispatch {
         self.handle_async_at(
             request,

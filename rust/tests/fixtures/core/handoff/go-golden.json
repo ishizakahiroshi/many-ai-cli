@@ -1,0 +1,666 @@
+[
+  {
+    "id": 0,
+    "records": null,
+    "rendered": "# 引き継ぎ: セッション #0\n\n## セッションの素性\n記録なし（session_start が看板に無い）\n\n## 作業中の md\n記録なし（この経路からはまだ分からない。開いていた plan/bugfix があれば手で伝えること）\n\n## 直近の完了\n記録なし\n\n## 直近の変更\n記録なし\n\n## 次の一手 / 未検証の前提\n記録なし。何が変わったかは分かるが、なぜそうしたかは分からない（最後の完了報告から止まるまでの1ターン分は構造的に欠けている）。\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n",
+    "sanitized": null
+  },
+  {
+    "id": 0,
+    "records": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "provider": "codex",
+        "kind": "session_start",
+        "handoff_from": 7
+      }
+    ],
+    "rendered": "# 引き継ぎ: セッション #0\n\n## セッションの素性\n- provider: codex\n- cwd: (記録なし)\n- branch: (記録なし)\n- model: (記録なし)\n- subscription: (記録なし)\n- 開始: (記録なし)\n- 引き継ぎ元セッション: #7\n- 終了: (未終了 — 看板の最新記録時点)\n\n## 作業中の md\n記録なし（この経路からはまだ分からない。開いていた plan/bugfix があれば手で伝えること）\n\n## 直近の完了\n記録なし\n\n## 直近の変更\n記録なし\n\n## 次の一手 / 未検証の前提\n記録なし。何が変わったかは分かるが、なぜそうしたかは分からない（最後の完了報告から止まるまでの1ターン分は構造的に欠けている）。\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n4. このセッション自身も別セッション（#7）からの引き継ぎである。さらに遡って読みたい場合は看板ディレクトリの s7.jsonl を確認する。\n",
+    "sanitized": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "provider": "codex",
+        "kind": "session_start",
+        "handoff_from": 7
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "records": [
+      {
+        "version": 0,
+        "ts": "2026-10-03T01:02:03Z",
+        "session_id": 42,
+        "provider": "claude",
+        "cwd": "/synthetic/project",
+        "branch": "work",
+        "model": "model",
+        "subscription_id": "profile",
+        "kind": "session_start"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "note",
+        "note": "/synthetic/note.md"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "transcript",
+        "transcript": "/synthetic/log.jsonl"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "intent",
+        "work_doc": "/synthetic/plan.md",
+        "text": "next step"
+      },
+      {
+        "version": 0,
+        "ts": "2026-10-03T01:03:03Z",
+        "session_id": 0,
+        "kind": "done",
+        "text": "[success] one thing"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "a",
+          "b"
+        ],
+        "commit": "0123456789abcdef",
+        "commit_subject": "日本語 \"quote\"\nline\ttext",
+        "turn": 3
+      },
+      {
+        "version": 0,
+        "ts": "2026-10-03T02:03:03Z",
+        "session_id": 0,
+        "kind": "session_end",
+        "text": "completed"
+      }
+    ],
+    "rendered": "# 引き継ぎ: セッション #42\n\n## セッションの素性\n- provider: claude\n- cwd: /synthetic/project\n- branch: work\n- model: model\n- subscription: profile\n- 開始: 2026-10-03T01:02:03Z\n- 終了: 2026-10-03T02:03:03Z (completed)\n\n## 引き継ぎメモ\n- /synthetic/note.md\n前任が止まる前に書いた引き継ぎメモ。**本書より先にこれを読む**（次の一手・未検証の前提・開いている論点が、この md より詳しく書かれている）。\n\n## 前任の会話ログ\n- /synthetic/log.jsonl\nこのファイルは前任の会話ログ（JSONL）。まず末尾から、最後のユーザーの指示と最後の assistant の発言（作業の要約・次のステップがあればそれ）を読み、次に本書の「次の一手」と突き合わせてから作業に入る。ファイルが大きいときは末尾 200 行と `grep` で足りる。\n\n## 作業中の md\n- /synthetic/plan.md\n\n## 直近の完了\n- 2026-10-03T01:03:03Z: [success] one thing\n\n## 直近の変更\n- commit 0123456789ab \"日本語 \\\"quote\\\"\\nline\\ttext\" / turn 3 / files: a, b\n\n## 次の一手 / 未検証の前提\n- next step\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n",
+    "sanitized": [
+      {
+        "version": 0,
+        "ts": "2026-10-03T01:02:03Z",
+        "session_id": 42,
+        "provider": "claude",
+        "cwd": "/synthetic/project",
+        "branch": "work",
+        "model": "model",
+        "subscription_id": "profile",
+        "kind": "session_start"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "note",
+        "note": "/synthetic/note.md"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "transcript",
+        "transcript": "/synthetic/log.jsonl"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "intent",
+        "work_doc": "/synthetic/plan.md",
+        "text": "next step"
+      },
+      {
+        "version": 0,
+        "ts": "2026-10-03T01:03:03Z",
+        "session_id": 0,
+        "kind": "done",
+        "text": "[success] one thing"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "a",
+          "b"
+        ],
+        "commit": "0123456789abcdef",
+        "commit_subject": "日本語 \"quote\"\nline\ttext",
+        "turn": 3
+      },
+      {
+        "version": 0,
+        "ts": "2026-10-03T02:03:03Z",
+        "session_id": 0,
+        "kind": "session_end",
+        "text": "completed"
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "records": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "future_kind",
+        "text": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日",
+        "note": "/synthetic/no-read.md"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "TOKEN=synthetic-value password=synthetic-password"
+      }
+    ],
+    "rendered": "# 引き継ぎ: セッション #0\n\n## セッションの素性\n記録なし（session_start が看板に無い）\n\n## 引き継ぎメモ\n- /synthetic/no-read.md\n前任が止まる前に書いた引き継ぎメモ。**本書より先にこれを読む**（次の一手・未検証の前提・開いている論点が、この md より詳しく書かれている）。\n\n## 作業中の md\n記録なし（この経路からはまだ分からない。開いていた plan/bugfix があれば手で伝えること）\n\n## 直近の完了\n- (記録なし): TOKEN=synthetic-value password=synthetic-password\n\n## 直近の変更\n記録なし\n\n## 次の一手 / 未検証の前提\n記録なし。何が変わったかは分かるが、なぜそうしたかは分からない（最後の完了報告から止まるまでの1ターン分は構造的に欠けている）。\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n",
+    "sanitized": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "future_kind",
+        "text": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日…",
+        "note": "/synthetic/no-read.md"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "TOKEN=synthetic-value password=***"
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "records": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "0"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "1"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "2"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "3"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "4"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "5"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "6"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "7"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "8"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "9"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "10"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "11"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ]
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 1
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 2
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 3
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 4
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 5
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 6
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 7
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 8
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 9
+      }
+    ],
+    "rendered": "# 引き継ぎ: セッション #0\n\n## セッションの素性\n記録なし（session_start が看板に無い）\n\n## 作業中の md\n記録なし（この経路からはまだ分からない。開いていた plan/bugfix があれば手で伝えること）\n\n## 直近の完了\n- (記録なし): 11\n- (記録なし): 10\n- (記録なし): 9\n- (記録なし): 8\n- (記録なし): 7\n- (記録なし): 6\n- (記録なし): 5\n- (記録なし): 4\n- …他 4 件（古いものから省略）\n\n## 直近の変更\n- turn 9 / files: file\n- turn 8 / files: file\n- turn 7 / files: file\n- turn 6 / files: file\n- turn 5 / files: file\n- turn 4 / files: file\n- …他 4 件（古いものから省略）\n\n## 次の一手 / 未検証の前提\n記録なし。何が変わったかは分かるが、なぜそうしたかは分からない（最後の完了報告から止まるまでの1ターン分は構造的に欠けている）。\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n",
+    "sanitized": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "0"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "1"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "2"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "3"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "4"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "5"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "6"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "7"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "8"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "9"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "10"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "text": "11"
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ]
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 1
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 2
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 3
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 4
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 5
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 6
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 7
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 8
+      },
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "files": [
+          "file"
+        ],
+        "turn": 9
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "records": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "files": [
+          "path0",
+          "path1",
+          "path2",
+          "path3",
+          "path4",
+          "path5",
+          "path6",
+          "path7",
+          "path8",
+          "path9",
+          "path10",
+          "path11",
+          "path12",
+          "path13",
+          "path14",
+          "path15",
+          "path16",
+          "path17",
+          "path18",
+          "path19",
+          "path20",
+          "path21",
+          "path22"
+        ],
+        "text": "prefix"
+      }
+    ],
+    "rendered": "# 引き継ぎ: セッション #0\n\n## セッションの素性\n記録なし（session_start が看板に無い）\n\n## 作業中の md\n記録なし（この経路からはまだ分からない。開いていた plan/bugfix があれば手で伝えること）\n\n## 直近の完了\n- (記録なし): prefix\n\n## 直近の変更\n記録なし\n\n## 次の一手 / 未検証の前提\n記録なし。何が変わったかは分かるが、なぜそうしたかは分からない（最後の完了報告から止まるまでの1ターン分は構造的に欠けている）。\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n",
+    "sanitized": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "done",
+        "files": [
+          "path0",
+          "path1",
+          "path2",
+          "path3",
+          "path4",
+          "path5",
+          "path6",
+          "path7",
+          "path8",
+          "path9",
+          "path10",
+          "path11",
+          "path12",
+          "path13",
+          "path14",
+          "path15",
+          "path16",
+          "path17",
+          "path18",
+          "path19",
+          "…他 3 件"
+        ],
+        "text": "prefix"
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "records": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "commit": "abcdefghij😀suffix",
+        "commit_subject": "quote ​\u0007\b\f\u000b"
+      }
+    ],
+    "rendered": "# 引き継ぎ: セッション #0\n\n## セッションの素性\n記録なし（session_start が看板に無い）\n\n## 作業中の md\n記録なし（この経路からはまだ分からない。開いていた plan/bugfix があれば手で伝えること）\n\n## 直近の完了\n記録なし\n\n## 直近の変更\n- commit abcdefghij\ufffd\ufffd \"quote\\u00a0\\u200b\\a\\b\\f\\v\\x7f\"\n\n## 次の一手 / 未検証の前提\n記録なし。何が変わったかは分かるが、なぜそうしたかは分からない（最後の完了報告から止まるまでの1ターン分は構造的に欠けている）。\n\n## 後継への指示\n1. まずこの md を読み、上の「作業中の md」に記録があればそのファイルも読む。\n2. 「直近の変更」に挙げたコミット以降から作業を再開する（この md にはコードの中身・diff・PTY 出力・環境変数は一切含まれていない）。\n3. 「次の一手 / 未検証の前提」に書かれていないことは分からない前提で動く。憶測で断定しない。\n",
+    "sanitized": [
+      {
+        "version": 0,
+        "ts": "",
+        "session_id": 0,
+        "kind": "git_turn",
+        "commit": "abcdefghij😀suffix",
+        "commit_subject": "quote ​\u0007\b\f\u000b"
+      }
+    ]
+  }
+]

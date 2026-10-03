@@ -139,3 +139,19 @@ fn raw_array_and_primitive_leaves_keep_go_boundaries() {
     assert!(decode_go_json_array(b"null").unwrap().is_none());
     assert!(decode_go_json_array(b"[1,]").is_err());
 }
+
+#[test]
+fn generic_http_first_value_keeps_go_map_float_and_unicode_semantics() {
+    use many_ai_cli::proto::decode_http_value;
+    let value = decode_http_value(
+        b"{\"A\":1,\"a\":2,\"A\":3,\"unicode\":\"\\ud800\",\"nil\":null} ignored",
+    )
+    .unwrap();
+    assert_eq!(value["A"].as_f64(), Some(3.0));
+    assert_eq!(value["a"].as_f64(), Some(2.0));
+    assert!(value["A"].is_f64());
+    assert_eq!(value["unicode"], "\u{fffd}");
+    assert!(value["nil"].is_null());
+    assert!(decode_http_value(br#"{"number":1e1000,"number":1}"#).is_err());
+    assert!(decode_http_value(b"[1,]").is_err());
+}

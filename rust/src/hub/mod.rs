@@ -8,7 +8,9 @@ pub mod network;
 pub mod pin;
 pub mod router;
 pub mod settings;
+pub mod sockets;
 pub mod transport;
+pub mod websocket;
 pub use router::{Dispatch, ServiceRouter};
 
 #[cfg(test)]

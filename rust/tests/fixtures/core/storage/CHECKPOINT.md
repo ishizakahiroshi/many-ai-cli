@@ -32,8 +32,7 @@ pre-fix deadlock cannot hang the full test runner.
 
 - Red: `cargo test --manifest-path rust/Cargo.toml --locked --lib storage::writer::tests::observer_close_during_concurrent_close_is_bounded -- --exact`
   failed with `writer observer deadlocked against close: Timeout` against the
-  previous lock order. Exit 101. Full local receipt:
-  `/tmp/many-ai-storage-deadlock-red.log`.
+  previous lock order. Exit 101. The complete failure log was retained in the isolated validation workspace.
 - Green unit target: `cargo test --manifest-path rust/Cargo.toml --locked --lib storage::`
   passed 13 tests, zero failed/ignored. This includes the same observer-close
   regression and `reset_recovery_uses_held_directory_after_path_replacement`,
@@ -41,8 +40,7 @@ pre-fix deadlock cannot hang the full test runner.
   file creation, preserving outside sentinel contents.
 - Green integration target: `cargo test --manifest-path rust/Cargo.toml --locked --test storage_contracts`
   passed 17 tests, zero failed/ignored, including fixed Go cross-read. Full local
-  receipts: `/tmp/many-ai-storage-narrow-unit.log` and
-  `/tmp/many-ai-storage-narrow-contracts.log`. No compiler warnings occurred.
+  full unit/integration receipts were retained in the isolated validation workspace. No compiler warnings occurred.
   The target includes
   `pending_reset_marker_stays_with_opened_directory_after_root_replacement`:
   an outside marker is neither adopted nor overwritten; our marker stays with

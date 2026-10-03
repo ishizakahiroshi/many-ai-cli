@@ -19,6 +19,7 @@ impl FilesService {
         core: &dyn SessionCore,
         storage: Option<&dyn SessionStorage>,
     ) -> Result<Response> {
+        self.require_attachment_history()?;
         let (session, filename, data) = multipart(r)?;
         let snap = core
             .snapshot(LiveSessionId(session))
@@ -35,6 +36,7 @@ impl FilesService {
         core: &dyn SessionCore,
         storage: Option<&dyn SessionStorage>,
     ) -> Result<()> {
+        self.require_attachment_history()?;
         use base64::{
             Engine, alphabet,
             engine::{GeneralPurpose, GeneralPurposeConfig},
@@ -69,13 +71,23 @@ impl FilesService {
         )?;
         Ok(())
     }
+    fn require_attachment_history(&self) -> Result<()> {
+        if self.history.is_none() {
+            return Err(err(
+                503,
+                "attachment_history_unavailable",
+                "attachment history is not initialized",
+            ));
+        }
+        Ok(())
+    }
     pub(super) fn save_attachment(
         &self,
         session: i64,
         provider: &str,
         filename: &str,
         data: &[u8],
-        storage: Option<&dyn SessionStorage>,
+        _storage: Option<&dyn SessionStorage>,
     ) -> Result<serde_json::Value> {
         if data.len() > UPLOAD_MAX {
             return Err(err(400, "bad_request", "file too large"));
@@ -129,13 +141,21 @@ impl FilesService {
                 return Err(super::io_error(e, "save_failed"));
             }
         };
-        if let Some(storage) = storage {
+        if let Some(history) = &self.history {
             let value = json!({"ts":crate::proto::time::format_rfc3339(now).map_err(|_|err(500,"invalid_timestamp","invalid attachment timestamp"))?,"type":"attach","session_id":session,"path":saved,"filename":filename,"provider":provider});
             if let serde_json::Value::Object(obj) = value {
-                storage.store_event_async(
-                    LiveSessionId(session),
-                    HistoryEvent(obj.into_iter().collect()),
-                );
+                history
+                    .apply(crate::proto::core::PersistenceEffect::Event {
+                        session: LiveSessionId(session),
+                        event: HistoryEvent(obj.into_iter().collect()),
+                    })
+                    .map_err(|_| {
+                        err(
+                            500,
+                            "attachment_history_failed",
+                            "attachment history could not be completed",
+                        )
+                    })?;
             }
         }
         Ok(json!({"ok":true,"inject":inject,"saved_path":saved,"filename":filename}))

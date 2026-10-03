@@ -45,6 +45,10 @@ pub struct GitTurnCompleted {
     // Dropping the completed result releases the per-incarnation capture gate.
     _completion: tokio::sync::OwnedMutexGuard<()>,
 }
+pub(super) fn format_turn_timestamp(time: SystemTime) -> Result<String> {
+    crate::proto::time::format_rfc3339(time)
+        .map_err(|_| err(500, "invalid_timestamp", "invalid turn timestamp"))
+}
 impl FilesService {
     /// Must be awaited BEFORE the matching confirmed input is delivered. End
     /// capture may run asynchronously, but the next start waits on the same gate.
@@ -162,11 +166,11 @@ impl FilesService {
         let ended = ended_at
             .and_then(super::super::time::parse)
             .unwrap_or_else(SystemTime::now);
-        let ended = crate::proto::time::format_with_offset(ended, 0, false)
-            .map_err(|_| err(500, "invalid_timestamp", "invalid turn timestamp"))?;
-        let started = super::super::time::parse(&started)
-            .and_then(|t| crate::proto::time::format_with_offset(t, 0, false).ok())
-            .unwrap_or(started);
+        let ended = format_turn_timestamp(ended)?;
+        let started = match super::super::time::parse(&started) {
+            Some(started) => format_turn_timestamp(started)?,
+            None => started,
+        };
         let snapshot = GitTurnSnapshot {
             turn,
             started_at: started.clone(),

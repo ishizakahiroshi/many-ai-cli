@@ -5,3 +5,5 @@ pub mod vt;
 pub mod width;
 
 pub mod events;
+pub mod journal;
+pub mod session;

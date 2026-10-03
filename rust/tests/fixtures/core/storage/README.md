@@ -65,3 +65,9 @@ synthetic old rows. Tests copy/create it inside their own temporary roots.
 Remaining gates: actual session/approval/storage caller integration; native
 Windows/macOS locking, permissions and SQLite operation; all-target binaries;
 full user-data backup/restore rehearsal; operator-led cutover.
+
+## Review repair boundary
+
+See `CHECKPOINT.md` for the capability-bound marker/recovery and close-order
+repair, and `VFS-DESIGN.md` for the unimplemented DB/WAL/SHM confinement proposal.
+The marker regression is not evidence that native SQLite path reopening is safe.

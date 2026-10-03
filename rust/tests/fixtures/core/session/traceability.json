@@ -1,0 +1,103 @@
+{
+  "oracle_commit": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "scope": "single-state lifecycle/input/journal caller milestone, not full C2 acceptance",
+  "implementation": [
+    "rust/src/terminal/session.rs",
+    "rust/src/terminal/session/",
+    "rust/src/terminal/journal.rs"
+  ],
+  "sources": [
+    "internal/hub/wrapper_loop.go",
+    "internal/hub/input_gate.go",
+    "internal/hub/ui_broadcast.go",
+    "internal/hub/approval_native.go",
+    "internal/hub/approval_action.go",
+    "internal/hub/approval_record.go",
+    "internal/hub/server.go",
+    "internal/sessionlog/sessionlog.go"
+  ],
+  "tests": {
+    "rust/tests/session_engine_contracts.rs": [
+      "registration_ack_is_separate_and_persistence_metadata_precedes_body_effects",
+      "reverse_polled_input_futures_keep_invocation_fifo_and_dropped_waiter_does_not_overtake",
+      "ack_reconnect_resends_original_sequence_before_pending_and_cold_watermark_is_adopted",
+      "initial_gate_bypass_overtakes_gated_input_exactly_once",
+      "failed_delayed_enter_never_replays_paste_body",
+      "priming_drain_keeps_later_frames_behind_batch_until_empty_and_revocation_drops_queued_work",
+      "zero_size_claim_transfers_control_without_creating_approval_epoch",
+      "stale_disconnect_cannot_end_replacement_and_terminal_tail_cannot_revive_completed",
+      "revoked_ui_input_reserved_but_not_polled_cannot_write_or_mutate_history",
+      "initial_ui_size_without_active_session_controls_first_wrapper_geometry",
+      "restored_card_label_is_distinct_from_wrapper_launch_identity",
+      "revoked_reset_and_dismiss_do_not_mutate_retained_wrapper_or_replay",
+      "advisory_native_legacy_sig_consumes_record_without_sending_and_persists_sent_text",
+      "revocation_waits_for_accepted_paste_but_rejects_unaccepted_queued_input",
+      "abort_during_transport_write_releases_only_unsent_frame_and_fifo_ticket",
+      "reattach_ack_is_exact_minimal_go_frame_and_dismissal_precedes_bad_replay",
+      "output_history_keeps_every_raw_byte_across_split_utf8_chunks",
+      "delayed_old_disconnect_cannot_close_rebound_journal_or_end_restored_database_row",
+      "provider_output_during_send_is_persisted_before_post_send_user_history",
+      "marker_answer_and_history_reset_clear_waiting_activity_immediately",
+      "warm_reattach_preserves_conversation_activity_and_original_output_clock"
+    ],
+    "rust/tests/journal_contracts.rs": [
+      "disabled_body_gate_keeps_registration_metadata_but_neither_body_store",
+      "writes_go_escaped_jsonl_and_sqlite_once_in_the_same_order",
+      "size_limit_marks_once_retains_end_and_append_starts_at_existing_size",
+      "paths_are_sanitized_and_runtime_derived_for_multibyte_and_empty_parts",
+      "existing_symlink_is_rejected_and_created_file_is_private",
+      "reattach_log_names_retain_validated_source_wall_clock_offset",
+      "byte_masking_matches_actual_go_rune_thresholds_and_preserves_unmatched_invalid_bytes",
+      "source_tolerated_persistence_failure_warns_without_aborting_remaining_effects"
+    ],
+    "rust/src/terminal/session/lifecycle.rs": [
+      "warm_conversation_preserves_project_and_board_but_not_connection_metadata"
+    ]
+  },
+  "rust_execution": "Parent-run frozen snapshot: 430 tests passed, 0 failed, 0 ignored; includes journal8 + session21 and lifecycle warm-conversation unit. Covers pre/post input history ordering, immediate approval activity refresh and warm-reattach metadata/activity/output-clock preservation.",
+  "go_mask_oracle": {
+    "generator": "rust/tests/fixtures/core/journal/mask_oracle.go",
+    "fixture": "rust/tests/fixtures/core/journal/mask-oracle-21d0bc7.json",
+    "cases": 16,
+    "command": "go run rust/tests/fixtures/core/journal/mask_oracle.go",
+    "exit_code": 0
+  },
+  "still_pending": [
+    "separate SpawnConfirmations capability and complete child preparation (SessionCore forwarding itself is implemented and compiled)",
+    "registration route/subscription/git metadata resolution and initial launch-prompt caller",
+    "transcript poll cursor/source fallback/thread-following/ledger integration",
+    "full text-question detection and idle scan",
+    "native PTY/wrapper lifecycle and supported platform acceptance",
+    "orchestration board/relay/worktree recovery and child defaults",
+    "frontend and real provider acceptance"
+  ],
+  "go_handshake_oracle": {
+    "generator": "rust/tests/fixtures/core/session/handshake_oracle.go",
+    "fixture": "rust/tests/fixtures/core/session/handshake-oracle-21d0bc7.json",
+    "cases": 4,
+    "exit_code": 0,
+    "note": "Message token_statusbar:false is required even in minimally constructed reattach_ack"
+  },
+  "verification_boundaries": [
+    "Parent-run frozen snapshot 430 tests passed, 0 ignored, including current journal8 + session21 and lifecycle unit; earlier 26-test receipt is historical only",
+    "Static fmt/clippy, native platform/provider/browser acceptance and live application assembly remain separate evidence; do not infer them from the frozen test run",
+    "Native PTY/provider/browser/OS acceptance not run",
+    "One-tap selection intent and proof replay/admission tests remain next slice"
+  ],
+  "full_snapshot_receipt": {
+    "tests_passed": 430,
+    "tests_failed": 0,
+    "tests_ignored": 0,
+    "run_owner": "integration coordinator",
+    "journal_integration_tests": 8,
+    "session_integration_tests": 21,
+    "warm_lifecycle_unit_tests": 1,
+    "scope": "registered frozen Rust snapshot before native wrapper/PTY and typed one-shot action selection registration",
+    "includes": [
+      "provider_output_during_send_is_persisted_before_post_send_user_history",
+      "marker_answer_and_history_reset_clear_waiting_activity_immediately",
+      "warm_reattach_preserves_conversation_activity_and_original_output_clock",
+      "warm_conversation_preserves_project_and_board_but_not_connection_metadata"
+    ]
+  }
+}

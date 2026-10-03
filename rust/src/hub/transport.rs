@@ -11,9 +11,9 @@ use crate::{
 use axum::{
     Router,
     body::{Body, Bytes, HttpBody},
-    extract::{ConnectInfo, State},
+    extract::{ConnectInfo, FromRequestParts, State, ws::WebSocketUpgrade},
     http::{HeaderName, HeaderValue},
-    response::Response as AxumResponse,
+    response::{IntoResponse, Response as AxumResponse},
     routing::any,
 };
 use std::{
@@ -29,16 +29,59 @@ use std::{
 struct TransportState {
     services: Arc<ServiceRouter>,
     sink: Arc<dyn CoreEffectSink>,
+    websockets: Option<Arc<super::websocket::WebSocketService>>,
 }
 pub fn router(services: Arc<ServiceRouter>, sink: Arc<dyn CoreEffectSink>) -> Router {
     Router::new()
         .fallback(any(handle))
-        .with_state(TransportState { services, sink })
+        .with_state(TransportState {
+            services,
+            sink,
+            websockets: None,
+        })
 }
 pub async fn serve(
     listener: tokio::net::TcpListener,
     services: Arc<ServiceRouter>,
     sink: Arc<dyn CoreEffectSink>,
+    cancel: Cancellation,
+) -> io::Result<()> {
+    serve_inner(listener, services.clone(), router(services, sink), cancel).await
+}
+/// The registered transport stays usable without WebSockets during incremental
+/// migration; production wiring supplies this actual service explicitly.
+pub fn router_with_websockets(
+    services: Arc<ServiceRouter>,
+    sink: Arc<dyn CoreEffectSink>,
+    websockets: Arc<super::websocket::WebSocketService>,
+) -> Router {
+    Router::new()
+        .fallback(any(handle))
+        .with_state(TransportState {
+            services,
+            sink,
+            websockets: Some(websockets),
+        })
+}
+pub async fn serve_with_websockets(
+    listener: tokio::net::TcpListener,
+    services: Arc<ServiceRouter>,
+    sink: Arc<dyn CoreEffectSink>,
+    websockets: Arc<super::websocket::WebSocketService>,
+    cancel: Cancellation,
+) -> io::Result<()> {
+    serve_inner(
+        listener,
+        services.clone(),
+        router_with_websockets(services, sink, websockets),
+        cancel,
+    )
+    .await
+}
+async fn serve_inner(
+    listener: tokio::net::TcpListener,
+    services: Arc<ServiceRouter>,
+    router: Router,
     cancel: Cancellation,
 ) -> io::Result<()> {
     let local = listener.local_addr()?;
@@ -50,7 +93,6 @@ pub async fn serve(
             "Hub listener must match the explicit IPv4 loopback runtime port",
         ));
     }
-    let router = router(services, sink);
     let mut connections = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
@@ -77,7 +119,7 @@ async fn handle(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     raw: axum::extract::Request,
 ) -> AxumResponse {
-    let (parts, body) = raw.into_parts();
+    let (mut parts, body) = raw.into_parts();
     let mut request = Request {
         method: parts.method.to_string(),
         path: match decode_path(parts.uri.path()) {
@@ -111,6 +153,22 @@ async fn handle(
             .collect(),
         body: vec![],
     };
+    if request.path == "/ws"
+        && let Some(websockets) = state.websockets
+    {
+        if let Err(error) = websockets.handshake(&request) {
+            return response(error);
+        }
+        let upgrade = match WebSocketUpgrade::from_request_parts(&mut parts, &()).await {
+            Ok(upgrade) => upgrade,
+            Err(error) => return error.into_response(),
+        };
+        return upgrade
+            .max_message_size(super::websocket::MAX_PAYLOAD_BYTES)
+            .max_frame_size(super::websocket::MAX_PAYLOAD_BYTES)
+            .on_upgrade(move |socket| websockets.run(socket, request))
+            .into_response();
+    }
     let captured_at = std::time::SystemTime::now();
     let now = captured_at
         .duration_since(std::time::UNIX_EPOCH)

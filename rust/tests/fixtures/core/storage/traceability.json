@@ -422,6 +422,11 @@
     ],
     "shared_masking": [
       "sessionlog_masking_preserves_exact_thresholds_and_context"
+    ],
+    "partial_security_repair": [
+      "pending_reset_marker_stays_with_opened_directory_after_root_replacement",
+      "reset_recovery_uses_held_directory_after_path_replacement",
+      "observer_close_during_concurrent_close_is_bounded"
     ]
   },
   "intentional_differences": [
@@ -433,7 +438,8 @@
     "real Hub caller and UI integration",
     "native Windows/macOS SQLite and directory permissions",
     "adversarial ancestor rename races",
-    "copied real-data backup/restore and operator cutover"
+    "copied real-data backup/restore and operator cutover",
+    "Native DB/WAL/SHM confinement under root/final-child replacement and cross-connection SHM lifetime; see VFS-DESIGN.md"
   ],
   "receipts": [
     {
@@ -478,6 +484,27 @@
       "failed": 0,
       "ignored": 0,
       "scope": "Includes manifest-verified temporary Go module, real sequential cross-read, archive/no-Git regression, extra-source exclusion and changed-source rejection"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib storage::writer::tests::observer_close_during_concurrent_close_is_bounded -- --exact",
+      "exit_code": 101,
+      "scope": "Red: actual previous lock order deadlocked the write-error observer; supervised child returned timeout without hanging suite"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib storage::",
+      "exit_code": 0,
+      "passed": 13,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Green: capability-bound recovery/create and early writer-close rejection; compact runtime target; no warnings"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --test storage_contracts",
+      "exit_code": 0,
+      "passed": 17,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Green: public reset-marker root replacement and Go rollback; does not establish native SQLite DB/WAL/SHM confinement"
     }
   ]
 }

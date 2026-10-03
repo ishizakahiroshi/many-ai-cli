@@ -685,3 +685,34 @@ fn private_directory_creation_restricts_only_final_and_never_follows_replacement
     );
     assert!(safe_fs::Dir::open_or_create_private(Path::new("/")).is_err());
 }
+
+#[test]
+fn attachment_history_uses_injected_journal_once() {
+    use crate::proto::core::{
+        HistoryEvent, PersistenceEffect, PersistenceEffectSink, SessionError,
+    };
+    use std::sync::{Arc, Mutex};
+    struct Journal(Mutex<Vec<HistoryEvent>>);
+    impl PersistenceEffectSink for Journal {
+        fn apply(&self, effect: PersistenceEffect) -> std::result::Result<(), SessionError> {
+            let PersistenceEffect::Event { session, event } = effect else {
+                panic!("attachment emits one event")
+            };
+            assert_eq!(session, LiveSessionId(7));
+            self.0.lock().unwrap().push(event);
+            Ok(())
+        }
+    }
+    let (_dir, service, _) = setup();
+    let journal = Arc::new(Journal(Mutex::new(vec![])));
+    let service = service.with_history(journal.clone());
+    let saved = service
+        .save_attachment(7, "codex", "fixture.txt", b"synthetic attachment", None)
+        .unwrap();
+    let events = journal.0.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].0["type"], "attach");
+    assert_eq!(events[0].0["path"], saved["saved_path"]);
+    assert_eq!(events[0].0["filename"], "fixture.txt");
+    assert!(!events[0].0.contains_key("data"));
+}

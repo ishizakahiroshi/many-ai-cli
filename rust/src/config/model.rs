@@ -1,6 +1,6 @@
 //! Typed configuration contracts ported from the fixed Go baseline.
 //! Secrets serialize only through `to_private_yaml`; loading never uses the real home.
-use super::{Resource, RuntimePaths, private_io};
+use super::{Resource, RuntimePaths};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::{
@@ -8,7 +8,7 @@ use std::{
     fmt, io,
     net::IpAddr,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 pub type SessionOrderIDs = Vec<i64>;
 pub type SubscriptionProfiles = BTreeMap<String, Vec<SubscriptionProfile>>;
@@ -444,9 +444,9 @@ pub struct NotifyBackendConfig {
 #[serde(default)]
 pub struct NotifyConfig {
     #[serde(rename = "backends")]
-    pub backends: Vec<NotifyBackendConfig>,
+    pub backends: Option<Vec<NotifyBackendConfig>>,
     #[serde(rename = "events")]
-    pub events: Vec<String>,
+    pub events: Option<Vec<String>>,
     #[serde(rename = "include_body")]
     pub include_body: bool,
 }
@@ -3086,8 +3086,8 @@ fn normalize_node(
                 {
                     continue;
                 }
-                if kind == "VoiceWhisperConfig"
-                    && field.yaml == "hallucination_phrases"
+                if ((kind == "VoiceWhisperConfig" && field.yaml == "hallucination_phrases")
+                    || (kind == "NotifyConfig" && matches!(field.yaml, "backends" | "events")))
                     && value.is_null()
                 {
                     out.insert(field.yaml.into(), Value::Null);
@@ -3764,6 +3764,7 @@ pub struct ConfigStore {
     paths: RuntimePaths,
     state: Mutex<ConfigSnapshot>,
     recovered_from_invalid_yaml: bool,
+    directory: Mutex<Option<Arc<crate::files::safe_fs::Dir>>>,
 }
 impl ConfigStore {
     pub fn new(paths: RuntimePaths, mut config: Config) -> Result<Self, ConfigError> {
@@ -3777,7 +3778,19 @@ impl ConfigStore {
                 config,
             }),
             recovered_from_invalid_yaml: false,
+            directory: Mutex::new(None),
         })
+    }
+    fn directory(&self) -> Result<Arc<crate::files::safe_fs::Dir>, ConfigError> {
+        let mut directory = self.directory.lock().map_err(|_| ConfigError::Poisoned)?;
+        if let Some(held) = &*directory {
+            return Ok(held.clone());
+        }
+        let held = Arc::new(crate::files::safe_fs::Dir::open_or_create_private(
+            self.paths.root(),
+        )?);
+        *directory = Some(held.clone());
+        Ok(held)
     }
     pub fn snapshot(&self) -> Result<ConfigSnapshot, ConfigError> {
         self.state
@@ -3806,11 +3819,56 @@ impl ConfigStore {
         next.validate()?;
         next.validate_paths(&self.paths)?;
         let payload = next.to_private_yaml()?;
-        private_io::write_atomic(&self.paths.resource(Resource::Config), payload.as_bytes())?;
+        self.directory()?
+            .replace("config.yaml", payload.as_bytes(), 0o600)?;
         *guard = ConfigSnapshot {
             revision,
             config: next,
         };
+        Ok(guard.clone())
+    }
+    /// Source-specific Go handlers assign shared memory before calling Save.
+    /// Their defaults/validation/I/O failure leaves that memory observable and
+    /// returns an error to the caller. Default `persist` remains transactional.
+    /// Trial confinement is checked before publication as a mandatory boundary.
+    pub fn publish_then_persist_legacy(
+        &self,
+        expected_revision: u64,
+        next: Config,
+    ) -> Result<ConfigSnapshot, ConfigError> {
+        self.publish_then_persist_legacy_with(expected_revision, next, |_| {})
+    }
+    /// The bounded in-memory reconfiguration hook runs before Save validation
+    /// and disk I/O, while this revision is still serialized. It must not call
+    /// ConfigStore again or perform blocking external I/O.
+    pub fn publish_then_persist_legacy_with(
+        &self,
+        expected_revision: u64,
+        mut next: Config,
+        published: impl FnOnce(&Config),
+    ) -> Result<ConfigSnapshot, ConfigError> {
+        let mut guard = self.state.lock().map_err(|_| ConfigError::Poisoned)?;
+        if expected_revision != guard.revision {
+            return Err(ConfigError::Conflict {
+                expected: expected_revision,
+                actual: guard.revision,
+            });
+        }
+        let revision = guard
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| ConfigError::invalid("config revision exhausted"))?;
+        next.apply_defaults(&self.paths);
+        next.validate_paths(&self.paths)?;
+        *guard = ConfigSnapshot {
+            revision,
+            config: next,
+        };
+        published(&guard.config);
+        guard.config.validate()?;
+        let payload = guard.config.to_private_yaml()?;
+        self.directory()?
+            .replace("config.yaml", payload.as_bytes(), 0o600)?;
         Ok(guard.clone())
     }
     /// Uses only the explicit runtime root and an injected cryptographic token source.
@@ -3831,20 +3889,29 @@ impl ConfigStore {
         }
         // Match Go LoadOrCreate: privacy is restored even when a valid existing
         // file needs no write. Without this, copied 0755/0644 config is exposed.
-        private_io::ensure_private_dir(paths.root())?;
+        let directory = Arc::new(crate::files::safe_fs::Dir::open_or_create_private(
+            paths.root(),
+        )?);
         let path = paths.resource(Resource::Config);
         if paths.is_trial() {
             checked_trial_path(&paths, &path)?;
         }
         let mut recovered = false;
-        let (mut config, missing) = match std::fs::read_to_string(&path) {
+        let text = directory
+            .read("config.yaml", 8 * 1024 * 1024 + 1)
+            .and_then(|bytes| {
+                String::from_utf8(bytes).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "config YAML contains invalid UTF-8",
+                    )
+                })
+            });
+        let (mut config, missing) = match text {
             Ok(text) => match Config::from_yaml(&text, &paths) {
                 Ok(config) => (config, false),
                 Err(ConfigError::Parse(_)) => {
-                    private_io::write_atomic(
-                        &paths.root().join("config.yaml.bak"),
-                        text.as_bytes(),
-                    )?;
+                    directory.replace("config.yaml.bak", text.as_bytes(), 0o600)?;
                     recovered = true;
                     (Config::defaults(&paths), true)
                 }
@@ -3863,9 +3930,10 @@ impl ConfigStore {
             }
         }
         if missing || needs_token {
-            private_io::write_atomic(&path, config.to_private_yaml()?.as_bytes())?;
+            directory.replace("config.yaml", config.to_private_yaml()?.as_bytes(), 0o600)?;
         }
         let mut store = Self::new(paths, config)?;
+        store.directory = Mutex::new(Some(directory));
         store.recovered_from_invalid_yaml = recovered;
         Ok(store)
     }
