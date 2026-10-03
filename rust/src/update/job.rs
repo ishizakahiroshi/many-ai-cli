@@ -74,42 +74,8 @@ impl Outcome {
     }
 }
 fn login_required(output: &str) -> bool {
-    let lower = output.to_lowercase();
-    let words: Vec<_> = lower
-        .split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|s| !s.is_empty())
-        .collect();
-    for (i, word) in words.iter().enumerate() {
-        if *word == "unauthenticated" {
-            return true;
-        }
-        if *word == "not" && words.get(i + 1) == Some(&"authenticated") {
-            return true;
-        }
-        if *word == "authentication"
-            && words
-                .get(i + 1)
-                .is_some_and(|w| matches!(*w, "required" | "failed"))
-        {
-            return true;
-        }
-        if matches!(*word, "login" | "signin")
-            && words
-                .get(i + 1)
-                .is_some_and(|w| matches!(*w, "required" | "needed"))
-        {
-            return true;
-        }
-        if matches!(*word, "log" | "sign")
-            && words.get(i + 1) == Some(&"in")
-            && words
-                .get(i + 2)
-                .is_some_and(|w| matches!(*w, "required" | "needed"))
-        {
-            return true;
-        }
-    }
-    false
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(||regex::Regex::new(r"(?i)(\[unauthenticated\]|\bunauthenticated\b|\bnot\s+authenticated\b|\bauthentication\s+(?:required|failed)\b|\blog[- ]?in\s+(?:required|needed)\b|\bsign[- ]?in\s+(?:required|needed)\b)").expect("frozen update outcome pattern")).is_match(output)
 }
 pub fn classify(
     output: &str,

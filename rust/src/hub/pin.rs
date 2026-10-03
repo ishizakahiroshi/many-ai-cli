@@ -94,35 +94,56 @@ fn rate_key(request: &Request) -> String {
         .map(|v| v.to_string())
         .unwrap_or_else(|| request.remote_addr.trim().into())
 }
+const SECOND_NANOS: i128 = 1_000_000_000;
+fn unix_nanos(at: std::time::SystemTime) -> i128 {
+    match at.duration_since(std::time::UNIX_EPOCH) {
+        Ok(d) => d.as_nanos() as i128,
+        Err(e) => -(e.duration().as_nanos() as i128),
+    }
+}
 #[derive(Default)]
 struct Attempt {
     fails: u32,
     level: usize,
-    until: i64,
-    last: i64,
+    until: Option<i128>,
+    last: i128,
 }
 #[derive(Default)]
 pub struct Limiter {
     ips: BTreeMap<String, Attempt>,
     global_fails: u32,
-    global_until: i64,
-    global_seen: i64,
+    global_until: Option<i128>,
+    global_seen: Option<i128>,
 }
 impl Limiter {
     pub fn retry_after(&mut self, key: &str, now: i64) -> i64 {
-        self.ips
-            .retain(|_, a| now - a.last <= 3600 || now <= a.until);
-        if now < self.global_until {
-            return self.global_until - now + 1;
+        self.retry_after_nanos(key, i128::from(now) * SECOND_NANOS)
+    }
+    pub fn retry_after_at(&mut self, key: &str, at: std::time::SystemTime) -> i64 {
+        self.retry_after_nanos(key, unix_nanos(at))
+    }
+    fn retry_after_nanos(&mut self, key: &str, now: i128) -> i64 {
+        self.ips.retain(|_, a| {
+            now - a.last <= 3600 * SECOND_NANOS || a.until.is_some_and(|until| now <= until)
+        });
+        if let Some(until) = self.global_until.filter(|until| now < *until) {
+            return ((until - now) / SECOND_NANOS + 1) as i64;
         }
         self.ips
             .get(key)
-            .filter(|a| now < a.until)
-            .map(|a| a.until - now + 1)
+            .and_then(|a| a.until)
+            .filter(|until| now < *until)
+            .map(|until| ((until - now) / SECOND_NANOS + 1) as i64)
             .unwrap_or(0)
     }
     pub fn begin(&mut self, key: &str, now: i64) -> i64 {
-        let retry = self.retry_after(key, now);
+        self.begin_nanos(key, i128::from(now) * SECOND_NANOS)
+    }
+    pub fn begin_at(&mut self, key: &str, at: std::time::SystemTime) -> i64 {
+        self.begin_nanos(key, unix_nanos(at))
+    }
+    fn begin_nanos(&mut self, key: &str, now: i128) -> i64 {
+        let retry = self.retry_after_nanos(key, now);
         if retry > 0 {
             return retry;
         }
@@ -131,18 +152,21 @@ impl Limiter {
             a.last = now;
             a.fails += 1;
             if a.fails >= 5 {
-                a.until = now + [60, 300, 1800][a.level.min(2)];
+                a.until = Some(now + [60, 300, 1800][a.level.min(2)] * SECOND_NANOS);
                 a.level = (a.level + 1).min(2);
                 a.fails = 0;
             }
         }
-        if now - self.global_seen > 3600 {
+        if self
+            .global_seen
+            .is_none_or(|seen| now - seen > 3600 * SECOND_NANOS)
+        {
             self.global_fails = 0;
         }
-        self.global_seen = now;
+        self.global_seen = Some(now);
         self.global_fails += 1;
         if self.global_fails >= 30 {
-            self.global_until = now + 60;
+            self.global_until = Some(now + 60 * SECOND_NANOS);
             self.global_fails = 0;
         }
         0
@@ -290,13 +314,30 @@ impl AuthService {
         Ok(signed(secret, &format!("{expiry}.{nonce}.{device}"), ""))
     }
     pub fn status(&self, request: &Request, config: &Config, now: i64) -> Response {
+        self.status_nanos(request, config, now, i128::from(now) * SECOND_NANOS)
+    }
+    pub fn status_at(
+        &self,
+        request: &Request,
+        config: &Config,
+        at: std::time::SystemTime,
+    ) -> Response {
+        let nanos = unix_nanos(at);
+        self.status_nanos(
+            request,
+            config,
+            nanos.div_euclid(SECOND_NANOS) as i64,
+            nanos,
+        )
+    }
+    fn status_nanos(&self, request: &Request, config: &Config, now: i64, nanos: i128) -> Response {
         let enabled = !config.remote_pin_hash.trim().is_empty();
         let remote = logically_remote(request);
         let authed = !enabled || !remote || self.has_valid_pin(request, config, now);
         let retry = if enabled && remote {
             self.state
                 .lock()
-                .map(|mut s| s.limiter.retry_after(&rate_key(request), now))
+                .map(|mut s| s.limiter.retry_after_nanos(&rate_key(request), nanos))
                 .unwrap_or(1)
         } else {
             0
@@ -304,6 +345,23 @@ impl AuthService {
         Response::json(200,&json!({"pin_enabled":enabled,"remote":remote,"remote_exposed":!config.hub.allowed_hosts.is_empty()||!config.hub.trusted_networks.is_empty(),"authed":authed,"locked":retry>0,"retry_after":retry})).no_store()
     }
     pub fn login(&self, request: &Request, config: &Config, now: i64) -> Response {
+        self.login_nanos(request, config, now, i128::from(now) * SECOND_NANOS)
+    }
+    pub fn login_at(
+        &self,
+        request: &Request,
+        config: &Config,
+        at: std::time::SystemTime,
+    ) -> Response {
+        let nanos = unix_nanos(at);
+        self.login_nanos(
+            request,
+            config,
+            nanos.div_euclid(SECOND_NANOS) as i64,
+            nanos,
+        )
+    }
+    fn login_nanos(&self, request: &Request, config: &Config, now: i64, nanos: i128) -> Response {
         let result = (|| {
             if config.remote_pin_hash.trim().is_empty() {
                 return Response::json(200, &json!({"ok":true,"pin_enabled":false}));
@@ -319,7 +377,7 @@ impl AuthService {
             let retry = self
                 .state
                 .lock()
-                .map(|mut s| s.limiter.begin(&key, now))
+                .map(|mut s| s.limiter.begin_nanos(&key, nanos))
                 .unwrap_or(1);
             if retry > 0 {
                 return locked(retry);
@@ -331,7 +389,7 @@ impl AuthService {
                 let retry = self
                     .state
                     .lock()
-                    .map(|mut s| s.limiter.retry_after(&key, now))
+                    .map(|mut s| s.limiter.retry_after_nanos(&key, nanos))
                     .unwrap_or(1);
                 return if retry > 0 {
                     locked(retry)

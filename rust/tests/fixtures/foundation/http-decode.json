@@ -1,8 +1,41 @@
 [
   {
+    "error": true,
+    "input": "{\"mtime\":\"\"}"
+  },
+  {
+    "error": true,
+    "input": "{\"mtime\":\"invalid\",\"mtime\":\"2026-10-03T01:02:03Z\"}"
+  },
+  {
+    "error": false,
+    "input": "{\"mtime\":\"2026-10-03T01:02:03Z\",\"mtime\":null}",
+    "value": {
+      "mtime": "2026-10-03T01:02:03Z",
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"mtime\":null}",
+    "value": {
+      "mtime": "0001-01-01T00:00:00Z",
+      "count": 0,
+      "nested": null,
+      "names": null
+    }
+  },
+  {
+    "error": true,
+    "input": "{\"mtime\":7,\"mtime\":null}"
+  },
+  {
     "error": false,
     "input": "{}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": null
@@ -12,6 +45,7 @@
     "error": false,
     "input": "null",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": null
@@ -21,6 +55,7 @@
     "error": false,
     "input": "{\"COUNT\":3,\"unknown\":1e9999}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 3,
       "nested": null,
       "names": null
@@ -30,6 +65,7 @@
     "error": false,
     "input": "{\"count\":1} {\"count\":2}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 1,
       "nested": null,
       "names": null
@@ -39,6 +75,7 @@
     "error": false,
     "input": "{\"count\":1} malformed",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 1,
       "nested": null,
       "names": null
@@ -48,6 +85,7 @@
     "error": false,
     "input": "nullgarbage",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": null
@@ -57,6 +95,7 @@
     "error": false,
     "input": "{\"count\":1,\"count\":null}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 1,
       "nested": null,
       "names": null
@@ -70,6 +109,7 @@
     "error": false,
     "input": "{\"nested\":{\"enabled\":true},\"NESTED\":{\"text\":\"preserved\"}}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": {
         "enabled": true,
@@ -82,6 +122,7 @@
     "error": false,
     "input": "{\"nested\":{\"enabled\":true},\"nested\":null}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": null
@@ -91,6 +132,7 @@
     "error": false,
     "input": "{\"names\":[\"first\",\"second\"],\"names\":[null],\"names\":[null,null]}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": [
@@ -103,6 +145,7 @@
     "error": false,
     "input": "{\"names\":[\"first\"],\"names\":[],\"names\":[null]}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": [
@@ -114,6 +157,7 @@
     "error": false,
     "input": "{\"nested\":{\"text\":\"\\ud800\"}}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": {
         "enabled": false,
@@ -150,6 +194,7 @@
     "error": false,
     "input": "{\"count\":-0}",
     "value": {
+      "mtime": "0001-01-01T00:00:00Z",
       "count": 0,
       "nested": null,
       "names": null

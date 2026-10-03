@@ -1,0 +1,62 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "canonicalization": "Git text bytes: CRLF normalized to LF",
+  "files": [
+    {
+      "path": "go.mod",
+      "sha256": "dcfc0c9c8e9b7a8c154d384db296c8710607da840c2779f0a0854937e0be5806"
+    },
+    {
+      "path": "go.sum",
+      "sha256": "1725dc7adb94ef1531ed538139fec49113ba5e23e8f85f3c2eb06e9798a0eff4"
+    },
+    {
+      "path": "internal/proto/messages.go",
+      "sha256": "2ce7013b9083f952deaf5be8157cea77ff33b95354e91d22bb1bb146f9df2193"
+    },
+    {
+      "path": "internal/proto/messages_test.go",
+      "sha256": "2297a959279ba89b31d83c5e7bd3e2028d5a754216c7a6e52d152f825f9b99c4"
+    },
+    {
+      "path": "internal/sessionlog/audit_masksecrets_test.go",
+      "sha256": "6b3d86e877635ddf06849feb52d27b9a9b3ea5a2f9d8f2258fd6afeec3670c4d"
+    },
+    {
+      "path": "internal/sessionlog/sessionlog.go",
+      "sha256": "031e44a2efcd7551abfc94927a4ca26c95cd3c3b29ff80effefb9a8367632f87"
+    },
+    {
+      "path": "internal/sessionlog/sessionlog_test.go",
+      "sha256": "da5a53660cf83cca16ed81e486c1b713ea7f56bc96c99f6da2475aa026daffa9"
+    },
+    {
+      "path": "internal/sessionlog/transcript.go",
+      "sha256": "4d626763e3ffc6df46dc071fe93fd63dbea6f975725c9f2cca15673b614f5793"
+    },
+    {
+      "path": "internal/sessionlog/transcript_test.go",
+      "sha256": "e0cf8b8d856dfde77eae04baf51d14c8aa7d347715fd1f0554ef7ee4ec878d2b"
+    },
+    {
+      "path": "internal/sessionstore/approval_ledger_test.go",
+      "sha256": "8295dd7c9b53776a9b62802ab40a65eb9b4f82ff2fa1abfd49478a89e855052f"
+    },
+    {
+      "path": "internal/sessionstore/audit_store_test.go",
+      "sha256": "b258621ffaf2bf56448af3091dc82529a18d2be0b25bdfb4a68920ed6bf82f06"
+    },
+    {
+      "path": "internal/sessionstore/noise_output_test.go",
+      "sha256": "5bced1edf7e2ebba3c5ce2f56aae680b67a54a9a0d3ac0e98de70797c7b64fb7"
+    },
+    {
+      "path": "internal/sessionstore/store.go",
+      "sha256": "b3fff0a6c0710483d32412e8f6dc8cb0b166be0ac366c7b0d7e0927126412721"
+    },
+    {
+      "path": "internal/sessionstore/store_test.go",
+      "sha256": "621733b4c594d9d3308fcae17cf6371f3b78569964cb12fcddb7b185d29317cf"
+    }
+  ]
+}

@@ -94,3 +94,7 @@ mod tests {
         }
     }
 }
+
+/// Protected ACLs supplied at Windows object creation, before any payload write.
+#[cfg(windows)]
+pub use super::private_windows::PrivateSecurity;

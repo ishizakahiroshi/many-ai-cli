@@ -1,0 +1,99 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "status": "implementation_in_progress",
+  "implemented_components": [
+    {
+      "source": [
+        "internal/hub/approval_identity.go"
+      ],
+      "rust": [
+        "rust/src/approval/identity.rs"
+      ],
+      "tests": [
+        "candidate_identity_ignores_labels_order_and_reflow",
+        "marker_identity_and_corruption_classification",
+        "go_oracle_risk_summaries_and_native_detectors"
+      ]
+    },
+    {
+      "source": [
+        "internal/approval/summary.go",
+        "internal/provider/approval.go"
+      ],
+      "rust": [
+        "rust/src/approval/summary.rs"
+      ],
+      "tests": [
+        "risk_syntax_and_summary",
+        "provider_summary_masks_only_synthetic_secrets",
+        "go_oracle_risk_summaries_and_native_detectors"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_detector.go",
+        "internal/hub/approval_trigger_phrases.go"
+      ],
+      "rust": [
+        "rust/src/approval/detect.rs"
+      ],
+      "tests": [
+        "native_provider_shapes_shortcuts_feedback_and_notices",
+        "go_oracle_risk_summaries_and_native_detectors"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_marker.go",
+        "internal/hub/approval_marker_verdict.go",
+        "internal/hub/provider_feature_source.go"
+      ],
+      "rust": [
+        "rust/src/approval/marker.rs"
+      ],
+      "tests": [
+        "marker_identity_and_corruption_classification",
+        "approval_source_capabilities_resolution_misses_and_recovery"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_record.go",
+        "internal/hub/approval_identity.go",
+        "internal/hub/approval_text_question.go:vtQuestionAnsweredInLedger"
+      ],
+      "rust": [
+        "rust/src/approval/record.rs"
+      ],
+      "tests": [
+        "record_closure_precedes_reused_signature_insert",
+        "transcript_user_turn_allows_repeated_question",
+        "vt_answer_carries_without_ttl_while_latest_question_remains",
+        "native_record_blocks_only_vt_marker_while_visible",
+        "late_consumption_cannot_close_newer_record",
+        "ledger_restore_is_narrow_and_preserves_different_consumed_slot"
+      ]
+    },
+    {
+      "source": [
+        "internal/hub/approval_action.go:oneTapApprovalManager"
+      ],
+      "rust": [
+        "rust/src/approval/token.rs"
+      ],
+      "tests": [
+        "one_tap_tokens_bind_identity_epoch_action_and_expire_without_consuming_on_verify"
+      ]
+    }
+  ],
+  "pending_components": [
+    "approval_text_question.go full text-question detector and output-idle scheduling",
+    "approval marker suppression notice throttling/caller",
+    "bound action reserve/send/revalidate/nonce/commit actual input integration",
+    "approval auto/batch policy actual caller",
+    "provider transcript resolver and Codex thread-following",
+    "complete transcript poll -> detect -> wire -> ledger -> next poll real session integration",
+    "served existing Web approval UI acceptance"
+  ],
+  "note": "Unit/component results do not accept K05 without the actual session call chain."
+}

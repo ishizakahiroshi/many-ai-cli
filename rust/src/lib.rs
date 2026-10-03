@@ -12,3 +12,10 @@ pub mod hub;
 pub mod terminal;
 
 pub mod update;
+
+pub mod approval;
+pub mod storage;
+
+pub mod files;
+pub mod profile;
+pub mod routine;

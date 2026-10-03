@@ -3,3 +3,5 @@ pub mod input;
 pub mod replay;
 pub mod vt;
 pub mod width;
+
+pub mod events;

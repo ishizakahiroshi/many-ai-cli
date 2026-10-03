@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 15:22:58
+> 最終更新: 2026-10-03(土) 16:19:11
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
@@ -40,7 +40,7 @@ The following checkpoint is based on the published progress commit `f48c6086a2be
 | Initial instruction commit | 6b0fb8e198750245ef8b4b475fbac9070db0ac3e |
 | Progress checkpoint read before this supplement | f48c6086a2be662233f09d051373a716ca44ce6a; progress-only commit |
 | Implementation code SHA | Latest independently reviewed C1 code e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a; next C2/C3 checkpoint SHA recorded in subsequent receipt |
-| Reviewed code SHA / reviewer | e7c1c18ffed4bcd96fdf09fbdb103edfb6595f4a / independent Codex foundation re-review PASS; 103 tests/fmt/clippy and 63 regenerated decoder cases verified; subsequent code is not covered |
+| Reviewed code SHA / reviewer | C1 e7c1c18 PASS. C2/C3 a5f75c9 reviewed: 149 tests and corpora reproduced; bound-port P2 required repair, explanatory P3 corrected in b674b8c. Newer working source is not covered. |
 | Board update commit | Read actual commit from GitHub history, or record it in a later receipt; no self-reference |
 | Supplemental instruction revision | dots records the published revision it actually reads; supplement is not a new task |
 
@@ -283,3 +283,38 @@ Code checkpoint: [a5f75c9ced8bd10f36406c0472c4d3a3cc07e15c](https://github.com/i
 - Receipt correction: historical 756b281 physical lines 1999/2042/2049 name auth_handlers.go/pin_auth.go/relay_api.go. The prior prose misidentified a nearby nvidia_nim source-map entry; corrected above after direct historical-line verification. Hash recomputation and exact ignore scope were correct, and no ignored fingerprint changed.
 
 Continuing work is unstaged/unreviewed separately: SQLite repository and synthetic sequential Go/Rust cross-read, approval/transcript, handle-safe files/Git/attachments, profile/routine and HTTP transport. Full application/launcher/native/Rust CI/artifact/cutover gates remain pending.
+
+
+## 2026-10-03(土) 16:19:11 JST — persistence/files/approval slice frozen for validation
+
+Owner: dots integration owner with exclusive component/service lanes. Current code parent is a5f75c9; b674b8c is the progress-only correction. The independent reviewer reproduced 149 tests/fmt/clippy and terminal/HTTP/time corpora at a5f75c9, and found the HTTP authority incorrectly used the production root's default port. This P2 is repaired below; its immutable re-review is still required.
+
+Frozen scope for the next code checkpoint:
+- SQLite: all 34 Store methods, migrations/WAL/FTS/deadlines, queue/drain/generation reset/prune and private trial paths. Eleven unit and sixteen integration tests include normal sequential Rust→Go→Rust read/write continuation. The Go source is verified against a committed SHA-256 manifest copied to an isolated module, so shallow checkouts/plain archives do not silently substitute mutable Go source. This is synthetic compatibility, not real-data backup/restore acceptance.
+- Approval/reader components: fifteen approval tests with actual Go native/risk/summary cases, fifteen bounded transcript/parser tests, and two ordered event-bus tests. Actual single-session state owner, text-question/poll/ledger/action/caller integration remains unfinished; provider parser differential gaps remain explicit.
+- Files/Git/attachments: thirty-four focused tests cover scoped reads, descriptor-anchored mutation, synthetic races, metadata/time/ranges, bounded held-file streaming, Git operations and attachment policies. No real repository remote or user files used. Windows ancestor pins deny write/delete sharing; private creation receives a protected ACL at create time. Full Windows metadata source check of this adapter passed separately, but native reparse/ACL behavior remains unaccepted.
+- Profiles/provider registry: sixteen tests including first seed, owned-hook removal while preserving user content, existing/default-wins, private atomic writes, malformed preservation, layered registry/hash/diagnostics, and raw JSON unknown/Unicode behavior. Memo/images/schedule: seven tests, including 223 Go modern/future schedule samples. Entire service/router/runtime coverage remains partial.
+- HTTP: actual bound-port authority is explicit (configured/fallback port and trial mismatch fixtures), fixing review P2. HTTP1 transport has actual 10-second header-timeout and auth-before-body/first-value/held-file tests. Full request time now controls fractional PIN lockout; cookie expiry intentionally stays seconds. Hub tests report 32 passes. No WS/complete SessionCore claim.
+- Shared additions: ordered raw JSON members/arrays and scalar/mtime decoding; injected effect/transport/event/persistence ports and source-grounded lifecycle types; no-deadline timeout=0 with cancellation and overflow rejection before spawning; handle-based/creation-time Windows private security descriptor. These are new APIs requiring caller and independent review.
+
+Deliberate differences and pending source gaps stay explicit: full storage shutdown drain, split string-sequence recovery and unsupported timestamp range protection were already identified. The routine IANA data versions differ (Rust 2025b / pinned Go 2025c); only the sampled modern/future cases are compared. Notify/voice nil-list and publish-before-save-failure semantics are being reconciled in a later slice on the shared store, not a shadow configuration.
+
+Validation in progress:
+- The registered working-tree full test run passed 281 tests, zero ignored. The first full clippy run failed on response size/style findings and an intentionally exclusive test lock; owners corrected implementation/style and retained a narrowly reasoned expectation for the barrier test rather than weakening it.
+- The index was exported to a separate immutable snapshot; every staged file's Git blob hash was rechecked against the export. In-progress SessionEngine/headless/voice/notify source and tests are excluded from this checkpoint.
+- First snapshot link exited 101 with rust-lld signal 7. Filesystem verification found the task's 32GB overlay full, zero available; this was an environmental link failure, not a completed failing test. Only generated failed-snapshot/obsolete package artifacts were cleaned through cargo clean; source, fixtures, failure logs, dependency caches and Git were preserved. Free space recovered to 13GB.
+- Exact frozen snapshot rerun uses process-local CARGO_INCREMENTAL=0, CARGO_PROFILE_DEV_DEBUG=0, CARGO_PROFILE_TEST_DEBUG=0 and CARGO_BUILD_JOBS=2. Assertions/tests are not disabled. Final results are recorded below when complete.
+- The expanded locked dependency set has 277 packages / 87 matching public RustSec advisory-version rows, all patched/unaffected at the recorded snapshot. This is not a claim of complete vendor/native/license audit.
+
+Next: finish frozen validation, publish this bounded source checkpoint, obtain independent re-review (especially P2, persistence/capability/crypto boundaries), then release waiting integration modules. Launcher and both full CLI runtimes, all remaining routes/WS/session lifecycle, clean native Rust CI/artifacts, copied-data/manual/stability and cutover remain pending. No daily Hub, real provider, real remote, user data, merge or release was used.
+
+### Frozen-snapshot final results (2026-10-03 16:33 JST)
+
+- `cargo fmt --manifest-path rust/Cargo.toml -- --check`: exit 0.
+- `cargo test --locked --offline --manifest-path rust/Cargo.toml`: **283 passed, 0 failed, 0 ignored**, including doctests and sequential synthetic Go/Rust SQLite readback.
+- `cargo clippy --locked --offline --manifest-path rust/Cargo.toml --all-targets -- -D warnings`: exit 0.
+- `go run github.com/securego/gosec/v2/cmd/gosec@v2.27.1 -quiet -severity high -confidence high ./...` and `go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...`: exit 0 from the staged export with process-local `GOFLAGS=-buildvcs=false` (archive has no VCS metadata).
+- The successful rerun used the same frozen sources with the compact build settings above. Generated snapshot target was about 936MB and about 12GB remained free afterward. Original disk-full linker logs were retained; no source/fixture/Git cleanup occurred.
+- Staged structural secret scan initially identified only synthetic boundary literals (private IPv4 policy inputs, fake URL userinfo/home paths, and GitHub's public SSH service principal). Unnecessary fixture identifiers were changed to reserved example/RFC5737 values; mandatory policy cases/public principal carry exact-line explanatory scanner annotations. No default rule, broad path exclusion, production address policy or assertion was weakened. Rerun: exit 0, 82 scanned text files; private watchlists are unavailable here. This is separate from full-history gitleaks in remote CI.
+
+The registered checkpoint is ready for immutable review; the new review and remote CI are pending. It does not register the still-unfinished session/WS/headless/voice/notification runtime modules. Main application and launcher completion remain open.

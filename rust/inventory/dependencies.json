@@ -23,8 +23,8 @@
       "official_source": "https://docs.rs/crate/serde/1.0.229",
       "registry_checksum": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "serde_json",
@@ -37,8 +37,8 @@
       "official_source": "https://docs.rs/crate/serde_json/1.0.151",
       "registry_checksum": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "base64",
@@ -49,8 +49,8 @@
       "official_source": "https://docs.rs/crate/base64/0.22.1",
       "registry_checksum": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "getrandom",
@@ -61,8 +61,8 @@
       "official_source": "https://docs.rs/crate/getrandom/0.4.3",
       "registry_checksum": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "url",
@@ -73,8 +73,8 @@
       "official_source": "https://docs.rs/crate/url/2.5.8",
       "registry_checksum": "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "serde-saphyr",
@@ -85,8 +85,8 @@
       "official_source": "https://docs.rs/crate/serde-saphyr/1.3.0",
       "registry_checksum": "b8050abb251097357e24aff63ba2c52a6309ecb7d23a5474023df960a02694d8",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "tokio",
@@ -106,8 +106,8 @@
       "official_source": "https://docs.rs/crate/tokio/1.53.1",
       "registry_checksum": "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed",
       "license": "MIT",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "rusqlite",
@@ -122,8 +122,8 @@
       "official_source": "https://docs.rs/crate/rusqlite/0.40.2",
       "registry_checksum": "23f2a97da3e3873c73cb2a2e71b35c40ff95e0b1eefa8d72d8499a6928c3b5b3",
       "license": "MIT",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "portable-pty",
@@ -134,8 +134,8 @@
       "official_source": "https://docs.rs/crate/portable-pty/0.9.0",
       "registry_checksum": "b4a596a2b3d2752d94f51fac2d4a96737b8705dddd311a32b9af47211f08671e",
       "license": "MIT",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "axum",
@@ -149,8 +149,8 @@
       "official_source": "https://docs.rs/crate/axum/0.8.9",
       "registry_checksum": "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90",
       "license": "MIT",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "bcrypt",
@@ -161,8 +161,8 @@
       "official_source": "https://docs.rs/crate/bcrypt/0.19.3",
       "registry_checksum": "a0cd0bd35a28836d528d2b58ad499bc3c5641d59379421b1be9eeb0c2f2b912a",
       "license": "MIT",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "hmac",
@@ -173,8 +173,8 @@
       "official_source": "https://docs.rs/crate/hmac/0.13.0",
       "registry_checksum": "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "sha2",
@@ -185,8 +185,8 @@
       "official_source": "https://docs.rs/crate/sha2/0.11.0",
       "registry_checksum": "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "toml_edit",
@@ -197,8 +197,8 @@
       "official_source": "https://docs.rs/crate/toml_edit/0.25.15+spec-1.1.0",
       "registry_checksum": "1340ea94a5856333492c9064b02c778b191dd2c853778d9609debdcdfea3a614",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "subtle",
@@ -209,8 +209,8 @@
       "official_source": "https://docs.rs/crate/subtle/2.6.1",
       "registry_checksum": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292",
       "license": "BSD-3-Clause",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "regex",
@@ -221,8 +221,8 @@
       "official_source": "https://docs.rs/crate/regex/1.13.1",
       "registry_checksum": "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "chrono",
@@ -236,8 +236,108 @@
       "official_source": "https://docs.rs/crate/chrono/0.4.45",
       "registry_checksum": "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "chrono-tz",
+      "version": "0.10.4",
+      "scope": "dependencies",
+      "features": [],
+      "default_features": true,
+      "official_source": "https://docs.rs/crate/chrono-tz/0.10.4",
+      "registry_checksum": "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "http-body",
+      "version": "1.1.0",
+      "scope": "dependencies",
+      "features": [],
+      "default_features": true,
+      "official_source": "https://docs.rs/crate/http-body/1.1.0",
+      "registry_checksum": "ca2a8f2913ee65f60facd6a5905613afaa448497a0230cc41ce022d93290bc2c",
+      "license": "MIT",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "futures-util",
+      "version": "0.3.34",
+      "scope": "dependencies",
+      "features": [
+        "sink"
+      ],
+      "default_features": true,
+      "official_source": "https://docs.rs/crate/futures-util/0.3.34",
+      "registry_checksum": "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "httpdate",
+      "version": "1.0.3",
+      "scope": "dependencies",
+      "features": [],
+      "default_features": true,
+      "official_source": "https://docs.rs/crate/httpdate/1.0.3",
+      "registry_checksum": "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "hyper",
+      "version": "1.11.1",
+      "scope": "dependencies",
+      "features": [
+        "server",
+        "http1"
+      ],
+      "default_features": true,
+      "official_source": "https://docs.rs/crate/hyper/1.11.1",
+      "registry_checksum": "27b501faa50e7a26c3d3560ca625132f4078a17771f4810baf70475ae48cbe43",
+      "license": "MIT",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "hyper-util",
+      "version": "0.1.21",
+      "scope": "dependencies",
+      "features": [
+        "server",
+        "http1",
+        "tokio",
+        "service"
+      ],
+      "default_features": true,
+      "official_source": "https://docs.rs/crate/hyper-util/0.1.21",
+      "registry_checksum": "ddc03d96684f9226b8a787cdb71488417b53ab5ea8fdb1dac946cb9431cc8bff",
+      "license": "MIT",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "reqwest",
+      "version": "0.13.5",
+      "scope": "dependencies",
+      "features": [
+        "rustls",
+        "json",
+        "query",
+        "stream",
+        "multipart"
+      ],
+      "default_features": false,
+      "official_source": "https://docs.rs/crate/reqwest/0.13.5",
+      "registry_checksum": "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029",
+      "license": "MIT OR Apache-2.0",
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "tempfile",
@@ -248,8 +348,8 @@
       "official_source": "https://docs.rs/crate/tempfile/3.27.0",
       "registry_checksum": "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "libc",
@@ -260,8 +360,8 @@
       "official_source": "https://docs.rs/crate/libc/0.2.190",
       "registry_checksum": "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     },
     {
       "name": "windows-sys",
@@ -281,8 +381,8 @@
       "official_source": "https://docs.rs/crate/windows-sys/0.61.2",
       "registry_checksum": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc",
       "license": "MIT OR Apache-2.0",
-      "advisory_review": "See advisory-receipt.json: selected version is patched/unaffected for matching advisories at the recorded database revision; unknown-vulnerability risk remains.",
-      "target_acceptance": "Linux source/tests; native all-target build/runtime and license/SBOM acceptance pending"
+      "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
+      "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
     }
   ],
   "notes": [
@@ -292,9 +392,12 @@
     "Official 2026-08-20 arrayref supply-chain incident packages/versions are absent from this lockfile; check again when adding dependencies.",
     "C2/C3 pins were verified against current official crates.io metadata and fetched upstream source. rusqlite bundled+backup+hooks selects libsqlite3-sys 0.38.2 / SQLite 3.53.2; ENABLE_FTS5 is set by upstream build.rs and a synthetic external-content query passes.",
     "Expanded Windows check reaches native SQLite compilation but cannot find MSVC lib.exe in the Linux executor. Native CI toolchains are required; earlier pure-Rust C1 cross-target passes do not cover the new native dependency.",
-    "Chrono is pinned with std,clock and default-features=false. Shared helpers preserve Go seconds/nanosecond precision and runtime-local offset; routine IANA timezone scheduling is a separate integration."
+    "Chrono is pinned with std,clock and default-features=false. Shared helpers preserve Go seconds/nanosecond precision and runtime-local offset; routine IANA timezone scheduling is a separate integration.",
+    "Reqwest 0.13.5 is pinned without default features, using rustls/json/query/stream/multipart. Its AWS-LC dependency compiled on Linux; native runtime, upstream library notices and clean target artifacts remain pending.",
+    "HTTP server transport explicitly uses Hyper HTTP1 with a 10-second header timeout; no implicit cleartext HTTP2 expansion. futures-util sink is explicit for separated WS readers/writers.",
+    "chrono-tz 0.10.4 embeds IANA 2025b; pinned Go 1.26.8 ships 2025c. Official IANA 2025c NEWS changes historical Baja California DST in 1953 and 1961\u20131975. The 223 modern/future schedule samples pass; whole-tzdb/historical equivalence is not accepted. Source: https://data.iana.org/time-zones/tzdb-2025c/NEWS"
   ],
-  "lockfile_sha256": "152c2820506ba69a68f877c77e579b278a1aa31c197f5eb34822dc118bcbf3e2",
+  "lockfile_sha256": "49a7e28e984edb7a0e858dfdbee1ead1b9e75b3b24d7547eccf02f9cc134183d",
   "toolchain_security": {
     "source": "https://blog.rust-lang.org/2026/05/25/cve-2026-5223/",
     "assessment": "The advisory applies to pre-1.96 Cargo using third-party registries. This locked build uses crates.io only, which the official advisory explicitly excludes; no alternate registry is configured. Reassess before changing registry sources.",

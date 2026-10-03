@@ -1181,12 +1181,17 @@ pub struct OutputChunk {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SessionEnd {
+    /// Wrapper-declared state remains independent of exit code/signal.
+    pub declared_state: String,
     pub outcome: ExitOutcome,
     pub reason: String,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StopReason {
     User,
+    KillAll,
+    IdleTimeout,
+    Dismissed,
     ParentEnded,
     StartupFailed,
     Timeout,
@@ -1315,6 +1320,30 @@ pub trait SessionCore:
         active: Option<LiveSessionId>,
     ) -> Result<UiPriming, SessionError>;
     fn finish_ui_priming(&self, ui: UiBinding) -> Result<CoreEffects, SessionError>;
+    /// Source: ui_active_session and the pre-enqueue input ownership claim.
+    /// A missing/zero size still changes ownership and never creates a prompt epoch.
+    fn claim_ui_session(
+        &self,
+        ui: UiBinding,
+        session: LiveSessionId,
+        size: Option<TerminalSize>,
+        now: SystemTime,
+    ) -> Result<CoreEffects, SessionError>;
+    /// Advisory after input was already sent; validates record/epoch without resending.
+    fn consume_approval(
+        &self,
+        ui: UiBinding,
+        message: super::Message,
+        now: SystemTime,
+    ) -> Result<CoreEffects, SessionError>;
+    /// Replies from the current immutable record; never re-detect from a stale UI tail.
+    fn resync_approval(
+        &self,
+        ui: UiBinding,
+        session: LiveSessionId,
+        now: SystemTime,
+    ) -> Result<CoreEffects, SessionError>;
+
     fn detach_ui(&self, ui: UiBinding) -> CoreEffects;
     /// Invalidates queued UI work/connections while retaining wrapper bindings.
     fn invalidate_all_ui(&self) -> CoreEffects;
@@ -1723,6 +1752,40 @@ pub enum CoreEffect {
 /// new record reusing its sig; registered must precede outbound wrapper effects.
 #[derive(Default)]
 pub struct CoreEffects(pub Vec<CoreEffect>);
+
+/// C3 owns socket writers. A full binding is checked immediately before sending;
+/// transport writes are not PTY acknowledgement or provider acceptance.
+pub trait WrapperTransport: Send + Sync {
+    fn send<'a>(
+        &'a self,
+        binding: SessionBinding,
+        message: super::Message,
+    ) -> CoreFuture<'a, Result<(), SessionError>>;
+}
+/// Earlier effects were applied in order. The failed effect may have performed
+/// partial external I/O; never retry the whole batch on this result.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CoreEffectFailure {
+    pub index: usize,
+    pub error: SessionError,
+}
+/// C3 applies ordered socket/persistence/notification effects after C2 releases
+/// state locks. Async input/action operations inject this same sink rather than
+/// silently dropping their persistence or notification side effects.
+pub trait CoreEffectSink: Send + Sync {
+    fn apply<'a>(&'a self, effects: CoreEffects) -> CoreFuture<'a, Result<(), CoreEffectFailure>>;
+}
+/// Internal publisher for the very same bus observed by SessionCore::subscribe.
+/// C2 creates this handle with its bus before constructing the C3 effect driver.
+/// Only CoreEffect::Notify application publishes, after all earlier effects.
+pub trait CoreEventPublisher: Send + Sync {
+    fn publish(&self, event: CoreEvent) -> Result<EventSequence, SessionError>;
+}
+/// C2's ordered journal + SQLite adapter. Its state contains owned writer handles,
+/// not a competing session map. C3 delegates Persist here and propagates errors.
+pub trait PersistenceEffectSink: Send + Sync {
+    fn apply(&self, effect: PersistenceEffect) -> Result<(), SessionError>;
+}
 
 /// Source: orchestration.go spawnChildRequest. Claims confer no authority.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

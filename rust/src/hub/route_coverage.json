@@ -970,30 +970,34 @@
     {
       "path": "/api/memos",
       "source_handler": "handleMemos",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
     },
     {
       "path": "/api/memos/",
       "source_handler": "handleMemos",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
     },
     {
       "path": "/api/memo-images",
       "source_handler": "handleMemoImages",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
     },
     {
       "path": "/api/memo-images/",
       "source_handler": "handleMemoImages",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs + hub/router.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*",
+      "remaining": "Synthetic persistence/image fixtures passed; full HTTP/core/workspace wiring, native ACL and user acceptance pending"
     },
     {
       "path": "/api/auto-approval/status",
@@ -1599,9 +1603,9 @@
         "DELETE"
       ],
       "source_handler": "handleMemos",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*"
     },
     {
       "pattern": "/api/memo-images/{basename}",
@@ -1609,9 +1613,9 @@
         "GET"
       ],
       "source_handler": "handleMemoImages",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/routine/memo.rs",
+      "fixture": "rust/src/routine/tests.rs::memo_*"
     }
   ]
 }

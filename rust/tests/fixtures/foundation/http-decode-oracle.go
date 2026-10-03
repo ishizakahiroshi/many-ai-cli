@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"strings"
+	"time"
 )
 
 type nested struct {
@@ -14,13 +15,15 @@ type nested struct {
 	Text    string `json:"text"`
 }
 type body struct {
-	Count  int      `json:"count"`
-	Nested *nested  `json:"nested"`
-	Names  []string `json:"names"`
+	Mtime  time.Time `json:"mtime"`
+	Count  int       `json:"count"`
+	Nested *nested   `json:"nested"`
+	Names  []string  `json:"names"`
 }
 
 func main() {
 	inputs := []string{
+		`{"mtime":""}`, `{"mtime":"invalid","mtime":"2026-10-03T01:02:03Z"}`, `{"mtime":"2026-10-03T01:02:03Z","mtime":null}`, `{"mtime":null}`, `{"mtime":7,"mtime":null}`,
 		`{}`, `null`, `{"COUNT":3,"unknown":1e9999}`, `{"count":1} {"count":2}`, `{"count":1} malformed`,
 		`nullgarbage`, `{"count":1,"count":null}`, `{"count":"bad","count":1}`,
 		`{"nested":{"enabled":true},"NESTED":{"text":"preserved"}}`,

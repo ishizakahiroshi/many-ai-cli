@@ -428,3 +428,117 @@ fn service_pin_login_ignores_set_pin_fields_as_unknown() {
     r.body = br#"{"pin":"123456","clear":"unknown-to-login"}"#.to_vec();
     assert_eq!(auth.login(&r, &cfg, 1000).status, 200);
 }
+
+#[test]
+fn service_query_ignores_go_invalid_pairs_before_cookie_fallback() {
+    let mut r = request();
+    r.headers
+        .push(("Cookie".into(), format!("{TOKEN_COOKIE}=synthetic")));
+    for query in [
+        "token=bad;pair",
+        "token=%ZZ",
+        "ignored=bad;pair&token=synthetic",
+    ] {
+        r.query = query.into();
+        assert_eq!(request_token(&r), "synthetic", "{query}");
+    }
+}
+
+#[test]
+fn service_production_uses_actual_bound_port_for_host_origin_and_rotation_url() {
+    for (configured, bound) in [(48888, 48888), (48888, 48889)] {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = crate::config::RuntimePaths::production(dir.path()).unwrap();
+        assert_eq!(paths.port(), 47777);
+        let mut cfg = config();
+        cfg.hub.port = configured;
+        let store =
+            std::sync::Arc::new(crate::config::ConfigStore::new(paths.clone(), cfg).unwrap());
+        let router = super::ServiceRouter::isolated_at_port(store, paths, bound).unwrap();
+        let mut r = request();
+        r.path = "/api/input-config".into();
+        r.method = "GET".into();
+        r.host = format!("127.0.0.1:{bound}");
+        assert_eq!(router.handle(&r, 1000).response.status, 200);
+        r.host = "127.0.0.1:47777".into();
+        assert_eq!(router.handle(&r, 1000).response.status, 403);
+        r.host = format!("127.0.0.1:{bound}");
+        r.method = "POST".into();
+        r.body = br#"{"deferred_enter_ms":0}"#.to_vec();
+        r.headers
+            .push(("Origin".into(), format!("http://127.0.0.1:{bound}")));
+        assert_eq!(router.handle(&r, 1000).response.status, 200);
+        r.headers[0].1 = "http://127.0.0.1:47777".into();
+        assert_eq!(router.handle(&r, 1000).response.status, 403);
+        r.headers.clear();
+        let rotated = router
+            .auth
+            .rotate(&r, &router.config, i64::from(router.bound_port()), 1000)
+            .unwrap();
+        assert!(
+            json_response(&rotated)["hub_url"]
+                .as_str()
+                .unwrap()
+                .starts_with(&format!("http://127.0.0.1:{bound}/?token="))
+        );
+    }
+}
+#[test]
+fn service_trial_bound_port_must_preserve_explicit_isolation() {
+    let (_dir, router) = router();
+    assert!(
+        super::ServiceRouter::isolated_at_port(
+            router.config.clone(),
+            router.paths.clone(),
+            router.paths.port() + 1
+        )
+        .is_err()
+    );
+    assert!(
+        super::ServiceRouter::isolated_at_port(router.config.clone(), router.paths.clone(), 0)
+            .is_err()
+    );
+}
+
+#[test]
+fn service_pin_fractional_lockout_does_not_unlock_or_round_early() {
+    use std::time::{Duration, UNIX_EPOCH};
+    let start = UNIX_EPOCH + Duration::new(1000, 900_000_000);
+    let mut limiter = super::pin::Limiter::default();
+    for _ in 0..5 {
+        assert_eq!(limiter.begin_at("ip", start), 0);
+    }
+    assert_eq!(limiter.retry_after_at("ip", start), 61);
+    assert_eq!(
+        limiter.retry_after_at("ip", start + Duration::from_millis(100)),
+        60
+    );
+    assert_eq!(
+        limiter.begin_at("ip", start + Duration::from_millis(59_999)),
+        1
+    );
+    assert_eq!(limiter.begin_at("ip", start + Duration::from_secs(60)), 0);
+    let auth = super::pin::AuthService::default();
+    let mut cfg = config();
+    cfg.remote_pin_hash = bcrypt::hash("123456", 4).unwrap();
+    cfg.auth_cookie_secret = "synthetic-secret".into();
+    let mut r = request();
+    r.remote_addr = "203.0.113.1:5000".into();
+    r.body = br#"{"pin":"654321"}"#.to_vec();
+    for _ in 0..4 {
+        assert_eq!(auth.login_at(&r, &cfg, start).status, 401);
+    }
+    assert_eq!(auth.login_at(&r, &cfg, start).status, 429);
+    let status = json_response(&auth.status_at(&r, &cfg, start + Duration::from_millis(100)));
+    assert_eq!(status["retry_after"], 60);
+    assert_eq!(
+        auth.login_at(&r, &cfg, start + Duration::from_millis(59_999))
+            .status,
+        429
+    );
+    assert_eq!(
+        auth.login_at(&r, &cfg, start + Duration::from_secs(60))
+            .status,
+        401
+    );
+}

@@ -32,10 +32,20 @@ impl Request {
             .unwrap_or("")
     }
     pub fn query(&self, name: &str) -> String {
-        url::form_urlencoded::parse(self.query.as_bytes())
-            .find(|(k, _)| k == name)
-            .map(|(_, v)| v.into_owned())
-            .unwrap_or_default()
+        // net/url.ParseQuery ignores malformed pairs (including unescaped
+        // semicolons), rather than turning them into a token which shadows a
+        // valid Authorization header or cookie.
+        for pair in self.query.split('&') {
+            if pair.contains(';') || !valid_query_escapes(pair.as_bytes()) {
+                continue;
+            }
+            if let Some((key, value)) = url::form_urlencoded::parse(pair.as_bytes()).next()
+                && key == name
+            {
+                return value.into_owned();
+            }
+        }
+        String::new()
     }
     pub fn cookie(&self, name: &str) -> Option<&str> {
         self.headers
@@ -48,12 +58,26 @@ impl Request {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
+pub struct StreamedFile {
+    pub file: std::fs::File,
+    pub ranges: Vec<StreamedRange>,
+    pub suffix: Vec<u8>,
+}
+#[derive(Debug)]
+pub struct StreamedRange {
+    pub prefix: Vec<u8>,
+    pub offset: u64,
+    pub len: u64,
+}
+
+#[derive(Debug)]
 pub struct Response {
     pub status: u16,
     pub headers: BTreeMap<String, String>,
     pub cookies: Vec<String>,
     pub body: Vec<u8>,
+    pub file: Option<Box<StreamedFile>>,
 }
 impl Response {
     pub fn bytes(status: u16, content_type: &str, body: impl Into<Vec<u8>>) -> Self {
@@ -62,6 +86,7 @@ impl Response {
             headers: BTreeMap::new(),
             cookies: Vec::new(),
             body: body.into(),
+            file: None,
         };
         response
             .headers
@@ -110,6 +135,23 @@ impl Response {
             self.headers.insert(name.into(), value);
         }
     }
+}
+fn valid_query_escapes(bytes: &[u8]) -> bool {
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            if i + 2 >= bytes.len()
+                || !bytes[i + 1].is_ascii_hexdigit()
+                || !bytes[i + 2].is_ascii_hexdigit()
+            {
+                return false;
+            }
+            i += 3;
+        } else {
+            i += 1;
+        }
+    }
+    true
 }
 pub fn content_security_policy(hosts: &[String]) -> String {
     let mut src = "'self' ws://127.0.0.1:* ws://localhost:*".to_string();

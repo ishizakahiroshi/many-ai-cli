@@ -66,6 +66,8 @@ pub struct ProcessPlan {
     /// Inherit the parent then set/remove individual variables. Never mutate the system environment.
     pub env: BTreeMap<OsString, Option<OsString>>,
     pub stdin: Vec<u8>,
+    /// Zero explicitly means no deadline (Go headless timeout=0 / long-lived SSH).
+    /// Cancellation, owner drop and bounded pipe draining still apply.
     pub timeout: Duration,
     pub output_cap: usize,
     pub pipe_drain_timeout: Duration,
@@ -248,6 +250,26 @@ async fn run_observed(
             outcome: ExitOutcome::Cancelled,
         });
     }
+    let deadline = if plan.timeout.is_zero() {
+        None
+    } else {
+        Some(
+            tokio::time::Instant::now()
+                .checked_add(plan.timeout)
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "process deadline is outside the supported range",
+                    )
+                })?,
+        )
+    };
+    let deadline_wait = async move {
+        match deadline {
+            Some(at) => tokio::time::sleep_until(at).await,
+            None => std::future::pending::<()>().await,
+        }
+    };
     let mut cmd = Command::new(&plan.executable);
     cmd.args(&plan.args)
         .current_dir(&plan.cwd)
@@ -338,7 +360,7 @@ async fn run_observed(
             ExitOutcome::Exited{code:status.code(),signal}
         },
         _=cancel.cancelled()=>ExitOutcome::Cancelled,
-        _=tokio::time::sleep(plan.timeout)=>ExitOutcome::TimedOut,
+        _=deadline_wait=>ExitOutcome::TimedOut,
     };
     if !matches!(outcome, ExitOutcome::Exited { .. }) {
         #[cfg(unix)]
@@ -754,5 +776,55 @@ mod streaming_tests {
         let (mut process, _) = ManagedProcess::spawn_owned(missing, 2);
         assert!(process.wait().await.is_err());
         assert!(process.wait().await.is_err());
+    }
+}
+
+#[cfg(all(test, unix))]
+mod deadline_tests {
+    use super::*;
+    fn plan(script: &str, timeout: Duration) -> ProcessPlan {
+        ProcessPlan {
+            executable: "/bin/sh".into(),
+            args: vec!["-c".into(), script.into()],
+            cwd: std::env::temp_dir(),
+            env: BTreeMap::new(),
+            stdin: vec![],
+            timeout,
+            output_cap: 1024,
+            pipe_drain_timeout: Duration::from_millis(100),
+        }
+    }
+    #[tokio::test]
+    async fn zero_deadline_waits_for_exit_but_can_be_cancelled() {
+        let output = run_capped(
+            &plan("sleep 0.02; printf done", Duration::ZERO),
+            &Cancellation::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(output.stdout, b"done");
+        assert!(matches!(
+            output.outcome,
+            ExitOutcome::Exited { code: Some(0), .. }
+        ));
+        let (mut owner, mut events) =
+            ManagedProcess::spawn_owned(plan("sleep 30", Duration::ZERO), 4);
+        assert!(matches!(
+            events.recv().await.unwrap(),
+            ProcessEvent::Started { .. }
+        ));
+        owner.close();
+        let output = tokio::time::timeout(Duration::from_secs(2), owner.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(output.outcome, ExitOutcome::Cancelled);
+    }
+    #[tokio::test]
+    async fn impossible_deadline_fails_before_spawn_without_panicking() {
+        let error = run_capped(&plan("exit 0", Duration::MAX), &Cancellation::default())
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 }

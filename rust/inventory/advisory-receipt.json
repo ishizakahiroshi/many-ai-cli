@@ -1,9 +1,9 @@
 {
   "source": "https://github.com/RustSec/advisory-db",
   "revision": "f8dee89e1b2f2f1eaf548312df7655fe5202a302",
-  "cargo_lock_sha256": "152c2820506ba69a68f877c77e579b278a1aa31c197f5eb34822dc118bcbf3e2",
+  "cargo_lock_sha256": "49a7e28e984edb7a0e858dfdbee1ead1b9e75b3b24d7547eccf02f9cc134183d",
   "method": "Exact resolved package/version lookup in official advisory database with semver patched/unaffected comparisons; not cargo-audit and not a guarantee against unknown vulnerabilities.",
-  "package_count": 204,
+  "package_count": 277,
   "matched_advisory_rows": [
     {
       "package": "anyhow",
@@ -14,6 +14,56 @@
         ">= 1.0.103"
       ],
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/anyhow/RUSTSEC-2026-0190.md"
+    },
+    {
+      "package": "aws-lc-sys",
+      "version": "0.45.0",
+      "advisory": "RUSTSEC-2026-0044",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.39.0"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/aws-lc-sys/RUSTSEC-2026-0044.md"
+    },
+    {
+      "package": "aws-lc-sys",
+      "version": "0.45.0",
+      "advisory": "RUSTSEC-2026-0045",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.38.0"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/aws-lc-sys/RUSTSEC-2026-0045.md"
+    },
+    {
+      "package": "aws-lc-sys",
+      "version": "0.45.0",
+      "advisory": "RUSTSEC-2026-0046",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.38.0"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/aws-lc-sys/RUSTSEC-2026-0046.md"
+    },
+    {
+      "package": "aws-lc-sys",
+      "version": "0.45.0",
+      "advisory": "RUSTSEC-2026-0047",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.38.0"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/aws-lc-sys/RUSTSEC-2026-0047.md"
+    },
+    {
+      "package": "aws-lc-sys",
+      "version": "0.45.0",
+      "advisory": "RUSTSEC-2026-0048",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.39.0"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/aws-lc-sys/RUSTSEC-2026-0048.md"
     },
     {
       "package": "axum-core",
@@ -84,6 +134,16 @@
         ">= 1.11.1"
       ],
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/bytes/RUSTSEC-2026-0007.md"
+    },
+    {
+      "package": "chacha20",
+      "version": "0.10.2",
+      "advisory": "RUSTSEC-2019-0029",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.2.3"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/chacha20/RUSTSEC-2019-0029.md"
     },
     {
       "package": "chrono",
@@ -326,12 +386,72 @@
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/once_cell/RUSTSEC-2019-0017.md"
     },
     {
+      "package": "quinn",
+      "version": "0.11.12",
+      "advisory": "RUSTSEC-2021-0035",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.7.0"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/quinn/RUSTSEC-2021-0035.md"
+    },
+    {
+      "package": "quinn-proto",
+      "version": "0.11.19",
+      "advisory": "RUSTSEC-2023-0063",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.10.5"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/quinn-proto/RUSTSEC-2023-0063.md"
+    },
+    {
+      "package": "quinn-proto",
+      "version": "0.11.19",
+      "advisory": "RUSTSEC-2024-0373",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.11.7"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/quinn-proto/RUSTSEC-2024-0373.md"
+    },
+    {
+      "package": "quinn-proto",
+      "version": "0.11.19",
+      "advisory": "RUSTSEC-2026-0037",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.11.14"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/quinn-proto/RUSTSEC-2026-0037.md"
+    },
+    {
+      "package": "quinn-proto",
+      "version": "0.11.19",
+      "advisory": "RUSTSEC-2026-0185",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.11.15"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/quinn-proto/RUSTSEC-2026-0185.md"
+    },
+    {
       "package": "rand",
       "version": "0.9.5",
       "advisory": "RUSTSEC-2026-0097",
       "classification": "patched_or_unaffected",
       "matching_safe_ranges": [
         "< 0.10.0, >= 0.9.3"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rand/RUSTSEC-2026-0097.md"
+    },
+    {
+      "package": "rand",
+      "version": "0.10.3",
+      "advisory": "RUSTSEC-2026-0097",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.10.1"
       ],
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rand/RUSTSEC-2026-0097.md"
     },
@@ -356,6 +476,26 @@
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rand_core/RUSTSEC-2021-0023.md"
     },
     {
+      "package": "rand_core",
+      "version": "0.10.1",
+      "advisory": "RUSTSEC-2019-0035",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.4.2"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rand_core/RUSTSEC-2019-0035.md"
+    },
+    {
+      "package": "rand_core",
+      "version": "0.10.1",
+      "advisory": "RUSTSEC-2021-0023",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.6.2"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rand_core/RUSTSEC-2021-0023.md"
+    },
+    {
       "package": "regex",
       "version": "1.13.1",
       "advisory": "RUSTSEC-2022-0013",
@@ -364,6 +504,26 @@
         ">= 1.5.5"
       ],
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/regex/RUSTSEC-2022-0013.md"
+    },
+    {
+      "package": "ring",
+      "version": "0.17.14",
+      "advisory": "RUSTSEC-2025-0009",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.17.12"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/ring/RUSTSEC-2025-0009.md"
+    },
+    {
+      "package": "ring",
+      "version": "0.17.14",
+      "advisory": "RUSTSEC-2025-0010",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.17"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/ring/RUSTSEC-2025-0010.md"
     },
     {
       "package": "rusqlite",
@@ -384,6 +544,96 @@
         ">= 0.26.2"
       ],
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rusqlite/RUSTSEC-2021-0128.md"
+    },
+    {
+      "package": "rustls",
+      "version": "0.23.45",
+      "advisory": "RUSTSEC-2024-0336",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.23.5"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls/RUSTSEC-2024-0336.md"
+    },
+    {
+      "package": "rustls",
+      "version": "0.23.45",
+      "advisory": "RUSTSEC-2024-0399",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.23.18"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls/RUSTSEC-2024-0399.md"
+    },
+    {
+      "package": "rustls",
+      "version": "0.23.45",
+      "advisory": "RUSTSEC-2026-0285",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.23.45"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls/RUSTSEC-2026-0285.md"
+    },
+    {
+      "package": "rustls-webpki",
+      "version": "0.103.15",
+      "advisory": "RUSTSEC-2023-0053",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.101.4"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls-webpki/RUSTSEC-2023-0053.md"
+    },
+    {
+      "package": "rustls-webpki",
+      "version": "0.103.15",
+      "advisory": "RUSTSEC-2026-0049",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.103.10"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls-webpki/RUSTSEC-2026-0049.md"
+    },
+    {
+      "package": "rustls-webpki",
+      "version": "0.103.15",
+      "advisory": "RUSTSEC-2026-0098",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.103.12, < 0.104.0-alpha.1"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls-webpki/RUSTSEC-2026-0098.md"
+    },
+    {
+      "package": "rustls-webpki",
+      "version": "0.103.15",
+      "advisory": "RUSTSEC-2026-0099",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.103.12, < 0.104.0-alpha.1"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls-webpki/RUSTSEC-2026-0099.md"
+    },
+    {
+      "package": "rustls-webpki",
+      "version": "0.103.15",
+      "advisory": "RUSTSEC-2026-0104",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.103.13, < 0.104.0-alpha.1"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/rustls-webpki/RUSTSEC-2026-0104.md"
+    },
+    {
+      "package": "security-framework",
+      "version": "3.7.0",
+      "advisory": "RUSTSEC-2017-0003",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.1.12"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/security-framework/RUSTSEC-2017-0003.md"
     },
     {
       "package": "sha2",
@@ -546,6 +796,26 @@
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/tokio/RUSTSEC-2025-0023.md"
     },
     {
+      "package": "tokio-rustls",
+      "version": "0.26.6",
+      "advisory": "RUSTSEC-2020-0019",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.13.1"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/tokio-rustls/RUSTSEC-2020-0019.md"
+    },
+    {
+      "package": "tower-http",
+      "version": "0.6.11",
+      "advisory": "RUSTSEC-2022-0043",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.2.1"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/tower-http/RUSTSEC-2022-0043.md"
+    },
+    {
       "package": "tracing",
       "version": "0.1.44",
       "advisory": "RUSTSEC-2023-0078",
@@ -564,6 +834,16 @@
         ">= 0.20.1"
       ],
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/tungstenite/RUSTSEC-2023-0065.md"
+    },
+    {
+      "package": "untrusted",
+      "version": "0.9.0",
+      "advisory": "RUSTSEC-2018-0001",
+      "classification": "patched_or_unaffected",
+      "matching_safe_ranges": [
+        ">= 0.6.2"
+      ],
+      "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/untrusted/RUSTSEC-2018-0001.md"
     },
     {
       "package": "zerocopy",
