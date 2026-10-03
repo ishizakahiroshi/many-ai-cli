@@ -1,0 +1,82 @@
+[
+  {
+    "input_b64": "b3JkaW5hcnn//iB0YWls",
+    "masked_b64": "b3JkaW5hcnn//iB0YWls",
+    "text": "ordinary\ufffd\ufffd tail"
+  },
+  {
+    "input_b64": "c3BsaXQgZW1vamkg8J8=",
+    "masked_b64": "c3BsaXQgZW1vamkg8J8=",
+    "text": "split emoji \ufffd\ufffd"
+  },
+  {
+    "input_b64": "YmFkIHNjYWxhciDtoIAgZW5k",
+    "masked_b64": "YmFkIHNjYWxhciDtoIAgZW5k",
+    "text": "bad scalar \ufffd\ufffd\ufffd end"
+  },
+  {
+    "input_b64": "QVBJX0tFWT1hYv9jZCD+IHVubWF0Y2hlZA==",
+    "masked_b64": "QVBJX0tFWT0qKiog/iB1bm1hdGNoZWQ=",
+    "text": "API_KEY=*** \ufffd unmatched"
+  },
+  {
+    "input_b64": "VE9LRU49YWJjZGX/IHVudG91Y2hlZA==",
+    "masked_b64": "VE9LRU49YWJjZGX/IHVudG91Y2hlZA==",
+    "text": "TOKEN=abcde\ufffd untouched"
+  },
+  {
+    "input_b64": "UEFTU1dPUkQ955WM55WM55WM55WM55WM",
+    "masked_b64": "UEFTU1dPUkQ955WM55WM55WM55WM55WM",
+    "text": "PASSWORD=界界界界界"
+  },
+  {
+    "input_b64": "UEFTU1dPUkQ955WM55WM55WM55WM55WM55WM",
+    "masked_b64": "UEFTU1dPUkQ9Kioq",
+    "text": "PASSWORD=***"
+  },
+  {
+    "input_b64": "UEFTU1dPUkQ955WM55WM55WM55WM55WM/w==",
+    "masked_b64": "UEFTU1dPUkQ9Kioq",
+    "text": "PASSWORD=***"
+  },
+  {
+    "input_b64": "QmVhcmVyIOeVjOeVjOeVjOeVjOeVjOeVjOeVjA==",
+    "masked_b64": "QmVhcmVyIOeVjOeVjOeVjOeVjOeVjOeVjOeVjA==",
+    "text": "Bearer 界界界界界界界"
+  },
+  {
+    "input_b64": "QmVhcmVyIOeVjOeVjOeVjOeVjOeVjOeVjOeVjP4=",
+    "masked_b64": "QmVhcmVyICoqKg==",
+    "text": "Bearer ***"
+  },
+  {
+    "input_b64": "aHR0cHM6Ly9uYW1lOnBh/3NzQGhvc3QvcGF0aCD/",
+    "masked_b64": "aHR0cHM6Ly9uYW1lOioqKkBob3N0L3BhdGgg/w==",
+    "text": "https://name:***@host/path \ufffd"
+  },
+  {
+    "input_b64": "QVBJX0tFWT1h/2IKQmVhcmVyIDEyMzQ1Njf/IHRhaWzwnw==",
+    "masked_b64": "QVBJX0tFWT0qKioKQmVhcmVyICoqKiB0YWls8J8=",
+    "text": "API_KEY=***\nBearer *** tail\ufffd\ufffd"
+  },
+  {
+    "input_b64": "G1szMW1BUElfS0VZPXZhbHVl/xtbMG0NCg==",
+    "masked_b64": "G1szMW1BUElfS0VZPSoqKg0K",
+    "text": "API_KEY=***\r\n"
+  },
+  {
+    "input_b64": "7oCAIPOwgIAg/w==",
+    "masked_b64": "7oCAIPOwgIAg/w==",
+    "text": " 󰀀 \ufffd"
+  },
+  {
+    "input_b64": "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCmFiY/8KLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLSB0YWls/w==",
+    "masked_b64": "KioqIHRhaWz/",
+    "text": "*** tail\ufffd"
+  },
+  {
+    "input_b64": "UEFTU1dPUkQ9YWLjgWNk",
+    "masked_b64": "UEFTU1dPUkQ9Kioq",
+    "text": "PASSWORD=***"
+  }
+]

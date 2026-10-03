@@ -1,0 +1,510 @@
+{
+  "go_baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "contract": "K04 / A05 repository-only",
+  "methods": [
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "Close",
+      "go_line": 310,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::close",
+      "tests": [
+        "full_close_drains_every_accepted_event_and_is_idempotent",
+        "drain_timeout_and_cancellation_leave_accepted_work_owned_until_close"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ScheduleFileReset",
+      "go_line": 350,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::schedule_file_reset",
+      "tests": [
+        "old_schema_migrations_and_pending_file_reset_recovery",
+        "failed_reset_retains_recovery_marker"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "FileResetPending",
+      "go_line": 358,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::file_reset_pending",
+      "tests": [
+        "old_schema_migrations_and_pending_file_reset_recovery",
+        "failed_pending_file_removal_keeps_the_recovery_marker"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "SetOnWriteError",
+      "go_line": 368,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::set_on_write_error",
+      "tests": [
+        "shutdown_reports_write_errors_without_discarding_later_work"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "StoreEventAsync",
+      "go_line": 379,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::store_event_async",
+      "tests": [
+        "bounded_queue_drop_count_is_nonblocking_under_database_backpressure",
+        "reset_barrier_discards_old_queue_and_accepts_the_new_generation",
+        "full_close_drains_every_accepted_event_and_is_idempotent"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "StartSession",
+      "go_line": 620,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::start_session",
+      "tests": [
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths",
+        "old_schema_migrations_and_pending_file_reset_recovery"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "CloseStaleSessions",
+      "go_line": 678,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::close_stale_sessions",
+      "tests": [
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "UpdateSessionMessages",
+      "go_line": 698,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::update_session_messages",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "UpdateSessionState",
+      "go_line": 704,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::update_session_state",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "SessionCardMetaByLiveSession",
+      "go_line": 716,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::session_card_meta_by_live_session",
+      "tests": [
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "UpdateSessionCardMeta",
+      "go_line": 736,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::update_session_card_meta",
+      "tests": [
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "EndSession",
+      "go_line": 743,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::end_session",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "chunked_prune_and_legacy_transcript_noise"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ClearSessionHistory",
+      "go_line": 758,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::clear_session_history",
+      "tests": [
+        "clear_and_reset_preserve_only_latest_metadata_and_remove_all_children",
+        "event_and_clear_failures_rollback_all_related_rows"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "StoreEvent",
+      "go_line": 813,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::store_event",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "transcript_selection_noise_masking_and_user_only_mentions",
+        "event_and_clear_failures_rollback_all_related_rows"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "StoreApprovalDetected",
+      "go_line": 881,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::store_approval_detected",
+      "tests": [
+        "approval_ledger_marker_resolution_latest_and_redetection"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "StoreApprovalConsumed",
+      "go_line": 910,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::store_approval_consumed",
+      "tests": [
+        "approval_ledger_marker_resolution_latest_and_redetection"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ApprovalsByLiveSession",
+      "go_line": 984,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::approvals_by_live_session",
+      "tests": [
+        "approval_ledger_marker_resolution_latest_and_redetection"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ApprovalsBySessionID",
+      "go_line": 995,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::approvals_by_session_id",
+      "tests": [
+        "approval_ledger_marker_resolution_latest_and_redetection",
+        "read_limits_ordering_and_nil_empty_shapes_match_baseline"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "LatestApprovalOfKinds",
+      "go_line": 1011,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::latest_approval_of_kinds",
+      "tests": [
+        "approval_ledger_marker_resolution_latest_and_redetection"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "RecentApprovals",
+      "go_line": 1032,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::recent_approvals",
+      "tests": [
+        "approval_ledger_marker_resolution_latest_and_redetection",
+        "read_limits_ordering_and_nil_empty_shapes_match_baseline"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ChatMessagesByLiveSession",
+      "go_line": 1040,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::chat_messages_by_live_session",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "transcript_selection_noise_masking_and_user_only_mentions"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ChatMessagesBySessionID",
+      "go_line": 1051,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::chat_messages_by_session_id",
+      "tests": [
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths",
+        "read_limits_ordering_and_nil_empty_shapes_match_baseline"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "SearchMessages",
+      "go_line": 1116,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::search_messages",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "fts_query_error_falls_back_to_literal_like_and_index_failure_keeps_message"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "MessagesMentionText",
+      "go_line": 1141,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::messages_mention_text",
+      "tests": [
+        "transcript_selection_noise_masking_and_user_only_mentions"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ListSessions",
+      "go_line": 1167,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::list_sessions",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "read_limits_ordering_and_nil_empty_shapes_match_baseline"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "SessionOverviewByLiveSession",
+      "go_line": 1203,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::session_overview_by_live_session",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "SessionOverviewBySessionID",
+      "go_line": 1213,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::session_overview_by_session_id",
+      "tests": [
+        "stable_database_identity_reattach_stale_close_card_and_virtual_paths"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "UpdateSessionMeta",
+      "go_line": 1248,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::update_session_meta",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "read_limits_ordering_and_nil_empty_shapes_match_baseline"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "TimelineByLiveSession",
+      "go_line": 1264,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::timeline_by_live_session",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "read_limits_ordering_and_nil_empty_shapes_match_baseline"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "UsageSummary",
+      "go_line": 1301,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::usage_summary",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "chunked_prune_and_legacy_transcript_noise"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "StaleSessions",
+      "go_line": 1332,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::stale_sessions",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "PruneOlderThan",
+      "go_line": 1370,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::prune_older_than",
+      "tests": [
+        "restore_search_prune_and_all_session_metadata",
+        "chunked_prune_and_legacy_transcript_noise"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "PruneTranscriptNoise",
+      "go_line": 1406,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::prune_transcript_noise",
+      "tests": [
+        "chunked_prune_and_legacy_transcript_noise"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    },
+    {
+      "go_source": "internal/sessionstore/store.go",
+      "go_entry": "ResetHistory",
+      "go_line": 1592,
+      "rust_entry": "rust/src/storage/repository.rs::SessionStorage::reset_history",
+      "tests": [
+        "clear_and_reset_preserve_only_latest_metadata_and_remove_all_children",
+        "reset_barrier_discards_old_queue_and_accepts_the_new_generation",
+        "failed_reset_retains_recovery_marker"
+      ],
+      "receipt": "2026-10-03 follow-up targeted runs: 16 integration + 11 unit tests passed, no failures or ignores",
+      "caller_acceptance": "pending actual Hub wiring"
+    }
+  ],
+  "additional_contracts": {
+    "schema": [
+      "unavailable_fts_is_a_supported_initialization_capability",
+      "busy_timeout_precedes_journal_initialization",
+      "single_connection_pragmas_reapply_on_every_explicit_open"
+    ],
+    "runtime_paths": [
+      "explicit_runtime_paths_reject_empty_and_outside_trial_logs",
+      "trial_database_and_companions_refuse_outside_symlinks"
+    ],
+    "deadlines": [
+      "sqlite_vm_deadline_interrupts_expensive_queries",
+      "sqlite_busy_wait_uses_the_same_query_deadline"
+    ],
+    "cross_read": [
+      "fixed_go_cross_read_and_rollback_continuation",
+      "rollback-oracle.go",
+      "oracle_manifest_works_without_git_and_rejects_source_changes",
+      "go-source-manifest.json"
+    ],
+    "shared_masking": [
+      "sessionlog_masking_preserves_exact_thresholds_and_context"
+    ],
+    "partial_security_repair": [
+      "pending_reset_marker_stays_with_opened_directory_after_root_replacement",
+      "reset_recovery_uses_held_directory_after_path_replacement",
+      "observer_close_during_concurrent_close_is_bounded"
+    ]
+  },
+  "intentional_differences": [
+    "close drains every accepted queued event instead of baseline six-second best effort",
+    "reset avoids double-deleting external-content FTS entries after its full-index clear",
+    "pending reset removal failure retains marker and fails open rather than reopening partially removed data"
+  ],
+  "remaining_acceptance": [
+    "real Hub caller and UI integration",
+    "native Windows/macOS SQLite and directory permissions",
+    "adversarial ancestor rename races",
+    "copied real-data backup/restore and operator cutover",
+    "Native DB/WAL/SHM confinement under root/final-child replacement and cross-connection SHM lifetime; see VFS-DESIGN.md"
+  ],
+  "receipts": [
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --test storage_contracts",
+      "exit_code": 0,
+      "passed": 15,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Includes sequential Rust -> fixed Go -> Rust read/write/FTS/approval compatibility",
+      "toolchains": "Rust 1.90.0; Go 1.26.8; fixed Cargo.lock; explicit isolated caches"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib storage::",
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Queue/generation/drain/deadlines/pragmas/FTS-unavailable/recovery/masking; final reset-body refactor included"
+    },
+    {
+      "command": "cargo clippy --manifest-path rust/Cargo.toml --locked --lib --test storage_contracts -- -D warnings",
+      "exit_code": 101,
+      "scope": "Final retry: 53 diagnostics outside storage in concurrent proto/hub/files/profile/routine code; zero storage-source diagnostics. Full output retained at /tmp/many-ai-storage-clippy.log in execution workspace."
+    },
+    {
+      "command": "rustfmt --edition 2024 --check rust/src/storage/{mod,schema,repository,writer,history,text}.rs rust/tests/storage_contracts.rs; git diff --check -- rust/src/storage rust/tests/storage_contracts.rs rust/tests/fixtures/core/storage",
+      "exit_code": 0,
+      "scope": "owned-file formatting/whitespace only"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib storage::",
+      "exit_code": 0,
+      "passed": 11,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Exclusive writer barrier retained with a narrow readonly_write_lock expectation; pinned tool/cache environment"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --test storage_contracts",
+      "exit_code": 0,
+      "passed": 16,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Includes manifest-verified temporary Go module, real sequential cross-read, archive/no-Git regression, extra-source exclusion and changed-source rejection"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib storage::writer::tests::observer_close_during_concurrent_close_is_bounded -- --exact",
+      "exit_code": 101,
+      "scope": "Red: actual previous lock order deadlocked the write-error observer; supervised child returned timeout without hanging suite"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --lib storage::",
+      "exit_code": 0,
+      "passed": 13,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Green: capability-bound recovery/create and early writer-close rejection; compact runtime target; no warnings"
+    },
+    {
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --test storage_contracts",
+      "exit_code": 0,
+      "passed": 17,
+      "failed": 0,
+      "ignored": 0,
+      "scope": "Green: public reset-marker root replacement and Go rollback; does not establish native SQLite DB/WAL/SHM confinement"
+    }
+  ]
+}

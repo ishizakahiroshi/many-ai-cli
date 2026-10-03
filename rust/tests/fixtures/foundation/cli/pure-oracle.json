@@ -1,0 +1,921 @@
+{
+  "method": "Extracted baseline pure functions executed by Go; only os.Getenv changed to a synthetic map.",
+  "sources": [
+    {
+      "path": "internal/orchestrate/orchestrate.go",
+      "sha256": "8446bb24c3ac470f58ee86ed08568d29ef49470d5cd40e37043a62722f6b270e",
+      "functions": [
+        "hubEnv",
+        "spawnClientTimeout",
+        "parseRelayProviderModel"
+      ]
+    },
+    {
+      "path": "internal/wrapper/delegation.go",
+      "sha256": "6799c29c43d3ebc5778a16393c508e7868b5a1b7fd410fce7c5e1c02f89830be",
+      "functions": [
+        "DelegationPromptEnabled"
+      ]
+    },
+    {
+      "path": "cmd/many-ai-cli/issue.go",
+      "sha256": "d935f29996288c9351f8e84cfa12edfc3fa1adf43d7896827b823514e5c18fd6",
+      "functions": [
+        "confirmIssue",
+        "validIssueProvider"
+      ]
+    },
+    {
+      "path": "internal/shell/init.go",
+      "sha256": "585e83aefd84bfdb56a6f5704eaf716127357e4befe511c175e20fb697492aed",
+      "functions": [
+        "InitScriptForProviders"
+      ]
+    },
+    {
+      "path": "cmd/many-ai-cli/provider_command.go",
+      "sha256": "26503cd8f7c8fdc55d7934e18a43c7fbe3cf0764072022ba04c21eca54806b7c",
+      "functions": [
+        "runProviderBackupCommand",
+        "runProviderResetCommand",
+        "runProviderRecoverCommand"
+      ]
+    },
+    {
+      "path": "internal/provider/store.go",
+      "sha256": "f9fadb81809b2dd2fd2429ac1ad626d6684634ef2f61078f8b4e4267778a287a",
+      "functions": [
+        "IsBuiltinID"
+      ]
+    },
+    {
+      "path": "internal/provider/schema.go",
+      "sha256": "90ec0701a67263fb7295d1e718d81fdbf6e3879c0e836f30a9578762d06f47dd",
+      "functions": []
+    }
+  ],
+  "extracted_functions": [
+    {
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 55,
+      "function": "hubEnv",
+      "body": "func hubEnv(subcommand string) (hubURL, token string, sessionID int, err error) {\n\tsessionID, convErr := strconv.Atoi(os.Getenv(sessionIDEnv))\n\tif convErr != nil || sessionID <= 0 {\n\t\treturn \"\", \"\", 0, fmt.Errorf(\"orchestrate %s: this session is not an orchestration session (missing/invalid %s)\", subcommand, sessionIDEnv)\n\t}\n\thubPort := os.Getenv(hubPortEnv)\n\tif hubPort == \"\" {\n\t\treturn \"\", \"\", 0, fmt.Errorf(\"orchestrate %s: %s is not set\", subcommand, hubPortEnv)\n\t}\n\ttoken = os.Getenv(hubTokenEnv)\n\tif token == \"\" {\n\t\treturn \"\", \"\", 0, fmt.Errorf(\"orchestrate %s: %s is not set\", subcommand, hubTokenEnv)\n\t}\n\treturn fmt.Sprintf(\"http://127.0.0.1:%s\", hubPort), token, sessionID, nil\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 486,
+      "function": "spawnClientTimeout",
+      "body": "func spawnClientTimeout() time.Duration {\n\tif raw := strings.TrimSpace(os.Getenv(spawnTimeoutEnv)); raw != \"\" {\n\t\tif d, err := time.ParseDuration(raw); err == nil && d > 0 {\n\t\t\treturn d\n\t\t}\n\t}\n\treturn defaultSpawnClientTimeout\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 337,
+      "function": "parseRelayProviderModel",
+      "body": "func parseRelayProviderModel(raw string) (provider, model, effort string, err error) {\n\traw = strings.TrimSpace(raw)\n\tif raw == \"\" {\n\t\treturn \"\", \"\", \"\", errors.New(\"provider is required\")\n\t}\n\trest, effort, hasEffort := strings.Cut(raw, \"@\")\n\teffort = strings.TrimSpace(effort)\n\tif hasEffort && effort == \"\" {\n\t\treturn \"\", \"\", \"\", errors.New(\"effort after \\\"@\\\" is empty\")\n\t}\n\tprovider, model, _ = strings.Cut(rest, \"/\")\n\tprovider = strings.TrimSpace(provider)\n\tmodel = strings.TrimSpace(model)\n\tif provider == \"\" {\n\t\treturn \"\", \"\", \"\", errors.New(\"provider is required\")\n\t}\n\tif strings.Contains(provider, \" \") || strings.Contains(model, \" \") || strings.Contains(effort, \" \") {\n\t\treturn \"\", \"\", \"\", errors.New(\"provider/model@effort must not contain spaces\")\n\t}\n\treturn provider, model, effort, nil\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "internal/wrapper/delegation.go",
+      "line": 98,
+      "function": "DelegationPromptEnabled",
+      "body": "func DelegationPromptEnabled(configDefault bool) bool {\n\tswitch os.Getenv(DelegationEnvName) {\n\tcase \"1\":\n\t\treturn true\n\tcase \"0\":\n\t\treturn false\n\tdefault:\n\t\treturn configDefault\n\t}\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "cmd/many-ai-cli/issue.go",
+      "line": 157,
+      "function": "confirmIssue",
+      "body": "func confirmIssue(reader *bufio.Reader, out io.Writer) (bool, error) {\n\tif _, err := fmt.Fprint(out, \"この内容で GitHub の Issue 作成画面を開きますか? [y/N]: \"); err != nil {\n\t\treturn false, fmt.Errorf(\"write confirmation prompt: %w\", err)\n\t}\n\tanswer, err := reader.ReadString('\\n')\n\tif err != nil && !errors.Is(err, io.EOF) {\n\t\treturn false, fmt.Errorf(\"read confirmation: %w\", err)\n\t}\n\treturn strings.EqualFold(strings.TrimSpace(answer), \"y\"), nil\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "cmd/many-ai-cli/issue.go",
+      "line": 176,
+      "function": "validIssueProvider",
+      "body": "func validIssueProvider(provider string) bool {\n\tswitch strings.TrimSpace(provider) {\n\tcase \"\", \"claude\", \"codex\", \"copilot\", \"cursor-agent\", \"opencode\", \"grok\", \"command-code\":\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "internal/shell/init.go",
+      "line": 29,
+      "function": "InitScriptForProviders",
+      "body": "func InitScriptForProviders(ids []string) string {\n\tvar aliases strings.Builder\n\tfor _, id := range ids {\n\t\tif !shellFunctionIDPattern.MatchString(id) {\n\t\t\tcontinue\n\t\t}\n\t\taliases.WriteString(\"  \")\n\t\taliases.WriteString(id)\n\t\taliases.WriteString(\"(){ many-ai-cli \")\n\t\taliases.WriteString(id)\n\t\taliases.WriteString(` \"$@\"; }`)\n\t\taliases.WriteByte('\\n')\n\t}\n\treturn `\nif [ \"${MANY_AI_CLI_AUTO:-0}\" = \"1\" ]; then\n` + aliases.String() + `fi\n`\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "cmd/many-ai-cli/provider_command.go",
+      "line": 38,
+      "function": "runProviderBackupCommand",
+      "body": "func runProviderBackupCommand(history *provider.HistoryStore, args []string) error {\n\tif len(args) < 2 {\n\t\treturn errors.New(\"provider backup <list|verify|restore> <provider-id> [backup-id]\")\n\t}\n\taction, id := args[0], args[1]\n\tswitch action {\n\tcase \"list\":\n\t\tbackups, err := history.ListBackups(id)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tfor _, backup := range backups {\n\t\t\tfmt.Printf(\"%s\\t%s\\t%s\\t%s\\n\", backup.Revision, backup.CreatedAt, backup.Reason, backup.ContentDigest)\n\t\t}\n\t\treturn nil\n\tcase \"verify\":\n\t\tif len(args) < 3 {\n\t\t\treturn errors.New(\"provider backup verify <provider-id> <backup-id>\")\n\t\t}\n\t\tbackup, err := history.VerifyBackup(id, args[2])\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tfmt.Printf(\"verified\\t%s\\t%s\\n\", backup.Revision, backup.ContentDigest)\n\t\treturn nil\n\tcase \"restore\":\n\t\tif len(args) < 3 {\n\t\t\treturn errors.New(\"provider backup restore <provider-id> <backup-id> [--expected-revision <revision>]\")\n\t\t}\n\t\texpected := \"\"\n\t\tfor i := 3; i+1 < len(args); i++ {\n\t\t\tif args[i] == \"--expected-revision\" {\n\t\t\t\texpected = args[i+1]\n\t\t\t}\n\t\t}\n\t\tif expected == \"\" {\n\t\t\treturn errors.New(\"--expected-revision is required\")\n\t\t}\n\t\trevision, err := history.RestoreBackup(id, args[2], expected)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tfmt.Printf(\"restored\\t%s\\n\", revision.Revision)\n\t\treturn nil\n\tdefault:\n\t\treturn fmt.Errorf(\"unknown backup action: %s\", action)\n\t}\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "cmd/many-ai-cli/provider_command.go",
+      "line": 87,
+      "function": "runProviderResetCommand",
+      "body": "func runProviderResetCommand(history *provider.HistoryStore, args []string) error {\n\tif len(args) < 2 || args[0] != \"--distributed\" {\n\t\treturn errors.New(\"provider reset --distributed <provider-id> --expected-revision <revision>\")\n\t}\n\tid := args[1]\n\texpected := \"\"\n\thasExpected := false\n\tfor i := 2; i+1 < len(args); i++ {\n\t\tif args[i] == \"--expected-revision\" {\n\t\t\texpected = args[i+1]\n\t\t\thasExpected = true\n\t\t}\n\t}\n\tif !hasExpected {\n\t\treturn errors.New(\"--expected-revision is required\")\n\t}\n\tif !provider.IsBuiltinID(id) {\n\t\treturn fmt.Errorf(\"built-in provider %q was not found\", id)\n\t}\n\trevision, err := history.Reset(id, expected)\n\tif err != nil {\n\t\treturn err\n\t}\n\tfmt.Printf(\"reset\\t%s\\n\", revision.Revision)\n\treturn nil\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "cmd/many-ai-cli/provider_command.go",
+      "line": 114,
+      "function": "runProviderRecoverCommand",
+      "body": "func runProviderRecoverCommand(history *provider.HistoryStore, args []string, out io.Writer) error {\n\tif len(args) < 1 {\n\t\treturn errors.New(\"provider recover <provider-id> [revision|--list]\")\n\t}\n\tid := args[0]\n\tif len(args) >= 2 && args[1] == \"--list\" {\n\t\trecord, found, err := history.LastVerifiedRevision(id)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif found {\n\t\t\tfmt.Fprintf(out, \"candidate\\tuser_revision\\t%s\\t%s\\n\", record.Revision, record.CreatedAt)\n\t\t}\n\t\tfmt.Fprintln(out, \"candidate\\tbase\")\n\t\treturn nil\n\t}\n\trevision := \"\"\n\tif len(args) >= 2 {\n\t\trevision = args[1]\n\t}\n\trecovered, err := history.RecoverHead(id, revision)\n\tif err != nil {\n\t\treturn err\n\t}\n\tfmt.Fprintf(out, \"recovered\\t%s\\n\", recovered.Revision)\n\treturn nil\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    },
+    {
+      "source": "internal/provider/store.go",
+      "line": 195,
+      "function": "IsBuiltinID",
+      "body": "func IsBuiltinID(id string) bool {\n\tfor _, builtin := range BuiltinProviderIDs {\n\t\tif id == builtin {\n\t\t\treturn true\n\t\t}\n\t}\n\treturn false\n}",
+      "transformation": "os.Getenv reads replaced by a synthetic map; provider history calls replaced by an error-only boundary spy"
+    }
+  ],
+  "cases": {
+    "delegation": [
+      {
+        "config_default": false,
+        "enabled": false,
+        "raw": ""
+      },
+      {
+        "config_default": true,
+        "enabled": true,
+        "raw": ""
+      },
+      {
+        "config_default": false,
+        "enabled": true,
+        "raw": "1"
+      },
+      {
+        "config_default": true,
+        "enabled": true,
+        "raw": "1"
+      },
+      {
+        "config_default": false,
+        "enabled": false,
+        "raw": "0"
+      },
+      {
+        "config_default": true,
+        "enabled": false,
+        "raw": "0"
+      },
+      {
+        "config_default": false,
+        "enabled": false,
+        "raw": "true"
+      },
+      {
+        "config_default": true,
+        "enabled": true,
+        "raw": "true"
+      },
+      {
+        "config_default": false,
+        "enabled": false,
+        "raw": "false"
+      },
+      {
+        "config_default": true,
+        "enabled": true,
+        "raw": "false"
+      },
+      {
+        "config_default": false,
+        "enabled": false,
+        "raw": " 1"
+      },
+      {
+        "config_default": true,
+        "enabled": true,
+        "raw": " 1"
+      }
+    ],
+    "hub_env": [
+      {
+        "env": {},
+        "error": "orchestrate spawn: this session is not an orchestration session (missing/invalid MANY_AI_CLI_SESSION_ID)",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_SESSION_ID": "0"
+        },
+        "error": "orchestrate spawn: this session is not an orchestration session (missing/invalid MANY_AI_CLI_SESSION_ID)",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_SESSION_ID": "-1"
+        },
+        "error": "orchestrate spawn: this session is not an orchestration session (missing/invalid MANY_AI_CLI_SESSION_ID)",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_SESSION_ID": " 1"
+        },
+        "error": "orchestrate spawn: this session is not an orchestration session (missing/invalid MANY_AI_CLI_SESSION_ID)",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_SESSION_ID": "1.5"
+        },
+        "error": "orchestrate spawn: this session is not an orchestration session (missing/invalid MANY_AI_CLI_SESSION_ID)",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_SESSION_ID": "1"
+        },
+        "error": "orchestrate spawn: MANY_AI_CLI_HUB_PORT is not set",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_HUB_PORT": "49123",
+          "MANY_AI_CLI_SESSION_ID": "1"
+        },
+        "error": "orchestrate spawn: MANY_AI_CLI_HUB_TOKEN is not set",
+        "session_id": 0,
+        "token": "",
+        "url": ""
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_HUB_PORT": "49123",
+          "MANY_AI_CLI_HUB_TOKEN": "synthetic",
+          "MANY_AI_CLI_SESSION_ID": "001"
+        },
+        "error": "",
+        "session_id": 1,
+        "token": "synthetic",
+        "url": "http://127.0.0.1:49123"
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_HUB_PORT": "not-a-number",
+          "MANY_AI_CLI_HUB_TOKEN": "synthetic",
+          "MANY_AI_CLI_SESSION_ID": "+1"
+        },
+        "error": "",
+        "session_id": 1,
+        "token": "synthetic",
+        "url": "http://127.0.0.1:not-a-number"
+      },
+      {
+        "env": {
+          "MANY_AI_CLI_HUB_PORT": " ",
+          "MANY_AI_CLI_HUB_TOKEN": " ",
+          "MANY_AI_CLI_SESSION_ID": "1"
+        },
+        "error": "",
+        "session_id": 1,
+        "token": " ",
+        "url": "http://127.0.0.1: "
+      }
+    ],
+    "issue_confirmation": [
+      {
+        "confirmed": false,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": ""
+      },
+      {
+        "confirmed": false,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": "\n"
+      },
+      {
+        "confirmed": true,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": "y\n"
+      },
+      {
+        "confirmed": true,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": "Y\n"
+      },
+      {
+        "confirmed": false,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": " yes\n"
+      },
+      {
+        "confirmed": true,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": " y \n"
+      },
+      {
+        "confirmed": false,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": "no\n"
+      },
+      {
+        "confirmed": true,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": "y"
+      },
+      {
+        "confirmed": true,
+        "error": "",
+        "stderr": "この内容で GitHub の Issue 作成画面を開きますか? [y/N]: ",
+        "stdin": "y\nnext\n"
+      }
+    ],
+    "issue_provider": [
+      {
+        "provider": "",
+        "valid": true
+      },
+      {
+        "provider": "claude",
+        "valid": true
+      },
+      {
+        "provider": "codex",
+        "valid": true
+      },
+      {
+        "provider": "copilot",
+        "valid": true
+      },
+      {
+        "provider": "cursor-agent",
+        "valid": true
+      },
+      {
+        "provider": "opencode",
+        "valid": true
+      },
+      {
+        "provider": "grok",
+        "valid": true
+      },
+      {
+        "provider": "command-code",
+        "valid": true
+      },
+      {
+        "provider": "gemini",
+        "valid": false
+      },
+      {
+        "provider": "shell",
+        "valid": false
+      },
+      {
+        "provider": "Codex",
+        "valid": false
+      },
+      {
+        "provider": " codex ",
+        "valid": true
+      },
+      {
+        "provider": "custom-provider",
+        "valid": false
+      }
+    ],
+    "provider_backup": [
+      {
+        "args": [],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider backup <list|verify|restore> <provider-id> [backup-id]",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "list"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider backup <list|verify|restore> <provider-id> [backup-id]",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "list",
+          "claude"
+        ],
+        "boundary_args": [
+          "claude"
+        ],
+        "boundary_call": "ListBackups",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "list",
+          "claude",
+          "ignored"
+        ],
+        "boundary_args": [
+          "claude"
+        ],
+        "boundary_call": "ListBackups",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "unknown",
+          "claude"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "unknown backup action: unknown",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "verify",
+          "claude"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider backup verify <provider-id> <backup-id>",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "verify",
+          "claude",
+          "r1",
+          "ignored"
+        ],
+        "boundary_args": [
+          "claude",
+          "r1"
+        ],
+        "boundary_call": "VerifyBackup",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider backup restore <provider-id> <backup-id> [--expected-revision <revision>]",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude",
+          "r1"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "--expected-revision is required",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude",
+          "r1",
+          "--expected-revision"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "--expected-revision is required",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude",
+          "r1",
+          "--expected-revision",
+          ""
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "--expected-revision is required",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude",
+          "r1",
+          "--expected-revision=r0"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "--expected-revision is required",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude",
+          "r1",
+          "ignored",
+          "--expected-revision",
+          "r0"
+        ],
+        "boundary_args": [
+          "claude",
+          "r1",
+          "r0"
+        ],
+        "boundary_call": "RestoreBackup",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "restore",
+          "claude",
+          "r1",
+          "--expected-revision",
+          "first",
+          "--expected-revision",
+          "last"
+        ],
+        "boundary_args": [
+          "claude",
+          "r1",
+          "last"
+        ],
+        "boundary_call": "RestoreBackup",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      }
+    ],
+    "provider_recover": [
+      {
+        "args": [],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider recover <provider-id> [revision|--list]",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude"
+        ],
+        "boundary_args": [
+          "claude",
+          ""
+        ],
+        "boundary_call": "RecoverHead",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude",
+          "--list"
+        ],
+        "boundary_args": [
+          "claude"
+        ],
+        "boundary_call": "LastVerifiedRevision",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude",
+          "--list",
+          "ignored"
+        ],
+        "boundary_args": [
+          "claude"
+        ],
+        "boundary_call": "LastVerifiedRevision",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude",
+          "r1"
+        ],
+        "boundary_args": [
+          "claude",
+          "r1"
+        ],
+        "boundary_call": "RecoverHead",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude",
+          "--unknown"
+        ],
+        "boundary_args": [
+          "claude",
+          "--unknown"
+        ],
+        "boundary_call": "RecoverHead",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude",
+          "r1",
+          "--list"
+        ],
+        "boundary_args": [
+          "claude",
+          "r1"
+        ],
+        "boundary_call": "RecoverHead",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      }
+    ],
+    "provider_reset": [
+      {
+        "args": [],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider reset --distributed <provider-id> --expected-revision <revision>",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "claude"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider reset --distributed <provider-id> --expected-revision <revision>",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "provider reset --distributed <provider-id> --expected-revision <revision>",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed",
+          "claude"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "--expected-revision is required",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed",
+          "claude",
+          "--expected-revision",
+          ""
+        ],
+        "boundary_args": [
+          "claude",
+          ""
+        ],
+        "boundary_call": "Reset",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed",
+          "claude",
+          "--expected-revision",
+          "r0"
+        ],
+        "boundary_args": [
+          "claude",
+          "r0"
+        ],
+        "boundary_call": "Reset",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed",
+          "custom-provider",
+          "--expected-revision",
+          "r0"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "built-in provider \"custom-provider\" was not found",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed",
+          "claude",
+          "--expected-revision=r0"
+        ],
+        "boundary_args": null,
+        "boundary_call": "",
+        "error": "--expected-revision is required",
+        "stdout": ""
+      },
+      {
+        "args": [
+          "--distributed",
+          "claude",
+          "--expected-revision",
+          "first",
+          "--expected-revision",
+          "last"
+        ],
+        "boundary_args": [
+          "claude",
+          "last"
+        ],
+        "boundary_call": "Reset",
+        "error": "oracle: storage boundary reached (not executed)",
+        "stdout": ""
+      }
+    ],
+    "relay_provider_model": [
+      {
+        "effort": "",
+        "error": "",
+        "model": "",
+        "provider": "claude",
+        "raw": "claude"
+      },
+      {
+        "effort": "high",
+        "error": "",
+        "model": "gpt-synthetic",
+        "provider": "codex",
+        "raw": " codex/gpt-synthetic@high "
+      },
+      {
+        "effort": "variant",
+        "error": "",
+        "model": "vendor/model",
+        "provider": "opencode",
+        "raw": "opencode/vendor/model@variant"
+      },
+      {
+        "effort": "",
+        "error": "",
+        "model": "",
+        "provider": "claude",
+        "raw": "claude/"
+      },
+      {
+        "effort": "",
+        "error": "effort after \"@\" is empty",
+        "model": "",
+        "provider": "",
+        "raw": "claude@"
+      },
+      {
+        "effort": "",
+        "error": "provider is required",
+        "model": "",
+        "provider": "",
+        "raw": "/model"
+      },
+      {
+        "effort": "",
+        "error": "provider is required",
+        "model": "",
+        "provider": "",
+        "raw": ""
+      },
+      {
+        "effort": "",
+        "error": "provider/model@effort must not contain spaces",
+        "model": "",
+        "provider": "",
+        "raw": "claude/has space"
+      },
+      {
+        "effort": "",
+        "error": "",
+        "model": "a\tb",
+        "provider": "claude",
+        "raw": "claude/a\tb"
+      },
+      {
+        "effort": "x@y",
+        "error": "",
+        "model": "model",
+        "provider": "codex",
+        "raw": "codex/model@x@y"
+      },
+      {
+        "effort": "high",
+        "error": "",
+        "model": "",
+        "provider": "claude",
+        "raw": "claude @ high"
+      },
+      {
+        "effort": "",
+        "error": "",
+        "model": "",
+        "provider": "claude\topus",
+        "raw": "claude\topus"
+      }
+    ],
+    "shell_init": [
+      {
+        "ids": [],
+        "stdout": "\nif [ \"${MANY_AI_CLI_AUTO:-0}\" = \"1\" ]; then\nfi\n"
+      },
+      {
+        "ids": [
+          "claude",
+          "codex"
+        ],
+        "stdout": "\nif [ \"${MANY_AI_CLI_AUTO:-0}\" = \"1\" ]; then\n  claude(){ many-ai-cli claude \"$@\"; }\n  codex(){ many-ai-cli codex \"$@\"; }\nfi\n"
+      },
+      {
+        "ids": [
+          "safe-id",
+          "safe_id",
+          "UPPER",
+          "bad id",
+          "bad;id",
+          "9bad",
+          "a/b",
+          "a.b",
+          "$bad",
+          "日本語"
+        ],
+        "stdout": "\nif [ \"${MANY_AI_CLI_AUTO:-0}\" = \"1\" ]; then\n  safe-id(){ many-ai-cli safe-id \"$@\"; }\n  safe_id(){ many-ai-cli safe_id \"$@\"; }\n  UPPER(){ many-ai-cli UPPER \"$@\"; }\nfi\n"
+      }
+    ],
+    "spawn_timeout": [
+      {
+        "nanoseconds": 300000000000,
+        "raw": ""
+      },
+      {
+        "nanoseconds": 300000000000,
+        "raw": "bad"
+      },
+      {
+        "nanoseconds": 300000000000,
+        "raw": "0s"
+      },
+      {
+        "nanoseconds": 300000000000,
+        "raw": "-1s"
+      },
+      {
+        "nanoseconds": 30000000000,
+        "raw": "30s"
+      },
+      {
+        "nanoseconds": 90000000000,
+        "raw": " 1m30s "
+      },
+      {
+        "nanoseconds": 100000000,
+        "raw": "100ms"
+      },
+      {
+        "nanoseconds": 300000000000,
+        "raw": "9223372036854775808ns"
+      }
+    ]
+  }
+}

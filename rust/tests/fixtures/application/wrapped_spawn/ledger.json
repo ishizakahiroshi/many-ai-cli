@@ -1,0 +1,100 @@
+{
+  "go_oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "go_sources": [
+    "internal/hub/spawn_handler.go",
+    "internal/hub/spawn_command.go",
+    "internal/hub/spawn_risk.go",
+    "internal/hub/env_preset.go"
+  ],
+  "rust_sources": [
+    "rust/src/application/wrapped_spawn.rs",
+    "rust/src/application/wrapped_spawn/launch.rs",
+    "rust/src/application/wrapped_spawn/tests.rs"
+  ],
+  "fixture": "owned-wrapper.sh",
+  "fixture_scope": "Ordinary synthetic owned processes and files in explicit temporary runtime roots; no provider, live Hub, home, external network, or path-mutation probes.",
+  "contracts": [
+    "bounded attempt-only startup registry; no label/session registry",
+    "reservation before process spawn and installation wakeup",
+    "sealed core receipt plus actual owned PID before pre-ACK disarm",
+    "ACK delivery uncertainty detaches; definite pre-ACK rejection may abort",
+    "HTTP observation cancellation and timeout do not own accepted wrapper lifetime",
+    "private append handles, prompt-file handoff, exact executable and explicit runtime root",
+    "launch-policy selection exactly once; required production callbacks, no account/route fallback",
+    "RAII terminal cleanup during policy panic and Tokio lifecycle abandonment",
+    "callback panic containment and accepted outcome publication during ACK guard destruction"
+  ],
+  "receipts": [
+    {
+      "time_utc": "2026-10-03T13:52:52Z",
+      "command": "cargo test --locked --offline --manifest-path rust/Cargo.toml --lib application::wrapped_spawn -- --nocapture",
+      "environment": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "0",
+        "CARGO_PROFILE_TEST_DEBUG": "0",
+        "CARGO_BUILD_JOBS": "2",
+        "target": "shared compact runtime-target",
+        "toolchain": "pinned Rust 1.90.0"
+      },
+      "exit": 0,
+      "passed": 17,
+      "failed": 0,
+      "ignored": 0,
+      "filtered": 333,
+      "test_seconds": 1.07,
+      "scope": "Before the subsequent lifecycle-abandonment and callback-panic correction."
+    },
+    {
+      "time_utc": "2026-10-03T13:53:39Z",
+      "command": "cargo clippy --locked --offline --manifest-path rust/Cargo.toml --lib --tests -- -D warnings",
+      "exit": 101,
+      "diagnostic": "Shared rust/src/hub/confirmations.rs:60 DoubleEndedIterator::last should use next_back; no owned-file diagnostic was reported. Integration owner subsequently reported the shared fix; not rerun by this lane."
+    },
+    {
+      "time_utc": "2026-10-03T14:03:52Z",
+      "command": "cargo test --locked --offline --manifest-path rust/Cargo.toml --lib application::wrapped_spawn -- --nocapture",
+      "environment": {
+        "CARGO_INCREMENTAL": "0",
+        "CARGO_PROFILE_DEV_DEBUG": "0",
+        "CARGO_PROFILE_TEST_DEBUG": "0",
+        "CARGO_BUILD_JOBS": "2",
+        "target": "shared compact runtime-target",
+        "toolchain": "pinned Rust 1.90.0"
+      },
+      "exit": 0,
+      "passed": 21,
+      "failed": 0,
+      "ignored": 0,
+      "filtered": 336,
+      "test_seconds": 1.06,
+      "scope": "Includes RAII lifecycle abandonment, failure/warning callback panic containment, and ACK guard destruction during outer unwind. Expected synthetic panic-hook output is part of the passing injection tests."
+    },
+    {
+      "time_utc": "2026-10-03T14:04:36Z",
+      "command": "cargo test --locked --offline --manifest-path rust/Cargo.toml --lib served_ -- --nocapture",
+      "exit": 0,
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0,
+      "filtered": 352,
+      "test_seconds": 0.08,
+      "scope": "Included served_one_tap, served_confirmation, and served_routine caller tests; the substring filter also matched two existing process/socket tests."
+    },
+    {
+      "time_utc": "2026-10-03T14:05:25Z",
+      "command": "cargo clippy --locked --offline --manifest-path rust/Cargo.toml --lib --tests -- -D warnings",
+      "exit": 0,
+      "seconds": 24.21,
+      "scope": "Lifecycle-amended source plus integration-owner shared lint correction."
+    },
+    {
+      "time_utc": "2026-10-03T14:06:04Z",
+      "command": "rustfmt --edition 2024 --check rust/src/application/wrapped_spawn.rs rust/src/application/wrapped_spawn/launch.rs rust/src/application/wrapped_spawn/tests.rs; sh -n rust/tests/fixtures/application/wrapped_spawn/owned-wrapper.sh; python3 -m json.tool rust/tests/fixtures/application/wrapped_spawn/ledger.json",
+      "exit": 0
+    }
+  ],
+  "pending": [
+    "Production launch-policy implementation, real wrapper WS/core/binary adoption, and native Windows/macOS acceptance remain integration work.",
+    "Full repository/integration acceptance and immutable freeze remain with the integration owner."
+  ]
+}

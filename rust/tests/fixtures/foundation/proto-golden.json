@@ -1,0 +1,994 @@
+[
+  {
+    "name": "Message/zero",
+    "type": "Message",
+    "value": {
+      "type": "",
+      "token_statusbar": false
+    }
+  },
+  {
+    "name": "Message/filled",
+    "type": "Message",
+    "value": {
+      "type": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "role": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "session_id": 17,
+      "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "provider_revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "cwd": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "branch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "project_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "pid": 17,
+      "input_seq": 17,
+      "input_seq_high_watermark": 17,
+      "shell": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "output_idle": true,
+      "workflow_active": true,
+      "awaiting_user": true,
+      "awaiting_approval": true,
+      "activity": {
+        "output_idle": true,
+        "workflow_active": true,
+        "awaiting_user": true,
+        "awaiting_approval": true
+      },
+      "workflow_progress": {
+        "detected": true,
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "done": 17,
+        "total": 17,
+        "running": 17,
+        "failed": 17,
+        "pending": 17,
+        "waiting_dynamic": 17,
+        "percent": 17,
+        "elapsed_sec": 17,
+        "tokens_raw": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "phases": [
+          {
+            "title": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "agents": [
+              {
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "metrics": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "detail": {
+                  "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                  "started_at": 17,
+                  "last_progress_at": 17,
+                  "duration_ms": 17,
+                  "tokens": 17,
+                  "tool_calls": 17,
+                  "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                  "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                  "prompt_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                  "result_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+                }
+              }
+            ]
+          }
+        ],
+        "settled": true,
+        "settled_by": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "task_detail_source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "subagent_tree": {
+        "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "nodes": [
+          {
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "parent_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "depth": 17,
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "agent_type": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "started_at": 17,
+            "last_activity_at": 17,
+            "finished_at": 17,
+            "tool_calls": 17,
+            "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        ],
+        "omitted": 17,
+        "updated_at": 17
+      },
+      "exit_code": 17,
+      "signal": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "token": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "home_dir": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "codex_home": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "claude_dir": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "grok_home": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "agent_session_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "subscription_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "subscription_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "usage_probe": true,
+      "subscription_login": true,
+      "data": "/w==",
+      "text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "messages": [
+        {
+          "role": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "thinking": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "tools": [
+            {
+              "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "input": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "result": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          ],
+          "ts": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "message_id": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "cols": 17,
+      "rows": 17,
+      "log_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "jsonl_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "replay_b64": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "pty_bytes": 17,
+      "replay": true,
+      "replay_epoch": 23,
+      "approval_source_epoch": 23,
+      "token_statusbar": true,
+      "approval_sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval_summary": {
+        "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "paths": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "approval_candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval_candidate_shape": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval_consumed": true,
+      "approval_consumed_epoch": 23,
+      "done_summary": {
+        "session_id": 17,
+        "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "title": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "fallback": true
+      },
+      "sent_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval_state": {
+        "version": 23,
+        "open": {
+          "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "candidate_shape": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source_epoch": 23,
+          "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "block": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "question": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "context": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "options": [
+            {
+              "num": 17,
+              "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "is_current": true,
+              "send_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "preserve_order": true
+            }
+          ],
+          "summary": {
+            "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "paths": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "close": {
+          "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source_epoch": 23,
+          "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "approval_snapshot": [
+        {
+          "session_id": 17,
+          "version": 23,
+          "record": {
+            "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "candidate_shape": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "source_epoch": 23,
+            "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "block": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "question": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "context": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "options": [
+              {
+                "num": 17,
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "is_current": true,
+                "send_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "preserve_order": true
+              }
+            ],
+            "summary": {
+              "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "paths": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        }
+      ],
+      "last_output_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "transcript_grew_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "started_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "launch_label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "session_meta": {
+        "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "pinned": true,
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "note": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "auto_title": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "effort": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "execution_mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "permission_preset": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "permission_mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "route": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "parent_session_id": 17,
+      "handoff_from": 17,
+      "auto": true,
+      "depth": 17,
+      "orchestration_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "board_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "worktree_branch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "board_notify_pending": true,
+      "relays": [
+        {
+          "orchestration_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "plan_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "completed_cs": 17,
+          "round": 17,
+          "max_rounds": 17,
+          "final_seen": true,
+          "implementation_session_id": 17,
+          "strong_session_id": 17,
+          "active_implementer": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "escalate_after": 17,
+          "review_session_id": 17,
+          "review_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "worktree_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "branch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "base_commit": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "updated_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "cross_session_messages": [
+        {
+          "at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "receiver_session_id": 17,
+          "receiver_role": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "sender": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "text": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "spawn_confirmation_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "initial_prompt": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "spawn_requested_at_ms": 17,
+      "remember_permission": true,
+      "spawn_child_approval": {
+        "synthetic": {
+          "synthetic": {
+            "permission_mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "sandbox": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "ask_for_approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "allowed_tools": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "risk_confirmed": true,
+            "tier": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "fallback_from": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        }
+      },
+      "trust_grant_providers": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "spawn_child_session_id": 17,
+      "first_message": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "last_message": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "inject": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "image_data": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "filename": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "providers": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "ui_active_session_id": 17,
+      "git_checked": true,
+      "git_files": 17,
+      "git_added": 17,
+      "git_deleted": 17,
+      "commit_subject": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "commit_body": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "cost_usd": 1.25,
+      "cost_known": true,
+      "tokens_in": 17,
+      "tokens_out": 17,
+      "tokens_cache": 17,
+      "tokens_total": 17,
+      "ctx_window": 17,
+      "ctx_used_pct": 1.25,
+      "usage_model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "usage_started_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "rl_5h_pct": 1.25,
+      "rl_5h_reset": 17,
+      "rl_7d_pct": 1.25,
+      "rl_7d_reset": 17,
+      "claude_rate_limits_present": true,
+      "claude_5h_field_present": true,
+      "claude_5h_present": true,
+      "claude_7d_field_present": true,
+      "claude_7d_present": true,
+      "codex_rate_limits_present": true,
+      "codex_primary_present": true,
+      "codex_primary_used_pct": 1.25,
+      "codex_primary_window_minutes": 17,
+      "codex_primary_reset": 17,
+      "codex_secondary_used_pct": 1.25,
+      "codex_secondary_present": true,
+      "codex_secondary_window_minutes": 17,
+      "codex_secondary_reset": 17,
+      "codex_credits_present": true,
+      "codex_has_credits": true,
+      "codex_credits_unlimited": true,
+      "codex_credits_balance": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "codex_plan_type": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "usage_observed_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "lines_added": 17,
+      "lines_removed": 17,
+      "effort_level": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "thinking": true,
+      "exceeds_200k": true,
+      "duration_ms": 17,
+      "api_duration_ms": 17,
+      "output_style": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "vim_mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "agent_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "repo_host": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "repo_owner": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "repo_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "remaining_pct": 1.25,
+      "reasoning_output_tokens": 17,
+      "note_ok": true,
+      "note_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "binary_stale": true
+    }
+  },
+  {
+    "name": "CrossSessionMessage/zero",
+    "type": "CrossSessionMessage",
+    "value": {}
+  },
+  {
+    "name": "CrossSessionMessage/filled",
+    "type": "CrossSessionMessage",
+    "value": {
+      "at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "receiver_session_id": 17,
+      "receiver_role": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "sender": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "text": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "AgentChatMessage/zero",
+    "type": "AgentChatMessage",
+    "value": {
+      "role": ""
+    }
+  },
+  {
+    "name": "AgentChatMessage/filled",
+    "type": "AgentChatMessage",
+    "value": {
+      "role": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "thinking": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "tools": [
+        {
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "input": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "result": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "ts": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "message_id": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "AgentChatTool/zero",
+    "type": "AgentChatTool",
+    "value": {
+      "name": ""
+    }
+  },
+  {
+    "name": "AgentChatTool/filled",
+    "type": "AgentChatTool",
+    "value": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "input": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "result": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "SessionActivity/zero",
+    "type": "SessionActivity",
+    "value": {
+      "output_idle": false,
+      "workflow_active": false,
+      "awaiting_user": false,
+      "awaiting_approval": false
+    }
+  },
+  {
+    "name": "SessionActivity/filled",
+    "type": "SessionActivity",
+    "value": {
+      "output_idle": true,
+      "workflow_active": true,
+      "awaiting_user": true,
+      "awaiting_approval": true
+    }
+  },
+  {
+    "name": "WorkflowProgress/zero",
+    "type": "WorkflowProgress",
+    "value": {
+      "detected": false,
+      "done": 0,
+      "total": 0,
+      "running": 0,
+      "failed": 0,
+      "pending": 0,
+      "waiting_dynamic": 0,
+      "percent": 0,
+      "settled": false
+    }
+  },
+  {
+    "name": "WorkflowProgress/filled",
+    "type": "WorkflowProgress",
+    "value": {
+      "detected": true,
+      "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "done": 17,
+      "total": 17,
+      "running": 17,
+      "failed": 17,
+      "pending": 17,
+      "waiting_dynamic": 17,
+      "percent": 17,
+      "elapsed_sec": 17,
+      "tokens_raw": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "phases": [
+        {
+          "title": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "agents": [
+            {
+              "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "metrics": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "detail": {
+                "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "started_at": 17,
+                "last_progress_at": 17,
+                "duration_ms": 17,
+                "tokens": 17,
+                "tool_calls": 17,
+                "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "prompt_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "result_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            }
+          ]
+        }
+      ],
+      "settled": true,
+      "settled_by": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "task_detail_source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "WfPhase/zero",
+    "type": "WfPhase",
+    "value": {
+      "title": "",
+      "agents": null
+    }
+  },
+  {
+    "name": "WfPhase/filled",
+    "type": "WfPhase",
+    "value": {
+      "title": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "agents": [
+        {
+          "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "metrics": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "detail": {
+            "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "started_at": 17,
+            "last_progress_at": 17,
+            "duration_ms": 17,
+            "tokens": 17,
+            "tool_calls": 17,
+            "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "prompt_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "result_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "name": "WfAgent/zero",
+    "type": "WfAgent",
+    "value": {
+      "label": "",
+      "state": ""
+    }
+  },
+  {
+    "name": "WfAgent/filled",
+    "type": "WfAgent",
+    "value": {
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "metrics": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "detail": {
+        "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "started_at": 17,
+        "last_progress_at": 17,
+        "duration_ms": 17,
+        "tokens": 17,
+        "tool_calls": 17,
+        "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "prompt_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "result_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    }
+  },
+  {
+    "name": "WfAgentDetail/zero",
+    "type": "WfAgentDetail",
+    "value": {}
+  },
+  {
+    "name": "WfAgentDetail/filled",
+    "type": "WfAgentDetail",
+    "value": {
+      "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "started_at": 17,
+      "last_progress_at": 17,
+      "duration_ms": 17,
+      "tokens": 17,
+      "tool_calls": 17,
+      "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "prompt_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "result_preview": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "SubagentTree/zero",
+    "type": "SubagentTree",
+    "value": {}
+  },
+  {
+    "name": "SubagentTree/filled",
+    "type": "SubagentTree",
+    "value": {
+      "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "nodes": [
+        {
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "parent_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "depth": 17,
+          "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "agent_type": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "started_at": 17,
+          "last_activity_at": 17,
+          "finished_at": 17,
+          "tool_calls": 17,
+          "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "omitted": 17,
+      "updated_at": 17
+    }
+  },
+  {
+    "name": "SubagentNode/zero",
+    "type": "SubagentNode",
+    "value": {
+      "id": "",
+      "depth": 0,
+      "state": ""
+    }
+  },
+  {
+    "name": "SubagentNode/filled",
+    "type": "SubagentNode",
+    "value": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "parent_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "depth": 17,
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "agent_type": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "started_at": 17,
+      "last_activity_at": 17,
+      "finished_at": 17,
+      "tool_calls": 17,
+      "last_tool_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "last_tool_summary": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "SessionMeta/zero",
+    "type": "SessionMeta",
+    "value": {
+      "label": "",
+      "pinned": false,
+      "color": "",
+      "note": "",
+      "auto_title": ""
+    }
+  },
+  {
+    "name": "SessionMeta/filled",
+    "type": "SessionMeta",
+    "value": {
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "pinned": true,
+      "color": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "note": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "auto_title": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "ApprovalSummary/zero",
+    "type": "ApprovalSummary",
+    "value": {
+      "risk": ""
+    }
+  },
+  {
+    "name": "ApprovalSummary/filled",
+    "type": "ApprovalSummary",
+    "value": {
+      "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "paths": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "DoneSummary/zero",
+    "type": "DoneSummary",
+    "value": {
+      "session_id": 0,
+      "text": "",
+      "kind": "",
+      "at": ""
+    }
+  },
+  {
+    "name": "DoneSummary/filled",
+    "type": "DoneSummary",
+    "value": {
+      "session_id": 17,
+      "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "title": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "fallback": true
+    }
+  },
+  {
+    "name": "RelayStatus/zero",
+    "type": "RelayStatus",
+    "value": {}
+  },
+  {
+    "name": "RelayStatus/filled",
+    "type": "RelayStatus",
+    "value": {
+      "orchestration_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "plan_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "completed_cs": 17,
+      "round": 17,
+      "max_rounds": 17,
+      "final_seen": true,
+      "implementation_session_id": 17,
+      "strong_session_id": 17,
+      "active_implementer": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "escalate_after": 17,
+      "review_session_id": 17,
+      "review_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "worktree_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "branch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "base_commit": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "updated_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "RelayEvent/zero",
+    "type": "RelayEvent",
+    "value": {}
+  },
+  {
+    "name": "RelayEvent/filled",
+    "type": "RelayEvent",
+    "value": {
+      "at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "c": 17,
+      "round": 17,
+      "text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "review_path": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "commit": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "files_changed": 17
+    }
+  },
+  {
+    "name": "ApprovalOption/zero",
+    "type": "ApprovalOption",
+    "value": {
+      "num": 0
+    }
+  },
+  {
+    "name": "ApprovalOption/filled",
+    "type": "ApprovalOption",
+    "value": {
+      "num": 17,
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "is_current": true,
+      "send_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "preserve_order": true
+    }
+  },
+  {
+    "name": "ApprovalRecord/zero",
+    "type": "ApprovalRecord",
+    "value": {
+      "candidate_key": "",
+      "source_epoch": 0,
+      "origin": ""
+    }
+  },
+  {
+    "name": "ApprovalRecord/filled",
+    "type": "ApprovalRecord",
+    "value": {
+      "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "candidate_shape": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source_epoch": 23,
+      "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "block": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "question": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "context": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "options": [
+        {
+          "num": 17,
+          "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "is_current": true,
+          "send_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "preserve_order": true
+        }
+      ],
+      "summary": {
+        "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "paths": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "ApprovalRecordClose/zero",
+    "type": "ApprovalRecordClose",
+    "value": {
+      "candidate_key": "",
+      "source_epoch": 0,
+      "reason": ""
+    }
+  },
+  {
+    "name": "ApprovalRecordClose/filled",
+    "type": "ApprovalRecordClose",
+    "value": {
+      "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source_epoch": 23,
+      "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  },
+  {
+    "name": "ApprovalState/zero",
+    "type": "ApprovalState",
+    "value": {
+      "version": 0
+    }
+  },
+  {
+    "name": "ApprovalState/filled",
+    "type": "ApprovalState",
+    "value": {
+      "version": 23,
+      "open": {
+        "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "candidate_shape": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source_epoch": 23,
+        "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "block": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "question": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "context": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "options": [
+          {
+            "num": 17,
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "is_current": true,
+            "send_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "preserve_order": true
+          }
+        ],
+        "summary": {
+          "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "paths": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "close": {
+        "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source_epoch": 23,
+        "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    }
+  },
+  {
+    "name": "ApprovalSessionState/zero",
+    "type": "ApprovalSessionState",
+    "value": {
+      "session_id": 0,
+      "version": 0
+    }
+  },
+  {
+    "name": "ApprovalSessionState/filled",
+    "type": "ApprovalSessionState",
+    "value": {
+      "session_id": 17,
+      "version": 23,
+      "record": {
+        "candidate_key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "candidate_shape": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source_epoch": 23,
+        "sig": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "block": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "question": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "context": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "options": [
+          {
+            "num": 17,
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "is_current": true,
+            "send_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "preserve_order": true
+          }
+        ],
+        "summary": {
+          "command": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "paths": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "risk": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "raw": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    }
+  },
+  {
+    "name": "ChildApproval/zero",
+    "type": "ChildApproval",
+    "value": {}
+  },
+  {
+    "name": "ChildApproval/filled",
+    "type": "ChildApproval",
+    "value": {
+      "permission_mode": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "sandbox": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "ask_for_approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "allowed_tools": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "risk_confirmed": true,
+      "tier": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "fallback_from": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    }
+  }
+]

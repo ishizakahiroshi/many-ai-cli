@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>many-ai-cli</title>
+<style nonce="__NONCE__">
+body{background:#0e0f12;color:#e6e6e6;font:16px/1.6 system-ui,-apple-system,sans-serif;margin:0;padding:2rem}
+.box{max-width:34rem;margin:0 auto}
+h1{font-size:1.25rem;margin:0 0 1rem}
+code{background:#1b1d22;padding:.1em .35em;border-radius:.25em}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>many-ai-cli</h1>
+<p id="working">Restoring this device&#39;s session&hellip;</p>
+<div id="failed" class="hide">
+<p>This device is not signed in to the Hub.</p>
+<p>Open the Hub URL that includes <code>?token=</code> once. Settings &gt; Mobile connect shows a QR code for it. After that this app restores the session on its own.</p>
+</div>
+</div>
+<script nonce="__NONCE__">
+(function () {
+  var working = document.getElementById('working');
+  var failed = document.getElementById('failed');
+  function giveUp() {
+    working.className = 'hide';
+    failed.className = '';
+  }
+  var stored = null;
+  try { stored = localStorage.getItem('__TOKEN_KEY__'); } catch (e) { /* private mode 等 */ }
+  if (!stored) { giveUp(); return; }
+  var tried = null;
+  try { tried = sessionStorage.getItem('__GUARD_KEY__'); } catch (e) { /* private mode 等 */ }
+  if (tried) { giveUp(); return; }
+  try { sessionStorage.setItem('__GUARD_KEY__', '1'); } catch (e) { /* private mode 等 */ }
+  var here = location.pathname + location.search + location.hash;
+  fetch('/', {
+    method: 'GET',
+    credentials: 'same-origin',
+    headers: { 'Authorization': 'Bearer ' + stored }
+  }).then(function (res) {
+    if (res.ok) { location.replace(here); return; }
+    giveUp();
+  }).catch(function () { giveUp(); });
+})();
+</script>
+</body>
+</html>

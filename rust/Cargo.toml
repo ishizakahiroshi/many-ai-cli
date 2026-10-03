@@ -1,0 +1,61 @@
+[package]
+name = "many-ai-cli"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+license = "MIT"
+description = "Compatibility migration candidate for many-ai-cli"
+build = "build.rs"
+
+[lib]
+name = "many_ai_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "many-ai-cli"
+path = "src/bin/many-ai-cli.rs"
+
+[[bin]]
+name = "many-ai-cli-launcher"
+path = "src/bin/many-ai-cli-launcher.rs"
+
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["raw_value"] }
+base64 = "=0.22.1"
+getrandom = "=0.4.3"
+url = "=2.5.8"
+serde-saphyr = "=1.3.0"
+tokio = { version = "=1.53.1", features = ["rt-multi-thread", "macros", "process", "io-util", "time", "sync", "signal", "net"] }
+
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled", "backup", "hooks"] }
+portable-pty = "=0.9.0"
+axum = { version = "=0.8.9", features = ["ws", "multipart"] }
+bcrypt = "=0.19.3"
+hmac = "=0.13.0"
+sha2 = "=0.11.0"
+toml_edit = "=0.25.15"
+subtle = "=2.6.1"
+regex = "=1.13.1"
+chrono = { version = "=0.4.45", default-features = false, features = ["std", "clock"] }
+chrono-tz = "=0.10.4"
+http-body = "=1.1.0"
+futures-util = { version = "=0.3.34", features = ["sink"] }
+tokio-tungstenite = { version = "=0.29.0", default-features = false, features = ["handshake"] }
+httpdate = "=1.0.3"
+hyper = { version = "=1.11.1", features = ["server", "http1"] }
+hyper-util = { version = "=0.1.21", features = ["server", "http1", "tokio", "service"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls", "json", "query", "stream", "multipart"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "=0.2.190"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_Memory", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Console", "Win32_System_WindowsProgramming", "Win32_System_SystemInformation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_System_Pipes", "Win32_System_IO"] }
+
+[dev-dependencies]
+tempfile = "=3.27.0"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

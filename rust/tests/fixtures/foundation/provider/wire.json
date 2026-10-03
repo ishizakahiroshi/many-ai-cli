@@ -1,0 +1,3337 @@
+[
+  {
+    "name": "SourceRef/zero",
+    "type": "SourceRef",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "SourceRef/filled",
+    "type": "SourceRef",
+    "input": {
+      "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "Definition/zero",
+    "type": "Definition",
+    "input": {
+      "adapters": {},
+      "source": {}
+    },
+    "expected": {
+      "adapters": {},
+      "source": {}
+    },
+    "expected_json": "{\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "Definition/filled",
+    "type": "Definition",
+    "input": {
+      "schema_version": 17,
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "launch": {
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "executable_candidates": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "model_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_levels": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "allowed_env": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "headless": {
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "models": {
+        "allow_custom": true,
+        "items": [
+          {
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        ],
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "capabilities": {
+        "synthetic": true
+      },
+      "adapters": {
+        "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "presentation": {
+        "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source": {
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "update": {
+        "version_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "enabled": true,
+        "login_may_be_required": true,
+        "timeout_seconds": 17
+      }
+    },
+    "expected": {
+      "schema_version": 17,
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "launch": {
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "executable_candidates": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "model_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_levels": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "allowed_env": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "headless": {
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "models": {
+        "allow_custom": true,
+        "items": [
+          {
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        ],
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "capabilities": {
+        "synthetic": true
+      },
+      "adapters": {
+        "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "presentation": {
+        "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source": {
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "update": {
+        "version_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "enabled": true,
+        "login_may_be_required": true,
+        "timeout_seconds": 17
+      }
+    },
+    "expected_json": "{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}"
+  },
+  {
+    "name": "LaunchDefinition/zero",
+    "type": "LaunchDefinition",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "LaunchDefinition/filled",
+    "type": "LaunchDefinition",
+    "input": {
+      "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "executable_candidates": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "model_args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "effort_args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "effort_levels": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "allowed_env": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "headless": {
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    },
+    "expected": {
+      "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "executable_candidates": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "model_args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "effort_args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "effort_levels": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "allowed_env": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "headless": {
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    },
+    "expected_json": "{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}}"
+  },
+  {
+    "name": "ModelsDefinition/zero",
+    "type": "ModelsDefinition",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "ModelsDefinition/filled",
+    "type": "ModelsDefinition",
+    "input": {
+      "allow_custom": true,
+      "items": [
+        {
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "allow_custom": true,
+      "items": [
+        {
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      ],
+      "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "ModelDefinition/zero",
+    "type": "ModelDefinition",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "ModelDefinition/filled",
+    "type": "ModelDefinition",
+    "input": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "HeadlessDefinition/zero",
+    "type": "HeadlessDefinition",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "HeadlessDefinition/filled",
+    "type": "HeadlessDefinition",
+    "input": {
+      "args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "PresentationDefinition/zero",
+    "type": "PresentationDefinition",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "PresentationDefinition/filled",
+    "type": "PresentationDefinition",
+    "input": {
+      "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "UpdateDefinition/zero",
+    "type": "UpdateDefinition",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "UpdateDefinition/filled",
+    "type": "UpdateDefinition",
+    "input": {
+      "version_args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "login_may_be_required": true,
+      "timeout_seconds": 17
+    },
+    "expected": {
+      "version_args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "login_may_be_required": true,
+      "timeout_seconds": 17
+    },
+    "expected_json": "{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}"
+  },
+  {
+    "name": "AdapterRefs/zero",
+    "type": "AdapterRefs",
+    "input": {},
+    "expected": {},
+    "expected_json": "{}"
+  },
+  {
+    "name": "AdapterRefs/filled",
+    "type": "AdapterRefs",
+    "input": {
+      "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "Layers/zero",
+    "type": "Layers",
+    "input": {
+      "Embedded": null,
+      "AcceptedDistribution": null,
+      "Distribution": null,
+      "Legacy": null,
+      "User": null,
+      "Overrides": null
+    },
+    "expected": {
+      "Embedded": null,
+      "AcceptedDistribution": null,
+      "Distribution": null,
+      "Legacy": null,
+      "User": null,
+      "Overrides": null
+    },
+    "expected_json": "{\"Embedded\":null,\"AcceptedDistribution\":null,\"Distribution\":null,\"Legacy\":null,\"User\":null,\"Overrides\":null}"
+  },
+  {
+    "name": "Layers/filled",
+    "type": "Layers",
+    "input": {
+      "Embedded": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "AcceptedDistribution": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "Distribution": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "Legacy": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "User": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "Overrides": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ]
+    },
+    "expected": {
+      "Embedded": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "AcceptedDistribution": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "Distribution": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "Legacy": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "User": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "Overrides": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ]
+    },
+    "expected_json": "{\"Embedded\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"AcceptedDistribution\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"Distribution\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"Legacy\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"User\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"Overrides\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}]}"
+  },
+  {
+    "name": "AdapterCatalog/zero",
+    "type": "AdapterCatalog",
+    "input": {
+      "Keys": null
+    },
+    "expected": {
+      "Keys": null
+    },
+    "expected_json": "{\"Keys\":null}"
+  },
+  {
+    "name": "AdapterCatalog/filled",
+    "type": "AdapterCatalog",
+    "input": {
+      "Keys": {
+        "synthetic": {}
+      }
+    },
+    "expected": {
+      "Keys": {
+        "synthetic": {}
+      }
+    },
+    "expected_json": "{\"Keys\":{\"synthetic\":{}}}"
+  },
+  {
+    "name": "CapabilitySummary/zero",
+    "type": "CapabilitySummary",
+    "input": {
+      "launch": false,
+      "models": false,
+      "effort": false,
+      "headless": false,
+      "approval": false,
+      "transcript": false,
+      "usage": false,
+      "subscription": false,
+      "permissions": false,
+      "subagents": false
+    },
+    "expected": {
+      "launch": false,
+      "models": false,
+      "effort": false,
+      "headless": false,
+      "approval": false,
+      "transcript": false,
+      "usage": false,
+      "subscription": false,
+      "permissions": false,
+      "subagents": false
+    },
+    "expected_json": "{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}"
+  },
+  {
+    "name": "CapabilitySummary/filled",
+    "type": "CapabilitySummary",
+    "input": {
+      "launch": true,
+      "models": true,
+      "effort": true,
+      "headless": true,
+      "approval": true,
+      "transcript": true,
+      "usage": true,
+      "subscription": true,
+      "permissions": true,
+      "subagents": true
+    },
+    "expected": {
+      "launch": true,
+      "models": true,
+      "effort": true,
+      "headless": true,
+      "approval": true,
+      "transcript": true,
+      "usage": true,
+      "subscription": true,
+      "permissions": true,
+      "subagents": true
+    },
+    "expected_json": "{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true}"
+  },
+  {
+    "name": "EffectiveDefinition/zero",
+    "type": "EffectiveDefinition",
+    "input": {
+      "adapters": {},
+      "source": {},
+      "effective_source": {},
+      "revision": "",
+      "capabilities_summary": {
+        "launch": false,
+        "models": false,
+        "effort": false,
+        "headless": false,
+        "approval": false,
+        "transcript": false,
+        "usage": false,
+        "subscription": false,
+        "permissions": false,
+        "subagents": false
+      }
+    },
+    "expected": {
+      "adapters": {},
+      "source": {},
+      "effective_source": {},
+      "revision": "",
+      "capabilities_summary": {
+        "launch": false,
+        "models": false,
+        "effort": false,
+        "headless": false,
+        "approval": false,
+        "transcript": false,
+        "usage": false,
+        "subscription": false,
+        "permissions": false,
+        "subagents": false
+      }
+    },
+    "expected_json": "{\"adapters\":{},\"source\":{},\"effective_source\":{},\"revision\":\"\",\"capabilities_summary\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}}"
+  },
+  {
+    "name": "EffectiveDefinition/filled",
+    "type": "EffectiveDefinition",
+    "input": {
+      "schema_version": 17,
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "launch": {
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "executable_candidates": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "model_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_levels": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "allowed_env": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "headless": {
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "models": {
+        "allow_custom": true,
+        "items": [
+          {
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        ],
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "capabilities": {
+        "synthetic": true
+      },
+      "adapters": {
+        "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "presentation": {
+        "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source": {
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "update": {
+        "version_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "enabled": true,
+        "login_may_be_required": true,
+        "timeout_seconds": 17
+      },
+      "effective_source": {
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "field_origins": {
+        "synthetic": {
+          "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "capabilities_summary": {
+        "launch": true,
+        "models": true,
+        "effort": true,
+        "headless": true,
+        "approval": true,
+        "transcript": true,
+        "usage": true,
+        "subscription": true,
+        "permissions": true,
+        "subagents": true
+      }
+    },
+    "expected": {
+      "schema_version": 17,
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "launch": {
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "executable_candidates": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "model_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "effort_levels": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "allowed_env": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "headless": {
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "models": {
+        "allow_custom": true,
+        "items": [
+          {
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        ],
+        "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "capabilities": {
+        "synthetic": true
+      },
+      "adapters": {
+        "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "presentation": {
+        "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "source": {
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "update": {
+        "version_args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "args": [
+          "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        ],
+        "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "enabled": true,
+        "login_may_be_required": true,
+        "timeout_seconds": 17
+      },
+      "effective_source": {
+        "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "field_origins": {
+        "synthetic": {
+          "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "capabilities_summary": {
+        "launch": true,
+        "models": true,
+        "effort": true,
+        "headless": true,
+        "approval": true,
+        "transcript": true,
+        "usage": true,
+        "subscription": true,
+        "permissions": true,
+        "subagents": true
+      }
+    },
+    "expected_json": "{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17},\"effective_source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"field_origins\":{\"synthetic\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"capabilities_summary\":{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true}}"
+  },
+  {
+    "name": "Summary/zero",
+    "type": "Summary",
+    "input": {
+      "id": "",
+      "display_name": "",
+      "enabled": false,
+      "origin": "",
+      "revision": "",
+      "capabilities": {
+        "launch": false,
+        "models": false,
+        "effort": false,
+        "headless": false,
+        "approval": false,
+        "transcript": false,
+        "usage": false,
+        "subscription": false,
+        "permissions": false,
+        "subagents": false
+      }
+    },
+    "expected": {
+      "id": "",
+      "display_name": "",
+      "enabled": false,
+      "origin": "",
+      "revision": "",
+      "capabilities": {
+        "launch": false,
+        "models": false,
+        "effort": false,
+        "headless": false,
+        "approval": false,
+        "transcript": false,
+        "usage": false,
+        "subscription": false,
+        "permissions": false,
+        "subagents": false
+      }
+    },
+    "expected_json": "{\"id\":\"\",\"display_name\":\"\",\"enabled\":false,\"origin\":\"\",\"revision\":\"\",\"capabilities\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}}"
+  },
+  {
+    "name": "Summary/filled",
+    "type": "Summary",
+    "input": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "capabilities": {
+        "launch": true,
+        "models": true,
+        "effort": true,
+        "headless": true,
+        "approval": true,
+        "transcript": true,
+        "usage": true,
+        "subscription": true,
+        "permissions": true,
+        "subagents": true
+      },
+      "presentation": {
+        "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "icon_image_version": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "enabled": true,
+      "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "capabilities": {
+        "launch": true,
+        "models": true,
+        "effort": true,
+        "headless": true,
+        "approval": true,
+        "transcript": true,
+        "usage": true,
+        "subscription": true,
+        "permissions": true,
+        "subagents": true
+      },
+      "presentation": {
+        "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      },
+      "icon_image_version": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"capabilities\":{\"launch\":true,\"models\":true,\"effort\":true,\"headless\":true,\"approval\":true,\"transcript\":true,\"usage\":true,\"subscription\":true,\"permissions\":true,\"subagents\":true},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"icon_image_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "Diagnostic/zero",
+    "type": "Diagnostic",
+    "input": {
+      "code": "",
+      "severity": "",
+      "message": ""
+    },
+    "expected": {
+      "code": "",
+      "severity": "",
+      "message": ""
+    },
+    "expected_json": "{\"code\":\"\",\"severity\":\"\",\"message\":\"\"}"
+  },
+  {
+    "name": "Diagnostic/filled",
+    "type": "Diagnostic",
+    "input": {
+      "code": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "severity": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "field": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "message": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "code": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "severity": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "field": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "message": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"code\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"severity\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"field\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"message\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "LaunchRequest/zero",
+    "type": "LaunchRequest",
+    "input": {
+      "Model": "",
+      "Effort": "",
+      "SessionID": "",
+      "Prompt": "",
+      "Headless": false
+    },
+    "expected": {
+      "Model": "",
+      "Effort": "",
+      "SessionID": "",
+      "Prompt": "",
+      "Headless": false
+    },
+    "expected_json": "{\"Model\":\"\",\"Effort\":\"\",\"SessionID\":\"\",\"Prompt\":\"\",\"Headless\":false}"
+  },
+  {
+    "name": "LaunchRequest/filled",
+    "type": "LaunchRequest",
+    "input": {
+      "Model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "Effort": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "SessionID": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "Prompt": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "Headless": true
+    },
+    "expected": {
+      "Model": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "Effort": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "SessionID": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "Prompt": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "Headless": true
+    },
+    "expected_json": "{\"Model\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"Effort\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"SessionID\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"Prompt\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"Headless\":true}"
+  },
+  {
+    "name": "ResolvedLaunch/zero",
+    "type": "ResolvedLaunch",
+    "input": {
+      "ExecutableCandidates": null,
+      "Args": null,
+      "AllowedEnv": null,
+      "Revision": ""
+    },
+    "expected": {
+      "ExecutableCandidates": null,
+      "Args": null,
+      "AllowedEnv": null,
+      "Revision": ""
+    },
+    "expected_json": "{\"ExecutableCandidates\":null,\"Args\":null,\"AllowedEnv\":null,\"Revision\":\"\"}"
+  },
+  {
+    "name": "ResolvedLaunch/filled",
+    "type": "ResolvedLaunch",
+    "input": {
+      "ExecutableCandidates": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "Args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "AllowedEnv": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "Revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "ExecutableCandidates": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "Args": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "AllowedEnv": [
+        "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      ],
+      "Revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"ExecutableCandidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"Args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"AllowedEnv\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"Revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "AdapterDescriptor/zero",
+    "type": "AdapterDescriptor",
+    "input": {
+      "key": "",
+      "kind": "",
+      "version": ""
+    },
+    "expected": {
+      "key": "",
+      "kind": "",
+      "version": ""
+    },
+    "expected_json": "{\"key\":\"\",\"kind\":\"\",\"version\":\"\"}"
+  },
+  {
+    "name": "AdapterDescriptor/filled",
+    "type": "AdapterDescriptor",
+    "input": {
+      "key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "key": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "kind": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "provider": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"key\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"kind\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"provider\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "DistributionPayload/zero",
+    "type": "DistributionPayload",
+    "input": {
+      "schema_version": 0,
+      "catalog_version": "",
+      "created_at": "",
+      "definitions": null,
+      "digests": null
+    },
+    "expected": {
+      "schema_version": 0,
+      "catalog_version": "",
+      "created_at": "",
+      "definitions": null,
+      "digests": null
+    },
+    "expected_json": "{\"schema_version\":0,\"catalog_version\":\"\",\"created_at\":\"\",\"definitions\":null,\"digests\":null}"
+  },
+  {
+    "name": "DistributionPayload/filled",
+    "type": "DistributionPayload",
+    "input": {
+      "schema_version": 17,
+      "catalog_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "created_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "minimum_app_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "definitions": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "digests": {
+        "synthetic": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    },
+    "expected": {
+      "schema_version": 17,
+      "catalog_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "created_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "minimum_app_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "definitions": [
+        {
+          "schema_version": 17,
+          "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "launch": {
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "executable_candidates": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "model_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "effort_levels": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "allowed_env": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "headless": {
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          },
+          "models": {
+            "allow_custom": true,
+            "items": [
+              {
+                "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            ],
+            "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "capabilities": {
+            "synthetic": true
+          },
+          "adapters": {
+            "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "presentation": {
+            "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "source": {
+            "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          },
+          "update": {
+            "version_args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "login_may_be_required": true,
+            "timeout_seconds": 17
+          }
+        }
+      ],
+      "digests": {
+        "synthetic": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+      }
+    },
+    "expected_json": "{\"schema_version\":17,\"catalog_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"created_at\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"minimum_app_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"definitions\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"digests\":{\"synthetic\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}}"
+  },
+  {
+    "name": "DistributionBundle/zero",
+    "type": "DistributionBundle",
+    "input": {
+      "payload": {
+        "schema_version": 0,
+        "catalog_version": "",
+        "created_at": "",
+        "definitions": null,
+        "digests": null
+      },
+      "key_id": "",
+      "signature": ""
+    },
+    "expected": {
+      "payload": {
+        "schema_version": 0,
+        "catalog_version": "",
+        "created_at": "",
+        "definitions": null,
+        "digests": null
+      },
+      "key_id": "",
+      "signature": ""
+    },
+    "expected_json": "{\"payload\":{\"schema_version\":0,\"catalog_version\":\"\",\"created_at\":\"\",\"definitions\":null,\"digests\":null},\"key_id\":\"\",\"signature\":\"\"}"
+  },
+  {
+    "name": "DistributionBundle/filled",
+    "type": "DistributionBundle",
+    "input": {
+      "payload": {
+        "schema_version": 17,
+        "catalog_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "created_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "minimum_app_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "definitions": [
+          {
+            "schema_version": 17,
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "launch": {
+              "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "executable_candidates": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "model_args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "effort_args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "effort_levels": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "allowed_env": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "headless": {
+                "args": [
+                  "synthetic-日本語-\u003c\u0026\u003e\u2028"
+                ],
+                "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            },
+            "models": {
+              "allow_custom": true,
+              "items": [
+                {
+                  "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                  "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+                }
+              ],
+              "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "capabilities": {
+              "synthetic": true
+            },
+            "adapters": {
+              "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "presentation": {
+              "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "source": {
+              "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "update": {
+              "version_args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "enabled": true,
+              "login_may_be_required": true,
+              "timeout_seconds": 17
+            }
+          }
+        ],
+        "digests": {
+          "synthetic": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "key_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "signature": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "payload": {
+        "schema_version": 17,
+        "catalog_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "created_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "minimum_app_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "definitions": [
+          {
+            "schema_version": 17,
+            "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "enabled": true,
+            "launch": {
+              "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "executable_candidates": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "model_args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "effort_args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "effort_levels": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "allowed_env": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "headless": {
+                "args": [
+                  "synthetic-日本語-\u003c\u0026\u003e\u2028"
+                ],
+                "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              }
+            },
+            "models": {
+              "allow_custom": true,
+              "items": [
+                {
+                  "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+                  "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+                }
+              ],
+              "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "capabilities": {
+              "synthetic": true
+            },
+            "adapters": {
+              "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "presentation": {
+              "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "source": {
+              "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            },
+            "update": {
+              "version_args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "args": [
+                "synthetic-日本語-\u003c\u0026\u003e\u2028"
+              ],
+              "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "enabled": true,
+              "login_may_be_required": true,
+              "timeout_seconds": 17
+            }
+          }
+        ],
+        "digests": {
+          "synthetic": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        }
+      },
+      "key_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "signature": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"payload\":{\"schema_version\":17,\"catalog_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"created_at\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"minimum_app_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"definitions\":[{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}],\"digests\":{\"synthetic\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"key_id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"signature\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "DistributionStatus/zero",
+    "type": "DistributionStatus",
+    "input": {
+      "catalog_version": "",
+      "digest": "",
+      "state": ""
+    },
+    "expected": {
+      "catalog_version": "",
+      "digest": "",
+      "state": ""
+    },
+    "expected_json": "{\"catalog_version\":\"\",\"digest\":\"\",\"state\":\"\"}"
+  },
+  {
+    "name": "DistributionStatus/filled",
+    "type": "DistributionStatus",
+    "input": {
+      "catalog_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "path": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "catalog_version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "state": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "path": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"catalog_version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"state\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"path\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "DistributionFieldDiff/zero",
+    "type": "DistributionFieldDiff",
+    "input": {
+      "field": "",
+      "conflict": false
+    },
+    "expected": {
+      "field": "",
+      "conflict": false
+    },
+    "expected_json": "{\"field\":\"\",\"conflict\":false}"
+  },
+  {
+    "name": "DistributionFieldDiff/filled",
+    "type": "DistributionFieldDiff",
+    "input": {
+      "field": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "current": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "candidate": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "override": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "conflict": true
+    },
+    "expected": {
+      "field": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "current": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "candidate": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "override": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "conflict": true
+    },
+    "expected_json": "{\"field\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"current\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"candidate\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"override\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"conflict\":true}"
+  },
+  {
+    "name": "DistributionProviderDiff/zero",
+    "type": "DistributionProviderDiff",
+    "input": {
+      "id": "",
+      "status": ""
+    },
+    "expected": {
+      "id": "",
+      "status": ""
+    },
+    "expected_json": "{\"id\":\"\",\"status\":\"\"}"
+  },
+  {
+    "name": "DistributionProviderDiff/filled",
+    "type": "DistributionProviderDiff",
+    "input": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "status": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "changes": [
+        {
+          "field": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "current": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "candidate": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "override": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "conflict": true
+        }
+      ]
+    },
+    "expected": {
+      "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "status": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "changes": [
+        {
+          "field": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "current": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "candidate": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "override": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "conflict": true
+        }
+      ]
+    },
+    "expected_json": "{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"status\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"changes\":[{\"field\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"current\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"candidate\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"override\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"conflict\":true}]}"
+  },
+  {
+    "name": "RevisionRecord/zero",
+    "type": "RevisionRecord",
+    "input": {
+      "schema_version": 0,
+      "provider_id": "",
+      "revision": "",
+      "created_at": "",
+      "reason": "",
+      "content_digest": "",
+      "payload": {
+        "adapters": {},
+        "source": {}
+      }
+    },
+    "expected": {
+      "schema_version": 0,
+      "provider_id": "",
+      "revision": "",
+      "created_at": "",
+      "reason": "",
+      "content_digest": "",
+      "payload": {
+        "adapters": {},
+        "source": {}
+      }
+    },
+    "expected_json": "{\"schema_version\":0,\"provider_id\":\"\",\"revision\":\"\",\"created_at\":\"\",\"reason\":\"\",\"content_digest\":\"\",\"payload\":{\"adapters\":{},\"source\":{}}}"
+  },
+  {
+    "name": "RevisionRecord/filled",
+    "type": "RevisionRecord",
+    "input": {
+      "schema_version": 17,
+      "provider_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "created_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "parent_revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "content_digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "payload": {
+        "schema_version": 17,
+        "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "enabled": true,
+        "launch": {
+          "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "executable_candidates": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "model_args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "effort_args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "effort_levels": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "allowed_env": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "headless": {
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        },
+        "models": {
+          "allow_custom": true,
+          "items": [
+            {
+              "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          ],
+          "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "capabilities": {
+          "synthetic": true
+        },
+        "adapters": {
+          "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "presentation": {
+          "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source": {
+          "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "update": {
+          "version_args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "login_may_be_required": true,
+          "timeout_seconds": 17
+        }
+      }
+    },
+    "expected": {
+      "schema_version": 17,
+      "provider_id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "created_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "parent_revision": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "content_digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "payload": {
+        "schema_version": 17,
+        "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "display_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "description": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "enabled": true,
+        "launch": {
+          "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "executable_candidates": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "model_args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "effort_args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "effort_levels": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "allowed_env": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "headless": {
+            "args": [
+              "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            ],
+            "format": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+            "prompt_via": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          }
+        },
+        "models": {
+          "allow_custom": true,
+          "items": [
+            {
+              "id": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+              "label": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+            }
+          ],
+          "source": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "capabilities": {
+          "synthetic": true
+        },
+        "adapters": {
+          "launch": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "approval": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "transcript": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "usage": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "subscription": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "permissions": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "subagents": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "presentation": {
+          "icon_text": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "color": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "approval_pattern_source": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+        "source": {
+          "origin": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "version": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "revision": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+        },
+        "update": {
+          "version_args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "args": [
+            "synthetic-日本語-\u003c\u0026\u003e\u2028"
+          ],
+          "executable": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+          "enabled": true,
+          "login_may_be_required": true,
+          "timeout_seconds": 17
+        }
+      }
+    },
+    "expected_json": "{\"schema_version\":17,\"provider_id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"created_at\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"reason\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"parent_revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"content_digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"payload\":{\"schema_version\":17,\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"display_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"description\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"launch\":{\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"executable_candidates\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"model_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"effort_levels\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"allowed_env\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"headless\":{\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"format\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"prompt_via\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}},\"models\":{\"allow_custom\":true,\"items\":[{\"id\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"label\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}],\"source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"capabilities\":{\"synthetic\":true},\"adapters\":{\"launch\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"approval\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"transcript\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"usage\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subscription\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"permissions\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"subagents\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"presentation\":{\"icon_text\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"color\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"approval_pattern_source\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"source\":{\"origin\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"version\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"revision\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"},\"update\":{\"version_args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"args\":[\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"],\"executable\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"enabled\":true,\"login_may_be_required\":true,\"timeout_seconds\":17}}}"
+  },
+  {
+    "name": "QuarantineRecord/zero",
+    "type": "QuarantineRecord",
+    "input": {
+      "original_name": "",
+      "quarantined": "",
+      "detected_at": "",
+      "reason": "",
+      "digest": ""
+    },
+    "expected": {
+      "original_name": "",
+      "quarantined": "",
+      "detected_at": "",
+      "reason": "",
+      "digest": ""
+    },
+    "expected_json": "{\"original_name\":\"\",\"quarantined\":\"\",\"detected_at\":\"\",\"reason\":\"\",\"digest\":\"\"}"
+  },
+  {
+    "name": "QuarantineRecord/filled",
+    "type": "QuarantineRecord",
+    "input": {
+      "original_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "quarantined": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected": {
+      "original_name": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "quarantined": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "detected_at": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "reason": "synthetic-日本語-\u003c\u0026\u003e\u2028",
+      "digest": "synthetic-日本語-\u003c\u0026\u003e\u2028"
+    },
+    "expected_json": "{\"original_name\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"quarantined\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"detected_at\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"reason\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\",\"digest\":\"synthetic-日本語-\\u003c\\u0026\\u003e\\u2028\"}"
+  },
+  {
+    "name": "definition/value-structs-still-emitted",
+    "type": "Definition",
+    "input": {},
+    "expected": {
+      "adapters": {},
+      "source": {}
+    },
+    "expected_json": "{\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/disabled-overlay",
+    "type": "Definition",
+    "input": {
+      "id": "custom-disabled",
+      "enabled": false,
+      "update": {
+        "enabled": false
+      }
+    },
+    "expected": {
+      "id": "custom-disabled",
+      "enabled": false,
+      "adapters": {},
+      "source": {},
+      "update": {
+        "enabled": false
+      }
+    },
+    "expected_json": "{\"id\":\"custom-disabled\",\"enabled\":false,\"adapters\":{},\"source\":{},\"update\":{\"enabled\":false}}"
+  },
+  {
+    "name": "definition/explicit-empty-pointers",
+    "type": "Definition",
+    "input": {
+      "launch": {},
+      "models": {},
+      "presentation": {},
+      "update": {}
+    },
+    "expected": {
+      "launch": {},
+      "models": {},
+      "adapters": {},
+      "presentation": {},
+      "source": {},
+      "update": {}
+    },
+    "expected_json": "{\"launch\":{},\"models\":{},\"adapters\":{},\"presentation\":{},\"source\":{},\"update\":{}}"
+  },
+  {
+    "name": "definition/all-null",
+    "type": "Definition",
+    "input": {
+      "schema_version": null,
+      "id": null,
+      "display_name": null,
+      "description": null,
+      "enabled": null,
+      "launch": null,
+      "models": null,
+      "capabilities": null,
+      "adapters": null,
+      "presentation": null,
+      "approval_pattern_source": null,
+      "source": null,
+      "update": null
+    },
+    "expected": {
+      "adapters": {},
+      "source": {}
+    },
+    "expected_json": "{\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/null-collection-elements",
+    "type": "Definition",
+    "input": {
+      "launch": {
+        "args": [
+          null,
+          "--fake"
+        ],
+        "executable_candidates": [
+          null
+        ],
+        "allowed_env": [
+          null
+        ]
+      },
+      "models": {
+        "items": [
+          null,
+          {}
+        ]
+      },
+      "capabilities": {
+        "launch": null
+      }
+    },
+    "expected": {
+      "launch": {
+        "executable_candidates": [
+          ""
+        ],
+        "args": [
+          "",
+          "--fake"
+        ],
+        "allowed_env": [
+          ""
+        ]
+      },
+      "models": {
+        "items": [
+          {},
+          {}
+        ]
+      },
+      "capabilities": {
+        "launch": false
+      },
+      "adapters": {},
+      "source": {}
+    },
+    "expected_json": "{\"launch\":{\"executable_candidates\":[\"\"],\"args\":[\"\",\"--fake\"],\"allowed_env\":[\"\"]},\"models\":{\"items\":[{},{}]},\"capabilities\":{\"launch\":false},\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/unknown-optional-and-old-version",
+    "type": "Definition",
+    "input": {
+      "schema_version": 0,
+      "id": "historical",
+      "future_optional": {
+        "ignored": true
+      },
+      "launch": {
+        "executable": "fake-old",
+        "future_flag": true
+      },
+      "source": {
+        "origin": "future-origin",
+        "future_source": true
+      },
+      "adapters": {
+        "approval": "future:reader-v9"
+      }
+    },
+    "expected": {
+      "id": "historical",
+      "launch": {
+        "executable": "fake-old"
+      },
+      "adapters": {
+        "approval": "future:reader-v9"
+      },
+      "source": {
+        "origin": "future-origin"
+      }
+    },
+    "expected_json": "{\"id\":\"historical\",\"launch\":{\"executable\":\"fake-old\"},\"adapters\":{\"approval\":\"future:reader-v9\"},\"source\":{\"origin\":\"future-origin\"}}"
+  },
+  {
+    "name": "definition/null-nested-value-structs",
+    "type": "Definition",
+    "input": {
+      "adapters": {
+        "launch": null,
+        "approval": null
+      },
+      "source": {
+        "origin": null,
+        "revision": null
+      }
+    },
+    "expected": {
+      "adapters": {},
+      "source": {}
+    },
+    "expected_json": "{\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/empty-optional-collections",
+    "type": "Definition",
+    "input": {
+      "capabilities": {},
+      "launch": {
+        "args": [],
+        "allowed_env": [],
+        "effort_levels": []
+      },
+      "models": {
+        "items": []
+      }
+    },
+    "expected": {
+      "launch": {},
+      "models": {},
+      "adapters": {},
+      "source": {}
+    },
+    "expected_json": "{\"launch\":{},\"models\":{},\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/bad-enabled-type",
+    "type": "Definition",
+    "input": {
+      "id": "bad",
+      "enabled": "false"
+    },
+    "expected": {
+      "id": "bad",
+      "enabled": false,
+      "adapters": {},
+      "source": {}
+    },
+    "rejected": true,
+    "expected_json": "{\"id\":\"bad\",\"enabled\":false,\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/bad-args-type",
+    "type": "Definition",
+    "input": {
+      "launch": {
+        "args": "--fake"
+      }
+    },
+    "expected": {
+      "launch": {},
+      "adapters": {},
+      "source": {}
+    },
+    "rejected": true,
+    "expected_json": "{\"launch\":{},\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/bad-schema-fraction",
+    "type": "Definition",
+    "input": {
+      "schema_version": 1.5
+    },
+    "expected": {
+      "adapters": {},
+      "source": {}
+    },
+    "rejected": true,
+    "expected_json": "{\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "definition/bad-map-value",
+    "type": "Definition",
+    "input": {
+      "capabilities": {
+        "launch": "yes"
+      }
+    },
+    "expected": {
+      "capabilities": {
+        "launch": false
+      },
+      "adapters": {},
+      "source": {}
+    },
+    "rejected": true,
+    "expected_json": "{\"capabilities\":{\"launch\":false},\"adapters\":{},\"source\":{}}"
+  },
+  {
+    "name": "effective/embedded-fields-and-capability-collision",
+    "type": "EffectiveDefinition",
+    "input": {
+      "id": "fixture",
+      "enabled": false,
+      "capabilities": {
+        "headless": true,
+        "future": false
+      },
+      "capabilities_summary": {
+        "launch": true,
+        "headless": false
+      },
+      "field_origins": {
+        "launch.executable": {
+          "origin": "override"
+        },
+        "old": null
+      },
+      "effective_source": {
+        "origin": "legacy"
+      },
+      "revision": "synthetic-r1"
+    },
+    "expected": {
+      "id": "fixture",
+      "enabled": false,
+      "capabilities": {
+        "future": false,
+        "headless": true
+      },
+      "adapters": {},
+      "source": {},
+      "effective_source": {
+        "origin": "legacy"
+      },
+      "field_origins": {
+        "launch.executable": {
+          "origin": "override"
+        },
+        "old": {}
+      },
+      "revision": "synthetic-r1",
+      "capabilities_summary": {
+        "launch": true,
+        "models": false,
+        "effort": false,
+        "headless": false,
+        "approval": false,
+        "transcript": false,
+        "usage": false,
+        "subscription": false,
+        "permissions": false,
+        "subagents": false
+      }
+    },
+    "expected_json": "{\"id\":\"fixture\",\"enabled\":false,\"capabilities\":{\"future\":false,\"headless\":true},\"adapters\":{},\"source\":{},\"effective_source\":{\"origin\":\"legacy\"},\"field_origins\":{\"launch.executable\":{\"origin\":\"override\"},\"old\":{}},\"revision\":\"synthetic-r1\",\"capabilities_summary\":{\"launch\":true,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false}}"
+  },
+  {
+    "name": "summary/unknown-origin",
+    "type": "Summary",
+    "input": {
+      "id": "fixture",
+      "origin": "future-origin",
+      "enabled": false,
+      "capabilities": null,
+      "presentation": {},
+      "icon_image_version": "1700000000"
+    },
+    "expected": {
+      "id": "fixture",
+      "display_name": "",
+      "enabled": false,
+      "origin": "future-origin",
+      "revision": "",
+      "capabilities": {
+        "launch": false,
+        "models": false,
+        "effort": false,
+        "headless": false,
+        "approval": false,
+        "transcript": false,
+        "usage": false,
+        "subscription": false,
+        "permissions": false,
+        "subagents": false
+      },
+      "presentation": {},
+      "icon_image_version": "1700000000"
+    },
+    "expected_json": "{\"id\":\"fixture\",\"display_name\":\"\",\"enabled\":false,\"origin\":\"future-origin\",\"revision\":\"\",\"capabilities\":{\"launch\":false,\"models\":false,\"effort\":false,\"headless\":false,\"approval\":false,\"transcript\":false,\"usage\":false,\"subscription\":false,\"permissions\":false,\"subagents\":false},\"presentation\":{},\"icon_image_version\":\"1700000000\"}"
+  },
+  {
+    "name": "diagnostic/unknown-severity",
+    "type": "Diagnostic",
+    "input": {
+      "code": "future",
+      "severity": "future-severity",
+      "message": "synthetic diagnostic",
+      "field": null
+    },
+    "expected": {
+      "code": "future",
+      "severity": "future-severity",
+      "message": "synthetic diagnostic"
+    },
+    "expected_json": "{\"code\":\"future\",\"severity\":\"future-severity\",\"message\":\"synthetic diagnostic\"}"
+  },
+  {
+    "name": "layers/nil",
+    "type": "Layers",
+    "input": {
+      "Embedded": null,
+      "AcceptedDistribution": null,
+      "Distribution": null,
+      "Legacy": null,
+      "User": null,
+      "Overrides": null
+    },
+    "expected": {
+      "Embedded": null,
+      "AcceptedDistribution": null,
+      "Distribution": null,
+      "Legacy": null,
+      "User": null,
+      "Overrides": null
+    },
+    "expected_json": "{\"Embedded\":null,\"AcceptedDistribution\":null,\"Distribution\":null,\"Legacy\":null,\"User\":null,\"Overrides\":null}"
+  },
+  {
+    "name": "layers/empty",
+    "type": "Layers",
+    "input": {
+      "Embedded": [],
+      "AcceptedDistribution": [],
+      "Distribution": [],
+      "Legacy": [],
+      "User": [],
+      "Overrides": []
+    },
+    "expected": {
+      "Embedded": [],
+      "AcceptedDistribution": [],
+      "Distribution": [],
+      "Legacy": [],
+      "User": [],
+      "Overrides": []
+    },
+    "expected_json": "{\"Embedded\":[],\"AcceptedDistribution\":[],\"Distribution\":[],\"Legacy\":[],\"User\":[],\"Overrides\":[]}"
+  },
+  {
+    "name": "resolved-launch/empty",
+    "type": "ResolvedLaunch",
+    "input": {
+      "ExecutableCandidates": [],
+      "Args": [],
+      "AllowedEnv": []
+    },
+    "expected": {
+      "ExecutableCandidates": [],
+      "Args": [],
+      "AllowedEnv": [],
+      "Revision": ""
+    },
+    "expected_json": "{\"ExecutableCandidates\":[],\"Args\":[],\"AllowedEnv\":[],\"Revision\":\"\"}"
+  },
+  {
+    "name": "catalog/nil",
+    "type": "AdapterCatalog",
+    "input": {
+      "Keys": null
+    },
+    "expected": {
+      "Keys": null
+    },
+    "expected_json": "{\"Keys\":null}"
+  },
+  {
+    "name": "catalog/empty",
+    "type": "AdapterCatalog",
+    "input": {
+      "Keys": {}
+    },
+    "expected": {
+      "Keys": {}
+    },
+    "expected_json": "{\"Keys\":{}}"
+  },
+  {
+    "name": "catalog/null-map-value",
+    "type": "AdapterCatalog",
+    "input": {
+      "Keys": {
+        "launch:generic-v1": null
+      }
+    },
+    "expected": {
+      "Keys": {
+        "launch:generic-v1": {}
+      }
+    },
+    "expected_json": "{\"Keys\":{\"launch:generic-v1\":{}}}"
+  },
+  {
+    "name": "distribution/empty",
+    "type": "DistributionPayload",
+    "input": {
+      "definitions": [],
+      "digests": {}
+    },
+    "expected": {
+      "schema_version": 0,
+      "catalog_version": "",
+      "created_at": "",
+      "definitions": [],
+      "digests": {}
+    },
+    "expected_json": "{\"schema_version\":0,\"catalog_version\":\"\",\"created_at\":\"\",\"definitions\":[],\"digests\":{}}"
+  },
+  {
+    "name": "distribution/null-elements",
+    "type": "DistributionPayload",
+    "input": {
+      "definitions": [
+        null
+      ],
+      "digests": {
+        "fixture": null
+      }
+    },
+    "expected": {
+      "schema_version": 0,
+      "catalog_version": "",
+      "created_at": "",
+      "definitions": [
+        {
+          "adapters": {},
+          "source": {}
+        }
+      ],
+      "digests": {
+        "fixture": ""
+      }
+    },
+    "expected_json": "{\"schema_version\":0,\"catalog_version\":\"\",\"created_at\":\"\",\"definitions\":[{\"adapters\":{},\"source\":{}}],\"digests\":{\"fixture\":\"\"}}"
+  }
+]

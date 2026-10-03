@@ -1,0 +1,132 @@
+[
+  {
+    "name": "claude_running_nested",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent.jsonl": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-one\",\"name\":\"Agent\"}]}}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-two\",\"name\":\"Agent\"}]}}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-orphan\",\"name\":\"Agent\"}]}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "claude_terminal",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"completed\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-one\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-two\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-orphan\"}]}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "claude_cutoff",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"completed\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-one\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-two\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-orphan\"}]}}\n"
+    },
+    "since": "2026-10-03T02:00:00Z"
+  },
+  {
+    "name": "claude_unknown",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent.jsonl": ""
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "codex_running_nested",
+    "adapter": "subagent:codex-v1",
+    "parent": "sessions/2026/10/03/parent.jsonl",
+    "files": {
+      "sessions/2026/10/03/parent.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"root\",\"timestamp\":\"2026-10-03T01:00:00Z\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"started\",\"agent_thread_id\":\"one\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"started\",\"agent_thread_id\":\"two\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"started\",\"agent_thread_id\":\"other\"}}}\n",
+      "sessions/2026/10/03/one.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"one\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"root\",\"agent_nickname\":\"Nick one\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/two.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"two\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"one\",\"agent_nickname\":\"Nick two\",\"agent_role\":\"reviewer\",\"depth\":2}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_message\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/other.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"other-root\",\"agent_nickname\":\"Nick other\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "codex_terminal",
+    "adapter": "subagent:codex-v1",
+    "parent": "sessions/2026/10/03/parent.jsonl",
+    "files": {
+      "sessions/2026/10/03/parent.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"root\",\"timestamp\":\"2026-10-03T01:00:00Z\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"completed\",\"agent_thread_id\":\"one\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"interrupted\",\"agent_thread_id\":\"two\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"interrupted\",\"agent_thread_id\":\"other\"}}}\n",
+      "sessions/2026/10/03/one.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"one\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"root\",\"agent_nickname\":\"Nick one\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/two.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"two\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"one\",\"agent_nickname\":\"Nick two\",\"agent_role\":\"reviewer\",\"depth\":2}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_message\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/other.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"other-root\",\"agent_nickname\":\"Nick other\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "codex_unknown",
+    "adapter": "subagent:codex-v1",
+    "parent": "sessions/2026/10/03/parent.jsonl",
+    "files": {
+      "sessions/2026/10/03/parent.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"root\",\"timestamp\":\"2026-10-03T01:00:00Z\"}}\n",
+      "sessions/2026/10/03/one.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"one\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"root\",\"agent_nickname\":\"Nick one\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/two.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"two\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"one\",\"agent_nickname\":\"Nick two\",\"agent_role\":\"reviewer\",\"depth\":2}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_message\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/other.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"other-root\",\"agent_nickname\":\"Nick other\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "grok_running",
+    "adapter": "subagent:grok-v1",
+    "parent": "sessions/cwd/parent/updates.jsonl",
+    "files": {
+      "sessions/cwd/parent/subagents/one/placeholder": "",
+      "sessions/cwd/parent/updates.jsonl": "{\"timestamp\":1790989200,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_spawned\",\"subagent_id\":\"one\",\"subagent_type\":\"general\",\"description\":\"Child one\",\"model\":\"synthetic\",\"child_session_id\":\"child-one\"}}}\n",
+      "sessions/cwd/child-one/events.jsonl": "{\"type\":\"tool_started\",\"tool_name\":\"read_file\"}\n{\"type\":\"phase_changed\",\"tool_name\":\"IGNORED\"}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "grok_meta",
+    "adapter": "subagent:grok-v1",
+    "parent": "sessions/cwd/parent/updates.jsonl",
+    "files": {
+      "sessions/cwd/parent/subagents/one/placeholder": "",
+      "sessions/cwd/parent/updates.jsonl": "{\"timestamp\":1790989200,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_spawned\",\"subagent_id\":\"one\",\"subagent_type\":\"general\",\"description\":\"Child one\",\"model\":\"synthetic\",\"child_session_id\":\"child-one\"}}}\n",
+      "sessions/cwd/child-one/events.jsonl": "{\"type\":\"tool_started\",\"tool_name\":\"read_file\"}\n{\"type\":\"phase_changed\",\"tool_name\":\"IGNORED\"}\n",
+      "sessions/cwd/parent/subagents/one/meta.json": "{\"parent_session_id\":\"parent\",\"description\":\"Meta one\",\"status\":\"cancelled\",\"started_at\":\"2026-10-03T01:00:00Z\",\"completed_at\":\"2026-10-03T01:00:00Z\",\"tool_calls\":9,\"effective_model_id\":\"synthetic\"}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  },
+  {
+    "name": "grok_finished",
+    "adapter": "subagent:grok-v1",
+    "parent": "sessions/cwd/parent/updates.jsonl",
+    "files": {
+      "sessions/cwd/parent/subagents/one/placeholder": "",
+      "sessions/cwd/parent/updates.jsonl": "{\"timestamp\":1790989200,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_spawned\",\"subagent_id\":\"one\",\"subagent_type\":\"general\",\"description\":\"Child one\",\"model\":\"synthetic\",\"child_session_id\":\"child-one\"}}}\n{\"timestamp\":1790989300,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_finished\",\"subagent_id\":\"one\",\"status\":\"completed\",\"tool_calls\":4}}}\n",
+      "sessions/cwd/child-one/events.jsonl": "{\"type\":\"tool_started\",\"tool_name\":\"read_file\"}\n{\"type\":\"phase_changed\",\"tool_name\":\"IGNORED\"}\n"
+    },
+    "since": "1970-01-01T00:00:00Z"
+  }
+]

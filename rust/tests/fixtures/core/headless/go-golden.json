@@ -1,0 +1,864 @@
+[
+  {
+    "format": "text",
+    "input": "{\"type\":\"system\",\"subtype\":\"init\",\"model\":\" synthetic \"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"system\",\"subtype\":\"init\",\"model\":\" synthetic \"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"system\",\"subtype\":\"init\",\"model\":\" synthetic \"}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"system\",\"subtype\":\"other\"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"system\",\"subtype\":\"other\"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"system\",\"subtype\":\"other\"}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\" Hello \\nworld \"},{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"BODY_NOT_RENDERED\"}}]}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\" Hello \\nworld \"},{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"BODY_NOT_RENDERED\"}}]}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\" Hello \\nworld \"},{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"BODY_NOT_RENDERED\"}}]}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\" bare text \"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":\" bare text \"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":\" bare text \"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"thinking\",\"thinking\":\"HIDDEN\"}]}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"thinking\",\"thinking\":\"HIDDEN\"}]}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"thinking\",\"thinking\":\"HIDDEN\"}]}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"is_error\":true,\"content\":[{\"type\":\"text\",\"text\":\"one\"},{\"type\":\"text\",\"text\":\"two\"}]}]}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"is_error\":true,\"content\":[{\"type\":\"text\",\"text\":\"one\"},{\"type\":\"text\",\"text\":\"two\"}]}]}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"is_error\":true,\"content\":[{\"type\":\"text\",\"text\":\"one\"},{\"type\":\"text\",\"text\":\"two\"}]}]}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\" done \\nother\"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\" done \\nother\"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\" done \\nother\"}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"subtype\":\"failure\",\"is_error\":false,\"error\":{\"message\":\"failure details\\nmore\",\"stack\":\"NOT_RENDERED\"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"subtype\":\"failure\",\"is_error\":false,\"error\":{\"message\":\"failure details\\nmore\",\"stack\":\"NOT_RENDERED\"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"subtype\":\"failure\",\"is_error\":false,\"error\":{\"message\":\"failure details\\nmore\",\"stack\":\"NOT_RENDERED\"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"is_error\":false}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"is_error\":false}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"is_error\":false}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"error\":\"quota\"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"error\":\"quota\"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"error\":\"quota\"}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"error\":{\"message\":\"\"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"error\":{\"message\":\"\"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"error\":{\"message\":\"\"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":99}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":99}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":99}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "null",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "null",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "null"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "[]",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "[]",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[]"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "   ",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "   ",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      ""
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":99,\"path\":\"/fallback\"}}]}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":99,\"path\":\"/fallback\"}}]}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":99,\"path\":\"/fallback\"}}]}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"subtype\":null,\"is_error\":null,\"result\":null}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"subtype\":null,\"is_error\":null,\"result\":null}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"subtype\":null,\"is_error\":null,\"result\":null}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"TYPE\":\"assistant\",\"MESSAGE\":{\"CONTENT\":\"upper\"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"TYPE\":\"assistant\",\"MESSAGE\":{\"CONTENT\":\"upper\"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"TYPE\":\"assistant\",\"MESSAGE\":{\"CONTENT\":\"upper\"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":{\"role\":\"assistant\"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":{\"role\":\"assistant\"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":{\"role\":\"assistant\"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":null,\"message\":{}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":null,\"message\":{}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":null,\"message\":{}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[null,{\"type\":\"text\",\"text\":\"after null\"}]}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":[null,{\"type\":\"text\",\"text\":\"after null\"}]}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":[null,{\"type\":\"text\",\"text\":\"after null\"}]}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"result\":null,\"RESULT\":\"later\"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"result\":null,\"RESULT\":\"later\"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"result\":null,\"RESULT\":\"later\"}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"result\":99,\"result\":\"later\"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"result\":99,\"result\":\"later\"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"result\":99,\"result\":\"later\"}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\"bad \\ud800 unicode\"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":\"bad \\ud800 unicode\"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":\"bad \\ud800 unicode\"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":\"echo hi\",\"irrelevant\":1e1000}}]}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":\"echo hi\",\"irrelevant\":1e1000}}]}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":\"echo hi\",\"irrelevant\":1e1000}}]}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"assistant\",\"ignored\":1e1000,\"message\":{\"content\":\"still accepted\"}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"ignored\":1e1000,\"message\":{\"content\":\"still accepted\"}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"ignored\":1e1000,\"message\":{\"content\":\"still accepted\"}}"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "{\"type\":\"result\",\"error\":{\"message\":null}}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"error\":{\"message\":null}}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"error\":{\"message\":null}}"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"system\",\"subtype\":\"init\",\"model\":\" synthetic \"}",
+    "events": [
+      {
+        "Type": "run.started",
+        "Tool": "",
+        "Text": "started model=synthetic",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[run] started model=synthetic"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"system\",\"subtype\":\"other\"}",
+    "events": null,
+    "lines": null
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\" Hello \\nworld \"},{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"BODY_NOT_RENDERED\"}}]}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "Hello \nworld",
+        "IsError": false
+      },
+      {
+        "Type": "tool.started",
+        "Tool": "Read",
+        "Text": "/synthetic/file",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] Hello world",
+      "[tool] Read /synthetic/file"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\" bare text \"}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "bare text",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] bare text"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"thinking\",\"thinking\":\"HIDDEN\"}]}}",
+    "events": null,
+    "lines": null
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"tool_result\",\"is_error\":true,\"content\":[{\"type\":\"text\",\"text\":\"one\"},{\"type\":\"text\",\"text\":\"two\"}]}]}}",
+    "events": [
+      {
+        "Type": "tool.completed",
+        "Tool": "",
+        "Text": "one two",
+        "IsError": true
+      }
+    ],
+    "lines": [
+      "[tool error] one two"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"subtype\":\"success\",\"result\":\" done \\nother\"}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "success: done",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result] success: done"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"subtype\":\"failure\",\"is_error\":false,\"error\":{\"message\":\"failure details\\nmore\",\"stack\":\"NOT_RENDERED\"}}",
+    "events": [
+      {
+        "Type": "run.failed",
+        "Tool": "",
+        "Text": "failure: failure details",
+        "IsError": true
+      }
+    ],
+    "lines": [
+      "[error] failure: failure details"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"is_error\":false}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "is_error=false",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result] is_error=false"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"error\":\"quota\"}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "quota",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result] quota"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"error\":{\"message\":\"\"}}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result]"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"assistant\",\"message\":{",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"assistant\",\"message\":{"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":99}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":99}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":99}"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "null",
+    "events": null,
+    "lines": null
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "[]",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "[]",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[]"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "   ",
+    "events": null,
+    "lines": null
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":99,\"path\":\"/fallback\"}}]}}",
+    "events": [
+      {
+        "Type": "tool.started",
+        "Tool": "Shell",
+        "Text": "/fallback",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[tool] Shell /fallback"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"subtype\":null,\"is_error\":null,\"result\":null}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "is_error=false",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result] is_error=false"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"TYPE\":\"assistant\",\"MESSAGE\":{\"CONTENT\":\"upper\"}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "upper",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] upper"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":{\"role\":\"assistant\"}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "first",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] first"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\"first\"},\"message\":null,\"message\":{}}",
+    "events": null,
+    "lines": null
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[null,{\"type\":\"text\",\"text\":\"after null\"}]}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "after null",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] after null"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"result\":null,\"RESULT\":\"later\"}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "later",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result] later"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"result\":99,\"result\":\"later\"}",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "{\"type\":\"result\",\"result\":99,\"result\":\"later\"}",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "{\"type\":\"result\",\"result\":99,\"result\":\"later\"}"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":\"bad \\ud800 unicode\"}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "bad � unicode",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] bad  unicode"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Shell\",\"input\":{\"command\":\"echo hi\",\"irrelevant\":1e1000}}]}}",
+    "events": [
+      {
+        "Type": "tool.started",
+        "Tool": "Shell",
+        "Text": "",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[tool] Shell"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"assistant\",\"ignored\":1e1000,\"message\":{\"content\":\"still accepted\"}}",
+    "events": [
+      {
+        "Type": "assistant.message",
+        "Tool": "",
+        "Text": "still accepted",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[assistant] still accepted"
+    ]
+  },
+  {
+    "format": "claude-stream-json",
+    "input": "{\"type\":\"result\",\"error\":{\"message\":null}}",
+    "events": [
+      {
+        "Type": "run.completed",
+        "Tool": "",
+        "Text": "is_error=false",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "[result] is_error=false"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "first\r\nsecond\t\u001b[31mred�",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "first\r\nsecond\t\u001b[31mred�",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "firstsecond [31mred"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      "日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日日 …(truncated)"
+    ]
+  },
+  {
+    "format": "text",
+    "input": "",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      ""
+    ]
+  },
+  {
+    "format": "text",
+    "input": "\u0000\u0001\t",
+    "events": [
+      {
+        "Type": "output",
+        "Tool": "",
+        "Text": "\u0000\u0001\t",
+        "IsError": false
+      }
+    ],
+    "lines": [
+      ""
+    ]
+  }
+]

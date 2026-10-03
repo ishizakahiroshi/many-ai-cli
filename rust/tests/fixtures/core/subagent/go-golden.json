@@ -1,0 +1,368 @@
+[
+  {
+    "name": "claude_running_nested",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent.jsonl": "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-one\",\"name\":\"Agent\"}]}}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-two\",\"name\":\"Agent\"}]}}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"id\":\"tool-orphan\",\"name\":\"Agent\"}]}}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:claude-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Label one",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "running",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "tool_calls": 1,
+          "last_tool_name": "Read",
+          "last_tool_summary": "/synthetic/file"
+        },
+        {
+          "id": "two",
+          "parent_id": "one",
+          "depth": 2,
+          "label": "Label two",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "running",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "tool_calls": 1,
+          "last_tool_name": "Read",
+          "last_tool_summary": "/synthetic/file"
+        }
+      ]
+    },
+    "signature": "b29a53daf2290cf16998f9110d2c14055a41b66c3dc6c17534111fca0bdfdb63"
+  },
+  {
+    "name": "claude_terminal",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"completed\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-one\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-two\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-orphan\"}]}}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:claude-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Label one",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "done",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "finished_at": 1790989200000,
+          "tool_calls": 1,
+          "last_tool_name": "Read",
+          "last_tool_summary": "/synthetic/file"
+        },
+        {
+          "id": "two",
+          "parent_id": "one",
+          "depth": 2,
+          "label": "Label two",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "failed",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "finished_at": 1790989200000,
+          "tool_calls": 1,
+          "last_tool_name": "Read",
+          "last_tool_summary": "/synthetic/file"
+        }
+      ]
+    },
+    "signature": "f66c22df8e612cb0ef5c2c3bbf3f33a92b69ff6c53790fe55dde7e301256765a"
+  },
+  {
+    "name": "claude_cutoff",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"completed\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-one\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-two\"}]}}\n{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"toolUseResult\":{\"status\":\"cancelled\"},\"message\":{\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"tool-orphan\"}]}}\n",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n"
+    },
+    "since": "2026-10-03T02:00:00Z",
+    "tree": null,
+    "signature": ""
+  },
+  {
+    "name": "claude_unknown",
+    "adapter": "subagent:claude-v1",
+    "parent": "parent.jsonl",
+    "files": {
+      "parent.jsonl": "",
+      "parent/subagents/agent-one.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-one.meta.json": "{\"agentType\":\"general\",\"description\":\"Label one\",\"toolUseId\":\"tool-one\",\"spawnDepth\":1,\"parentAgentId\":\"\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-orphan.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-orphan.meta.json": "{\"agentType\":\"general\",\"description\":\"Label orphan\",\"toolUseId\":\"tool-orphan\",\"spawnDepth\":2,\"parentAgentId\":\"missing\",\"model\":\"synthetic\"}\n",
+      "parent/subagents/agent-two.jsonl": "{\"type\":\"user\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":\"NEVER_COPY\"}}\n{\"type\":\"assistant\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"message\":{\"content\":[{\"type\":\"tool_use\",\"name\":\"Read\",\"input\":{\"file_path\":\"/synthetic/file\",\"content\":\"NEVER_COPY\"}}]}}\n",
+      "parent/subagents/agent-two.meta.json": "{\"agentType\":\"general\",\"description\":\"Label two\",\"toolUseId\":\"tool-two\",\"spawnDepth\":2,\"parentAgentId\":\"one\",\"model\":\"synthetic\"}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:claude-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Label one",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "unknown",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "tool_calls": 1,
+          "last_tool_name": "Read",
+          "last_tool_summary": "/synthetic/file"
+        },
+        {
+          "id": "two",
+          "parent_id": "one",
+          "depth": 2,
+          "label": "Label two",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "unknown",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "tool_calls": 1,
+          "last_tool_name": "Read",
+          "last_tool_summary": "/synthetic/file"
+        }
+      ]
+    },
+    "signature": "0437c31f071826444ca222b92d8c6522ab73e2211584fedad04255dfe7b11906"
+  },
+  {
+    "name": "codex_running_nested",
+    "adapter": "subagent:codex-v1",
+    "parent": "sessions/2026/10/03/parent.jsonl",
+    "files": {
+      "sessions/2026/10/03/one.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"one\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"root\",\"agent_nickname\":\"Nick one\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/other.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"other-root\",\"agent_nickname\":\"Nick other\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/parent.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"root\",\"timestamp\":\"2026-10-03T01:00:00Z\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"started\",\"agent_thread_id\":\"one\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"started\",\"agent_thread_id\":\"two\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"started\",\"agent_thread_id\":\"other\"}}}\n",
+      "sessions/2026/10/03/two.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"two\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"one\",\"agent_nickname\":\"Nick two\",\"agent_role\":\"reviewer\",\"depth\":2}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_message\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:codex-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Nick one",
+          "state": "running",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "last_tool_name": "exec",
+          "last_tool_summary": "echo hello there"
+        },
+        {
+          "id": "two",
+          "parent_id": "one",
+          "depth": 2,
+          "label": "Nick two",
+          "state": "running",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "last_tool_name": "send_message"
+        }
+      ]
+    },
+    "signature": "5594a893345a5dc1141451fc104dc93b5017f73a9c344597d9b125e6415e7787"
+  },
+  {
+    "name": "codex_terminal",
+    "adapter": "subagent:codex-v1",
+    "parent": "sessions/2026/10/03/parent.jsonl",
+    "files": {
+      "sessions/2026/10/03/one.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"one\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"root\",\"agent_nickname\":\"Nick one\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/other.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"other-root\",\"agent_nickname\":\"Nick other\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/parent.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"root\",\"timestamp\":\"2026-10-03T01:00:00Z\"}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"completed\",\"agent_thread_id\":\"one\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"interrupted\",\"agent_thread_id\":\"two\"}}}\n{\"type\":\"event_msg\",\"payload\":{\"type\":\"item_completed\",\"completed_at_ms\":100,\"item\":{\"type\":\"SubAgentActivity\",\"kind\":\"interrupted\",\"agent_thread_id\":\"other\"}}}\n",
+      "sessions/2026/10/03/two.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"two\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"one\",\"agent_nickname\":\"Nick two\",\"agent_role\":\"reviewer\",\"depth\":2}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_message\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:codex-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Nick one",
+          "state": "done",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "finished_at": 100,
+          "last_tool_name": "exec",
+          "last_tool_summary": "echo hello there"
+        },
+        {
+          "id": "two",
+          "parent_id": "one",
+          "depth": 2,
+          "label": "Nick two",
+          "state": "failed",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "finished_at": 100,
+          "last_tool_name": "send_message"
+        }
+      ]
+    },
+    "signature": "f7345c558455788ab1bee6c13f4fb2d98e604949936cceaa46c620923b6eaad3"
+  },
+  {
+    "name": "codex_unknown",
+    "adapter": "subagent:codex-v1",
+    "parent": "sessions/2026/10/03/parent.jsonl",
+    "files": {
+      "sessions/2026/10/03/one.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"one\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"root\",\"agent_nickname\":\"Nick one\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/other.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"other-root\",\"agent_nickname\":\"Nick other\",\"agent_role\":\"reviewer\",\"depth\":1}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"custom_tool_call\",\"name\":\"exec\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n",
+      "sessions/2026/10/03/parent.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"root\",\"timestamp\":\"2026-10-03T01:00:00Z\"}}\n",
+      "sessions/2026/10/03/two.jsonl": "{\"type\":\"session_meta\",\"payload\":{\"id\":\"two\",\"timestamp\":\"2026-10-03T01:00:00Z\",\"source\":{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"one\",\"agent_nickname\":\"Nick two\",\"agent_role\":\"reviewer\",\"depth\":2}}}}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"function_call\",\"name\":\"send_message\",\"input\":\"echo   hello\\nthere\",\"arguments\":\"NEVER_COPY\"}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:codex-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Nick one",
+          "state": "unknown",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "last_tool_name": "exec",
+          "last_tool_summary": "echo hello there"
+        },
+        {
+          "id": "two",
+          "parent_id": "one",
+          "depth": 2,
+          "label": "Nick two",
+          "state": "unknown",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "last_tool_name": "send_message"
+        }
+      ]
+    },
+    "signature": "caca19c8001a089b63470e73be8ac2381f45ebbd8cb606f522edcc4d5669e877"
+  },
+  {
+    "name": "grok_running",
+    "adapter": "subagent:grok-v1",
+    "parent": "sessions/cwd/parent/updates.jsonl",
+    "files": {
+      "sessions/cwd/child-one/events.jsonl": "{\"type\":\"tool_started\",\"tool_name\":\"read_file\"}\n{\"type\":\"phase_changed\",\"tool_name\":\"IGNORED\"}\n",
+      "sessions/cwd/parent/subagents/one/placeholder": "",
+      "sessions/cwd/parent/updates.jsonl": "{\"timestamp\":1790989200,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_spawned\",\"subagent_id\":\"one\",\"subagent_type\":\"general\",\"description\":\"Child one\",\"model\":\"synthetic\",\"child_session_id\":\"child-one\"}}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:grok-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Child one",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "running",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "last_tool_name": "read_file"
+        }
+      ]
+    },
+    "signature": "abfb0ed8abb777496594086e8a791ae8c5af7de0891733f07a2f8832f44b468a"
+  },
+  {
+    "name": "grok_meta",
+    "adapter": "subagent:grok-v1",
+    "parent": "sessions/cwd/parent/updates.jsonl",
+    "files": {
+      "sessions/cwd/child-one/events.jsonl": "{\"type\":\"tool_started\",\"tool_name\":\"read_file\"}\n{\"type\":\"phase_changed\",\"tool_name\":\"IGNORED\"}\n",
+      "sessions/cwd/parent/subagents/one/meta.json": "{\"parent_session_id\":\"parent\",\"description\":\"Meta one\",\"status\":\"cancelled\",\"started_at\":\"2026-10-03T01:00:00Z\",\"completed_at\":\"2026-10-03T01:00:00Z\",\"tool_calls\":9,\"effective_model_id\":\"synthetic\"}\n",
+      "sessions/cwd/parent/subagents/one/placeholder": "",
+      "sessions/cwd/parent/updates.jsonl": "{\"timestamp\":1790989200,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_spawned\",\"subagent_id\":\"one\",\"subagent_type\":\"general\",\"description\":\"Child one\",\"model\":\"synthetic\",\"child_session_id\":\"child-one\"}}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:grok-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Meta one",
+          "model": "synthetic",
+          "state": "failed",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "finished_at": 1790989200000,
+          "tool_calls": 9
+        }
+      ]
+    },
+    "signature": "6a5fec539fdd715a0fb70cdcc79182a501d19722c6583023f124b671cb00109e"
+  },
+  {
+    "name": "grok_finished",
+    "adapter": "subagent:grok-v1",
+    "parent": "sessions/cwd/parent/updates.jsonl",
+    "files": {
+      "sessions/cwd/child-one/events.jsonl": "{\"type\":\"tool_started\",\"tool_name\":\"read_file\"}\n{\"type\":\"phase_changed\",\"tool_name\":\"IGNORED\"}\n",
+      "sessions/cwd/parent/subagents/one/placeholder": "",
+      "sessions/cwd/parent/updates.jsonl": "{\"timestamp\":1790989200,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_spawned\",\"subagent_id\":\"one\",\"subagent_type\":\"general\",\"description\":\"Child one\",\"model\":\"synthetic\",\"child_session_id\":\"child-one\"}}}\n{\"timestamp\":1790989300,\"params\":{\"update\":{\"sessionUpdate\":\"subagent_finished\",\"subagent_id\":\"one\",\"status\":\"completed\",\"tool_calls\":4}}}\n"
+    },
+    "since": "1970-01-01T00:00:00Z",
+    "tree": {
+      "provider": "subagent:grok-v1",
+      "nodes": [
+        {
+          "id": "one",
+          "depth": 1,
+          "label": "Child one",
+          "agent_type": "general",
+          "model": "synthetic",
+          "state": "done",
+          "started_at": 1790989200000,
+          "last_activity_at": 1790989200000,
+          "finished_at": 1790989300000,
+          "tool_calls": 4,
+          "last_tool_name": "read_file"
+        }
+      ]
+    },
+    "signature": "e62d8fce93813a97106c9e7724694eb5060031c5c5170b8b800b469e35ca9e3e"
+  }
+]

@@ -1,0 +1,135 @@
+[
+  {
+    "error": false,
+    "input": "{}",
+    "valid": false,
+    "value": {
+      "version": 0,
+      "pid": 0,
+      "port": 0,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "null",
+    "valid": false,
+    "value": {
+      "version": 0,
+      "pid": 0,
+      "port": 0,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":42,\"port\":48888}",
+    "valid": true,
+    "value": {
+      "version": 0,
+      "pid": 42,
+      "port": 48888,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"PID\":42,\"PORT\":48889,\"version\":1,\"started_at\":\"2024-02-03T04:05:06.123+09:00\"}",
+    "valid": true,
+    "value": {
+      "version": 1,
+      "pid": 42,
+      "port": 48889,
+      "started_at": "2024-02-03T04:05:06.123+09:00"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":42,\"port\":70000}",
+    "valid": true,
+    "value": {
+      "version": 0,
+      "pid": 42,
+      "port": 70000,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":0,\"port\":48888}",
+    "valid": false,
+    "value": {
+      "version": 0,
+      "pid": 0,
+      "port": 48888,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":-1,\"port\":48888}",
+    "valid": false,
+    "value": {
+      "version": 0,
+      "pid": -1,
+      "port": 48888,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":42,\"port\":0}",
+    "valid": false,
+    "value": {
+      "version": 0,
+      "pid": 42,
+      "port": 0,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":42,\"port\":48888,\"started_at\":null}",
+    "valid": true,
+    "value": {
+      "version": 0,
+      "pid": 42,
+      "port": 48888,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": true,
+    "input": "{\"pid\":\"bad\",\"pid\":42,\"port\":48888}"
+  },
+  {
+    "error": true,
+    "input": "{\"pid\":42,\"port\":48888,\"started_at\":\"bad\"}"
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":42,\"port\":48888,\"future\":1e1000}",
+    "valid": true,
+    "value": {
+      "version": 0,
+      "pid": 42,
+      "port": 48888,
+      "started_at": "0001-01-01T00:00:00Z"
+    }
+  },
+  {
+    "error": true,
+    "input": "{\"pid\":42,\"port\":48888} {}"
+  },
+  {
+    "error": false,
+    "input": "{\"pid\":42,\"port\":48888,\"started_at\":\"2024-02-03T04:05:06Z\",\"started_at\":null}",
+    "valid": true,
+    "value": {
+      "version": 0,
+      "pid": 42,
+      "port": 48888,
+      "started_at": "2024-02-03T04:05:06Z"
+    }
+  }
+]

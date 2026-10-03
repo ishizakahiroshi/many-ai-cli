@@ -1,0 +1,15 @@
+# Exact historical false positives in the C1 public source-hash inventory.
+# Each value was recomputed from Go baseline 21d0bc7 and is a SHA-256 digest,
+# not a credential. Current schema v2 separates path keys from digest fields.
+# Do not broaden this to a rule/path allowlist or new commits.
+756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:1999
+756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:2042
+756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:2049
+# Exact synthetic redaction regression, independently verified: fixed PEM
+# markers enclose only literal synthetic-only-not-a-key, not encoded key bytes.
+# Future fixture delimiters are constructed at runtime; keep history scanned.
+8355b1060ca8753b8d469ec1244a33c355d307bd:rust/src/storage/text.rs:private-key-block:211
+
+# Exact synthetic Go redaction oracle: invalid bytes abc + FF, no key material.
+# Future delimiter construction preserves the same observed input bytes.
+a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_oracle.go:private-key-block:28

@@ -1,0 +1,1214 @@
+[
+  {
+    "input": "",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "  \n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: -2\nprofiles: []\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": -2
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 2\n",
+    "kind": "yaml",
+    "ok": false
+  },
+  {
+    "input": "profiles: null\nlast_used: missing\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 0,
+      "last_used": "missing"
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\nprofiles:\n- name: legacy\n  type: ssh\n  host: first@example.invalid\n  user: ignored\n  binary: '/synthetic/two words'\n  future_optional: [one, two]\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1,
+      "profiles": [
+        {
+          "name": "legacy",
+          "type": "ssh",
+          "host": "example.invalid",
+          "user": "first",
+          "binary": "/synthetic/two words"
+        }
+      ]
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\nprofiles:\n- name: 0777\n  type: ssh\n  host: 0xCAFE\n  hub_port: 49001.9\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1,
+      "profiles": [
+        {
+          "name": "0777",
+          "type": "ssh",
+          "host": "0xCAFE",
+          "hub_port": 49001
+        }
+      ]
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\nprofiles:\n- null\n- name: on\n  type: wsl\n  future: { ? [one,two] : arbitrary }\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1,
+      "profiles": [
+        {
+          "name": "on",
+          "type": "wsl"
+        }
+      ]
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\nprofiles:\n- name: absent-type\n  binary: x\nlast_used: missing\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1,
+      "last_used": "missing",
+      "profiles": [
+        {
+          "name": "absent-type",
+          "type": "",
+          "binary": "x"
+        }
+      ]
+    },
+    "validation_error": "profile[1] \"absent-type\": type is required"
+  },
+  {
+    "input": "defaults: &base {type: ssh, host: example.invalid}\nversion: 1\nprofiles:\n- <<: *base\n  name: merged\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1,
+      "profiles": [
+        {
+          "name": "merged",
+          "type": "ssh",
+          "host": "example.invalid"
+        }
+      ]
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\nversion: 1\n",
+    "kind": "yaml",
+    "ok": false
+  },
+  {
+    "input": "version: 1\nprofiles: [wrong]\n",
+    "kind": "yaml",
+    "ok": false
+  },
+  {
+    "input": "version: 1\nprofiles:\n- {name: null, type: null, host: null, hub_port: null}\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1,
+      "profiles": [
+        {
+          "name": "",
+          "type": ""
+        }
+      ]
+    },
+    "validation_error": "profile[1]: name is required"
+  },
+  {
+    "input": "null\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 0
+    },
+    "validation_error": ""
+  },
+  {
+    "input": "version: 1\n---\nversion: 99\n",
+    "kind": "yaml",
+    "ok": true,
+    "output": {
+      "version": 1
+    },
+    "validation_error": ""
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "wsl",
+      "type": "wsl"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": host must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": host must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": host must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": host is required",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": user must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "user": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": user must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "user": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": user must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "user": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "user": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": user must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "user": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": binary must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "binary": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "binary": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "binary": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "binary": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "binary": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": identity_file must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "identity_file": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "identity_file": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "identity_file": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "identity_file": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "identity_file": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": cwd must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "cwd": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "cwd": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": cwd must not contain control characters",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "cwd": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "cwd": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "host": "example.invalid",
+      "cwd": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "distro": "-option",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "distro": "two words",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "distro": "line\nbreak",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "distro": "quote';&日本語",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "distro": "",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "user": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "user": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "user": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "user": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "user": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": binary must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "binary": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": binary must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "binary": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": binary must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "binary": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "binary": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": binary must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "binary": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "identity_file": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "identity_file": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "identity_file": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "identity_file": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "identity_file": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": cwd must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "cwd": "-option"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "cwd": "two words"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": cwd must not contain control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "cwd": "line\nbreak"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "cwd": "quote';&日本語"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "host": "example.invalid",
+      "cwd": ""
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": distro must not start with '-' (got \"-option\")",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "distro": "-option",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": distro must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "distro": "two words",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": distro must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "distro": "line\nbreak",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "distro": "quote';&日本語",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": distro must not contain whitespace or control characters",
+    "input": {
+      "name": "remote",
+      "type": "wsl",
+      "distro": "",
+      "host": "example.invalid"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": hub_port out of range (got -1, must be 1–65535)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "serve",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": -1
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "serve",
+      "host": "example.invalid",
+      "token_command": "printf opaque"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "serve",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 1
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "serve",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 65535
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": hub_port out of range (got 65536, must be 1–65535)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "serve",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 65536
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": hub_port out of range (got -1, must be 1–65535)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "tunnel",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": -1
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": hub_port must be 1–65535 (got 0)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "tunnel",
+      "host": "example.invalid",
+      "token_command": "printf opaque"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "tunnel",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 1
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "tunnel",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 65535
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": hub_port out of range (got 65536, must be 1–65535)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "tunnel",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 65536
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": unknown mode \"other\" (must be serve or tunnel)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "other",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": -1
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": unknown mode \"other\" (must be serve or tunnel)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "other",
+      "host": "example.invalid",
+      "token_command": "printf opaque"
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": unknown mode \"other\" (must be serve or tunnel)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "other",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 1
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": unknown mode \"other\" (must be serve or tunnel)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "other",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 65535
+    },
+    "kind": "validate"
+  },
+  {
+    "error": "profile[1] \"remote\": unknown mode \"other\" (must be serve or tunnel)",
+    "input": {
+      "name": "remote",
+      "type": "ssh",
+      "mode": "other",
+      "host": "example.invalid",
+      "token_command": "printf opaque",
+      "hub_port": 65536
+    },
+    "kind": "validate"
+  },
+  {
+    "input": "",
+    "kind": "quote",
+    "output": "''"
+  },
+  {
+    "input": "a'b",
+    "kind": "quote",
+    "output": "'a'\\''b'"
+  },
+  {
+    "input": "two words; $(echo no)",
+    "kind": "quote",
+    "output": "'two words; $(echo no)'"
+  },
+  {
+    "input": "日本語\nline",
+    "kind": "quote",
+    "output": "'日本語\nline'"
+  },
+  {
+    "host": "host&label=日本語",
+    "kind": "tunnel_url",
+    "output": "http://127.0.0.1:49001/?token=a%2Bb%26x%3D1&via=ssh&host_label=host%26label%3D%E6%97%A5%E6%9C%AC%E8%AA%9E&env_kind=remote-tunnel",
+    "token": "a+b&x=1"
+  },
+  {
+    "host": "host&label=日本語",
+    "kind": "tunnel_url",
+    "output": "http://127.0.0.1:49001/?token=~%21%2A%28%29&via=ssh&host_label=host%26label%3D%E6%97%A5%E6%9C%AC%E8%AA%9E&env_kind=remote-tunnel",
+    "token": "~!*()"
+  },
+  {
+    "host": "host&label=日本語",
+    "kind": "tunnel_url",
+    "output": "http://127.0.0.1:49001/?token=%E6%97%A5%E6%9C%AC%E8%AA%9E&via=ssh&host_label=host%26label%3D%E6%97%A5%E6%9C%AC%E8%AA%9E&env_kind=remote-tunnel",
+    "token": "日本語"
+  },
+  {
+    "input": "noise\nhttp://127.0.0.1:49001/?token=Abc123\u001b[0m\n",
+    "kind": "scan",
+    "output": "noise\r\nhttp://127.0.0.1:49001/?token=Abc123\u001b[0m\r\n",
+    "urls": [
+      "http://127.0.0.1:49001/?token=Abc123"
+    ]
+  },
+  {
+    "input": "http://127.0.0.1:49002/?token=abc123 trailing\r\nlast",
+    "kind": "scan",
+    "output": "http://127.0.0.1:49002/?token=abc123 trailing\r\nlast\r\n",
+    "urls": [
+      "http://127.0.0.1:49002/?token=abc123"
+    ]
+  },
+  {
+    "input": "no url\n",
+    "kind": "scan",
+    "output": "no url\r\n",
+    "urls": []
+  },
+  {
+    "input": "http://127.0.0.1:49003/?token=a+b",
+    "kind": "scan",
+    "output": "http://127.0.0.1:49003/?token=a+b\r\n",
+    "urls": [
+      "http://127.0.0.1:49003/?token=a"
+    ]
+  },
+  {
+    "input": "{\"profile\":{\"name\":\"remote\",\"type\":\"ssh\"},\"host_candidates\":[\"example.invalid\"]}",
+    "kind": "import",
+    "ok": true,
+    "output": {
+      "profile": {
+        "name": "remote",
+        "type": "ssh"
+      },
+      "host_candidates": [
+        "example.invalid"
+      ]
+    }
+  },
+  {
+    "input": "welcome\n{\"profile\":{\"name\":\"remote\"}}\ntrailing",
+    "kind": "import",
+    "ok": true,
+    "output": {
+      "profile": {
+        "name": "remote",
+        "type": ""
+      },
+      "host_candidates": null
+    }
+  },
+  {
+    "input": "{\"PROFILE\":{\"NAME\":\"remote\"},\"PROFILE\":{\"TYPE\":\"ssh\"}}",
+    "kind": "import",
+    "ok": true,
+    "output": {
+      "profile": {
+        "name": "remote",
+        "type": "ssh"
+      },
+      "host_candidates": null
+    }
+  },
+  {
+    "input": "null",
+    "kind": "import",
+    "ok": true,
+    "output": {
+      "profile": {
+        "name": "",
+        "type": ""
+      },
+      "host_candidates": null
+    }
+  },
+  {
+    "input": "no JSON",
+    "kind": "import",
+    "ok": false
+  },
+  {
+    "input": "{} {}",
+    "kind": "import",
+    "ok": false
+  },
+  {
+    "input": "",
+    "kind": "banner",
+    "output": "\u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m       \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\n\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m      \u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔╝\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[38;5;226m╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m  \u001b[38;5;226m╚════╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚═╝\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m         \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[38;5;226m╚═╝\u001b[0m     \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═══╝\u001b[0m   \u001b[38;5;226m╚═╝\u001b[0m         \u001b[38;5;226m╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m\n\nConnection launcher (WSL / SSH) dev\nRuntime: Windows\nGitHub: https://github.com/ishizakahiroshi/many-ai-cli\n\n"
+  },
+  {
+    "input": "dev",
+    "kind": "banner",
+    "output": "\u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m       \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\n\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m      \u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔╝\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[38;5;226m╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m  \u001b[38;5;226m╚════╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚═╝\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m         \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[38;5;226m╚═╝\u001b[0m     \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═══╝\u001b[0m   \u001b[38;5;226m╚═╝\u001b[0m         \u001b[38;5;226m╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m\n\nConnection launcher (WSL / SSH) dev\nRuntime: Windows\nGitHub: https://github.com/ishizakahiroshi/many-ai-cli\n\n"
+  },
+  {
+    "input": "1.2.3",
+    "kind": "banner",
+    "output": "\u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m       \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\n\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m      \u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔╝\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[38;5;226m╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m  \u001b[38;5;226m╚════╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚═╝\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m         \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[38;5;226m╚═╝\u001b[0m     \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═══╝\u001b[0m   \u001b[38;5;226m╚═╝\u001b[0m         \u001b[38;5;226m╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m\n\nConnection launcher (WSL / SSH) v1.2.3\nRuntime: Windows\nGitHub: https://github.com/ishizakahiroshi/many-ai-cli\n\n"
+  },
+  {
+    "input": " v2.0 ",
+    "kind": "banner",
+    "output": "\u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m███\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m       \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\n\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╗\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m      \u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m╔╝\u001b[0m \u001b[97m█████\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m███████\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╗\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[38;5;226m╚\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔╝\u001b[0m  \u001b[38;5;226m╚════╝\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m╔══\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚═╝\u001b[0m \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m \u001b[38;5;226m╚\u001b[0m\u001b[97m████\u001b[0m\u001b[38;5;226m║\u001b[0m   \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m         \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m  \u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\u001b[97m██\u001b[0m\u001b[38;5;226m║\u001b[0m\n\u001b[38;5;226m╚═╝\u001b[0m     \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m  \u001b[38;5;226m╚═══╝\u001b[0m   \u001b[38;5;226m╚═╝\u001b[0m         \u001b[38;5;226m╚═╝\u001b[0m  \u001b[38;5;226m╚═╝╚═╝\u001b[0m\n\nConnection launcher (WSL / SSH) v2.0\nRuntime: Windows\nGitHub: https://github.com/ishizakahiroshi/many-ai-cli\n\n"
+  },
+  {
+    "input": "127.0.0.1:49001",
+    "kind": "ui_host",
+    "output": true
+  },
+  {
+    "input": "127.0.0.1:80",
+    "kind": "ui_host",
+    "output": false
+  },
+  {
+    "input": "localhost.",
+    "kind": "ui_host",
+    "output": true
+  },
+  {
+    "input": "[::1]:49001",
+    "kind": "ui_host",
+    "output": true
+  },
+  {
+    "input": "::1",
+    "kind": "ui_host",
+    "output": true
+  },
+  {
+    "input": "localhost:",
+    "kind": "ui_host",
+    "output": true
+  },
+  {
+    "input": "example.invalid:49001",
+    "kind": "ui_host",
+    "output": false
+  },
+  {
+    "input": "127.0.0.1:+49001",
+    "kind": "ui_host",
+    "output": true
+  },
+  {
+    "input": "http://localhost:49001",
+    "kind": "ui_origin",
+    "output": true
+  },
+  {
+    "input": "http://localhost:80",
+    "kind": "ui_origin",
+    "output": false
+  },
+  {
+    "input": "http://user@localhost:49001/path",
+    "kind": "ui_origin",
+    "output": true
+  },
+  {
+    "input": "HTTP://LOCALHOST.:49001",
+    "kind": "ui_origin",
+    "output": true
+  },
+  {
+    "input": "https://localhost:49001",
+    "kind": "ui_origin",
+    "output": false
+  },
+  {
+    "input": "null",
+    "kind": "ui_origin",
+    "output": false
+  },
+  {
+    "kind": "ssh_serve_args",
+    "output": [
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ExitOnForwardFailure=yes",
+      "-o",
+      "ServerAliveInterval=30",
+      "-p",
+      "2201",
+      "-i",
+      "key with spaces",
+      "-t",
+      "-L",
+      "127.0.0.1:49001:127.0.0.1:49001",
+      "synthetic@example.invalid",
+      "--",
+      "bash",
+      "-ilc",
+      "cd '/synthetic/cwd '\\'' ; 日本語' && exec env MANY_AI_CLI_HOST_LABEL='example.invalid' '/synthetic/app '\\'' ; 日本語' serve --port 49001"
+    ],
+    "profile": {
+      "name": "boundary",
+      "type": "ssh",
+      "host": "example.invalid",
+      "user": "synthetic",
+      "ssh_port": 2201,
+      "identity_file": "key with spaces",
+      "binary": "/synthetic/app ' ; 日本語",
+      "cwd": "/synthetic/cwd ' ; 日本語"
+    }
+  }
+]
