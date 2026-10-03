@@ -1,17 +1,17 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 18:03:51 JST
+> 最終更新: 2026-10-03(土) 18:40:00 JST
 
 ## 現在地
 
 - 受付番号：#5。C1の調査・比較HTML・順位付けを受付し、固定版 INSTRUCTIONS.md / REVIEW.md を読了。
-- 段階：公開実践例8件の追加調査・文書反映・静的確認・独立再レビューが完了し、既存draft PR #8へ公開。実表示QAは環境制約により未実施。C2接続実験・構築は未着手。
+- 段階：複数方式を比較するC2試験設計の追加指示を受付・読了。設計文書のみ更新する。実表示QAの全項目検収とC2接続実験・構築は未着手。
 - ソース基準：`21d0bc7935a2c4696fb89ccff2e324157a528c2d`。
 - 指示commit・作業起点：`c2822a8f39a18809bca8fe9484f1c84bd387f64b`。
 - 専用文書branch：`docs/dots-bridge-c1-comparison-20261003`。指示branch `docs/dots-local-ai-bridge-c1-20261003` は変更しない。
 - 参考：指示branchの `59300409408c24d6040445d77733da7c5b55d2e8` はSlack送信状態の更新のみ。固定指示・レビュー差分なしを確認。起点は変更しない。
 - 初稿公開SHA：`df1e01f80daf3641361eee0939549c74baa98d97`。draft PR：[#8](https://github.com/ishizakahiroshi/many-ai-cli/pull/8)。独立レビュー対象のローカルSHA：`6f41211f05dbe56578c0b6c41352a89a09c64744`（同一tree `8a35556ec1e6c9ec2edce6ac7d0f3d32854122f2`）。
-- 次の一手：最終headのCIを確認し、本人が表示とC2実施可否を判断する。C1からC2へ自動移行しない。
+- 次の一手：C2_TEST_PLANを作成し、MCP EventsとSlack Socketの同課題比較、共通queue、複数入口/復旧試験、役割別検収を具体化する。実装・接続試験は行わない。
 
 ## 開始時の能力確認
 
@@ -114,3 +114,11 @@
 - CIスナップショット（2026-10-03 09:02 UTC、本文head fe661da）：secret-scan成功、Validate実行中。受付head 1d70de9は両workflow成功。初回head 755db76のmacOS Go失敗の原因・再現性は未確定のままで、本体修正やテスト緩和はしていない。最新headの確定結果はPR checksとPR本文を参照。
 - この後は提出証跡としてPROGRESSだけを更新する。最終ボードheadはこのファイルのGit履歴とPR headから確認でき、本文のレビューtreeと区別する。
 - 未実施：実ブラウザ/スマホ表示の全項目QA、dotsと別Botの往復、plugin登録/購読、本人PC/Hub/CLI実動、実費・遅延、C2接続実験。必要な本人操作はFINDINGSの候補別条件へ記載。
+
+## 複数方式のC2試験設計（受付）
+
+- 固定追加指示：[SUPPLEMENT_MULTI_PATH_PLAN / d533a72](https://github.com/ishizakahiroshi/many-ai-cli/blob/d533a72f66752d1f9e97a40d4ccba468c65e4f6f/docs/bot/dots-local-ai-bridge/SUPPLEMENT_MULTI_PATH_PLAN.md)を全文読了。remote/local head `855786ad207a775b145e22725215df24ab9125bd` の一致と未保存変更なしを確認。
+- **現行の選定方針**：MCP EventsとSlack Socketを同じ合成課題で比較し、第一候補が成功しても終了しない。必要ならSlack HTTPを追加。主経路・補助/手動復旧経路を共通queueへ集約する。過去の順位順・最初の成功で採用する方針は履歴であり、この固定追加指示で置き換える。
+- C2_TEST_PLAN、FINDINGS、comparison.html、PROGRESSと必要な生成indexだけを更新。コード・依存・設定・Build・Hub/CLI起動・外部試験・常設監視・mergeは範囲外。
+- 初回追加調査head855786adのValidate/secret-scanは成功済み。本人はHTMLを確認したが、全表示項目/スマホQAや接続実測の合格とはしない。
+- 暫定運用：本人がdotsの返信通知を見て、ローカルAIへ「#5の進捗を見て」と伝える。ローカルAIが認可済みSlack/GitHubから取得・照合する。本文転記不要、自動通知/定期監視/自動起動は未導入。
