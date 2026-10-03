@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+    "commit": "adc730ba8926ad29756e40b3ba685f046b1ed7ae",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -80,11 +80,7 @@
           ".rs"
         ],
         "capabilities": [
-          "authentication",
-          "authorization",
-          "reads",
-          "summary",
-          "writes"
+          "summary"
         ]
       },
       {
@@ -138,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1131,
-    "analyzed": 921,
+    "discovered": 1133,
+    "analyzed": 922,
     "unresolved": 5,
     "unknown": 1,
-    "unclaimed": 204,
+    "unclaimed": 205,
     "skipped_by_config": 0
   },
   "files": [
@@ -780,6 +776,14 @@
       "reason": "no adapter claims '.md'"
     },
     {
+      "path": "docs/bot/dots-local-ai-bridge/FINDINGS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
       "path": "docs/bot/dots-local-ai-bridge/INSTRUCTIONS.md",
       "adapter": null,
       "status": "unclaimed",
@@ -802,6 +806,34 @@
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/dots-local-ai-bridge/comparison.html",
+      "adapter": "html",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "dots とローカルAIの連携方式 C1比較"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
     },
     {
       "path": "docs/manual_docker-multiuser.md",
