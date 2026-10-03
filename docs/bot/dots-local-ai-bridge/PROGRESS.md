@@ -1,17 +1,17 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 14:21:57 JST
+> 最終更新: 2026-10-03(土) 17:23:22 JST
 
 ## 現在地
 
 - 受付番号：#5。C1の調査・比較HTML・順位付けを受付し、固定版 INSTRUCTIONS.md / REVIEW.md を読了。
-- 段階：文書作成・静的検査・独立レビュー完了、draft PR提出。実表示QAは環境制約により未実施。C2接続実験・構築は未着手。
+- 段階：初回C1提出後、公開実践例による追加調査を受付・着手。既存draft PR #8を文書のみ更新する。実表示QAは環境制約により未実施。C2接続実験・構築は未着手。
 - ソース基準：`21d0bc7935a2c4696fb89ccff2e324157a528c2d`。
 - 指示commit・作業起点：`c2822a8f39a18809bca8fe9484f1c84bd387f64b`。
 - 専用文書branch：`docs/dots-bridge-c1-comparison-20261003`。指示branch `docs/dots-local-ai-bridge-c1-20261003` は変更しない。
 - 参考：指示branchの `59300409408c24d6040445d77733da7c5b55d2e8` はSlack送信状態の更新のみ。固定指示・レビュー差分なしを確認。起点は変更しない。
 - 初稿公開SHA：`df1e01f80daf3641361eee0939549c74baa98d97`。draft PR：[#8](https://github.com/ishizakahiroshi/many-ai-cli/pull/8)。独立レビュー対象のローカルSHA：`6f41211f05dbe56578c0b6c41352a89a09c64744`（同一tree `8a35556ec1e6c9ec2edce6ac7d0f3d32854122f2`）。
-- 次の一手：本人がHTMLを開いて表示を確認し、C2の実施可否と必要な設定・PC操作を判断する。C1からC2へ自動移行しない。
+- 次の一手：公開事例を5〜10件の目安で絞り、PUBLIC_RESEARCH・FINDINGS・HTML・候補別C2手順を更新し、独立レビューへ回す。C1からC2へ自動移行しない。
 
 ## 開始時の能力確認
 
@@ -77,3 +77,11 @@
 - CIのスナップショット（2026-10-03 05:20 UTC、成果物SHA fb8bcbb）：secret-scan成功、Validate queued。これは最終headのCI成功を意味しない。最新結果はPR checksを確認。CI待ちを接続実測の成功と扱わない。
 - 未確認：実ブラウザ/スマホ表示、本人PC/Hub/CLI実動、plugin登録・購読、Slack別Bot受信、dots同一jobの自動再開、Rust版統合、実費・遅延。
 - C2で本人に必要な操作：方式の選択と外部試験送信の許可、必要なplugin/app/webhook権限の承認、PCと既存Hub/CLIの起動・認証・専用cwd確認。秘密は本人が安全な設定画面で扱い、チャットや成果物へ転記しない。
+
+## 公開実践例の追加調査（受付）
+
+- 追加固定指示：[SUPPLEMENT_PUBLIC_RESEARCH.md / 0f14ba5](https://github.com/ishizakahiroshi/many-ai-cli/blob/0f14ba574aaf6e00bacaa92744f2db1e55845345/docs/bot/dots-local-ai-bridge/SUPPLEMENT_PUBLIC_RESEARCH.md) を全文読了。原指示・レビュー条件を維持。
+- 更新前のremote head：`755db76e6823d75920b526d62e014ceb712fafd7`。専用作業branchとローカルが一致、未保存変更なしを確認。
+- X、Zenn、Qiita、note、技術ブログ、公開GitHubを日本語・英語で検索する。公式仕様・公開コード・著者報告・提案を区別し、dots以外の成功をdots対応へ一般化しない。
+- 新しい方式・権限・保存/再開条件が増えなくなれば検索を止める。ログイン・有料記事・取得制限は回避せず記録。
+- 初回headのmacOS Goテスト失敗は原因・再現性未確定の既存結果。今回headのCIと分け、文書の範囲外の製品修正は行わない。
