@@ -11,6 +11,10 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Offline C2 bridge prototype.** The separate `dots-bridge-c2` command compares
+  synthetic MCP/Socket routes using a dedicated SQLite ledger, fake Hub and mock
+  CLI. Durable launch/delivery intents and verified fake run mailbox binding
+  fail closed on uncertain outcomes. Live services and AI execution are unavailable.
 - **Place input controls independently where you need them.** Send, microphone,
   clear input, templates, quick commands and the other input toolbar buttons each
   have a small grip. Drag it with a mouse or touch to move that control anywhere
