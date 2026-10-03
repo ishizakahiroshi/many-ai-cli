@@ -55,6 +55,21 @@ mod platform {
             Ok(unsafe { File::from_raw_fd(fd) })
         }
     }
+    // Native first-create fixtures at 1d14fc1 reproduce Darwin ENOENT from
+    // openat itself with a held, existing parent. Retry only that lock-leaf
+    // operation, unchanged, at most three times; persistent absence still fails.
+    // Other Unix platforms keep one syscall. No path re-resolution/fallback.
+    const LOCK_OPEN_ATTEMPTS: usize = if cfg!(target_os = "macos") { 3 } else { 1 };
+    fn lock_open<T>(attempts: usize, mut open: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+        for attempt in 0..attempts {
+            match open() {
+                Err(error)
+                    if error.raw_os_error() == Some(libc::ENOENT) && attempt + 1 < attempts => {}
+                result => return result,
+            }
+        }
+        unreachable!("lock open always has at least one attempt")
+    }
     // Context contains only a fixed operation label and OS error, never paths or
     // file contents. Preserve ErrorKind for source-compatible caller handling.
     fn at(operation: &'static str, error: io::Error) -> io::Error {
@@ -208,17 +223,19 @@ mod platform {
             let name = c(name)?;
             // SAFETY: relative to the held directory; no truncation or following.
             // O_NONBLOCK prevents a non-regular entry from stalling before fstat.
-            let file = fd_file(unsafe {
-                libc::openat(
-                    self.file.as_raw_fd(),
-                    name.as_ptr(),
-                    libc::O_RDWR
-                        | libc::O_CREAT
-                        | libc::O_NOFOLLOW
-                        | libc::O_CLOEXEC
-                        | libc::O_NONBLOCK,
-                    0o600u32,
-                )
+            let file = lock_open(LOCK_OPEN_ATTEMPTS, || {
+                fd_file(unsafe {
+                    libc::openat(
+                        self.file.as_raw_fd(),
+                        name.as_ptr(),
+                        libc::O_RDWR
+                            | libc::O_CREAT
+                            | libc::O_NOFOLLOW
+                            | libc::O_CLOEXEC
+                            | libc::O_NONBLOCK,
+                        0o600u32,
+                    )
+                })
             })
             .map_err(|e| at("lock openat", e))?;
             if !file.metadata().map_err(|e| at("lock fstat", e))?.is_file() {
@@ -402,6 +419,52 @@ mod platform {
                 }
             }
             Ok(())
+        }
+    }
+    #[cfg(test)]
+    mod lock_open_tests {
+        use super::*;
+        #[test]
+        fn persistent_absence_is_bounded_and_other_errors_are_immediate() {
+            let mut calls = 0;
+            let result: io::Result<()> = lock_open(3, || {
+                calls += 1;
+                Err(io::Error::from_raw_os_error(libc::ENOENT))
+            });
+            assert_eq!(calls, 3);
+            assert_eq!(result.unwrap_err().raw_os_error(), Some(libc::ENOENT));
+            calls = 0;
+            let result: io::Result<()> = lock_open(3, || {
+                calls += 1;
+                Err(io::Error::from_raw_os_error(libc::EACCES))
+            });
+            assert_eq!(calls, 1);
+            assert_eq!(result.unwrap_err().raw_os_error(), Some(libc::EACCES));
+            calls = 0;
+            let result: io::Result<()> = lock_open(1, || {
+                calls += 1;
+                Err(io::Error::from_raw_os_error(libc::ENOENT))
+            });
+            assert_eq!(calls, 1);
+            assert_eq!(result.unwrap_err().raw_os_error(), Some(libc::ENOENT));
+        }
+        #[test]
+        fn transient_first_creation_keeps_the_successful_result() {
+            let mut calls = 0;
+            let result = lock_open(3, || {
+                calls += 1;
+                if calls < 3 {
+                    Err(io::Error::from_raw_os_error(libc::ENOENT))
+                } else {
+                    Ok(19)
+                }
+            });
+            assert_eq!(result.unwrap(), 19);
+            assert_eq!(calls, 3);
+            assert_eq!(
+                LOCK_OPEN_ATTEMPTS,
+                if cfg!(target_os = "macos") { 3 } else { 1 }
+            );
         }
     }
 }
