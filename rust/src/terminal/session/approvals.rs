@@ -1,5 +1,5 @@
 use super::*;
-use crate::approval::{detect, identity};
+use crate::approval::{detect, identity, selection};
 impl Session {
     pub(super) fn approval_action_matches(&self, binding: &ApprovalActionBinding) -> bool {
         self.connected
@@ -44,7 +44,7 @@ impl ApprovalActions for SessionEngine {
             if !ticket.wait(cancel).await {
                 return Err(ApprovalActionError::Cancelled);
             }
-            let (reservation, summary, cwd, input) = {
+            let (reservation, summary, cwd, input, selected_text) = {
                 let mut state = lock(&self.state);
                 let reservation = ApprovalReservationId(
                     state
@@ -90,27 +90,52 @@ impl ApprovalActions for SessionEngine {
                 {
                     return Err(ApprovalActionError::StaleCandidate);
                 }
-                let option = live
-                    .options
-                    .iter()
-                    .find(|o| option_input(o) == request.send_text && !request.send_text.is_empty())
-                    .ok_or(ApprovalActionError::StaleCandidate)?;
-                let negative = negative_label(&option.label);
-                let automatic = matches!(request.origin, NativeActionOrigin::Automatic { .. });
-                if !matches!(request.origin, NativeActionOrigin::User) {
-                    if !negative && !positive_label(&option.label) {
-                        return Err(ApprovalActionError::PersistentOption);
+                let (input, selected_text) = match &request.selection {
+                    NativeActionSelection::Exact {
+                        selected_text,
+                        send_text,
+                    } => {
+                        // Only an explicit human action may supply keystrokes.
+                        // One-shot callers carry intent, never a snapshot's Enter.
+                        if !matches!(request.origin, NativeActionOrigin::User) {
+                            return Err(ApprovalActionError::PersistentOption);
+                        }
+                        if send_text.is_empty()
+                            || !live
+                                .options
+                                .iter()
+                                .any(|option| selection::raw_option_input(option) == *send_text)
+                        {
+                            return Err(ApprovalActionError::StaleCandidate);
+                        }
+                        (send_text.clone(), selected_text.clone())
                     }
-                    if !negative && live.summary.risk == "high" {
-                        return Err(ApprovalActionError::HighRisk);
+                    NativeActionSelection::ApproveOnce => {
+                        if live.summary.risk == "high"
+                            || matches!(request.origin, NativeActionOrigin::Automatic { .. })
+                                && live.summary.risk != "low"
+                        {
+                            return Err(ApprovalActionError::HighRisk);
+                        }
+                        let input = selection::approve_once_input(&live.options);
+                        (input.clone(), input)
                     }
-                    if automatic && (!positive_label(&option.label) || live.summary.risk != "low") {
-                        return Err(ApprovalActionError::HighRisk);
+                    NativeActionSelection::RejectOnce => {
+                        let input = selection::reject_once_input(&live.options);
+                        (input.clone(), input)
                     }
+                };
+                if input.is_empty() {
+                    return Err(ApprovalActionError::PersistentOption);
                 }
-                let input = option_input(option);
                 s.approval_reservation = Some((reservation, request.binding.clone()));
-                (reservation, live.summary, s.snapshot.cwd.clone(), input)
+                (
+                    reservation,
+                    live.summary,
+                    s.snapshot.cwd.clone(),
+                    input,
+                    selected_text,
+                )
             };
             let mut guard = ActionGuard {
                 engine: self,
@@ -121,7 +146,7 @@ impl ApprovalActions for SessionEngine {
             let action = ReservedApprovalAction {
                 reservation,
                 binding: request.binding.clone(),
-                selected_text: input.clone(),
+                selected_text,
                 origin: request.origin.clone(),
             };
             if let NativeActionOrigin::Automatic { rule_id } = &request.origin
@@ -192,101 +217,5 @@ impl ApprovalActions for SessionEngine {
         {
             s.approval_reservation = None;
         }
-    }
-}
-fn label(text: &str) -> String {
-    let mut s = text
-        .trim()
-        .to_lowercase()
-        .replace('’', "'")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    for suffix in [
-        " (y)",
-        " (p)",
-        " (n)",
-        " (esc)",
-        " (escape)",
-        " (!)",
-        " (?)",
-        " (#)",
-        " (recommended)",
-    ] {
-        if let Some(v) = s.strip_suffix(suffix) {
-            s = v.trim().into();
-            break;
-        }
-    }
-    s
-}
-pub(super) fn negative_label(text: &str) -> bool {
-    let s = label(text);
-    matches!(
-        s.as_str(),
-        "no" | "deny"
-            | "deny once"
-            | "reject"
-            | "cancel"
-            | "skip"
-            | "abort"
-            | "decline"
-            | "do not allow"
-            | "don't allow"
-            | "do not run"
-            | "don't run"
-            | "拒否"
-            | "許可しない"
-            | "中止"
-    ) || [
-        "no ", "deny ", "reject ", "cancel ", "skip ", "abort ", "decline ",
-    ]
-    .iter()
-    .any(|p| s.starts_with(p))
-}
-pub(super) fn positive_label(text: &str) -> bool {
-    let s = label(text);
-    if negative_label(&s)
-        || [
-            "always",
-            "don't ask",
-            "dont ask",
-            "all similar",
-            "this session",
-            "session",
-        ]
-        .iter()
-        .any(|p| s.contains(p))
-    {
-        return false;
-    }
-    matches!(
-        s.as_str(),
-        "yes"
-            | "yes, allow once"
-            | "allow"
-            | "allow once"
-            | "approve"
-            | "run"
-            | "run command"
-            | "run (once)"
-            | "continue"
-            | "proceed"
-            | "yes, proceed"
-            | "yes proceed"
-            | "許可"
-            | "実行"
-            | "続行"
-    )
-}
-pub(super) fn option_input(option: &proto::ApprovalOption) -> String {
-    if !option.send_text.is_empty() {
-        option.send_text.clone()
-    } else if option.is_current {
-        "\r".into()
-    } else if option.num > 0 {
-        format!("{}\r", option.num)
-    } else {
-        String::new()
     }
 }

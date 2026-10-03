@@ -55,9 +55,23 @@
     ],
     "rust/src/terminal/session/lifecycle.rs": [
       "warm_conversation_preserves_project_and_board_but_not_connection_metadata"
+    ],
+    "rust/tests/session_engine/approval_actions.rs": [
+      "one_shot_intent_uses_focus_observed_after_fifo_acquisition",
+      "only_human_exact_selection_carries_supplied_text_and_persistent_option",
+      "one_shot_high_risk_approval_is_refused_but_rejection_remains_available",
+      "native_action_reservation_spans_send_until_release_or_commit",
+      "failed_send_releases_reservation_and_nonce_is_consumed_only_before_commit",
+      "failed_nonce_consume_releases_only_lease_without_clearing_pending_record",
+      "dropping_action_during_send_releases_reservation_and_unsent_frame",
+      "absent_live_automatic_policy_releases_reservation_before_any_send",
+      "commit_from_replaced_wrapper_cannot_clear_restored_pending_record"
+    ],
+    "rust/tests/storage_legacy_ordering_contracts.rs": [
+      "late_lifecycle_event_overwrite_matches_fixed_go_for_registration_and_reattach"
     ]
   },
-  "rust_execution": "Frozen wrapper/input integration snapshot: 477 passed, 0 failed, 0 ignored; includes session24, journal8, wrapper13 and212 unit tests. Native OS acceptance and remaining application callers remain separate.",
+  "rust_execution": "Historical frozen snapshot: 430 passed/0 ignored (journal8 + session21 + warm lifecycle unit). Current typed-selection author slice: selection unit1 + session suite33 passed/0 ignored and strict lib/session clippy exit0; the current suite has24 existing tests and9 action transaction tests. No full current-tree or independent-review result is claimed by this receipt.",
   "go_mask_oracle": {
     "generator": "rust/tests/fixtures/core/journal/mask_oracle.go",
     "fixture": "rust/tests/fixtures/core/journal/mask-oracle-21d0bc7.json",
@@ -85,7 +99,7 @@
     "Parent-run frozen snapshot 430 tests passed, 0 ignored, including current journal8 + session21 and lifecycle unit; earlier 26-test receipt is historical only",
     "Static fmt/clippy, native platform/provider/browser acceptance and live application assembly remain separate evidence; do not infer them from the frozen test run",
     "Native PTY/provider/browser/OS acceptance not run",
-    "One-tap selection intent and proof replay/admission tests remain next slice"
+    "One-tap selection intent is author-tested in the separate typed_action_selection_receipt; actual HTTP/policy callers and proof replay/admission acceptance remain separate"
   ],
   "full_snapshot_receipt": {
     "tests_passed": 477,
@@ -99,5 +113,54 @@
     "reattach_flush": "Actual WebSocket caller starts owned pending/inflight flush after ACK and keeps the reader polling; real loopback fixture covers ACK-capable resend, pending bytes and new input.",
     "split_enter": "Failed separate CR restores settle/confirmation intent, including cancellation/stale-binding paths; warm reconnect preserves that intent.",
     "review_status": "Author regressions passed; immutable independent re-review pending."
+  },
+  "typed_action_selection_receipt": {
+    "base_published_sha": "83f7cf9cc39c2d380f341c3ed33db7f3d9bb0bff",
+    "kind": "ordinary author synthetic test run",
+    "selection_unit_passed": 1,
+    "session_integration_passed": 33,
+    "failed": 0,
+    "ignored": 0,
+    "fmt_exit_code": 0,
+    "scoped_strict_clippy_exit_code": 0,
+    "commands": [
+      "cargo test --offline --locked --manifest-path rust/Cargo.toml --lib approval::selection",
+      "cargo test --offline --locked --manifest-path rust/Cargo.toml --test session_engine_contracts",
+      "cargo clippy --offline --locked --manifest-path rust/Cargo.toml --lib --test session_engine_contracts -- -D warnings"
+    ],
+    "boundary": "No full live-tree regression or independent review is claimed. HTTP one-tap/batch/automatic routes, confirmations, poller and remaining application callers remain pending."
+  },
+  "inherited_card_label_ordering": {
+    "status": "inherited defect preserved; production compatibility exception is not authorized",
+    "source": [
+      "internal/hub/server.go:2706-2730 (asynchronous writeHistory)",
+      "internal/hub/wrapper_loop.go:348-365,897-910 (raw wrapper label in lifecycle history)",
+      "internal/sessionstore/store.go:620-673 (StartSession retains existing card label)",
+      "internal/sessionstore/store.go:734-741 (synchronous card metadata edit)",
+      "internal/sessionstore/store.go:1901-1910 (late lifecycle event overwrites nonempty label)"
+    ],
+    "generator": "rust/tests/fixtures/core/session/late_card_meta_oracle.go",
+    "fixture": "rust/tests/fixtures/core/session/late-card-meta-go.json",
+    "go_cases": 2,
+    "generator_exit_code": 0,
+    "commit_orders": [
+      "StartSession -> UpdateSessionCardMeta(renamed card) -> delayed session_start StoreEvent(label=launch-label) -> EndSession/StartSession",
+      "StartSession -> committed session_start -> UpdateSessionCardMeta(renamed card) -> EndSession/StartSession(restores renamed card) -> delayed session_reattach StoreEvent(label=launch-label) -> EndSession/StartSession"
+    ],
+    "observations": "Both late-event variants replace label with launch-label and that value survives the next StartSession. Pin, color, note and auto-title stay unchanged; history payload retains launch-label.",
+    "determinism": "Public synchronous StoreEvent calls deliberately impose the late database commit order. The oracle does not claim to control asynchronous worker scheduling.",
+    "restore_fixture_precondition": "restored_card_label_is_distinct_from_wrapper_launch_identity first observes the committed registration timeline event under a five-second query/yield timeout, then edits the card and checks the returned reattach snapshot. This is not a durable rename-ordering guarantee after the reattach history event.",
+    "rust_validation": {
+      "late_ordering_test_passed": 1,
+      "go_variants_compared": 2,
+      "restored_card_test_passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "clock_boundary": "explicit live Timestamp",
+      "scope": "two targeted test invocations only; no full suite rerun",
+      "initial_attempt": "No tests executed: stale root-package artifacts lacked the live Timestamp export. Coordinator cleaned only many-ai-cli package artifacts before the successful explicit-Timestamp rerun."
+    },
+    "future_fix": "An explicit compatibility decision is required before changing inherited lifecycle-event/card metadata precedence.",
+    "condition": "Hub body logging must be enabled for its queued lifecycle events; StoreEvent applies the nonempty wrapper label when that event commits."
   }
 }

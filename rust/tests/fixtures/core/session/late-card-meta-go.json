@@ -1,0 +1,52 @@
+[
+  {
+    "after_event": {
+      "auto_title": "synthetic title",
+      "color": "blue",
+      "label": "launch-label",
+      "note": "synthetic note",
+      "pinned": true
+    },
+    "after_next_start": {
+      "auto_title": "synthetic title",
+      "color": "blue",
+      "label": "launch-label",
+      "note": "synthetic note",
+      "pinned": true
+    },
+    "before_event": {
+      "auto_title": "synthetic title",
+      "color": "blue",
+      "label": "renamed card",
+      "note": "synthetic note",
+      "pinned": true
+    },
+    "history_label": "launch-label",
+    "kind": "session_start"
+  },
+  {
+    "after_event": {
+      "auto_title": "synthetic title",
+      "color": "blue",
+      "label": "launch-label",
+      "note": "synthetic note",
+      "pinned": true
+    },
+    "after_next_start": {
+      "auto_title": "synthetic title",
+      "color": "blue",
+      "label": "launch-label",
+      "note": "synthetic note",
+      "pinned": true
+    },
+    "before_event": {
+      "auto_title": "synthetic title",
+      "color": "blue",
+      "label": "renamed card",
+      "note": "synthetic note",
+      "pinned": true
+    },
+    "history_label": "launch-label",
+    "kind": "session_reattach"
+  }
+]

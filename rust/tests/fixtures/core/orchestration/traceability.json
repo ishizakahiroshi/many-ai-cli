@@ -1,0 +1,56 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "status": "implementation_in_progress",
+  "implemented_components": [
+    {
+      "source": [
+        "internal/hub/child_permission.go",
+        "internal/hub/orchestration.go:childApprovalPreviewTiers"
+      ],
+      "rust": [
+        "rust/src/orchestration/child_options.rs"
+      ],
+      "fixture": "rust/tests/fixtures/core/orchestration/child-options-go-21d0bc7.json",
+      "generator": "rust/tests/fixtures/core/orchestration/generate_child_options.py",
+      "go_cases": 40,
+      "generator_exit_code": 0,
+      "tests": [
+        "child_permission_preparation_and_preview_match_fixed_go",
+        "confirmation_does_not_reclassify_an_autonomous_launch_as_direct_ui",
+        "bounded_tool_fill_retains_human_folder_trust_and_prior_internal_tools"
+      ],
+      "author_validation": {
+        "unit_passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "strict_lib_clippy_exit_code": 0
+      },
+      "provenance": "Direct verified UI launches use attended defaults when interactive. Human confirmation of an autonomous request retains autonomous execution/permission defaults. Configuration-sourced allowed tools fill only empty internal grants and preserve explicit human folder-trust decisions.",
+      "boundary": "Pure preparation/disclosure is paired with fixed-Go observations; this does not claim actual confirmation HTTP, child startup, profile write, native process, or provider acceptance."
+    }
+  ],
+  "pending": [
+    "Core-owned confirmation ID and atomic admission replacement",
+    "Opaque accepted-decision task and waiter handles using portable Timestamp",
+    "Real board/refusal/child preparation and worktree integration",
+    "Child registration metadata bound to existing spawn-attempt/proof owner before ACK",
+    "Initial prompt route and gate based on actual resolved launcher plan",
+    "Relay lifecycle/recovery and source-aligned notifications",
+    "Live application/HTTP/native acceptance"
+  ],
+  "verification_kind": "ordinary author tests; independent review remains separate",
+  "prepared_fixtures": [
+    {
+      "source": [
+        "internal/hub/orchestration.go:childLaunchPrompt/buildChildInitialPromptFor/sanitizeInjectText/childProgressPathFor",
+        "internal/headless/prompt.go:ExpandPrompt"
+      ],
+      "generator": "rust/tests/fixtures/core/orchestration/generate_child_prompts.py",
+      "fixture": "rust/tests/fixtures/core/orchestration/child-prompts-go-21d0bc7.json",
+      "go_cases": 24,
+      "generator_exit_code": 0,
+      "status": "Go observations only; Rust prompt builder and actual launch/injection caller remain pending",
+      "portability": "Relative board.md avoids host separator differences in this pure prompt corpus; native path acceptance remains separate."
+    }
+  ]
+}

@@ -23,13 +23,8 @@ use crate::{
     process::{Cancellation, ProcessPlan},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::time::SystemTime;
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 pub type CoreFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Only genuinely heterogeneous Go event payloads and message metadata use JSON.
@@ -1616,10 +1611,20 @@ pub enum NativeActionOrigin {
     Automatic { rule_id: String },
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NativeActionSelection {
+    /// Exact interactive user choice, validated against freshly detected options.
+    Exact {
+        selected_text: String,
+        send_text: String,
+    },
+    /// Resolve the one-shot option after acquiring the session input FIFO.
+    ApproveOnce,
+    RejectOnce,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativeActionRequest {
     pub binding: ApprovalActionBinding,
-    pub selected_text: String,
-    pub send_text: String,
+    pub selection: NativeActionSelection,
     pub origin: NativeActionOrigin,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2024,22 +2029,24 @@ impl ChildSpawnRequest {
         decision: &SpawnConfirmationResponse,
         _proof: &VerifiedUiOrigin,
     ) {
-        if !decision.provider.is_empty() {
-            self.provider.clone_from(&decision.provider);
+        if !decision.provider.trim().is_empty() {
+            self.provider = decision.provider.trim().to_owned();
         }
-        if !decision.model.is_empty() {
-            self.model.clone_from(&decision.model);
+        if !decision.model.trim().is_empty() {
+            self.model = decision.model.trim().to_owned();
         }
         if let Some(value) = &decision.effort {
-            self.effort.clone_from(value);
+            self.effort = value.trim().to_owned();
         }
         if let Some(value) = &decision.execution_mode {
-            self.execution_mode.clone_from(value);
+            self.execution_mode = value.trim().to_owned();
         }
         if let Some(value) = &decision.permission_preset {
-            self.permission_preset.clone_from(value);
+            self.permission_preset = value.trim().to_owned();
         }
-        self.remember_permission = decision.remember_permission;
+        if let Some(value) = decision.remember_permission {
+            self.remember_permission = Some(value);
+        }
     }
 }
 /// Internal grants never appear in ChildSpawnRequest or serde input/output.
@@ -2104,6 +2111,13 @@ impl ResolvedChildSpawn {
     }
     pub fn grants(&self) -> &InternalSpawnGrants {
         &self.grants
+    }
+    /// Only source-derived server configuration supplies this fallback. Preserve
+    /// existing bounded tools and the independently verified folder-trust grant.
+    pub(crate) fn fill_allowed_tools_from_config(&mut self, tools: Vec<String>) {
+        if self.grants.allowed_tools.is_empty() {
+            self.grants.allowed_tools = tools;
+        }
     }
     /// Role/provider normalization is server-owned, never a second JSON decode.
     #[allow(dead_code)]
@@ -2596,6 +2610,58 @@ impl super::SessionActivity {
 #[cfg(test)]
 mod internal_contract_tests {
     use super::*;
+    #[test]
+    fn human_decision_trims_supplied_fields_and_preserves_absent_memory_and_origin() {
+        let proof = VerifiedUiOrigin::after_server_verification(UiBinding {
+            connection: UiConnectionId(1),
+            auth_epoch: AuthEpoch(1),
+        });
+        let mut body = ChildSpawnRequest {
+            provider: "previous".into(),
+            model: "old-model".into(),
+            effort: "old-effort".into(),
+            execution_mode: "old-mode".into(),
+            permission_preset: "old-preset".into(),
+            remember_permission: Some(true),
+            claimed_origin: String::new(),
+            ..Default::default()
+        };
+        body.apply_human_decision(
+            &SpawnConfirmationResponse {
+                provider: " \t ".into(),
+                model: "\n".into(),
+                ..Default::default()
+            },
+            &proof,
+        );
+        assert_eq!(body.provider, "previous");
+        assert_eq!(body.model, "old-model");
+        assert_eq!(body.effort, "old-effort");
+        assert_eq!(body.remember_permission, Some(true));
+        body.apply_human_decision(
+            &SpawnConfirmationResponse {
+                provider: " codex ".into(),
+                model: " model ".into(),
+                effort: Some("  ".into()),
+                execution_mode: Some(" headless ".into()),
+                permission_preset: Some(" strict ".into()),
+                remember_permission: Some(false),
+                ..Default::default()
+            },
+            &proof,
+        );
+        assert_eq!(body.provider, "codex");
+        assert_eq!(body.model, "model");
+        assert!(body.effort.is_empty());
+        assert_eq!(body.execution_mode, "headless");
+        assert_eq!(body.permission_preset, "strict");
+        assert_eq!(body.remember_permission, Some(false));
+        assert!(
+            body.claimed_origin.is_empty(),
+            "confirmation must not turn autonomous launch origin into UI"
+        );
+    }
+
     #[test]
     fn verified_decision_keeps_absent_but_clears_explicit_empty() {
         let proof = VerifiedUiOrigin::after_server_verification(UiBinding {

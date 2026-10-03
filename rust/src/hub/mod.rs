@@ -15,3 +15,5 @@ pub use router::{Dispatch, ServiceRouter};
 
 #[cfg(test)]
 mod tests;
+
+pub mod routines;

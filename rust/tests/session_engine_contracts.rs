@@ -1,5 +1,8 @@
 //! Deterministic caller tests use isolated journal/database roots and injected
 //! transports. They do not assert native PTY/provider/UI acceptance.
+use std::time::{SystemTime, UNIX_EPOCH};
+#[path = "session_engine/approval_actions.rs"]
+mod approval_actions;
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
     proto::{self, core::*},
@@ -15,7 +18,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 fn now() -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(1767323045)
@@ -609,6 +612,24 @@ async fn initial_ui_size_without_active_session_controls_first_wrapper_geometry(
 async fn restored_card_label_is_distinct_from_wrapper_launch_identity() {
     let f = fixture();
     let b = register(&f).await.binding;
+    // This assertion concerns metadata restored before the reattach event.
+    // The baseline asynchronous lifecycle event can overwrite a later rename;
+    // observe its registration commit before performing the card edit here.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let events = f
+                .store
+                .timeline_by_live_session(b.session, 10)
+                .unwrap()
+                .unwrap_or_default();
+            if events.iter().any(|event| event.r#type == "session_start") {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("registration history event did not commit before the card edit");
     let effects = f
         .engine
         .update_card_meta(

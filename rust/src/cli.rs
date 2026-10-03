@@ -45,7 +45,8 @@ pub struct Invocation {
     pub command: Command,
 }
 
-pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation, String> {
+/// Extract migration-only flags without interpreting a provider or launcher tail.
+pub fn split_trial_options(args: &[String]) -> Result<(Option<TrialOptions>, &[String]), String> {
     // Migration-only flags are accepted only as a leading pair. Provider argv is opaque.
     let mut args = args;
     let mut root = None;
@@ -84,6 +85,11 @@ pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation,
             );
         }
     };
+    Ok((trial, args))
+}
+
+pub fn parse(args: &[String], custom_providers: &[String]) -> Result<Invocation, String> {
+    let (trial, args) = split_trial_options(args)?;
     let Some(cmd) = args.first() else {
         return Ok(Invocation {
             trial,
@@ -204,6 +210,12 @@ pub struct LauncherInvocation {
 /// Go flag.FlagSet-compatible lexical behavior: one/two dashes, =value,
 /// boolean literals, and stop at the first positional value or `--`.
 pub fn parse_launcher(args: &[String]) -> Result<LauncherInvocation, String> {
+    parse_connection_options(args, true)
+}
+pub fn parse_connect(args: &[String]) -> Result<LauncherInvocation, String> {
+    parse_connection_options(args, false)
+}
+fn parse_connection_options(args: &[String], allow_ui: bool) -> Result<LauncherInvocation, String> {
     let mut invocation = LauncherInvocation::default();
     let mut i = 0;
     while i < args.len() {
@@ -235,6 +247,7 @@ pub fn parse_launcher(args: &[String]) -> Result<LauncherInvocation, String> {
                 };
                 invocation.profile = value.into();
             }
+            "ui" if !allow_ui => return Err("flag provided but not defined: -ui".into()),
             "last" | "ui" => {
                 let value = match inline.unwrap_or("true") {
                     "1" | "t" | "T" | "true" | "TRUE" | "True" => true,

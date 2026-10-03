@@ -1,4 +1,5 @@
 //! Headless execution, typed handoff and orchestration services.
+pub mod child_options;
 pub mod handoff;
 pub mod headless;
 pub mod headless_formats;

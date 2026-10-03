@@ -84,12 +84,52 @@
       "tests": [
         "one_tap_tokens_bind_identity_epoch_action_and_expire_without_consuming_on_verify"
       ]
+    },
+    {
+      "source": [
+        "internal/hub/auto_approval.go:approvalOptionInput/autoApprovalInput",
+        "internal/hub/approval_action.go:oneTapRejectInput/sendNativeApprovalAction/commitNativeApprovalAction"
+      ],
+      "rust": [
+        "rust/src/approval/selection.rs",
+        "rust/src/terminal/session/approvals.rs"
+      ],
+      "fixtures": [
+        "rust/tests/fixtures/core/approval/selection-oracle-21d0bc7.json"
+      ],
+      "generator": "rust/tests/fixtures/core/approval/generate_selection_oracle.py",
+      "go_observations": {
+        "labels": 27,
+        "option_focus_sets": 8,
+        "generator_exit_code": 0
+      },
+      "caller_tests": "rust/tests/session_engine/approval_actions.rs",
+      "tests": [
+        "one_shot_selection_matches_fixed_go_labels_options_and_focus",
+        "one_shot_intent_uses_focus_observed_after_fifo_acquisition",
+        "only_human_exact_selection_carries_supplied_text_and_persistent_option",
+        "one_shot_high_risk_approval_is_refused_but_rejection_remains_available",
+        "native_action_reservation_spans_send_until_release_or_commit",
+        "failed_send_releases_reservation_and_nonce_is_consumed_only_before_commit",
+        "failed_nonce_consume_releases_only_lease_without_clearing_pending_record",
+        "dropping_action_during_send_releases_reservation_and_unsent_frame",
+        "absent_live_automatic_policy_releases_reservation_before_any_send",
+        "commit_from_replaced_wrapper_cannot_clear_restored_pending_record"
+      ],
+      "author_validation": {
+        "selection_unit_passed": 1,
+        "session_suite_passed": 33,
+        "failed": 0,
+        "ignored": 0,
+        "strict_lib_session_clippy_exit_code": 0
+      },
+      "boundary": "Core selects freshly detected options after FIFO, reserves through send/nonce/commit and never infers one-shot intent from precomputed keys. HTTP one-tap/automatic/batch callers remain separate pending integration; these are ordinary author tests, not independent review."
     }
   ],
   "pending_components": [
     "approval_text_question.go full text-question detector and output-idle scheduling",
     "approval marker suppression notice throttling/caller",
-    "bound action reserve/send/revalidate/nonce/commit actual input integration",
+    "HTTP one-tap/automatic/batch routes and end-to-end nonce transaction caller integration",
     "approval auto/batch policy actual caller",
     "provider transcript resolver and Codex thread-following",
     "complete transcript poll -> detect -> wire -> ledger -> next poll real session integration",
