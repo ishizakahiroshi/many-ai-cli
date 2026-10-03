@@ -933,3 +933,66 @@ func TestDuplicateAnswerPreservesCompletedState(t *testing.T) {
 		})
 	}
 }
+
+type pausedReconcileHub struct {
+	*FakeHub
+	entered chan struct{}
+	release chan struct{}
+	empty   bool
+}
+
+func (h *pausedReconcileHub) List(ctx context.Context, routine string) ([]Run, error) {
+	close(h.entered)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-h.release:
+	}
+	if h.empty {
+		return nil, nil
+	}
+	return h.FakeHub.List(ctx, routine)
+}
+func TestConcurrentReconcileCannotRollBackCommittedResult(t *testing.T) {
+	for _, empty := range []bool{false, true} {
+		name := "known"
+		if empty {
+			name = "unknown"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := makeRig(t)
+			r.launch(t)
+			raw := r.answer(t)
+			h := &pausedReconcileHub{r.h, make(chan struct{}), make(chan struct{}), empty}
+			r.w.Hub = h
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() { _, err := r.w.Reconcile(ctx, r.l, r.now); done <- err }()
+			select {
+			case <-h.entered:
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			must(t, r.w.Collect(ctx, r.l, raw, r.now))
+			close(h.release)
+			must(t, <-done)
+			j, err := r.s.Job(r.j.ID)
+			must(t, err)
+			e := r.export(t)
+			if j.State != "answered" || e.Launches[0].State != "collected" || len(e.Outbox) != 1 {
+				t.Fatal(j, e)
+			}
+			o, err := r.s.BeginDelivery(j.ID, j.Route, j.RouteEpoch, r.now)
+			must(t, err)
+			must(t, r.s.FinishDelivery(o, Delivered, 0, r.now))
+			_, err = r.s.Ingest(event(j, "completed", 3, "done", j.Route), r.now)
+			must(t, err)
+			j, err = r.s.Job(j.ID)
+			must(t, err)
+			if j.State != "completed" {
+				t.Fatal(j.State)
+			}
+		})
+	}
+}

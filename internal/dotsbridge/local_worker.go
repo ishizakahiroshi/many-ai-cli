@@ -152,6 +152,11 @@ func (w *Worker) bind(l Lease, i Intent, r Run, now time.Time) (Intent, error) {
 		if !j.exact(l, now) {
 			return ErrLease
 		}
+		// Collection may commit while the Hub read is in flight. Recheck the
+		// durable terminal intent under this same write transaction.
+		if i.State == "collected" {
+			return nil
+		}
 		if err = j.live(now); err != nil {
 			return err
 		}
@@ -218,10 +223,20 @@ func (w *Worker) Reconcile(ctx context.Context, l Lease, now time.Time) (Intent,
 		if !j.exact(l, now) {
 			return ErrLease
 		}
+		i, e = getIntent(tx, j.ID)
+		if e != nil {
+			return e
+		}
+		if i.State == "collected" {
+			return nil
+		}
 		return hold(tx, j, "unknown launch outcome; never automatically re-POST")
 	})
 	if err != nil {
 		return i, err
+	}
+	if i.State == "collected" {
+		return i, nil
 	}
 	return i, ErrHeld
 }
