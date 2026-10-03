@@ -1,17 +1,22 @@
 //! Fixed Go wrapper/input/reconnect contracts with owned synthetic processes.
+#[cfg(unix)]
+use many_ai_cli::{
+    process::pty::NativePtyFactory,
+    wrapper::{input::write_all, transport::LoopbackConnector},
+};
 use many_ai_cli::{
     process::{
         Cancellation, ProcessPlan,
-        pty::{NativePtyFactory, PtyFactory, PtySession, PtySize},
+        pty::{PtyFactory, PtySession, PtySize},
     },
     proto::{
         Message,
         core::{CoreFuture, SPAWN_PROOF_ENV},
     },
     wrapper::{
-        input::{InputStep, InputWatermarks, input_steps, write_all},
+        input::{InputStep, InputWatermarks, input_steps},
         runtime::{self, WrapperOptions},
-        transport::{HubConnector, HubSocket, LoopbackConnector},
+        transport::{HubConnector, HubSocket},
     },
 };
 use std::{

@@ -252,7 +252,7 @@ fn decode_skips_corruption_handles_go_case_nulls_and_unknown_fields() {
             .contains("NOT_STORED")
     );
     let (path, _) = store.write_rendered(1).unwrap();
-    assert!(path.starts_with(t.path()));
+    assert!(path.starts_with(t.path().canonicalize().unwrap()));
 }
 #[test]
 fn oversized_record_reports_error_without_unbounded_allocation() {

@@ -67,7 +67,7 @@ def main() -> None:
     # Cargo places command before its command-specific manifest/lock arguments.
     run(["cargo", "fmt", "--manifest-path", "rust/Cargo.toml", "--", "--check"], env)
     run(["cargo", "clippy", *cargo[1:], "--target", args.target, "--all-targets", "--", "-D", "warnings"], env)
-    run(["cargo", "test", *cargo[1:], "--target", args.target], env)
+    run(["cargo", "test", *cargo[1:], "--target", args.target, "--no-fail-fast"], env)
     run(["cargo", "build", *cargo[1:], "--target", args.target, "--release", "--bins"], env)
     output = ROOT / ".rust-candidate-artifacts" / TARGETS[args.target]
     output.mkdir(parents=True, exist_ok=False)
