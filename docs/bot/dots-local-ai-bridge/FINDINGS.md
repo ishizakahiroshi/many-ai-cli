@@ -1,6 +1,6 @@
 # dots とローカルAIの連携方式 調査結果
 
-> 最終更新: 2026-10-03(土) 14:18:50 JST
+> 最終更新: 2026-10-03(土) 17:51:00 JST
 
 ## 結論
 
@@ -9,6 +9,16 @@ C2の第一候補は **専用MCP tools＋MCP Events＋永続キュー**。OpenAI
 次点はSlack Socket Mode。公開受信口なしで小さく試せるが、Slack公式のセキュリティ推奨にはLLM／bot由来へ自動応答しない方針がある。Slackの配送能力とdotsの受理条件は別。本人アカウント経由の投稿成功は、別Botや自動通知の成功を示さない。
 
 順位はC2の検証順であり、全方式が採用可能という宣言ではない。PC停止中の受付を最重要にするなら、Slack候補内では常時HTTP受信＋queueをSocket localより先にする。通知と保存とAI起動は別々に選ぶ。Slackを会話の窓口、GitHubを証跡、queueを実行待ちの正本にする組合せも可能だが、最初の一往復では部品を増やさない。
+
+## 公開実践例を追加した判断
+
+2026-10-03にX・Zenn・Qiita・note・技術ブログ・公開GitHubを日本語と英語で調査し、本文・コードへ辿った8事例を [PUBLIC_RESEARCH](PUBLIC_RESEARCH.md) にまとめた。追加指示は [固定0f14ba5](https://github.com/ishizakahiroshi/many-ai-cli/blob/0f14ba574aaf6e00bacaa92744f2db1e55845345/docs/bot/dots-local-ai-bridge/SUPPLEMENT_PUBLIC_RESEARCH.md)。検索日・検索語・公開日・版・認証・費用の不明点・採否を同資料に記録する。
+
+**旧順位からの変更なし。** ローカルClaudeでのSocket→resumeには著者報告と公開コードがあるが、通常messageでBotを除外する実装もあり、dotsとの無人一往復を証明しない（R1/R2）。MCP Eventsはdotsへの公開製品適合が第一位の理由で、導入実績の量による一位ではない。PC停止中の受付を優先する場合は、引き続きSlack内で3位HTTP＋queueを2位Socket localより先に評価する。
+
+採用を決める前に保存の粒度を見る。SQLiteにthreadとsessionを残しても待ちjobがメモリ内なら再起動で失われ得る（R2）。R2のSlack返信はfresh headless resumeであり、実行中TUIへ注入できない。TUIとSlackの同時書込みは会話を分岐させるため、既存sessionを使う設計では書込み担当を一つにする。MCPツールのsocket待ちは動作中呼出しへの返却であり、プロセス終了後の起動機構ではない（R3）。n8nはDB待機・認証付き再開URLを提供する中継部品候補（R6）だが、dots起動・PCへの取得・Hub起動adapterは別途必要。Claude Channels（R5）もローカル入力adapterの別案として扱い、7候補へ混ぜて順位を水増ししない。
+
+GitHubの過去の再帰課金報告（R7）は現行のbot制御と照合し、現行版の再現性は未確認とした。MCP Eventsの公開demo（R8）は実験版・メモリ保持で、dots製品統合の実証ではない。QiitaのClaude Slack実測（R4）はクラウドの別製品。Xに有力原典を見つけられず、noteの2記事は取得エラーだったため、全媒体を網羅したとはしない。
 
 ## 範囲と証拠
 
@@ -193,6 +203,24 @@ C1完了はC2の許可ではない。本人がC2、対象会話／repo／plugin�
 | 5 GitHub poll | 4のdots起動ゲートとcomment権限を満たし、低頻度取得を許可 | 対象Issue一つ、60秒以上間隔、ETag＋page/watermark。空振りAI0、回答comment差分と再開を記録 | 403権限待ち／429は条件待ち、回収設計不能なら6。poller停止、試験Issue close、不要token権限はオーナーが撤収 |
 | 6 Slack poll | dots bot受信、会話/threadの実読取可否とapp分類を先に確認 | 1会話・1thread、60秒以上かRetry-Afterに従う。historyとrepliesのwatermark、古い親への回答取得 | 保持期限外や不可視DMは対象設計の不成立。7へ。poller停止、試験購読・app設定を撤収 |
 | 7 A2A | dots側とbridge側のAgent Card・version・binding・認証・capabilitiesが実在し、オーナーが利用許可 | 1 task、input-required→回答→completed、taskId/contextId。pushを使うならそのcapabilityとHTTPS callbackを確認 | 対応なしなら条件待ち／不成立を区別し候補再評価。task取消・push設定解除・一時endpoint停止を許可範囲で実施 |
+
+### 公開事例から追加する候補別確認
+
+下表は既存の最小構成・オーナー操作・次点移行・撤収を補う。金額は未算定で、C2前に本人のプラン・試験量に対して支出上限を決める。公開sampleの導入は許可済みと扱わない。
+
+| 候補 | 追加する証跡と不合格条件 | 権限・費用の確認 |
+|---|---|---|
+| 1 MCP Events | R8をそのまま実行せず、OpenAI対応webhook契約と永続購読・inbox/outboxを確認。2xx、dots処理、完了toolを別時刻で記録。demoのpoll/SSE成功は代替不可 | plugin接続・event購読、認証MCP、中継compute/storage、dots/CLI枠 |
+| 2 Socket | R1/R2のthread→session表と未処理job保存を別確認。Bot除外条件を確認し、dots実senderの質問が保存されること。文脈なし新規会話への再試行はresume成功にしない | app-level connections:write、対象会話history、chat:write、mention利用時app_mentions:read、PC稼働・CLI枠 |
+| 3 Slack HTTP | R6のworkflow待機とdots再開を別検証。中継が受理・保存後、PC receiverを一時停止してもjobを失わないか、許可済み範囲で確認。Hub/AIを停止・再起動する試験は含めない | Slack署名/URL設定、queueまたはn8n＋DBの常時費、実行課金、AI枠 |
+| 4 GitHub webhook | R7に従いcomment authorとtriggerを相関。同jobの自発返信・再配送でrunを追加しない。Actionの成功はdots起動の証拠にしない | repo webhook管理、限定comment読書き。中継/保存とAI費、Actionsを別採用するなら別途runner費 |
+| 5 GitHub poll | 差分取得とAI判断を分け、空振り巡回でAI起動0を確認。watermark後の古いIssueへの新commentを回収し、dots側triggerの証跡も得る | 対象repo read/write最小権限、API上限、PCとAI枠 |
+| 6 Slack poll | Bot受信条件は2/3と共通。historyだけで古い親の新返信を見落とさずrepliesも確認。不可視DMを別tokenで回避しない | 対象conversation履歴scope、app分類のrate上限、保持期間、PCとAI枠 |
+| 7 A2A | current Agent Cardと認証を確認。input-required→同taskへの回答→completedの相関、保存期限を確認。古いtutorial・別agentの成功はdots適合にしない | 両端の認証/capability、常時endpoint/task store、各AI費 |
+
+最小試験は新規の合成runを使う。既存sessionをresumeするadapterを後で選ぶ場合は、オーナーがTUI/bridge間の操作所有権を確認し、単一の書込み担当とsession lockを設計する。Slackの返信をlive TUIへの入力として扱わない。
+
+全候補の共通ゲートはHubのrequest_id→run_id対応、専用routineがactiveでないこと、CLI認証・cwd・承認待ち。通知方式を替えてもこの失敗は解消しない。中継の再開URLを間違えても、実行固有IDの削除や認証緩和で通さない。C2理由ログに `evidence_case`、`source_version`、`resume_kind`（live_tool / existing_session / fresh_run / dots_job）、`inbox_persisted`、`outbox_persisted` を追加する。
 
 ### 上限と判定
 
