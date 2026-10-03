@@ -120,7 +120,7 @@ async fn wrapper_native_pty_observes_env_cwd_argv_and_idempotent_wait() {
         String::from_utf8(all).unwrap(),
         format!(
             "{}|owned-value|unset|quoted 日本語 ; literal",
-            root.path().display()
+            root.path().canonicalize().unwrap().display()
         )
     );
     let first = pty.wait().await.unwrap();

@@ -189,7 +189,11 @@ fn paths_are_sanitized_and_runtime_derived_for_multibyte_and_empty_parts() {
             instant(),
         )
         .unwrap();
-    assert!(paths.jsonl.starts_with(root.path().join("logs/sessions")));
+    assert!(
+        paths
+            .jsonl
+            .starts_with(root.path().canonicalize().unwrap().join("logs/sessions"))
+    );
     assert!(
         paths
             .jsonl

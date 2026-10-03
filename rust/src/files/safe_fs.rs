@@ -448,13 +448,20 @@ mod platform {
                     Component::ParentDir | Component::CurDir => {
                         return Err(io::Error::other("unclean directory path"));
                     }
-                    _ => {
+                    // A verbatim disk prefix alone (e.g. \\?\C:) is not
+                    // the volume's root directory. Wait for RootDir before
+                    // opening it; all actual directory components are pinned.
+                    Component::Prefix(_) => p.push(comp),
+                    Component::RootDir | Component::Normal(_) => {
                         p.push(comp);
                         if p.is_absolute() {
                             pins.push(pin(&p)?);
                         }
                     }
                 }
+            }
+            if pins.is_empty() {
+                return Err(io::Error::other("directory has no root component"));
             }
             Ok(Self {
                 path: p,
@@ -718,5 +725,27 @@ impl Dir {
         }
         directory.restrict_private()?;
         Ok(directory)
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_path_tests {
+    use super::*;
+
+    #[test]
+    fn canonical_verbatim_directory_opens_and_keeps_same_owned_path() {
+        let root = tempfile::tempdir().unwrap();
+        let canonical = std::fs::canonicalize(root.path()).unwrap();
+        assert!(matches!(
+            canonical.components().next(),
+            Some(Component::Prefix(_))
+        ));
+        let held = Dir::open(&canonical).unwrap();
+        assert_eq!(held.path(), canonical);
+        let child = held.child_dir("ordinary-child", true).unwrap();
+        child
+            .create_new("fixture.txt", b"owned fixture", 0o600)
+            .unwrap();
+        assert_eq!(child.read("fixture.txt", 100).unwrap(), b"owned fixture");
     }
 }

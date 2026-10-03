@@ -642,7 +642,10 @@ fn launcher_ssh_join_and_remote_shell_deliver_exact_argv_env_cwd() {
     );
     let observed: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(observed["argv"], json!(["serve", "--port", "49001"]));
-    assert_eq!(observed["cwd"], cwd.to_string_lossy().as_ref());
+    assert_eq!(
+        observed["cwd"],
+        cwd.canonicalize().unwrap().to_string_lossy().as_ref()
+    );
     assert_eq!(observed["label"], p.host);
     // Actual Go fixed-SHA script lacks the outer quote. The same shell boundary
     // must fail to deliver the intended operation, documenting the required fix.
