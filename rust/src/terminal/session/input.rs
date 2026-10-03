@@ -161,6 +161,16 @@ impl SessionEngine {
             tokio::select! {biased;_=cancel.token().cancelled()=>return Err(SessionError::Cancelled),_=tokio::time::sleep(self.options.submit_timing.poll.max(Duration::from_millis(1)))=>{}}
         }
     }
+    fn restore_awaiting_submit_enter(&self, binding: SessionBinding) {
+        let mut state = lock(&self.state);
+        if let Some(session) = state
+            .sessions
+            .get_mut(&binding.session)
+            .filter(|session| session.binding.incarnation == binding.incarnation)
+        {
+            session.awaiting_submit_enter = true;
+        }
+    }
     pub(super) async fn send_combined(
         &self,
         binding: SessionBinding,
@@ -187,10 +197,14 @@ impl SessionEngine {
         };
         let split_enter = awaiting && delayed.is_empty() && first == b"\r";
         if split_enter && let Err(e) = self.settle(binding, authority, cancel).await {
+            self.restore_awaiting_submit_enter(binding);
             result.error = Some(e);
             return result;
         }
         if cancel.token().is_cancelled() {
+            if split_enter {
+                self.restore_awaiting_submit_enter(binding);
+            }
             result.error = Some(SessionError::Cancelled);
             return result;
         }
@@ -200,6 +214,9 @@ impl SessionEngine {
         {
             Ok(seq) => result.sequences.push(seq),
             Err(e) => {
+                if split_enter {
+                    self.restore_awaiting_submit_enter(binding);
+                }
                 result.error = Some(e);
                 return result;
             }

@@ -60,6 +60,39 @@ fn failure(detail: &str) -> SessionError {
     })
 }
 
+/// Compute the source-compatible session log names without opening a file or
+/// creating another journal owner. Validated reattach timestamps retain their
+/// original wall-clock offset/date rather than being reformatted in the Hub zone.
+pub fn session_log_paths(
+    paths: &RuntimePaths,
+    id: LiveSessionId,
+    provider: &str,
+    cwd: &str,
+    started: &str,
+) -> Result<JournalPaths, SessionError> {
+    time::parse_rfc3339(started).map_err(|_| failure("session log timestamp is unsupported"))?;
+    let clock = started[11..].split(':').collect::<Vec<_>>();
+    let hour = clock[0]
+        .parse::<u8>()
+        .map_err(|_| failure("invalid session log hour"))?;
+    let stamp = format!("{}_{hour:02}{}{}", &started[..10], clock[1], &clock[2][..2]);
+    let provider = sanitize_file_part(&provider.trim().to_lowercase());
+    // filepath.Base is host-specific. Path handles the supported platform's
+    // native separator; no wrapper-proposed log path is ever consulted.
+    let folder = go_basename(cwd);
+    let base = format!(
+        "{provider}_{stamp}_{}_s{}",
+        sanitize_file_part(&folder),
+        id.0
+    );
+    let raw = paths
+        .resource(Resource::Logs)
+        .join("sessions")
+        .join(format!("{base}.log"));
+    let jsonl = raw.with_extension("jsonl");
+    Ok(JournalPaths { raw, jsonl })
+}
+
 impl SessionJournal {
     pub fn new(
         paths: RuntimePaths,
@@ -120,29 +153,7 @@ impl SessionJournal {
         cwd: &str,
         started: &str,
     ) -> Result<JournalPaths, SessionError> {
-        time::parse_rfc3339(started)
-            .map_err(|_| failure("session log timestamp is unsupported"))?;
-        let clock = started[11..].split(':').collect::<Vec<_>>();
-        let hour = clock[0]
-            .parse::<u8>()
-            .map_err(|_| failure("invalid session log hour"))?;
-        let stamp = format!("{}_{hour:02}{}{}", &started[..10], clock[1], &clock[2][..2]);
-        let provider = sanitize_file_part(&provider.trim().to_lowercase());
-        // filepath.Base is host-specific. Path handles the supported platform's
-        // native separator; no wrapper-proposed log path is ever consulted.
-        let folder = go_basename(cwd);
-        let base = format!(
-            "{provider}_{stamp}_{}_s{}",
-            sanitize_file_part(&folder),
-            id.0
-        );
-        let raw = self
-            .paths
-            .resource(Resource::Logs)
-            .join("sessions")
-            .join(format!("{base}.log"));
-        let jsonl = raw.with_extension("jsonl");
-        Ok(JournalPaths { raw, jsonl })
+        session_log_paths(&self.paths, id, provider, cwd, started)
     }
     /// Called during registration, before its first history effect is produced.
     /// Failure does not erase the previous writer or database session metadata.

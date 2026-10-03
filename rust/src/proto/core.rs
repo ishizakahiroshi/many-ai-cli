@@ -1213,6 +1213,9 @@ pub enum ResizeOutcome {
 #[derive(Clone)]
 pub struct SessionDetails {
     pub binding: SessionBinding,
+    /// Exact core clock for source-compatible inactivity decisions; never parse
+    /// the seconds-formatted display snapshot back into runtime authority.
+    pub last_output_at: Option<SystemTime>,
     pub snapshot: SessionSnapshot,
     pub db_id: Option<DbSessionId>,
     pub git_root: Option<std::path::PathBuf>,
@@ -1794,6 +1797,12 @@ pub trait CoreEventSubscription: Send {
 }
 pub enum CoreEffect {
     SendWrapper {
+        binding: SessionBinding,
+        message: super::Message,
+    },
+    /// Native resize delivery is best-effort in Go; its failure cannot veto
+    /// the UI resize broadcast/history or later input. Input sends stay strict.
+    SendWrapperBestEffort {
         binding: SessionBinding,
         message: super::Message,
     },

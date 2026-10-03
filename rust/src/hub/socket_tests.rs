@@ -548,3 +548,47 @@ async fn typed_git_turn_keeps_all_zero_counts_and_avoids_message_fields() {
     assert_eq!(event["turn"], 2);
     assert!(event.get("token_statusbar").is_none());
 }
+
+#[tokio::test]
+async fn failed_best_effort_resize_preserves_ui_and_history_while_input_stays_strict() {
+    let registry = registry();
+    let ui_recording = Recording::default();
+    registry
+        .insert_ui(ui(), Box::new(ui_recording.clone()))
+        .unwrap();
+    let dependencies = Arc::new(Dependencies::default());
+    let driver = EffectDriver::new(
+        registry,
+        dependencies.clone(),
+        dependencies.clone(),
+        dependencies.clone(),
+    );
+    driver
+        .apply(CoreEffects(vec![
+            CoreEffect::SendWrapperBestEffort {
+                binding: wrapper(99),
+                message: message("pty_resize"),
+            },
+            CoreEffect::SendUi {
+                binding: ui(),
+                message: message("pty_resize"),
+            },
+            CoreEffect::Persist(PersistenceEffect::ClearSessionHistory(LiveSessionId(1))),
+        ]))
+        .await
+        .unwrap();
+    assert_eq!(types(&ui_recording), ["pty_resize"]);
+    assert_eq!(*dependencies.log.lock().unwrap(), ["persist"]);
+    let failure = driver
+        .apply(CoreEffects(vec![
+            CoreEffect::SendWrapper {
+                binding: wrapper(99),
+                message: message("pty_input"),
+            },
+            CoreEffect::Persist(PersistenceEffect::ClearSessionHistory(LiveSessionId(1))),
+        ]))
+        .await
+        .unwrap_err();
+    assert_eq!(failure.index, 0);
+    assert_eq!(*dependencies.log.lock().unwrap(), ["persist"]);
+}

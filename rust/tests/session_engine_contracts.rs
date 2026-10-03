@@ -1255,3 +1255,118 @@ async fn warm_reattach_preserves_conversation_activity_and_original_output_clock
         );
     }
 }
+
+#[tokio::test]
+async fn exhausted_registration_id_does_not_leak_provider_admission() {
+    let f = fixture();
+    let restored = f
+        .engine
+        .reattach(
+            ReattachRequest {
+                message: proto::Message {
+                    session_id: i64::MAX,
+                    provider: "copilot".into(),
+                    cwd: "/fixture/restored".into(),
+                    cols: 80,
+                    rows: 24,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(1),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(restored.binding.session, LiveSessionId(i64::MAX));
+    // Dropping unapplied effects releases only their ordering tickets.
+    drop(restored);
+    let failed = f
+        .engine
+        .register(
+            RegisterRequest {
+                message: proto::Message {
+                    provider: "codex".into(),
+                    cwd: "/fixture/new".into(),
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(2),
+            now(),
+        )
+        .await;
+    assert!(
+        matches!(failed, Err(SessionError::InvalidRequest(message)) if message == "session identity exhausted")
+    );
+    let update = f
+        .engine
+        .begin_provider_update("codex")
+        .expect("failed registration must not reserve provider spawn");
+    f.engine.end_provider_update(update);
+}
+
+#[tokio::test]
+async fn failed_separate_submit_enter_retains_settle_and_confirmation_on_flush() {
+    let f = fixture();
+    let binding = register(&f).await.binding;
+    let cancel = TaskCancellation::default();
+    let request = |bytes: &[u8]| InputRequest {
+        bytes: bytes.to_vec(),
+        authority: InputAuthority::Internal,
+    };
+    let body = f
+        .engine
+        .submit(binding, request(b"\x1b[200~body\x1b[201~"), now(), &cancel)
+        .await;
+    assert_eq!(body.submit, SubmitReceipt::PendingEnter);
+    f.transport.fail.store(2, Ordering::SeqCst);
+    let failed = f
+        .engine
+        .submit(binding, request(b"\r"), now(), &cancel)
+        .await;
+    assert!(
+        matches!(failed.disposition, InputDisposition::Failed { unsent_remainder, .. } if unsent_remainder == b"\r")
+    );
+    f.transport.fail.store(0, Ordering::SeqCst);
+    f.engine.flush(binding, &cancel).await;
+    let frames = f.transport.frames.lock().unwrap();
+    assert_eq!(
+        frames
+            .iter()
+            .map(|(_, frame)| frame.data.as_slice())
+            .collect::<Vec<_>>(),
+        [
+            b"\x1b[200~body\x1b[201~".as_slice(),
+            b"\r".as_slice(),
+            b"\r".as_slice()
+        ]
+    );
+    assert_eq!(frames[2].1.input_seq, frames[1].1.input_seq + 1);
+}
+
+#[tokio::test]
+async fn details_exposes_exact_output_clock_without_rounding_for_routines() {
+    let f = fixture();
+    let binding = register(&f).await.binding;
+    assert_eq!(
+        f.engine.details(binding.session).unwrap().last_output_at,
+        None
+    );
+    let precise = now() + Duration::from_nanos(123_456_789);
+    let effects = f
+        .engine
+        .observe_output(
+            binding,
+            OutputChunk {
+                bytes: b"clock".to_vec(),
+                total_pty_bytes: 5,
+            },
+            precise,
+        )
+        .unwrap();
+    f.sink.apply(effects).await.unwrap();
+    assert_eq!(
+        f.engine.details(binding.session).unwrap().last_output_at,
+        Some(precise)
+    );
+}

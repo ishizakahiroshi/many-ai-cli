@@ -13,6 +13,15 @@ impl SessionEngine {
         let started = timestamp(now)?;
         let (binding, size, lease) = {
             let mut state = lock(&self.state);
+            // Allocation failure must neither consume a one-use proof nor leave
+            // a newly acquired provider-spawn lease behind.
+            let next_id = state
+                .next_id
+                .checked_add(1)
+                .ok_or_else(|| SessionError::InvalidRequest("session identity exhausted".into()))?;
+            let next_incarnation = state.next_incarnation.checked_add(1).ok_or_else(|| {
+                SessionError::InvalidRequest("session incarnation exhausted".into())
+            })?;
             let lease = if let Some(proof) = request.spawn_proof {
                 let hash = crate::approval::identity::digest(&proof);
                 let Some(lease) = state.spawn_proofs.get(&hash) else {
@@ -35,13 +44,8 @@ impl SessionEngine {
                     .begin_provider_spawn(&m.provider)
                     .map_err(|_| SessionError::ProviderUpdating(m.provider.clone()))?
             };
-            state.next_id = state
-                .next_id
-                .checked_add(1)
-                .ok_or_else(|| SessionError::InvalidRequest("session identity exhausted".into()))?;
-            state.next_incarnation = state.next_incarnation.checked_add(1).ok_or_else(|| {
-                SessionError::InvalidRequest("session incarnation exhausted".into())
-            })?;
+            state.next_id = next_id;
+            state.next_incarnation = next_incarnation;
             let size = if usable(state.last_ui_size) {
                 state.last_ui_size
             } else if usable(TerminalSize {
@@ -365,6 +369,7 @@ impl SessionEngine {
             session.marker_source = old.marker_source;
             session.input = old.input;
             session.input_lane = old.input_lane;
+            session.awaiting_submit_enter = old.awaiting_submit_enter;
             session.transcript.native_log_path = old.transcript.native_log_path;
             session.transcript_offset = old.transcript_offset;
             session.git_root = old.git_root;

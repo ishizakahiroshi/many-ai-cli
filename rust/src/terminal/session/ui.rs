@@ -388,7 +388,7 @@ fn resize_session(
     };
     let mut effects = CoreEffects::default();
     if s.connected {
-        effects.0.push(CoreEffect::SendWrapper {
+        effects.0.push(CoreEffect::SendWrapperBestEffort {
             binding: s.binding,
             message: message.clone(),
         });

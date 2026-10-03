@@ -3,6 +3,25 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+/// Resolve only macOS's fixed root-owned system aliases before capability
+/// walking. A user-controlled symlink in any later component is still rejected.
+/// Do not canonicalize arbitrary caller paths: that would erase the boundary.
+pub(crate) fn native_system_path(path: &Path) -> std::borrow::Cow<'_, Path> {
+    #[cfg(target_os = "macos")]
+    for name in ["var", "tmp", "etc"] {
+        let alias = PathBuf::from("/").join(name);
+        let Ok(rest) = path.strip_prefix(&alias) else {
+            continue;
+        };
+        let physical = PathBuf::from("/private").join(name);
+        let relative = PathBuf::from("private").join(name);
+        if std::fs::read_link(&alias).is_ok_and(|target| target == physical || target == relative) {
+            return std::borrow::Cow::Owned(physical.join(rest));
+        }
+    }
+    std::borrow::Cow::Borrowed(path)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
     Config,
@@ -410,7 +429,7 @@ mod tests {
         let old = tempfile::tempdir().unwrap();
         let p = RuntimePaths::trial(t.path(), 49001, old.path()).unwrap();
         assert!(p.clone().with_log_dir(&old.path().join("logs")).is_err());
-        assert_eq!(p.usage_hook_temporary_dir(old.path()), t.path().join("tmp"));
+        assert_eq!(p.usage_hook_temporary_dir(old.path()), p.root().join("tmp"));
     }
     #[test]
     fn database_location_matches_go_relative_and_root_parent_rules() {

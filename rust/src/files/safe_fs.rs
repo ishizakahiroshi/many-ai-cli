@@ -1,7 +1,7 @@
-//! Directory capabilities. Every operation is relative to a held directory, not
-//! a pathname checked earlier. Symlink/reparse components are never followed.
-//! A capability names the opened directory inode even if its name is moved; a
-//! replacement symlink cannot redirect a write to a different object.
+//! Unix operations are relative to held directories; Windows retains directory
+//! pins without delete sharing and rejects reparse points at acquisition.
+//! Fixed macOS system aliases are expanded before the no-follow walk. Native
+//! Windows concurrent reparse mutation is not an established security boundary.
 use std::{
     fs::{File, Metadata},
     io::{self, Read, Write},
@@ -57,6 +57,8 @@ mod platform {
     }
     impl Dir {
         pub fn open(path: &Path) -> io::Result<Self> {
+            let path = crate::config::paths::native_system_path(path);
+            let path = path.as_ref();
             if !path.is_absolute() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
@@ -386,9 +388,12 @@ mod platform {
         _pins: Vec<File>,
     }
     fn pin(path: &Path) -> io::Result<File> {
+        use windows_sys::Win32::Storage::FileSystem::{FILE_READ_ATTRIBUTES, SYNCHRONIZE};
         let f = OpenOptions::new()
-            .read(true)
-            .share_mode(FILE_SHARE_READ)
+            .access_mode(FILE_READ_ATTRIBUTES | SYNCHRONIZE)
+            // Do not deny ordinary writes merely because a directory is held.
+            // Delete sharing stays absent, so the pinned name cannot be renamed.
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
             .open(path)?;
         let m = f.metadata()?;
@@ -459,15 +464,15 @@ mod platform {
         pub fn path(&self) -> &Path {
             &self.path
         }
-        /// The existing held pin denies rename/delete and reparse mutation.
-        /// Reopen that same pinned object with WRITE_DAC only for ACL repair.
+        /// The held pin denies rename/delete. Reopen that object with WRITE_DAC
+        /// for ACL repair; concurrent reparse mutation still needs native review.
         pub fn restrict_private(&self) -> io::Result<()> {
             use windows_sys::Win32::Storage::FileSystem::{
                 FILE_READ_ATTRIBUTES, READ_CONTROL, SYNCHRONIZE, WRITE_DAC,
             };
             let file = OpenOptions::new()
                 .access_mode(FILE_READ_ATTRIBUTES | READ_CONTROL | WRITE_DAC | SYNCHRONIZE)
-                .share_mode(FILE_SHARE_READ)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
                 .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
                 .open(&self.path)?;
             let metadata = file.metadata()?;
@@ -518,7 +523,7 @@ mod platform {
             Ok(f)
         }
         /// Append-only access keeps concurrent writers at EOF in the kernel.
-        /// Every ancestor is held without write/delete sharing by this Dir.
+        /// Every ancestor is held without delete sharing by this Dir.
         pub fn open_append(&self, name: &str) -> io::Result<File> {
             use windows_sys::Win32::Storage::FileSystem::{
                 FILE_APPEND_DATA, FILE_READ_ATTRIBUTES, OPEN_ALWAYS, READ_CONTROL, SYNCHRONIZE,
@@ -668,6 +673,8 @@ impl Dir {
     /// directory is restricted if it already existed. Existing ancestors (for
     /// example the user's home or a volume root) keep their original policy.
     pub fn open_or_create_private(path: &Path) -> io::Result<Self> {
+        let path = crate::config::paths::native_system_path(path);
+        let path = path.as_ref();
         if !path.is_absolute() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

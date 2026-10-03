@@ -1086,6 +1086,7 @@ dependencies = [
  "subtle",
  "tempfile",
  "tokio",
+ "tokio-tungstenite",
  "toml_edit",
  "url",
  "windows-sys 0.61.2",

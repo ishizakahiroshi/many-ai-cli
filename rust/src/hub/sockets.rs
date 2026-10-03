@@ -500,6 +500,12 @@ impl EffectDriver {
             CoreEffect::SendWrapper { binding, message } => {
                 self.sockets.send(binding, message).await
             }
+            CoreEffect::SendWrapperBestEffort { binding, message } => {
+                if let Err(error) = self.sockets.send(binding, message).await {
+                    (self.warning)("best-effort wrapper delivery", &error);
+                }
+                Ok(())
+            }
             CoreEffect::SendUi { binding, message } => self.sockets.send_ui(binding, message).await,
             CoreEffect::SendUiBestEffort { binding, message } => {
                 if let Err(error) = self.sockets.send_ui(binding, message).await {

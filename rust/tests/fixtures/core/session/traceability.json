@@ -38,7 +38,10 @@
       "delayed_old_disconnect_cannot_close_rebound_journal_or_end_restored_database_row",
       "provider_output_during_send_is_persisted_before_post_send_user_history",
       "marker_answer_and_history_reset_clear_waiting_activity_immediately",
-      "warm_reattach_preserves_conversation_activity_and_original_output_clock"
+      "warm_reattach_preserves_conversation_activity_and_original_output_clock",
+      "exhausted_registration_id_does_not_leak_provider_admission",
+      "failed_separate_submit_enter_retains_settle_and_confirmation_on_flush",
+      "details_exposes_exact_output_clock_without_rounding_for_routines"
     ],
     "rust/tests/journal_contracts.rs": [
       "disabled_body_gate_keeps_registration_metadata_but_neither_body_store",
@@ -54,7 +57,7 @@
       "warm_conversation_preserves_project_and_board_but_not_connection_metadata"
     ]
   },
-  "rust_execution": "Parent-run frozen snapshot: 430 tests passed, 0 failed, 0 ignored; includes journal8 + session21 and lifecycle warm-conversation unit. Covers pre/post input history ordering, immediate approval activity refresh and warm-reattach metadata/activity/output-clock preservation.",
+  "rust_execution": "Frozen wrapper/input integration snapshot: 477 passed, 0 failed, 0 ignored; includes session24, journal8, wrapper13 and212 unit tests. Native OS acceptance and remaining application callers remain separate.",
   "go_mask_oracle": {
     "generator": "rust/tests/fixtures/core/journal/mask_oracle.go",
     "fixture": "rust/tests/fixtures/core/journal/mask-oracle-21d0bc7.json",
@@ -85,19 +88,16 @@
     "One-tap selection intent and proof replay/admission tests remain next slice"
   ],
   "full_snapshot_receipt": {
-    "tests_passed": 430,
+    "tests_passed": 477,
     "tests_failed": 0,
     "tests_ignored": 0,
-    "run_owner": "integration coordinator",
-    "journal_integration_tests": 8,
-    "session_integration_tests": 21,
-    "warm_lifecycle_unit_tests": 1,
-    "scope": "registered frozen Rust snapshot before native wrapper/PTY and typed one-shot action selection registration",
-    "includes": [
-      "provider_output_during_send_is_persisted_before_post_send_user_history",
-      "marker_answer_and_history_reset_clear_waiting_activity_immediately",
-      "warm_reattach_preserves_conversation_activity_and_original_output_clock",
-      "warm_conversation_preserves_project_and_board_but_not_connection_metadata"
-    ]
+    "fmt": "exit0",
+    "strict_all_targets_clippy": "exit0"
+  },
+  "functional_review_repairs": {
+    "review_sha": "a02223c622345e44c6da8cbcc4e2e9da1b225ded",
+    "reattach_flush": "Actual WebSocket caller starts owned pending/inflight flush after ACK and keeps the reader polling; real loopback fixture covers ACK-capable resend, pending bytes and new input.",
+    "split_enter": "Failed separate CR restores settle/confirmation intent, including cancellation/stale-binding paths; warm reconnect preserves that intent.",
+    "review_status": "Author regressions passed; immutable independent re-review pending."
   }
 }

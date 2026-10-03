@@ -11,7 +11,10 @@ pub(super) fn open_connection(
     } else {
         rusqlite::OpenFlags::default()
     };
-    let conn = Connection::open_with_flags(path, flags)
+    // SQLITE_OPEN_NOFOLLOW also rejects Darwin's system /var alias. Expand
+    // only the fixed OS aliases; do not follow arbitrary trial path components.
+    let path = crate::config::paths::native_system_path(path);
+    let conn = Connection::open_with_flags(path.as_ref(), flags)
         .map_err(|e| sql_error(StorageErrorKind::Open, e))?;
     let fts = initialize(&conn, init_timeout)?;
     Ok((conn, fts))

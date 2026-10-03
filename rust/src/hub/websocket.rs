@@ -172,7 +172,25 @@ impl WebSocketService {
             let result = async {
                 self.sockets.acknowledge_wrapper(binding, ack).await?;
                 self.apply(effects).await?;
-                self.wrapper_loop(binding, &mut reader, &closed).await
+                // The baseline starts flushPendingInput only after reattach_ack.
+                // Keep it owned by this socket lifecycle and poll the reader in
+                // parallel so ACK/output frames can advance the input gate.
+                let flush_cancel = TaskCancellation::default();
+                let read = async {
+                    let result = self.wrapper_loop(binding, &mut reader, &closed).await;
+                    flush_cancel.cancel();
+                    result
+                };
+                let flush = async {
+                    if reattach {
+                        let effects = self.core.flush(binding, &flush_cancel).await;
+                        if let Err(error) = self.apply(effects).await {
+                            (self.warning)("reattach input flush", &error);
+                        }
+                    }
+                };
+                let (result, ()) = tokio::join!(read, flush);
+                result
             }
             .await;
             self.sockets.close_wrapper(binding).await?;

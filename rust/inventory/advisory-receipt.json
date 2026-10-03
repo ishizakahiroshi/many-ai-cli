@@ -1,7 +1,7 @@
 {
   "source": "https://github.com/RustSec/advisory-db",
   "revision": "f8dee89e1b2f2f1eaf548312df7655fe5202a302",
-  "cargo_lock_sha256": "49a7e28e984edb7a0e858dfdbee1ead1b9e75b3b24d7547eccf02f9cc134183d",
+  "cargo_lock_sha256": "a32402847b44cb282770f7b3f4f1cf88231d8400ef59558d296db9fd59e137e6",
   "method": "Exact resolved package/version lookup in official advisory database with semver patched/unaffected comparisons; not cargo-audit and not a guarantee against unknown vulnerabilities.",
   "package_count": 277,
   "matched_advisory_rows": [
@@ -876,5 +876,6 @@
       "source": "https://github.com/RustSec/advisory-db/blob/f8dee89e1b2f2f1eaf548312df7655fe5202a302/crates/zerovec-derive/RUSTSEC-2024-0346.md"
     }
   ],
-  "unresolved_rows": 0
+  "unresolved_rows": 0,
+  "lockfile_delta": "Only the root many-ai-cli dependency edge to already-reviewed tokio-tungstenite0.29.0 was added; all277 resolved package/version/source/checksum rows are unchanged. Native acceptance remains separate."
 }

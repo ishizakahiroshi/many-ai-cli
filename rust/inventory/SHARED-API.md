@@ -93,3 +93,11 @@ resources, real SSH/provider/model boundaries, browser/mobile acceptance and
 copied-data rollback are still separate gates. Generated Web assets are validated
 against the frozen build-input contract before embedding. Existing Go and Web
 source must remain untouched.
+
+## Wrapper/input caller additions (2026-10-03)
+
+- `process::pty::{PtyFactory,PtySession,NativePtyFactory,PtySize,PtyExit}` owns PTY IO/resize/close/wait separately from pipe-based ManagedProcess. PtyExit.code is i64 to preserve Windows DWORD values. Unix process-group cleanup is not a universal detached-descendant container; native Windows ConPTY/Job acceptance remains separate.
+- `process::execpath::Resolver` consumes explicit platform/environment/cwd/filesystem inputs. `wrapper::entry::run_cli` consumes an already-loaded config and explicit runtime context; it does not establish the still-unfinished Hub startup/spawn ownership handoff.
+- `SessionDetails.last_output_at: Option<SystemTime>` exposes the same core clock for exact inactivity decisions. The display snapshot's second-resolution RFC3339 value must not become a runtime clock.
+- `CoreEffect::SendWrapperBestEffort` is used for source-tolerated resize delivery. Input transport stays strict. The WebSocket owner starts core.flush only after reattach ACK, polls the reader concurrently and cancels/drains that owned work with its socket lifecycle.
+- `terminal::journal::session_log_paths` is a pure shared naming function. It retains the validated timestamp's source offset/date and creates no file or second persistence owner.

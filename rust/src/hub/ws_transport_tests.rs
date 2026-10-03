@@ -426,3 +426,57 @@ async fn loopback_reattach_rejection_and_declared_exit_keep_go_wire_shape() {
     assert_eq!(end.reason, "synthetic reason");
     fixture.stop().await;
 }
+
+#[tokio::test]
+async fn real_reattach_ack_precedes_unacked_replay_and_disconnected_input_flush() {
+    let fixture = fixture().await;
+    let (mut wrapper, _) = Client::connect(fixture.port, "").await;
+    let registration = serde_json::json!({"type":"register","provider":"shell","cwd":fixture._root.path(),"pid":123,"token":"synthetic-websocket-token"});
+    wrapper.json(registration.clone()).await;
+    let ack = wrapper.frame().await.unwrap();
+    let id = ack["session_id"].as_i64().unwrap();
+    // The fixed Go source replays inflight frames only after ACK capability
+    // has been observed; a nonpositive ACK advertises it without removing data.
+    wrapper
+        .json(serde_json::json!({"type":"pty_input_ack","input_seq":0}))
+        .await;
+    let (mut ui, _) = Client::connect(fixture.port, "").await;
+    ui.json(serde_json::json!({"role":"ui","token":"synthetic-websocket-token"}))
+        .await;
+    ui.until("approval_snapshot").await;
+    ui.json(serde_json::json!({"type":"pty_input","session_id":id,"text":"first"}))
+        .await;
+    let first = wrapper.until("pty_input").await;
+    drop(wrapper); // Deliberately lose ACK after receiving the original bytes.
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while fixture.core.details(LiveSessionId(id)).unwrap().connected {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    ui.json(serde_json::json!({"type":"pty_input","session_id":id,"text":"pending"}))
+        .await;
+    ui.until("input_deferred").await;
+    let (mut next, _) = Client::connect(fixture.port, "").await;
+    let mut reattach = registration;
+    reattach["type"] = "reattach".into();
+    reattach["session_id"] = id.into();
+    reattach["started_at"] = ack["started_at"].clone();
+    next.json(reattach).await;
+    assert_eq!(next.frame().await.unwrap()["type"], "reattach_ack");
+    let replay = next.until("pty_input").await;
+    assert_eq!(replay["data"], first["data"]);
+    assert_eq!(replay["input_seq"], first["input_seq"]);
+    let pending = next.until("pty_input").await;
+    assert_eq!(pending["data"], "cGVuZGluZw==");
+    assert!(pending["input_seq"].as_i64().unwrap() > first["input_seq"].as_i64().unwrap());
+    for frame in [&replay, &pending] {
+        next.json(serde_json::json!({"type":"pty_input_ack","input_seq":frame["input_seq"]}))
+            .await;
+    }
+    ui.json(serde_json::json!({"type":"pty_input","session_id":id,"text":"fresh"}))
+        .await;
+    assert_eq!(next.until("pty_input").await["data"], "ZnJlc2g=");
+    fixture.stop().await;
+}

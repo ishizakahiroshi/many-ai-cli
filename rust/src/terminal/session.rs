@@ -220,6 +220,7 @@ impl SessionEngine {
     pub fn details(&self, id: LiveSessionId) -> Option<SessionDetails> {
         lock(&self.state).sessions.get(&id).map(|s| SessionDetails {
             binding: s.binding,
+            last_output_at: s.last_output,
             snapshot: s.snapshot.clone(),
             db_id: s.db_id,
             git_root: s.git_root.clone(),

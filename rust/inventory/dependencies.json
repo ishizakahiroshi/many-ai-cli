@@ -375,7 +375,19 @@
         "Win32_System_Threading",
         "Win32_System_Diagnostics_ToolHelp",
         "Win32_System_JobObjects",
-        "Win32_System_Memory"
+        "Win32_System_Memory",
+        "Win32_UI_WindowsAndMessaging",
+        "Win32_UI_Shell",
+        "Win32_Graphics_Gdi",
+        "Win32_System_LibraryLoader",
+        "Win32_System_Console",
+        "Win32_System_WindowsProgramming",
+        "Win32_System_SystemInformation",
+        "Win32_NetworkManagement_IpHelper",
+        "Win32_NetworkManagement_Ndis",
+        "Win32_Networking_WinSock",
+        "Win32_System_Pipes",
+        "Win32_System_IO"
       ],
       "default_features": true,
       "official_source": "https://docs.rs/crate/windows-sys/0.61.2",
@@ -383,6 +395,20 @@
       "license": "MIT OR Apache-2.0",
       "advisory_review": "See advisory-receipt.json; selected versions are patched/unaffected in the recorded public RustSec snapshot. Unknown vulnerabilities and target-specific vendor/runtime audits remain separate.",
       "target_acceptance": "Linux source/tests; complete native target/build/license/SBOM acceptance pending"
+    },
+    {
+      "name": "tokio-tungstenite",
+      "version": "0.29.0",
+      "scope": "dependencies",
+      "features": [
+        "handshake"
+      ],
+      "default_features": false,
+      "official_source": "https://docs.rs/crate/tokio-tungstenite/0.29.0",
+      "registry_checksum": "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c",
+      "license": "MIT",
+      "advisory_review": "Previously transitive via axum; same locked package and reviewed advisory rows, now a direct loopback WebSocket client dependency.",
+      "target_acceptance": "Linux synthetic loopback caller exercised; complete native matrix and application acceptance pending"
     }
   ],
   "notes": [
@@ -395,7 +421,7 @@
     "Chrono is pinned with std,clock and default-features=false. Shared helpers preserve Go seconds/nanosecond precision and runtime-local offset; routine IANA timezone scheduling is a separate integration.",
     "Reqwest 0.13.5 is pinned without default features, using rustls/json/query/stream/multipart. Its AWS-LC dependency compiled on Linux; native runtime, upstream library notices and clean target artifacts remain pending.",
     "HTTP server transport explicitly uses Hyper HTTP1 with a 10-second header timeout; no implicit cleartext HTTP2 expansion. futures-util sink is explicit for separated WS readers/writers.",
-    "chrono-tz 0.10.4 embeds IANA 2025b; pinned Go 1.26.8 ships 2025c. Official IANA 2025c NEWS changes historical Baja California DST in 1953 and 1961\u20131975. The 223 modern/future schedule samples pass; whole-tzdb/historical equivalence is not accepted. Source: https://data.iana.org/time-zones/tzdb-2025c/NEWS"
+    "chrono-tz 0.10.4 embeds IANA 2025b; pinned Go 1.26.8 ships 2025c. Official IANA 2025c NEWS changes historical Baja California DST in 1953 and 1961–1975. The 223 modern/future schedule samples pass; whole-tzdb/historical equivalence is not accepted. Source: https://data.iana.org/time-zones/tzdb-2025c/NEWS"
   ],
   "lockfile_sha256": "49a7e28e984edb7a0e858dfdbee1ead1b9e75b3b24d7547eccf02f9cc134183d",
   "toolchain_security": {

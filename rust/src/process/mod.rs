@@ -1,4 +1,10 @@
 //! Owned, cancellable subprocesses. Output readers start before prompt writes.
+pub mod execpath;
+pub mod pty;
+#[cfg(unix)]
+mod pty_unix;
+#[cfg(windows)]
+mod pty_windows;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -487,7 +493,7 @@ fn terminate_group(pid: u32) {
     }
 }
 #[cfg(windows)]
-mod windows_job {
+pub(crate) mod windows_job {
     use std::mem::size_of;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use std::{io, mem};
@@ -498,10 +504,15 @@ mod windows_job {
     pub struct OwnedJob(OwnedHandle);
     impl OwnedJob {
         pub fn attach(child: &tokio::process::Child) -> io::Result<Self> {
+            let raw = child
+                .raw_handle()
+                .ok_or_else(|| io::Error::other("missing child handle"))?;
+            Self::attach_raw(raw)
+        }
+        /// Attach a still-owned, suspended child before any provider code runs.
+        /// The caller retains the process handle and resumes only after success.
+        pub(crate) fn attach_raw(raw: HANDLE) -> io::Result<Self> {
             unsafe {
-                let raw = child
-                    .raw_handle()
-                    .ok_or_else(|| io::Error::other("missing child handle"))?;
                 let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
                 if job.is_null() {
                     return Err(io::Error::last_os_error());
