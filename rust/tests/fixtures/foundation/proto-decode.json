@@ -1,0 +1,173 @@
+[
+  {
+    "error": false,
+    "input": "{\"TYPE\":\"register\",\"PID\":123}",
+    "value": {
+      "type": "register",
+      "pid": 123,
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"type\":\"first\",\"type\":\"last\"}",
+    "value": {
+      "type": "last",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"type\":\"first\",\"TYPE\":\"last\"}",
+    "value": {
+      "type": "last",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"TYPE\":\"first\",\"type\":\"last\"}",
+    "value": {
+      "type": "last",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"type\":\"kept\",\"type\":null,\"pid\":7,\"PID\":null}",
+    "value": {
+      "type": "kept",
+      "pid": 7,
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"activity\":{\"output_idle\":true},\"ACTIVITY\":{\"workflow_active\":true}}",
+    "value": {
+      "type": "",
+      "activity": {
+        "output_idle": true,
+        "workflow_active": true,
+        "awaiting_user": false,
+        "awaiting_approval": false
+      },
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"activity\":{\"output_idle\":true},\"activity\":null}",
+    "value": {
+      "type": "",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"data\":\"AB==\"}",
+    "value": {
+      "type": "",
+      "data": "AA==",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"data\":[1,null,255]}",
+    "value": {
+      "type": "",
+      "data": "AQD/",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"messages\":[null,{\"role\":null,\"tools\":[null]}]}",
+    "value": {
+      "type": "",
+      "messages": [
+        {
+          "role": ""
+        },
+        {
+          "role": "",
+          "tools": [
+            {
+              "name": ""
+            }
+          ]
+        }
+      ],
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"spawn_child_approval\":{\"claude\":null}}",
+    "value": {
+      "type": "",
+      "token_statusbar": false,
+      "spawn_child_approval": {
+        "claude": null
+      }
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"spawn_child_approval\":{\"claude\":{\"x\":{\"tier\":\"full\"}}},\"SPAWN_CHILD_APPROVAL\":{\"codex\":{}}}",
+    "value": {
+      "type": "",
+      "token_statusbar": false,
+      "spawn_child_approval": {
+        "claude": {
+          "x": {
+            "tier": "full"
+          }
+        },
+        "codex": {}
+      }
+    }
+  },
+  {
+    "error": true,
+    "input": "{\"pid\":1e0}"
+  },
+  {
+    "error": true,
+    "input": "{\"pid\":9223372036854775808}"
+  },
+  {
+    "error": true,
+    "input": "{\"data\":\"bad!\"}"
+  },
+  {
+    "error": true,
+    "input": "{\"rows\":\"12\"}"
+  },
+  {
+    "error": false,
+    "input": "null",
+    "value": {
+      "type": "",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"unknown\":{\"future\":[1,2,3]},\"token_statusbar\":false}",
+    "value": {
+      "type": "",
+      "token_statusbar": false
+    }
+  },
+  {
+    "error": false,
+    "input": "{\"ſeſſion_id\":7,\"type\":\"synthetic\"}",
+    "value": {
+      "type": "synthetic",
+      "session_id": 7,
+      "token_statusbar": false
+    }
+  }
+]

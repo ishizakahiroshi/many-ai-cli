@@ -215,6 +215,9 @@ pub fn parse_launcher(args: &[String]) -> Result<LauncherInvocation, String> {
             .strip_prefix("--")
             .or_else(|| arg.strip_prefix('-'))
             .unwrap();
+        if flag.starts_with(['-', '=']) {
+            return Err(format!("bad flag syntax: {arg}"));
+        }
         let (name, inline) = flag
             .split_once('=')
             .map_or((flag, None), |(n, v)| (n, Some(v)));
@@ -236,7 +239,12 @@ pub fn parse_launcher(args: &[String]) -> Result<LauncherInvocation, String> {
                 let value = match inline.unwrap_or("true") {
                     "1" | "t" | "T" | "true" | "TRUE" | "True" => true,
                     "0" | "f" | "F" | "false" | "FALSE" | "False" => false,
-                    _ => return Err(format!("invalid boolean value for -{name}")),
+                    _ => {
+                        return Err(format!(
+                            "invalid boolean value {} for -{name}: parse error",
+                            go_quote(inline.unwrap_or("true"))
+                        ));
+                    }
                 };
                 if name == "last" {
                     invocation.use_last = value
@@ -282,4 +290,38 @@ mod launcher_tests {
         assert!(parse_launcher(&args(&["--ui=bad"])).is_err());
         assert!(parse_launcher(&args(&["--help"])).unwrap().help);
     }
+}
+
+fn go_quote(value: &str) -> String {
+    use std::fmt::Write;
+    let mut out = String::from("\"");
+    for c in value.chars() {
+        match c {
+            '\"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{7}' => out.push_str("\\a"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{b}' => out.push_str("\\v"),
+            '\u{c}' => out.push_str("\\f"),
+            c if c.is_ascii_control() => {
+                write!(&mut out, "\\x{:02x}", c as u32).unwrap();
+            }
+            c if c.is_control()
+                || (c.is_whitespace() && c != ' ')
+                || matches!(c, '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{feff}') =>
+            {
+                if (c as u32) <= 0xffff {
+                    write!(&mut out, "\\u{:04x}", c as u32).unwrap();
+                } else {
+                    write!(&mut out, "\\U{:08x}", c as u32).unwrap();
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('\"');
+    out
 }

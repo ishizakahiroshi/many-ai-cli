@@ -1,598 +1,2989 @@
 {
+  "schema_version": 2,
   "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "instruction_supplement": "30c37b7 (instruction-only; Go behavior baseline unchanged)",
+  "scope": "K01 both binary CLI source contract; parse coverage and runtime acceptance deliberately independent",
+  "binaries": [
+    "many-ai-cli",
+    "many-ai-cli-launcher"
+  ],
+  "usage": "many-ai-cli <serve|connect|setup|doctor|issue|wrap|claude|codex|copilot|cursor-agent|opencode|grok|command-code|shell-init|stop|status|tray|profile-export|log-clean|uninstall|version>",
+  "builtin_providers": [
+    "claude",
+    "codex",
+    "copilot",
+    "cursor-agent",
+    "opencode",
+    "grok",
+    "command-code"
+  ],
   "commands": [
     {
-      "name": "<no arguments>",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
-    },
-    {
       "name": "version",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+      "binary": "many-ai-cli",
+      "route": "version",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 205,
+      "go_calls": [],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "candidate help/version output exists; pre-dispatch config load and version lookup parity pending"
     },
     {
       "name": "--version",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+      "binary": "many-ai-cli",
+      "route": "version",
+      "alias_of": "version",
+      "hidden": false,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 205,
+      "go_calls": [],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "candidate help/version output exists; pre-dispatch config load and version lookup parity pending"
     },
     {
       "name": "-v",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+      "binary": "many-ai-cli",
+      "route": "version",
+      "alias_of": "version",
+      "hidden": false,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 205,
+      "go_calls": [],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "candidate help/version output exists; pre-dispatch config load and version lookup parity pending"
     },
     {
       "name": "serve",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "serve",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 211,
+      "go_calls": [
+        "s.Run(ctx)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "connect",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "connect",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 237,
+      "go_calls": [
+        "errors.New(\"connect requires --profile <name> or --last\")",
+        "fmt.Errorf(\"load profiles: %w\", err)",
+        "fmt.Errorf(\"invalid profiles: %w\", err)",
+        "launcher.Connect(profile)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "profile-export",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "profile-export",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 266,
+      "go_calls": [
+        "errors.New(\"profile-export currently supports only --json output\")",
+        "enc.Encode(exported)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "status",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "status",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 294,
+      "go_calls": [
+        "hub.PrintStatus(cfg)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "tray",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "tray",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 296,
+      "go_calls": [
+        "tray.Run(cfg)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "doctor",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "doctor",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 301,
+      "go_calls": [
+        "json.NewEncoder(os.Stdout).Encode(report)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "stop",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "stop",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 318,
+      "go_calls": [
+        "hub.Stop(cfg)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "log-clean",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "log-clean",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 320,
+      "go_calls": [
+        "errors.New(\"log-clean <session.jsonl> [-o transcript.txt]\")"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "uninstall",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "uninstall",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 340,
+      "go_calls": [
+        "uninstall.Run(*purge)"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "shell-init",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "shell-init",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 351,
+      "go_calls": [],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "setup",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "setup",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 354,
+      "go_calls": [
+        "setupcmd.Run()"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "issue",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "issue",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 363,
+      "go_calls": [
+        "runIssue(cfg, args[1:], defaultIssueDependencies())"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "provider",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "provider",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 365,
+      "go_calls": [
+        "runProviderCommand(cfg, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "wrap",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 367,
+      "go_calls": [
+        "errors.New(\"wrap <provider>\")",
+        "wrapper.Run(cfg, logger, args[1], args[2:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "claude",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "codex",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "copilot",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "cursor-agent",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "opencode",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "grok",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "command-code",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "alias_of": "wrap",
+      "hidden": false,
+      "advertised_in_usage": true,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 372,
+      "go_calls": [
+        "wrapper.Run(cfg, logger, cmd, args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "usage-relay",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "usage-relay",
+      "alias_of": null,
+      "hidden": true,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 374,
+      "go_calls": [
+        "usagerelay.Run(args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "orchestrate",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "orchestrate",
+      "alias_of": null,
+      "hidden": true,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 378,
+      "go_calls": [
+        "errors.New(\"orchestrate <spawn|send>\")",
+        "orchestrate.Run(args[1:])"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "not integrated by the current binary; parsing is not runtime acceptance"
     },
     {
       "name": "-h",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+      "binary": "many-ai-cli",
+      "route": "help",
+      "alias_of": "help",
+      "hidden": false,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 388,
+      "go_calls": [
+        "usage()"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "candidate help/version output exists; pre-dispatch config load and version lookup parity pending"
     },
     {
       "name": "--help",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+      "binary": "many-ai-cli",
+      "route": "help",
+      "alias_of": "help",
+      "hidden": false,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 388,
+      "go_calls": [
+        "usage()"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "candidate help/version output exists; pre-dispatch config load and version lookup parity pending"
     },
     {
       "name": "help",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "candidate-only; baseline configuration/version lookup side effects pending"
+      "binary": "many-ai-cli",
+      "route": "help",
+      "alias_of": null,
+      "hidden": false,
+      "advertised_in_usage": false,
+      "source": "cmd/many-ai-cli/main.go",
+      "line": 388,
+      "go_calls": [
+        "usage()"
+      ],
+      "rust_dispatch": "rust/src/cli.rs::parse",
+      "parse_status": "top-level route covered by source-derived dispatch fixture; delegated parsing is separate",
+      "runtime_status": "pending",
+      "runtime_note": "candidate help/version output exists; pre-dispatch config load and version lookup parity pending"
+    },
+    {
+      "name": "<no arguments>",
+      "binary": "many-ai-cli",
+      "route": "default",
+      "source": "cmd/many-ai-cli/main.go",
+      "go_calls": [
+        "config.LoadOrCreate",
+        "hub.IsRunning",
+        "hub.OpenBrowserForConfig or hub.NewServer.Run"
+      ],
+      "parse_status": "top-level route covered",
+      "runtime_status": "pending"
     },
     {
       "name": "<configured custom provider ID>",
-      "dispatch": "rust/src/cli.rs::parse",
-      "caller_status": "pending"
+      "binary": "many-ai-cli",
+      "route": "wrap",
+      "source": "cmd/many-ai-cli/main.go",
+      "go_calls": [
+        "cfg.IsCustomProviderID",
+        "wrapper.Run"
+      ],
+      "parse_status": "route covered with an explicit synthetic custom-provider list; binary config wiring pending",
+      "runtime_status": "pending",
+      "precedence": "only after every built-in command/alias case"
+    },
+    {
+      "name": "many-ai-cli-launcher",
+      "binary": "many-ai-cli-launcher",
+      "source": "cmd/many-ai-cli-launcher/main.go",
+      "rust_dispatch": "rust/src/cli.rs::parse_launcher",
+      "parse_status": "standalone Go flag grammar covered",
+      "runtime_status": "pending",
+      "go_calls": [
+        "launcher.ConfigureConsoleUTF8",
+        "launcher.StartupBanner",
+        "launcher.LoadProfiles",
+        "launcher.Validate",
+        "runUI or launcher.SelectProfile + launcher.Connect"
+      ]
     }
   ],
-  "entry_sources": [
+  "subcommands": [
     {
-      "source": "cmd/many-ai-cli/main.go",
-      "sha256": "a6fd98b94bd0939f970a11e24c3a0a140fa615567d3eea4d6e599ddf4e7a0568",
-      "cases": [
-        {
-          "line": 63,
-          "case": "case sig := <-sigCh:"
-        },
-        {
-          "line": 66,
-          "case": "case <-ctx.Done():"
-        },
-        {
-          "line": 205,
-          "case": "case \"version\", \"--version\", \"-v\":"
-        },
-        {
-          "line": 211,
-          "case": "case \"serve\":"
-        },
-        {
-          "line": 237,
-          "case": "case \"connect\":"
-        },
-        {
-          "line": 266,
-          "case": "case \"profile-export\":"
-        },
-        {
-          "line": 294,
-          "case": "case \"status\":"
-        },
-        {
-          "line": 296,
-          "case": "case \"tray\":"
-        },
-        {
-          "line": 301,
-          "case": "case \"doctor\":"
-        },
-        {
-          "line": 318,
-          "case": "case \"stop\":"
-        },
-        {
-          "line": 320,
-          "case": "case \"log-clean\":"
-        },
-        {
-          "line": 340,
-          "case": "case \"uninstall\":"
-        },
-        {
-          "line": 351,
-          "case": "case \"shell-init\":"
-        },
-        {
-          "line": 354,
-          "case": "case \"setup\":"
-        },
-        {
-          "line": 363,
-          "case": "case \"issue\":"
-        },
-        {
-          "line": 365,
-          "case": "case \"provider\":"
-        },
-        {
-          "line": 367,
-          "case": "case \"wrap\":"
-        },
-        {
-          "line": 372,
-          "case": "case \"claude\", \"codex\", \"copilot\", \"cursor-agent\", \"opencode\", \"grok\", \"command-code\":"
-        },
-        {
-          "line": 374,
-          "case": "case \"usage-relay\":"
-        },
-        {
-          "line": 378,
-          "case": "case \"orchestrate\":"
-        },
-        {
-          "line": 388,
-          "case": "case \"-h\", \"--help\", \"help\":"
-        }
-      ],
-      "flags": [
-        {
-          "line": 213,
-          "declaration": "open := fs.Bool(\"open\", false, \"open browser\")"
-        },
-        {
-          "line": 214,
-          "declaration": "port := fs.Int(\"port\", 0, \"port\")"
-        },
-        {
-          "line": 215,
-          "declaration": "dev := fs.Bool(\"dev\", false, \"serve web assets from ./web/ (no recompile needed)\")"
-        },
-        {
-          "line": 216,
-          "declaration": "debug := fs.Bool(\"debug\", false, \"enable debug logging\")"
-        },
-        {
-          "line": 242,
-          "declaration": "profileName := fs.String(\"profile\", \"\", \"profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)\")"
-        },
-        {
-          "line": 243,
-          "declaration": "useLast := fs.Bool(\"last\", false, \"connect using the last-used profile\")"
-        },
-        {
-          "line": 271,
-          "declaration": "asJSON := fs.Bool(\"json\", false, \"output as JSON\")"
-        },
-        {
-          "line": 272,
-          "declaration": "name := fs.String(\"name\", \"\", \"profile display name (default: hostname)\")"
-        },
-        {
-          "line": 273,
-          "declaration": "host := fs.String(\"host\", \"\", \"public host to advertise first (overrides auto-detected IP; e.g. for Docker)\")"
-        },
-        {
-          "line": 274,
-          "declaration": "cwd := fs.String(\"cwd\", \"\", \"remote working directory (default: current directory)\")"
-        },
-        {
-          "line": 275,
-          "declaration": "hubPort := fs.Int(\"hub-port\", 0, \"fixed hub port (0 = auto-select)\")"
-        },
-        {
-          "line": 303,
-          "declaration": "asJSON := fs.Bool(\"json\", false, \"output as JSON\")"
-        },
-        {
-          "line": 322,
-          "declaration": "out := fs.String(\"o\", \"\", \"output transcript path\")"
-        },
-        {
-          "line": 342,
-          "declaration": "purge := fs.Bool(\"purge\", false, \"バイナリ本体も削除する\")"
-        }
-      ]
+      "name": "provider",
+      "syntax": "provider <backup|reset|recover>",
+      "go_entry": "runProviderCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 14,
+        "anchor": "func runProviderCommand("
+      },
+      "flag_set": null,
+      "behavior": "Missing verb errors before config.Dir; nonempty verb resolves config and history store before branch validation. No help alias.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
     },
     {
-      "source": "cmd/many-ai-cli/issue.go",
-      "sha256": "d935f29996288c9351f8e84cfa12edfc3fa1adf43d7896827b823514e5c18fd6",
-      "cases": [
-        {
-          "line": 178,
-          "case": "case \"\", \"claude\", \"codex\", \"copilot\", \"cursor-agent\", \"opencode\", \"grok\", \"command-code\":"
-        }
-      ],
-      "flags": [
-        {
-          "line": 66,
-          "declaration": "titleFlag := fs.String(\"title\", \"\", \"GitHub issue title\")"
-        },
-        {
-          "line": 67,
-          "declaration": "provider := fs.String(\"provider\", \"\", \"active provider\")"
-        },
-        {
-          "line": 68,
-          "declaration": "dryRun := fs.Bool(\"dry-run\", false, \"print the redacted report without opening GitHub\")"
-        }
-      ]
+      "name": "provider backup",
+      "syntax": "provider backup <list|verify|restore> <provider-id> [backup-id]",
+      "go_entry": "runProviderBackupCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 38,
+        "anchor": "func runProviderBackupCommand("
+      },
+      "flag_set": null,
+      "behavior": "Requires at least action and provider ID. Unknown action errors; trailing argv is tolerated.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
     },
     {
+      "name": "provider backup list",
+      "syntax": "provider backup list <provider-id>",
+      "go_entry": "runProviderBackupCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 38,
+        "anchor": "func runProviderBackupCommand("
+      },
+      "flag_set": null,
+      "behavior": "ListBackups; one tab-separated revision, created_at, reason, content_digest row per backup. Extra args ignored.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "provider backup verify",
+      "syntax": "provider backup verify <provider-id> <backup-id>",
+      "go_entry": "runProviderBackupCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 38,
+        "anchor": "func runProviderBackupCommand("
+      },
+      "flag_set": null,
+      "behavior": "VerifyBackup; stdout verified TAB revision TAB digest. Extra args ignored.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "provider backup restore",
+      "syntax": "provider backup restore <provider-id> <backup-id> --expected-revision <revision>",
+      "go_entry": "runProviderBackupCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 38,
+        "anchor": "func runProviderBackupCommand("
+      },
+      "flag_set": null,
+      "behavior": "Manual scan starts at argv index 3; only separate --expected-revision recognized; last complete occurrence wins; empty or missing value rejected; unknown args ignored.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "provider reset",
+      "syntax": "provider reset --distributed <provider-id> --expected-revision <revision>",
+      "go_entry": "runProviderResetCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 87,
+        "anchor": "func runProviderResetCommand("
+      },
+      "flag_set": null,
+      "behavior": "First arg must be --distributed. Exact built-in IDs only. Presence of a separate expected-revision value required, but empty value accepted; last complete occurrence wins.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "provider recover",
+      "syntax": "provider recover <provider-id> [revision|--list]",
+      "go_entry": "runProviderRecoverCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 114,
+        "anchor": "func runProviderRecoverCommand("
+      },
+      "flag_set": null,
+      "behavior": "No revision requests base recovery; any second arg other than --list is a revision, including unknown flags; extra args ignored. A healthy HEAD is rejected by HistoryStore.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "provider recover --list",
+      "syntax": "provider recover <provider-id> --list",
+      "go_entry": "runProviderRecoverCommand",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 114,
+        "anchor": "func runProviderRecoverCommand("
+      },
+      "flag_set": null,
+      "behavior": "Only argv index 1 selects --list; prints optional candidate TAB user_revision TAB revision TAB created_at then candidate TAB base; read-only.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "orchestrate",
+      "syntax": "orchestrate <spawn|send|relay>",
+      "go_entry": "Run",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 38,
+        "anchor": "func Run("
+      },
+      "flag_set": null,
+      "behavior": "Main missing-verb error is older <spawn|send>; delegated Run missing/unknown-verb error includes relay. No top-level help alias.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "orchestrate spawn",
+      "syntax": "orchestrate spawn --role <role> [flags] <prompt>",
+      "go_entry": "runSpawn",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 71,
+        "anchor": "func runSpawn("
+      },
+      "flag_set": "orchestrate spawn",
+      "behavior": "Requires >=1 positional, then nonempty role; first positional is prompt, extras ignored. same-tree=true warns before env validation; false is omitted from body.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "orchestrate send",
+      "syntax": "orchestrate send --role <role> <text>",
+      "go_entry": "runSend",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 133,
+        "anchor": "func runSend("
+      },
+      "flag_set": "orchestrate send",
+      "behavior": "Requires >=1 positional, then nonempty role; first positional is text, extras ignored.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "orchestrate relay",
+      "syntax": "orchestrate relay --plan <path> [flags]",
+      "go_entry": "runRelay",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 160,
+        "anchor": "func runRelay("
+      },
+      "flag_set": "orchestrate relay",
+      "behavior": "Start has no start verb. Empty/flag-first argv enters start parser; unknown non-flag first token errors. Plan is trim+absolute; extra positionals ignored; same-tree warning occurs after env validation.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "orchestrate relay status",
+      "syntax": "orchestrate relay status [--id <id>]",
+      "go_entry": "runRelayStatus",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 254,
+        "anchor": "func runRelayStatus("
+      },
+      "flag_set": "orchestrate relay status",
+      "behavior": "No positionals allowed; trimmed nonempty ID filters results, absent result errors; unfiltered empty result prints no relays.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "orchestrate relay stop",
+      "syntax": "orchestrate relay stop [--id <id>]",
+      "go_entry": "runRelayStop",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 290,
+        "anchor": "func runRelayStop("
+      },
+      "flag_set": "orchestrate relay stop",
+      "behavior": "No positionals allowed; trimmed ID sent; Hub decides selection when omitted.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "usage-relay claude",
+      "syntax": "usage-relay --provider claude [--hub <url> --session <id> --token <deprecated>]",
+      "go_entry": "Run",
+      "evidence": {
+        "source": "internal/usagerelay/usagerelay.go",
+        "line": 37,
+        "anchor": "func Run("
+      },
+      "flag_set": "usage-relay",
+      "behavior": "Provider is a flag, not a positional subcommand; parses stdin JSON and emits a status line. Invalid input/post failures warn and return nil.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "usage-relay codex",
+      "syntax": "usage-relay --provider codex [--hub <url> --session <id> --token <deprecated>]",
+      "go_entry": "Run",
+      "evidence": {
+        "source": "internal/usagerelay/usagerelay.go",
+        "line": 37,
+        "anchor": "func Run("
+      },
+      "flag_set": "usage-relay",
+      "behavior": "Reads stdin JSON transcript_path then only token metadata from its rollout. No status stdout. Invalid input/read/post failures warn and return nil.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    },
+    {
+      "name": "wrap <provider>",
+      "syntax": "wrap <provider> [wrapper flags] [--] [provider argv]",
+      "go_entry": "Run",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1144,
+        "anchor": "func Run("
+      },
+      "flag_set": "wrap",
+      "behavior": "Same parser for seven aliases and configured custom IDs; ignores fs.Parse error. Positional or -- ends wrapper parsing, rest goes through provider-specific reconstruction. Unknown leading option is consumed by Go's failed parse; remaining args survive.",
+      "parse_status": "opaque top-level argv forwarded; source contract recorded for downstream implementation",
+      "runtime_status": "pending"
+    }
+  ],
+  "flag_sets": [
+    {
+      "name": "many-ai-cli-launcher",
       "source": "cmd/many-ai-cli-launcher/main.go",
-      "sha256": "8631501bd1e09e4d0ef21c4cf047754491c413a9af40670573d1f08d1bb495a3",
-      "cases": [],
+      "function": "run",
+      "line": 44,
       "flags": [
         {
-          "line": 45,
-          "declaration": "profileName := fs.String(\"profile\", \"\", \"profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)\")"
+          "name": "profile",
+          "kind": "string",
+          "default": "",
+          "usage": "profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)",
+          "line": 45
         },
         {
-          "line": 46,
-          "declaration": "useLast := fs.Bool(\"last\", false, \"connect using the last-used profile\")"
+          "name": "last",
+          "kind": "bool",
+          "default": false,
+          "usage": "connect using the last-used profile",
+          "line": 46
         },
         {
-          "line": 47,
-          "declaration": "openUI := fs.Bool(\"ui\", false, \"open the profile selection UI in the browser\")"
+          "name": "ui",
+          "kind": "bool",
+          "default": false,
+          "usage": "open the profile selection UI in the browser",
+          "line": 47
         }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned except ErrHelp",
+      "help_process_exit": 0,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "covered by launcher oracle tests"
+    },
+    {
+      "name": "issue",
+      "source": "cmd/many-ai-cli/issue.go",
+      "function": "runIssue",
+      "line": 64,
+      "flags": [
+        {
+          "name": "title",
+          "kind": "string",
+          "default": "",
+          "usage": "GitHub issue title",
+          "line": 66
+        },
+        {
+          "name": "provider",
+          "kind": "string",
+          "default": "",
+          "usage": "active provider",
+          "line": 67
+        },
+        {
+          "name": "dry-run",
+          "kind": "bool",
+          "default": false,
+          "usage": "print the redacted report without opening GitHub",
+          "line": 68
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned except ErrHelp",
+      "help_process_exit": 0,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "serve",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 212,
+      "flags": [
+        {
+          "name": "open",
+          "kind": "bool",
+          "default": false,
+          "usage": "open browser",
+          "line": 213
+        },
+        {
+          "name": "port",
+          "kind": "int",
+          "default": 0,
+          "usage": "port",
+          "line": 214
+        },
+        {
+          "name": "dev",
+          "kind": "bool",
+          "default": false,
+          "usage": "serve web assets from ./web/ (no recompile needed)",
+          "line": 215
+        },
+        {
+          "name": "debug",
+          "kind": "bool",
+          "default": false,
+          "usage": "enable debug logging",
+          "line": 216
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "connect",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 241,
+      "flags": [
+        {
+          "name": "profile",
+          "kind": "string",
+          "default": "",
+          "usage": "profile name to connect (see ~/.many-ai-cli/launcher-profiles.yaml)",
+          "line": 242
+        },
+        {
+          "name": "last",
+          "kind": "bool",
+          "default": false,
+          "usage": "connect using the last-used profile",
+          "line": 243
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned except ErrHelp",
+      "help_process_exit": 0,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "profile-export",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 270,
+      "flags": [
+        {
+          "name": "json",
+          "kind": "bool",
+          "default": false,
+          "usage": "output as JSON",
+          "line": 271
+        },
+        {
+          "name": "name",
+          "kind": "string",
+          "default": "",
+          "usage": "profile display name (default: hostname)",
+          "line": 272
+        },
+        {
+          "name": "host",
+          "kind": "string",
+          "default": "",
+          "usage": "public host to advertise first (overrides auto-detected IP; e.g. for Docker)",
+          "line": 273
+        },
+        {
+          "name": "cwd",
+          "kind": "string",
+          "default": "",
+          "usage": "remote working directory (default: current directory)",
+          "line": 274
+        },
+        {
+          "name": "hub-port",
+          "kind": "int",
+          "default": 0,
+          "usage": "fixed hub port (0 = auto-select)",
+          "line": 275
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned except ErrHelp",
+      "help_process_exit": 0,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "doctor",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 302,
+      "flags": [
+        {
+          "name": "json",
+          "kind": "bool",
+          "default": false,
+          "usage": "output as JSON",
+          "line": 303
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "log-clean",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 321,
+      "flags": [
+        {
+          "name": "o",
+          "kind": "string",
+          "default": "",
+          "usage": "output transcript path",
+          "line": 322
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "uninstall",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 341,
+      "flags": [
+        {
+          "name": "purge",
+          "kind": "bool",
+          "default": false,
+          "usage": "バイナリ本体も削除する",
+          "line": 342
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "setup",
+      "source": "cmd/many-ai-cli/main.go",
+      "function": "run",
+      "line": 355,
+      "flags": [],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned except ErrHelp",
+      "help_process_exit": 0,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "orchestrate spawn",
+      "source": "internal/orchestrate/orchestrate.go",
+      "function": "runSpawn",
+      "line": 72,
+      "flags": [
+        {
+          "name": "role",
+          "kind": "string",
+          "default": "",
+          "usage": "child role (required, e.g. implementation/test/review)",
+          "line": 73
+        },
+        {
+          "name": "provider",
+          "kind": "string",
+          "default": "",
+          "usage": "override provider; one of claude|codex|copilot|cursor-agent|opencode|grok (exact lowercase). Default: the role mapping decided at conductor launch, then the provider last used for this role, then the parent's provider",
+          "line": 74
+        },
+        {
+          "name": "model",
+          "kind": "string",
+          "default": "",
+          "usage": "override model (default: resolved from the role mapping decided at conductor launch)",
+          "line": 75
+        },
+        {
+          "name": "cwd",
+          "kind": "string",
+          "default": "",
+          "usage": "root for the child's working directory (default: parent session cwd). By default many-ai-cli creates an orchestration worktree under this directory and the child runs there, not directly in this directory; pass -same-tree to have the child run in this directory itself",
+          "line": 76
+        },
+        {
+          "name": "same-tree",
+          "kind": "bool",
+          "default": false,
+          "usage": "run the child directly in -cwd instead of an orchestration worktree (default: use a worktree; the child then edits your working tree directly, so do not edit it in parallel)",
+          "line": 77
+        },
+        {
+          "name": "force",
+          "kind": "bool",
+          "default": false,
+          "usage": "spawn a new child even if a live child already exists for the role (default: rejected; use `orchestrate send` instead)",
+          "line": 78
+        },
+        {
+          "name": "effort",
+          "kind": "string",
+          "default": "",
+          "usage": "reasoning effort for the child; accepted values depend on the provider (claude: low|medium|high|xhigh|max, codex: minimal|low|medium|high|xhigh|max, opencode: the model's own variant name). Providers without an effort flag (copilot / cursor-agent / grok / command-code / custom) reject a non-empty value",
+          "line": 79
+        },
+        {
+          "name": "execution-mode",
+          "kind": "string",
+          "default": "",
+          "usage": "auto|interactive|headless (default: auto). headless runs the child through the provider's own non-interactive mode and needs a definition for that provider; asking for it where there is none is rejected rather than quietly downgraded",
+          "line": 80
+        },
+        {
+          "name": "permission",
+          "kind": "string",
+          "default": "",
+          "usage": "attended|bounded|full (default: the orchestration child default). attended sends the child's approval prompts to the Hub's approval panel; bounded runs the allowlisted actions without asking and denies the rest (copilot has no auto-deny, so there anything outside the list still prompts); full allows everything",
+          "line": 81
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "orchestrate send",
+      "source": "internal/orchestrate/orchestrate.go",
+      "function": "runSend",
+      "line": 134,
+      "flags": [
+        {
+          "name": "role",
+          "kind": "string",
+          "default": "",
+          "usage": "target child role (required)",
+          "line": 135
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "orchestrate relay",
+      "source": "internal/orchestrate/orchestrate.go",
+      "function": "runRelay",
+      "line": 173,
+      "flags": [
+        {
+          "name": "plan",
+          "kind": "string",
+          "default": "",
+          "usage": "plan markdown path (required)",
+          "line": 174
+        },
+        {
+          "name": "max-rounds",
+          "kind": "int",
+          "default": 0,
+          "usage": "maximum review rounds per C (default: 3)",
+          "line": 175
+        },
+        {
+          "name": "impl",
+          "kind": "string",
+          "default": "",
+          "usage": "implementation provider[/model][@effort]",
+          "line": 176
+        },
+        {
+          "name": "review",
+          "kind": "string",
+          "default": "",
+          "usage": "review provider[/model][@effort]",
+          "line": 177
+        },
+        {
+          "name": "strong",
+          "kind": "string",
+          "default": "",
+          "usage": "strong implementation provider[/model][@effort]",
+          "line": 178
+        },
+        {
+          "name": "escalate-after",
+          "kind": "int",
+          "default": 0,
+          "usage": "failed review rounds before strong implementation (default: 2)",
+          "line": 179
+        },
+        {
+          "name": "same-tree",
+          "kind": "bool",
+          "default": false,
+          "usage": "run children in the parent's working tree",
+          "line": 180
+        },
+        {
+          "name": "extra-impl",
+          "kind": "string",
+          "default": "",
+          "usage": "extra instructions for the implementation role",
+          "line": 181
+        },
+        {
+          "name": "extra-review",
+          "kind": "string",
+          "default": "",
+          "usage": "extra instructions for the review role",
+          "line": 182
+        },
+        {
+          "name": "execution-mode",
+          "kind": "string",
+          "default": "",
+          "usage": "auto|interactive|headless for every relay role (default: orchestration.relay_execution_mode, itself unset = interactive). headless runs each instruction as one non-interactive process of the provider's own print mode and takes its exit as the completion signal; a role whose provider has no headless definition is rejected here rather than quietly run interactively",
+          "line": 183
+        },
+        {
+          "name": "permission",
+          "kind": "string",
+          "default": "",
+          "usage": "attended|bounded|full for every relay role (default: orchestration.child_permission_default). attended sends the child's approval prompts to the Hub's approval panel, which nobody is watching during an unattended relay; bounded runs the allowlisted actions without asking and denies the rest (copilot has no auto-deny, so there anything outside the list still prompts); full allows everything",
+          "line": 184
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "orchestrate relay status",
+      "source": "internal/orchestrate/orchestrate.go",
+      "function": "runRelayStatus",
+      "line": 255,
+      "flags": [
+        {
+          "name": "id",
+          "kind": "string",
+          "default": "",
+          "usage": "show only this orchestration id",
+          "line": 256
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "orchestrate relay stop",
+      "source": "internal/orchestrate/orchestrate.go",
+      "function": "runRelayStop",
+      "line": 291,
+      "flags": [
+        {
+          "name": "id",
+          "kind": "string",
+          "default": "",
+          "usage": "orchestration id (optional when exactly one relay is active)",
+          "line": 292
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "usage-relay",
+      "source": "internal/usagerelay/usagerelay.go",
+      "function": "Run",
+      "line": 38,
+      "flags": [
+        {
+          "name": "provider",
+          "kind": "string",
+          "default": "",
+          "usage": "provider: claude or codex",
+          "line": 39
+        },
+        {
+          "name": "hub",
+          "kind": "string",
+          "default": "",
+          "usage": "Hub base URL (e.g. http://127.0.0.1:47777)",
+          "line": 40
+        },
+        {
+          "name": "token",
+          "kind": "string",
+          "default": "",
+          "usage": "Hub auth token (deprecated: use MANY_AI_CLI_HUB_TOKEN env instead)",
+          "line": 41
+        },
+        {
+          "name": "session",
+          "kind": "int",
+          "default": 0,
+          "usage": "session ID",
+          "line": 42
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "returned including ErrHelp",
+      "help_process_exit": 1,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    },
+    {
+      "name": "wrap",
+      "source": "internal/wrapper/wrapper.go",
+      "function": "Run",
+      "line": 1162,
+      "flags": [
+        {
+          "name": "label",
+          "kind": "string",
+          "default": "",
+          "usage": "session label shown in UI card",
+          "line": 1163
+        },
+        {
+          "name": "model",
+          "kind": "string",
+          "default": "",
+          "usage": "model override",
+          "line": 1164
+        },
+        {
+          "name": "permission-mode",
+          "kind": "string",
+          "default": "",
+          "usage": "permission mode (claude/grok: passed through; copilot auto→--autopilot bypass→--allow-all; cursor-agent auto→--auto-review bypass→--force; opencode bypass→--auto; command-code plan→--permission-mode plan, acceptEdits/auto→--auto-accept, bypass→--yolo)",
+          "line": 1165
+        },
+        {
+          "name": "effort",
+          "kind": "string",
+          "default": "",
+          "usage": "reasoning effort (claude: --effort; codex: -c model_reasoning_effort; opencode: --variant; others: ignored)",
+          "line": 1166
+        },
+        {
+          "name": "allowed-tools",
+          "kind": "string",
+          "default": "",
+          "usage": "bounded tier allowlist, comma-separated (claude: --allowedTools values; copilot: --allow-tool values; others: ignored)",
+          "line": 1167
+        },
+        {
+          "name": "sandbox",
+          "kind": "string",
+          "default": "",
+          "usage": "codex sandbox mode",
+          "line": 1168
+        },
+        {
+          "name": "ask-for-approval",
+          "kind": "string",
+          "default": "",
+          "usage": "codex ask-for-approval",
+          "line": 1169
+        },
+        {
+          "name": "codex-oss",
+          "kind": "bool",
+          "default": false,
+          "usage": "codex: use --oss to route via local Ollama daemon",
+          "line": 1170
+        },
+        {
+          "name": "utf8",
+          "kind": "bool",
+          "default": false,
+          "usage": "set UTF-8 console encoding for this session (Windows only)",
+          "line": 1171
+        },
+        {
+          "name": "subscription-login",
+          "kind": "bool",
+          "default": false,
+          "usage": "run the provider CLI's own login flow instead of an interactive session",
+          "line": 1172
+        },
+        {
+          "name": "headless",
+          "kind": "bool",
+          "default": false,
+          "usage": "run the provider's own non-interactive mode (no PTY) instead of an interactive session; requires a headless definition for the provider",
+          "line": 1176
+        },
+        {
+          "name": "prompt-file",
+          "kind": "string",
+          "default": "",
+          "usage": "file holding the initial prompt. The wrapper reads it once and deletes it. Headless: passed the way the provider's headless definition says. Interactive: passed as the CLI's first launch argument, or as a one-line pointer to a private file when the launch goes through cmd.exe or the prompt is very long (launch_prompt.go)",
+          "line": 1177
+        }
+      ],
+      "lexical_grammar": "Go flag.ContinueOnError: one/two dashes, =value, bool consumes no next token, stop on first positional or --, repeated flags last value wins, int uses base 0 with platform int width",
+      "parse_error_handling": "ignored; wrapper continues with partial flags and fs.Args",
+      "help_process_exit": null,
+      "stderr": "Go flag diagnostic/usage; top-level main prints returned error once more unless ErrHelp is swallowed",
+      "rust_lexical_status": "pending delegated parser integration"
+    }
+  ],
+  "manual_options": [
+    {
+      "name": "--distributed",
+      "command": "provider reset",
+      "kind": "required exact first token",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 88,
+        "anchor": "args[0] != \"--distributed\""
+      }
+    },
+    {
+      "name": "--expected-revision",
+      "command": "provider reset",
+      "kind": "separate next token; empty accepted; last complete occurrence wins",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 93,
+        "anchor": "hasExpected := false"
+      }
+    },
+    {
+      "name": "--expected-revision",
+      "command": "provider backup restore",
+      "kind": "separate next token; empty rejected; last complete occurrence wins",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 63,
+        "anchor": "case \"restore\":"
+      }
+    },
+    {
+      "name": "--list",
+      "command": "provider recover",
+      "kind": "exact second token; no value; later tokens ignored",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 119,
+        "anchor": "args[1] == \"--list\""
+      }
+    }
+  ],
+  "behavior_contracts": [
+    {
+      "id": "main-pre-dispatch",
+      "contract": "LoadOrCreate runs before every command including help/version; unknown commands can therefore touch configuration or fail first. No arguments also loads config and can open/start Hub.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 173,
+        "anchor": "func run(args"
+      }
+    },
+    {
+      "id": "main-exit",
+      "contract": "run error prints error plus newline to stderr and exits 1; nil exits 0. Panic logs to hub.log (stderr fallback), then exit 1. There is no generic child exit-code passthrough.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 75,
+        "anchor": "func main()"
+      }
+    },
+    {
+      "id": "main-version",
+      "contract": "Trim injected version; nonempty non-dev wins with one v prefix removed; otherwise executable-directory then cwd repository tag discovery; fallback dev. Prints version newline.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 113,
+        "anchor": "func displayVersion()",
+        "baseline_test": "cmd/many-ai-cli/main_test.go::TestDisplayVersionTrimsVPrefix"
+      }
+    },
+    {
+      "id": "main-usage",
+      "contract": "Top-level help aliases ignore trailing args and print one usage line on stdout. Provider, usage-relay and orchestrate are absent from that line, but only the latter two are explicitly hidden in source.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 402,
+        "anchor": "func usage()"
+      }
+    },
+    {
+      "id": "ignored-tail",
+      "contract": "version/help/status/tray/stop/shell-init ignore trailing argv. Flag-based commands stop at the first positional; they do not use GNU interspersed flags.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 204,
+        "anchor": "switch cmd {"
+      }
+    },
+    {
+      "id": "serve-port",
+      "contract": "Only a parsed --port > 0 overrides configured Hub.Port; zero/negative keeps config. Go flag.Int accepts base-0 integer syntax, not just decimal u16.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 220,
+        "anchor": "if *port > 0"
+      }
+    },
+    {
+      "id": "connect-selection",
+      "contract": "--profile or --last is required; help returns nil before profile load. Explicit profile selection wins over --last in SelectProfile.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 237,
+        "anchor": "case \"connect\":"
+      }
+    },
+    {
+      "id": "export-json",
+      "contract": "Only --json output accepted; indented JSON to stdout. --name/--host/--cwd/--hub-port feed ExportOptions.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 266,
+        "anchor": "case \"profile-export\":"
+      }
+    },
+    {
+      "id": "doctor-output",
+      "contract": "--json writes compact JSON plus newline; text prints checks/fixes; report levels do not themselves produce a nonzero exit.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 301,
+        "anchor": "case \"doctor\":"
+      }
+    },
+    {
+      "id": "log-clean-order",
+      "contract": "Exactly one unparsed positional path is required. Despite the error usage wording, -o after input becomes extra positionals and fails. Without -o, output replaces final extension with .txt; output path prints to stdout.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/main.go",
+        "line": 320,
+        "anchor": "case \"log-clean\":"
+      }
+    },
+    {
+      "id": "uninstall-input",
+      "contract": "Reads one stdin line; trim/lowercase y or yes confirms; other/empty/EOF cancels successfully. Main may stop the Hub before this confirmation. purge also removes binary.",
+      "evidence": {
+        "source": "internal/uninstall/uninstall.go",
+        "line": 76,
+        "anchor": "func confirm("
+      }
+    },
+    {
+      "id": "issue-input",
+      "contract": "At most one positional title; nonblank --title conflicts with positional. Provider is trimmed and must be one of seven IDs or empty. Without a title prompt to stderr/read one stdin line; blank symptom errors.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/issue.go",
+        "line": 63,
+        "anchor": "func runIssue(",
+        "baseline_test": "cmd/many-ai-cli/issue_test.go::TestRunIssueRejectsConflictingTitleInputs"
+      }
+    },
+    {
+      "id": "issue-confirmation",
+      "contract": "Only trim/case-insensitive y confirms; yes does not. Dry-run writes redacted Markdown without confirmation. Non-dry output preview precedes stdin confirmation; cancellation succeeds; gh uses --web and fallback remains explicit.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/issue.go",
+        "line": 157,
+        "anchor": "func confirmIssue(",
+        "baseline_test": "cmd/many-ai-cli/issue_test.go::TestRunIssueUsesGHWebAfterConfirmation"
+      }
+    },
+    {
+      "id": "wrapper-parse",
+      "contract": "Wrapper deliberately ignores parse errors, including help. No success/exit code can be inferred from lexical acceptance or failure alone.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1178,
+        "anchor": "_ = fs.Parse(args)"
+      }
+    },
+    {
+      "id": "wrapper-pty-exit",
+      "contract": "PTY child wait error is returned; main maps any error to process exit 1. Actual child code/signal remains in session_end metadata.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1833,
+        "anchor": "waitErr := ps.Wait()"
+      }
+    },
+    {
+      "id": "wrapper-headless-exit",
+      "contract": "Successful headless runner completion returns nil even when result records a nonzero child exit. Launch/runner errors return errors; result State/ExitCode sent in session_end.",
+      "evidence": {
+        "source": "internal/wrapper/headless_session.go",
+        "line": 130,
+        "anchor": "result, runErr := headless.Run("
+      }
+    },
+    {
+      "id": "wrapper-stdio",
+      "contract": "Wrapper PTY output is pumped to logs/Hub websocket and input arrives from Hub messages. It is not an inherited-stdio passthrough; stdin terminal dimensions are queried, diagnostics use stderr.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1828,
+        "anchor": "ptyPump(ps, lf,"
+      }
+    },
+    {
+      "id": "wrapper-login",
+      "contract": "headless + subscription-login rejects; nonempty prompt-file + login rejects; login replaces provider argv with adapter LoginArgs and bypasses model/permission/settings reconstruction.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1186,
+        "anchor": "if *subscriptionLogin {"
+      }
+    },
+    {
+      "id": "usage-relay-errors",
+      "contract": "Invalid --provider and flag parse errors propagate to main exit 1. Valid-provider stdin decode/read or post failures are warnings and nil (main exit 0); token prefers nonempty env over deprecated argv.",
+      "evidence": {
+        "source": "internal/usagerelay/usagerelay.go",
+        "line": 37,
+        "anchor": "func Run(args"
+      }
+    },
+    {
+      "id": "orchestrate-auth",
+      "contract": "Reads session ID, then Hub port, then token; session must parse as positive decimal int. Port/token need only be nonempty here. Token travels in Authorization header, not argv or URL.",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 55,
+        "anchor": "func hubEnv("
+      }
+    },
+    {
+      "id": "orchestrate-response",
+      "contract": "Request success requires HTTP 200 and response ok true; error detail preferred to error. POST client timeout reports an uncertain pending request, not a canceled child.",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 495,
+        "anchor": "func postChildAPI(",
+        "baseline_test": "internal/orchestrate/orchestrate_test.go::TestPostChildAPISpawnTimeoutPendingMessage"
+      }
+    },
+    {
+      "id": "relay-role-grammar",
+      "contract": "Split first @ then first /, trim parts; provider required, explicit empty effort rejected, ASCII spaces rejected within parts. Other characters/tabs are not generally validated by this parser; actual providers validated downstream.",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 337,
+        "anchor": "func parseRelayProviderModel(",
+        "baseline_test": "internal/orchestrate/orchestrate_test.go::TestParseRelayProviderModelWithEffort"
+      }
+    },
+    {
+      "id": "launcher-order",
+      "contract": "Configure console and print StartupBanner before parsing. Help exits 0 before profile IO; other parse errors appear in FlagSet stderr and again from main, exit 1. Positional/trailing args ignored. Load+Validate precedes UI/direct choice.",
+      "evidence": {
+        "source": "cmd/many-ai-cli-launcher/main.go",
+        "line": 40,
+        "anchor": "func run()"
+      }
+    },
+    {
+      "id": "launcher-choice",
+      "contract": "--ui true takes precedence; otherwise no profile and !last opens UI. --profile or --last selects direct connection. --last false is parsed true then stops at positional false; --last=false is the false form.",
+      "evidence": {
+        "source": "cmd/many-ai-cli-launcher/main.go",
+        "line": 66,
+        "anchor": "if *openUI ||"
+      }
+    },
+    {
+      "id": "shell-init",
+      "contract": "Prints a conditional shell script; functions activate only when MANY_AI_CLI_AUTO=1. Built-in plus effective custom IDs are used, but shell-invalid IDs are omitted and remain usable via wrap.",
+      "evidence": {
+        "source": "internal/shell/init.go",
+        "line": 29,
+        "anchor": "func InitScriptForProviders("
+      }
+    },
+    {
+      "id": "provider-recover-list",
+      "contract": "--list is read-only and prints base even without an override; actual history recovery refuses a healthy HEAD.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/provider_command.go",
+        "line": 114,
+        "anchor": "func runProviderRecoverCommand(",
+        "baseline_test": "cmd/many-ai-cli/provider_command_test.go::TestProviderCommandRecoverListWithoutOverrideOnlyShowsBase"
+      }
+    },
+    {
+      "id": "status-stdio",
+      "contract": "Prints stopped and succeeds on connection failure or non-200; 200 prints running plus authenticated local URL and optional stale-binary warning. No stdin.",
+      "evidence": {
+        "source": "internal/hub/lifecycle.go",
+        "line": 358,
+        "anchor": "func PrintStatus("
+      }
+    },
+    {
+      "id": "stop-stdio",
+      "contract": "No success stdout or stdin; failures return errors to main stderr/exit 1. Uses runtime effective port then config, private logging, graceful shutdown then force-kill fallback. Trial caller must restrict process ownership.",
+      "evidence": {
+        "source": "internal/hub/lifecycle.go",
+        "line": 131,
+        "anchor": "func Stop("
+      }
+    },
+    {
+      "id": "setup-stdio",
+      "contract": "No stdin; stdout lists executable/config and created/failed/note shortcut results plus next steps. Any failed shortcut returns an error after reporting all results.",
+      "evidence": {
+        "source": "internal/setupcmd/setup.go",
+        "line": 27,
+        "anchor": "func Run()"
+      }
+    },
+    {
+      "id": "tray-platform",
+      "contract": "Non-Windows tray returns ErrUnsupported; Windows runs native tray callbacks without a terminal interaction contract. Runtime/native acceptance pending.",
+      "evidence": {
+        "source": "internal/tray/tray_other.go",
+        "line": 10,
+        "anchor": "func run("
+      }
+    }
+  ],
+  "environment_precedence": [
+    {
+      "id": "usage-token",
+      "contract": "Nonempty MANY_AI_CLI_HUB_TOKEN wins over --token (even whitespace); fallback --token produces a deprecation warning. No token value is collected by inventory.",
+      "evidence": {
+        "source": "internal/usagerelay/usagerelay.go",
+        "line": 51,
+        "anchor": "token := os.Getenv(hubTokenEnv)"
+      },
+      "names": [
+        "MANY_AI_CLI_HUB_TOKEN"
+      ]
+    },
+    {
+      "id": "wrapper-hub-port",
+      "contract": "Positive strconv.Atoi(MANY_AI_CLI_HUB_PORT) overrides config.Hub.Port; missing/invalid/nonpositive env leaves it unchanged.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1279,
+        "anchor": "os.Getenv(\"MANY_AI_CLI_HUB_PORT\")"
+      },
+      "names": [
+        "MANY_AI_CLI_HUB_PORT"
+      ]
+    },
+    {
+      "id": "spawn-timeout",
+      "contract": "Trim MANY_AI_CLI_SPAWN_TIMEOUT; positive time.ParseDuration value wins, otherwise five minutes.",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 486,
+        "anchor": "func spawnClientTimeout()"
+      },
+      "names": [
+        "MANY_AI_CLI_SPAWN_TIMEOUT"
+      ]
+    },
+    {
+      "id": "issue-auto",
+      "contract": "MANY_AI_CLI_AUTO exactly 1 blocks non-dry issue before interaction; --dry-run bypasses that guard.",
+      "evidence": {
+        "source": "cmd/many-ai-cli/issue.go",
+        "line": 84,
+        "anchor": "deps.getenv(\"MANY_AI_CLI_AUTO\")",
+        "baseline_test": "cmd/many-ai-cli/issue_test.go::TestRunIssueAutoModeRejectsBeforeInteraction"
+      },
+      "names": [
+        "MANY_AI_CLI_AUTO"
+      ]
+    },
+    {
+      "id": "delegation",
+      "contract": "MANY_AI_CLI_DELEGATION exactly 1/0 overrides config default; all other values fall back. This controls instruction injection, not orchestration permission.",
+      "evidence": {
+        "source": "internal/wrapper/delegation.go",
+        "line": 98,
+        "anchor": "func DelegationPromptEnabled(",
+        "baseline_test": "internal/wrapper/delegation_test.go::TestDelegationPromptEnabledEnvOverridesConfigDefault"
+      },
+      "names": [
+        "MANY_AI_CLI_DELEGATION"
+      ]
+    },
+    {
+      "id": "export-host",
+      "contract": "Ordered deduplicated candidates: --host, MANY_AI_CLI_PUBLIC_HOST, server IP from SSH_CONNECTION, non-loopback/non-link-local IPv4, hostname; trim space/trailing dot and case-insensitive dedupe.",
+      "evidence": {
+        "source": "internal/launcher/export.go",
+        "line": 110,
+        "anchor": "func exportHostCandidates("
+      },
+      "names": [
+        "MANY_AI_CLI_PUBLIC_HOST",
+        "SSH_CONNECTION"
+      ]
+    },
+    {
+      "id": "export-user",
+      "contract": "USERNAME if nonempty, otherwise USER; no trimming in this choice.",
+      "evidence": {
+        "source": "internal/launcher/export.go",
+        "line": 39,
+        "anchor": "user := os.Getenv(\"USERNAME\")"
+      },
+      "names": [
+        "USERNAME",
+        "USER"
+      ]
+    },
+    {
+      "id": "parent-shell",
+      "contract": "Trimmed MANY_AI_CLI_PARENT_SHELL override wins; otherwise OS parent process detection, Unix SHELL fallback. Windows uses PSModulePath only in its heuristic.",
+      "evidence": {
+        "source": "internal/wrapper/detect_shell_unix.go",
+        "line": 21,
+        "anchor": "func DetectShell()"
+      },
+      "names": [
+        "MANY_AI_CLI_PARENT_SHELL",
+        "SHELL",
+        "PSModulePath"
+      ]
+    },
+    {
+      "id": "subscription-selection",
+      "contract": "MANY_AI_CLI_SUBSCRIPTION_ID is trimmed for registration. Selected profile launch env overrides vendor configuration directory; empty profile leaves vendor env unchanged; missing/disabled selection does not silently fall back.",
+      "evidence": {
+        "source": "internal/subscription/resolve.go",
+        "line": 66,
+        "anchor": "func Resolve("
+      },
+      "names": [
+        "MANY_AI_CLI_SUBSCRIPTION_ID",
+        "CLAUDE_CONFIG_DIR",
+        "CODEX_HOME",
+        "GROK_HOME",
+        "XDG_DATA_HOME"
+      ]
+    },
+    {
+      "id": "color-env",
+      "contract": "force removes inherited NO_COLOR case-insensitively and appends FORCE_COLOR=3/CLICOLOR_FORCE=1; off removes CLICOLOR_FORCE and appends NO_COLOR=1/FORCE_COLOR=0; inherit retains base. All append TERM=xterm-256color, COLORTERM=truecolor, MANY_AI_CLI=1. Headless forces off.",
+      "evidence": {
+        "source": "internal/wrapper/env_color.go",
+        "line": 61,
+        "anchor": "func childEnv("
+      },
+      "names": [
+        "NO_COLOR",
+        "FORCE_COLOR",
+        "CLICOLOR_FORCE",
+        "TERM",
+        "COLORTERM",
+        "MANY_AI_CLI"
+      ]
+    },
+    {
+      "id": "wrapper-marker",
+      "contract": "MANY_AI_CLI exactly 1 suppresses nested Hub auto-start, even before the ordinary IsRunning path.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 2066,
+        "anchor": "os.Getenv(\"MANY_AI_CLI\")"
+      },
+      "names": [
+        "MANY_AI_CLI"
+      ]
+    },
+    {
+      "id": "probe-login-markers",
+      "contract": "MANY_AI_CLI_USAGE_PROBE and MANY_AI_CLI_SUBSCRIPTION_LOGIN exactly 1 set registration/reattach markers; they are distinct from parsed --subscription-login execution mode.",
+      "evidence": {
+        "source": "internal/wrapper/wrapper.go",
+        "line": 1930,
+        "anchor": "os.Getenv(\"MANY_AI_CLI_USAGE_PROBE\")"
+      },
+      "names": [
+        "MANY_AI_CLI_USAGE_PROBE",
+        "MANY_AI_CLI_SUBSCRIPTION_LOGIN"
+      ]
+    },
+    {
+      "id": "host-label",
+      "contract": "SSH_CONNECTION marks SSH and supplies server IP; otherwise SSH_CLIENT/SSH_TTY mark SSH. Nonempty MANY_AI_CLI_HOST_LABEL overrides display host; absent host falls back to local IP.",
+      "evidence": {
+        "source": "internal/hub/runtime.go",
+        "line": 100,
+        "anchor": "func hostNetInfo()"
+      },
+      "names": [
+        "SSH_CONNECTION",
+        "SSH_CLIENT",
+        "SSH_TTY",
+        "MANY_AI_CLI_HOST_LABEL"
+      ]
+    },
+    {
+      "id": "env-kind",
+      "contract": "Nonblank MANY_AI_CLI_ENV_KIND overrides config env kind, then net hint kind, then net-hint SSH, WSL mode, SSH and local inference. Unknown explicit kind normalizes to local.",
+      "evidence": {
+        "source": "internal/hub/runtime.go",
+        "line": 148,
+        "anchor": "func resolveEnvMeta("
+      },
+      "names": [
+        "MANY_AI_CLI_ENV_KIND"
+      ]
+    },
+    {
+      "id": "provider-homes",
+      "contract": "Session-reported vendor directory wins, then process CODEX_HOME/CLAUDE_CONFIG_DIR, then default home directory for approval/skill paths. Registration also reports GROK_HOME. Codex usage-hook config only tests exact empty env; seed ignores directories inside the subscriptions tree.",
+      "evidence": {
+        "source": "internal/hub/approval_handler.go",
+        "line": 159,
+        "anchor": "func codexAgentsPath("
+      },
+      "names": [
+        "CODEX_HOME",
+        "CLAUDE_CONFIG_DIR",
+        "GROK_HOME"
+      ]
+    },
+    {
+      "id": "windows-command",
+      "contract": "For unresolved .cmd shims execpath and subscription shellSafeCommand use nonempty COMSPEC then the standard Windows cmd path. Default interactive shell instead prefers pwsh/powershell, then an existing COMSPEC path; Unix prefers existing SHELL, bash, sh, then /bin/sh.",
+      "evidence": {
+        "source": "internal/execpath/execpath_windows.go",
+        "line": 25,
+        "anchor": "func Resolve("
+      },
+      "names": [
+        "COMSPEC",
+        "SHELL"
+      ]
+    },
+    {
+      "id": "path-resolution",
+      "contract": "PATH is used for provider executable resolution with expanded absolute entries. Windows can augment entries from registry and expand variables; PATHEXT is consumed indirectly by exec.LookPath. Wrapper diagnostic reads PATH only to explain failures.",
+      "evidence": {
+        "source": "internal/hub/spawn_command.go",
+        "line": 20,
+        "anchor": "func lookPathLikeSpawn("
+      },
+      "names": [
+        "PATH",
+        "PATHEXT"
+      ]
+    },
+    {
+      "id": "nim-key",
+      "contract": "Trimmed nonempty NVIDIA_API_KEY wins over the private key file and must validate; invalid env errors rather than falling back. Empty env reads the private file. No credential values are collected by these fixtures.",
+      "evidence": {
+        "source": "internal/nvidianim/secret.go",
+        "line": 41,
+        "anchor": "func ResolveAPIKey("
+      },
+      "names": [
+        "NVIDIA_API_KEY"
+      ]
+    },
+    {
+      "id": "jev-key",
+      "contract": "Trimmed TYPESAFE_API_KEY is required for the JEV endpoint; empty yields service-unavailable and no remote request.",
+      "evidence": {
+        "source": "internal/hub/jev_evaluate.go",
+        "line": 51,
+        "anchor": "os.Getenv(\"TYPESAFE_API_KEY\")"
+      },
+      "names": [
+        "TYPESAFE_API_KEY"
+      ]
+    },
+    {
+      "id": "opencode-config",
+      "contract": "NVIDIA NIM route merges provider configuration into inherited OPENCODE_CONFIG_CONTENT; the resulting config and API key overlay child env. This inventory does not enable the route.",
+      "evidence": {
+        "source": "internal/hub/spawn_handler.go",
+        "line": 132,
+        "anchor": "os.Getenv(\"OPENCODE_CONFIG_CONTENT\")"
+      },
+      "names": [
+        "OPENCODE_CONFIG_CONTENT"
+      ]
+    },
+    {
+      "id": "whisper-baked",
+      "contract": "Trimmed MANY_AI_CLI_WHISPER_SERVER is accepted only for a recognized executable basename and an existing file; otherwise this shortcut is absent and normal managed/external resolution continues.",
+      "evidence": {
+        "source": "internal/hub/whisper_manage.go",
+        "line": 117,
+        "anchor": "func bakedWhisperServerPath()"
+      },
+      "names": [
+        "MANY_AI_CLI_WHISPER_SERVER"
+      ]
+    },
+    {
+      "id": "windows-directories",
+      "contract": "LOCALAPPDATA provides setup application directory and PNPM fallback; APPDATA provides startup shortcut installation/removal. Empty values trigger caller-specific home fallback or omission, not a global path override.",
+      "evidence": {
+        "source": "internal/setupcmd/setup_windows.go",
+        "line": 28,
+        "anchor": "os.Getenv(\"LOCALAPPDATA\")"
+      },
+      "names": [
+        "LOCALAPPDATA",
+        "APPDATA"
+      ]
+    },
+    {
+      "id": "wsl-markers",
+      "contract": "On non-Windows, nonempty WSL_INTEROP or WSL_DISTRO_NAME indicates WSL; MANY_AI_CLI_WSL_LAUNCHER exactly 1 distinguishes Windows-launcher mode. Detection is not authorization to launch WSL or query Windows home.",
+      "evidence": {
+        "source": "internal/wslutil/wslutil_unix.go",
+        "line": 16,
+        "anchor": "func IsWSL()"
+      },
+      "names": [
+        "WSL_INTEROP",
+        "WSL_DISTRO_NAME",
+        "MANY_AI_CLI_WSL_LAUNCHER"
+      ]
+    },
+    {
+      "id": "hub-display-user",
+      "contract": "Hub display-name config wins, then USERNAME, then USER. Mobile SSH hints and profile-export use USERNAME then USER without the display-name preference.",
+      "evidence": {
+        "source": "internal/hub/misc_handlers.go",
+        "line": 45,
+        "anchor": "userDisplayName := cfg.UserPrefs.DisplayName"
+      },
+      "names": [
+        "USERNAME",
+        "USER"
+      ]
+    },
+    {
+      "id": "orchestrate-session-env",
+      "contract": "Session ID must be a positive decimal integer, then nonempty port and token are required, in that order. No CLI flags override these environment values.",
+      "evidence": {
+        "source": "internal/orchestrate/orchestrate.go",
+        "line": 55,
+        "anchor": "func hubEnv("
+      },
+      "names": [
+        "MANY_AI_CLI_SESSION_ID",
+        "MANY_AI_CLI_HUB_PORT",
+        "MANY_AI_CLI_HUB_TOKEN"
       ]
     }
   ],
   "environment_reads": [
     {
+      "name": "MANY_AI_CLI_AUTO",
+      "expression": "\"MANY_AI_CLI_AUTO\"",
+      "source": "cmd/many-ai-cli/issue.go",
+      "line": 84,
+      "api": "deps.getenv",
+      "resolution": "source constant or literal"
+    },
+    {
       "name": "COMSPEC",
+      "expression": "\"COMSPEC\"",
       "source": "internal/execpath/execpath_windows.go",
-      "line": 42
+      "line": 42,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "CODEX_HOME",
+      "expression": "\"CODEX_HOME\"",
       "source": "internal/hub/approval_handler.go",
-      "line": 162
+      "line": 162,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",
+      "expression": "\"CLAUDE_CONFIG_DIR\"",
       "source": "internal/hub/approval_handler.go",
-      "line": 179
+      "line": 179,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "TYPESAFE_API_KEY",
+      "expression": "\"TYPESAFE_API_KEY\"",
       "source": "internal/hub/jev_evaluate.go",
-      "line": 51
+      "line": 51,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "USERNAME",
+      "expression": "\"USERNAME\"",
       "source": "internal/hub/misc_handlers.go",
-      "line": 47
+      "line": 47,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "USER",
+      "expression": "\"USER\"",
       "source": "internal/hub/misc_handlers.go",
-      "line": 50
+      "line": 50,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "USERNAME",
+      "expression": "\"USERNAME\"",
       "source": "internal/hub/mobile_connect.go",
-      "line": 35
+      "line": 35,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "USER",
+      "expression": "\"USER\"",
       "source": "internal/hub/mobile_connect.go",
-      "line": 37
+      "line": 37,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "expression": "name",
+      "source": "internal/hub/path_expand_windows.go",
+      "line": 148,
+      "api": "os.Getenv",
+      "resolution": "dynamic expression; caller inventory required"
     },
     {
       "name": "LOCALAPPDATA",
+      "expression": "\"LOCALAPPDATA\"",
       "source": "internal/hub/path_expand_windows.go",
-      "line": 157
+      "line": 157,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "SSH_CONNECTION",
+      "expression": "\"SSH_CONNECTION\"",
       "source": "internal/hub/runtime.go",
-      "line": 101
+      "line": 101,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "SSH_CLIENT",
+      "expression": "\"SSH_CLIENT\"",
       "source": "internal/hub/runtime.go",
-      "line": 104
+      "line": 104,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "SSH_TTY",
+      "expression": "\"SSH_TTY\"",
       "source": "internal/hub/runtime.go",
-      "line": 104
+      "line": 104,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI_HOST_LABEL",
+      "expression": "\"MANY_AI_CLI_HOST_LABEL\"",
       "source": "internal/hub/runtime.go",
-      "line": 107
+      "line": 107,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI_ENV_KIND",
+      "expression": "\"MANY_AI_CLI_ENV_KIND\"",
       "source": "internal/hub/runtime.go",
-      "line": 159
+      "line": 159,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "CODEX_HOME",
+      "expression": "\"CODEX_HOME\"",
       "source": "internal/hub/slash_cmd_fetch.go",
-      "line": 295
+      "line": 295,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",
+      "expression": "\"CLAUDE_CONFIG_DIR\"",
       "source": "internal/hub/slash_cmd_fetch.go",
-      "line": 307
+      "line": 307,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "PATH",
+      "expression": "\"PATH\"",
       "source": "internal/hub/spawn_command.go",
-      "line": 24
+      "line": 24,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "OPENCODE_CONFIG_CONTENT",
+      "expression": "\"OPENCODE_CONFIG_CONTENT\"",
       "source": "internal/hub/spawn_handler.go",
-      "line": 132
+      "line": 132,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI_PUBLIC_HOST",
+      "expression": "\"MANY_AI_CLI_PUBLIC_HOST\"",
       "source": "internal/hub/tailscale_probe.go",
-      "line": 231
+      "line": 231,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "expression": "env",
+      "source": "internal/hub/tailscale_probe_windows.go",
+      "line": 18,
+      "api": "os.Getenv",
+      "resolution": "dynamic expression; caller inventory required"
+    },
+    {
+      "name": "MANY_AI_CLI_WHISPER_SERVER",
+      "expression": "whisperServerEnvVar",
+      "source": "internal/hub/whisper_manage.go",
+      "line": 118,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "USERNAME",
+      "expression": "\"USERNAME\"",
       "source": "internal/launcher/export.go",
-      "line": 39
+      "line": 39,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "USER",
+      "expression": "\"USER\"",
       "source": "internal/launcher/export.go",
-      "line": 41
+      "line": 41,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI_PUBLIC_HOST",
+      "expression": "\"MANY_AI_CLI_PUBLIC_HOST\"",
       "source": "internal/launcher/export.go",
-      "line": 127
+      "line": 127,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "SSH_CONNECTION",
+      "expression": "\"SSH_CONNECTION\"",
       "source": "internal/launcher/export.go",
-      "line": 141
+      "line": 141,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
-      "name": "LOCALAPPDATA",
-      "source": "internal/setupcmd/setup_windows.go",
-      "line": 28
+      "name": "NVIDIA_API_KEY",
+      "expression": "APIKeyEnv",
+      "source": "internal/nvidianim/secret.go",
+      "line": 42,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
-      "name": "APPDATA",
-      "source": "internal/setupcmd/setup_windows.go",
-      "line": 160
-    },
-    {
-      "name": "COMSPEC",
-      "source": "internal/subscription/cliexec.go",
-      "line": 70
-    },
-    {
-      "name": "APPDATA",
-      "source": "internal/uninstall/uninstall_windows.go",
-      "line": 25
-    },
-    {
-      "name": "SHELL",
-      "source": "internal/wrapper/detect_shell_unix.go",
-      "line": 53
-    },
-    {
-      "name": "PATH",
-      "source": "internal/wrapper/diagnose.go",
-      "line": 47
-    },
-    {
-      "name": "SHELL",
-      "source": "internal/wrapper/pty_unix.go",
-      "line": 153
-    },
-    {
-      "name": "COMSPEC",
-      "source": "internal/wrapper/pty_windows.go",
-      "line": 171
-    },
-    {
-      "name": "CODEX_HOME",
-      "source": "internal/wrapper/usage_hooks.go",
-      "line": 255
+      "name": "MANY_AI_CLI_SESSION_ID",
+      "expression": "sessionIDEnv",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 56,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI_HUB_PORT",
-      "source": "internal/wrapper/wrapper.go",
-      "line": 1279
+      "expression": "hubPortEnv",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 60,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
-      "name": "MANY_AI_CLI_USAGE_PROBE",
-      "source": "internal/wrapper/wrapper.go",
-      "line": 1930
+      "name": "MANY_AI_CLI_HUB_TOKEN",
+      "expression": "hubTokenEnv",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 64,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
-      "name": "MANY_AI_CLI_SUBSCRIPTION_LOGIN",
-      "source": "internal/wrapper/wrapper.go",
-      "line": 1931
+      "name": "MANY_AI_CLI_SPAWN_TIMEOUT",
+      "expression": "spawnTimeoutEnv",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 487,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
-      "name": "MANY_AI_CLI_USAGE_PROBE",
-      "source": "internal/wrapper/wrapper.go",
-      "line": 1984
+      "name": "LOCALAPPDATA",
+      "expression": "\"LOCALAPPDATA\"",
+      "source": "internal/setupcmd/setup_windows.go",
+      "line": 28,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
-      "name": "MANY_AI_CLI_SUBSCRIPTION_LOGIN",
-      "source": "internal/wrapper/wrapper.go",
-      "line": 1985
+      "name": "APPDATA",
+      "expression": "\"APPDATA\"",
+      "source": "internal/setupcmd/setup_windows.go",
+      "line": 160,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "COMSPEC",
+      "expression": "\"COMSPEC\"",
+      "source": "internal/subscription/cliexec.go",
+      "line": 70,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "expression": "envVar",
+      "source": "internal/subscription/seed.go",
+      "line": 742,
+      "api": "os.Getenv",
+      "resolution": "dynamic expression; caller inventory required"
+    },
+    {
+      "name": "APPDATA",
+      "expression": "\"APPDATA\"",
+      "source": "internal/uninstall/uninstall_windows.go",
+      "line": 25,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_HUB_TOKEN",
+      "expression": "hubTokenEnv",
+      "source": "internal/usagerelay/usagerelay.go",
+      "line": 51,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_DELEGATION",
+      "expression": "DelegationEnvName",
+      "source": "internal/wrapper/delegation.go",
+      "line": 99,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_PARENT_SHELL",
+      "expression": "parentShellEnv",
+      "source": "internal/wrapper/detect_shell_unix.go",
+      "line": 22,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "SHELL",
+      "expression": "\"SHELL\"",
+      "source": "internal/wrapper/detect_shell_unix.go",
+      "line": 53,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_PARENT_SHELL",
+      "expression": "parentShellEnv",
+      "source": "internal/wrapper/detect_shell_windows.go",
+      "line": 117,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "PSModulePath",
+      "expression": "\"PSModulePath\"",
+      "source": "internal/wrapper/detect_shell_windows.go",
+      "line": 231,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "PATH",
+      "expression": "\"PATH\"",
+      "source": "internal/wrapper/diagnose.go",
+      "line": 47,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "SHELL",
+      "expression": "\"SHELL\"",
+      "source": "internal/wrapper/pty_unix.go",
+      "line": 153,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "COMSPEC",
+      "expression": "\"COMSPEC\"",
+      "source": "internal/wrapper/pty_windows.go",
+      "line": 171,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "CODEX_HOME",
+      "expression": "\"CODEX_HOME\"",
+      "source": "internal/wrapper/usage_hooks.go",
+      "line": 255,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_HUB_PORT",
+      "expression": "\"MANY_AI_CLI_HUB_PORT\"",
       "source": "internal/wrapper/wrapper.go",
-      "line": 2022
+      "line": 1279,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_USAGE_PROBE",
+      "expression": "\"MANY_AI_CLI_USAGE_PROBE\"",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1930,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_SUBSCRIPTION_LOGIN",
+      "expression": "\"MANY_AI_CLI_SUBSCRIPTION_LOGIN\"",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1931,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_USAGE_PROBE",
+      "expression": "\"MANY_AI_CLI_USAGE_PROBE\"",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1984,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_SUBSCRIPTION_LOGIN",
+      "expression": "\"MANY_AI_CLI_SUBSCRIPTION_LOGIN\"",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 1985,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "CODEX_HOME",
+      "expression": "\"CODEX_HOME\"",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 2022,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "CLAUDE_CONFIG_DIR",
+      "expression": "\"CLAUDE_CONFIG_DIR\"",
       "source": "internal/wrapper/wrapper.go",
-      "line": 2022
+      "line": 2022,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "GROK_HOME",
+      "expression": "subscription.GrokHomeEnv",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 2022,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
+    },
+    {
+      "name": "MANY_AI_CLI_SUBSCRIPTION_ID",
+      "expression": "subscription.SessionEnvVar",
+      "source": "internal/wrapper/wrapper.go",
+      "line": 2028,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI",
+      "expression": "\"MANY_AI_CLI\"",
       "source": "internal/wrapper/wrapper.go",
-      "line": 2066
+      "line": 2066,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "WSL_INTEROP",
+      "expression": "\"WSL_INTEROP\"",
       "source": "internal/wslutil/wslutil_unix.go",
-      "line": 17
+      "line": 17,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "WSL_DISTRO_NAME",
+      "expression": "\"WSL_DISTRO_NAME\"",
       "source": "internal/wslutil/wslutil_unix.go",
-      "line": 17
+      "line": 17,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     },
     {
       "name": "MANY_AI_CLI_WSL_LAUNCHER",
+      "expression": "\"MANY_AI_CLI_WSL_LAUNCHER\"",
       "source": "internal/wslutil/wslutil_unix.go",
-      "line": 28
+      "line": 28,
+      "api": "os.Getenv",
+      "resolution": "source constant or literal"
     }
   ],
-  "limitations": [
-    "Case/flag scans are discovery records; delegated command function flags and env precedence require source-caller fixtures.",
-    "Existing Go config loads before all commands, including version/help; current Rust diagnostic entry has not ported that side effect.",
-    "Launcher execution remains explicitly unavailable until integration, not a success stub."
+  "environment_constants": [
+    {
+      "identifier": "ref",
+      "value": "HEAD",
+      "source": "internal/hub/git_log.go",
+      "line": 59,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "manyAICLIBinEnv",
+      "value": "MANY_AI_CLI_BIN",
+      "source": "internal/hub/spawn_handler.go",
+      "line": 80,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "whisperServerEnvVar",
+      "value": "MANY_AI_CLI_WHISPER_SERVER",
+      "source": "internal/hub/whisper_manage.go",
+      "line": 115,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "APIKeyEnv",
+      "value": "NVIDIA_API_KEY",
+      "source": "internal/nvidianim/secret.go",
+      "line": 15,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "hubPortEnv",
+      "value": "MANY_AI_CLI_HUB_PORT",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 29,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "sessionIDEnv",
+      "value": "MANY_AI_CLI_SESSION_ID",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 30,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "hubTokenEnv",
+      "value": "MANY_AI_CLI_HUB_TOKEN",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 31,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "spawnTimeoutEnv",
+      "value": "MANY_AI_CLI_SPAWN_TIMEOUT",
+      "source": "internal/orchestrate/orchestrate.go",
+      "line": 32,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "publicEmailPlaceholder",
+      "value": "MANYAICLI_PUBLIC_EMAIL_PLACEHOLDER",
+      "source": "internal/report/redact.go",
+      "line": 113,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "SessionEnvVar",
+      "value": "MANY_AI_CLI_SUBSCRIPTION_ID",
+      "source": "internal/subscription/adapter.go",
+      "line": 49,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "ClaudeConfigDirEnv",
+      "value": "CLAUDE_CONFIG_DIR",
+      "source": "internal/subscription/claude.go",
+      "line": 17,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "CodexHomeEnv",
+      "value": "CODEX_HOME",
+      "source": "internal/subscription/codex.go",
+      "line": 19,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "GrokHomeEnv",
+      "value": "GROK_HOME",
+      "source": "internal/subscription/grok.go",
+      "line": 15,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "OpenCodeDataHomeEnv",
+      "value": "XDG_DATA_HOME",
+      "source": "internal/subscription/opencode.go",
+      "line": 26,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "hubTokenEnv",
+      "value": "MANY_AI_CLI_HUB_TOKEN",
+      "source": "internal/usagerelay/usagerelay.go",
+      "line": 34,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "DelegationEnvName",
+      "value": "MANY_AI_CLI_DELEGATION",
+      "source": "internal/wrapper/delegation.go",
+      "line": 83,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "parentShellEnv",
+      "value": "MANY_AI_CLI_PARENT_SHELL",
+      "source": "internal/wrapper/detect_shell_unix.go",
+      "line": 15,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "parentShellEnv",
+      "value": "MANY_AI_CLI_PARENT_SHELL",
+      "source": "internal/wrapper/detect_shell_windows.go",
+      "line": 40,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "noColorEnvName",
+      "value": "NO_COLOR",
+      "source": "internal/wrapper/env_color.go",
+      "line": 12,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "forceColorEnvName",
+      "value": "FORCE_COLOR",
+      "source": "internal/wrapper/env_color.go",
+      "line": 16,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "clicolorForceEnvName",
+      "value": "CLICOLOR_FORCE",
+      "source": "internal/wrapper/env_color.go",
+      "line": 17,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "envTerm",
+      "value": "TERM=xterm-256color",
+      "source": "internal/wrapper/env_color.go",
+      "line": 21,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "envColorterm",
+      "value": "COLORTERM=truecolor",
+      "source": "internal/wrapper/env_color.go",
+      "line": 22,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "envMarker",
+      "value": "MANY_AI_CLI=1",
+      "source": "internal/wrapper/env_color.go",
+      "line": 37,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    },
+    {
+      "identifier": "hubTokenEnvName",
+      "value": "MANY_AI_CLI_HUB_TOKEN",
+      "source": "internal/wrapper/usage_hooks.go",
+      "line": 105,
+      "classification": "candidate environment constant; may be emitted rather than directly read"
+    }
   ],
-  "launcher": {
-    "source": "cmd/many-ai-cli-launcher/main.go",
-    "parser": "rust/src/cli.rs::parse_launcher",
+  "dynamic_environment_reads": [
+    {
+      "id": "windows-expand",
+      "contract": "The name argument comes from %NAME% expansion. Case-insensitive local cache wins, then nonempty os.Getenv, then registry value without nested %, then PNPM_HOME alone may derive LOCALAPPDATA/pnpm if it exists. Dynamic keys cannot be exhaustively enumerated.",
+      "evidence": {
+        "source": "internal/hub/path_expand_windows.go",
+        "line": 143,
+        "anchor": "func resolveWinEnvVar("
+      }
+    },
+    {
+      "id": "tailscale-search",
+      "contract": "Dynamic env loop reads ProgramFiles, ProgramFiles(x86), and ProgramW6432 for executable candidates.",
+      "evidence": {
+        "source": "internal/hub/tailscale_probe_windows.go",
+        "line": 17,
+        "anchor": "[]string{\"ProgramFiles\", \"ProgramFiles(x86)\", \"ProgramW6432\"}"
+      }
+    },
+    {
+      "id": "subscription-seed",
+      "contract": "envVar is a vendor config-directory selector supplied by callers; see default directory read rules.",
+      "evidence": {
+        "source": "internal/subscription/seed.go",
+        "line": 742,
+        "anchor": "os.Getenv(envVar)"
+      }
+    }
+  ],
+  "implicit_environment": [
+    {
+      "names": [
+        "HOME",
+        "USERPROFILE"
+      ],
+      "consumer": "os.UserHomeDir in config/profile/other production path resolvers",
+      "status": "production semantics retained; trial mode must not fall back or mutate HOME"
+    },
+    {
+      "names": [
+        "PATH",
+        "PATHEXT"
+      ],
+      "consumer": "Go/OS executable resolution; includes indirect exec.LookPath reads",
+      "status": "OS-specific acceptance remains pending"
+    }
+  ],
+  "entry_sources": [
+    {
+      "source": "cmd/many-ai-cli-launcher/main.go",
+      "sha256": "8631501bd1e09e4d0ef21c4cf047754491c413a9af40670573d1f08d1bb495a3"
+    },
+    {
+      "source": "cmd/many-ai-cli/issue.go",
+      "sha256": "d935f29996288c9351f8e84cfa12edfc3fa1adf43d7896827b823514e5c18fd6"
+    },
+    {
+      "source": "cmd/many-ai-cli/main.go",
+      "sha256": "a6fd98b94bd0939f970a11e24c3a0a140fa615567d3eea4d6e599ddf4e7a0568"
+    },
+    {
+      "source": "cmd/many-ai-cli/provider_command.go",
+      "sha256": "26503cd8f7c8fdc55d7934e18a43c7fbe3cf0764072022ba04c21eca54806b7c"
+    },
+    {
+      "source": "internal/execpath/execpath_windows.go",
+      "sha256": "f67519bbf85208a5d88ed6d7b4d2fb92f4a9dcb4188fda484f61061dfda436d1"
+    },
+    {
+      "source": "internal/hub/approval_handler.go",
+      "sha256": "ecb6c19c0dbd36fed62dccad1fe878edf5d772d377c8cd39fdd89c4b9384ce68"
+    },
+    {
+      "source": "internal/hub/jev_evaluate.go",
+      "sha256": "e8a5e7bb9043fd02123cd0cebe04db04e46bfd869318136b12596d2bb8640eba"
+    },
+    {
+      "source": "internal/hub/lifecycle.go",
+      "sha256": "9cdc574f91e0d94d3ecc372e4f10156e0362ffb7f4bcf7788da879d274a20458"
+    },
+    {
+      "source": "internal/hub/misc_handlers.go",
+      "sha256": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2"
+    },
+    {
+      "source": "internal/hub/mobile_connect.go",
+      "sha256": "d3f89a8e4ede420de751b474b65c89d13953d61c78424ed092675236c4626667"
+    },
+    {
+      "source": "internal/hub/path_expand_windows.go",
+      "sha256": "54dee0b63b1ae7a1d07a7e30ad672c7a52ba5bfe122acda28e745b758fc8ca7c"
+    },
+    {
+      "source": "internal/hub/runtime.go",
+      "sha256": "f82be0678066ff0bd46f601abe8c98d119f4f8c604ed472f08bb76ef36477e5a"
+    },
+    {
+      "source": "internal/hub/slash_cmd_fetch.go",
+      "sha256": "27314c2b29689a1c19e9770cbe6f62ec2255ffbcc45e5f5b223776c67454fadf"
+    },
+    {
+      "source": "internal/hub/spawn_command.go",
+      "sha256": "2c1831968e3222fcb0bc9314ea7651fbf085017457b703032d66451adc7673e3"
+    },
+    {
+      "source": "internal/hub/spawn_handler.go",
+      "sha256": "ea1c66767aa00caf248a555a2d9eeba0239f11f5ebb6f5310ef09e363c8ec279"
+    },
+    {
+      "source": "internal/hub/tailscale_probe.go",
+      "sha256": "d27cf264f55be39a890ae949e8e796501197af423363a3b5b9f6a8869307787f"
+    },
+    {
+      "source": "internal/hub/tailscale_probe_windows.go",
+      "sha256": "8a289059f29e902e654a0aec6783cf94c99d18f751d5f6a8e70f007f9d7e6770"
+    },
+    {
+      "source": "internal/hub/whisper_manage.go",
+      "sha256": "06b8a597a87958a75528cd24382d330f0f5ae72ecf52ae604cf0ac1e8001a776"
+    },
+    {
+      "source": "internal/launcher/export.go",
+      "sha256": "94a3c1bd59233228985a9128d28e391a639b5654b217f132d318399599f508af"
+    },
+    {
+      "source": "internal/nvidianim/secret.go",
+      "sha256": "f443b5623df1ffdfb260fc437edec7a8ed4174b15bba117363bb4ea763b4e083"
+    },
+    {
+      "source": "internal/orchestrate/orchestrate.go",
+      "sha256": "8446bb24c3ac470f58ee86ed08568d29ef49470d5cd40e37043a62722f6b270e"
+    },
+    {
+      "source": "internal/provider/schema.go",
+      "sha256": "90ec0701a67263fb7295d1e718d81fdbf6e3879c0e836f30a9578762d06f47dd"
+    },
+    {
+      "source": "internal/provider/store.go",
+      "sha256": "f9fadb81809b2dd2fd2429ac1ad626d6684634ef2f61078f8b4e4267778a287a"
+    },
+    {
+      "source": "internal/setupcmd/setup.go",
+      "sha256": "4937c0c2f038df645781a60803471c59398155e138ac9b7a8d1d25bf70c93985"
+    },
+    {
+      "source": "internal/setupcmd/setup_windows.go",
+      "sha256": "1f647ba49b87b94def4472c98a6343a0c2cac7bc99976b0ac99769ac309c1b41"
+    },
+    {
+      "source": "internal/shell/init.go",
+      "sha256": "585e83aefd84bfdb56a6f5704eaf716127357e4befe511c175e20fb697492aed"
+    },
+    {
+      "source": "internal/subscription/adapter.go",
+      "sha256": "b25a761ab49d304f85c2d15424e0740cc9df11d8fe7c02327a115fcfc34db3a8"
+    },
+    {
+      "source": "internal/subscription/cliexec.go",
+      "sha256": "0d97a0bcbd3dcbc417b5db9a00b5a70c5688eeb64cf04257b27d23f9c8e75098"
+    },
+    {
+      "source": "internal/subscription/grok.go",
+      "sha256": "7dd166c1d1b5df81bd484810262462999d033f4848989341bc5d882e4cf972fb"
+    },
+    {
+      "source": "internal/subscription/resolve.go",
+      "sha256": "09fb82146881ad83482d18ad3397912edf38dfdb2debe429ee069c738e14e32b"
+    },
+    {
+      "source": "internal/subscription/seed.go",
+      "sha256": "72cb7f76b80382e61a1f8ff7c9a8a558c09b6fe87dbeba5d6a3d08c4ce8ef875"
+    },
+    {
+      "source": "internal/tray/tray_other.go",
+      "sha256": "d4bd15a4d964586d831917bde153d7dc8cace6741a36428614e2812bd0a4acce"
+    },
+    {
+      "source": "internal/uninstall/uninstall.go",
+      "sha256": "dd32721c958cc709cbbff42ac0de999bb0b662e3bf80e1cd26d1b17bdf3e7ca4"
+    },
+    {
+      "source": "internal/uninstall/uninstall_windows.go",
+      "sha256": "b395211d20caa01dfb0e1c9e612981466b345da05ae5dcf301bc04eedbf483e9"
+    },
+    {
+      "source": "internal/usagerelay/usagerelay.go",
+      "sha256": "01a163259e3fb52268e63c1b4577bd05291c29082689611d905099aaf5794180"
+    },
+    {
+      "source": "internal/wrapper/delegation.go",
+      "sha256": "6799c29c43d3ebc5778a16393c508e7868b5a1b7fd410fce7c5e1c02f89830be"
+    },
+    {
+      "source": "internal/wrapper/detect_shell_unix.go",
+      "sha256": "5db6361062c83a47374dc6904ceecb93dac3d0675731b70b4fc6a7112c055992"
+    },
+    {
+      "source": "internal/wrapper/detect_shell_windows.go",
+      "sha256": "ac0cc250ec4baf385ee0822089225fa7f4d6d7c12564abacca98342441f14de4"
+    },
+    {
+      "source": "internal/wrapper/diagnose.go",
+      "sha256": "c26a59ec4073c47554b6ab588fe124fe08e00b03c8eae3428bafa1ba0cb830ff"
+    },
+    {
+      "source": "internal/wrapper/env_color.go",
+      "sha256": "b695a363814b43114703ae8ee406640b934dc857ef5d7009a224e525040a9a3a"
+    },
+    {
+      "source": "internal/wrapper/headless_session.go",
+      "sha256": "9970e6c00c315aba49e69d5dc4e1b6a78a07e38cf857397982f341b96a16877f"
+    },
+    {
+      "source": "internal/wrapper/pty_unix.go",
+      "sha256": "c42487e3aa98d6a3b08ce793646d1f77fd73e6573ff26054abb70c621077ea3a"
+    },
+    {
+      "source": "internal/wrapper/pty_windows.go",
+      "sha256": "53973516732cea9fea1a078b4160e43f552652c1b0856e618e374d57a7f6015b"
+    },
+    {
+      "source": "internal/wrapper/usage_hooks.go",
+      "sha256": "a714f4aaf5ac1c50621eac53a364ebeb11599f10eeaf10370bbe6d96a707ed5a"
+    },
+    {
+      "source": "internal/wrapper/wrapper.go",
+      "sha256": "0b50d9acee6957b826414e761479368e738b97e7ed9a525ff8c163f9ad5f96ad"
+    },
+    {
+      "source": "internal/wslutil/wslutil_unix.go",
+      "sha256": "6d3d692a2a44fbff6f164fbb71c7bc4d5f7d413f891441f586c8dff4c9760818"
+    }
+  ],
+  "fixtures": {
+    "source_oracle": "rust/tests/fixtures/foundation/cli/source-oracle.json",
+    "flag_case_count": 907,
+    "dispatch_case_count": 65,
+    "pure_oracle": "rust/tests/fixtures/foundation/cli/pure-oracle.json",
+    "pure_case_count": 97,
+    "rust_tests": "rust/tests/cli_contracts.rs"
+  },
+  "acceptance": {
+    "parsed_routes": "covered by source-derived main dispatch tests",
+    "standalone_launcher_lexical": "covered by actual Go flag goldens",
+    "delegated_flag_lexical": "Go goldens recorded; Rust downstream caller implementation pending",
+    "provider_boundary": "original Go parse/control flow observed only until error-only synthetic storage boundary",
+    "runtime_integration": "pending",
+    "native_os_acceptance": "pending"
+  },
+  "migration_only": {
     "flags": [
-      "--profile",
-      "--last",
-      "--ui",
-      "--help",
-      "-h"
+      "--trial-root",
+      "--trial-port"
     ],
-    "default": "open selection UI after profiles load/validation",
-    "entry_effect_order": [
-      "ConfigureConsoleUTF8",
-      "StartupBanner",
-      "parse flags",
-      "LoadProfiles",
-      "Validate",
-      "UI or SelectProfile",
-      "Connect"
-    ],
-    "runtime_status": "pending C4 caller/UI/connection implementation",
-    "parser_fixture": "cli::launcher_tests::launcher_defaults_and_go_flags"
-  }
+    "scope": "leading main-binary pairs only, not consumed inside provider argv",
+    "go_baseline": "not present",
+    "status": "trial-path propagation has separate foundation acceptance; standalone launcher wiring pending"
+  },
+  "limitations": [
+    "No application binary was executed to obtain these CLI goldens. No Hub, real home, provider, SSH/WSL, config/settings mutation, or external API was used.",
+    "Dispatch goldens are an AST-grounded projection of source switch/call boundaries, not end-to-end run/stdio observations.",
+    "Go FlagSet goldens are lexical observations; help exit and ignored-error behavior comes from caller source contracts, not flag.ErrHelp alone.",
+    "Pure extracted function fixtures replace only environment reads with a synthetic map and provider history with an error-only boundary spy; no persistence success is simulated.",
+    "Getenv/LookupEnv inventory excludes runtime values; dynamic, os.UserHomeDir/exec.LookPath and child-environment emission are listed separately.",
+    "Source/test evidence references identify existing oracle assertions; they do not claim those whole packages or OS boundaries were run."
+  ]
 }

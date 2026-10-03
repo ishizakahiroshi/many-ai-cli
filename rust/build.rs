@@ -1,3 +1,5 @@
+#[path = "src/asset_contract.rs"]
+mod asset_contract;
 use std::{
     env, fs, io,
     path::{Path, PathBuf},
@@ -34,6 +36,10 @@ fn main() {
             "missing generated web/dist/index.html; run the locked Bun frontend build in the isolated checkout before Cargo"
         );
     }
+    asset_contract::validate_web_assets(&root.join("web/src"), &web)
+        .expect("generated Web asset validation failed");
+    println!("cargo:rerun-if-changed={}", root.join("web/src").display());
+    println!("cargo:rerun-if-changed=src/asset_contract.rs");
     let mut files = Vec::new();
     walk(&web, &web, &mut files).expect("read generated Web assets");
     files.sort_by(|a, b| a.0.cmp(&b.0));

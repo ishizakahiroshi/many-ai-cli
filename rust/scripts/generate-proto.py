@@ -25,7 +25,10 @@ def typ(g,omit=True):
     if g.startswith('[]'):
         v='Vec<'+typ(g[2:])+'>'
         return v if omit else 'Option<'+v+'>'
-    if g.startswith('map[string]'): return 'BTreeMap<String, '+typ(g[11:])+'>'
+    if g.startswith('map[string]'):
+        inner=typ(g[11:])
+        if g[11:].startswith(('map[','[]')): inner='Option<'+inner+'>'
+        return 'BTreeMap<String, '+inner+'>'
     if g in aliases:return 'String'
     if g in scalars:return scalars[g]
     if g in [x['name'] for x in structs]:return g
@@ -44,6 +47,14 @@ for st in structs:
             if pred:attr+=['skip_serializing_if = '+json.dumps(pred)]
         out+=['    #[serde('+', '.join(attr)+')]','    pub '+rustname+': '+typ(g,f['omitempty'])+',']
     out+=['}']
+out += ['', 'pub static WIRE_SCHEMA: &[super::wire::Schema] = &[']
+for st in structs:
+    out.append('super::wire::Schema { name: '+json.dumps(st['name'])+', fields: &[')
+    for field in st['fields']:
+        out.append('super::wire::Field { name: '+json.dumps(field['wire_name'])+', kind: '+json.dumps(field['go_type'])+' },')
+    out.append('] },')
+out.append('];')
+for st in structs:out.append('impl super::wire::GoWire for '+st['name']+' { const GO_TYPE: &\'static str = '+json.dumps(st['name'])+'; }')
 (ROOT/'rust/src/proto/generated.rs').write_text('\n'.join(out)+'\n')
 inv={'schema_version':1,'baseline':'21d0bc7935a2c4696fb89ccff2e324157a528c2d','source':'internal/proto/messages.go','source_sha256':hashlib.sha256(raw.encode()).hexdigest(),'structs':structs,'string_aliases':aliases}
 (ROOT/'rust/inventory/protocol.json').write_text(json.dumps(inv,indent=2)+'\n')

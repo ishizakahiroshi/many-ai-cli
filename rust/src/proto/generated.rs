@@ -494,7 +494,7 @@ pub struct Message {
         deserialize_with = "null_default",
         skip_serializing_if = "BTreeMap::is_empty"
     )]
-    pub spawn_child_approval: BTreeMap<String, BTreeMap<String, ChildApproval>>,
+    pub spawn_child_approval: BTreeMap<String, Option<BTreeMap<String, ChildApproval>>>,
     #[serde(
         rename = "trust_grant_providers",
         deserialize_with = "null_default",
@@ -1698,4 +1698,1391 @@ pub struct ChildApproval {
         skip_serializing_if = "String::is_empty"
     )]
     pub fallback_from: String,
+}
+
+pub static WIRE_SCHEMA: &[super::wire::Schema] = &[
+    super::wire::Schema {
+        name: "Message",
+        fields: &[
+            super::wire::Field {
+                name: "type",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "role",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "provider",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "provider_revision",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "display_name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "cwd",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "branch",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "project_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "pid",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "input_seq",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "input_seq_high_watermark",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "shell",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "version",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "state",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "output_idle",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "workflow_active",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "awaiting_user",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "awaiting_approval",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "activity",
+                kind: "*SessionActivity",
+            },
+            super::wire::Field {
+                name: "workflow_progress",
+                kind: "*WorkflowProgress",
+            },
+            super::wire::Field {
+                name: "subagent_tree",
+                kind: "*SubagentTree",
+            },
+            super::wire::Field {
+                name: "exit_code",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "signal",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "token",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "home_dir",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "codex_home",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "claude_dir",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "grok_home",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "agent_session_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "subscription_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "subscription_name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "usage_probe",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "subscription_login",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "data",
+                kind: "[]byte",
+            },
+            super::wire::Field {
+                name: "text",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "messages",
+                kind: "[]AgentChatMessage",
+            },
+            super::wire::Field {
+                name: "cols",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "rows",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "log_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "jsonl_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "replay_b64",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "reason",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "pty_bytes",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "replay",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "replay_epoch",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "approval_source_epoch",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "token_statusbar",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "approval_sig",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "approval_source",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "approval_summary",
+                kind: "*ApprovalSummary",
+            },
+            super::wire::Field {
+                name: "approval_candidate_key",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "approval_candidate_shape",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "approval_consumed",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "approval_consumed_epoch",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "done_summary",
+                kind: "*DoneSummary",
+            },
+            super::wire::Field {
+                name: "sent_text",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "detected_at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "approval_state",
+                kind: "*ApprovalState",
+            },
+            super::wire::Field {
+                name: "approval_snapshot",
+                kind: "[]ApprovalSessionState",
+            },
+            super::wire::Field {
+                name: "last_output_at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "transcript_grew_at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "started_at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "label",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "launch_label",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "session_meta",
+                kind: "*SessionMeta",
+            },
+            super::wire::Field {
+                name: "model",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "effort",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "execution_mode",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "permission_preset",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "permission_mode",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "route",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "parent_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "handoff_from",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "auto",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "depth",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "orchestration_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "board_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "worktree_branch",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "board_notify_pending",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "relays",
+                kind: "[]RelayStatus",
+            },
+            super::wire::Field {
+                name: "cross_session_messages",
+                kind: "[]CrossSessionMessage",
+            },
+            super::wire::Field {
+                name: "spawn_confirmation_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "initial_prompt",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "spawn_requested_at_ms",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "remember_permission",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "spawn_child_approval",
+                kind: "map[string]map[string]ChildApproval",
+            },
+            super::wire::Field {
+                name: "trust_grant_providers",
+                kind: "[]string",
+            },
+            super::wire::Field {
+                name: "spawn_child_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "first_message",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "last_message",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "inject",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "image_data",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "filename",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "providers",
+                kind: "[]string",
+            },
+            super::wire::Field {
+                name: "ui_active_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "git_checked",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "git_files",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "git_added",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "git_deleted",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "commit_subject",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "commit_body",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "cost_usd",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "cost_known",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "tokens_in",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "tokens_out",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "tokens_cache",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "tokens_total",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "ctx_window",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "ctx_used_pct",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "usage_model",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "usage_started_at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "rl_5h_pct",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "rl_5h_reset",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "rl_7d_pct",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "rl_7d_reset",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "claude_rate_limits_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "claude_5h_field_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "claude_5h_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "claude_7d_field_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "claude_7d_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_rate_limits_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_primary_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_primary_used_pct",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "codex_primary_window_minutes",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "codex_primary_reset",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "codex_secondary_used_pct",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "codex_secondary_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_secondary_window_minutes",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "codex_secondary_reset",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "codex_credits_present",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_has_credits",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_credits_unlimited",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "codex_credits_balance",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "codex_plan_type",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "usage_observed_at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "lines_added",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "lines_removed",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "effort_level",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "thinking",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "exceeds_200k",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "duration_ms",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "api_duration_ms",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "output_style",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "vim_mode",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "agent_name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "repo_host",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "repo_owner",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "repo_name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "remaining_pct",
+                kind: "float64",
+            },
+            super::wire::Field {
+                name: "reasoning_output_tokens",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "note_ok",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "note_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "binary_stale",
+                kind: "*bool",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "CrossSessionMessage",
+        fields: &[
+            super::wire::Field {
+                name: "at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "receiver_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "receiver_role",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "sender",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "text",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "AgentChatMessage",
+        fields: &[
+            super::wire::Field {
+                name: "role",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "kind",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "text",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "thinking",
+                kind: "[]string",
+            },
+            super::wire::Field {
+                name: "tools",
+                kind: "[]AgentChatTool",
+            },
+            super::wire::Field {
+                name: "ts",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "message_id",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "AgentChatTool",
+        fields: &[
+            super::wire::Field {
+                name: "id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "input",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "result",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "SessionActivity",
+        fields: &[
+            super::wire::Field {
+                name: "output_idle",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "workflow_active",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "awaiting_user",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "awaiting_approval",
+                kind: "bool",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "WorkflowProgress",
+        fields: &[
+            super::wire::Field {
+                name: "detected",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "source",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "done",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "total",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "running",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "failed",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "pending",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "waiting_dynamic",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "percent",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "elapsed_sec",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "tokens_raw",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "phases",
+                kind: "[]WfPhase",
+            },
+            super::wire::Field {
+                name: "settled",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "settled_by",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "task_detail_source",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "WfPhase",
+        fields: &[
+            super::wire::Field {
+                name: "title",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "agents",
+                kind: "[]WfAgent",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "WfAgent",
+        fields: &[
+            super::wire::Field {
+                name: "label",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "state",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "metrics",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "detail",
+                kind: "*WfAgentDetail",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "WfAgentDetail",
+        fields: &[
+            super::wire::Field {
+                name: "model",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "started_at",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "last_progress_at",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "duration_ms",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "tokens",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "tool_calls",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "last_tool_name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "last_tool_summary",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "prompt_preview",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "result_preview",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "SubagentTree",
+        fields: &[
+            super::wire::Field {
+                name: "provider",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "nodes",
+                kind: "[]SubagentNode",
+            },
+            super::wire::Field {
+                name: "omitted",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "updated_at",
+                kind: "int64",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "SubagentNode",
+        fields: &[
+            super::wire::Field {
+                name: "id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "parent_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "depth",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "label",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "agent_type",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "model",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "state",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "started_at",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "last_activity_at",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "finished_at",
+                kind: "int64",
+            },
+            super::wire::Field {
+                name: "tool_calls",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "last_tool_name",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "last_tool_summary",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "SessionMeta",
+        fields: &[
+            super::wire::Field {
+                name: "label",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "pinned",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "color",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "note",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "auto_title",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ApprovalSummary",
+        fields: &[
+            super::wire::Field {
+                name: "command",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "paths",
+                kind: "[]string",
+            },
+            super::wire::Field {
+                name: "risk",
+                kind: "ApprovalRiskTier",
+            },
+            super::wire::Field {
+                name: "raw",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "DoneSummary",
+        fields: &[
+            super::wire::Field {
+                name: "session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "provider",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "title",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "text",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "kind",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "fallback",
+                kind: "bool",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "RelayStatus",
+        fields: &[
+            super::wire::Field {
+                name: "orchestration_id",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "plan_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "mode",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "state",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "reason",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "completed_cs",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "round",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "max_rounds",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "final_seen",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "implementation_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "strong_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "active_implementer",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "escalate_after",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "review_session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "review_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "worktree_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "branch",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "base_commit",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "updated_at",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "RelayEvent",
+        fields: &[
+            super::wire::Field {
+                name: "at",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "kind",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "c",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "round",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "text",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "review_path",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "commit",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "files_changed",
+                kind: "int",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ApprovalOption",
+        fields: &[
+            super::wire::Field {
+                name: "num",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "label",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "is_current",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "send_text",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "preserve_order",
+                kind: "bool",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ApprovalRecord",
+        fields: &[
+            super::wire::Field {
+                name: "candidate_key",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "candidate_shape",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "source_epoch",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "sig",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "origin",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "source",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "kind",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "block",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "question",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "context",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "options",
+                kind: "[]ApprovalOption",
+            },
+            super::wire::Field {
+                name: "summary",
+                kind: "*ApprovalSummary",
+            },
+            super::wire::Field {
+                name: "detected_at",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ApprovalRecordClose",
+        fields: &[
+            super::wire::Field {
+                name: "candidate_key",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "source_epoch",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "sig",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "origin",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "reason",
+                kind: "string",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ApprovalState",
+        fields: &[
+            super::wire::Field {
+                name: "version",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "open",
+                kind: "*ApprovalRecord",
+            },
+            super::wire::Field {
+                name: "close",
+                kind: "*ApprovalRecordClose",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ApprovalSessionState",
+        fields: &[
+            super::wire::Field {
+                name: "session_id",
+                kind: "int",
+            },
+            super::wire::Field {
+                name: "version",
+                kind: "uint64",
+            },
+            super::wire::Field {
+                name: "record",
+                kind: "*ApprovalRecord",
+            },
+        ],
+    },
+    super::wire::Schema {
+        name: "ChildApproval",
+        fields: &[
+            super::wire::Field {
+                name: "permission_mode",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "sandbox",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "ask_for_approval",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "allowed_tools",
+                kind: "[]string",
+            },
+            super::wire::Field {
+                name: "risk_confirmed",
+                kind: "bool",
+            },
+            super::wire::Field {
+                name: "tier",
+                kind: "string",
+            },
+            super::wire::Field {
+                name: "fallback_from",
+                kind: "string",
+            },
+        ],
+    },
+];
+impl super::wire::GoWire for Message {
+    const GO_TYPE: &'static str = "Message";
+}
+impl super::wire::GoWire for CrossSessionMessage {
+    const GO_TYPE: &'static str = "CrossSessionMessage";
+}
+impl super::wire::GoWire for AgentChatMessage {
+    const GO_TYPE: &'static str = "AgentChatMessage";
+}
+impl super::wire::GoWire for AgentChatTool {
+    const GO_TYPE: &'static str = "AgentChatTool";
+}
+impl super::wire::GoWire for SessionActivity {
+    const GO_TYPE: &'static str = "SessionActivity";
+}
+impl super::wire::GoWire for WorkflowProgress {
+    const GO_TYPE: &'static str = "WorkflowProgress";
+}
+impl super::wire::GoWire for WfPhase {
+    const GO_TYPE: &'static str = "WfPhase";
+}
+impl super::wire::GoWire for WfAgent {
+    const GO_TYPE: &'static str = "WfAgent";
+}
+impl super::wire::GoWire for WfAgentDetail {
+    const GO_TYPE: &'static str = "WfAgentDetail";
+}
+impl super::wire::GoWire for SubagentTree {
+    const GO_TYPE: &'static str = "SubagentTree";
+}
+impl super::wire::GoWire for SubagentNode {
+    const GO_TYPE: &'static str = "SubagentNode";
+}
+impl super::wire::GoWire for SessionMeta {
+    const GO_TYPE: &'static str = "SessionMeta";
+}
+impl super::wire::GoWire for ApprovalSummary {
+    const GO_TYPE: &'static str = "ApprovalSummary";
+}
+impl super::wire::GoWire for DoneSummary {
+    const GO_TYPE: &'static str = "DoneSummary";
+}
+impl super::wire::GoWire for RelayStatus {
+    const GO_TYPE: &'static str = "RelayStatus";
+}
+impl super::wire::GoWire for RelayEvent {
+    const GO_TYPE: &'static str = "RelayEvent";
+}
+impl super::wire::GoWire for ApprovalOption {
+    const GO_TYPE: &'static str = "ApprovalOption";
+}
+impl super::wire::GoWire for ApprovalRecord {
+    const GO_TYPE: &'static str = "ApprovalRecord";
+}
+impl super::wire::GoWire for ApprovalRecordClose {
+    const GO_TYPE: &'static str = "ApprovalRecordClose";
+}
+impl super::wire::GoWire for ApprovalState {
+    const GO_TYPE: &'static str = "ApprovalState";
+}
+impl super::wire::GoWire for ApprovalSessionState {
+    const GO_TYPE: &'static str = "ApprovalSessionState";
+}
+impl super::wire::GoWire for ChildApproval {
+    const GO_TYPE: &'static str = "ChildApproval";
 }

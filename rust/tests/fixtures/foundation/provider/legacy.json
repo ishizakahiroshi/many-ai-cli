@@ -1,0 +1,648 @@
+[
+  {
+    "name": "absent",
+    "yaml": "token: synthetic-stable-token\n",
+    "raw": null,
+    "definitions": [],
+    "diagnostics": null
+  },
+  {
+    "name": "wrong-shape",
+    "yaml": "token: synthetic-stable-token\ncustom_providers: {historical: malformed}\n",
+    "raw": null,
+    "definitions": [],
+    "diagnostics": null
+  },
+  {
+    "name": "empty",
+    "yaml": "token: synthetic-stable-token\ncustom_providers: []\n",
+    "raw": null,
+    "definitions": [],
+    "diagnostics": null
+  },
+  {
+    "name": "historical-quotes-and-empty-arguments",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - id: ' MY-CLI '\n    label: '  My CLI  '\n    command: '\"C:\\Program Files\\fake cli\\cli.exe\" --agent \"\" --flag=\"a\"\"b\"'\n    approval_pattern_source: 'https://example.invalid/synthetic-patterns.json'\n    unknown_older_setting: retained-by-go-ignore\n    headless: {args: ['--print', '$HOME;literal'], format: ' text ', prompt_via: ' arg '}\n  - id: literal-cli\n    command: 'fake-cli $HOME %APPDATA% ~ * | \u0026\u0026 ; \u003e \u003c'\n    label: '   '\n    headless: {format: text}\n  - id: quote-only\n    command: '\"\"'\n",
+    "raw": [
+      {
+        "id": " MY-CLI ",
+        "label": "  My CLI  ",
+        "command": "\"C:\\Program Files\\fake cli\\cli.exe\" --agent \"\" --flag=\"a\"\"b\"",
+        "approval_pattern_source": "https://example.invalid/synthetic-patterns.json",
+        "headless": {
+          "args": [
+            "--print",
+            "$HOME;literal"
+          ],
+          "format": " text ",
+          "prompt_via": " arg "
+        }
+      },
+      {
+        "id": "literal-cli",
+        "label": "   ",
+        "command": "fake-cli $HOME %APPDATA% ~ * | \u0026\u0026 ; \u003e \u003c",
+        "headless": {
+          "format": "text"
+        }
+      },
+      {
+        "id": "quote-only",
+        "command": "\"\""
+      }
+    ],
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "my-cli",
+        "display_name": "  My CLI  ",
+        "launch": {
+          "executable": "C:\\Program Files\\fake cli\\cli.exe",
+          "args": [
+            "--agent",
+            "",
+            "--flag=a\"b"
+          ],
+          "headless": {
+            "args": [
+              "--print",
+              "$HOME;literal"
+            ],
+            "format": "text",
+            "prompt_via": "arg"
+          }
+        },
+        "adapters": {},
+        "approval_pattern_source": "https://example.invalid/synthetic-patterns.json",
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "literal-cli",
+        "display_name": "literal-cli",
+        "launch": {
+          "executable": "fake-cli",
+          "args": [
+            "$HOME",
+            "%APPDATA%",
+            "~",
+            "*",
+            "|",
+            "\u0026\u0026",
+            ";",
+            "\u003e",
+            "\u003c"
+          ],
+          "headless": {
+            "format": "text"
+          }
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "quote-only",
+        "display_name": "quote-only",
+        "launch": {},
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      }
+    ],
+    "diagnostics": null
+  },
+  {
+    "name": "malformed-command-and-headless",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - {id: bad-quote, command: 'fake \"unterminated'}\n  - {id: bad-newline, command: \"fake\\nnewline\"}\n  - {id: bad-tab, command: 'fake \"tab\there\"'}\n  - {id: bad-format, command: 'fake-ok --stay', headless: {args: ['--print'], format: unknown}}\n  - {id: bad-prompt, command: 'fake-ok', headless: {format: text, prompt_via: env}}\n  - {id: bad-arg, command: 'fake-ok', headless: {args: [''], format: text}}\n  - {id: bad-control, command: 'fake-ok', headless: {args: [\"--print\\n--other\"], format: text}}\n  - {id: good-after, command: 'fake-ok --last', headless: {format: claude-stream-json, prompt_via: stdin}}\n",
+    "raw": [
+      {
+        "id": "bad-quote",
+        "command": "fake \"unterminated"
+      },
+      {
+        "id": "bad-newline",
+        "command": "fake\nnewline"
+      },
+      {
+        "id": "bad-tab",
+        "command": "fake \"tab\there\""
+      },
+      {
+        "id": "bad-format",
+        "command": "fake-ok --stay",
+        "headless": {
+          "args": [
+            "--print"
+          ],
+          "format": "unknown"
+        }
+      },
+      {
+        "id": "bad-prompt",
+        "command": "fake-ok",
+        "headless": {
+          "format": "text",
+          "prompt_via": "env"
+        }
+      },
+      {
+        "id": "bad-arg",
+        "command": "fake-ok",
+        "headless": {
+          "args": [
+            ""
+          ],
+          "format": "text"
+        }
+      },
+      {
+        "id": "bad-control",
+        "command": "fake-ok",
+        "headless": {
+          "args": [
+            "--print\n--other"
+          ],
+          "format": "text"
+        }
+      },
+      {
+        "id": "good-after",
+        "command": "fake-ok --last",
+        "headless": {
+          "format": "claude-stream-json",
+          "prompt_via": "stdin"
+        }
+      }
+    ],
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "bad-format",
+        "display_name": "bad-format",
+        "launch": {
+          "executable": "fake-ok",
+          "args": [
+            "--stay"
+          ]
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "bad-prompt",
+        "display_name": "bad-prompt",
+        "launch": {
+          "executable": "fake-ok"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "bad-arg",
+        "display_name": "bad-arg",
+        "launch": {
+          "executable": "fake-ok"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "bad-control",
+        "display_name": "bad-control",
+        "launch": {
+          "executable": "fake-ok"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "good-after",
+        "display_name": "good-after",
+        "launch": {
+          "executable": "fake-ok",
+          "args": [
+            "--last"
+          ],
+          "headless": {
+            "format": "claude-stream-json",
+            "prompt_via": "stdin"
+          }
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "legacy_command_invalid",
+        "severity": "warning",
+        "field": "bad-quote.command",
+        "message": "legacy custom provider command cannot be split: custom provider command has an unterminated \""
+      },
+      {
+        "code": "legacy_command_invalid",
+        "severity": "warning",
+        "field": "bad-newline.command",
+        "message": "legacy custom provider command cannot be split: custom provider command contains a control character (0x0a)"
+      },
+      {
+        "code": "legacy_command_invalid",
+        "severity": "warning",
+        "field": "bad-tab.command",
+        "message": "legacy custom provider command cannot be split: custom provider command contains a control character (0x09)"
+      },
+      {
+        "code": "legacy_headless_invalid",
+        "severity": "warning",
+        "field": "bad-format.headless",
+        "message": "invalid headless definition was ignored"
+      },
+      {
+        "code": "legacy_headless_invalid",
+        "severity": "warning",
+        "field": "bad-prompt.headless",
+        "message": "invalid headless definition was ignored"
+      },
+      {
+        "code": "legacy_headless_invalid",
+        "severity": "warning",
+        "field": "bad-arg.headless",
+        "message": "invalid headless definition was ignored"
+      },
+      {
+        "code": "legacy_headless_invalid",
+        "severity": "warning",
+        "field": "bad-control.headless",
+        "message": "invalid headless definition was ignored"
+      }
+    ]
+  },
+  {
+    "name": "built-in-collisions-duplicates-and-invalid-identifiers",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - {id: CLAUDE, command: fake-claude}\n  - {id: codex, command: fake-codex}\n  - {id: copilot, command: fake-copilot}\n  - {id: cursor-agent, command: fake-cursor}\n  - {id: opencode, command: fake-opencode}\n  - {id: grok, command: fake-grok}\n  - {id: command-code, command: fake-command-code}\n  - {id: shell, command: fake-shell}\n  - {id: ' bad/id ', command: fake-invalid}\n  - {id: '-bad', command: fake-invalid}\n  - {id: ' CUSTOM ', command: 'fake-first --first'}\n  - {id: custom, command: fake-duplicate}\n  - {id: late, command: fake-last}\n",
+    "raw": [
+      {
+        "id": "CLAUDE",
+        "command": "fake-claude"
+      },
+      {
+        "id": "codex",
+        "command": "fake-codex"
+      },
+      {
+        "id": "copilot",
+        "command": "fake-copilot"
+      },
+      {
+        "id": "cursor-agent",
+        "command": "fake-cursor"
+      },
+      {
+        "id": "opencode",
+        "command": "fake-opencode"
+      },
+      {
+        "id": "grok",
+        "command": "fake-grok"
+      },
+      {
+        "id": "command-code",
+        "command": "fake-command-code"
+      },
+      {
+        "id": "shell",
+        "command": "fake-shell"
+      },
+      {
+        "id": " bad/id ",
+        "command": "fake-invalid"
+      },
+      {
+        "id": "-bad",
+        "command": "fake-invalid"
+      },
+      {
+        "id": " CUSTOM ",
+        "command": "fake-first --first"
+      },
+      {
+        "id": "custom",
+        "command": "fake-duplicate"
+      },
+      {
+        "id": "late",
+        "command": "fake-last"
+      }
+    ],
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "custom",
+        "display_name": "custom",
+        "launch": {
+          "executable": "fake-first",
+          "args": [
+            "--first"
+          ]
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "late",
+        "display_name": "late",
+        "launch": {
+          "executable": "fake-last"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      }
+    ],
+    "diagnostics": null
+  },
+  {
+    "name": "historical-tolerant-yaml",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - old-scalar\n  - {id: missing-command}\n  - {command: fake-missing-id}\n  - {id: empty-command, command: '  '}\n  - {id: 123, command: 456, label: true}\n  - {id: invalid-shape, command: [fake, --arg]}\n  - {id: invalid-headless-shape, command: fake, headless: 'old-invalid'}\n  - {id: null-headless, command: fake-null, headless: null}\n  - {id: old-numeric-headless, command: fake-numeric, headless: {args: [23, true], format: text}}\n  - {id: future-fields, command: fake-future, future: {ignored: true}, headless: {args: [], format: text, future_format: 9}}\n",
+    "raw": [
+      {
+        "id": "123",
+        "label": "true",
+        "command": "456"
+      },
+      {
+        "id": "null-headless",
+        "command": "fake-null"
+      },
+      {
+        "id": "old-numeric-headless",
+        "command": "fake-numeric",
+        "headless": {
+          "args": [
+            "23",
+            "true"
+          ],
+          "format": "text"
+        }
+      },
+      {
+        "id": "future-fields",
+        "command": "fake-future",
+        "headless": {
+          "format": "text"
+        }
+      }
+    ],
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "123",
+        "display_name": "true",
+        "launch": {
+          "executable": "456"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "null-headless",
+        "display_name": "null-headless",
+        "launch": {
+          "executable": "fake-null"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "old-numeric-headless",
+        "display_name": "old-numeric-headless",
+        "launch": {
+          "executable": "fake-numeric",
+          "headless": {
+            "args": [
+              "23",
+              "true"
+            ],
+            "format": "text"
+          }
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "future-fields",
+        "display_name": "future-fields",
+        "launch": {
+          "executable": "fake-future",
+          "headless": {
+            "format": "text"
+          }
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      }
+    ],
+    "diagnostics": null
+  },
+  {
+    "name": "malformed-first-duplicate-stays-first",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - {id: same, command: 'fake \"bad'}\n  - {id: SAME, command: fake-second}\n  - {id: still-good, command: fake-good}\n",
+    "raw": [
+      {
+        "id": "same",
+        "command": "fake \"bad"
+      },
+      {
+        "id": "SAME",
+        "command": "fake-second"
+      },
+      {
+        "id": "still-good",
+        "command": "fake-good"
+      }
+    ],
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "still-good",
+        "display_name": "still-good",
+        "launch": {
+          "executable": "fake-good"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "legacy_command_invalid",
+        "severity": "warning",
+        "field": "same.command",
+        "message": "legacy custom provider command cannot be split: custom provider command has an unterminated \""
+      }
+    ]
+  },
+  {
+    "name": "headless-boundaries",
+    "yaml": "token: synthetic-stable-token\ncustom_providers:\n  - {id: long-arg, command: fake, headless: {format: text, args: ['ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé']}}\n  - {id: max-arg, command: fake, headless: {format: text, args: ['éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé']}}\n  - {id: many-args, command: fake, headless: {format: text, args: [x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x,x]}}\n",
+    "raw": [
+      {
+        "id": "long-arg",
+        "command": "fake",
+        "headless": {
+          "args": [
+            "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          ],
+          "format": "text"
+        }
+      },
+      {
+        "id": "max-arg",
+        "command": "fake",
+        "headless": {
+          "args": [
+            "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          ],
+          "format": "text"
+        }
+      },
+      {
+        "id": "many-args",
+        "command": "fake",
+        "headless": {
+          "args": [
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x",
+            "x"
+          ],
+          "format": "text"
+        }
+      }
+    ],
+    "definitions": [
+      {
+        "schema_version": 1,
+        "id": "long-arg",
+        "display_name": "long-arg",
+        "launch": {
+          "executable": "fake"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "max-arg",
+        "display_name": "max-arg",
+        "launch": {
+          "executable": "fake",
+          "headless": {
+            "args": [
+              "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+            ],
+            "format": "text"
+          }
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      },
+      {
+        "schema_version": 1,
+        "id": "many-args",
+        "display_name": "many-args",
+        "launch": {
+          "executable": "fake"
+        },
+        "adapters": {},
+        "source": {
+          "origin": "legacy"
+        }
+      }
+    ],
+    "diagnostics": [
+      {
+        "code": "legacy_headless_invalid",
+        "severity": "warning",
+        "field": "long-arg.headless",
+        "message": "invalid headless definition was ignored"
+      },
+      {
+        "code": "legacy_headless_invalid",
+        "severity": "warning",
+        "field": "many-args.headless",
+        "message": "invalid headless definition was ignored"
+      }
+    ]
+  }
+]

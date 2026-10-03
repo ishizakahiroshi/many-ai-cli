@@ -647,14 +647,14 @@ pub struct HeadlessDef {
     pub prompt_via: String,
 }
 #[derive(Clone, Copy)]
-struct Field {
-    yaml: &'static str,
+pub(super) struct Field {
+    pub(super) yaml: &'static str,
     json: &'static str,
-    kind: &'static str,
+    pub(super) kind: &'static str,
     yomit: bool,
     jomit: bool,
 }
-fn schema(kind: &str) -> &'static [Field] {
+pub(super) fn schema(kind: &str) -> &'static [Field] {
     match kind {
         "LogConfig" => &[
             Field {
@@ -2678,8 +2678,11 @@ impl Config {
     }
     pub fn from_yaml(text: &str, paths: &RuntimePaths) -> Result<Self, ConfigError> {
         // Never surface YAML parser excerpts: they may contain tokens or PIN hashes.
-        let raw: Value = serde_saphyr::from_str(text).map_err(|_| {
-            ConfigError::Parse("config YAML syntax is invalid (content redacted)".into())
+        let raw = super::yaml_nodes::decode_config(text).map_err(|error| match error {
+            super::yaml_nodes::YamlDecodeError::Syntax => ConfigError::Parse(error.to_string()),
+            super::yaml_nodes::YamlDecodeError::ResourceLimit => {
+                ConfigError::Invalid(error.to_string())
+            }
         })?;
         let normalized = normalize_node(raw, "Config", "config", false)?;
         let mut merged = Self::defaults(paths).private_value();
@@ -3099,7 +3102,14 @@ fn normalize_node(
                     Ok(value) => {
                         out.insert(field.yaml.into(), value);
                     }
-                    Err(_) if tolerant => {}
+                    Err(_) if tolerant => {
+                        // yaml.v3 allocates a non-null *bool before reporting a
+                        // bad scalar; SubscriptionProfiles deliberately keeps
+                        // the partially decoded profile, including false.
+                        if kind == "SubscriptionProfile" && field.kind == "*bool" {
+                            out.insert(field.yaml.into(), Value::Bool(false));
+                        }
+                    }
                     Err(error) => return Err(error),
                 }
             }
@@ -3819,6 +3829,9 @@ impl ConfigStore {
                 let _ = std::fs::rename(legacy, paths.root());
             }
         }
+        // Match Go LoadOrCreate: privacy is restored even when a valid existing
+        // file needs no write. Without this, copied 0755/0644 config is exposed.
+        private_io::ensure_private_dir(paths.root())?;
         let path = paths.resource(Resource::Config);
         if paths.is_trial() {
             checked_trial_path(&paths, &path)?;

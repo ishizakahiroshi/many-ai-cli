@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 13:01:07
+> 最終更新: 2026-10-03(土) 14:09:12
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
@@ -39,8 +39,8 @@ The following checkpoint is based on the published progress commit `f48c6086a2be
 | Go behavioral oracle | 21d0bc7935a2c4696fb89ccff2e324157a528c2d |
 | Initial instruction commit | 6b0fb8e198750245ef8b4b475fbac9070db0ac3e |
 | Progress checkpoint read before this supplement | f48c6086a2be662233f09d051373a716ca44ce6a; progress-only commit |
-| Implementation code SHA | Not yet verified locally; dots records actual code commit when available |
-| Reviewed code SHA / reviewer | Pending; changes after review require the corrected SHA and re-review receipt |
+| Implementation code SHA | Initial C1 checkpoint 756b28154a77dd10a258f01cd2fc69c076d5bc87; the next source-changing repair commit is recorded by subsequent receipt |
+| Reviewed code SHA / reviewer | 756b28154a77dd10a258f01cd2fc69c076d5bc87 / independent Codex foundation review: changes required; newer repair code is not covered by that review |
 | Board update commit | Read actual commit from GitHub history, or record it in a later receipt; no self-reference |
 | Supplemental instruction revision | dots records the published revision it actually reads; supplement is not a new task |
 
@@ -166,3 +166,46 @@ Added the synthetic `historical_reads_and_new_write_validation_are_separate` fix
 Public progress reports are self-reported execution receipts until independently reviewed. Private conversation locators are intentionally absent.
 
 Final supplement fixture rerun: `cargo test --locked --manifest-path rust/Cargo.toml --test config_contracts` exit 0, 19 tests. `cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings` exit 0. The final suite now comprises 68 tests (29 units, 19 config, 1 protocol golden/44 cases, 16 shared, 3 compile-fail docs). The last full-suite receipt was 67 tests before the isolated added fixture; its targeted rerun is the new evidence.
+
+## 2026-10-03(土) 13:41:35 JST — C1 independent review and repair in progress
+
+Published implementation code SHA: [756b28154a77dd10a258f01cd2fc69c076d5bc87](https://github.com/ishizakahiroshi/many-ai-cli/commit/756b28154a77dd10a258f01cd2fc69c076d5bc87). This code checkpoint was based on owner supplement 30c37b7. Current working changes below are not covered by that reviewed SHA.
+
+Independent Codex foundation reviewer reports an isolated locked/offline full rerun at 756b281: 68 tests passed; fmt/clippy passed; Go/cmd/Web source unchanged from the behavioral oracle. Its review is limited to this foundation checkpoint, not C5 or complete compatibility. It found important defects requiring repair before API freeze:
+
+- Historical YAML scalar lexical spelling and ignored extension values were not preserved before JSON coercion; this can alter string settings or trigger inappropriate config recovery. A schema-aware raw-node bridge and Go-generated historical fixtures are being added. This gate remains open.
+- Existing-config loading did not always harden the config directory if no write occurred. Unconditional private directory setup now has a synthetic 0755/0644 startup regression; targeted test exited 0 without rewriting the file.
+- Subprocess cleanup did not own descendants/IO tasks if its async future was dropped or the direct process exited while descendants redirected their stdio. Added group/task ownership guard; two Unix regression tests exited 0. Windows now creates suspended, attaches to Job before child code, then resumes its owned primary thread. Windows native acceptance remains pending.
+- Go JSON decoder case-folding/duplicate-field compatibility was not covered by canonical DTO goldens; additional decode fixtures and the chosen compatibility boundary remain pending.
+
+Further C1 work: provider DTOs/legacy config conversion and exact Go JSON byte fixtures; exhaustive CLI/delegated flag/env fixtures; full generated Web asset validation; exact production/trial resource names and WSL-launcher log/database-root selection. New runtime resource helpers are source-grounded; all downstream callers still need to use them.
+
+Receipts so far: Web asset contract tests 3/3 passed; initial provider contract run 7/8 passed with a test that bypassed the actual tolerant Config::from_yaml entry (being corrected); process ownership tests 2/2 passed; root-layout tests 4/4 passed; existing-config privacy regression 1/1 passed. A Cargo filter still compiles every integration-test target: an initial filter run failed because new provider module tests landed before module registration, then was rerun after correct wiring. Do not count those compile failures as behavioral passes.
+
+No C1 freeze, C2/C3/C4 release, whole-migration acceptance, native acceptance, merge or cutover has been declared. Next: integrate schema-aware YAML and CLI decoder corrections, full serial validation, new code checkpoint, and independent re-review of repaired paths.
+
+## 2026-10-03(土) 14:09:12 JST — C1 repair validation checkpoint
+
+State: in_progress, awaiting independent re-review of a new code SHA. Source changes are confined to rust/ and this ledger. The fixed Go/cmd/Web source diff remains empty.
+
+Repairs and expanded handoff surface:
+- Replaced whole-YAML-to-JSON coercion with schema-directed raw nodes. Historical auth/string lexemes, Go numeric forms, ignored YAML-only subtrees, aliases/merge precedence, null-list behavior and tolerant pointer-bool partial decoding are compared against 42 actual Go cases. Unknown `.nan`/complex-key extensions no longer trigger config backup/token rotation.
+- Restored unconditional private config-directory hardening before an existing-file read. Existing bytes/token remain unchanged on read-only startup.
+- Added owned process-group/IO task drop guards, cleanup of detached-stdio descendants, and a streaming ManagedProcess handle with idempotent close/wait and explicit output lag. Windows uses suspended create → Job attachment → primary-thread resume; attach failure cannot run the child. Source checks pass; no Windows native acceptance is claimed.
+- Added 19 actual Go JSON decoder cases for case-folded/duplicate fields, pointer-object merge, null values, nested nil maps and byte/base64 behavior. Wire callers must use decode_wire, not canonical-only derive decoding.
+- Added 25 shared provider DTOs and pure legacy conversion, with 73 exact Go byte/value wire cases and 9 legacy cases. Hash/signature callers use the Go-compatible encoder.
+- Completed CLI discovery: both binaries, 32 command forms, 17 delegated forms, 16 FlagSets/59 declared flags, 4 manually parsed options, 60 environment-read sites; 907 Go flag goldens, 65 dispatch projections and 97 extracted source/boundary cases. Runtime implementations remain pending.
+- Generated Web validation now requires the complete frozen build-output asset set, nonempty boot/runtime assets and source identity. Added resource-name/layout, custom-log database placement, WSL-launcher log-root, hook-temp, dangling-symlink and unresolved-installed-root-alias checks.
+
+Final executed receipts before publication:
+- `cargo test --locked --manifest-path rust/Cargo.toml`: exit 0, 103 tests: 38 library, 3 asset, 9 CLI, 20 config, 1 protocol decoder, 1 protocol golden, 8 provider, 16 shared, 4 YAML, 3 compile-fail docs. Golden case counts are separate from test counts. No ignored tests.
+- `cargo clippy --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings`: exit 0. `cargo fmt --manifest-path rust/Cargo.toml -- --check` is required again on the staged snapshot.
+- All-target `cargo check --locked` for Windows x64 and both macOS targets: exit 0; Linux diagnostic `cargo build --locked --bins`: exit 0. These do not establish native execution/artifact acceptance.
+- `go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...`: exit 0 with isolated caches. `python3 rust/scripts/inventory-cli.py --check`: exit 0.
+- The streaming order fixture now uses an explicit file handshake, not a scheduler-sensitive sleep. Targeted streaming tests and clippy reran successfully after that test-only adjustment.
+
+Intermediate failures retained: provider test initially bypassed the actual tolerant YAML entry (corrected); one YAML fixture run raced a 38→42 corpus update (rerun after the lane stopped edits); a too-strong roundtrip assertion conflicted with baseline empty hallucination-list omission/default restoration (corrected using actual Go marshaled omission evidence); the documented tolerant invalid subscription *bool allocation was ported. No application behavior was weakened merely to obtain a green test.
+
+Explicit decoding boundaries: YAML above 8 MiB/200000 nodes/depth128/1000000 expansion steps and non-UTF8 binary scalars are rejected without backup/regeneration; the original bytes remain for operator recovery. They are not silently reinterpreted as corrupt config. Provider/native/runtime and copied-data cases remain pending.
+
+Next: publish a source-changing repair checkpoint, identify its immutable code SHA separately from board updates, obtain independent re-review, then freeze the shared API handoff in rust/inventory/SHARED-API.md before C2/C3/C4 implementation. No all-K acceptance, complete functional binaries, release, merge, real-data migration or cutover has occurred.

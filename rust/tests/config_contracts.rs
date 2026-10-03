@@ -528,3 +528,25 @@ fn historical_reads_and_new_write_validation_are_separate() {
     // Unknown YAML keys are ignored by Go's typed Config; preserving source bytes
     // until an explicit write is required, inventing persisted fields is not.
 }
+
+#[cfg(unix)]
+#[test]
+fn existing_config_read_always_restores_private_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let (_root, _installed, paths) = trial();
+    let file = paths.resource(Resource::Config);
+    let original = b"token: synthetic-existing-token\n";
+    std::fs::write(&file, original).unwrap();
+    std::fs::set_permissions(paths.root(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let _store = ConfigStore::load_or_create(paths.clone(), || panic!("existing token")).unwrap();
+    assert_eq!(
+        std::fs::metadata(paths.root())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+    assert_eq!(std::fs::read(file).unwrap(), original);
+}

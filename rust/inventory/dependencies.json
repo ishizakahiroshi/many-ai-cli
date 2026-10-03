@@ -132,7 +132,8 @@
         "Win32_Storage_FileSystem",
         "Win32_System_Threading",
         "Win32_System_JobObjects",
-        "Win32_System_Memory"
+        "Win32_System_Memory",
+        "Win32_System_Diagnostics_ToolHelp"
       ],
       "official_source": "https://docs.rs/crate/windows-sys/0.61.2",
       "registry_checksum": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc",
@@ -144,7 +145,15 @@
   "notes": [
     "Versions/features verified against official crate documentation, registry metadata and fetched upstream Cargo source. Cargo.lock pins transitive versions and checksums.",
     "This ledger is not an advisory clearance or license/SBOM acceptance. Those gates remain pending.",
-    "serde-saphyr avoids abandoned serde_yaml and does not enable filesystem include extensions."
+    "serde-saphyr avoids abandoned serde_yaml and does not enable filesystem include extensions.",
+    "Official 2026-08-20 arrayref supply-chain incident packages/versions are absent from this lockfile; check again when adding dependencies."
   ],
-  "lockfile_sha256": "f5a4c75b188d77eb2a411b6a40c8e75da5a6fe71a426cce93ae40f95f9998fb7"
+  "lockfile_sha256": "f5a4c75b188d77eb2a411b6a40c8e75da5a6fe71a426cce93ae40f95f9998fb7",
+  "toolchain_security": {
+    "source": "https://blog.rust-lang.org/2026/05/25/cve-2026-5223/",
+    "assessment": "The advisory applies to pre-1.96 Cargo using third-party registries. This locked build uses crates.io only, which the official advisory explicitly excludes; no alternate registry is configured. Reassess before changing registry sources.",
+    "registry_source_check": [
+      "registry+https://github.com/rust-lang/crates.io-index"
+    ]
+  }
 }

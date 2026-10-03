@@ -8,3 +8,8 @@ mod private_windows;
 
 pub mod model;
 pub use model::*;
+
+pub mod provider_legacy;
+pub use provider_legacy::legacy_provider_definitions;
+
+mod yaml_nodes;

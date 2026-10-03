@@ -4,3 +4,5 @@ pub mod cli;
 pub mod config;
 pub mod process;
 pub mod proto;
+
+pub mod asset_contract;

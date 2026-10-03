@@ -23,7 +23,14 @@ fn is_false(v: &bool) -> bool {
 }
 
 mod base64_bytes {
-    use base64::{Engine, engine::general_purpose::STANDARD};
+    use base64::{
+        Engine, alphabet,
+        engine::{GeneralPurpose, GeneralPurposeConfig},
+    };
+    const STANDARD: GeneralPurpose = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new().with_decode_allow_trailing_bits(true),
+    );
     use serde::{Deserialize, Deserializer, Serializer, de::Error};
     pub fn serialize<S: Serializer>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(&STANDARD.encode(value))
@@ -95,3 +102,8 @@ mod tests {
         );
     }
 }
+
+pub mod provider;
+
+pub mod wire;
+pub use wire::decode as decode_wire;
