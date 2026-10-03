@@ -1,6 +1,6 @@
 # C2 offline prototype 実装契約
 
-> 最終更新: 2026-10-03(土) 20:10:47 JST
+> 最終更新: 2026-10-03(土) 20:25:57 JST
 
 ## 固定基準と範囲
 
@@ -84,3 +84,44 @@ Windowsではbinary名に`.exe`を付け、出力directoryを対応shellで作�
 ## #3 Rust移植との統合境界
 
 この実装はGo基準 `21d0bc7935a2c4696fb89ccff2e324157a528c2d` に固定し、#3のbranch/workspace/Rust/Hubには触れていない。将来developへ両方を統合するとき、CHANGELOGや生成indexの共通行は競合しうる。Rust Hubとこのbridgeのrequest/run/session/instance、active alias、GET回収、result_availableの互換性は未検証で、別の契約統合テストが必要。branchが別であることだけから実行時互換を保証しない。ここでは実接続やRust作業へ範囲を広げない。
+
+## 固定SHAの検証・独立レビュー記録
+
+レビュー済みcode SHA: `625d5ef0548f825b108ca7b1ccb077c4b7606f4d`。
+code checkpoint tree: `3b923e886bb7e0e904fecbc1c4fd14d77d98c3c4`。
+独立レビュアー: OpenAI Codex（実装者とは別担当）。固定指示 `6698089` と固定設計 `d5e0d02` に対してレビューした。archived go.mod/go.sumとbridge/CLI source/testの17ファイルを固定SHAにbyte照合。レビュアーは実装ファイルを変更していない。
+
+| 検査 | 作成者 | 独立レビュアー |
+|---|---|---|
+| bridge + CLI normal tests | exit 0、39 + 13 tests、89 subtests | 同じrepository testsに成功 |
+| bridge + CLI race tests | exit 0 | exit 0 |
+| 独自の状態退行再現 | 順次/並行/重複のregressionを本体へ追加 | 独自4 tests + 2 subtests、normal/race成功 |
+| scoped go vet | exit 0 | exit 0 |
+| prototype go build | exit 0 | exit 0 |
+| staticcheck 2026.1 / v0.7.0（2 packageのみ） | exit 0 | exit 0 |
+| 重点race反復 | Concurrent/Crash/WorkerRestart/DuplicateAnswerを10回、exit 0 | 上記独自負例を別実装で検査 |
+
+レビュアーの `-buildvcs=false` はGit metadataを持たないimmutable archive上のBuildにだけ使用した。通常checkoutの作成者Buildはガイド記載コマンドそのまま。全てGo 1.26.8 / GOTOOLCHAIN=local、Linuxで実行。private KB/family watchlistsが無いためsecrets-scanは構造patternのみ。新依存は追加していない。
+
+### 指摘と修正
+
+- P2: 回答commit後のworker再開でansweredがrunningへ戻る。さらにGET/Listが保留中にCollectがcommitすると、後着bind/unknown-runがanswered/collectedを書き戻す。読取直後だけでなく両write transaction内で最新のcollected intentを再確認するよう修正。known/empty履歴の並行回帰も成功。
+- P2: 完了済みjobへの厳密に同じ回答の再受信が、期限後またはHub一時断でneeds_reconcileへ戻る。owner/全相関の検証後、既に受理したdurable outboxを可変な期限/Hub状態より先に照合する。停止後の重複も終端を維持し、異なるnonce等は引き続き隔離。
+- 旧headのWindows CIで専用DBが開けなかった。Windows driveをauthorityにしないSQLite URIへ修正。旧gosecのG703はイベント由来ではない明示operator DBパスである根拠を限定注記した。CI/workflow/provider/既存Hubは無変更。
+
+独立レビューの結論: 上記全再現は固定code SHAで成功。レビュー対象のfake/offline範囲に未解消blocking findingなし。実MCP/Slack/dots/Hub/provider、秘密、公開配備、UX/費用、production、#3 Rust互換性はこの結論の対象外。
+
+code SHAの[Validate](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37119302847)はLinux/macOS/Windows含め成功、release-token-scopesだけPR条件によりskipped。secret-scanも成功。最終docs-only headのCIはこれから推測せず、[PR #10](https://github.com/ishizakahiroshi/many-ai-cli/pull/10)で別途終端確認する。
+
+### docs-only提出のsource同一性
+
+- `internal/dotsbridge` subtree: `c53d330c2ecb30af70e69cb5963eb5318a07cf68`
+- `cmd/dots-bridge-c2` subtree: `9fcf0cdf1f39c4d5c90194cc622e9bcabd04d526`
+
+提出checkoutで以下がexit 0なら、最終文書更新にコード変更が紛れていない。
+
+```sh
+git diff --exit-code 625d5ef0548f825b108ca7b1ccb077c4b7606f4d HEAD -- internal/dotsbridge cmd/dots-bridge-c2 go.mod go.sum
+```
+
+次のローカル指揮者は対象headを照合し、Go 1.26.8の内部テスト/race対応可否/独立prototype Buildと4mock課題を本人PCで再現する。続いて通常のomitnix generatorで古いindexを再生成・確認する。これらを終えても実接続は自動許可されず、前述のliveゲートを別途具体化する。
