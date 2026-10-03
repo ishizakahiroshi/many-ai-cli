@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 14:57:25
+> 最終更新: 2026-10-03(土) 15:22:58
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
@@ -266,8 +266,20 @@ Pre-publication: terminal oracle generator and provenance are included; regenera
 
 [Validate run](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37100527486) passed the three Go OS tests, staticcheck, govulncheck, Web and other reported guards, but gosec failed on the added config fixture generator's argv-selected file read. The generator now accepts bounded stdin (`--stdin`), avoiding arbitrary path input; canonical and tolerant oracle readback are rechecked.
 
-[PR secret-scan run](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37100527479) reported three generic-api-key matches in the historical 756b281 services source-hash map (lines 1999, 2042, 2049). Each is a SHA-256 digest of public baseline Go source: auth_handlers.go, nvidia_nim_handlers.go and pin_auth.go, respectively. All inventory hashes were recomputed against 21d0bc7 and matched. Schema v2 separates file keys and labeled sha256 objects to avoid future ambiguous formatting. `.gitleaksignore` contains only those three exact commit/path/rule/line fingerprints; default rules and all other history remain scanned. This narrow false-positive handling requires independent review. No matching secret bytes are included in this ledger, and no history rewrite or broad path/rule exclusion was used. The next CI result remains pending.
+[PR secret-scan run](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37100527479) reported three generic-api-key matches in the historical 756b281 services source-hash map (lines 1999, 2042, 2049). Each is a SHA-256 digest of public baseline Go source: auth_handlers.go, pin_auth.go and relay_api.go, respectively. All inventory hashes were recomputed against 21d0bc7 and matched. Schema v2 separates file keys and labeled sha256 objects to avoid future ambiguous formatting. `.gitleaksignore` contains only those three exact commit/path/rule/line fingerprints; default rules and all other history remain scanned. This narrow false-positive handling requires independent review. No matching secret bytes are included in this ledger, and no history rewrite or broad path/rule exclusion was used. The next CI result remains pending.
 
 The first live-checkout gosec rerun encountered in-progress, unstaged standalone generators from other lanes (duplicate main declarations and a synthetic rollback-root read). Those are excluded from this immutable checkpoint and were returned to their owners for correction. Validation is repeated from the staged-index-only snapshot rather than reporting a contaminated workspace scan as this checkpoint's result. Canonical and tolerant config oracle outputs after the stdin change match their committed fixtures byte-for-byte.
 
 The staged-index-only snapshot passed both gosec v2.27.1 (high severity/high confidence) and staticcheck v0.7.0, exit 0. Its first scan could not obtain VCS stamping because it is an exported index, so the successful static-analysis rerun set process-local GOFLAGS=-buildvcs=false; this is not a release-build identity receipt. Existing Go/Web source stays frozen, and CI on the next actual commit remains the authoritative remote rerun.
+
+
+## 2026-10-03(土) 15:22:58 JST — first C2/C3 checkpoint remote CI receipt
+
+Code checkpoint: [a5f75c9ced8bd10f36406c0472c4d3a3cc07e15c](https://github.com/ishizakahiroshi/many-ai-cli/commit/a5f75c9ced8bd10f36406c0472c4d3a3cc07e15c), published and remote-ref verified. This board-only correction does not change its source SHA or extend the earlier C1 review.
+
+- [Validate](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37102478058): all applicable Go Linux/Windows/macOS, Web, staticcheck, gosec, govulncheck, third-party, module and instrumentation checks completed successfully. release-token-scopes intentionally skipped. These existing jobs do not yet build/test Rust on a native matrix.
+- [PR secret scan](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37102477977) and [push secret scan](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37102474802): gitleaks success.
+- Independent Codex review of immutable a5f75c9 reran 149 tests successfully and independently verified the three exact source-hash ignore fingerprints. Auth/update/terminal and supplemental boundary review is still in progress; no overall PASS yet.
+- Receipt correction: historical 756b281 physical lines 1999/2042/2049 name auth_handlers.go/pin_auth.go/relay_api.go. The prior prose misidentified a nearby nvidia_nim source-map entry; corrected above after direct historical-line verification. Hash recomputation and exact ignore scope were correct, and no ignored fingerprint changed.
+
+Continuing work is unstaged/unreviewed separately: SQLite repository and synthetic sequential Go/Rust cross-read, approval/transcript, handle-safe files/Git/attachments, profile/routine and HTTP transport. Full application/launcher/native/Rust CI/artifact/cutover gates remain pending.
