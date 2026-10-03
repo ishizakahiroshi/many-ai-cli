@@ -1,4 +1,8 @@
+/// Protected ACLs supplied at Windows object creation, before any payload write.
+#[cfg(windows)]
+pub use super::private_windows::PrivateSecurity;
 use std::{fs, io, path::Path};
+
 /// Private append-only file under a capability-walked parent. Each write uses
 /// the kernel append offset; existing log bodies are never read and rewritten.
 pub fn open_append(path: &Path) -> io::Result<fs::File> {
@@ -51,7 +55,3 @@ mod tests {
         }
     }
 }
-
-/// Protected ACLs supplied at Windows object creation, before any payload write.
-#[cfg(windows)]
-pub use super::private_windows::PrivateSecurity;

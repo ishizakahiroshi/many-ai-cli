@@ -3,7 +3,9 @@ use many_ai_cli::{
     launcher::*,
     process::Cancellation,
 };
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(unix)]
+use serde_json::json;
 use std::{path::Path, sync::Arc, time::Duration};
 
 fn store_at(root: &Path) -> LauncherStore {

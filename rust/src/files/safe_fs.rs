@@ -178,7 +178,7 @@ mod platform {
                         | libc::O_NOFOLLOW
                         | libc::O_CLOEXEC
                         | libc::O_NONBLOCK,
-                    0o600 as libc::mode_t,
+                    0o600u32,
                 )
             })?;
             if !file.metadata()?.is_file() {
@@ -208,6 +208,7 @@ mod platform {
         pub fn create_new(&self, name: &str, bytes: &[u8], mode: u32) -> io::Result<()> {
             let n = c(name)?;
             // SAFETY: create_new never follows/replaces an existing entry.
+            // C varargs require promoted integer width; macOS mode_t is u16.
             let mut f = fd_file(unsafe {
                 libc::openat(
                     self.file.as_raw_fd(),
@@ -217,7 +218,7 @@ mod platform {
                         | libc::O_EXCL
                         | libc::O_NOFOLLOW
                         | libc::O_CLOEXEC,
-                    mode as libc::mode_t,
+                    mode,
                 )
             })?;
             if let Err(e) = f.write_all(bytes).and_then(|_| f.sync_all()) {

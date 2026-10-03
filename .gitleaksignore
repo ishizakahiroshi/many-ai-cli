@@ -9,3 +9,7 @@
 # markers enclose only literal synthetic-only-not-a-key, not encoded key bytes.
 # Future fixture delimiters are constructed at runtime; keep history scanned.
 8355b1060ca8753b8d469ec1244a33c355d307bd:rust/src/storage/text.rs:private-key-block:211
+
+# Exact synthetic Go redaction oracle: invalid bytes abc + FF, no key material.
+# Future delimiter construction preserves the same observed input bytes.
+a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_oracle.go:private-key-block:28

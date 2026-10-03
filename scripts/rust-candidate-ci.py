@@ -96,9 +96,10 @@ def main() -> None:
         "rustc": rustc, "go": go, "bun": bun,
         "version": env["MANY_AI_BUILD_VERSION"], "build_time": env["MANY_AI_BUILD_TIME"],
         "cargo_lock_sha256": digest(ROOT / "rust" / "Cargo.lock"),
-        "binaries": binary_entries, "embedded_web_assets": web_entries,
-        "launcher_ui_sha256": digest(ROOT / "internal" / "launcher" / "ui" / "index.html"),
-        "pending": ["full-application-behavior", "native-device-remote-acceptance", "signed-channel-packaging", "rollback-rehearsal", "user-cutover-approval"],
+        "binaries": binary_entries, "generated_web_asset_inputs": web_entries,
+        "launcher_ui_input_sha256": digest(ROOT / "internal" / "launcher" / "ui" / "index.html"),
+        "receipt_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
+        "pending": ["binary-entrypoint-and-asset-retention", "full-application-behavior", "native-device-remote-acceptance", "signed-channel-packaging", "rollback-rehearsal", "user-cutover-approval"],
     }
     (output / "BUILD-RECEIPT.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     (output / "NOT-FOR-CUTOVER.txt").write_text("WIP Rust migration candidate. Native compilation and synthetic tests are not full compatibility, signing, packaging, rollback or user acceptance. Do not replace an installed Go binary.\n", encoding="utf-8")

@@ -1,11 +1,11 @@
 use super::{job::*, plan::*};
+#[cfg(unix)]
+use crate::proto::core::*;
 use crate::{
     process::ExitOutcome,
-    proto::{
-        core::*,
-        provider::{Definition, LaunchDefinition, UpdateDefinition},
-    },
+    proto::provider::{Definition, LaunchDefinition, UpdateDefinition},
 };
+#[cfg(unix)]
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -128,8 +128,10 @@ fn updater_outcome_precedence_and_versions() {
     assert_eq!(classify("", &ok, false, None, Some("2")), Outcome::Unknown);
 }
 
+#[cfg(unix)]
 #[derive(Default)]
 struct Admission(Mutex<AdmissionState>);
+#[cfg(unix)]
 impl ProviderUpdateAdmission for Admission {
     fn begin_provider_spawn(&self, p: &str) -> Result<ProviderSpawnLease, ProviderAdmissionError> {
         self.0.lock().unwrap().begin_provider_spawn(p)
