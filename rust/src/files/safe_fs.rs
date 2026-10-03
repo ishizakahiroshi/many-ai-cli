@@ -55,6 +55,11 @@ mod platform {
             Ok(unsafe { File::from_raw_fd(fd) })
         }
     }
+    // Context contains only a fixed operation label and OS error, never paths or
+    // file contents. Preserve ErrorKind for source-compatible caller handling.
+    fn at(operation: &'static str, error: io::Error) -> io::Error {
+        io::Error::new(error.kind(), format!("{operation}: {error}"))
+    }
     impl Dir {
         pub fn open(path: &Path) -> io::Result<Self> {
             let path = crate::config::paths::native_system_path(path);
@@ -214,15 +219,16 @@ mod platform {
                         | libc::O_NONBLOCK,
                     0o600u32,
                 )
-            })?;
-            if !file.metadata()?.is_file() {
+            })
+            .map_err(|e| at("lock openat", e))?;
+            if !file.metadata().map_err(|e| at("lock fstat", e))?.is_file() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "not a regular lock file",
                 ));
             }
             if unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
-                return Err(io::Error::last_os_error());
+                return Err(at("lock fchmod", io::Error::last_os_error()));
             }
             Ok(file)
         }
@@ -251,8 +257,13 @@ mod platform {
                         | libc::O_CLOEXEC,
                     mode,
                 )
-            })?;
-            if let Err(e) = f.write_all(bytes).and_then(|_| f.sync_all()) {
+            })
+            .map_err(|e| at("create openat", e))?;
+            if let Err(e) = f
+                .write_all(bytes)
+                .map_err(|e| at("create write", e))
+                .and_then(|_| f.sync_all().map_err(|e| at("create sync", e)))
+            {
                 let _ = self.remove_file(name);
                 return Err(e);
             }
@@ -276,9 +287,11 @@ mod platform {
             if r < 0 {
                 let e = io::Error::last_os_error();
                 let _ = self.remove_file(&temp);
-                return Err(e);
+                return Err(at("replace renameat", e));
             }
-            self.file.sync_all()
+            self.file
+                .sync_all()
+                .map_err(|e| at("replace directory sync", e))
         }
         pub fn rename_to(&self, name: &str, target: &Dir, new_name: &str) -> io::Result<()> {
             let src = c(name)?;
@@ -822,6 +835,35 @@ mod windows_path_tests {
 #[cfg(test)]
 mod lock_file_tests {
     use super::*;
+
+    #[test]
+    fn simultaneous_first_lock_opens_and_atomic_writes_use_one_inode() {
+        use std::sync::{Arc, Barrier};
+        // Each round starts with no lock entry. This exercises native concurrent
+        // O_CREAT/OPEN_ALWAYS, rather than only reopening an existing lock.
+        let root = tempfile::tempdir().unwrap();
+        for round in 0..8 {
+            let first = Dir::open(root.path()).unwrap();
+            let second = Dir::open(root.path()).unwrap();
+            let name = format!("first-open-{round}.lock");
+            let barrier = Arc::new(Barrier::new(2));
+            std::thread::scope(|scope| {
+                for dir in [&first, &second] {
+                    let barrier = barrier.clone();
+                    let name = &name;
+                    scope.spawn(move || {
+                        barrier.wait();
+                        for _ in 0..4 {
+                            let lock = dir.open_lock(name).unwrap();
+                            lock.lock().expect("acquire native lock");
+                            dir.replace("owned-state.json", b"{\"fixture\":true}", 0o600)
+                                .unwrap();
+                        }
+                    });
+                }
+            });
+        }
+    }
 
     #[test]
     fn independent_lock_opens_serialize_without_truncating_the_same_file() {
