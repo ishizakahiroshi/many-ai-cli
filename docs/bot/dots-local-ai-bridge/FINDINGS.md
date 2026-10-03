@@ -1,6 +1,6 @@
 # dots とローカルAIの連携方式 調査結果
 
-> 最終更新: 2026-10-03(土) 13:45:40 JST
+> 最終更新: 2026-10-03(土) 14:18:50 JST
 
 ## 結論
 
@@ -25,7 +25,7 @@ C2の第一候補は **専用MCP tools＋MCP Events＋永続キュー**。OpenAI
 | 手動起動口 | `POST /api/routines/<id>/runs` は request_id 必須（最大128 bytes）、triggerはmanual。外部event専用endpointではない。bridgeが認証して変換する実装は未作成。 |
 | 認証とbind | guardはtoken・method・Host・変更系Origin確認、必要時remote PIN。listenはloopback。Hub公開やtoken権限モデルの変更をせず、ローカルbridgeから呼ぶ構成を提案する。tokenはOSユーザー相当として扱い、中継に転送しない。 |
 | 認可とcwd | validateRoutineは絶対プロジェクトcwd・directory実在・provider/model/promptを検証。spawn側でcmd.Dirに反映。既存CLI認証・permission設定と承認待ちは別途実機確認。無人完走や承認迂回は保証しない。 |
-| 重複 | routine ID＋request_id、および同routineのactive runをチェック。active時は別requestでも既存runを返し得る。外部queueの複数jobを各一回処理する保証にはならない。bridge側で直列化・未処理job保持が必要。 |
+| 重複 | routine ID＋request_id、および同routineのactive runをチェック。active時は別requestでも既存runを返し、新しいrequest_idをそのrunへのaliasとして永続保存する。そのIDの再試行は終了後も同じrunへ戻る。bridgeは専用routineがactiveの間はdispatchしない。衝突して無関係なrunが返ったら対応不一致として停止・照合し、同じIDの再試行や無条件のID再発行で解決しない。 |
 | 保存と結果 | routines.jsonへatomic保存してから実行を開始。run履歴・結果がある。finishedは終了信号で、要求全成功ではない。承認待ち等はwaiting。 |
 | 停止と再起動 | 起動時・遅れた時刻のscheduleをskip。失われたsessionのpromptを再実行しない。labelで生存sessionを再関連付けするのは観測復元で、終了AIの再開ではない。 |
 | 既存sessionへの回答 | routine経路に任意job回答を同じAI会話へ戻す専用契約は見当たらない。cross_session_message.goは観測記録でroutingではない。他の入力・provider再開経路まで含む「Hub全体で不可能」とは断定しない。C2ではまず新規の合成runを使う。 |
@@ -144,7 +144,7 @@ AIを起こさない小さな差分取得プロセス。**差分取得仕様あ�
 - 復路：ローカルAIの回答・状態 → 同じtaskId / contextIdへmessage → dots側agentの処理・再開 ※未確認 → completed等 → 受信bridge
 - 利点：質問待ち・継続・完了をtaskとして表しやすい。複数実装の相互運用が目的なら有用。
 - 弱点：両端のAgent Card・対応binding・認証が必要。dotsや現HubがA2A対応と示す根拠を確認できず、今回の最短経路ではない。
-- 設定・権限・常駐：A2A 1.0対応両端、Agent Card、認証、task store。pushは公開HTTPS callbackとpushNotifications capabilityが必要。
+- 設定・権限・常駐：A2A 1.0対応両端、Agent Card、認証、task store。pushNotifications capabilityが必要。本提案は公開HTTPS callbackを採用条件とする（仕様のHTTPSはSHOULD）。
 - 切断・PC停止：Get Taskによる照合や再購読は可能な設計だが、保持・replay・PC復帰時の処理は実装依存。規格だけでPCは起きない。
 - 費用・負荷：導入・運用は高。protocol自体の利用枠とLLM／hosting料金は別。接続先製品の料金は未確定。
 - 条件・除外：現行release 1.0.0を確認。input-requiredへの追加入力とtask相関は規格。dotsのendpoint・Agent Card・サポートは未確認。
@@ -178,7 +178,7 @@ C1完了はC2の許可ではない。本人がC2、対象会話／repo／plugin�
 
 - job_idを一つ作り「合成メモの色が未指定。色を質問し、回答を待って1行の完了文を返す」と依頼する。実データ・リポ編集・購入等は含めない。
 - 依頼受理 → dotsが色を質問 → 受信bridgeが質問を保存 → 既定routineを一度だけ起動 → ローカルAIが固定回答「青」を返す → 同じjobのdotsが再開 → 完了をbridgeが受信・保存、まで相関させる。
-- bridgeはHub run作成のrequest_idとjob_idを対応付ける。既存active runが返った場合は新jobを完了にせずqueue待ちにする。終了したAIのsession resumeはこの最小試験の要件にしない。
+- bridgeはHub run作成のrequest_idとjob_idを対応付ける。専用routineがactiveの間はdispatchを待つ。衝突で無関係なrunが返った場合、新request_idがそのrunへ永続aliasされるため、jobを完了にも単純再試行にもせず対応不一致として停止・照合する。新しいdispatch keyはそのjobのrunが起動されていないと確認した後の管理された再投入として別途設計する。終了したAIのsession resumeはこの最小試験の要件にしない。
 - 同じイベントを一度再配送し、追加AI起動・二重回答がないことを確認。承認待ちはblockedとして記録し、勝手に許可しない。無関係なjob／senderはAI起動前に拒否。
 - 成功は「7区間のID・時刻・状態が連結し、質問1件、回答1件、完了1件、意図しない追加runが0」。保存を確認するのはbridge台帳・Hub run履歴・dots側の会話記録で、HTTP成功だけでは合格しない。
 

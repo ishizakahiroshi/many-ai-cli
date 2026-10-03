@@ -1,6 +1,6 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 13:48:25 JST
+> 最終更新: 2026-10-03(土) 14:18:50 JST
 
 ## 現在地
 
@@ -10,7 +10,7 @@
 - 指示commit・作業起点：`c2822a8f39a18809bca8fe9484f1c84bd387f64b`。
 - 専用文書branch：`docs/dots-bridge-c1-comparison-20261003`。指示branch `docs/dots-local-ai-bridge-c1-20261003` は変更しない。
 - 参考：指示branchの `59300409408c24d6040445d77733da7c5b55d2e8` はSlack送信状態の更新のみ。固定指示・レビュー差分なしを確認。起点は変更しない。
-- 成果物SHA／draft PR／独立レビュー対象SHA：未取得。
+- 初稿公開SHA：`df1e01f80daf3641361eee0939549c74baa98d97`。draft PR：[#8](https://github.com/ishizakahiroshi/many-ai-cli/pull/8)。独立レビュー対象のローカルSHA：`6f41211f05dbe56578c0b6c41352a89a09c64744`（同一tree `8a35556ec1e6c9ec2edce6ac7d0f3d32854122f2`）。
 - 次の一手：初稿をcommit/pushし、固定SHAで独立レビューを依頼する。
 
 ## 開始時の能力確認
@@ -59,3 +59,12 @@
 - omitnix鮮度検査が文書2件追加を検知したため0.1.3で生成。coverageは1131→1133、analyzed 921→922、unclaimed 204→205。既存fileレコードは変化なし。生成環境差としてRust adapterのcapabilities metadataがsummaryのみへ変化（基準にRustソースなし）。手編集はしていない。
 - secrets-scanは今回の公開文書4件の構造検査合格。非公開watchlistは未設定で未実施、本人の秘密を取得して補完しない。承認ルール混入検査、instrumentation検査合格。
 - GitHub上の成果物リンク読戻し・独立レビューは初稿公開後に実施。
+
+## 独立レビューと修正
+
+- 作成者と別の担当が固定指示と初稿SHAをレビュー中。
+- 中重要度1件：active routineへの衝突時に新request_idも既存runへ永続aliasされるため、単にqueue待ちとして同ID再試行するとjobが進まない。ソースroutine_runner.go L31–42を根拠にFINDINGSとHTMLを修正。active中dispatch回避、衝突時の停止・照合、制御された再投入を明記。Hubコードは変更なし。
+- 修正後SHAとレビュー最終判定は次の公開checkpointに記録する。
+- 公開初稿はローカル検査済treeと全5blob SHAが一致。draft PR #8はdevelop向け、draft=trueを確認。
+
+- 低重要度の補足も反映：A2AのHTTPSは本提案の採用条件（仕様はSHOULD）と明記。HTML比較表にcaption・列scopeを追加。scroll領域は元からkeyboard focus可能・label付き。
