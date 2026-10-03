@@ -29,7 +29,9 @@
       "name": "serde_json",
       "version": "1.0.151",
       "scope": "dependencies",
-      "features": [],
+      "features": [
+        "raw_value"
+      ],
       "official_source": "https://docs.rs/crate/serde_json/1.0.151",
       "registry_checksum": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
       "license": "MIT OR Apache-2.0",

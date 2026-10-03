@@ -34,7 +34,7 @@ second config, storage, session manager or process abstraction.
   construction distinguishes an untrusted origin claim from an authenticated UI
   binding. Internal grants cannot be supplied by conductor JSON. Tri-state fields
   preserve absent/false/empty decisions.
-- `AdmissionLedger` and provider launch/update leases are concurrency contracts.
+- `AdmissionState` and provider launch/update leases are concurrency contracts.
   Use one state owner across spawn/update; retain the launch lease until actual
   registration or failure. Dropping/failing a reservation must release it once.
 - `config::Config`, `ConfigStore`, `ConfigSnapshot`: load with `Config::from_yaml`

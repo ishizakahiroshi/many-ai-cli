@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 14:09:12
+> 最終更新: 2026-10-03(土) 14:30:21
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
@@ -8,11 +8,11 @@ Baseline Go SHA: 21d0bc7935a2c4696fb89ccff2e324157a528c2d.
 Instruction/implementation branch: feat/rust-migration.
 PR base: develop.
 Current state: C1 foundation in progress in an isolated clean clone; the operator has started execution.
-Rust implementation: initial shared foundation implemented; final C1 configuration and interface tests are being integrated. Isolated toolchains and locked Web build succeeded. Application callers, routes and both functional binaries remain pending.
+Rust implementation: shared foundation, CLI/provider inventories and configuration/process contracts implemented. Independent review confirmed the three P1 repairs at 0bad886; the remaining Go JSON decoder P2 repair is validated and awaits exact-SHA re-review. Application callers, routes and both functional binaries remain pending.
 
 | Stage | Owner | State | Evidence / next action |
 |---|---|---|---|
-| C1 foundation | dots integration owner | in_progress | Initial foundation code and source inventories exist; final C1 validation is in progress. All downstream implementation and acceptance remain pending. |
+| C1 foundation | dots integration owner | in_progress | Three P1 repairs independently verified at 0bad886; final JSON decoder repair awaits re-review. Shared API handoff candidate exists; downstream implementation and acceptance remain pending. |
 | C2 core | dots core lane | pending | After C1, parallel with C3/C4 |
 | C3 services | dots services lane | pending | After C1, parallel with C2/C4 |
 | C4 launcher/delivery | dots launcher lane | pending | After C1, parallel with C2/C3 |
@@ -39,8 +39,8 @@ The following checkpoint is based on the published progress commit `f48c6086a2be
 | Go behavioral oracle | 21d0bc7935a2c4696fb89ccff2e324157a528c2d |
 | Initial instruction commit | 6b0fb8e198750245ef8b4b475fbac9070db0ac3e |
 | Progress checkpoint read before this supplement | f48c6086a2be662233f09d051373a716ca44ce6a; progress-only commit |
-| Implementation code SHA | Initial C1 checkpoint 756b28154a77dd10a258f01cd2fc69c076d5bc87; the next source-changing repair commit is recorded by subsequent receipt |
-| Reviewed code SHA / reviewer | 756b28154a77dd10a258f01cd2fc69c076d5bc87 / independent Codex foundation review: changes required; newer repair code is not covered by that review |
+| Implementation code SHA | Latest published C1 repair 0bad88656776904a320e8b9fc22442185b86c137; next JSON repair SHA recorded by subsequent receipt |
+| Reviewed code SHA / reviewer | 0bad88656776904a320e8b9fc22442185b86c137 / independent Codex foundation re-review: 103 tests and three P1 fixes verified; JSON decoder P2 changes required; subsequent code is not covered |
 | Board update commit | Read actual commit from GitHub history, or record it in a later receipt; no self-reference |
 | Supplemental instruction revision | dots records the published revision it actually reads; supplement is not a new task |
 
@@ -209,3 +209,28 @@ Intermediate failures retained: provider test initially bypassed the actual tole
 Explicit decoding boundaries: YAML above 8 MiB/200000 nodes/depth128/1000000 expansion steps and non-UTF8 binary scalars are rejected without backup/regeneration; the original bytes remain for operator recovery. They are not silently reinterpreted as corrupt config. Provider/native/runtime and copied-data cases remain pending.
 
 Next: publish a source-changing repair checkpoint, identify its immutable code SHA separately from board updates, obtain independent re-review, then freeze the shared API handoff in rust/inventory/SHARED-API.md before C2/C3/C4 implementation. No all-K acceptance, complete functional binaries, release, merge, real-data migration or cutover has occurred.
+
+## 2026-10-03(土) 14:30:21 JST — C1 Go JSON decoder repair checkpoint
+
+Published/reviewed code SHA: [0bad88656776904a320e8b9fc22442185b86c137](https://github.com/ishizakahiroshi/many-ai-cli/commit/0bad88656776904a320e8b9fc22442185b86c137). Independent Codex re-review used an immutable blob-verified source snapshot, reran all 103 tests/fmt/clippy, and reproduced the fixes for the three original P1 findings. It found a remaining P2: an invalid earlier repeated JSON field could be overwritten without retaining the Go type error; ignored overflowing numbers and lone escaped surrogates also differed. This receipt does not treat the following new code as already reviewed.
+
+Changed paths: rust/src/proto/wire.rs, decoder oracle/fixtures/test, Cargo.toml and dependency feature receipt, SHARED-API.md, this ledger. Cargo.lock package versions/checksums are unchanged.
+
+- Replaced eager value conversion with syntax-validated RawValue fields, then destination-typed validation of each known occurrence. Invalid earlier scalar/object/map/array/base64 occurrences cannot be hidden by a valid later duplicate. Unknown fields are skipped without floating-point conversion.
+- Matched Go's replacement of lone UTF-16 surrogates and each invalid UTF-8 byte inside JSON strings, preserved valid pairs/escaped literals, and retained the scanner's 10000-depth limit, including ignored values. Invalid JSON syntax remains an error.
+- Additional actual-Go probes exposed repeated-slice backing storage reuse. The decoder now retains earlier struct/byte elements through a shorter repeated slice and resets them for null/empty slices, matching the oracle.
+- Expanded Go-generated decoder corpus from 19 to 63 cases, including raw input bytes encoded separately from display text. Corrected shared documentation to the exported AdmissionState name.
+
+Executed receipts for this repair:
+- `go run rust/tests/fixtures/foundation/proto-decode-oracle.go`: exit 0; 63 synthetic cases regenerated from the frozen Go source.
+- Targeted decoder run initially failed for negative integer zero; using destination integer parsing fixed it. Expanded duplicate-slice probes initially failed for Go backing-array reuse; the state-preserving decoder fixed them. Both regressions remain in the corpus.
+- `cargo test --offline --locked --manifest-path rust/Cargo.toml`: exit 0, all 103 tests, no ignored tests. Test count is unchanged; the decoder test now executes 63 cases.
+- `cargo clippy --offline --locked --manifest-path rust/Cargo.toml --all-targets -- -D warnings` and `cargo fmt --manifest-path rust/Cargo.toml -- --check`: exit 0.
+- `cargo check --offline --locked --manifest-path rust/Cargo.toml --all-targets --target <target>`: exit 0 for Windows x64 MSVC, macOS Intel and macOS Apple Silicon. Source checks remain distinct from native execution.
+- Go/cmd/Web source diff versus 21d0bc7 remains empty. Repository staged guards and staticcheck are rerun before publication.
+
+An isolated dependency feasibility probe outside the repository also compiled pinned rusqlite 0.40.2, portable-pty 0.9.0 and Axum 0.8.9 on Linux. Bundled SQLite 3.53.2 passed a synthetic in-memory external-content FTS5 query. This is not yet a dependency addition, full storage implementation, native PTY acceptance or network service test.
+
+Next: publish the source-changing decoder repair, obtain narrow independent re-review, then release tested shared APIs to C2/C3/C4 with exclusive ownership. Native/resources/caller integration and all application acceptance gates remain pending. No Hub, paid provider, real SSH host, daily data, merge, release or cutover was used.
+
+Pre-publication checks: `go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...` exited 0. Staged secrets scan exited 0 (8 files, four structural patterns; private watchlists unavailable), approval-residue/text-hygiene/instrumentation checks and `git diff --cached --check` exited 0. This is not a full history secret scan.

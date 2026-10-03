@@ -3,9 +3,10 @@
 //! must use this boundary for case-folded fields, duplicate keys and null defaults.
 use serde::{
     Deserialize, Deserializer,
-    de::{DeserializeOwned, MapAccess, SeqAccess, Visitor},
+    de::{DeserializeOwned, MapAccess, Visitor},
 };
-use serde_json::{Map, Number, Value};
+use serde_json::{Value, value::RawValue};
+use std::collections::BTreeMap;
 use std::fmt;
 
 pub trait GoWire: DeserializeOwned {
@@ -19,76 +20,28 @@ pub struct Schema {
     pub name: &'static str,
     pub fields: &'static [Field],
 }
-#[derive(Clone)]
-enum Raw {
-    Null,
-    Bool(bool),
-    Number(Number),
-    String(String),
-    Array(Vec<Raw>),
-    Object(Vec<(String, Raw)>),
-}
-impl<'de> Deserialize<'de> for Raw {
+struct Object(Vec<(String, Box<RawValue>)>);
+impl<'de> Deserialize<'de> for Object {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct RawVisitor;
-        impl<'de> Visitor<'de> for RawVisitor {
-            type Value = Raw;
+        struct ObjectVisitor;
+        impl<'de> Visitor<'de> for ObjectVisitor {
+            type Value = Object;
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("JSON value")
+                f.write_str("JSON object")
             }
-            fn visit_unit<E>(self) -> Result<Raw, E> {
-                Ok(Raw::Null)
-            }
-            fn visit_none<E>(self) -> Result<Raw, E> {
-                Ok(Raw::Null)
-            }
-            fn visit_bool<E>(self, v: bool) -> Result<Raw, E> {
-                Ok(Raw::Bool(v))
-            }
-            fn visit_i64<E>(self, v: i64) -> Result<Raw, E> {
-                Ok(Raw::Number(v.into()))
-            }
-            fn visit_u64<E>(self, v: u64) -> Result<Raw, E> {
-                Ok(Raw::Number(v.into()))
-            }
-            fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Raw, E> {
-                Number::from_f64(v)
-                    .map(Raw::Number)
-                    .ok_or_else(|| E::custom("non-finite number"))
-            }
-            fn visit_str<E>(self, v: &str) -> Result<Raw, E> {
-                Ok(Raw::String(v.into()))
-            }
-            fn visit_string<E>(self, v: String) -> Result<Raw, E> {
-                Ok(Raw::String(v))
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Raw, A::Error> {
-                let mut out = vec![];
-                while let Some(v) = seq.next_element()? {
-                    out.push(v);
-                }
-                Ok(Raw::Array(out))
-            }
-            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Raw, A::Error> {
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Object, A::Error> {
                 let mut out = vec![];
                 while let Some(pair) = map.next_entry()? {
                     out.push(pair);
                 }
-                Ok(Raw::Object(out))
+                Ok(Object(out))
             }
         }
-        deserializer.deserialize_any(RawVisitor)
+        deserializer.deserialize_map(ObjectVisitor)
     }
 }
-fn value(raw: Raw) -> Value {
-    match raw {
-        Raw::Null => Value::Null,
-        Raw::Bool(v) => v.into(),
-        Raw::Number(v) => v.into(),
-        Raw::String(v) => v.into(),
-        Raw::Array(v) => Value::Array(v.into_iter().map(value).collect()),
-        Raw::Object(v) => Value::Object(v.into_iter().map(|(k, v)| (k, value(v))).collect()),
-    }
+fn error(message: &str) -> serde_json::Error {
+    <serde_json::Error as serde::de::Error>::custom(message)
 }
 fn fold(name: &str) -> String {
     // Go foldName uses Unicode simple-fold equivalence. These are the only
@@ -106,62 +59,245 @@ fn schema(kind: &str) -> Option<&'static Schema> {
         .iter()
         .find(|s| s.name == kind)
 }
-fn merge(kind: &str, old: Option<Value>, raw: Raw) -> Value {
+// Keep slice backing elements while repeated fields are decoded. Go reuses
+// them even when an intermediate occurrence shortens the visible slice.
+enum Decoded {
+    Leaf(Value),
+    Array { values: Vec<Decoded>, len: usize },
+    Object(BTreeMap<String, Decoded>),
+}
+impl Decoded {
+    fn finish(self) -> Value {
+        match self {
+            Self::Leaf(v) => v,
+            Self::Array { values, len } => {
+                Value::Array(values.into_iter().take(len).map(Self::finish).collect())
+            }
+            Self::Object(values) => {
+                Value::Object(values.into_iter().map(|(k, v)| (k, v.finish())).collect())
+            }
+        }
+    }
+    fn object(self) -> Option<BTreeMap<String, Decoded>> {
+        if let Self::Object(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
+}
+fn merge(kind: &str, old: Option<Decoded>, raw: &RawValue) -> Result<Decoded, serde_json::Error> {
+    let source = raw.get();
     if let Some(inner) = kind.strip_prefix('*') {
-        if matches!(raw, Raw::Null) {
-            return Value::Null;
+        if source == "null" {
+            return Ok(Decoded::Leaf(Value::Null));
         }
         return merge(inner, old, raw);
     }
     if let Some(inner) = kind.strip_prefix("[]") {
-        return match raw {
-            Raw::Null => Value::Null,
-            Raw::Array(items) => {
-                Value::Array(items.into_iter().map(|v| merge(inner, None, v)).collect())
-            }
-            other => value(other),
+        if source == "null" {
+            return Ok(Decoded::Leaf(Value::Null));
+        }
+        if inner == "byte" && source.starts_with('"') {
+            #[derive(Deserialize)]
+            struct Bytes(#[serde(with = "super::base64_bytes")] Vec<u8>);
+            // Validate every occurrence before a later duplicate can overwrite it.
+            let Bytes(bytes) = serde_json::from_str(source)?;
+            let len = bytes.len();
+            return Ok(Decoded::Array {
+                values: bytes.into_iter().map(|v| Decoded::Leaf(v.into())).collect(),
+                len,
+            });
+        }
+        let items: Vec<Box<RawValue>> = serde_json::from_str(source)?;
+        let len = items.len();
+        let mut values = match old {
+            Some(Decoded::Array { values, .. }) if len > 0 => values,
+            _ => Vec::new(),
         };
+        for (i, item) in items.iter().enumerate() {
+            let previous = if i < values.len() {
+                Some(std::mem::replace(
+                    &mut values[i],
+                    Decoded::Leaf(Value::Null),
+                ))
+            } else {
+                None
+            };
+            let next = merge(inner, previous, item)?;
+            if i < values.len() {
+                values[i] = next;
+            } else {
+                values.push(next);
+            }
+        }
+        return Ok(Decoded::Array { values, len });
     }
     if let Some(inner) = kind.strip_prefix("map[string]") {
-        return match raw {
-            Raw::Null => Value::Null,
-            Raw::Object(fields) => {
-                let mut map = old.and_then(|v| v.as_object().cloned()).unwrap_or_default();
-                for (key, v) in fields {
-                    map.insert(key, merge(inner, None, v));
-                }
-                Value::Object(map)
-            }
-            other => value(other),
-        };
+        if source == "null" {
+            return Ok(Decoded::Leaf(Value::Null));
+        }
+        let Object(fields) = serde_json::from_str(source)?;
+        let mut map = old.and_then(Decoded::object).unwrap_or_default();
+        for (key, v) in fields {
+            map.insert(key, merge(inner, None, &v)?);
+        }
+        return Ok(Decoded::Object(map));
     }
     if let Some(schema) = schema(kind) {
-        if matches!(raw, Raw::Null) {
-            return old.unwrap_or_else(|| Value::Object(Map::new()));
+        if source == "null" {
+            return Ok(old.unwrap_or_else(|| Decoded::Object(BTreeMap::new())));
         }
-        let Raw::Object(fields) = raw else {
-            return value(raw);
-        };
-        let mut map = old.and_then(|v| v.as_object().cloned()).unwrap_or_default();
+        let Object(fields) = serde_json::from_str(source)?;
+        let mut map = old.and_then(Decoded::object).unwrap_or_default();
         for (key, v) in fields {
             if let Some(field) = schema.fields.iter().find(|f| fold(f.name) == fold(&key)) {
                 let previous = map.remove(field.name);
-                map.insert(field.name.into(), merge(field.kind, previous, v));
+                map.insert(field.name.into(), merge(field.kind, previous, &v)?);
+            }
+            // Unknown fields are syntax-checked raw values, not numbers or DTOs.
+            // In particular an ignored 1e1000 must not overflow an f64 here.
+        }
+        return Ok(Decoded::Object(map));
+    }
+    if source == "null" {
+        return Ok(old.unwrap_or_else(|| {
+            Decoded::Leaf(match kind {
+                "bool" => false.into(),
+                "int" | "int64" | "uint64" | "byte" => 0.into(),
+                "float64" => 0.0.into(),
+                _ => "".into(),
+            })
+        }));
+    }
+    // Decode with the Go destination type before merging. An invalid earlier
+    // duplicate remains an error even if the last occurrence would be valid.
+    match kind {
+        "bool" => serde_json::from_str::<bool>(source).map(Value::from),
+        "int" | "int64" => source
+            .parse::<i64>()
+            .map(Value::from)
+            .map_err(|_| error("invalid Go int64")),
+        "uint64" => source
+            .parse::<u64>()
+            .map(Value::from)
+            .map_err(|_| error("invalid Go uint64")),
+        "byte" => source
+            .parse::<u8>()
+            .map(Value::from)
+            .map_err(|_| error("invalid Go byte")),
+        "float64" => serde_json::from_str::<f64>(source).map(Value::from),
+        "string" | "ApprovalRiskTier" => serde_json::from_str::<String>(source).map(Value::from),
+        _ => Err(error("unsupported Go wire schema kind")),
+    }
+    .map(Decoded::Leaf)
+}
+
+fn hex_quad(bytes: &[u8]) -> Option<u16> {
+    if bytes.len() < 6 || &bytes[..2] != b"\\u" {
+        return None;
+    }
+    bytes[2..6].iter().try_fold(0u16, |v, b| {
+        (*b as char).to_digit(16).map(|digit| v * 16 + digit as u16)
+    })
+}
+fn append_go_utf8(out: &mut Vec<u8>, mut bytes: &[u8]) {
+    // encoding/json replaces each invalid UTF-8 byte, not each invalid sequence.
+    while !bytes.is_empty() {
+        match std::str::from_utf8(bytes) {
+            Ok(_) => {
+                out.extend_from_slice(bytes);
+                break;
+            }
+            Err(e) => {
+                out.extend_from_slice(&bytes[..e.valid_up_to()]);
+                out.extend_from_slice("\u{fffd}".as_bytes());
+                bytes = &bytes[e.valid_up_to() + 1..];
             }
         }
-        return Value::Object(map);
     }
-    if matches!(raw, Raw::Null) {
-        return old.unwrap_or_else(|| match kind {
-            "bool" => false.into(),
-            "int" | "int64" | "uint64" | "byte" => 0.into(),
-            "float64" => 0.0.into(),
-            _ => "".into(),
-        });
+}
+fn go_unicode(bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    let mut in_string = false;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'"' => {
+                in_string = !in_string;
+                out.push(b'"');
+                i += 1;
+            }
+            b'\\' if in_string => {
+                if let Some(unit) = hex_quad(&bytes[i..])
+                    && (0xd800..=0xdfff).contains(&unit)
+                {
+                    if unit <= 0xdbff
+                        && hex_quad(&bytes[i + 6..]).is_some_and(|v| (0xdc00..=0xdfff).contains(&v))
+                    {
+                        out.extend_from_slice(&bytes[i..i + 12]);
+                        i += 12;
+                    } else {
+                        out.extend_from_slice(b"\\ufffd");
+                        i += 6;
+                    }
+                } else {
+                    // Leave malformed escapes to JSON syntax validation; consume
+                    // the escaped character so an escaped quote does not toggle.
+                    let end = (i + 2).min(bytes.len());
+                    out.extend_from_slice(&bytes[i..end]);
+                    i = end;
+                }
+            }
+            _ if in_string => {
+                let start = i;
+                while i < bytes.len() && !matches!(bytes[i], b'"' | b'\\') {
+                    i += 1;
+                }
+                append_go_utf8(&mut out, &bytes[start..i]);
+            }
+            byte => {
+                out.push(byte);
+                i += 1;
+            }
+        }
     }
-    value(raw)
+    out
+}
+fn check_depth(bytes: &[u8]) -> Result<(), serde_json::Error> {
+    // encoding/json's scanner rejects the 10,001st opening array/object, even
+    // inside an ignored field. RawValue validates syntax without this limit.
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for &byte in bytes {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+        } else {
+            match byte {
+                b'"' => in_string = true,
+                b'[' | b'{' => {
+                    depth += 1;
+                    if depth > 10_000 {
+                        return Err(error("exceeded Go JSON maximum depth"));
+                    }
+                }
+                b']' | b'}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+    }
+    Ok(())
 }
 pub fn decode<T: GoWire>(bytes: &[u8]) -> Result<T, serde_json::Error> {
-    let raw: Raw = serde_json::from_slice(bytes)?;
-    serde_json::from_value(merge(T::GO_TYPE, None, raw))
+    let bytes = go_unicode(bytes);
+    check_depth(&bytes)?;
+    let raw: Box<RawValue> = serde_json::from_slice(&bytes)?;
+    serde_json::from_value(merge(T::GO_TYPE, None, &raw)?.finish())
 }
