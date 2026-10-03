@@ -5,7 +5,7 @@ impl SessionEngine {
         &self,
         binding: SessionBinding,
         chunk: OutputChunk,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let stamp = timestamp(now)?;
         let mut state = lock(&self.state);
@@ -149,7 +149,7 @@ impl SessionEngine {
         &self,
         binding: SessionBinding,
         observation: SessionObservation,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         timestamp(now)?;
         let mut state = lock(&self.state);
@@ -281,7 +281,7 @@ impl SessionEngine {
     pub fn reset_history(
         &self,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         self.reset_history_authorized(None, id, now)
     }
@@ -289,7 +289,7 @@ impl SessionEngine {
         &self,
         ui: UiBinding,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         self.reset_history_authorized(Some(ui), id, now)
     }
@@ -297,7 +297,7 @@ impl SessionEngine {
         &self,
         ui: Option<UiBinding>,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         timestamp(now)?;
         let mut state = lock(&self.state);
@@ -373,7 +373,7 @@ impl SessionEngine {
         ]);
         Ok(state.route(effects))
     }
-    pub fn evaluate_idle(&self, now: SystemTime) -> CoreEffects {
+    pub fn evaluate_idle(&self, now: Timestamp) -> CoreEffects {
         let mut state = lock(&self.state);
         let mut effects = CoreEffects::default();
         for s in state.sessions.values_mut() {

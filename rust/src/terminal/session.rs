@@ -9,6 +9,7 @@ use super::{
     replay::{self, ReplayBuffer},
     vt::VtBuffer,
 };
+use crate::proto::time::Timestamp;
 use crate::{
     approval::{marker::TranscriptSource, record::ApprovalState},
     proto::{self, core::*},
@@ -19,7 +20,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 mod approvals;
@@ -107,12 +108,12 @@ struct Session {
     pty_bytes_seen: i64,
     vt: VtBuffer,
     size: TerminalSize,
-    resize_debounce: Option<SystemTime>,
+    resize_debounce: Option<Timestamp>,
     controlling_ui: Option<UiConnectionId>,
     input: InputState,
     input_lane: Arc<lane::InputLane>,
     awaiting_submit_enter: bool,
-    last_output: Option<SystemTime>,
+    last_output: Option<Timestamp>,
     output_generation: u64,
     usage_probe: bool,
     custom_provider: bool,
@@ -138,7 +139,7 @@ struct ConfirmationEntry {
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
-fn timestamp(now: SystemTime) -> Result<String, SessionError> {
+fn timestamp(now: Timestamp) -> Result<String, SessionError> {
     proto::time::format_rfc3339(now).map_err(|_| {
         SessionError::InvalidRequest("timestamp is outside the supported range".into())
     })
@@ -151,7 +152,7 @@ fn terminal(state: &str) -> bool {
 }
 fn history(
     id: LiveSessionId,
-    now: SystemTime,
+    now: Timestamp,
     kind: &str,
     mut values: JsonObject,
 ) -> Result<CoreEffect, SessionError> {
@@ -503,7 +504,7 @@ impl SessionCore for SessionEngine {
         &'a self,
         request: RegisterRequest,
         connection: WrapperConnectionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> CoreFuture<'a, Result<Registration, SessionError>> {
         Box::pin(SessionEngine::register(self, request, connection, now))
     }
@@ -511,7 +512,7 @@ impl SessionCore for SessionEngine {
         &'a self,
         request: ReattachRequest,
         connection: WrapperConnectionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> CoreFuture<'a, Result<Reattachment, SessionError>> {
         Box::pin(SessionEngine::reattach(self, request, connection, now))
     }
@@ -541,7 +542,7 @@ impl SessionCore for SessionEngine {
         &self,
         binding: SessionBinding,
         observation: SessionObservation,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::apply_observation(self, binding, observation, now)
     }
@@ -549,7 +550,7 @@ impl SessionCore for SessionEngine {
         &self,
         binding: SessionBinding,
         chunk: OutputChunk,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::observe_output(self, binding, chunk, now)
     }
@@ -557,14 +558,14 @@ impl SessionCore for SessionEngine {
         &self,
         binding: SessionBinding,
         end: SessionEnd,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::observe_end(self, binding, end, now)
     }
     fn disconnected(
         &self,
         binding: SessionBinding,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::disconnected(self, binding, now)
     }
@@ -573,25 +574,25 @@ impl SessionCore for SessionEngine {
         ui: UiBinding,
         id: LiveSessionId,
         size: TerminalSize,
-        now: SystemTime,
+        now: Timestamp,
     ) -> (ResizeOutcome, CoreEffects) {
         SessionEngine::resize(self, ui, id, size, now)
     }
     fn reset_history(
         &self,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::reset_history(self, id, now)
     }
-    fn dismiss(&self, id: LiveSessionId, now: SystemTime) -> Result<CoreEffects, SessionError> {
+    fn dismiss(&self, id: LiveSessionId, now: Timestamp) -> Result<CoreEffects, SessionError> {
         SessionEngine::dismiss(self, id, now)
     }
     fn reset_history_from_ui(
         &self,
         ui: UiBinding,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::reset_history_from_ui(self, ui, id, now)
     }
@@ -599,7 +600,7 @@ impl SessionCore for SessionEngine {
         &self,
         ui: UiBinding,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::dismiss_from_ui(self, ui, id, now)
     }
@@ -607,7 +608,7 @@ impl SessionCore for SessionEngine {
         &self,
         id: LiveSessionId,
         reason: StopReason,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::stop(self, id, reason, now)
     }
@@ -649,7 +650,7 @@ impl SessionCore for SessionEngine {
         ui: UiBinding,
         id: LiveSessionId,
         size: Option<TerminalSize>,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::claim_ui_session(self, ui, id, size, now)
     }
@@ -657,7 +658,7 @@ impl SessionCore for SessionEngine {
         &self,
         ui: UiBinding,
         message: proto::Message,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::consume_approval(self, ui, message, now)
     }
@@ -665,7 +666,7 @@ impl SessionCore for SessionEngine {
         &self,
         ui: UiBinding,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::resync_approval(self, ui, id, now)
     }

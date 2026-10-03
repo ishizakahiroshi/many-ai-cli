@@ -290,7 +290,7 @@ impl GoWire for RoutineFile {
 pub fn active(status: &str) -> bool {
     matches!(status, "starting" | "running" | "waiting")
 }
-pub(crate) fn time(at: std::time::SystemTime) -> Result<String, super::store::Error> {
+pub(crate) fn time(at: crate::proto::time::Timestamp) -> Result<String, super::store::Error> {
     crate::proto::time::format_with_offset(at, 0, true).map_err(|_| super::store::Error::Operation)
 }
 

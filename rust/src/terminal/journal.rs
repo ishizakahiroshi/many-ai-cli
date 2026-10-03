@@ -1,6 +1,7 @@
 //! Ordered session JSONL + SQLite adapter. The handle table owns writers only;
 //! session lifecycle and identities live exclusively in SessionEngine.
 //! Source: internal/sessionlog/sessionlog.go and hub/server.go:writeHistory.
+use crate::proto::time::Timestamp;
 use crate::{
     config::{Resource, RuntimePaths},
     files::safe_fs::Dir,
@@ -15,7 +16,6 @@ use std::{
         Arc, Mutex, RwLock,
         atomic::{AtomicBool, Ordering},
     },
-    time::SystemTime,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -138,7 +138,7 @@ impl SessionJournal {
         id: LiveSessionId,
         provider: &str,
         cwd: &str,
-        started: SystemTime,
+        started: Timestamp,
     ) -> Result<JournalPaths, SessionError> {
         let started = time::format_rfc3339(started)
             .map_err(|_| failure("session log timestamp is unsupported"))?;
@@ -162,7 +162,7 @@ impl SessionJournal {
         id: LiveSessionId,
         provider: &str,
         cwd: &str,
-        started: SystemTime,
+        started: Timestamp,
         append: bool,
     ) -> Result<JournalPaths, SessionError> {
         let paths = self.paths(id, provider, cwd, started)?;
@@ -330,7 +330,7 @@ impl SessionJournal {
             .get_mut(&id)
             .and_then(|slot| slot.writer.as_mut())
         {
-            Some(writer) => writer.event(&event, SystemTime::now()),
+            Some(writer) => writer.event(&event, Timestamp::now()),
             None => Ok(()),
         };
         if let Some(storage) = &self.storage {
@@ -528,7 +528,7 @@ impl JsonlWriter {
         self.written = self.written.saturating_add(line.len() as u64);
         Ok(())
     }
-    fn event(&mut self, event: &HistoryEvent, now: SystemTime) -> Result<(), SessionError> {
+    fn event(&mut self, event: &HistoryEvent, now: Timestamp) -> Result<(), SessionError> {
         if self.file.is_none() {
             return Err(failure("session history writer is closed"));
         }

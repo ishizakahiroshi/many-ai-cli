@@ -1,4 +1,5 @@
 use super::*;
+use crate::proto::time::UNIX_EPOCH;
 use crate::{
     config::RuntimePaths,
     files::safe_fs::Dir,
@@ -13,7 +14,6 @@ use std::sync::{
     Weak,
     atomic::{AtomicUsize, Ordering},
 };
-use std::time::UNIX_EPOCH;
 struct SyntheticTransport;
 impl WrapperTransport for SyntheticTransport {
     fn send<'a>(
@@ -136,7 +136,7 @@ impl RoutineLaunchPreparation for SyntheticPreparation {
     }
     fn finish(&self, _: &Run, _: &SpawnWaitOutcome) {}
 }
-fn clock() -> SystemTime {
+fn clock() -> Timestamp {
     UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_789)
 }
 struct Fixture {

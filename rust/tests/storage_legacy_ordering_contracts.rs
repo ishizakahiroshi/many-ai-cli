@@ -2,11 +2,13 @@
 //! ordering. Explicit StoreEvent calls model the observed late commit order.
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
-    proto::{core::*, time},
+    proto::{
+        core::*,
+        time::{self, Timestamp},
+    },
     storage::SqliteSessionStorage,
 };
 use serde_json::{Value, json};
-use std::time::SystemTime;
 
 fn card(meta: SessionCardMeta) -> Value {
     json!({"label":meta.label,"pinned":meta.pinned,"color":meta.color,
@@ -51,7 +53,7 @@ fn late_lifecycle_event_overwrite_matches_fixed_go_for_registration_and_reattach
                 .into_owned(),
             ..Default::default()
         };
-        let ended_at: SystemTime = time::parse_rfc3339(&start.started_at).unwrap();
+        let ended_at: Timestamp = time::parse_rfc3339(&start.started_at).unwrap();
         store.start_session(start.clone()).unwrap();
         if kind == "session_reattach" {
             store.store_event(id, event("session_start")).unwrap();

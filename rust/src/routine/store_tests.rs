@@ -1,7 +1,7 @@
 use super::*;
+use crate::proto::time::UNIX_EPOCH;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::UNIX_EPOCH;
-fn now() -> SystemTime {
+fn now() -> Timestamp {
     UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_789)
 }
 fn setup() -> (tempfile::TempDir, Arc<RoutineStore>, Arc<AtomicBool>) {
@@ -42,7 +42,7 @@ fn summary(id: i64, text: &str) -> DoneSummary {
         ..Default::default()
     }
 }
-fn obs(run: &Run, state: &str, last: Option<SystemTime>) -> Observation {
+fn obs(run: &Run, state: &str, last: Option<Timestamp>) -> Observation {
     Observation {
         id: LiveSessionId(42),
         db_id: Some(DbSessionId(700)),

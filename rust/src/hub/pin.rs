@@ -95,8 +95,8 @@ fn rate_key(request: &Request) -> String {
         .unwrap_or_else(|| request.remote_addr.trim().into())
 }
 const SECOND_NANOS: i128 = 1_000_000_000;
-fn unix_nanos(at: std::time::SystemTime) -> i128 {
-    match at.duration_since(std::time::UNIX_EPOCH) {
+fn unix_nanos(at: crate::proto::time::Timestamp) -> i128 {
+    match at.duration_since(crate::proto::time::UNIX_EPOCH) {
         Ok(d) => d.as_nanos() as i128,
         Err(e) => -(e.duration().as_nanos() as i128),
     }
@@ -119,7 +119,7 @@ impl Limiter {
     pub fn retry_after(&mut self, key: &str, now: i64) -> i64 {
         self.retry_after_nanos(key, i128::from(now) * SECOND_NANOS)
     }
-    pub fn retry_after_at(&mut self, key: &str, at: std::time::SystemTime) -> i64 {
+    pub fn retry_after_at(&mut self, key: &str, at: crate::proto::time::Timestamp) -> i64 {
         self.retry_after_nanos(key, unix_nanos(at))
     }
     fn retry_after_nanos(&mut self, key: &str, now: i128) -> i64 {
@@ -139,7 +139,7 @@ impl Limiter {
     pub fn begin(&mut self, key: &str, now: i64) -> i64 {
         self.begin_nanos(key, i128::from(now) * SECOND_NANOS)
     }
-    pub fn begin_at(&mut self, key: &str, at: std::time::SystemTime) -> i64 {
+    pub fn begin_at(&mut self, key: &str, at: crate::proto::time::Timestamp) -> i64 {
         self.begin_nanos(key, unix_nanos(at))
     }
     fn begin_nanos(&mut self, key: &str, now: i128) -> i64 {
@@ -320,7 +320,7 @@ impl AuthService {
         &self,
         request: &Request,
         config: &Config,
-        at: std::time::SystemTime,
+        at: crate::proto::time::Timestamp,
     ) -> Response {
         let nanos = unix_nanos(at);
         self.status_nanos(
@@ -351,7 +351,7 @@ impl AuthService {
         &self,
         request: &Request,
         config: &Config,
-        at: std::time::SystemTime,
+        at: crate::proto::time::Timestamp,
     ) -> Response {
         let nanos = unix_nanos(at);
         self.login_nanos(

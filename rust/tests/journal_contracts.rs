@@ -1,14 +1,11 @@
+use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
     proto::core::*,
     storage::SqliteSessionStorage,
     terminal::journal::*,
 };
-use std::{
-    fs,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{fs, sync::Arc, time::Duration};
 fn fixture(
     enabled: bool,
     max_bytes: i64,
@@ -64,7 +61,7 @@ fn write(j: &SessionJournal, kind: &str, text: &str) {
     )
     .unwrap();
 }
-fn instant() -> SystemTime {
+fn instant() -> Timestamp {
     UNIX_EPOCH + Duration::from_secs(1767323045)
 }
 #[test]

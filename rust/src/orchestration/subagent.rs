@@ -1,6 +1,7 @@
 //! Source: internal/hub/subagent_{tree,source_claude,source_codex,source_grok}.go.
 //! Provider-owned paths are supplied by the resolver. No home lookup, PTY parsing,
 //! transcript content field or dynamically typed continuation crosses this API.
+use crate::proto::time::{Timestamp, UNIX_EPOCH};
 mod claude;
 mod codex;
 mod grok;
@@ -12,7 +13,7 @@ use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 pub use claude::ClaudeState;
@@ -113,10 +114,10 @@ pub struct ReadBatch {
 pub fn read_tree(
     adapter: Adapter,
     parent: &Path,
-    since: SystemTime,
+    since: Timestamp,
     prior: Option<Continuation>,
     budget: ReadBudget,
-    now: SystemTime,
+    now: Timestamp,
 ) -> io::Result<ReadBatch> {
     let budget = budget.normalized();
     let mut stats = ReadStats::default();
@@ -167,18 +168,18 @@ pub fn read_tree(
 pub struct PollState {
     pub continuation: Option<Continuation>,
     pub tree: Option<SubagentTree>,
-    pub turn_started_at: Option<SystemTime>,
+    pub turn_started_at: Option<Timestamp>,
     pub running_count: usize,
     pub generation: u64,
     signature: String,
 }
 impl PollState {
-    pub fn confirmed_user_turn(&mut self, now: SystemTime) {
+    pub fn confirmed_user_turn(&mut self, now: Timestamp) {
         if self.running_count == 0 {
             self.turn_started_at = Some(now);
         }
     }
-    pub fn reattach(&mut self, started_at: &str, now: SystemTime) {
+    pub fn reattach(&mut self, started_at: &str, now: Timestamp) {
         if self.turn_started_at.is_none() {
             self.turn_started_at =
                 Some(crate::proto::time::parse_rfc3339(started_at).unwrap_or(now));
@@ -248,7 +249,7 @@ fn null_default<'de, D: Deserializer<'de>, T: Deserialize<'de> + Default>(
 ) -> Result<T, D::Error> {
     Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
 }
-fn millis(time: SystemTime) -> i64 {
+fn millis(time: Timestamp) -> i64 {
     match time.duration_since(UNIX_EPOCH) {
         Ok(d) => d.as_millis().min(i64::MAX as u128) as i64,
         Err(e) => {
@@ -267,7 +268,7 @@ fn parse_timestamp(value: &str) -> i64 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Stamp {
     size: u64,
-    modified: Option<SystemTime>,
+    modified: Option<Timestamp>,
 }
 impl Stamp {
     fn read(path: &Path) -> io::Result<Self> {
@@ -280,7 +281,10 @@ impl Stamp {
         }
         Ok(Self {
             size: m.len(),
-            modified: m.modified().ok(),
+            modified: m
+                .modified()
+                .ok()
+                .and_then(|at| Timestamp::from_system_time(at).ok()),
         })
     }
     fn millis(self) -> i64 {

@@ -1,3 +1,4 @@
+use many_ai_cli::proto::time::Timestamp;
 use many_ai_cli::{
     approval::{
         identity::*,
@@ -7,7 +8,7 @@ use many_ai_cli::{
     },
     proto::{self, core::*},
 };
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 fn option(num: i64, label: &str, send: &str) -> proto::ApprovalOption {
     proto::ApprovalOption {
         num,
@@ -36,7 +37,7 @@ fn data(provider: &str, question: &str, source: &str, origin: &str) -> ApprovalR
         context: "".into(),
         options,
         summary: summarize(question, ""),
-        detected_at: SystemTime::UNIX_EPOCH + Duration::from_secs(100),
+        detected_at: Timestamp::UNIX_EPOCH + Duration::from_secs(100),
     }
 }
 #[test]
@@ -103,7 +104,7 @@ fn marker_identity_and_corruption_classification() {
 }
 #[test]
 fn record_closure_precedes_reused_signature_insert() {
-    let now = SystemTime::UNIX_EPOCH;
+    let now = Timestamp::UNIX_EPOCH;
     let mut state = ApprovalState::new(LiveSessionId(1), "claude".into());
     assert_eq!(
         state
@@ -127,7 +128,7 @@ fn record_closure_precedes_reused_signature_insert() {
 }
 #[test]
 fn transcript_user_turn_allows_repeated_question() {
-    let now = SystemTime::UNIX_EPOCH;
+    let now = Timestamp::UNIX_EPOCH;
     let mut state = ApprovalState::new(LiveSessionId(1), "claude".into());
     let d = data("claude", "again?", "transcript", "marker");
     state.observe(d.clone(), None, now);
@@ -139,7 +140,7 @@ fn transcript_user_turn_allows_repeated_question() {
 }
 #[test]
 fn vt_answer_carries_without_ttl_while_latest_question_remains() {
-    let now = SystemTime::UNIX_EPOCH;
+    let now = Timestamp::UNIX_EPOCH;
     let mut state = ApprovalState::new(LiveSessionId(1), "grok".into());
     let d = data("grok", "again?", "go_vt", "marker");
     let identity = d.candidate.clone();
@@ -154,7 +155,7 @@ fn vt_answer_carries_without_ttl_while_latest_question_remains() {
 }
 #[test]
 fn native_record_blocks_only_vt_marker_while_visible() {
-    let now = SystemTime::UNIX_EPOCH;
+    let now = Timestamp::UNIX_EPOCH;
     let mut state = ApprovalState::new(LiveSessionId(1), "claude".into());
     state.observe(data("claude", "native?", "go_vt", "native"), None, now);
     assert!(
@@ -180,7 +181,7 @@ fn native_record_blocks_only_vt_marker_while_visible() {
 }
 #[test]
 fn late_consumption_cannot_close_newer_record() {
-    let now = SystemTime::UNIX_EPOCH;
+    let now = Timestamp::UNIX_EPOCH;
     let mut state = ApprovalState::new(LiveSessionId(1), "claude".into());
     let d = data("claude", "again?", "transcript", "marker");
     state.observe(d, None, now);
@@ -467,7 +468,7 @@ fn go_oracle_risk_summaries_and_native_detectors() {
 fn one_tap_tokens_bind_identity_epoch_action_and_expire_without_consuming_on_verify() {
     use many_ai_cli::approval::token::*;
     let manager = OneTapManager::new().unwrap();
-    let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+    let now = Timestamp::UNIX_EPOCH + Duration::from_secs(1_000);
     let token = manager
         .issue(
             LiveSessionId(3),

@@ -1,7 +1,7 @@
 //! Immutable single-record lifecycle; ordered effects are applied after releasing
 //! the session lock. Old ledger closure always precedes replacement insertion.
+use crate::proto::time::Timestamp;
 use crate::proto::{self, core::*};
-use std::time::SystemTime;
 
 #[derive(Clone)]
 pub struct ApprovalState {
@@ -96,7 +96,7 @@ impl ApprovalState {
         &mut self,
         mut data: ApprovalRecordData,
         latest_vt: Option<&CandidateIdentity>,
-        now: SystemTime,
+        now: Timestamp,
     ) -> CoreEffects {
         if data.source == "go_vt" && data.origin == "marker" && self.blocks_vt_marker() {
             return CoreEffects::default();
@@ -169,7 +169,7 @@ impl ApprovalState {
         &mut self,
         binding: &ApprovalActionBinding,
         selected: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, ApprovalActionError> {
         let Some(record) = &self.record else {
             return Err(ApprovalActionError::NotFound);
@@ -184,7 +184,7 @@ impl ApprovalState {
         self.mark_consumed(record.data().candidate.clone());
         Ok(self.close(ApprovalCloseReason::Answered, selected, now))
     }
-    pub fn submitted_turn(&mut self, text: &str, now: SystemTime) -> CoreEffects {
+    pub fn submitted_turn(&mut self, text: &str, now: Timestamp) -> CoreEffects {
         if let Some(record) = &self.record
             && record.data().origin == "marker"
         {
@@ -197,7 +197,7 @@ impl ApprovalState {
         &mut self,
         reason: ApprovalCloseReason,
         answer: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> CoreEffects {
         let Some(record) = self.record.take() else {
             return CoreEffects::default();
@@ -289,7 +289,7 @@ impl ApprovalState {
     /// History reset closes the record without resolving a row that is about
     /// to be deleted. Keep the wire version monotonic and advance only the
     /// approval epoch; terminal replay and input sequence domains are untouched.
-    pub fn reset_history(&mut self, now: SystemTime) -> CoreEffects {
+    pub fn reset_history(&mut self, now: Timestamp) -> CoreEffects {
         let effects = self.close(ApprovalCloseReason::HistoryReset, "", now);
         self.consumed = None;
         self.native_clear_misses = 0;

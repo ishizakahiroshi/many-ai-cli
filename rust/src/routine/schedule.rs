@@ -1,7 +1,8 @@
 //! Civil-time routine scheduling, including the Go time.Date ambiguity choice.
+use crate::proto::time::Timestamp;
 use chrono::{DateTime, Datelike, Days, LocalResult, NaiveTime, Offset, TimeZone, Utc, Weekday};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Schedule {
@@ -11,7 +12,7 @@ pub struct Schedule {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub timezone: String,
 }
-pub fn next(schedule: &Schedule, after: SystemTime) -> Result<Option<SystemTime>, String> {
+pub fn next(schedule: &Schedule, after: Timestamp) -> Result<Option<Timestamp>, String> {
     if schedule.kind == "manual" {
         return Ok(None);
     }
@@ -40,7 +41,7 @@ pub fn next(schedule: &Schedule, after: SystemTime) -> Result<Option<SystemTime>
         .timezone
         .parse()
         .map_err(|_| "unknown schedule timezone")?;
-    let after: DateTime<Utc> = after.into();
+    let after: DateTime<Utc> = crate::proto::time::utc(after).map_err(|e| e.to_string())?;
     let first = after.with_timezone(&zone).date_naive();
     for offset in 0..9 {
         let date = first
@@ -65,7 +66,10 @@ pub fn next(schedule: &Schedule, after: SystemTime) -> Result<Option<SystemTime>
             }
         };
         if candidate.with_timezone(&Utc) > after {
-            return Ok(Some(candidate.with_timezone(&Utc).into()));
+            return Ok(Some(
+                crate::proto::time::from_utc(candidate.with_timezone(&Utc))
+                    .map_err(|e| e.to_string())?,
+            ));
         }
     }
     Err("no next schedule time".into())

@@ -1,11 +1,10 @@
 //! Go-compatible timestamp helpers. Storage/approval use local RFC3339 seconds;
 //! JSON time values use RFC3339Nano. Callers must select precision explicitly.
 use chrono::{DateTime, Datelike, FixedOffset, Local, NaiveDate, Offset, Timelike, Utc};
-use std::{
-    fmt,
-    sync::OnceLock,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{fmt, sync::OnceLock};
+mod clock;
+pub use clock::{EarlierTimestamp, Timestamp, UNIX_EPOCH};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TimestampError;
 impl fmt::Display for TimestampError {
@@ -14,30 +13,15 @@ impl fmt::Display for TimestampError {
     }
 }
 impl std::error::Error for TimestampError {}
-fn utc(time: SystemTime) -> Result<DateTime<Utc>, TimestampError> {
-    let nanos = match time.duration_since(UNIX_EPOCH) {
-        Ok(d) => d.as_nanos() as i128,
-        Err(e) => -(e.duration().as_nanos() as i128),
-    };
-    let seconds = i64::try_from(nanos.div_euclid(1_000_000_000)).map_err(|_| TimestampError)?;
-    DateTime::from_timestamp(seconds, nanos.rem_euclid(1_000_000_000) as u32).ok_or(TimestampError)
+pub fn utc(time: Timestamp) -> Result<DateTime<Utc>, TimestampError> {
+    DateTime::from_timestamp(time.unix_seconds(), time.subsec_nanos()).ok_or(TimestampError)
 }
-fn system(seconds: i64, nanos: u32) -> Result<SystemTime, TimestampError> {
-    let total = i128::from(seconds) * 1_000_000_000 + i128::from(nanos);
-    let magnitude = total.unsigned_abs();
-    let duration = Duration::new(
-        u64::try_from(magnitude / 1_000_000_000).map_err(|_| TimestampError)?,
-        (magnitude % 1_000_000_000) as u32,
-    );
-    if total < 0 {
-        UNIX_EPOCH.checked_sub(duration)
-    } else {
-        UNIX_EPOCH.checked_add(duration)
-    }
-    .ok_or(TimestampError)
+/// Civil-time scheduling boundary; never converts through OS clock precision.
+pub fn from_utc(time: DateTime<Utc>) -> Result<Timestamp, TimestampError> {
+    Timestamp::from_unix(time.timestamp(), time.timestamp_subsec_nanos())
 }
 /// Format with the runtime's local timezone, like time.Now().Format(RFC3339).
-pub fn format_rfc3339(time: SystemTime) -> Result<String, TimestampError> {
+pub fn format_rfc3339(time: Timestamp) -> Result<String, TimestampError> {
     let offset = utc(time)?
         .with_timezone(&Local)
         .offset()
@@ -45,7 +29,7 @@ pub fn format_rfc3339(time: SystemTime) -> Result<String, TimestampError> {
         .local_minus_utc();
     format_with_offset(time, offset, false)
 }
-pub fn format_rfc3339_nano(time: SystemTime) -> Result<String, TimestampError> {
+pub fn format_rfc3339_nano(time: Timestamp) -> Result<String, TimestampError> {
     let offset = utc(time)?
         .with_timezone(&Local)
         .offset()
@@ -56,7 +40,7 @@ pub fn format_rfc3339_nano(time: SystemTime) -> Result<String, TimestampError> {
 /// Deterministic explicit-offset formatter for provider/source timestamps and tests.
 /// Zone seconds are truncated to minutes in the suffix, as in Go's RFC3339 layout.
 pub fn format_with_offset(
-    time: SystemTime,
+    time: Timestamp,
     offset_seconds: i32,
     nano: bool,
 ) -> Result<String, TimestampError> {
@@ -89,7 +73,7 @@ pub fn format_with_offset(
 }
 /// Match time.Parse(RFC3339), including comma fractions, one-digit hours, and
 /// its tolerated 24-hour/60-minute numeric offsets. Leap seconds are rejected.
-pub fn parse_rfc3339(value: &str) -> Result<SystemTime, TimestampError> {
+pub fn parse_rfc3339(value: &str) -> Result<Timestamp, TimestampError> {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
     let re=RE.get_or_init(||regex::Regex::new(r"\A([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{1,2}):([0-9]{2}):([0-9]{2})(?:[.,]([0-9]+))?(Z|[+-][0-9]{2}:[0-9]{2})\z").expect("constant timestamp regex"));
     let c = re.captures(value).ok_or(TimestampError)?;
@@ -118,5 +102,5 @@ pub fn parse_rfc3339(value: &str) -> Result<SystemTime, TimestampError> {
         }
         (h * 3600 + m * 60) * if zone.starts_with('-') { -1 } else { 1 }
     };
-    system(date.and_utc().timestamp() - offset, nanos)
+    Timestamp::from_unix(date.and_utc().timestamp() - offset, nanos)
 }

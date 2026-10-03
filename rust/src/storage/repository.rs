@@ -182,7 +182,7 @@ impl SessionStorage for SqliteSessionStorage {
              live_session_id=excluded.live_session_id,provider=excluded.provider,display_name=excluded.display_name,cwd=excluded.cwd,branch=excluded.branch,model=excluded.model,route=excluded.route,shell=excluded.shell,state=excluded.state,started_at=excluded.started_at,log_path=excluded.log_path,parent_session_id=excluded.parent_session_id,role=excluded.role,auto=excluded.auto,depth=excluded.depth,orchestration_id=excluded.orchestration_id,board_path=excluded.board_path,worktree_branch=excluded.worktree_branch,subscription_id=excluded.subscription_id,updated_at=excluded.updated_at,ended_at=NULL,end_reason=NULL RETURNING id",
             params![st.live_session_id.0,st.provider,st.display,st.cwd,st.branch,st.label,st.model,st.route,st.shell,state,st.started_at,st.log_path,st.jsonl_path,st.parent_session_id.0,st.role,st.auto,st.depth,st.orchestration_id.0,st.board_path,st.worktree_branch,st.subscription_id,now()], |r| Ok(DbSessionId(r.get(0)?))))
     }
-    fn close_stale_sessions(&self, ended_at: SystemTime, reason: &str) -> StorageResult<i64> {
+    fn close_stale_sessions(&self, ended_at: Timestamp, reason: &str) -> StorageResult<i64> {
         self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET state='disconnected',end_reason=COALESCE(NULLIF(?, ''),end_reason),ended_at=?,updated_at=? WHERE ended_at IS NULL", params![reason,timestamp(ended_at)?,now()]).map(|n| n as i64))
     }
     fn update_session_messages(&self, session: LiveSessionId, first: &str, last: &str) {
@@ -210,7 +210,7 @@ impl SessionStorage for SqliteSessionStorage {
     ) -> StorageResult<()> {
         self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET label=?,pinned=?,color=?,note=?,auto_title=?,updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![meta.label,meta.pinned,meta.color,meta.note,meta.auto_title,now(),session.0]).map(|_| ()))
     }
-    fn end_session(&self, session: LiveSessionId, state: &str, reason: &str, ended_at: SystemTime) {
+    fn end_session(&self, session: LiveSessionId, state: &str, reason: &str, ended_at: Timestamp) {
         let result = self.with_conn(StorageErrorKind::Write, |c| c.execute("UPDATE sessions SET state=COALESCE(NULLIF(?, ''),state),end_reason=COALESCE(NULLIF(?, ''),end_reason),ended_at=?,updated_at=? WHERE live_session_id=? AND ended_at IS NULL",params![state,reason,timestamp(ended_at)?,now(),session.0]).map(|_| ()));
         self.inner.notify(session, result);
     }
@@ -237,7 +237,7 @@ impl SessionStorage for SqliteSessionStorage {
         let result = self.with_conn(StorageErrorKind::Write, |c| {
             let Some(id) = resolve(c,d.live_session_id,true)? else { return Ok(()); };
             let options = serde_json::to_string(&d.options).unwrap_or_else(|_| "null".into());
-            c.execute("INSERT INTO approvals(session_id,sig,source,kind,provider,question,context,options_json,block,candidate_key,source_epoch,state,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?) ON CONFLICT(session_id,sig) DO UPDATE SET source=excluded.source,kind=excluded.kind,provider=excluded.provider,question=excluded.question,context=excluded.context,options_json=excluded.options_json,block=excluded.block,candidate_key=excluded.candidate_key,source_epoch=excluded.source_epoch,state='pending',detected_at=excluded.detected_at,resolved_at=NULL",params![id,d.sig,d.source,d.kind,d.provider,d.question,d.context,options,d.block,d.candidate_key,d.source_epoch.0 as i64,timestamp(d.detected_at.unwrap_or_else(SystemTime::now))?]).map(|_| ())
+            c.execute("INSERT INTO approvals(session_id,sig,source,kind,provider,question,context,options_json,block,candidate_key,source_epoch,state,detected_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',?) ON CONFLICT(session_id,sig) DO UPDATE SET source=excluded.source,kind=excluded.kind,provider=excluded.provider,question=excluded.question,context=excluded.context,options_json=excluded.options_json,block=excluded.block,candidate_key=excluded.candidate_key,source_epoch=excluded.source_epoch,state='pending',detected_at=excluded.detected_at,resolved_at=NULL",params![id,d.sig,d.source,d.kind,d.provider,d.question,d.context,options,d.block,d.candidate_key,d.source_epoch.0 as i64,timestamp(d.detected_at.unwrap_or_else(Timestamp::now))?]).map(|_| ())
         });
         self.inner.notify(d.live_session_id, result);
     }
@@ -246,7 +246,7 @@ impl SessionStorage for SqliteSessionStorage {
         session: LiveSessionId,
         sig: &str,
         selected_text: &str,
-        resolved_at: SystemTime,
+        resolved_at: Timestamp,
     ) {
         if sig.is_empty() {
             return;
@@ -486,12 +486,12 @@ impl SessionStorage for SqliteSessionStorage {
     }
     fn stale_sessions(
         &self,
-        cutoff: SystemTime,
+        cutoff: Timestamp,
         limit: i64,
     ) -> StorageResult<StoredRows<SessionOverview>> {
         self.with_conn(StorageErrorKind::Query,|c|overviews(c,&format!("WHERE COALESCE(se.archived,0)=0 AND (se.ended_at IS NOT NULL OR se.state IN ('completed','error','disconnected','dismissed') OR COALESCE(NULLIF(se.last_output_at,''),NULLIF(se.started_at,''),se.created_at) < ?) ORDER BY {ACTIVITY} ASC,se.id ASC LIMIT ?"),params![timestamp(cutoff)?,normalized_limit(limit,500,100)]).map(nullable))
     }
-    fn prune_older_than(&self, cutoff: SystemTime) -> StorageResult<()> {
+    fn prune_older_than(&self, cutoff: Timestamp) -> StorageResult<()> {
         self.prune(cutoff)
     }
     fn prune_transcript_noise(&self) -> StorageResult<i64> {

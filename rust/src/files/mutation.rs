@@ -154,7 +154,9 @@ fn save_file(q: Mutation, s: &Scope) -> Result<Response> {
     let current = meta
         .modified()
         .map_err(|e| super::io_error(e, "internal_error"))?;
-    if base.is_some_and(|base| base != current) {
+    let current_logical = crate::proto::time::Timestamp::from_system_time(current)
+        .map_err(|_| err(500, "invalid_timestamp", "invalid filesystem timestamp"))?;
+    if base.is_some_and(|base| base != current_logical) {
         return Err(Response::json(
             409,
             &json!({"ok":false,"error":"conflict","detail":"file was modified by another process","mtime":time::format_utc(current)?}),

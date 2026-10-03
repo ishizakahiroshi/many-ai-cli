@@ -1,8 +1,8 @@
 use super::*;
 use crate::files::safe_fs::Dir;
+use crate::proto::time::UNIX_EPOCH;
 use std::time::Duration;
-use std::time::UNIX_EPOCH;
-fn at() -> SystemTime {
+fn at() -> Timestamp {
     UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_789)
 }
 fn fixture() -> (tempfile::TempDir, RoutineHttp) {

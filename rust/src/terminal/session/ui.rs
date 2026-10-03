@@ -165,7 +165,7 @@ impl SessionEngine {
         ui: UiBinding,
         id: LiveSessionId,
         size: Option<TerminalSize>,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         if !state.authorized(ui) {
@@ -203,7 +203,7 @@ impl SessionEngine {
         ui: UiBinding,
         id: LiveSessionId,
         size: TerminalSize,
-        now: SystemTime,
+        now: Timestamp,
     ) -> (ResizeOutcome, CoreEffects) {
         if size.cols <= 0 || size.rows <= 0 {
             return (ResizeOutcome::InvalidSize, CoreEffects::default());
@@ -243,7 +243,7 @@ impl SessionEngine {
         &self,
         ui: UiBinding,
         id: LiveSessionId,
-        _now: SystemTime,
+        _now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         if !state.authorized(ui) {
@@ -283,7 +283,7 @@ impl SessionEngine {
         &self,
         ui: UiBinding,
         message: proto::Message,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         if !state.authorized(ui) {
@@ -364,7 +364,7 @@ impl SessionEngine {
 fn resize_session(
     s: &mut Session,
     size: TerminalSize,
-    now: SystemTime,
+    now: Timestamp,
 ) -> Result<(ResizeOutcome, CoreEffects), SessionError> {
     if s.size == size {
         return Ok((ResizeOutcome::Duplicate, CoreEffects::default()));

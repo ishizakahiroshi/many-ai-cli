@@ -1,5 +1,6 @@
 //! Typed path-only handoff records. Source: internal/handoff/{handoff,render}.go, 21d0bc7.
 //! Do not add transcript bodies, dynamic metadata, raw input, diffs or environment.
+use crate::proto::time::Timestamp;
 use crate::{
     config::{Resource, RuntimePaths, private_io},
     files::safe_fs::Dir,
@@ -15,7 +16,7 @@ use std::{
     io::{self, BufRead, Read, Write},
     path::{Path, PathBuf},
     sync::Mutex,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 pub const RECORD_VERSION: i64 = 1;
@@ -216,7 +217,7 @@ impl HandoffStore {
     /// Append one encoded record to the caller-selected store. The kernel append
     /// handle preserves prior bytes without reading them. Callers must perform
     /// this blocking IO outside their session/Hub state locks.
-    pub fn append(&self, session_id: i64, mut record: Record, now: SystemTime) -> io::Result<()> {
+    pub fn append(&self, session_id: i64, mut record: Record, now: Timestamp) -> io::Result<()> {
         record.version = RECORD_VERSION;
         if record.session_id == 0 {
             record.session_id = session_id;
@@ -253,7 +254,7 @@ impl HandoffStore {
         directory.replace(&format!("s{id}_handoff.md"), markdown.as_bytes(), 0o600)?;
         Ok((path, markdown))
     }
-    pub fn prune_older_than(&self, cutoff: SystemTime) -> io::Result<()> {
+    pub fn prune_older_than(&self, cutoff: Timestamp) -> io::Result<()> {
         let directory = match Dir::open(&self.directory()) {
             Ok(e) => e,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
@@ -266,13 +267,18 @@ impl HandoffStore {
             let Ok(info) = directory.metadata(&name) else {
                 continue;
             };
-            if info.modified().is_ok_and(|time| time < cutoff) {
+            if info
+                .modified()
+                .ok()
+                .and_then(|time| Timestamp::from_system_time(time).ok())
+                .is_some_and(|time| time < cutoff)
+            {
                 let _ = directory.remove_file(&name);
             }
         }
         Ok(())
     }
-    pub fn stat_dir(&self, now: SystemTime) -> io::Result<DirStatus> {
+    pub fn stat_dir(&self, now: Timestamp) -> io::Result<DirStatus> {
         let directory = match Dir::open(&self.directory()) {
             Ok(e) => e,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(DirStatus::default()),
@@ -287,7 +293,11 @@ impl HandoffStore {
                 continue;
             };
             status.files += 1;
-            if let Ok(time) = info.modified() {
+            if let Some(time) = info
+                .modified()
+                .ok()
+                .and_then(|time| Timestamp::from_system_time(time).ok())
+            {
                 status.oldest_age = status
                     .oldest_age
                     .max(now.duration_since(time).unwrap_or_default());

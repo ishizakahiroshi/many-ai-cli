@@ -5,6 +5,7 @@ use super::{
     http::{Request, Response},
     sockets::{FrameWriter, SocketRegistry, WireFrame},
 };
+use crate::proto::time::{Timestamp, UNIX_EPOCH};
 use crate::{
     config::Config,
     process::Cancellation,
@@ -15,10 +16,7 @@ use futures_util::{
     SinkExt, StreamExt,
     stream::{FuturesUnordered, SplitSink, SplitStream},
 };
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{sync::Arc, time::Duration};
 
 pub const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 pub const UI_PING_INTERVAL: Duration = Duration::from_secs(30);
@@ -87,7 +85,7 @@ impl WebSocketService {
             &self.services.auth,
             &config.config,
             &first,
-            SystemTime::now(),
+            Timestamp::now(),
         ) {
             return Err(SessionError::AuthenticationExpired);
         }
@@ -127,7 +125,7 @@ impl WebSocketService {
                     .reattach(
                         ReattachRequest { message: first },
                         connection,
-                        SystemTime::now(),
+                        Timestamp::now(),
                     )
                     .await
                     .map(|r| (r.binding, r.reattached, r.after_reattached))
@@ -139,7 +137,7 @@ impl WebSocketService {
                         spawn_proof,
                     },
                     connection,
-                    SystemTime::now(),
+                    Timestamp::now(),
                 )
                 .await
                 .map(|r| (r.binding, r.registered, r.after_registered))
@@ -162,7 +160,7 @@ impl WebSocketService {
             };
             if let Err(error) = self.sockets.bind_wrapper(binding) {
                 self.sockets.close_pending_wrapper(connection).await?;
-                if let Ok(effects) = self.core.disconnected(binding, SystemTime::now())
+                if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
                     && let Err(failure) = self.apply(effects).await
                 {
                     (self.warning)("failed registration cleanup", &failure);
@@ -194,7 +192,7 @@ impl WebSocketService {
             }
             .await;
             self.sockets.close_wrapper(binding).await?;
-            match self.core.disconnected(binding, SystemTime::now()) {
+            match self.core.disconnected(binding, Timestamp::now()) {
                 Ok(effects) => {
                     if let Err(error) = self.apply(effects).await {
                         (self.warning)("wrapper disconnect effects", &error);
@@ -225,7 +223,7 @@ impl WebSocketService {
         if let Some(session) = active {
             match self
                 .core
-                .claim_ui_session(binding, session, size(&first), SystemTime::now())
+                .claim_ui_session(binding, session, size(&first), Timestamp::now())
             {
                 Ok(effects) => self.apply(effects).await?,
                 Err(SessionError::NotFound(_)) => {}
@@ -256,7 +254,7 @@ impl WebSocketService {
                     let message = match incoming { Ok(Some(message)) => message, Ok(None) => break Ok(()), Err(error) => break Err(error) };
                     if self.core.auth_epoch() != binding.auth_epoch { break Err(SessionError::AuthenticationExpired); }
                     let session = LiveSessionId(message.session_id);
-                    let at = SystemTime::now();
+                    let at = Timestamp::now();
                     let _accepted = if message.r#type == "pty_input" { None } else {
                         match self.core.authorize_ui_work(binding) {
                             Ok(permit) => Some(permit),
@@ -364,7 +362,7 @@ impl WebSocketService {
                         bytes: message.data,
                         total_pty_bytes: message.pty_bytes,
                     },
-                    SystemTime::now(),
+                    Timestamp::now(),
                 )?,
                 "pty_input_ack" => {
                     self.core.acknowledge(binding, InputSeq(message.input_seq));
@@ -377,7 +375,7 @@ impl WebSocketService {
                         exit_code: message.exit_code,
                         reason: message.reason,
                     },
-                    SystemTime::now(),
+                    Timestamp::now(),
                 )?,
                 _ => continue,
             };
@@ -458,7 +456,7 @@ fn authorize_first(
     auth_service: &super::pin::AuthService,
     config: &Config,
     first: &proto::Message,
-    now: SystemTime,
+    now: Timestamp,
 ) -> bool {
     let authenticated =
         auth::valid_token(&first.token, &config.token) || auth::token_or_trusted(request, config);

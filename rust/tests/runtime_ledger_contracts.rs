@@ -1,3 +1,4 @@
+use many_ai_cli::proto::time::Timestamp;
 use many_ai_cli::{
     application::hub_runtime::{RuntimeData, RuntimeLedger, probe_hub_info},
     config::RuntimePaths,
@@ -6,7 +7,7 @@ use many_ai_cli::{
 use serde_json::Value;
 use std::{
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 #[test]
@@ -35,7 +36,7 @@ fn configured_probe_wins_and_dead_pid_cannot_authenticate_fallback() {
     let home = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::production(home.path()).unwrap();
     let ledger = RuntimeLedger::open(&paths).unwrap();
-    ledger.write(48889, 42, SystemTime::UNIX_EPOCH).unwrap();
+    ledger.write(48889, 42, Timestamp::UNIX_EPOCH).unwrap();
     let seen = Mutex::new(Vec::new());
     assert_eq!(
         ledger.running_port_with(
@@ -55,7 +56,7 @@ fn configured_probe_wins_and_dead_pid_cannot_authenticate_fallback() {
     );
     assert_eq!(ledger.running_port_with(48888, |_| false, |_| false), None);
     assert!(ledger.read().unwrap().is_none());
-    ledger.write(48889, 43, SystemTime::UNIX_EPOCH).unwrap();
+    ledger.write(48889, 43, Timestamp::UNIX_EPOCH).unwrap();
     ledger.remove_if_pid(42).unwrap();
     assert_eq!(ledger.read().unwrap().unwrap().pid, 43);
 }
@@ -65,7 +66,7 @@ fn trial_never_probes_installed_or_other_trial_ports() {
     let installed = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(root.path(), 49123, installed.path()).unwrap();
     let ledger = RuntimeLedger::open(&paths).unwrap();
-    ledger.write(49123, 42, SystemTime::UNIX_EPOCH).unwrap();
+    ledger.write(49123, 42, Timestamp::UNIX_EPOCH).unwrap();
     let seen = Mutex::new(Vec::new());
     assert_eq!(
         ledger.running_port_with(
@@ -79,7 +80,7 @@ fn trial_never_probes_installed_or_other_trial_ports() {
         Some(49123)
     );
     assert_eq!(*seen.lock().unwrap(), [49123]);
-    assert!(ledger.write(49124, 42, SystemTime::UNIX_EPOCH).is_err());
+    assert!(ledger.write(49124, 42, Timestamp::UNIX_EPOCH).is_err());
 }
 #[cfg(unix)]
 #[test]
@@ -93,10 +94,10 @@ fn held_runtime_directory_survives_replacement_and_private_helpers_refuse_links(
     std::fs::create_dir(&outside).unwrap();
     let paths = RuntimePaths::trial(&root, 49123, &base.path().join("installed")).unwrap();
     let ledger = RuntimeLedger::open(&paths).unwrap();
-    ledger.write(49123, 42, SystemTime::UNIX_EPOCH).unwrap();
+    ledger.write(49123, 42, Timestamp::UNIX_EPOCH).unwrap();
     std::fs::rename(&root, &moved).unwrap();
     symlink(&outside, &root).unwrap();
-    ledger.write(49123, 43, SystemTime::UNIX_EPOCH).unwrap();
+    ledger.write(49123, 43, Timestamp::UNIX_EPOCH).unwrap();
     assert_eq!(ledger.read().unwrap().unwrap().pid, 43);
     assert!(!outside.join("hub-runtime.json").exists());
     assert_eq!(
@@ -120,12 +121,12 @@ fn runtime_writers_serialize_across_independent_handles() {
     let b = second.clone();
     let one = std::thread::spawn(move || {
         for _ in 0..20 {
-            a.write(48888, 42, SystemTime::UNIX_EPOCH).unwrap();
+            a.write(48888, 42, Timestamp::UNIX_EPOCH).unwrap();
         }
     });
     let two = std::thread::spawn(move || {
         for _ in 0..20 {
-            b.write(48889, 43, SystemTime::UNIX_EPOCH).unwrap();
+            b.write(48889, 43, Timestamp::UNIX_EPOCH).unwrap();
         }
     });
     one.join().unwrap();

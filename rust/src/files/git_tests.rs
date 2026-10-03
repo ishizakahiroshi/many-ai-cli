@@ -296,7 +296,8 @@ fn per_route_git_bodies_ignore_fields_from_other_endpoints() {
 fn git_turn_timestamps_preserve_source_local_offset() {
     const CHILD: &str = "MANY_AI_TEST_GIT_TURN_TIMEZONE";
     if std::env::var(CHILD).as_deref() == Ok("1") {
-        let at = std::time::UNIX_EPOCH + std::time::Duration::new(1_700_000_000, 123_456_789);
+        let at =
+            crate::proto::time::UNIX_EPOCH + std::time::Duration::new(1_700_000_000, 123_456_789);
         assert_eq!(
             super::turns::format_turn_timestamp(at).unwrap(),
             "2023-11-15T07:13:20+09:00"

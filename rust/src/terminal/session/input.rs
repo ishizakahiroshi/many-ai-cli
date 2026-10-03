@@ -126,7 +126,7 @@ impl SessionEngine {
             let quiet = {
                 let mut state = lock(&self.state);
                 state.session(binding)?.last_output.is_none_or(|at| {
-                    SystemTime::now().duration_since(at).unwrap_or_default() >= t.idle_settle
+                    Timestamp::now().duration_since(at).unwrap_or_default() >= t.idle_settle
                 })
             };
             if elapsed >= minimum && quiet {
@@ -303,7 +303,7 @@ impl SessionEngine {
         &self,
         binding: SessionBinding,
         request: &InputRequest,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<(CoreEffects, CoreEffects), SessionError> {
         let mut state = lock(&self.state);
         let s = state.session(binding)?;
@@ -413,7 +413,7 @@ impl SessionEngine {
     pub fn set_initial_gate(
         &self,
         binding: SessionBinding,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<(), SessionError> {
         lock(&self.state)
             .session(binding)?
@@ -427,7 +427,7 @@ impl InputQueue for SessionEngine {
         &'a self,
         binding: SessionBinding,
         request: InputRequest,
-        now: SystemTime,
+        now: Timestamp,
         cancel: &'a TaskCancellation,
     ) -> CoreFuture<'a, InputReceipt> {
         // Reserve at invocation, not first poll (the transport may spawn futures).
@@ -602,7 +602,7 @@ impl InputQueue for SessionEngine {
         };
         s.input.acknowledge(binding.wrapper, seq)
     }
-    fn transport_failed(&self, binding: SessionBinding, now: SystemTime) -> CoreEffects {
+    fn transport_failed(&self, binding: SessionBinding, now: Timestamp) -> CoreEffects {
         self.disconnected(binding, now).unwrap_or_default()
     }
     fn flush<'a>(
@@ -623,7 +623,7 @@ impl InputQueue for SessionEngine {
                 let Ok(s) = state.session(binding) else {
                     return CoreEffects::default();
                 };
-                if !s.connected || s.input.gated(SystemTime::now()) {
+                if !s.connected || s.input.gated(Timestamp::now()) {
                     return CoreEffects::default();
                 }
                 (s.input.take_pending(), s.input.take_resend())

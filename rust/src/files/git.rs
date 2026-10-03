@@ -1,6 +1,7 @@
 //! Git commands preserve argv boundaries, bounded output and one operation budget.
 //! No network/process action is performed merely by constructing this service.
 use super::{FilesService, Result, err, scope};
+use crate::proto::time::Timestamp;
 use crate::{
     hub::http::{Request, Response},
     process::{Cancellation, ExitOutcome, ProcessPlan},
@@ -14,7 +15,7 @@ use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 #[path = "git_suggest.rs"]
 mod suggest;

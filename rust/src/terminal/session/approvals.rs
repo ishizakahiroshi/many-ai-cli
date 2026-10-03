@@ -185,7 +185,7 @@ impl ApprovalActions for SessionEngine {
     fn commit(
         &self,
         action: ReservedApprovalAction,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, ApprovalActionError> {
         let mut state = lock(&self.state);
         let s = state

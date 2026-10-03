@@ -1,17 +1,13 @@
 //! Source: internal/hubruntime/runtime.go. All filesystem operations retain the
 //! explicit runtime directory capability; no process-global home lookup occurs.
+use crate::proto::time::Timestamp;
 use crate::{
     config::RuntimePaths,
     files::safe_fs::Dir,
     proto::wire::{Field, GoWire, Schema},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    fs::File,
-    io,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{fs::File, io, sync::Arc, time::Duration};
 const FILE: &str = "hub-runtime.json";
 const LOCK: &str = "hub-runtime.json.lock";
 const MAX_BYTES: usize = 1024 * 1024;
@@ -99,7 +95,7 @@ impl RuntimeLedger {
         }
         Ok(Some(data))
     }
-    pub fn write(&self, port: u16, pid: i64, now: SystemTime) -> io::Result<()> {
+    pub fn write(&self, port: u16, pid: i64, now: Timestamp) -> io::Result<()> {
         if port == 0 || pid <= 0 || self.trial_port.is_some_and(|p| p != port) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

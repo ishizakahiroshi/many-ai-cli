@@ -1,6 +1,7 @@
 //! Routine HTTP operations. The caller applies the ordinary Hub token/PIN,
 //! method, Host and Origin guard before invoking this authenticated boundary.
 use super::http::{Request, Response, decode_json, require_method};
+use crate::proto::time::Timestamp;
 use crate::{
     proto::wire::{Field, GoWire, Schema},
     routine::{
@@ -11,7 +12,6 @@ use crate::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use std::time::SystemTime;
 use std::{path::PathBuf, sync::Arc};
 pub struct RoutineHttp {
     pub store: Arc<RoutineStore>,
@@ -34,7 +34,7 @@ impl GoWire for StartRequest {
     }];
 }
 impl RoutineHttp {
-    pub fn handle_authenticated(&self, request: &Request, now: SystemTime) -> Option<Response> {
+    pub fn handle_authenticated(&self, request: &Request, now: Timestamp) -> Option<Response> {
         if request.path == "/api/routine-runs" || request.path.starts_with("/api/routine-runs/") {
             return Some(self.runs(request));
         }
@@ -43,7 +43,7 @@ impl RoutineHttp {
         }
         Some(self.routines(request, now))
     }
-    fn routines(&self, request: &Request, now: SystemTime) -> Response {
+    fn routines(&self, request: &Request, now: Timestamp) -> Response {
         if let Err(error) = require_method(request, &["GET", "POST", "PUT", "DELETE"]) {
             return error;
         }

@@ -18,12 +18,12 @@
 //! let proof: VerifiedUiOrigin = serde_json::from_str(r#"{"origin":"ui"}"#).unwrap();
 //! ```
 use super::{is_false, is_zero, null_default};
+use crate::proto::time::Timestamp;
 use crate::{
     config::RuntimePaths,
     process::{Cancellation, ProcessPlan},
 };
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 pub type CoreFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -891,7 +891,7 @@ pub struct ApprovalDetected {
     pub source_epoch: ApprovalSourceEpoch,
     pub options: Vec<super::ApprovalOption>,
     /// None preserves Go zero-time's use-the-current-time behavior.
-    pub detected_at: Option<SystemTime>,
+    pub detected_at: Option<Timestamp>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1000,7 +1000,7 @@ pub trait SessionStorage: Send + Sync {
     fn set_on_write_error(&self, handler: Option<WriteErrorHandler>);
     fn store_event_async(&self, session: LiveSessionId, event: HistoryEvent) -> EnqueueOutcome;
     fn start_session(&self, start: SessionStart) -> StorageResult<DbSessionId>;
-    fn close_stale_sessions(&self, ended_at: SystemTime, reason: &str) -> StorageResult<i64>;
+    fn close_stale_sessions(&self, ended_at: Timestamp, reason: &str) -> StorageResult<i64>;
     fn update_session_messages(&self, session: LiveSessionId, first: &str, last: &str);
     fn update_session_state(&self, session: LiveSessionId, state: &str, last_output_at: &str);
     fn session_card_meta_by_live_session(
@@ -1012,7 +1012,7 @@ pub trait SessionStorage: Send + Sync {
         session: LiveSessionId,
         meta: SessionCardMeta,
     ) -> StorageResult<()>;
-    fn end_session(&self, session: LiveSessionId, state: &str, reason: &str, ended_at: SystemTime);
+    fn end_session(&self, session: LiveSessionId, state: &str, reason: &str, ended_at: Timestamp);
     fn clear_session_history(&self, session: LiveSessionId) -> StorageResult<()>;
     fn store_event(&self, session: LiveSessionId, event: HistoryEvent) -> StorageResult<()>;
     fn store_approval_detected(&self, detected: ApprovalDetected);
@@ -1021,7 +1021,7 @@ pub trait SessionStorage: Send + Sync {
         session: LiveSessionId,
         sig: &str,
         selected_text: &str,
-        resolved_at: SystemTime,
+        resolved_at: Timestamp,
     );
     fn approvals_by_live_session(
         &self,
@@ -1092,10 +1092,10 @@ pub trait SessionStorage: Send + Sync {
     fn usage_summary(&self) -> StorageResult<UsageSummary>;
     fn stale_sessions(
         &self,
-        cutoff: SystemTime,
+        cutoff: Timestamp,
         limit: i64,
     ) -> StorageResult<StoredRows<SessionOverview>>;
-    fn prune_older_than(&self, cutoff: SystemTime) -> StorageResult<()>;
+    fn prune_older_than(&self, cutoff: Timestamp) -> StorageResult<()>;
     fn prune_transcript_noise(&self) -> StorageResult<i64>;
     /// Counts describe pre-reset totals, not affected SQL row counts.
     fn reset_history(&self, preserve: &[LiveSessionId]) -> StorageResult<ResetResult>;
@@ -1210,7 +1210,7 @@ pub struct SessionDetails {
     pub binding: SessionBinding,
     /// Exact core clock for source-compatible inactivity decisions; never parse
     /// the seconds-formatted display snapshot back into runtime authority.
-    pub last_output_at: Option<SystemTime>,
+    pub last_output_at: Option<Timestamp>,
     pub snapshot: SessionSnapshot,
     pub db_id: Option<DbSessionId>,
     pub git_root: Option<std::path::PathBuf>,
@@ -1251,13 +1251,13 @@ pub trait SessionCore:
         &'a self,
         request: RegisterRequest,
         connection: WrapperConnectionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> CoreFuture<'a, Result<Registration, SessionError>>;
     fn reattach<'a>(
         &'a self,
         request: ReattachRequest,
         connection: WrapperConnectionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> CoreFuture<'a, Result<Reattachment, SessionError>>;
     fn snapshot(&self, session: LiveSessionId) -> Option<SessionSnapshot>;
     fn snapshots(&self) -> Vec<SessionSnapshot>;
@@ -1277,56 +1277,55 @@ pub trait SessionCore:
         &self,
         binding: SessionBinding,
         observation: SessionObservation,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn observe_output(
         &self,
         binding: SessionBinding,
         chunk: OutputChunk,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn observe_end(
         &self,
         binding: SessionBinding,
         end: SessionEnd,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn disconnected(
         &self,
         binding: SessionBinding,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn resize(
         &self,
         ui: UiBinding,
         session: LiveSessionId,
         size: TerminalSize,
-        now: SystemTime,
+        now: Timestamp,
     ) -> (ResizeOutcome, CoreEffects);
     fn reset_history(
         &self,
         session: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
-    fn dismiss(&self, session: LiveSessionId, now: SystemTime)
-    -> Result<CoreEffects, SessionError>;
+    fn dismiss(&self, session: LiveSessionId, now: Timestamp) -> Result<CoreEffects, SessionError>;
     fn reset_history_from_ui(
         &self,
         ui: UiBinding,
         session: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn dismiss_from_ui(
         &self,
         ui: UiBinding,
         session: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn stop(
         &self,
         session: LiveSessionId,
         reason: StopReason,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     fn update_card_meta(
         &self,
@@ -1358,21 +1357,21 @@ pub trait SessionCore:
         ui: UiBinding,
         session: LiveSessionId,
         size: Option<TerminalSize>,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     /// Advisory after input was already sent; validates record/epoch without resending.
     fn consume_approval(
         &self,
         ui: UiBinding,
         message: super::Message,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
     /// Replies from the current immutable record; never re-detect from a stale UI tail.
     fn resync_approval(
         &self,
         ui: UiBinding,
         session: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
 
     fn detach_ui(&self, ui: UiBinding) -> CoreEffects;
@@ -1516,7 +1515,7 @@ pub trait InputQueue: Send + Sync {
         &'a self,
         binding: SessionBinding,
         request: InputRequest,
-        now: SystemTime,
+        now: Timestamp,
         cancellation: &'a TaskCancellation,
     ) -> CoreFuture<'a, InputReceipt>;
     fn reserve_frame(
@@ -1526,7 +1525,7 @@ pub trait InputQueue: Send + Sync {
     ) -> Result<(InputReservation, InputFrame), SessionError>;
     fn release_frame(&self, reservation: InputReservation);
     fn acknowledge(&self, binding: SessionBinding, seq: InputSeq) -> AckDisposition;
-    fn transport_failed(&self, binding: SessionBinding, now: SystemTime) -> CoreEffects;
+    fn transport_failed(&self, binding: SessionBinding, now: Timestamp) -> CoreEffects;
     fn flush<'a>(
         &'a self,
         binding: SessionBinding,
@@ -1567,7 +1566,7 @@ pub struct ApprovalRecordData {
     pub context: String,
     pub options: Vec<super::ApprovalOption>,
     pub summary: super::ApprovalSummary,
-    pub detected_at: SystemTime,
+    pub detected_at: Timestamp,
 }
 /// After publishing, replace the record rather than editing shared fields.
 #[derive(Clone, PartialEq)]
@@ -1657,7 +1656,7 @@ pub trait ApprovalActions: Send + Sync {
     fn commit(
         &self,
         action: ReservedApprovalAction,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, ApprovalActionError>;
     fn release(&self, action: ReservedApprovalAction);
 }
@@ -1672,7 +1671,7 @@ pub enum PersistenceEffect {
         session: LiveSessionId,
         sig: String,
         selected_text: String,
-        resolved_at: SystemTime,
+        resolved_at: Timestamp,
     },
     CardMeta {
         session: LiveSessionId,
@@ -1698,7 +1697,7 @@ pub enum PersistenceEffect {
         binding: SessionBinding,
         state: String,
         reason: String,
-        ended_at: SystemTime,
+        ended_at: Timestamp,
     },
     ClearSessionHistory(LiveSessionId),
 }
@@ -2316,7 +2315,7 @@ pub struct PendingSpawnConfirmation {
     pub parent: LiveSessionId,
     pub requested_provider: String,
     pub body: ResolvedChildSpawn,
-    pub requested_at: SystemTime,
+    pub requested_at: Timestamp,
     pub admission: AdmissionId,
     pub waiter_gone: bool,
 }

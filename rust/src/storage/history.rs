@@ -1,7 +1,7 @@
 use super::*;
 
 impl SqliteSessionStorage {
-    pub(super) fn prune(&self, cutoff: SystemTime) -> StorageResult<()> {
+    pub(super) fn prune(&self, cutoff: Timestamp) -> StorageResult<()> {
         let until = Instant::now() + Duration::from_secs(60);
         loop {
             let ids=self.with_conn(StorageErrorKind::Query,|c|c.prepare("SELECT id FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ? ORDER BY id LIMIT 50")?.query_map([timestamp(cutoff)?],|r|r.get::<_,i64>(0))?.collect::<rusqlite::Result<Vec<_>>>())?;

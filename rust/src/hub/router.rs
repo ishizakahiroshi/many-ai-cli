@@ -154,13 +154,17 @@ impl ServiceRouter {
     pub async fn handle_async(&self, request: &Request, now: i64) -> Dispatch {
         self.handle_async_at(
             request,
-            std::time::UNIX_EPOCH + std::time::Duration::from_secs(now.max(0) as u64),
+            crate::proto::time::UNIX_EPOCH + std::time::Duration::from_secs(now.max(0) as u64),
         )
         .await
     }
-    pub async fn handle_async_at(&self, request: &Request, at: std::time::SystemTime) -> Dispatch {
+    pub async fn handle_async_at(
+        &self,
+        request: &Request,
+        at: crate::proto::time::Timestamp,
+    ) -> Dispatch {
         let now = at
-            .duration_since(std::time::UNIX_EPOCH)
+            .duration_since(crate::proto::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
         if crate::files::ROUTES.contains(&request.path.as_str()) {
@@ -195,10 +199,15 @@ impl ServiceRouter {
         self.handle_with_time(
             request,
             now,
-            std::time::UNIX_EPOCH + std::time::Duration::from_secs(now.max(0) as u64),
+            crate::proto::time::UNIX_EPOCH + std::time::Duration::from_secs(now.max(0) as u64),
         )
     }
-    fn handle_with_time(&self, request: &Request, now: i64, at: std::time::SystemTime) -> Dispatch {
+    fn handle_with_time(
+        &self,
+        request: &Request,
+        now: i64,
+        at: crate::proto::time::Timestamp,
+    ) -> Dispatch {
         if assets::is_static(&request.path) {
             return Dispatch::response(assets::static_asset(request));
         }

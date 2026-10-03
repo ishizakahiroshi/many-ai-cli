@@ -142,7 +142,7 @@ impl FilesService {
             }
         };
         if let Some(history) = &self.history {
-            let value = json!({"ts":crate::proto::time::format_rfc3339(now).map_err(|_|err(500,"invalid_timestamp","invalid attachment timestamp"))?,"type":"attach","session_id":session,"path":saved,"filename":filename,"provider":provider});
+            let value = json!({"ts":crate::proto::time::Timestamp::from_system_time(now).and_then(crate::proto::time::format_rfc3339).map_err(|_|err(500,"invalid_timestamp","invalid attachment timestamp"))?,"type":"attach","session_id":session,"path":saved,"filename":filename,"provider":provider});
             if let serde_json::Value::Object(obj) = value {
                 history
                     .apply(crate::proto::core::PersistenceEffect::Event {

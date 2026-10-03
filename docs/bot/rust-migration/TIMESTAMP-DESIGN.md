@@ -1,4 +1,4 @@
-# Portable wall-clock representation (proposed, 2026-10-03)
+# Portable wall-clock representation (candidate implementation, 2026-10-03)
 
 ## Native evidence and scope
 
@@ -8,7 +8,7 @@ This is a logical wall-clock compatibility correction, not a new scheduler, time
 
 ## Representation and conversions
 
-Proposed shared `proto::time::Timestamp`: normalized signed Unix seconds (`i64`) plus a nanosecond remainder (`u32`, strictly less than 1,000,000,000). It is Copy, ordered, and immutable; constructors enforce normalization/range. A negative fractional instant uses floor seconds plus positive remainder. Arithmetic with `Duration` checks the seconds range, and signed duration comparison retains the current before/after semantics.
+Shared candidate `proto::time::Timestamp`: normalized signed Unix seconds (`i64`) plus a nanosecond remainder (`u32`, strictly less than 1,000,000,000). It is Copy, ordered, and immutable; constructors enforce normalization/range. A negative fractional instant uses floor seconds plus positive remainder. Arithmetic with `Duration` checks the seconds range, and signed duration comparison retains the current before/after semantics.
 
 - Parsing RFC3339 and constructing deterministic fixture times produce Timestamp directly, never through `SystemTime`.
 - Existing formatters consume Timestamp and retain the corpus's exact nine-digit maximum precision and Go offset quirks.
@@ -32,6 +32,12 @@ Logical wall-clock consumers to move together with their typed contracts and fix
 
 ## Validation and acceptance
 
-First add standalone normalization/arithmetic/conversion regressions, including negative fractions, bounds, exact OS round-trip and Windows sub-tick rejection. Then migrate inventoried callers without changing their output assertions and run the full locked test suite, formatting and strict clippy on an immutable snapshot. Re-run all four actual native targets. The existing Go formatting/parsing corpus stays byte-identical; add direct parse-format nine-digit regression on every platform.
+The candidate adds normalization/arithmetic/conversion regressions for negative fractions, bounds, exact OS round-trip and Windows sub-tick rejection. Inventoried logical callers migrated without changing output assertions; the immutable full locked suite, formatting and strict clippy pass. The existing Go formatting/parsing corpus is byte-identical, with an added direct parse-format nine-digit regression on every platform. Re-running all four actual native targets remains required.
 
-Author test and native CI receipts are distinct from independent review. The currently blocked independent re-review, native filesystem confinement, full command/service integration, copied-data rollback and cutover gates remain open. This document is a bounded implementation proposal, not an acceptance receipt.
+Author test and native CI receipts are distinct from independent review. The currently blocked independent re-review, native filesystem confinement, full command/service integration, copied-data rollback and cutover gates remain open. This document records the bounded implementation and its author validation; native and independent acceptance remain separate.
+
+## Implemented boundary and author validation
+
+The initial logical migration registers `proto::time::Timestamp` and changes the logical callers listed above. File metadata formatters, HTTP dates, attachment retention, launcher stale-temp cleanup and wrapper hook cleanup retain native SystemTime where they only consume native filesystem values; formatting/concurrency checks cross explicitly into Timestamp. File save's parsed `base_mtime` is compared to a converted metadata timestamp, without any conversion of the client's value back to native precision. Handoff/subagent metadata scanning also converts explicitly. Newly retained notification/voice sources remain outside the compiled receipt until their modules/dependencies are registered.
+
+Initial `cargo check --offline --locked --all-targets` passes after resolving every typed native/civil-time boundary. The first full author test invocation selected a non-compiler `go` from PATH for the database rollback oracle, so that one test failed with “Go: Unknown option: run”; all other targets passed. A clean root-package rebuild in the immutable clock export, with pinned Go selected, subsequently passed520 tests, formatting and strict all-target clippy. This earlier attempt remains an environment selection error, not a Go/Rust behavioral divergence.

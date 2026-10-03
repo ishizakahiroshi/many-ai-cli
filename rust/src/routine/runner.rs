@@ -5,8 +5,8 @@ use super::{
     store::{Admission, Error, Observation, RoutineStore},
     validation,
 };
+use crate::proto::time::Timestamp;
 use crate::proto::{DoneSummary, core::*};
-use std::time::SystemTime;
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -35,7 +35,7 @@ pub struct RoutineRunner {
     home: PathBuf,
     instance: String,
     cancellation: TaskCancellation,
-    now: Arc<dyn Fn() -> SystemTime + Send + Sync>,
+    now: Arc<dyn Fn() -> Timestamp + Send + Sync>,
     warning: Warning,
     tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
 }
@@ -55,7 +55,7 @@ impl RoutineRunner {
             home,
             instance,
             cancellation,
-            now: Arc::new(SystemTime::now),
+            now: Arc::new(Timestamp::now),
             warning,
             tasks: Mutex::new(vec![]),
         }
@@ -69,7 +69,7 @@ impl RoutineRunner {
         id: &str,
         request: &str,
         trigger: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<Admission, Error> {
         let preparation = self.preparation.clone().ok_or(Error::LaunchUnavailable)?;
         let runtime =
@@ -141,7 +141,7 @@ impl RoutineRunner {
             (self.warning)("save routine launch state", &error);
         }
     }
-    pub fn tick(self: &Arc<Self>, now: SystemTime, startup: bool) -> Result<(), Error> {
+    pub fn tick(self: &Arc<Self>, now: Timestamp, startup: bool) -> Result<(), Error> {
         for definition in self.store.definitions()? {
             if !definition.enabled
                 || definition.schedule.kind == "manual"
@@ -186,7 +186,7 @@ impl RoutineRunner {
         }
         Ok(())
     }
-    pub fn refresh(&self, now: SystemTime) -> Result<(), Error> {
+    pub fn refresh(&self, now: Timestamp) -> Result<(), Error> {
         let observations = self
             .core
             .snapshots()
@@ -217,7 +217,7 @@ impl RoutineRunner {
             &self.instance,
         )
     }
-    pub fn active_session(&self, id: LiveSessionId, at: SystemTime) -> bool {
+    pub fn active_session(&self, id: LiveSessionId, at: Timestamp) -> bool {
         self.core
             .snapshot(id)
             .is_some_and(|snapshot| self.store.active_session(&snapshot.launch_label, at))

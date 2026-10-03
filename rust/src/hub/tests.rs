@@ -1,5 +1,6 @@
 use super::{auth::*, http::*};
 use crate::config::Config;
+use crate::proto::time::UNIX_EPOCH;
 
 fn request() -> Request {
     Request {
@@ -610,7 +611,7 @@ fn service_trial_bound_port_must_preserve_explicit_isolation() {
 
 #[test]
 fn service_pin_fractional_lockout_does_not_unlock_or_round_early() {
-    use std::time::{Duration, UNIX_EPOCH};
+    use std::time::Duration;
     let start = UNIX_EPOCH + Duration::new(1000, 900_000_000);
     let mut limiter = super::pin::Limiter::default();
     for _ in 0..5 {

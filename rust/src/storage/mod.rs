@@ -1,5 +1,6 @@
 //! Go-compatible SQLite history repository (Go oracle 21d0bc7).
 //! This is a repository implementation, not proof of Hub caller integration.
+use crate::proto::time::Timestamp;
 mod directory;
 mod history;
 mod repository;
@@ -22,7 +23,7 @@ use std::{
         mpsc::{self, SyncSender},
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant, SystemTime},
+    time::{Duration, Instant},
 };
 
 /// Every handle uses one physical connection. All persisted paths are derived
@@ -168,13 +169,13 @@ impl Drop for SqliteSessionStorage {
     }
 }
 /// Shared Go-compatible local-offset formatter; unsupported input is an error.
-fn timestamp(time: SystemTime) -> rusqlite::Result<String> {
+fn timestamp(time: Timestamp) -> rusqlite::Result<String> {
     crate::proto::time::format_rfc3339(time)
         .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))
 }
 fn now() -> String {
     // Supported operating system clocks are inside the RFC3339 year range.
-    crate::proto::time::format_rfc3339(SystemTime::now())
+    crate::proto::time::format_rfc3339(Timestamp::now())
         .expect("system clock outside RFC3339 range")
 }
 fn normalized_limit(value: i64, max: i64, default: i64) -> i64 {

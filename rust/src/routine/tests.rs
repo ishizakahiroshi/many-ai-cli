@@ -1,12 +1,10 @@
 use super::memo::*;
+use crate::proto::time::{Timestamp, UNIX_EPOCH};
 use crate::{
     files::safe_fs::Dir,
     hub::http::{Request, Response},
 };
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{sync::Arc, time::Duration};
 fn manager() -> (tempfile::TempDir, MemoManager) {
     let dir = tempfile::tempdir().unwrap();
     let root = Arc::new(Dir::open(dir.path()).unwrap());
@@ -25,7 +23,7 @@ fn value(r: Response) -> serde_json::Value {
     assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
     serde_json::from_slice(&r.body).unwrap()
 }
-fn now() -> SystemTime {
+fn now() -> Timestamp {
     UNIX_EPOCH + Duration::new(1_700_000_000, 123_456_789)
 }
 #[test]
@@ -221,7 +219,7 @@ fn memo_images_basename_limits_svg_and_orphan_cleanup() {
         .unwrap()
         .to_string();
     assert_eq!(
-        m.clean_orphan_images(SystemTime::now() + Duration::from_secs(90000)),
+        m.clean_orphan_images(Timestamp::now() + Duration::from_secs(90000)),
         1
     );
     assert!(!dir.path().join("memo-images").join(image).exists());

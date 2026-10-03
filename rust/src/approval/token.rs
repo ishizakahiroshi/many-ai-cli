@@ -1,5 +1,6 @@
 //! Purpose-limited one-tap HMAC tokens. Verification is read-only; nonce
 //! consumption belongs after successful bound input, never GET or failed send.
+use crate::proto::time::Timestamp;
 use crate::proto::{
     self,
     core::{ApprovalSourceEpoch, LiveSessionId},
@@ -9,11 +10,7 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use std::{
-    collections::BTreeMap,
-    sync::Mutex,
-    time::{Duration, SystemTime},
-};
+use std::{collections::BTreeMap, sync::Mutex, time::Duration};
 pub const ONE_TAP_TTL: Duration = Duration::from_secs(120);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenError {
@@ -138,7 +135,7 @@ impl OneTapManager {
         signature: &str,
         epoch: ApprovalSourceEpoch,
         action: OneTapAction,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<String, TokenError> {
         if session.0 <= 0
             || approval_id.trim().is_empty()
@@ -164,7 +161,7 @@ impl OneTapManager {
         let mac = self.mac(encoded.as_bytes()).finalize().into_bytes();
         Ok(format!("{encoded}.{}", URL_SAFE_NO_PAD.encode(mac)))
     }
-    pub fn verify(&self, token: &str, now: SystemTime) -> Result<VerifiedClaim, TokenError> {
+    pub fn verify(&self, token: &str, now: Timestamp) -> Result<VerifiedClaim, TokenError> {
         let parts: Vec<_> = token.split('.').collect();
         if parts.len() != 2 || parts.iter().any(|s| s.is_empty()) {
             return Err(TokenError::Invalid);
@@ -196,7 +193,7 @@ impl OneTapManager {
     }
     /// Invoke under the live session/action transaction after transmission and
     /// binding validation. The caller must never clear a replacement candidate.
-    pub fn consume(&self, claim: &VerifiedClaim, now: SystemTime) -> Result<(), TokenError> {
+    pub fn consume(&self, claim: &VerifiedClaim, now: Timestamp) -> Result<(), TokenError> {
         let now = unix(now)?;
         let mut used = self.used.lock().unwrap_or_else(|p| p.into_inner());
         used.retain(|_, expiry| *expiry > now);
@@ -210,8 +207,8 @@ impl OneTapManager {
         Ok(())
     }
 }
-fn unix(time: SystemTime) -> Result<i64, TokenError> {
-    match time.duration_since(SystemTime::UNIX_EPOCH) {
+fn unix(time: Timestamp) -> Result<i64, TokenError> {
+    match time.duration_since(Timestamp::UNIX_EPOCH) {
         Ok(d) => i64::try_from(d.as_secs()).map_err(|_| TokenError::Invalid),
         Err(e) => {
             let d = e.duration();

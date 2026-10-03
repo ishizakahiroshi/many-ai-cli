@@ -1,5 +1,6 @@
 //! Source → Rust: internal/hub/subagent_source_*_test.go and subagent_tree_test.go
 //! → orchestration/subagent/*.rs. Every provider record below is synthetic.
+use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 use many_ai_cli::{
     orchestration::subagent::*,
     proto::{SubagentNode, SubagentTree},
@@ -9,10 +10,10 @@ use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 const TS: &str = "2026-10-03T01:00:00Z";
-fn now() -> SystemTime {
+fn now() -> Timestamp {
     many_ai_cli::proto::time::parse_rfc3339("2026-10-03T02:00:00Z").unwrap()
 }
 fn write(path: &Path, lines: &[Value]) {
@@ -344,7 +345,7 @@ fn codex_first_observation_unknown_is_frozen_despite_later_file_growth() {
     let p = codex_root(t.path());
     let c = codex_child(&p, "one", "root", 1);
     let file = fs::File::options().write(true).open(&c).unwrap();
-    file.set_times(fs::FileTimes::new().set_modified(UNIX_EPOCH))
+    file.set_times(fs::FileTimes::new().set_modified(UNIX_EPOCH.to_system_time_exact().unwrap()))
         .unwrap();
     let first = read(Adapter::Codex, &p, None);
     assert_eq!(first.tree.as_ref().unwrap().nodes[0].state, "unknown");
@@ -614,7 +615,9 @@ fn actual_go_three_provider_tree_and_signature_corpus() {
                 .write(true)
                 .open(path)
                 .unwrap()
-                .set_times(fs::FileTimes::new().set_modified(modified))
+                .set_times(
+                    fs::FileTimes::new().set_modified(modified.to_system_time_exact().unwrap()),
+                )
                 .unwrap();
         }
         let batch = read_tree(

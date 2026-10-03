@@ -1,6 +1,6 @@
 //! Deterministic caller tests use isolated journal/database roots and injected
 //! transports. They do not assert native PTY/provider/UI acceptance.
-use std::time::{SystemTime, UNIX_EPOCH};
+use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 #[path = "session_engine/approval_actions.rs"]
 mod approval_actions;
 use many_ai_cli::{
@@ -20,7 +20,7 @@ use std::{
     },
     time::Duration,
 };
-fn now() -> SystemTime {
+fn now() -> Timestamp {
     UNIX_EPOCH + Duration::from_secs(1767323045)
 }
 type SendHook =

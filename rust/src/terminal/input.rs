@@ -5,10 +5,10 @@ use crate::proto::core::{
     AckDisposition, INITIAL_PROMPT_GATE_TIMEOUT, INPUT_QUEUE_LIMIT, InputFrame,
     InputHighWatermarks, InputSeq, ProcessedInput, WrapperConnectionId,
 };
+use crate::proto::time::Timestamp;
 use std::{
     collections::{BTreeMap, VecDeque},
     sync::Mutex,
-    time::SystemTime,
 };
 
 #[derive(Clone, Debug)]
@@ -23,7 +23,7 @@ pub struct InputState {
     inflight: BTreeMap<InputSeq, Inflight>,
     resend: Vec<InputFrame>,
     ack_capable: bool,
-    initial_gate: Option<SystemTime>,
+    initial_gate: Option<Timestamp>,
 }
 impl InputState {
     /// Cold reattach must start above the wrapper's processed/received range;
@@ -31,7 +31,7 @@ impl InputState {
     pub fn observe_high_watermark(&mut self, sequence: InputSeq) {
         self.sequence = self.sequence.max(sequence.0);
     }
-    pub fn set_initial_gate(&mut self, now: SystemTime) {
+    pub fn set_initial_gate(&mut self, now: Timestamp) {
         self.initial_gate = Some(now);
     }
     pub fn clear_initial_gate(&mut self) {
@@ -40,7 +40,7 @@ impl InputState {
     pub fn initial_prompt_phase(&self) -> bool {
         self.initial_gate.is_some()
     }
-    pub fn gated(&self, now: SystemTime) -> bool {
+    pub fn gated(&self, now: Timestamp) -> bool {
         self.initial_gate.is_some_and(|at| {
             now.duration_since(at).unwrap_or_default() < INITIAL_PROMPT_GATE_TIMEOUT
         })

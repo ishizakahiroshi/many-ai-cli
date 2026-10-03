@@ -24,9 +24,15 @@ second config, storage, session manager or process abstraction.
 - Additive HTTP boundary: `proto::decode_http_json<T: GoWire>` decodes one value
   without EOF, using the caller's explicit `GoWire::SCHEMAS`. Route-specific body
   limits stay with the service; do not use it for whole-frame WS messages.
-- `proto::time` centralizes RFC3339 seconds/nanoseconds, runtime-local timezone,
-  explicit fixed-offset formatting and Go-compatible parsing. Do not hand-roll
-  independent storage/approval/launcher calendar conversions.
+- `proto::time::Timestamp` is the logical wall clock: normalized signed Unix
+  seconds plus nanoseconds, independent of Windows FILETIME precision. Parsing,
+  arithmetic, shared event fields and exact fixture clocks use Timestamp directly.
+  Native OS/metadata reads enter through `from_system_time`; an OS-facing write
+  uses `to_system_time_exact`, which rejects precision loss. `utc`/`from_utc` are
+  explicit civil-time boundaries. `Instant`, Tokio deadlines and Duration remain
+  the elapsed-time primitives. See `docs/bot/rust-migration/TIMESTAMP-DESIGN.md`.
+  RFC3339 second/nanosecond selection, local timezone and Go-compatible parsing
+  remain shared; do not hand-roll independent calendar conversions.
 - `proto::provider::*`: complete provider data/registry persistence DTOs. Use
   `provider::to_go_json` for typed values whose bytes enter Go-compatible hashes;
   JSON value equality alone is insufficient for signatures/digests.

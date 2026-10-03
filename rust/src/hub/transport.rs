@@ -169,9 +169,9 @@ async fn handle(
             .on_upgrade(move |socket| websockets.run(socket, request))
             .into_response();
     }
-    let captured_at = std::time::SystemTime::now();
+    let captured_at = crate::proto::time::Timestamp::now();
     let now = captured_at
-        .duration_since(std::time::UNIX_EPOCH)
+        .duration_since(crate::proto::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
     // Rejections must not wait for an attacker to finish a request body.

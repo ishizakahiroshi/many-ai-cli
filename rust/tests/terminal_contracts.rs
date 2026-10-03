@@ -1,8 +1,9 @@
+use many_ai_cli::proto::time::Timestamp;
 use many_ai_cli::{
     proto::core::*,
     terminal::{input::*, replay::*, vt::*, width::cell_width},
 };
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 fn partitions(bytes: &[u8], cols: usize, rows: usize) -> Vec<String> {
     let mut whole = VtBuffer::new(cols, rows);
@@ -232,7 +233,7 @@ fn input_old_wrappers_never_resend_and_queues_are_bounded() {
 #[test]
 fn input_gate_and_paste_failure_boundary() {
     let mut input = InputState::default();
-    let now = SystemTime::UNIX_EPOCH;
+    let now = Timestamp::UNIX_EPOCH;
     input.set_initial_gate(now);
     assert!(input.gated(now + Duration::from_secs(89)));
     assert!(!input.gated(now + Duration::from_secs(90)));

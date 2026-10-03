@@ -22,7 +22,7 @@ struct SessionTurns {
 }
 struct AwaitCommit {
     binding: SessionBinding,
-    deadline: SystemTime,
+    deadline: Timestamp,
     language: String,
     buffer: String,
     progressed: bool,
@@ -45,7 +45,7 @@ pub struct GitTurnCompleted {
     // Dropping the completed result releases the per-incarnation capture gate.
     _completion: tokio::sync::OwnedMutexGuard<()>,
 }
-pub(super) fn format_turn_timestamp(time: SystemTime) -> Result<String> {
+pub(super) fn format_turn_timestamp(time: Timestamp) -> Result<String> {
     crate::proto::time::format_rfc3339(time)
         .map_err(|_| err(500, "invalid_timestamp", "invalid turn timestamp"))
 }
@@ -165,7 +165,7 @@ impl FilesService {
         let turn = s.turns.last().map(|s| s.turn + 1).unwrap_or(1);
         let ended = ended_at
             .and_then(super::super::time::parse)
-            .unwrap_or_else(SystemTime::now);
+            .unwrap_or_else(Timestamp::now);
         let ended = format_turn_timestamp(ended)?;
         let started = match super::super::time::parse(&started) {
             Some(started) => format_turn_timestamp(started)?,
@@ -274,7 +274,7 @@ impl FilesService {
         if !details.connected {
             return Err(err(409, "no_wrapper", "AI session is not connected"));
         }
-        let now = SystemTime::now();
+        let now = Timestamp::now();
         let binding = details.binding;
         let ja = language.is_empty() || language.eq_ignore_ascii_case("ja");
         {
@@ -323,7 +323,7 @@ impl FilesService {
         core: &dyn SessionCore,
         binding: SessionBinding,
         clean_text: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Vec<crate::proto::Message> {
         if !core.is_current(binding) {
             return vec![];

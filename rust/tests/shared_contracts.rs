@@ -1,4 +1,5 @@
 //! Synthetic C1 contract tests. No provider, network, production files or SQLite.
+use many_ai_cli::proto::time::UNIX_EPOCH;
 use many_ai_cli::{
     process,
     proto::{self, core::*},
@@ -6,7 +7,7 @@ use many_ai_cli::{
 use serde_json::json;
 use std::{
     sync::{Arc, Mutex},
-    time::{Duration, UNIX_EPOCH},
+    time::Duration,
 };
 
 #[test]

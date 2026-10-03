@@ -4,7 +4,7 @@ impl SessionEngine {
         &self,
         request: RegisterRequest,
         connection: WrapperConnectionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<Registration, SessionError> {
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
@@ -135,7 +135,7 @@ impl SessionEngine {
         m: &proto::Message,
         size: TerminalSize,
         started_text: &str,
-        _started: SystemTime,
+        _started: Timestamp,
         append: bool,
     ) -> Result<Session, SessionError> {
         let paths =
@@ -244,7 +244,7 @@ impl SessionEngine {
         &self,
         request: ReattachRequest,
         connection: WrapperConnectionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<Reattachment, SessionError> {
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
@@ -445,7 +445,7 @@ impl SessionEngine {
         &self,
         binding: SessionBinding,
         end: SessionEnd,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         let s = state.session(binding)?;
@@ -473,7 +473,7 @@ impl SessionEngine {
     pub fn disconnected(
         &self,
         binding: SessionBinding,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         let Some(s) = state.sessions.get_mut(&binding.session) else {
@@ -525,14 +525,14 @@ impl SessionEngine {
         }
         Ok(state.route(effects))
     }
-    pub fn dismiss(&self, id: LiveSessionId, now: SystemTime) -> Result<CoreEffects, SessionError> {
+    pub fn dismiss(&self, id: LiveSessionId, now: Timestamp) -> Result<CoreEffects, SessionError> {
         self.dismiss_authorized(None, id, now)
     }
     pub fn dismiss_from_ui(
         &self,
         ui: UiBinding,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         self.dismiss_authorized(Some(ui), id, now)
     }
@@ -540,7 +540,7 @@ impl SessionEngine {
         &self,
         ui: Option<UiBinding>,
         id: LiveSessionId,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         if ui.is_some_and(|ui| !state.authorized(ui)) {
@@ -598,7 +598,7 @@ impl SessionEngine {
         &self,
         id: LiveSessionId,
         reason: StopReason,
-        _now: SystemTime,
+        _now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let state = lock(&self.state);
         let s = state.sessions.get(&id).ok_or(SessionError::NotFound(id))?;

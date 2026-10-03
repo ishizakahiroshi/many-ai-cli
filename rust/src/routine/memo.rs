@@ -1,3 +1,4 @@
+use crate::proto::time::Timestamp;
 use crate::{
     files::safe_fs::Dir,
     hub::http::{Request, Response, decode_json, random_hex},
@@ -8,7 +9,7 @@ use serde_json::json;
 use std::{
     io,
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 const MEMO_LIMIT: usize = 500;
@@ -176,7 +177,7 @@ fn operation_error() -> Response {
 fn text_error() -> Response {
     Response::error(400, "bad_request", "text must contain 1 to 4000 bytes")
 }
-fn timestamp(now: SystemTime) -> Result<String, Response> {
+fn timestamp(now: Timestamp) -> Result<String, Response> {
     crate::proto::time::format_with_offset(now, 0, true).map_err(|_| operation_error())
 }
 impl MemoManager {
@@ -273,7 +274,7 @@ impl MemoManager {
         &self,
         request: &Request,
         project_for_session: impl Fn(i64) -> String,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Response {
         let mut state = match self.state.lock() {
             Ok(v) => v,
@@ -500,7 +501,7 @@ impl MemoManager {
         }
         Response::json(200, &json!({"image":name}))
     }
-    pub fn clean_orphan_images(&self, now: SystemTime) -> usize {
+    pub fn clean_orphan_images(&self, now: Timestamp) -> usize {
         let Ok(state) = self.state.lock() else {
             return 0;
         };
@@ -520,6 +521,7 @@ impl MemoManager {
                 .metadata(&name)
                 .and_then(|m| m.modified())
                 .ok()
+                .and_then(|t| Timestamp::from_system_time(t).ok())
                 .and_then(|t| now.duration_since(t).ok())
                 .is_some_and(|d| d >= Duration::from_secs(86400));
             if old && dir.remove_file(&name).is_ok() {

@@ -2,6 +2,7 @@
 //! All output text uses the sessionlog mask; tool identity and record cursors
 //! stay parser-owned across polls.
 use super::reader::*;
+use crate::proto::time::Timestamp;
 use crate::{
     proto::{
         self,
@@ -15,7 +16,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     io,
     path::Path,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 const TEXT_MAX: usize = 64 * 1024;
 const MESSAGE_MAX: usize = 200;
@@ -912,7 +913,7 @@ impl ParseState {
                         if seconds.is_finite() && seconds <= u64::MAX as f64 {
                             let time = Duration::try_from_secs_f64(seconds)
                                 .ok()
-                                .and_then(|duration| SystemTime::UNIX_EPOCH.checked_add(duration));
+                                .and_then(|duration| Timestamp::UNIX_EPOCH.checked_add(duration));
                             if let Some(time) = time {
                                 at = proto::time::format_with_offset(time, 0, false)
                                     .unwrap_or_default();

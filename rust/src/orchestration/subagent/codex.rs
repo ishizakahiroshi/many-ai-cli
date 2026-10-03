@@ -96,7 +96,7 @@ struct Child {
 pub struct CodexState {
     parent: PathBuf,
     children: BTreeMap<String, Child>,
-    day_dirs: BTreeMap<PathBuf, Option<SystemTime>>,
+    day_dirs: BTreeMap<PathBuf, Option<Timestamp>>,
 }
 #[derive(Default)]
 struct Signal {
@@ -130,7 +130,7 @@ pub(super) fn read(
     since: i64,
     mut state: CodexState,
     budget: ReadBudget,
-    now: SystemTime,
+    now: Timestamp,
     stats: &mut ReadStats,
 ) -> io::Result<(Option<SubagentTree>, CodexState)> {
     if state.parent != parent {
@@ -238,13 +238,16 @@ pub(super) fn read(
 }
 fn scan_days(
     root: &Path,
-    from: SystemTime,
-    to: SystemTime,
+    from: Timestamp,
+    to: Timestamp,
     state: &mut CodexState,
     stats: &mut ReadStats,
 ) {
-    let from: DateTime<Local> = from.into();
-    let to: DateTime<Local> = to.into();
+    let (Ok(from), Ok(to)) = (crate::proto::time::utc(from), crate::proto::time::utc(to)) else {
+        return;
+    };
+    let from: DateTime<Local> = from.with_timezone(&Local);
+    let to: DateTime<Local> = to.with_timezone(&Local);
     let today = to.date_naive();
     let (from, to) = if from > to { (to, from) } else { (from, to) };
     let mut day = from.date_naive();
@@ -257,7 +260,10 @@ fn scan_days(
             .join(format!("{:02}", day.month()))
             .join(format!("{:02}", day.day()));
         if let Ok(info) = fs::metadata(&path) {
-            let stamp = info.modified().ok();
+            let stamp = info
+                .modified()
+                .ok()
+                .and_then(|at| Timestamp::from_system_time(at).ok());
             let skip = state
                 .day_dirs
                 .get(&path)

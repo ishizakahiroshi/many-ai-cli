@@ -61,7 +61,7 @@ impl GoWire for ConnectLock {
     const SCHEMAS: &'static [Schema] = SCHEMAS;
 }
 fn now() -> io::Result<String> {
-    format_rfc3339_nano(SystemTime::now()).map_err(io::Error::other)
+    format_rfc3339_nano(crate::proto::time::Timestamp::now()).map_err(io::Error::other)
 }
 fn current_pid() -> i64 {
     i64::from(std::process::id())

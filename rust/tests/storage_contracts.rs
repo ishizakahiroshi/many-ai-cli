@@ -1,4 +1,5 @@
 //! Synthetic-only repository contracts against Go 21d0bc7; Hub/native acceptance is separate.
+use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
     proto::core::*,
@@ -11,7 +12,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 struct Fixture {
@@ -162,7 +163,7 @@ fn restore_search_prune_and_all_session_metadata() {
     );
     assert_eq!(
         store
-            .stale_sessions(SystemTime::now(), 10)
+            .stale_sessions(Timestamp::now(), 10)
             .unwrap()
             .unwrap()
             .len(),
@@ -179,7 +180,7 @@ fn restore_search_prune_and_all_session_metadata() {
             .len(),
         2
     );
-    store.prune_older_than(SystemTime::now()).unwrap();
+    store.prune_older_than(Timestamp::now()).unwrap();
     assert!(
         store
             .chat_messages_by_live_session(LiveSessionId(1), 100)
@@ -213,7 +214,7 @@ fn stable_database_identity_reattach_stale_close_card_and_virtual_paths() {
         .unwrap();
     assert_eq!(
         store
-            .close_stale_sessions(SystemTime::now(), "restart")
+            .close_stale_sessions(Timestamp::now(), "restart")
             .unwrap(),
         1
     );
@@ -225,7 +226,7 @@ fn stable_database_identity_reattach_stale_close_card_and_virtual_paths() {
     assert_eq!(card.label, "edited");
     assert!(card.pinned);
     assert_eq!(card.note, "note");
-    store.end_session(LiveSessionId(8), "completed", "", SystemTime::now());
+    store.end_session(LiveSessionId(8), "completed", "", Timestamp::now());
     let mut fresh = start(8, "codex");
     fresh.jsonl_path = "synthetic-two.jsonl".into();
     let two = store.start_session(fresh).unwrap();
@@ -672,7 +673,7 @@ fn chunked_prune_and_legacy_transcript_noise() {
     c.execute_batch("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<4501) INSERT INTO events(session_id,type,payload_json) SELECT 1,'synthetic','{}' FROM n").unwrap();
     drop(c);
     store.end_session(LiveSessionId(1), "completed", "", UNIX_EPOCH);
-    store.prune_older_than(SystemTime::now()).unwrap();
+    store.prune_older_than(Timestamp::now()).unwrap();
     assert_eq!(store.usage_summary().unwrap().total_sessions, 1);
     assert_eq!(store.session_overview_by_session_id(live).unwrap().id, live);
     assert_eq!(scalar(&fixture.sql(), "SELECT COUNT(*) FROM events"), 0);

@@ -3,6 +3,7 @@ use super::{
     model::{self, Definition, RoutineFile, Run, active},
     schedule, validation,
 };
+use crate::proto::time::Timestamp;
 use crate::{
     files::safe_fs::Dir,
     proto::{
@@ -10,7 +11,6 @@ use crate::{
         core::{DbSessionId, LiveSessionId},
     },
 };
-use std::time::SystemTime;
 use std::{
     collections::BTreeMap,
     io,
@@ -43,13 +43,13 @@ pub struct Observation {
     pub launch_label: String,
     pub state: String,
     pub waiting: bool,
-    pub last_output: Option<SystemTime>,
+    pub last_output: Option<Timestamp>,
 }
 type Writer = dyn Fn(&Dir, &[u8]) -> io::Result<()> + Send + Sync;
 struct State {
     data: RoutineFile,
     unavailable: bool,
-    missing_since: BTreeMap<String, SystemTime>,
+    missing_since: BTreeMap<String, Timestamp>,
     pending_results: BTreeMap<String, Run>,
 }
 pub struct RoutineStore {
@@ -132,7 +132,7 @@ impl RoutineStore {
         id: Option<&str>,
         mut item: Definition,
         home: &Path,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<Definition, Error> {
         validation::validate(&mut item, home, now).map_err(Error::Invalid)?;
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -200,7 +200,7 @@ impl RoutineStore {
         id: &str,
         request_id: &str,
         trigger: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<Admission, Error> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut next = state.data.clone();
@@ -265,7 +265,7 @@ impl RoutineStore {
         id: &str,
         session: Result<LiveSessionId, ()>,
         instance: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<(), Error> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut next = state.data.clone();
@@ -291,7 +291,7 @@ impl RoutineStore {
     pub fn skip_schedule(
         &self,
         definition: &Definition,
-        now: SystemTime,
+        now: Timestamp,
         reason: &str,
     ) -> Result<(), Error> {
         let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
@@ -323,7 +323,7 @@ impl RoutineStore {
         &self,
         observations: &[Observation],
         instance: &str,
-        now: SystemTime,
+        now: Timestamp,
     ) -> Result<(), Error> {
         let observations: BTreeMap<_, _> = observations
             .iter()
@@ -452,7 +452,7 @@ impl RoutineStore {
             }
         }
     }
-    pub fn active_session(&self, label: &str, at: SystemTime) -> bool {
+    pub fn active_session(&self, label: &str, at: Timestamp) -> bool {
         let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         !state.unavailable
             && state.data.runs.iter().any(|r| {
@@ -485,7 +485,7 @@ fn random_id() -> Result<String, Error> {
         .map(|s| s[..32].into())
         .map_err(|_| Error::Operation)
 }
-fn new_run(def: &Definition, request: &str, trigger: &str, now: SystemTime) -> Result<Run, Error> {
+fn new_run(def: &Definition, request: &str, trigger: &str, now: Timestamp) -> Result<Run, Error> {
     let id = random_id()?;
     let at = model::time(now)?;
     Ok(Run {

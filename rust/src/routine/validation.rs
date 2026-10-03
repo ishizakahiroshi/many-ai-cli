@@ -1,9 +1,9 @@
 //! New-input validation only. Loading an old store must not rewrite its records.
 use super::{model::Definition, schedule};
+use crate::proto::time::Timestamp;
 use std::path::{Component, Path, PathBuf};
-use std::time::SystemTime;
 
-pub fn validate(item: &mut Definition, home: &Path, now: SystemTime) -> Result<(), String> {
+pub fn validate(item: &mut Definition, home: &Path, now: Timestamp) -> Result<(), String> {
     item.name = item.name.trim().into();
     item.cwd = item.cwd.trim().into();
     item.prompt = item.prompt.trim().into();

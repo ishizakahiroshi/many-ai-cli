@@ -1,11 +1,8 @@
 //! Source → Rust: internal/handoff/{handoff_test,render_test}.go → orchestration/handoff.rs.
+use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 use many_ai_cli::{config::RuntimePaths, orchestration::handoff::*};
 use serde::Deserialize;
-use std::{
-    fs,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{fs, sync::Arc, time::Duration};
 #[derive(Deserialize)]
 struct Golden {
     id: i64,
@@ -122,7 +119,7 @@ fn append_stamps_version_and_preserves_explicit_fields() {
                 note: "/synthetic/path".into(),
                 ..Default::default()
             },
-            SystemTime::now(),
+            Timestamp::now(),
         )
         .unwrap();
     let records = store.read_session(42).unwrap();
@@ -271,7 +268,7 @@ fn oversized_record_reports_error_without_unbounded_allocation() {
 #[test]
 fn retention_owns_only_handoff_suffixes_and_stats_count_jsonl() {
     let (_t, _i, store) = fixture();
-    assert!(!store.stat_dir(SystemTime::now()).unwrap().exists);
+    assert!(!store.stat_dir(Timestamp::now()).unwrap().exists);
     store
         .append(
             1,
@@ -291,9 +288,9 @@ fn retention_owns_only_handoff_suffixes_and_stats_count_jsonl() {
     store.write_rendered(1).unwrap();
     fs::write(store.directory().join("unrelated.txt"), b"keep").unwrap();
     fs::create_dir(store.directory().join("directory.jsonl")).unwrap();
-    assert_eq!(store.stat_dir(SystemTime::now()).unwrap().files, 1);
+    assert_eq!(store.stat_dir(Timestamp::now()).unwrap().files, 1);
     store
-        .prune_older_than(SystemTime::now() + Duration::from_secs(2))
+        .prune_older_than(Timestamp::now() + Duration::from_secs(2))
         .unwrap();
     assert!(!store.path_for(1).unwrap().exists());
     assert!(!store.note_path_for(1).unwrap().exists());
@@ -316,13 +313,13 @@ fn trial_handoff_symlink_cannot_write_installed_root() {
     let store = HandoffStore::new(paths);
     assert!(
         store
-            .append(1, Record::default(), SystemTime::now())
+            .append(1, Record::default(), Timestamp::now())
             .is_err()
     );
     assert!(store.read_session(1).is_err());
     assert!(store.write_rendered(1).is_err());
-    assert!(store.stat_dir(SystemTime::now()).is_err());
-    assert!(store.prune_older_than(SystemTime::now()).is_err());
+    assert!(store.stat_dir(Timestamp::now()).is_err());
+    assert!(store.prune_older_than(Timestamp::now()).is_err());
     assert_eq!(fs::read_dir(installed.path()).unwrap().count(), 0);
 }
 #[cfg(unix)]
@@ -339,9 +336,9 @@ fn leaf_symlinks_never_expose_or_prune_outside_content() {
     assert!(read_all(&link).is_err());
     assert!(store.write_rendered(1).is_err());
     assert!(store.append(1, Record::default(), UNIX_EPOCH).is_err());
-    assert_eq!(store.stat_dir(SystemTime::now()).unwrap().files, 0);
+    assert_eq!(store.stat_dir(Timestamp::now()).unwrap().files, 0);
     store
-        .prune_older_than(SystemTime::now() + Duration::from_secs(1))
+        .prune_older_than(Timestamp::now() + Duration::from_secs(1))
         .unwrap();
     assert_eq!(fs::read(&outside).unwrap(), secret);
     assert!(
@@ -413,8 +410,8 @@ fn concurrent_directory_exchange_cannot_redirect_handoff_io() {
         if let Ok((_, rendered)) = store.write_rendered(1) {
             assert!(!rendered.contains("outside body"));
         }
-        let _ = store.stat_dir(SystemTime::now());
-        let _ = store.prune_older_than(SystemTime::now() + Duration::from_secs(1));
+        let _ = store.stat_dir(Timestamp::now());
+        let _ = store.prune_older_than(Timestamp::now() + Duration::from_secs(1));
     }
     swapping.join().unwrap();
     assert_eq!(fs::read(&outside).unwrap(), secret);
