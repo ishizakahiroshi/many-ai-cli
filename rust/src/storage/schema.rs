@@ -63,18 +63,21 @@ fn ensure_columns(
 pub(super) fn deadline(conn: &Connection, at: Instant) -> rusqlite::Result<()> {
     conn.progress_handler(1000, Some(move || Instant::now() >= at))
 }
-pub(super) fn apply_pending_reset(path: &Path) -> StorageResult<()> {
-    let marker = companion(path, ".reset-pending");
-    if !marker.exists() {
-        return Ok(());
+pub(super) fn apply_pending_reset(directory: &Dir) -> StorageResult<()> {
+    match directory.metadata(directory::RESET_MARKER) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => {
+            return Err(error(
+                StorageErrorKind::Open,
+                "database reset marker could not be read safely",
+            ));
+        }
     }
-    // Keep the recovery marker on every failure; never pretend a partial reset completed.
-    for target in [
-        path.to_path_buf(),
-        companion(path, "-wal"),
-        companion(path, "-shm"),
-    ] {
-        match std::fs::remove_file(target) {
+    // Every unlink is relative to the held directory. Renaming an ancestor
+    // cannot redirect recovery to a replacement pathname's database/sidecars.
+    for name in [directory::DATABASE, directory::WAL, directory::SHM] {
+        match directory.remove_file(name) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(_) => {
@@ -85,7 +88,7 @@ pub(super) fn apply_pending_reset(path: &Path) -> StorageResult<()> {
             }
         }
     }
-    std::fs::remove_file(marker).map_err(|_| {
+    directory.remove_file(directory::RESET_MARKER).map_err(|_| {
         error(
             StorageErrorKind::Open,
             "pending reset marker could not be removed",
@@ -127,7 +130,7 @@ mod tests {
         let path = root.path().join("any-ai-cli.db");
         std::fs::create_dir(&path).unwrap();
         std::fs::write(companion(&path, ".reset-pending"), "synthetic marker").unwrap();
-        assert!(apply_pending_reset(&path).is_err());
+        assert!(apply_pending_reset(&Dir::open(root.path()).unwrap()).is_err());
         assert!(companion(&path, ".reset-pending").exists());
     }
     #[test]

@@ -5,3 +5,7 @@
 756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:1999
 756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:2042
 756b28154a77dd10a258f01cd2fc69c076d5bc87:rust/inventory/services.json:generic-api-key:2049
+# Exact synthetic redaction regression, independently verified: fixed PEM
+# markers enclose only literal synthetic-only-not-a-key, not encoded key bytes.
+# Future fixture delimiters are constructed at runtime; keep history scanned.
+8355b1060ca8753b8d469ec1244a33c355d307bd:rust/src/storage/text.rs:private-key-block:211

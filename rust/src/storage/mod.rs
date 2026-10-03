@@ -1,5 +1,6 @@
 //! Go-compatible SQLite history repository (Go oracle 21d0bc7).
 //! This is a repository implementation, not proof of Hub caller integration.
+mod directory;
 mod history;
 mod repository;
 mod schema;
@@ -8,7 +9,8 @@ pub use text::mask_secrets;
 mod writer;
 
 use crate::{
-    config::{Resource, RuntimePaths, private_io},
+    config::{Resource, RuntimePaths},
+    files::safe_fs::Dir,
     proto::core::*,
 };
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
@@ -29,10 +31,12 @@ pub struct SqliteSessionStorage {
     inner: Arc<Inner>,
     writer: Mutex<Option<JoinHandle<()>>>,
     close_lock: Mutex<()>,
+    writer_id: thread::ThreadId,
 }
 struct Inner {
     connection: Mutex<Option<Connection>>,
     path: PathBuf,
+    directory: Arc<Dir>,
     fts: bool,
     query_timeout: Duration,
     history: RwLock<()>,

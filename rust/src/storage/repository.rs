@@ -38,23 +38,11 @@ impl SessionStorage for SqliteSessionStorage {
         let parent = path
             .parent()
             .ok_or_else(|| error(StorageErrorKind::Open, "database parent is missing"))?;
-        private_io::ensure_private_dir(parent).map_err(|_| {
-            error(
-                StorageErrorKind::Open,
-                "database directory could not be created",
-            )
-        })?;
-        schema::apply_pending_reset(&path)?;
-        // Establish private permissions before SQLite creates WAL/SHM sidecars.
-        let mut create = std::fs::OpenOptions::new();
-        create.write(true).create_new(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            create.mode(0o600);
-        }
-        match create.open(&path) {
-            Ok(file) => drop(file),
+        let directory = Arc::new(directory::open(parent)?);
+        schema::apply_pending_reset(&directory)?;
+        // All application-owned writes use the held directory capability.
+        match directory.create_new(directory::DATABASE, &[], 0o600) {
+            Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
             Err(_) => {
                 return Err(error(
@@ -63,24 +51,34 @@ impl SessionStorage for SqliteSessionStorage {
                 ));
             }
         }
-        let (connection, fts) =
-            schema::open_connection(&path, options.init_timeout, paths.is_trial())?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).map_err(
-                |_| {
+            // Change only the opened inode, and release this setup handle before
+            // SQLite acquires POSIX locks on its own database descriptor.
+            let file = directory
+                .open_file(directory::DATABASE, true)
+                .map_err(|_| {
+                    error(
+                        StorageErrorKind::Open,
+                        "database file could not be held safely",
+                    )
+                })?;
+            file.set_permissions(std::fs::Permissions::from_mode(0o600))
+                .map_err(|_| {
                     error(
                         StorageErrorKind::Open,
                         "database permissions could not be secured",
                     )
-                },
-            )?;
+                })?;
         }
+        let (connection, fts) =
+            schema::open_connection(&path, options.init_timeout, paths.is_trial())?;
         let (sender, receiver) = mpsc::sync_channel(options.queue_capacity);
         let inner = Arc::new(Inner {
             connection: Mutex::new(Some(connection)),
             path,
+            directory,
             fts,
             query_timeout: options.query_timeout,
             history: RwLock::new(()),
@@ -101,32 +99,41 @@ impl SessionStorage for SqliteSessionStorage {
             .name("session-history-writer".into())
             .spawn(move || writer::run(worker_inner, receiver))
             .map_err(|_| error(StorageErrorKind::Open, "database writer could not start"))?;
+        let writer_id = writer.thread().id();
         Ok(Self {
             inner,
+            writer_id,
             writer: Mutex::new(Some(writer)),
             close_lock: Mutex::new(()),
         })
     }
     fn close(&self) -> StorageResult<()> {
+        self.ensure_external_close()?;
         self.begin_close();
         // Explicitly stronger than the Go six-second best-effort Close: consume
         // every accepted event before closing the only physical connection.
         self.finish_close()
     }
     fn schedule_file_reset(&self) -> StorageResult<()> {
-        private_io::write_atomic(
-            &companion(&self.inner.path, ".reset-pending"),
-            format!("{}\n", now()).as_bytes(),
-        )
-        .map_err(|_| {
-            error(
-                StorageErrorKind::Reset,
-                "database reset marker could not be saved",
+        self.inner
+            .directory
+            .replace(
+                directory::RESET_MARKER,
+                format!("{}\n", now()).as_bytes(),
+                0o600,
             )
-        })
+            .map_err(|_| {
+                error(
+                    StorageErrorKind::Reset,
+                    "database reset marker could not be saved",
+                )
+            })
     }
     fn file_reset_pending(&self) -> bool {
-        companion(&self.inner.path, ".reset-pending").exists()
+        self.inner
+            .directory
+            .metadata(directory::RESET_MARKER)
+            .is_ok()
     }
     fn set_on_write_error(&self, handler: Option<WriteErrorHandler>) {
         *self

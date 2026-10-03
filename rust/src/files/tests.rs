@@ -552,3 +552,136 @@ fn saved_attachment_is_private_local_timestamp_prefixed_and_bounded() {
             .is_err()
     );
 }
+
+#[test]
+fn private_append_does_not_overwrite_and_concurrent_handles_append_at_eof() {
+    use std::io::Write;
+    #[cfg(unix)]
+    use std::io::{Seek, SeekFrom};
+    let root = tempfile::tempdir().unwrap();
+    let dir = std::sync::Arc::new(safe_fs::Dir::open(root.path()).unwrap());
+    let mut first = dir.open_append("history.jsonl").unwrap();
+    first.write_all(b"original\n").unwrap();
+    // Rewinding an append-only descriptor must not authorize an overwrite.
+    #[cfg(unix)]
+    first.seek(SeekFrom::Start(0)).unwrap();
+    first.write_all(b"retained\n").unwrap();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(5));
+    let mut threads = Vec::new();
+    for worker in 0..4 {
+        let mut file = dir.open_append("history.jsonl").unwrap();
+        let barrier = barrier.clone();
+        threads.push(std::thread::spawn(move || {
+            barrier.wait();
+            for index in 0..100 {
+                let line = format!("{worker}:{index:03}:{}\n", "x".repeat(64));
+                // One write is the atomic unit; the API does not promise that
+                // several separate writes form a transaction across handles.
+                assert_eq!(file.write(line.as_bytes()).unwrap(), line.len());
+            }
+        }));
+    }
+    barrier.wait();
+    for thread in threads {
+        thread.join().unwrap();
+    }
+    let contents = fs::read_to_string(root.path().join("history.jsonl")).unwrap();
+    assert!(contents.starts_with("original\nretained\n"));
+    let lines: std::collections::BTreeSet<_> = contents.lines().skip(2).collect();
+    assert_eq!(lines.len(), 400);
+    assert_eq!(contents.lines().count(), 402);
+    assert!(dir.open_append("../escape").is_err());
+    fs::create_dir(root.path().join("directory")).unwrap();
+    assert!(dir.open_append("directory").is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn private_append_rejects_links_fifo_and_survives_parent_replacement() {
+    use std::{
+        io::Write,
+        os::unix::fs::{PermissionsExt, symlink},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let owned = root.path().join("owned");
+    let foreign = root.path().join("foreign");
+    fs::create_dir(&owned).unwrap();
+    fs::create_dir(&foreign).unwrap();
+    let dir = safe_fs::Dir::open(&owned).unwrap();
+    fs::write(foreign.join("keep"), b"unchanged").unwrap();
+    symlink(foreign.join("keep"), owned.join("linked")).unwrap();
+    assert!(dir.open_append("linked").is_err());
+    let fifo = std::ffi::CString::new(owned.join("pipe").to_str().unwrap()).unwrap();
+    // SAFETY: this test creates a FIFO only inside its owned temporary root.
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    assert!(dir.open_append("pipe").is_err());
+    fs::write(owned.join("old.log"), b"prefix").unwrap();
+    fs::set_permissions(owned.join("old.log"), fs::Permissions::from_mode(0o666)).unwrap();
+    let mut existing = dir.open_append("old.log").unwrap();
+    assert_eq!(
+        existing.metadata().unwrap().permissions().mode() & 0o777,
+        0o600
+    );
+    existing.write_all(b" suffix").unwrap();
+    let renamed = root.path().join("renamed");
+    fs::rename(&owned, &renamed).unwrap();
+    symlink(&foreign, &owned).unwrap();
+    let mut file = dir.open_append("new.log").unwrap();
+    file.write_all(b"owned inode").unwrap();
+    assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+    assert_eq!(fs::read(renamed.join("new.log")).unwrap(), b"owned inode");
+    assert!(!foreign.join("new.log").exists());
+    assert_eq!(fs::read(foreign.join("keep")).unwrap(), b"unchanged");
+    assert_eq!(fs::read(renamed.join("old.log")).unwrap(), b"prefix suffix");
+}
+
+#[cfg(unix)]
+#[test]
+fn private_directory_creation_restricts_only_final_and_never_follows_replacement() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let root = tempfile::tempdir().unwrap();
+    let ancestor = root.path().join("existing");
+    fs::create_dir(&ancestor).unwrap();
+    fs::set_permissions(&ancestor, fs::Permissions::from_mode(0o755)).unwrap();
+    let leaf = ancestor.join("private").join("logs");
+    let dir = safe_fs::Dir::open_or_create_private(&leaf).unwrap();
+    assert_eq!(
+        fs::metadata(&ancestor).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert_eq!(
+        dir.own_metadata().unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    fs::set_permissions(&leaf, fs::Permissions::from_mode(0o755)).unwrap();
+    let repaired = safe_fs::Dir::open_or_create_private(&leaf).unwrap();
+    assert_eq!(
+        repaired.own_metadata().unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    let foreign = root.path().join("foreign");
+    fs::create_dir(&foreign).unwrap();
+    fs::set_permissions(&foreign, fs::Permissions::from_mode(0o755)).unwrap();
+    symlink(&foreign, ancestor.join("link")).unwrap();
+    assert!(safe_fs::Dir::open_or_create_private(&ancestor.join("link")).is_err());
+    assert!(safe_fs::Dir::open_or_create_private(&ancestor.join("link/new")).is_err());
+    assert_eq!(
+        fs::metadata(&foreign).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert!(!foreign.join("new").exists());
+    let moved = ancestor.join("moved");
+    fs::rename(&leaf, &moved).unwrap();
+    symlink(&foreign, &leaf).unwrap();
+    fs::set_permissions(&moved, fs::Permissions::from_mode(0o755)).unwrap();
+    dir.restrict_private().unwrap();
+    assert_eq!(
+        fs::metadata(&moved).unwrap().permissions().mode() & 0o777,
+        0o700
+    );
+    assert_eq!(
+        fs::metadata(&foreign).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert!(safe_fs::Dir::open_or_create_private(Path::new("/")).is_err());
+}

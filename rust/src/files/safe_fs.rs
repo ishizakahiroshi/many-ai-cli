@@ -89,6 +89,20 @@ mod platform {
         pub fn path(&self) -> &Path {
             &self.path
         }
+        /// Export one owned duplicate for a descriptor-anchored storage VFS.
+        /// The caller never receives an unowned raw descriptor.
+        pub fn try_clone_file(&self) -> io::Result<File> {
+            self.file.try_clone()
+        }
+
+        /// Restrict this opened directory, without resolving its pathname again.
+        pub fn restrict_private(&self) -> io::Result<()> {
+            // SAFETY: this capability owns a verified directory descriptor.
+            if unsafe { libc::fchmod(self.file.as_raw_fd(), 0o700) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        }
         pub fn own_metadata(&self) -> io::Result<Metadata> {
             self.file.metadata()
         }
@@ -145,6 +159,41 @@ mod platform {
                 ));
             }
             Ok(f)
+        }
+        /// Open a private log for kernel-atomic append. The handle stays bound
+        /// to this directory inode across rename; no seek-then-write window exists.
+        pub fn open_append(&self, name: &str) -> io::Result<File> {
+            basename(name)?;
+            let name = c(name)?;
+            // SAFETY: openat resolves one validated component beneath our held
+            // directory. O_NOFOLLOW rejects a symlink and O_NONBLOCK prevents
+            // opening an attacker-created FIFO from hanging before fstat.
+            let file = fd_file(unsafe {
+                libc::openat(
+                    self.file.as_raw_fd(),
+                    name.as_ptr(),
+                    libc::O_WRONLY
+                        | libc::O_APPEND
+                        | libc::O_CREAT
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC
+                        | libc::O_NONBLOCK,
+                    0o600 as libc::mode_t,
+                )
+            })?;
+            if !file.metadata()?.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a regular file",
+                ));
+            }
+            // Existing logs must also be private. Change the opened inode,
+            // never a path that a concurrent rename could replace.
+            // SAFETY: file owns this descriptor and 0600 is a valid mode.
+            if unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(file)
         }
         pub fn metadata(&self, name: &str) -> io::Result<Metadata> {
             self.open_file(name, false)?.metadata()
@@ -409,6 +458,27 @@ mod platform {
         pub fn path(&self) -> &Path {
             &self.path
         }
+        /// The existing held pin denies rename/delete and reparse mutation.
+        /// Reopen that same pinned object with WRITE_DAC only for ACL repair.
+        pub fn restrict_private(&self) -> io::Result<()> {
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_READ_ATTRIBUTES, READ_CONTROL, SYNCHRONIZE, WRITE_DAC,
+            };
+            let file = OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES | READ_CONTROL | WRITE_DAC | SYNCHRONIZE)
+                .share_mode(FILE_SHARE_READ)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&self.path)?;
+            let metadata = file.metadata()?;
+            if !metadata.is_dir() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a plain directory",
+                ));
+            }
+            crate::config::private_io::PrivateSecurity::for_current_user(true)?.restrict_file(&file)
+        }
         pub fn own_metadata(&self) -> io::Result<Metadata> {
             self._pins
                 .last()
@@ -445,6 +515,51 @@ mod platform {
                 return Err(io::Error::other("not a plain file"));
             }
             Ok(f)
+        }
+        /// Append-only access keeps concurrent writers at EOF in the kernel.
+        /// Every ancestor is held without write/delete sharing by this Dir.
+        pub fn open_append(&self, name: &str) -> io::Result<File> {
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_APPEND_DATA, FILE_READ_ATTRIBUTES, OPEN_ALWAYS, READ_CONTROL, SYNCHRONIZE,
+                WRITE_DAC,
+            };
+            basename(name)?;
+            let security = crate::config::private_io::PrivateSecurity::for_current_user(false)?;
+            let attributes = security.attributes();
+            let path = wide(&self.path.join(name))?;
+            // SAFETY: the protected descriptor and path outlive CreateFileW;
+            // the append-only access mask omits FILE_WRITE_DATA. OPEN_REPARSE
+            // opens any final reparse object itself so validation can reject it.
+            let handle = unsafe {
+                CreateFileW(
+                    path.as_ptr(),
+                    FILE_APPEND_DATA
+                        | FILE_READ_ATTRIBUTES
+                        | READ_CONTROL
+                        | WRITE_DAC
+                        | SYNCHRONIZE,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &attributes,
+                    OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                    std::ptr::null_mut(),
+                )
+            };
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: successful creation/open returned one newly-owned handle.
+            let file = unsafe { File::from_raw_handle(handle) };
+            let metadata = file.metadata()?;
+            if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a plain file",
+                ));
+            }
+            security.restrict_file(&file)?;
+            Ok(file)
         }
         pub fn metadata(&self, name: &str) -> io::Result<Metadata> {
             self.open_file(name, false)?.metadata()
@@ -545,3 +660,55 @@ mod platform {
     }
 }
 pub use platform::Dir;
+
+impl Dir {
+    /// Walk from the absolute filesystem root through directory capabilities.
+    /// New components are private from creation; only the requested final
+    /// directory is restricted if it already existed. Existing ancestors (for
+    /// example the user's home or a volume root) keep their original policy.
+    pub fn open_or_create_private(path: &Path) -> io::Result<Self> {
+        if !path.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "directory must be absolute",
+            ));
+        }
+        let mut root = PathBuf::new();
+        let mut names = Vec::new();
+        for component in path.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir if names.is_empty() => {
+                    root.push(component)
+                }
+                Component::Normal(name) => names.push(
+                    name.to_str()
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                "non-Unicode directory component",
+                            )
+                        })?
+                        .to_owned(),
+                ),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "unclean directory path",
+                    ));
+                }
+            }
+        }
+        if names.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "private directory must not be a filesystem root",
+            ));
+        }
+        let mut directory = Self::open(&root)?;
+        for name in names {
+            directory = directory.child_dir(&name, true)?;
+        }
+        directory.restrict_private()?;
+        Ok(directory)
+    }
+}

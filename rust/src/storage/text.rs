@@ -207,12 +207,12 @@ mod tests {
         ] {
             assert_eq!(mask_secrets(input), expected);
         }
-        let pem = [
-            "-----BEGIN RSA PRIVATE KEY-----",
-            "synthetic-only-not-a-key",
-            "-----END RSA PRIVATE KEY-----",
-        ]
-        .join("\n");
+        // Delimiters are built at runtime so scanner fixtures are not mistaken
+        // for embedded PEM material. The body is deliberately not key data.
+        let pem = format!(
+            "-----{} RSA PRIVATE {}-----\nsynthetic-only-not-a-key\n-----{} RSA PRIVATE {}-----",
+            "BEGIN", "KEY", "END", "KEY"
+        );
         assert_eq!(mask_secrets(&pem), "***");
     }
 }

@@ -1066,3 +1066,43 @@ fn oracle_manifest_works_without_git_and_rejects_source_changes() {
             .contains("differs")
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn pending_reset_marker_stays_with_opened_directory_after_root_replacement() {
+    use std::os::unix::fs::symlink;
+    let top = tempfile::tempdir().unwrap();
+    let root = top.path().join("trial");
+    let moved = top.path().join("held");
+    let outside = top.path().join("outside");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    let installed = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(&root, 49116, installed.path()).unwrap();
+    let store = SqliteSessionStorage::open(
+        &paths,
+        StorageOptions::baseline(paths.resource(Resource::Logs)),
+    )
+    .unwrap();
+    std::fs::rename(&root, &moved).unwrap();
+    symlink(&outside, &root).unwrap();
+    std::fs::write(
+        outside.join("any-ai-cli.db.reset-pending"),
+        b"outside marker",
+    )
+    .unwrap();
+    assert!(
+        !store.file_reset_pending(),
+        "replacement marker must not be treated as ours"
+    );
+    store.schedule_file_reset().unwrap();
+    assert!(store.file_reset_pending());
+    assert!(moved.join("any-ai-cli.db.reset-pending").is_file());
+    assert_eq!(
+        std::fs::read(outside.join("any-ai-cli.db.reset-pending")).unwrap(),
+        b"outside marker"
+    );
+    // This narrowly proves the application-owned marker path. Native SQLite
+    // DB/WAL/SHM path reopening still requires the separately tracked VFS fix.
+    store.close().unwrap();
+}
