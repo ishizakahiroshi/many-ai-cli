@@ -1007,3 +1007,163 @@ fn nanosecond_expiry_boundary_matches_extracted_fixed_go_consumption() {
         assert_eq!(manager.consume(&claim, now()).is_err(), case["used"] == 1);
     }
 }
+
+#[tokio::test]
+async fn served_one_tap_ignores_body_and_survives_http_disconnect_until_effect_drain() {
+    use crate::hub::{ServiceRouter, task_owner::HubTaskOwner, transport};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let f = fixture();
+    let binding = native(&f, "git status").await;
+    let token = issue(&f, binding, OneTapAction::Approve);
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let paths = RuntimePaths::trial(f._root.path(), port, f._installed.path()).unwrap();
+    let config = Arc::new(
+        crate::config::ConfigStore::load_or_create(paths.clone(), || {
+            Ok("synthetic-http-token".into())
+        })
+        .unwrap(),
+    );
+    let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+    let actions = Arc::new(ApprovalActionHttp::new(
+        f.core.clone(),
+        f.sink.clone(),
+        Arc::new(owner.approval_effects()),
+        f.manager.clone(),
+        Arc::new(now),
+        Arc::new(|_| {}),
+    ));
+    let router = Arc::new(
+        ServiceRouter::new(config, paths, f.core.clone(), port)
+            .unwrap()
+            .with_approval_actions(actions, Arc::new(Rules::default()))
+            .with_task_owner(owner.handle()),
+    );
+    let cancel = crate::process::Cancellation::default();
+    let server = tokio::spawn(transport::serve(
+        listener,
+        router,
+        f.sink.clone(),
+        cancel.clone(),
+    ));
+    // Source one-tap ignores a body, including a declared body that never arrives.
+    let mut invalid = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+        .await
+        .unwrap();
+    invalid.write_all(b"GET /api/approval-action/ HTTP/1.1\r\nHost: invalid.example\r\nContent-Length: 900000\r\nConnection: close\r\n\r\n").await.unwrap();
+    let mut reply = [0u8; 256];
+    let n = tokio::time::timeout(Duration::from_secs(3), invalid.read(&mut reply))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(String::from_utf8_lossy(&reply[..n]).starts_with("HTTP/1.1 401"));
+    drop(invalid);
+    f.transport.pause.store(true, Ordering::SeqCst);
+    let mut client = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+        .await
+        .unwrap();
+    client.write_all(format!("POST /api/approval-action/{token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 900000\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), f.transport.entered.notified())
+        .await
+        .unwrap();
+    assert_eq!(owner.snapshot().requests.running, 1);
+    drop(client);
+    owner.stop_requests();
+    f.transport.resume.notify_one();
+    let requests = tokio::time::timeout(Duration::from_secs(3), owner.drain_requests())
+        .await
+        .unwrap();
+    assert_eq!(requests.completed, 1);
+    assert_eq!(requests.cancelled, 0);
+    owner.stop_effects().unwrap();
+    let effects = owner.drain_effects().await;
+    assert_eq!(effects.completed, 1);
+    assert_eq!(effects.cancelled, 0);
+    assert_eq!(frames(&f), vec![b"\r".to_vec()]);
+    assert!(!pending(&f, binding));
+    let rows = f
+        .store
+        .approvals_by_live_session(binding.session, 10, false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(rows[0].state, "resolved");
+    assert_eq!(rows[0].selected_text, "\r");
+    cancel.cancel();
+    server.await.unwrap().unwrap();
+}
+
+#[tokio::test]
+async fn served_batch_keeps_all_matched_items_after_the_socket_waiter_disappears() {
+    use crate::hub::{ServiceRouter, task_owner::HubTaskOwner, transport};
+    use tokio::io::AsyncWriteExt;
+    let f = fixture();
+    let one = native(&f, "git status").await;
+    let two = native(&f, "git status").await;
+    let candidates = f.core.pending_native_approval_actions();
+    let selected = candidates
+        .iter()
+        .find(|c| c.binding.session == one)
+        .unwrap();
+    let signature = batch_signature(&selected.provider, &selected.cwd, &selected.summary);
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let paths = RuntimePaths::trial(f._root.path(), port, f._installed.path()).unwrap();
+    let config = Arc::new(
+        crate::config::ConfigStore::load_or_create(paths.clone(), || {
+            Ok("synthetic-batch-token".into())
+        })
+        .unwrap(),
+    );
+    let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+    let actions = Arc::new(ApprovalActionHttp::new(
+        f.core.clone(),
+        f.sink.clone(),
+        Arc::new(owner.approval_effects()),
+        f.manager.clone(),
+        Arc::new(now),
+        Arc::new(|_| {}),
+    ));
+    let router = Arc::new(
+        ServiceRouter::new(config, paths, f.core.clone(), port)
+            .unwrap()
+            .with_approval_actions(actions, Arc::new(Rules::default()))
+            .with_task_owner(owner.handle()),
+    );
+    let cancel = crate::process::Cancellation::default();
+    let server = tokio::spawn(transport::serve(
+        listener,
+        router,
+        f.sink.clone(),
+        cancel.clone(),
+    ));
+    f.transport.pause.store(true, Ordering::SeqCst);
+    let body = serde_json::json!({"signature":signature,"action":"approve"}).to_string();
+    let mut client = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+        .await
+        .unwrap();
+    client.write_all(format!("POST /api/approval/batch?token=synthetic-batch-token HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(3), f.transport.entered.notified())
+        .await
+        .unwrap();
+    drop(client);
+    owner.stop_requests();
+    f.transport.resume.notify_one();
+    let requests = tokio::time::timeout(Duration::from_secs(3), owner.drain_requests())
+        .await
+        .unwrap();
+    assert_eq!(requests.completed, 1);
+    assert_eq!(requests.cancelled, 0);
+    owner.stop_effects().unwrap();
+    let effects = owner.drain_effects().await;
+    assert_eq!(effects.completed, 2);
+    assert_eq!(effects.cancelled, 0);
+    assert!(!pending(&f, one));
+    assert!(!pending(&f, two));
+    assert_eq!(frames(&f), vec![b"\r".to_vec(), b"\r".to_vec()]);
+    cancel.cancel();
+    server.await.unwrap().unwrap();
+}

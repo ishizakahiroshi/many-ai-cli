@@ -10,8 +10,22 @@ impl SessionEngine {
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
         let m = request.message;
+        // Native startup ownership matches the actual owned PID; ordinary
+        // manual registrations retain Go's signed wire PID compatibility.
+        let startup_pid = if request.spawn_proof.is_some() {
+            Some(
+                u32::try_from(m.pid)
+                    .ok()
+                    .filter(|pid| *pid != 0)
+                    .ok_or_else(|| {
+                        SessionError::InvalidRequest("invalid startup process identity".into())
+                    })?,
+            )
+        } else {
+            None
+        };
         let started = timestamp(now)?;
-        let (binding, size, lease) = {
+        let (binding, size, lease, metadata) = {
             let mut state = lock(&self.state);
             // Allocation failure must neither consume a one-use proof nor leave
             // a newly acquired provider-spawn lease behind.
@@ -22,14 +36,14 @@ impl SessionEngine {
             let next_incarnation = state.next_incarnation.checked_add(1).ok_or_else(|| {
                 SessionError::InvalidRequest("session incarnation exhausted".into())
             })?;
-            let lease = if let Some(proof) = request.spawn_proof {
+            let pending = if let Some(proof) = request.spawn_proof {
                 let hash = crate::approval::identity::digest(&proof);
                 let Some(lease) = state.spawn_proofs.get(&hash) else {
                     return Err(SessionError::InvalidRequest(
                         "invalid registration proof".into(),
                     ));
                 };
-                if lease.provider != m.provider {
+                if lease.lease.provider != m.provider {
                     return Err(SessionError::InvalidRequest(
                         "invalid registration proof".into(),
                     ));
@@ -39,10 +53,13 @@ impl SessionEngine {
                     .remove(&hash)
                     .expect("validated one-use proof")
             } else {
-                state
-                    .admission
-                    .begin_provider_spawn(&m.provider)
-                    .map_err(|_| SessionError::ProviderUpdating(m.provider.clone()))?
+                PendingSpawn {
+                    lease: state
+                        .admission
+                        .begin_provider_spawn(&m.provider)
+                        .map_err(|_| SessionError::ProviderUpdating(m.provider.clone()))?,
+                    metadata: SpawnRegistrationMetadata::default(),
+                }
             };
             state.next_id = next_id;
             state.next_incarnation = next_incarnation;
@@ -69,10 +86,12 @@ impl SessionEngine {
                     wrapper: connection,
                 },
                 size,
-                lease,
+                pending.lease,
+                pending.metadata,
             )
         };
-        let mut session = match self.initialize(binding, &m, size, &started, now, false) {
+        let mut session = match self.initialize(binding, &m, size, &started, now, false, &metadata)
+        {
             Ok(session) => session,
             Err(error) => {
                 lock(&self.state).admission.end_provider_spawn(&lease);
@@ -89,6 +108,9 @@ impl SessionEngine {
             log_path: snapshot.log_path.clone(),
             jsonl_path: snapshot.jsonl_path.clone(),
             token_statusbar: self.options.token_statusbar || m.usage_probe,
+            orchestration_id: metadata.orchestration.0.clone(),
+            auto: metadata.auto,
+            board_path: metadata.board_path.clone(),
             ..Default::default()
         };
         let mut effects = CoreEffects::default();
@@ -98,7 +120,7 @@ impl SessionEngine {
         announce.jsonl_path = snapshot.jsonl_path.clone();
         effects.0.push(CoreEffect::Broadcast(announce));
         if !session.usage_probe {
-            effects.0.push(history(binding.session,now,"session_start",object(serde_json::json!({"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"parent_session_id":0,"role":"","auto":false,"orchestration_id":"","board_path":"","subscription_profile_id":m.subscription_id})))?);
+            effects.0.push(history(binding.session,now,"session_start",object(serde_json::json!({"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"parent_session_id":metadata.parent.0,"role":metadata.role,"auto":metadata.auto,"orchestration_id":metadata.orchestration.0,"board_path":metadata.board_path,"subscription_profile_id":m.subscription_id})))?);
         }
         effects
             .0
@@ -120,6 +142,12 @@ impl SessionEngine {
         state.sessions.insert(binding.session, session);
         let effects = state.route(effects);
         Ok(Registration {
+            startup_receipt: startup_pid.map(|pid| {
+                crate::process::wrapper_startup::SpawnRegistrationReceipt::proof_bound(
+                    lease.id, binding, pid,
+                )
+            }),
+            startup_metadata: metadata,
             binding,
             snapshot,
             registered,
@@ -129,14 +157,16 @@ impl SessionEngine {
     /// Optional journal/SQLite failures are observable warnings, not launch
     /// failures. This explicit initialization boundary performs all registration
     /// I/O outside State, before a wrapper ACK or any session publication.
+    #[allow(clippy::too_many_arguments)]
     fn initialize(
         &self,
         binding: SessionBinding,
         m: &proto::Message,
         size: TerminalSize,
         started_text: &str,
-        _started: Timestamp,
+        started: Timestamp,
         append: bool,
+        metadata: &SpawnRegistrationMetadata,
     ) -> Result<Session, SessionError> {
         let paths =
             self.journal
@@ -155,6 +185,13 @@ impl SessionEngine {
             log_path: paths.raw.to_string_lossy().into_owned(),
             jsonl_path: paths.jsonl.to_string_lossy().into_owned(),
             subscription_id: m.subscription_id.clone(),
+            parent_session_id: metadata.parent,
+            role: metadata.role.clone(),
+            auto: metadata.auto,
+            depth: metadata.depth,
+            orchestration_id: metadata.orchestration.clone(),
+            board_path: metadata.board_path.clone(),
+            worktree_branch: metadata.worktree_branch.clone(),
             ..Default::default()
         };
         let (paths, db_id, card) = self.journal.attach_session(
@@ -195,8 +232,22 @@ impl SessionEngine {
             subscription_profile_id: m.subscription_id.clone(),
             log_path: paths.raw.to_string_lossy().into_owned(),
             jsonl_path: paths.jsonl.to_string_lossy().into_owned(),
+            parent_session_id: metadata.parent,
+            handoff_from: metadata.handoff_from,
+            role: metadata.role.clone(),
+            auto: metadata.auto,
+            depth: metadata.depth,
+            orchestration_id: metadata.orchestration.clone(),
+            board_path: metadata.board_path.clone(),
+            worktree_branch: metadata.worktree_branch.clone(),
+            normal_worktree: metadata.normal_worktree.clone(),
+            worktree_cleanup: metadata.worktree_cleanup.clone(),
             ..Default::default()
         };
+        let mut input = InputState::default();
+        if metadata.needs_initial_gate() {
+            input.set_initial_gate(started);
+        }
         Ok(Session {
             binding,
             snapshot,
@@ -229,7 +280,7 @@ impl SessionEngine {
             size,
             resize_debounce: None,
             controlling_ui: None,
-            input: InputState::default(),
+            input,
             input_lane: Arc::new(lane::InputLane::default()),
             awaiting_submit_enter: false,
             last_output: None,
@@ -323,7 +374,15 @@ impl SessionEngine {
             cols: m.cols,
             rows: m.rows,
         };
-        let initialized = self.initialize(binding, &m, size, &started_text, started, true);
+        let initialized = self.initialize(
+            binding,
+            &m,
+            size,
+            &started_text,
+            started,
+            true,
+            &SpawnRegistrationMetadata::default(),
+        );
         let mut session = match initialized {
             Ok(s) => s,
             Err(e) => {
@@ -525,6 +584,33 @@ impl SessionEngine {
         }
         Ok(state.route(effects))
     }
+    /// Source orchestration.go markConductor changes the current session card
+    /// and broadcasts only; it does not persist a second session record. Parent
+    /// lifetime is session+incarnation, so a warm wrapper reconnect is permitted.
+    pub fn mark_conductor(
+        &self,
+        binding: SessionBinding,
+        orchestration: OrchestrationId,
+        board_path: String,
+    ) -> Result<CoreEffects, SessionError> {
+        let mut state = lock(&self.state);
+        let session = state
+            .sessions
+            .get_mut(&binding.session)
+            .ok_or(SessionError::NotFound(binding.session))?;
+        if session.binding.incarnation != binding.incarnation {
+            return Err(SessionError::StaleBinding);
+        }
+        if session.snapshot.orchestration_id == orchestration
+            && session.snapshot.board_path == board_path
+        {
+            return Ok(CoreEffects::default());
+        }
+        session.snapshot.orchestration_id = orchestration;
+        session.snapshot.board_path = board_path;
+        let message = session.update_message();
+        Ok(state.route(CoreEffects(vec![CoreEffect::Broadcast(message)])))
+    }
     pub fn dismiss(&self, id: LiveSessionId, now: Timestamp) -> Result<CoreEffects, SessionError> {
         self.dismiss_authorized(None, id, now)
     }
@@ -546,11 +632,7 @@ impl SessionEngine {
         if ui.is_some_and(|ui| !state.authorized(ui)) {
             return Err(SessionError::AuthenticationExpired);
         }
-        if state
-            .confirmations
-            .values()
-            .any(|c| c.pending.parent == id && c.outcome.is_none())
-        {
+        if state.confirmations.values().any(|c| c.pending.parent == id) {
             return Ok(
                 state.route(CoreEffects(vec![CoreEffect::Broadcast(proto::Message {
                     r#type: "session_dismiss_refused".into(),

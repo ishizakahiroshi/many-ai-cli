@@ -77,6 +77,9 @@ impl WrappedSessionSpawner for SyntheticSpawner {
                         message: Message {
                             r#type: "register".into(),
                             provider: spec.provider,
+
+                            // Synthetic positive PID for the internal startup proof.
+                            pid: 71,
                             cwd: spec.cwd.to_string_lossy().into(),
                             label: spec.label,
                             cols: 120,
@@ -109,6 +112,7 @@ impl RoutineLaunchPreparation for SyntheticPreparation {
         self.prompts.lock().unwrap().push(prompt.clone());
         Box::pin(async move {
             Ok(WrappedSpawnSpec {
+                registration_metadata: SpawnRegistrationMetadata::default(),
                 spawn_attempt: None,
                 registration_proof: None,
                 provider: run.provider.clone(),

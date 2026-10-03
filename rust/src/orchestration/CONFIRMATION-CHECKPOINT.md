@@ -1,9 +1,17 @@
 # Confirmation ownership checkpoint
 
-Updated: 2026-10-03 12:08 UTC. Proposed shared contract, not an implemented or
-accepted runtime capability. Fixed Go source: `21d0bc7935a2c4696fb89ccff2e324157a528c2d`.
+Updated: 2026-10-03 13:01 UTC. Shared contract and bounded core implementation
+checkpoint. Fixed Go source: `21d0bc7935a2c4696fb89ccff2e324157a528c2d`.
 
-## Shared API proposal
+The actual `SessionEngine` now implements confirmation registration, replacement,
+waiters, accepted-task ownership, pending UI replay, and pending shutdown. The
+optional `ConfirmationExecutor` must supply a fallible live presentation snapshot
+and real preparation/board operations; its absence rejects registration before
+reservation or publication. No production executor or successful child launch is
+provided by this checkpoint. Scoped receipts and remaining caller gaps are in
+`rust/tests/fixtures/core/orchestration/traceability.json`.
+
+## Shared API
 
 Keep `SpawnConfirmations` separate from `SessionCore`. The same `SessionEngine`
 implements both; its existing state and admission ledger remain the only owners.
@@ -53,15 +61,15 @@ pub trait SpawnConfirmations: Send + Sync {
 }
 ```
 
-Replace existing `register(PendingSpawnConfirmation)`, `wait(id)`, and asynchronous
-`decide` signatures. Callers must not invent the confirmation ID, admission ID,
+These replace `register(PendingSpawnConfirmation)`, `wait(id)`, and asynchronous
+`decide`. Callers must not invent the confirmation ID, admission ID,
 waiter state, or a final launch outcome. `register` allocates the ID and reserves
 one child atomically. It returns unapplied effects. The registration waiter already
 owns the completion handle, so a fast decision cannot disappear before `wait` starts.
 
-Add the crate-visible admission entry point
+The crate-visible admission entry point
 `AdmissionState::reserve_confirmation(parent, slots, replace)` returning
-`Result<AdmissionReservation, AdmissionError>`. It uses the existing ledger and
+`Result<AdmissionReservation, AdmissionError>` uses the existing ledger and
 the source confirmation capacity lane: 256 children per parent, no autonomous
 aggregate cap. Do not fabricate `VerifiedUiOrigin` or a human decision to reserve
 this pre-decision capacity. A failed replacement preserves the old pending entry
@@ -115,9 +123,11 @@ committed future, even before its first poll, must synchronously release its
 owned admission and publish a failure to the
 completion cell, but cannot claim asynchronous board/broadcast cleanup happened;
 it must report that incomplete cleanup and never restore an accepted decision.
-Pending waiters also need the Hub owner's
-shutdown signal to return `HubStopped`. The exact shutdown hook/owned permit type
-is a remaining composition contract, not an implemented `SessionEngine` method.
+`SessionEngine::shutdown_confirmations` completes pending waiters as `HubStopped`
+and releases pending admission without generating a new wire close reason. It
+does not cancel or release committed tasks owned elsewhere. The real Hub must
+call it in the drain sequence above; the owned task permit and HTTP handoff are
+still pending composition.
 
 ## Permission and actual launch boundary
 
@@ -162,21 +172,22 @@ The executor's exact interface and injection remain integration-owner coordinati
   routing are required callers, not covered by the confirmation state alone.
 - 1440–1470: server-bound origin; 4428–4465: human override field semantics.
 
-The first implementation checkpoint should cover registration/admission atomicity,
+The bounded implementation tests cover registration/admission atomicity,
 same-role replacement failure and ID exhaustion, fast completion before wait,
 waiter cancellation before/after handoff, invalid approval retry, refusal ignoring
 invalid options, decision-lease drop, duplicate decisions, replacement/parent-end
-races, and zero launches before an accepted task handoff. Then exercise real
+races, and zero launches before an accepted task handoff. Next exercise real
 preparation failure, exactly one successful synthetic launch, admission transfer,
 nonce-independent human provenance, and task shutdown/cleanup. Use injected
-logical clocks and owned synthetic roots/helpers. This document records no new
-test pass and does not close the remaining orchestration or native acceptance gaps.
+logical clocks and owned synthetic roots/helpers. The traceability receipt owns
+exact test counts; these checks do not close the remaining production orchestration
+or native acceptance gaps.
 
-## HTTP proof boundary correction still required
+## HTTP proof boundary correction applied to shared types
 
 Source inspection found that the earlier shared `VerifiedUiOrigin(UiBinding)`
-requires an active WebSocket member through `session/spawning.rs`, while these
-Go HTTP callers do not. Before implementing the proposed State interface:
+required an active WebSocket member, while these Go HTTP callers do not. The
+shared types and core admission checks now use the two epoch-bearing purposes:
 
 - Direct `origin: ui` uses the existing signed ui_origin cookie,
   Sec-Fetch-Site=same-origin and allowed nonempty Origin
@@ -198,6 +209,9 @@ Go HTTP callers do not. Before implementing the proposed State interface:
   subsequently closed browser socket. Do not add a new capability/PIN scheme:
   migration instruction `03-services.md:33` requires the existing trust model.
 
-This is a shared-interface correction proposal. No production route, guard,
-permission default or confirmation State implementation has been changed by
-this note. Final type signatures and caller fixtures are still pending.
+`VerifiedUiOrigin` retains the ordinary request's authentication epoch after the
+existing browser-origin checks. `VerifiedConfirmationRequest` retains the epoch
+after the ordinary confirmation route guard. Core tests exercise acceptance with
+no active socket and stale-epoch rejection. Actual HTTP proof creation, route
+status mapping, task-owner handoff, and production executor wiring remain separate
+caller work; no new authentication architecture is introduced here.

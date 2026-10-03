@@ -204,6 +204,7 @@ where
         let _ = send(socket.as_mut(), &frame, options.write_timeout).await;
         return Err(error);
     }
+    super::startup::strip_provider_environment(&mut options.process);
     options.process.env.insert(SPAWN_PROOF_ENV.into(), None);
     let proof_keys: Vec<_> = options
         .process

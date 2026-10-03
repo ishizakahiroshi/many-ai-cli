@@ -5,6 +5,7 @@ pub mod pty;
 mod pty_unix;
 #[cfg(windows)]
 mod pty_windows;
+pub mod wrapper_startup;
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -498,8 +499,8 @@ pub(crate) mod windows_job {
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use std::{io, mem};
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, HANDLE},
-        System::JobObjects::*,
+        Foundation::{CloseHandle, DuplicateHandle, HANDLE},
+        System::{JobObjects::*, Threading::GetCurrentProcess},
     };
     pub struct OwnedJob(OwnedHandle);
     impl OwnedJob {
@@ -512,6 +513,11 @@ pub(crate) mod windows_job {
         /// Attach a still-owned, suspended child before any provider code runs.
         /// The caller retains the process handle and resumes only after success.
         pub(crate) fn attach_raw(raw: HANDLE) -> io::Result<Self> {
+            let job = Self::create()?;
+            job.assign(raw)?;
+            Ok(job)
+        }
+        pub(crate) fn create() -> io::Result<Self> {
             unsafe {
                 let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
                 if job.is_null() {
@@ -526,12 +532,43 @@ pub(crate) mod windows_job {
                     &limits as *const _ as _,
                     size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
                 ) == 0
-                    || AssignProcessToJobObject(job, raw as HANDLE) == 0
                 {
                     return Err(io::Error::last_os_error());
                 }
                 Ok(owned)
             }
+        }
+        pub(crate) fn assign(&self, process: HANDLE) -> io::Result<()> {
+            // Caller retains its suspended process until assignment succeeds.
+            if unsafe { AssignProcessToJobObject(self.as_raw_handle(), process) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        }
+        pub(crate) fn as_raw_handle(&self) -> HANDLE {
+            self.0.as_raw_handle()
+        }
+        pub(crate) fn inherited_query_handle(&self) -> io::Result<OwnedHandle> {
+            // JOB_OBJECT_QUERY (Win32 SystemServices): the child can validate
+            // membership/limits and retain lifetime, but cannot change or kill
+            // this Job through its inherited handle. No wait access is needed.
+            const JOB_OBJECT_QUERY_ACCESS: u32 = 0x0004;
+            let mut raw = std::ptr::null_mut();
+            if unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    self.as_raw_handle(),
+                    GetCurrentProcess(),
+                    &mut raw,
+                    JOB_OBJECT_QUERY_ACCESS,
+                    1,
+                    0,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(unsafe { OwnedHandle::from_raw_handle(raw) })
         }
         pub fn terminate(&self) {
             unsafe {

@@ -275,15 +275,12 @@ pub fn preview_tiers(
 mod tests {
     use super::*;
     use crate::proto::core::{
-        AuthEpoch, InternalSpawnGrants, SpawnConfirmationId, SpawnConfirmationResponse, UiBinding,
-        UiConnectionId, VerifiedUiOrigin,
+        AuthEpoch, InternalSpawnGrants, SpawnConfirmationId, SpawnConfirmationResponse,
+        VerifiedConfirmationRequest, VerifiedUiOrigin,
     };
 
     fn proof() -> VerifiedUiOrigin {
-        VerifiedUiOrigin::after_server_verification(UiBinding {
-            connection: UiConnectionId(1),
-            auth_epoch: AuthEpoch(7),
-        })
+        VerifiedUiOrigin::after_server_verification(AuthEpoch(7))
     }
     fn text<'a>(input: &'a serde_json::Value, field: &str) -> &'a str {
         input[field].as_str().unwrap_or_default()
@@ -322,7 +319,7 @@ mod tests {
                         confirmation_id: SpawnConfirmationId("synthetic-confirmation".into()),
                         ..Default::default()
                     },
-                    proof(),
+                    VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(7)),
                 )
                 .unwrap();
         }
@@ -444,7 +441,7 @@ mod tests {
                         confirmation_id: SpawnConfirmationId("synthetic-confirmation".into()),
                         ..Default::default()
                     },
-                    proof(),
+                    VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(7)),
                 )
                 .unwrap();
             let prepared = prepare(confirmed, &Config::default()).unwrap();

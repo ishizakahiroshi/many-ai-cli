@@ -13,6 +13,16 @@ impl SessionEngine {
         initial_size: Option<TerminalSize>,
     ) -> Result<UiPriming, SessionError> {
         let mut state = lock(&self.state);
+        let disclosure = if state.confirmations.is_empty() {
+            None
+        } else {
+            // A callback may acquire application/config locks. Recheck all
+            // membership and pending state below after obtaining one snapshot.
+            drop(state);
+            let result = self.confirmation_disclosure();
+            state = lock(&self.state);
+            Some(result)
+        };
         if state.auth_epoch != ui.auth_epoch {
             return Err(SessionError::AuthenticationExpired);
         }
@@ -21,6 +31,11 @@ impl SessionEngine {
                 "UI connection is already attached".into(),
             ));
         }
+        let confirmation_frames = if state.confirmations.is_empty() {
+            Vec::new()
+        } else {
+            state.confirmation_frames(&disclosure.expect("pending entries requested disclosure")?)
+        };
         if let Some(size) = initial_size.filter(|s| s.cols > 0 && s.rows > 0) {
             state.last_ui_size = size;
         }
@@ -77,6 +92,9 @@ impl SessionEngine {
                 });
             }
         }
+        // Go ui_broadcast.go sends pending dialogs immediately before the
+        // approval snapshot. Live broadcasts continue to use the priming queue.
+        frames.extend(confirmation_frames);
         frames.push(proto::Message {
             r#type: "approval_snapshot".into(),
             approval_snapshot: state

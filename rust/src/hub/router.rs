@@ -21,6 +21,14 @@ pub struct ServiceRouter {
     files: Option<Arc<crate::files::FilesService>>,
     storage: Option<Arc<dyn SessionStorage>>,
     workspace: Option<Arc<dyn crate::files::WorkspaceReads>>,
+    approvals: Option<ApprovalRoutes>,
+    routines: Option<Arc<super::routines::RoutineHttp>>,
+    confirmations: Option<Arc<super::confirmations::ConfirmationHttp>>,
+    tasks: Option<super::task_owner::HubTaskHandle>,
+}
+struct ApprovalRoutes {
+    actions: Arc<super::approval_actions::ApprovalActionHttp>,
+    rules: Arc<dyn super::approval_actions::ApprovalBatchRules>,
 }
 /// Side effects must be driven by the actual WebSocket owner, in order, before
 /// acknowledging an auth revocation. They are never dropped inside the router.
@@ -55,7 +63,16 @@ impl ServiceRouter {
             .map_err(|_| Response::error(500, "internal", "configuration unavailable"))?;
         let config = &snapshot.config;
         let port = i64::from(self.bound_port);
+        if super::confirmations::is_confirmation_route(&request.path) {
+            // Go handleSessionAPI checks token, path shape and ID before the
+            // endpoint's ordinary method/Host/Origin/PIN guard.
+            if !auth::token_or_trusted(request, config) {
+                return Err(Response::error(401, "unauthorized", "unauthorized"));
+            }
+            super::confirmations::parent_path(&request.path)?;
+        }
         if request.path.starts_with("/api/approval-action/") {
+            super::approval_actions::one_tap_token(&request.path)?;
             super::http::require_method(request, &["POST"])?;
             auth::require_host(request, config, port)?;
             return auth::require_origin(request, config, port);
@@ -88,7 +105,99 @@ impl ServiceRouter {
             files: None,
             storage: None,
             workspace: None,
+            approvals: None,
+            routines: None,
+            confirmations: None,
+            tasks: None,
         })
+    }
+    pub fn with_approval_actions(
+        mut self,
+        actions: Arc<super::approval_actions::ApprovalActionHttp>,
+        rules: Arc<dyn super::approval_actions::ApprovalBatchRules>,
+    ) -> Self {
+        self.approvals = Some(ApprovalRoutes { actions, rules });
+        self
+    }
+    pub fn with_task_owner(mut self, tasks: super::task_owner::HubTaskHandle) -> Self {
+        self.tasks = Some(tasks);
+        self
+    }
+    pub fn with_confirmations(
+        mut self,
+        confirmations: Arc<super::confirmations::ConfirmationHttp>,
+    ) -> Self {
+        self.confirmations = Some(confirmations);
+        self
+    }
+    pub fn with_routines(mut self, routines: Arc<super::routines::RoutineHttp>) -> Self {
+        self.routines = Some(routines);
+        self
+    }
+    pub(crate) fn owned_request_permit(
+        &self,
+    ) -> Result<super::task_owner::OwnedTaskPermit, crate::proto::core::SessionError> {
+        self.tasks
+            .as_ref()
+            .ok_or(crate::proto::core::SessionError::Shutdown)?
+            .request_permit()
+    }
+    pub(crate) async fn handle_owned_async_at(
+        &self,
+        request: &Request,
+        at: crate::proto::time::Timestamp,
+        cancellation: &crate::proto::core::TaskCancellation,
+    ) -> Dispatch {
+        let epoch = self.core.as_ref().map(|core| core.auth_epoch());
+        let now = at
+            .duration_since(crate::proto::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        if let Err(error) = self.preflight(request, now) {
+            return Dispatch::response(error);
+        }
+        if super::confirmations::is_confirmation_route(&request.path) {
+            return Dispatch::response(match (&self.confirmations, &self.tasks, epoch) {
+                (Some(confirmations), Some(tasks), Some(epoch)) => confirmations
+                    .handle_authenticated(
+                    request,
+                    crate::proto::core::VerifiedConfirmationRequest::after_server_authentication(
+                        epoch,
+                    ),
+                    at,
+                    tasks,
+                ),
+                _ => Response::error(
+                    503,
+                    "confirmation_unavailable",
+                    "confirmation service is not initialized",
+                ),
+            });
+        }
+        let Some(approvals) = &self.approvals else {
+            return Dispatch::response(Response::error(
+                503,
+                "approval_unavailable",
+                "approval service is not initialized",
+            ));
+        };
+        let response = if request
+            .path
+            .starts_with(super::approval_actions::ONE_TAP_PREFIX)
+        {
+            match super::approval_actions::one_tap_token(&request.path) {
+                Ok(token) => approvals.actions.one_tap_guarded(token, cancellation).await,
+                Err(error) => error,
+            }
+        } else if request.path == "/api/approval/batch" {
+            approvals
+                .actions
+                .batch_authenticated(request, approvals.rules.as_ref(), cancellation)
+                .await
+        } else {
+            Response::error(404, "not_found", "not found")
+        };
+        Dispatch::response(response)
     }
     pub fn bound_port(&self) -> u16 {
         self.bound_port
@@ -115,6 +224,10 @@ impl ServiceRouter {
             files: None,
             storage: None,
             workspace: None,
+            approvals: None,
+            routines: None,
+            confirmations: None,
+            tasks: None,
         })
     }
     pub fn with_memos(mut self, memos: Arc<crate::routine::memo::MemoManager>) -> Self {
@@ -167,6 +280,23 @@ impl ServiceRouter {
             .duration_since(crate::proto::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
+        if is_routine_route(&request.path) {
+            if let Err(error) = self.preflight(request, now) {
+                return Dispatch::response(error);
+            }
+            let response = self
+                .routines
+                .as_ref()
+                .and_then(|routines| routines.handle_authenticated(request, at))
+                .unwrap_or_else(|| {
+                    Response::error(
+                        503,
+                        "routine_unavailable",
+                        "routine service is not initialized",
+                    )
+                });
+            return Dispatch::response(response);
+        }
         if crate::files::ROUTES.contains(&request.path.as_str()) {
             if let Err(error) = self.preflight(request, now) {
                 return Dispatch::response(error);
@@ -345,8 +475,24 @@ fn validate_bound_port(paths: &RuntimePaths, port: u16) -> std::io::Result<()> {
     }
     Ok(())
 }
+pub(crate) fn needs_owned_request(path: &str) -> bool {
+    path.starts_with(super::approval_actions::ONE_TAP_PREFIX)
+        || path == "/api/approval/batch"
+        || super::confirmations::is_confirmation_route(path)
+}
+fn is_routine_route(path: &str) -> bool {
+    matches!(path, "/api/routines" | "/api/routine-runs")
+        || path.starts_with("/api/routines/")
+        || path.starts_with("/api/routine-runs/")
+}
 fn guard_methods(path: &str) -> &'static [&'static str] {
     match path {
+        "/api/approval/batch" => &["POST"],
+        p if super::confirmations::is_confirmation_route(p) => &["POST"],
+        p if p == "/api/routines" || p.starts_with("/api/routines/") => {
+            &["GET", "POST", "PUT", "DELETE"]
+        }
+        p if p == "/api/routine-runs" || p.starts_with("/api/routine-runs/") => &["GET"],
         p if p == "/api/memos" || p.starts_with("/api/memos/") => {
             &["GET", "POST", "PATCH", "DELETE"]
         }

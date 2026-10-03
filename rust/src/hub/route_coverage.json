@@ -664,16 +664,18 @@
     {
       "path": "/api/approval/batch",
       "source_handler": "handleApprovalBatch",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{approval_actions,router,transport,task_owner}.rs",
+      "fixture": "rust/src/hub/approval_actions_tests.rs",
+      "remaining": "Served owned one-tap disconnect/body-ignore and adapter batch fixtures; complete Hub startup, live notification issuance, automatic policy dispatch, native/browser acceptance remain pending."
     },
     {
       "path": "/api/approval-action/",
       "source_handler": "handleOneTapApproval",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{approval_actions,router,transport,task_owner}.rs",
+      "fixture": "rust/src/hub/approval_actions_tests.rs",
+      "remaining": "Served owned one-tap disconnect/body-ignore and adapter batch fixtures; complete Hub startup, live notification issuance, automatic policy dispatch, native/browser acceptance remain pending."
     },
     {
       "path": "/api/attach",
@@ -968,30 +970,34 @@
     {
       "path": "/api/routines",
       "source_handler": "handleRoutines",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
     },
     {
       "path": "/api/routines/",
       "source_handler": "handleRoutines",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
     },
     {
       "path": "/api/routine-runs",
       "source_handler": "handleRoutineRuns",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
     },
     {
       "path": "/api/routine-runs/",
       "source_handler": "handleRoutineRuns",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{routines,router,transport}.rs + rust/src/routine/{store,runner}.rs",
+      "fixture": "rust/src/hub/transport.rs::served_routine_crud_persists_and_delete_does_not_wait_for_a_body",
+      "remaining": "Real loopback CRUD and component run-store fixtures; production scheduler, launch preparer, event lifecycle and browser/native acceptance remain pending."
     },
     {
       "path": "/api/memos",
@@ -1375,9 +1381,10 @@
         "POST"
       ],
       "source_handler": "handleSpawnConfirmation",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/{confirmations,router,transport,task_owner}.rs + terminal/session/confirmations.rs",
+      "fixture": "terminal/session/confirmations/tests.rs::served_confirmation_uses_ordinary_guard_and_transfers_to_the_real_task_owner",
+      "remaining": "Real loopback ordinary guard and owned refusal handoff; production child executor/board/preparation, complete orchestration caller and independent/native/browser acceptance remain pending."
     },
     {
       "pattern": "/api/sessions/{id}/send-child",
@@ -1658,5 +1665,10 @@
     "current_full_static_guards": "fmt, strict all-targets clippy, gosec and staticcheck passed; staticcheck rerun with isolated cache",
     "scope_caution": "Synthetic component and loopback evidence only; no accepted production/browser/native/remote/provider/audio/model/notification route claim.",
     "settings_correction": "Six source-specific settings writes publish before failed Save; 500, updated memory/revision, unchanged filesystem fixtures passed. Correct empty/null orchestration projection retained."
+  },
+  "owned_runtime_addition": {
+    "reported_at_utc": "2026-10-03T14:06:00Z",
+    "state": "author implementation; integration freeze validation follows",
+    "scope": "Six registered routes and one dynamic confirmation operation advance to partial; zero accepted routes. Earlier aggregate430 receipt is retained as historical evidence."
   }
 }

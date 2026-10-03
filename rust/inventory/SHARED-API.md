@@ -44,8 +44,10 @@ second config, storage, session manager or process abstraction.
   input sequence, replay, approval source, approval version, history generation,
   auth epoch and events are distinct. Do not merge them into one counter.
 - Verified UI origin is never deserialized from JSON. `ResolvedChildSpawn`
-  construction distinguishes an untrusted origin claim from an authenticated UI
-  binding. Internal grants cannot be supplied by conductor JSON. Tri-state fields
+  construction distinguishes an untrusted origin claim from the existing signed
+  UI-origin cookie + Fetch-Metadata + allowed-Origin proof. It does not require
+  active WebSocket membership. Confirmation decisions instead use a distinct
+  ordinary authenticated-request proof; neither type is deserialized. Internal grants cannot be supplied by conductor JSON. Tri-state fields
   preserve absent/false/empty decisions.
 - `AdmissionState` and provider launch/update leases are concurrency contracts.
   Use one state owner across spawn/update; retain the launch lease until actual
@@ -104,6 +106,51 @@ source must remain untouched.
 
 - `process::pty::{PtyFactory,PtySession,NativePtyFactory,PtySize,PtyExit}` owns PTY IO/resize/close/wait separately from pipe-based ManagedProcess. PtyExit.code is i64 to preserve Windows DWORD values. Unix process-group cleanup is not a universal detached-descendant container; native Windows ConPTY/Job acceptance remains separate.
 - `process::execpath::Resolver` consumes explicit platform/environment/cwd/filesystem inputs. `wrapper::entry::run_cli` consumes an already-loaded config and explicit runtime context; it does not establish the still-unfinished Hub startup/spawn ownership handoff.
-- `SessionDetails.last_output_at: Option<SystemTime>` exposes the same core clock for exact inactivity decisions. The display snapshot's second-resolution RFC3339 value must not become a runtime clock.
+- `SessionDetails.last_output_at: Option<Timestamp>` exposes the same core clock for exact inactivity decisions. The display snapshot's second-resolution RFC3339 value must not become a runtime clock.
 - `CoreEffect::SendWrapperBestEffort` is used for source-tolerated resize delivery. Input transport stays strict. The WebSocket owner starts core.flush only after reattach ACK, polls the reader concurrently and cancels/drains that owned work with its socket lifecycle.
 - `terminal::journal::session_log_paths` is a pure shared naming function. It retains the validated timestamp's source offset/date and creates no file or second persistence owner.
+
+
+## Owned HTTP and startup additions (author implementation, 2026-10-03)
+
+- `HubTaskOwner` is the external lifecycle owner; task-captured services keep
+  only `HubTaskHandle` or `HubApprovalEffectOwner` weak handles. Request/effect
+  permits synchronously own work before response waiters can drop. Stop/drain
+  requests while effect admission remains open, then stop/cancel/drain effects
+  before journal, socket writers and Tokio. Completion counters distinguish
+  returned application futures, panics, cancellation and abandoned permits.
+- `SpawnConfirmations::register` returns pending metadata, unapplied effects and
+  an already-owned completion waiter. `accept_decision` reserves a decision;
+  `AcceptedSpawnDecision::run` commits synchronously. Acquire a Hub effect permit
+  first, then transfer its returned future in the same poll without await or a
+  fallible enqueue. Pending shutdown and task cancellation are separate domains.
+- `VerifiedConfirmationRequest` carries an auth epoch captured before the
+  ordinary HTTP guard. It has no UI-origin capability or wire constructor.
+  `ConfirmationMissing`/`ConfirmationDecided` preserve404/409; typed
+  `SessionError::ChildLaunch { status, code, detail }` survives confirmation
+  completion so the original caller can retain source error statuses.
+- `SpawnRegistrationMetadata` is server-owned, has no serde implementation and
+  is stored alongside the one-use launch proof. Core applies it to persistence,
+  snapshot and ACK before publishing registration. Editable labels do not resolve
+  parent/board/role ownership. Wrapper-declared model/effort/execution mode remain
+  source-authoritative. Initial-prompt payload/board caller work still requires
+  the production orchestration driver; merely setting its input gate is not a
+  completed injection.
+- `Registration.startup_receipt` is present only for core-consumed internal launch
+  proofs. `ProcessWrappedSpawner::prepare_registration` matches the owned
+  attempt/PID and disarms startup termination before ACK. Known pre-ACK rejection
+  aborts; uncertain delivery/drop detaches. A Registered result proves Hub
+  acceptance, not observed ACK delivery or provider execution.
+- `WrapperStartup` owns only an unregistered detached process/group/Job and has
+  an independent native reaper. `ReapReceipt` has no termination authority.
+  Windows child adoption retains a query-only inherited Job handle until process
+  exit; provider plans remove bootstrap metadata and handle inheritance.
+- `PolicyStore` is shared by persisted batch rules and the live automatic-action
+  callback. Enabled preferences are read live, and reload failure removes stale
+  authorization. Exact Go Unicode15 regex property/casefold compatibility remains
+  unfinished; the current bounded slice warns/disables unsupported valid-Go
+  forms rather than accepting a wider pattern. See its source fixture README.
+
+These additions are not covered by the old C1 independent-pass receipt. Current
+independent re-review, full CLI/Hub/orchestration/service composition, native
+startup acceptance, real-data rollback and cutover remain separate open gates.

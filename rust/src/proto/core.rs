@@ -1132,6 +1132,13 @@ pub enum SessionError {
     NotFound(LiveSessionId),
     StaleBinding,
     AuthenticationExpired,
+    ConfirmationMissing,
+    ConfirmationDecided,
+    ChildLaunch {
+        status: u16,
+        code: String,
+        detail: String,
+    },
     ProviderUpdating(String),
     InvalidRequest(String),
     Transport(String),
@@ -1159,6 +1166,13 @@ pub struct ReattachRequest {
     pub message: super::Message,
 }
 pub struct Registration {
+    /// Present only after core consumes its one-use launch proof. The transport
+    /// must hand it to the process startup owner before writing registered ACK.
+    /// Manual wrapper registration never acquires startup-process authority.
+    pub startup_receipt: Option<crate::process::wrapper_startup::SpawnRegistrationReceipt>,
+    /// Source initial-prompt/board caller work, to be owned after ACK. This is
+    /// the same server metadata already applied to persistence and the snapshot.
+    pub startup_metadata: SpawnRegistrationMetadata,
     pub binding: SessionBinding,
     pub snapshot: SessionSnapshot,
     /// Must be delivered before any later wrapper message.
@@ -1994,16 +2008,33 @@ pub struct SpawnConfirmationResponse {
 /// It cannot be constructed by deserializing an `origin: "ui"` claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedUiOrigin {
-    binding: UiBinding,
+    auth_epoch: AuthEpoch,
 }
 impl VerifiedUiOrigin {
-    /// C3 must call only after verifyUIOriginCapability succeeds.
+    /// Issue only after the existing signed UI cookie, Fetch Metadata, Origin
+    /// and ordinary HTTP guard succeed. No active WebSocket is required by Go.
     #[allow(dead_code)]
-    pub(crate) fn after_server_verification(binding: UiBinding) -> Self {
-        Self { binding }
+    pub(crate) fn after_server_verification(auth_epoch: AuthEpoch) -> Self {
+        Self { auth_epoch }
     }
-    pub fn binding(&self) -> UiBinding {
-        self.binding
+    pub fn auth_epoch(&self) -> AuthEpoch {
+        self.auth_epoch
+    }
+}
+/// The existing confirmation endpoint's authenticated HTTP request. This is
+/// deliberately not a direct-UI-origin capability or proof of human presence.
+/// It has no wire/serde constructor and cannot authorize a fresh UI-origin claim.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VerifiedConfirmationRequest {
+    auth_epoch: AuthEpoch,
+}
+impl VerifiedConfirmationRequest {
+    /// Issue only after token/method/Host/Origin and applicable PIN checks.
+    pub(crate) fn after_server_authentication(auth_epoch: AuthEpoch) -> Self {
+        Self { auth_epoch }
+    }
+    pub fn auth_epoch(&self) -> AuthEpoch {
+        self.auth_epoch
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2011,13 +2042,20 @@ pub enum VerifiedSpawnOrigin {
     Autonomous,
     HumanUi(VerifiedUiOrigin),
     HumanConfirmation {
-        ui: VerifiedUiOrigin,
+        request: VerifiedConfirmationRequest,
         confirmation: SpawnConfirmationId,
     },
 }
 impl VerifiedSpawnOrigin {
     pub fn is_human(&self) -> bool {
         !matches!(self, Self::Autonomous)
+    }
+    pub fn auth_epoch(&self) -> Option<AuthEpoch> {
+        match self {
+            Self::Autonomous => None,
+            Self::HumanUi(origin) => Some(origin.auth_epoch()),
+            Self::HumanConfirmation { request, .. } => Some(request.auth_epoch()),
+        }
     }
 }
 impl ChildSpawnRequest {
@@ -2038,7 +2076,7 @@ impl ChildSpawnRequest {
     pub fn apply_human_decision(
         &mut self,
         decision: &SpawnConfirmationResponse,
-        _proof: &VerifiedUiOrigin,
+        _proof: &VerifiedConfirmationRequest,
     ) {
         if !decision.provider.trim().is_empty() {
             self.provider = decision.provider.trim().to_owned();
@@ -2084,7 +2122,7 @@ impl InternalSpawnGrants {
     pub fn with_human_folder_trust(
         mut self,
         decision: &SpawnConfirmationResponse,
-        _proof: &VerifiedUiOrigin,
+        _proof: &VerifiedConfirmationRequest,
     ) -> Self {
         self.grant_folder_trust = decision.approved && decision.grant_folder_trust == Some(true);
         self
@@ -2138,7 +2176,7 @@ impl ResolvedChildSpawn {
     pub fn approve(
         mut self,
         decision: &SpawnConfirmationResponse,
-        proof: VerifiedUiOrigin,
+        proof: VerifiedConfirmationRequest,
     ) -> Result<Self, SessionError> {
         if !decision.approved {
             return Err(SessionError::InvalidRequest(
@@ -2148,7 +2186,7 @@ impl ResolvedChildSpawn {
         self.request.apply_human_decision(decision, &proof);
         self.grants = self.grants.with_human_folder_trust(decision, &proof);
         self.origin = VerifiedSpawnOrigin::HumanConfirmation {
-            ui: proof,
+            request: proof,
             confirmation: decision.confirmation_id.clone(),
         };
         Ok(self)
@@ -2169,6 +2207,9 @@ pub struct AdmissionRequest {
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AdmissionError {
+    /// Required runtime capability/configuration is unavailable; no reservation
+    /// or successful dialog was published. Callers map this gate explicitly.
+    Unavailable,
     ParentNotFound,
     InvalidSlots,
     InvalidReplacement,
@@ -2258,8 +2299,34 @@ pub enum ProviderCommandPurpose {
     Update,
     Version,
 }
+/// Server-owned registration metadata from the fixed Go pendingChild contract.
+/// It is bound to a one-use spawn attempt, never resolved by an editable label
+/// or deserialized from wrapper/browser input. Prompt text is not persisted here.
+#[derive(Clone, Default)]
+pub struct SpawnRegistrationMetadata {
+    pub parent: LiveSessionId,
+    pub role: String,
+    pub auto: bool,
+    pub depth: i64,
+    pub orchestration: OrchestrationId,
+    pub board_path: String,
+    pub worktree_branch: String,
+    pub normal_worktree: NormalWorktree,
+    pub worktree_cleanup: String,
+    pub spawned_at: Option<Timestamp>,
+    pub initial_prompt: String,
+    pub handoff_from: LiveSessionId,
+    pub prompt_at_launch: bool,
+}
+impl SpawnRegistrationMetadata {
+    pub fn needs_initial_gate(&self) -> bool {
+        (!self.orchestration.0.is_empty() || !self.initial_prompt.is_empty())
+            && !self.prompt_at_launch
+    }
+}
 #[derive(Clone)]
 pub struct WrappedSpawnSpec {
+    pub registration_metadata: SpawnRegistrationMetadata,
     /// Internal admission correlation; never serialized onto conductor JSON.
     pub spawn_attempt: Option<SpawnAttemptId>,
     pub registration_proof: Option<SpawnRegistrationProof>,
@@ -2337,7 +2404,7 @@ pub enum ConfirmationOutcome {
     Refused,
     Superseded,
     ParentEnded,
-    SpawnFailed(String),
+    SpawnFailed(SessionError),
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConfirmationWaitOutcome {
@@ -2345,20 +2412,52 @@ pub enum ConfirmationWaitOutcome {
     WaiterCancelled,
     HubStopped,
 }
+pub struct ConfirmationRequest {
+    pub parent: LiveSessionId,
+    pub requested_provider: String,
+    pub body: ResolvedChildSpawn,
+    pub requested_at: Timestamp,
+}
+pub struct ConfirmationRegistration {
+    pub pending: PendingSpawnConfirmation,
+    pub effects: CoreEffects,
+    pub waiter: Box<dyn ConfirmationWaiter>,
+}
+/// Captured at registration; a fast completion cannot disappear before wait.
+/// Drop/cancellation marks only this original request waiter as gone.
+pub trait ConfirmationWaiter: Send {
+    fn id(&self) -> &SpawnConfirmationId;
+    fn wait(
+        self: Box<Self>,
+        cancel: HttpWaitCancellation,
+    ) -> CoreFuture<'static, ConfirmationWaitOutcome>;
+}
+/// Before run, dropping this handle releases only its matching decision lease,
+/// never restoring a superseded/expired entry. The HTTP owner obtains a task
+/// permit first. run commits synchronously (not in a lazy future body); the
+/// caller transfers its returned future without an intervening await or a
+/// fallible enqueue, before returning success. Dropping a committed future,
+/// even before first poll, releases admission and publishes failure, without
+/// pretending asynchronous board/socket cleanup was completed.
+pub trait AcceptedSpawnDecision: Send {
+    fn id(&self) -> &SpawnConfirmationId;
+    fn run(
+        self: Box<Self>,
+        cancel: TaskCancellation,
+    ) -> Result<CoreFuture<'static, ConfirmationOutcome>, SessionError>;
+}
 pub trait SpawnConfirmations: Send + Sync {
     fn pending(&self) -> Vec<PendingSpawnConfirmation>;
-    fn register(&self, pending: PendingSpawnConfirmation) -> Result<CoreEffects, AdmissionError>;
-    fn decide<'a>(
-        &'a self,
+    fn register(
+        &self,
+        request: ConfirmationRequest,
+    ) -> Result<ConfirmationRegistration, AdmissionError>;
+    fn accept_decision(
+        self: Arc<Self>,
         response: SpawnConfirmationResponse,
-        origin: VerifiedUiOrigin,
-    ) -> CoreFuture<'a, Result<ConfirmationOutcome, SessionError>>;
-    /// Cancellation stops only this waiter; reservation/confirmation remains.
-    fn wait<'a>(
-        &'a self,
-        id: &'a SpawnConfirmationId,
-        cancel: &'a HttpWaitCancellation,
-    ) -> CoreFuture<'a, ConfirmationWaitOutcome>;
+        request: VerifiedConfirmationRequest,
+        now: Timestamp,
+    ) -> Result<Box<dyn AcceptedSpawnDecision>, SessionError>;
     fn parent_ended(&self, parent: LiveSessionId) -> CoreEffects;
 }
 
@@ -2490,21 +2589,53 @@ impl AdmissionState {
         request: AdmissionRequest,
         limits: AdmissionLimits,
     ) -> Result<AdmissionReservation, AdmissionError> {
-        if request.slots <= 0 {
+        let human_capacity = request.origin.is_human();
+        self.reserve_capacity(
+            request.parent,
+            request.slots,
+            request.replace,
+            limits,
+            human_capacity,
+        )
+    }
+    /// Source pre-decision confirmation capacity, without fabricating a human
+    /// request proof. Only the actual SessionEngine transaction calls this lane.
+    pub(crate) fn reserve_confirmation(
+        &mut self,
+        parent: LiveSessionId,
+        slots: i64,
+        replace: Option<AdmissionId>,
+    ) -> Result<AdmissionReservation, AdmissionError> {
+        self.reserve_capacity(
+            parent,
+            slots,
+            replace,
+            AdmissionLimits {
+                max_children_per_parent: 256,
+                max_total_sessions: 257,
+            },
+            true,
+        )
+    }
+    fn reserve_capacity(
+        &mut self,
+        parent: LiveSessionId,
+        slots: i64,
+        replace: Option<AdmissionId>,
+        limits: AdmissionLimits,
+        human: bool,
+    ) -> Result<AdmissionReservation, AdmissionError> {
+        if slots <= 0 {
             return Err(AdmissionError::InvalidSlots);
         }
-        if !self.live.contains_key(&request.parent) {
+        if !self.live.contains_key(&parent) {
             return Err(AdmissionError::ParentNotFound);
         }
-        if let Some(id) = &request.replace
-            && self
-                .reservations
-                .get(id)
-                .is_none_or(|r| r.parent != request.parent)
+        if let Some(id) = &replace
+            && self.reservations.get(id).is_none_or(|r| r.parent != parent)
         {
             return Err(AdmissionError::InvalidReplacement);
         }
-        let human = request.origin.is_human();
         let child_limit = if human {
             256
         } else if limits.max_children_per_parent <= 0 {
@@ -2513,25 +2644,21 @@ impl AdmissionState {
             limits.max_children_per_parent.min(256)
         };
         let total_limit = limits.max_total_sessions.max(child_limit + 1);
-        let child_count = self
-            .live
-            .values()
-            .filter(|s| s.parent == request.parent)
-            .count() as i64;
+        let child_count = self.live.values().filter(|s| s.parent == parent).count() as i64;
         let mut parent_reserved = 0;
         let mut total_reserved = 0;
         for (id, r) in &self.reservations {
-            if request.replace.as_ref() == Some(id) {
+            if replace.as_ref() == Some(id) {
                 continue;
             }
             total_reserved += r.slots;
-            if r.parent == request.parent {
+            if r.parent == parent {
                 parent_reserved += r.slots;
             }
         }
-        let running_relays = *self.running_relays.get(&request.parent).unwrap_or(&0);
+        let running_relays = *self.running_relays.get(&parent).unwrap_or(&0);
         let used = child_count + parent_reserved;
-        if request.slots > child_limit.saturating_sub(used) {
+        if slots > child_limit.saturating_sub(used) {
             return Err(AdmissionError::ChildrenPerParent {
                 running_relays,
                 used,
@@ -2539,7 +2666,7 @@ impl AdmissionState {
             });
         }
         let used = self.live.len() as i64 + total_reserved;
-        if !human && request.slots > total_limit.saturating_sub(used) {
+        if !human && slots > total_limit.saturating_sub(used) {
             return Err(AdmissionError::TotalSessions {
                 running_relays,
                 used,
@@ -2550,10 +2677,10 @@ impl AdmissionState {
         let id = AdmissionId(format!("oa-{sequence}"));
         let reservation = AdmissionReservation {
             id: id.clone(),
-            parent: request.parent,
-            slots: request.slots,
+            parent,
+            slots,
         };
-        if let Some(old) = request.replace {
+        if let Some(old) = replace {
             self.reservations.remove(&old);
         }
         self.reservations.insert(id, reservation.clone());
@@ -2623,10 +2750,7 @@ mod internal_contract_tests {
     use super::*;
     #[test]
     fn human_decision_trims_supplied_fields_and_preserves_absent_memory_and_origin() {
-        let proof = VerifiedUiOrigin::after_server_verification(UiBinding {
-            connection: UiConnectionId(1),
-            auth_epoch: AuthEpoch(1),
-        });
+        let proof = VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(1));
         let mut body = ChildSpawnRequest {
             provider: "previous".into(),
             model: "old-model".into(),
@@ -2675,10 +2799,7 @@ mod internal_contract_tests {
 
     #[test]
     fn verified_decision_keeps_absent_but_clears_explicit_empty() {
-        let proof = VerifiedUiOrigin::after_server_verification(UiBinding {
-            connection: UiConnectionId(1),
-            auth_epoch: AuthEpoch(4),
-        });
+        let proof = VerifiedConfirmationRequest::after_server_authentication(AuthEpoch(4));
         let mut request = ChildSpawnRequest {
             provider: "codex".into(),
             effort: "high".into(),
@@ -2715,10 +2836,7 @@ mod internal_contract_tests {
                 },
             )
             .unwrap();
-        let proof = VerifiedUiOrigin::after_server_verification(UiBinding {
-            connection: UiConnectionId(1),
-            auth_epoch: AuthEpoch(1),
-        });
+        let proof = VerifiedUiOrigin::after_server_verification(AuthEpoch(1));
         let request = AdmissionRequest {
             parent: LiveSessionId(1),
             slots: 256,

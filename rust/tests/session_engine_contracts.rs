@@ -3,6 +3,8 @@
 use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 #[path = "session_engine/approval_actions.rs"]
 mod approval_actions;
+#[path = "session_engine/startup_registration.rs"]
+mod startup_registration;
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
     proto::{self, core::*},
@@ -126,6 +128,9 @@ struct Fixture {
     store: Arc<SqliteSessionStorage>,
 }
 fn fixture() -> Fixture {
+    fixture_with_spawner(Arc::new(NoSpawn))
+}
+fn fixture_with_spawner(spawner: Arc<dyn WrappedSessionSpawner>) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(root.path(), 49121, installed.path()).unwrap();
@@ -170,7 +175,7 @@ fn fixture() -> Fixture {
         journal,
         transport.clone(),
         sink.clone(),
-        Arc::new(NoSpawn),
+        spawner,
         bus,
     ));
     Fixture {

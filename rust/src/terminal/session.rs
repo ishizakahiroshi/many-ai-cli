@@ -25,6 +25,7 @@ use std::{
 
 mod approvals;
 mod authorization;
+pub mod confirmations;
 mod input;
 mod lane;
 mod lifecycle;
@@ -45,6 +46,9 @@ pub struct EngineOptions {
     pub custom_providers: BTreeSet<String>,
     /// Live policy lookup; absence means automatic approvals are disabled.
     pub approval_policy: Option<LiveApprovalPolicy>,
+    /// Required for confirmation disclosure and actual child/refusal dispatch.
+    /// Absence leaves the capability explicitly unavailable.
+    pub confirmation_executor: Option<Arc<dyn confirmations::ConfirmationExecutor>>,
     /// Reports optional persistence degradation without copying user bodies.
     pub warning: EngineWarningHandler,
 }
@@ -58,6 +62,7 @@ impl Default for EngineOptions {
             approval_phrases: BTreeMap::new(),
             custom_providers: BTreeSet::new(),
             approval_policy: None,
+            confirmation_executor: None,
             warning: Arc::new(|operation, error| eprintln!("session core {operation}: {error:?}")),
         }
     }
@@ -73,6 +78,10 @@ pub struct SessionEngine {
     spawner: Arc<dyn WrappedSessionSpawner>,
     events: CoreEventBus,
 }
+struct PendingSpawn {
+    lease: ProviderSpawnLease,
+    metadata: SpawnRegistrationMetadata,
+}
 struct State {
     next_id: i64,
     next_incarnation: u64,
@@ -84,9 +93,12 @@ struct State {
     retired_uis: BTreeMap<(UiConnectionId, AuthEpoch), Arc<authorization::UiWorkState>>,
     last_ui_size: TerminalSize,
     admission: AdmissionState,
-    spawn_proofs: BTreeMap<String, ProviderSpawnLease>,
+    spawn_proofs: BTreeMap<String, PendingSpawn>,
     persistence_lane: Arc<lane::InputLane>,
     confirmations: BTreeMap<SpawnConfirmationId, ConfirmationEntry>,
+    next_confirmation: u64,
+    next_confirmation_decision: u64,
+    confirmations_stopped: bool,
 }
 struct Session {
     binding: SessionBinding,
@@ -134,7 +146,8 @@ enum UiFrame {
 }
 struct ConfirmationEntry {
     pending: PendingSpawnConfirmation,
-    outcome: Option<ConfirmationOutcome>,
+    completion: Arc<confirmations::Completion>,
+    decision: Option<u64>,
 }
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
@@ -192,6 +205,9 @@ impl SessionEngine {
                 spawn_proofs: BTreeMap::new(),
                 persistence_lane: Arc::new(lane::InputLane::default()),
                 confirmations: BTreeMap::new(),
+                next_confirmation: 0,
+                next_confirmation_decision: 0,
+                confirmations_stopped: false,
             }),
             registration: tokio::sync::Mutex::new(()),
             journal,

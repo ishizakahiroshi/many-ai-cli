@@ -6,9 +6,12 @@ impl SpawnAdmission for SessionEngine {
         limits: AdmissionLimits,
     ) -> Result<AdmissionReservation, AdmissionError> {
         let mut state = lock(&self.state);
-        if let VerifiedSpawnOrigin::HumanUi(origin)
-        | VerifiedSpawnOrigin::HumanConfirmation { ui: origin, .. } = &request.origin
-            && !state.authorized(origin.binding())
+        // HTTP proofs retain auth-revocation epochs, but are not WebSocket
+        // memberships. Go permits these requests without an open browser socket.
+        if request
+            .origin
+            .auth_epoch()
+            .is_some_and(|epoch| epoch != state.auth_epoch)
         {
             return Err(AdmissionError::ParentNotFound);
         }
@@ -42,9 +45,9 @@ impl ProviderUpdateAdmission for SessionEngine {
     }
     fn end_provider_spawn(&self, lease: ProviderSpawnLease) {
         let mut state = lock(&self.state);
-        state
-            .spawn_proofs
-            .retain(|_, pending| pending.id != lease.id || pending.provider != lease.provider);
+        state.spawn_proofs.retain(|_, pending| {
+            pending.lease.id != lease.id || pending.lease.provider != lease.provider
+        });
         state.admission.end_provider_spawn(&lease);
     }
     fn begin_provider_update(
@@ -95,13 +98,16 @@ impl WrappedSessionSpawner for SessionEngine {
                 if state
                     .spawn_proofs
                     .values()
-                    .any(|pending| pending.id == lease.id)
+                    .any(|pending| pending.lease.id == lease.id)
                 {
                     return SpawnWaitOutcome::Failed("start attempt is already launched".into());
                 }
                 state.spawn_proofs.insert(
                     crate::approval::identity::digest(proof.as_header_value()),
-                    lease.clone(),
+                    PendingSpawn {
+                        lease: lease.clone(),
+                        metadata: spec.registration_metadata.clone(),
+                    },
                 );
             }
             spec.registration_proof = Some(proof);
@@ -121,10 +127,12 @@ impl WrappedSessionSpawner for SessionEngine {
                         );
                     }
                 }
-                SpawnWaitOutcome::Failed(_) => {
-                    if let Err(error) = self.spawn_failed(lease.id, &lease.provider) {
-                        self.warn("release failed launch", &error);
-                    }
+                SpawnWaitOutcome::Failed(_) | SpawnWaitOutcome::HubStopped => {
+                    // A real process owner releases on terminal failure even if
+                    // the HTTP waiter is gone. This observer cleanup is exact
+                    // and idempotent; it cannot remove a registered session or
+                    // a different provider's lease after the owner won first.
+                    self.end_provider_spawn(lease);
                 }
                 _ => {}
             }
@@ -141,13 +149,14 @@ impl SessionEngine {
         let mut state = lock(&self.state);
         state
             .spawn_proofs
-            .retain(|_, lease| lease.id != attempt || lease.provider != provider);
-        if !state.admission.end_provider_spawn(&ProviderSpawnLease {
+            .retain(|_, pending| pending.lease.id != attempt || pending.lease.provider != provider);
+        // A terminal owner may race registration consuming this exact lease.
+        // Cleanup is idempotent and never removes a registered session or any
+        // differently identified/provider-bound pending launch.
+        state.admission.end_provider_spawn(&ProviderSpawnLease {
             id: attempt,
             provider: provider.into(),
-        }) {
-            return Err(SessionError::StaleBinding);
-        }
+        });
         Ok(CoreEffects::default())
     }
 }

@@ -233,7 +233,7 @@ pub async fn run_cli(
         &context.config.hub.terminal_color
     };
     let child = launch::child_env(context.environment, color, &[]);
-    let process = ProcessPlan {
+    let mut process = ProcessPlan {
         executable: command.executable.into(),
         args: command.args.into_iter().map(Into::into).collect(),
         cwd: context.cwd.into(),
@@ -244,6 +244,7 @@ pub async fn run_cli(
         pipe_drain_timeout: Duration::from_secs(2),
     };
     let registration = registration(&context, &launch)?;
+    super::startup::strip_provider_environment(&mut process);
     let proof = env(context.environment, SPAWN_PROOF_ENV).map(str::to_owned);
     if launch.headless {
         return run_headless(

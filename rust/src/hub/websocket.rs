@@ -29,6 +29,7 @@ pub struct WebSocketService {
     effects: Arc<dyn CoreEffectSink>,
     shutdown: Cancellation,
     warning: Arc<Warning>,
+    startups: Option<Arc<crate::application::wrapped_spawn::ProcessWrappedSpawner>>,
 }
 impl WebSocketService {
     pub fn new(
@@ -46,7 +47,15 @@ impl WebSocketService {
             effects,
             shutdown,
             warning,
+            startups: None,
         }
+    }
+    pub fn with_startup_owner(
+        mut self,
+        startups: Arc<crate::application::wrapped_spawn::ProcessWrappedSpawner>,
+    ) -> Self {
+        self.startups = Some(startups);
+        self
     }
     /// Called before upgrade. Unlike HTTP guards, WebSocket token authentication
     /// occurs only after receiving the first complete JSON frame.
@@ -128,7 +137,7 @@ impl WebSocketService {
                         Timestamp::now(),
                     )
                     .await
-                    .map(|r| (r.binding, r.reattached, r.after_reattached))
+                    .map(|r| (r.binding, r.reattached, r.after_reattached, None))
             } else {
                 SessionCore::register(
                     self.core.as_ref(),
@@ -140,9 +149,16 @@ impl WebSocketService {
                     Timestamp::now(),
                 )
                 .await
-                .map(|r| (r.binding, r.registered, r.after_registered))
+                .map(|r| {
+                    (
+                        r.binding,
+                        r.registered,
+                        r.after_registered,
+                        r.startup_receipt,
+                    )
+                })
             };
-            let (binding, ack, effects) = match registration {
+            let (binding, ack, effects, receipt) = match registration {
                 Ok(registration) => registration,
                 Err(error) => {
                     if reattach && let Some(rejection) = reattach_rejection(requested, &error) {
@@ -158,7 +174,35 @@ impl WebSocketService {
                     return Err(error);
                 }
             };
+            let mut startup = if let Some(receipt) = receipt {
+                let prepared = if let Some(owner) = &self.startups {
+                    owner.prepare_registration(receipt).await.map_err(|_| {
+                        SessionError::Transport("wrapper startup ownership transfer failed".into())
+                    })
+                } else {
+                    Err(SessionError::Transport(
+                        "wrapper startup owner is unavailable".into(),
+                    ))
+                };
+                match prepared {
+                    Ok(guard) => Some(guard),
+                    Err(error) => {
+                        self.sockets.close_pending_wrapper(connection).await?;
+                        if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
+                            && let Err(failure) = self.apply(effects).await
+                        {
+                            (self.warning)("failed startup transfer cleanup", &failure);
+                        }
+                        return Err(error);
+                    }
+                }
+            } else {
+                None
+            };
             if let Err(error) = self.sockets.bind_wrapper(binding) {
+                if let Some(guard) = startup.take() {
+                    guard.reject_before_ack();
+                }
                 self.sockets.close_pending_wrapper(connection).await?;
                 if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
                     && let Err(failure) = self.apply(effects).await
@@ -168,7 +212,17 @@ impl WebSocketService {
                 return Err(error);
             }
             let result = async {
-                self.sockets.acknowledge_wrapper(binding, ack).await?;
+                let sent = self.sockets.acknowledge_wrapper(binding, ack).await;
+                if let Some(guard) = startup.take() {
+                    // Transfer is already disarmed before the first ACK byte.
+                    // A write error does not prove the wrapper missed that ACK.
+                    if sent.is_ok() {
+                        guard.acknowledged();
+                    } else {
+                        guard.delivery_uncertain();
+                    }
+                }
+                sent?;
                 self.apply(effects).await?;
                 // The baseline starts flushPendingInput only after reattach_ack.
                 // Keep it owned by this socket lifecycle and poll the reader in

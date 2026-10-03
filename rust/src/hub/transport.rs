@@ -180,6 +180,11 @@ async fn handle(
     }
     let reads_body = !matches!(request.method.as_str(), "GET" | "HEAD" | "OPTIONS")
         && request.path.starts_with("/api/")
+        && !request
+            .path
+            .starts_with(super::approval_actions::ONE_TAP_PREFIX)
+        && !(request.method == "DELETE"
+            && (request.path == "/api/routines" || request.path.starts_with("/api/routines/")))
         && !matches!(
             request.path.as_str(),
             "/api/auth/logout" | "/api/auth/revoke-all" | "/api/notify-generate-topic"
@@ -189,6 +194,36 @@ async fn handle(
             Ok(v) => v,
             Err(_) => return response(Response::error(400, "bad_request", "invalid json")),
         };
+    }
+    if super::router::needs_owned_request(&request.path) {
+        let permit = match state.services.owned_request_permit() {
+            Ok(permit) => permit,
+            Err(_) => {
+                return response(Response::error(
+                    503,
+                    "approval_unavailable",
+                    "approval service is not accepting requests",
+                ));
+            }
+        };
+        let cancellation = permit.cancellation();
+        // The lifecycle owns the whole accepted operation, including every batch
+        // item and its committed effects. A dropped socket waits for nothing and
+        // cannot cancel this task. Captured services hold only weak task handles.
+        let completion = permit.start(async move {
+            let dispatch = state
+                .services
+                .handle_owned_async_at(&request, captured_at, &cancellation)
+                .await;
+            match state.sink.apply(dispatch.effects).await {
+                Ok(()) => dispatch.response,
+                Err(failure) => effect_failure(dispatch.response, failure),
+            }
+        });
+        return response(match completion.wait().await {
+            Ok(result) => result,
+            Err(_) => Response::error(500, "operation_failed", "Hub operation did not complete"),
+        });
     }
     let dispatch = state.services.handle_async_at(&request, captured_at).await;
     match state.sink.apply(dispatch.effects).await {
@@ -445,6 +480,16 @@ mod tests {
         Cancellation,
         tokio::task::JoinHandle<io::Result<()>>,
     ) {
+        fixture_with_routines(false).await
+    }
+    async fn fixture_with_routines(
+        routines: bool,
+    ) -> (
+        tempfile::TempDir,
+        u16,
+        Cancellation,
+        tokio::task::JoinHandle<io::Result<()>>,
+    ) {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path().join("trial");
         std::fs::create_dir(&root).unwrap();
@@ -463,7 +508,18 @@ mod tests {
             )
             .unwrap(),
         );
-        let services = Arc::new(ServiceRouter::isolated(config, paths));
+        let mut services = ServiceRouter::isolated(config, paths);
+        if routines {
+            let store = Arc::new(crate::routine::store::RoutineStore::open(Arc::new(
+                crate::files::safe_fs::Dir::open(&root).unwrap(),
+            )));
+            services = services.with_routines(Arc::new(super::super::routines::RoutineHttp {
+                store,
+                runner: None,
+                home: dir.path().to_owned(),
+            }));
+        }
+        let services = Arc::new(services);
         let cancel = Cancellation::default();
         let task = tokio::spawn(serve(
             listener,
@@ -586,5 +642,27 @@ mod tests {
         assert_eq!(v["ok"], false);
         assert_eq!(v["failed_step"], 2);
         assert_eq!(v["token"], "new-synthetic");
+    }
+    #[tokio::test]
+    async fn served_routine_crud_persists_and_delete_does_not_wait_for_a_body() {
+        let (dir, port, cancel, server) = fixture_with_routines(true).await;
+        let cwd = dir.path().join("project");
+        std::fs::create_dir(&cwd).unwrap();
+        let definition=serde_json::json!({"name":"synthetic routine","provider":"claude","cwd":cwd,"prompt":"owned fixture"}).to_string();
+        let created=exchange(port,format!("POST /api/routines?token=synthetic-http HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",definition.len(),definition)).await;
+        assert!(created.starts_with("HTTP/1.1 200"), "{created}");
+        let body: serde_json::Value =
+            serde_json::from_str(created.split_once("\r\n\r\n").unwrap().1).unwrap();
+        let id = body["routine"]["id"].as_str().unwrap();
+        let listed=exchange(port,format!("GET /api/routines?token=synthetic-http HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n")).await;
+        assert!(listed.contains("synthetic routine"));
+        let deleted=exchange(port,format!("DELETE /api/routines/{id}?token=synthetic-http HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 900000\r\nConnection: close\r\n\r\n")).await;
+        assert!(deleted.starts_with("HTTP/1.1 200"), "{deleted}");
+        let reopened = crate::routine::store::RoutineStore::open(Arc::new(
+            crate::files::safe_fs::Dir::open(&dir.path().join("trial")).unwrap(),
+        ));
+        assert!(reopened.definitions().unwrap().is_empty());
+        cancel.cancel();
+        server.await.unwrap().unwrap();
     }
 }

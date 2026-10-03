@@ -5,12 +5,29 @@ use many_ai_cli::{
     launcher,
     process::{self, Cancellation},
 };
-#[tokio::main]
-async fn main() {
-    if let Err(error) = run().await {
-        eprintln!("{error}");
-        std::process::exit(1);
-    }
+fn main() {
+    // Adopt an inherited startup Job before any provider or registration work.
+    // Its lifetime remains outside Tokio so runtime cleanup happens first.
+    let startup = match many_ai_cli::wrapper::startup::StartupLifetime::adopt_from_environment() {
+        Ok(startup) => startup,
+        Err(error) => {
+            eprintln!("wrapper startup: {error}");
+            std::process::exit(1);
+        }
+    };
+    let result = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| error.to_string())
+        .and_then(|runtime| runtime.block_on(run()));
+    let code = match result {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{error}");
+            1
+        }
+    };
+    startup.exit(code);
 }
 async fn run() -> Result<(), String> {
     let args: Vec<String> = std::env::args().skip(1).collect();

@@ -1,0 +1,2565 @@
+{
+  "adds": [
+    {
+      "name": "fresh",
+      "initial": "",
+      "command": " git status \t",
+      "cwd": "/synthetic/project",
+      "rule": {
+        "id": "batch-fd404b71f89b",
+        "command": "^git status$",
+        "risk": [
+          "low"
+        ],
+        "working_dir": "^/synthetic/project$"
+      },
+      "error": "",
+      "changed": true,
+      "file": {
+        "version": 1,
+        "rules": [
+          {
+            "id": "batch-fd404b71f89b",
+            "command": "^git status$",
+            "risk": [
+              "low"
+            ],
+            "working_dir": "^/synthetic/project$"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cwd_literal",
+      "initial": "",
+      "command": "cat 日本語.[txt]",
+      "cwd": "C:\\synthetic\\project.(demo)",
+      "rule": {
+        "id": "batch-340f0d23f19b",
+        "command": "^cat 日本語\\.\\[txt\\]$",
+        "risk": [
+          "low"
+        ],
+        "working_dir": "^C:\\\\synthetic\\\\project\\.\\(demo\\)$"
+      },
+      "error": "",
+      "changed": true,
+      "file": {
+        "version": 1,
+        "rules": [
+          {
+            "id": "batch-340f0d23f19b",
+            "command": "^cat 日本語\\.\\[txt\\]$",
+            "risk": [
+              "low"
+            ],
+            "working_dir": "^C:\\\\synthetic\\\\project\\.\\(demo\\)$"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty_cwd",
+      "initial": "",
+      "command": "go test ./...",
+      "cwd": "",
+      "rule": {
+        "id": "batch-73772176f248",
+        "command": "^go test \\./\\.\\.\\.$",
+        "risk": [
+          "low"
+        ]
+      },
+      "error": "",
+      "changed": true,
+      "file": {
+        "version": 1,
+        "rules": [
+          {
+            "id": "batch-73772176f248",
+            "command": "^go test \\./\\.\\.\\.$",
+            "risk": [
+              "low"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unsafe",
+      "initial": "",
+      "command": "git push origin main",
+      "cwd": "",
+      "rule": {
+        "id": "",
+        "command": ""
+      },
+      "error": "unsafe or empty command cannot be auto-approved",
+      "changed": false,
+      "file": {
+        "version": 0,
+        "rules": null
+      }
+    },
+    {
+      "name": "empty",
+      "initial": "",
+      "command": " \t",
+      "cwd": "",
+      "rule": {
+        "id": "",
+        "command": ""
+      },
+      "error": "unsafe or empty command cannot be auto-approved",
+      "changed": false,
+      "file": {
+        "version": 0,
+        "rules": null
+      }
+    },
+    {
+      "name": "multiline",
+      "initial": "",
+      "command": "git status\ngit diff",
+      "cwd": "",
+      "rule": {
+        "id": "",
+        "command": ""
+      },
+      "error": "an approval naming more than one command cannot be auto-approved",
+      "changed": false,
+      "file": {
+        "version": 0,
+        "rules": null
+      }
+    },
+    {
+      "name": "carriage_return",
+      "initial": "",
+      "command": "git status\rgit diff",
+      "cwd": "",
+      "rule": {
+        "id": "",
+        "command": ""
+      },
+      "error": "an approval naming more than one command cannot be auto-approved",
+      "changed": false,
+      "file": {
+        "version": 0,
+        "rules": null
+      }
+    },
+    {
+      "name": "invalid_file",
+      "initial": "rules: [",
+      "command": "git status",
+      "cwd": "",
+      "rule": {
+        "id": "",
+        "command": ""
+      },
+      "error": "read auto approval policy: yaml: line 1: did not find expected node content",
+      "changed": false,
+      "file": {
+        "version": 0,
+        "rules": null
+      }
+    },
+    {
+      "name": "unknown_version",
+      "initial": "version: 7\nextension: {ignored: .nan}\nrules: [{id: historic, command: '^git diff$', risk: [mid]}]\n",
+      "command": "git status",
+      "cwd": "",
+      "rule": {
+        "id": "batch-32d64cd1aaad",
+        "command": "^git status$",
+        "risk": [
+          "low"
+        ]
+      },
+      "error": "",
+      "changed": true,
+      "file": {
+        "version": 7,
+        "rules": [
+          {
+            "id": "historic",
+            "command": "^git diff$",
+            "risk": [
+              "mid"
+            ]
+          },
+          {
+            "id": "batch-32d64cd1aaad",
+            "command": "^git status$",
+            "risk": [
+              "low"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "zero_version",
+      "initial": "version: 0\nrules: []\n",
+      "command": "git status",
+      "cwd": "",
+      "rule": {
+        "id": "batch-32d64cd1aaad",
+        "command": "^git status$",
+        "risk": [
+          "low"
+        ]
+      },
+      "error": "",
+      "changed": true,
+      "file": {
+        "version": 1,
+        "rules": [
+          {
+            "id": "batch-32d64cd1aaad",
+            "command": "^git status$",
+            "risk": [
+              "low"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "reuse_invalid_existing",
+      "initial": "version: 0\nextension: keep-me\nrules: [{id: old, command: '^git status$', risk: [high]}]\n",
+      "command": "git status",
+      "cwd": "",
+      "rule": {
+        "id": "old",
+        "command": "^git status$",
+        "risk": [
+          "high"
+        ]
+      },
+      "error": "",
+      "changed": false,
+      "file": {
+        "version": 0,
+        "rules": [
+          {
+            "id": "old",
+            "command": "^git status$",
+            "risk": [
+              "high"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "loads": [
+    {
+      "name": "missing",
+      "raw": "",
+      "missing": true,
+      "rules": 0,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "raw": "",
+      "missing": false,
+      "rules": 0,
+      "warnings": [
+        "auto-approval.yaml の version は 1 にしてください"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "null",
+      "raw": "null\n",
+      "missing": false,
+      "rules": 0,
+      "warnings": [
+        "auto-approval.yaml の version は 1 にしてください"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "ordered_cwd",
+      "raw": "version: 1\nrules:\n - id: scoped\n   command: '^git status$'\n   working_dir: '^/synthetic/project$'\n - id: fallback\n   command: '^git status$'\n   risk: [low, low]\n",
+      "missing": false,
+      "rules": 2,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "scoped",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "scoped",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "fallback",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "historical_unknown_version",
+      "raw": "version: 9\nfuture: {.nan: [true, 2026-01-02]}\nrules:\n - id: 001\n   command: '^git status$'\n   future: {42: .inf}\n",
+      "missing": false,
+      "rules": 1,
+      "warnings": [
+        "auto-approval.yaml の version は 1 にしてください"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "001",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "001",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "001",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "null_and_lexical",
+      "raw": "version: 1.9\nrules:\n - null\n - id: true\n   command: '^git status$'\n   risk: [null, low]\n   working_dir: null\n",
+      "missing": false,
+      "rules": 1,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "true",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "true",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "true",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "alias_merge",
+      "raw": "base: \u0026base {id: merged, command: '^git status$', risk: [low]}\nversion: 1\nrules:\n - \u003c\u003c: *base\n   working_dir: '^/synthetic/project$'\n",
+      "missing": false,
+      "rules": 1,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "merged",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "merged",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "ordered_invalid",
+      "raw": "version: 0\nrules:\n - command: '^git status$'\n - id: reserved\n - id: reserved\n   command: '^git status$'\n - id: syntax\n   command: '('\n - id: broad\n   command: '.*'\n - id: badcwd\n   command: '^git status$'\n   working_dir: '('\n - id: risk\n   command: '^git status$'\n   risk: [low, mid]\n - id: okay\n   command: '^git diff$'\n",
+      "missing": false,
+      "rules": 1,
+      "warnings": [
+        "auto-approval.yaml の version は 1 にしてください",
+        "rules[0]: id がありません",
+        "rule \"reserved\": command 正規表現がありません",
+        "rule \"reserved\": id が重複しています",
+        "rule \"syntax\": command 正規表現が不正です",
+        "rule \"broad\": 危険操作に一致するため無効化しました",
+        "rule \"badcwd\": working_dir 正規表現が不正です",
+        "rule \"risk\": 自動承認できる risk は low のみです"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": true,
+          "rule_id": "okay",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "malformed",
+      "raw": "version: [broken",
+      "missing": false,
+      "rules": 0,
+      "warnings": [
+        "auto-approval.yaml の形式が正しくありません。自動承認は実行されません"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "wrong_type",
+      "raw": "version: 1\nrules: [false, {id: okay, command: '^git status$'}]\n",
+      "missing": false,
+      "rules": 0,
+      "warnings": [
+        "auto-approval.yaml の形式が正しくありません。自動承認は実行されません"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "duplicate_field",
+      "raw": "version: 1\nversion: 1\nrules: []\n",
+      "missing": false,
+      "rules": 0,
+      "warnings": [
+        "auto-approval.yaml の形式が正しくありません。自動承認は実行されません"
+      ],
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "first_document",
+      "raw": "version: 1\nrules: [{id: first, command: '^git status$'}]\n---\n[malformed",
+      "missing": false,
+      "rules": 1,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": " git status \t",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project/child",
+          "risk": "low"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git status",
+          "cwd": "/synthetic/project",
+          "risk": ""
+        },
+        {
+          "command": "git diff",
+          "cwd": "/synthetic/project",
+          "risk": "low"
+        },
+        {
+          "command": "",
+          "cwd": "/synthetic/project",
+          "risk": "high"
+        },
+        {
+          "command": "git push",
+          "cwd": "/synthetic/project",
+          "risk": "mid"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "first",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "first",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "first",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "low 以外の危険度は自動承認できません"
+        },
+        {
+          "allowed": false,
+          "reason": "一致するホワイトリスト規則がありません"
+        },
+        {
+          "allowed": false,
+          "reason": "コマンドを抽出できないため手動確認が必要です"
+        },
+        {
+          "allowed": false,
+          "reason": "危険操作は自動承認できません"
+        }
+      ]
+    },
+    {
+      "name": "unicode_literal",
+      "raw": "version: 1\nrules: [{id: cjk, command: '^cat 日本語.txt$', working_dir: '^/合成/作業$'}]\n",
+      "missing": false,
+      "rules": 1,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "cat 日本語.txt",
+          "cwd": "/合成/作業",
+          "risk": "low"
+        },
+        {
+          "command": "cat 日本語Xtxt",
+          "cwd": "/合成/作業",
+          "risk": "low"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "cjk",
+          "reason": "ホワイトリスト規則に一致"
+        },
+        {
+          "allowed": true,
+          "rule_id": "cjk",
+          "reason": "ホワイトリスト規則に一致"
+        }
+      ]
+    },
+    {
+      "name": "unsupported_unicode_property",
+      "raw": "version: 1\nrules: [{id: han, command: '^cat \\p{Han}+$'}]\n",
+      "missing": false,
+      "rules": 1,
+      "warnings": null,
+      "error": false,
+      "inputs": [
+        {
+          "command": "cat 日本語",
+          "cwd": "/synthetic",
+          "risk": "low"
+        }
+      ],
+      "decisions": [
+        {
+          "allowed": true,
+          "rule_id": "han",
+          "reason": "ホワイトリスト規則に一致"
+        }
+      ]
+    }
+  ],
+  "regexes": [
+    {
+      "pattern": "^cat \\w+$",
+      "values": [
+        "cat abc_12",
+        "cat 日本語",
+        "cat café",
+        "cat K"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat \\s+file$",
+      "values": [
+        "cat  file",
+        "cat \tfile",
+        "cat \u000bfile",
+        "cat  file"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat \\S+$",
+      "values": [
+        "cat abc",
+        "cat a b",
+        "cat a\u000bb",
+        "cat a b"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "\\bgit status\\b",
+      "values": [
+        "git status",
+        "é git status é",
+        "é git statusé",
+        "xgit status"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat [a\u0026\u0026b]+$",
+      "values": [
+        "cat a",
+        "cat b",
+        "cat \u0026",
+        "cat ab\u0026",
+        "cat c"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        true,
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat [a[b]+$",
+      "values": [
+        "cat [ab",
+        "cat c"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat [^\\W]+$",
+      "values": [
+        "cat abc_2",
+        "cat 日本語",
+        "cat \u0026"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat [[:alpha:]]+$",
+      "values": [
+        "cat abc",
+        "cat 日本語",
+        "cat café"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^\\Qcat (a+b).[txt]\\E$",
+      "values": [
+        "cat (a+b).[txt]",
+        "cat abXtxt"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat \\141\\x62\\x{63}$",
+      "values": [
+        "cat abc",
+        "cat 141bc"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^(?P\u003c1name\u003ecat) (?P\u003c1name\u003efile)$",
+      "values": [
+        "cat file",
+        "cat"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^(?\u003csame\u003ecat) (?\u003csame\u003efile)$",
+      "values": [
+        "cat file"
+      ],
+      "valid": true,
+      "matches": [
+        true
+      ]
+    },
+    {
+      "pattern": "(?i)^cat [a-z]+$",
+      "values": [
+        "CAT file",
+        "cat Kſ",
+        "cat 日"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat a{01}$",
+      "values": [
+        "cat a{01}",
+        "cat a"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat a{,3}$",
+      "values": [
+        "cat a{,3}",
+        "cat aaa"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat a{2,3}$",
+      "values": [
+        "cat a",
+        "cat aa",
+        "cat aaa",
+        "cat aaaa"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "(?m)^cat file$",
+      "values": [
+        "before\ncat file\nafter",
+        "cat file\r\n",
+        "cat file\n"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false,
+        true
+      ]
+    },
+    {
+      "pattern": "^cat [a--b]$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat a{1001}$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat (a{20}){60}$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat a++$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "(?x)^cat file$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "(?u)^cat file$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\u0061$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat [\\b]$",
+      "values": null,
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\p{Han}+$",
+      "values": [
+        "cat 日本語"
+      ],
+      "valid": true,
+      "matches": [
+        true
+      ],
+      "unsupported": "unicode_property"
+    },
+    {
+      "pattern": "(?i)^cat λ$",
+      "values": [
+        "cat Λ"
+      ],
+      "valid": true,
+      "matches": [
+        true
+      ],
+      "unsupported": "non_ascii_casefold"
+    },
+    {
+      "pattern": "^cat \\x{d800}$",
+      "values": [
+        "cat a"
+      ],
+      "valid": true,
+      "matches": [
+        false
+      ],
+      "unsupported": "surrogate"
+    },
+    {
+      "pattern": "(?ii)^cat file$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "(?i-i)^cat file$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "(?im-ms)^cat file$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "(?)^cat file$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat(?)*$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat [\\D]+$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        false,
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true
+      ]
+    },
+    {
+      "pattern": "^cat [a\\-z]+$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat []a-]+$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat [^]a]+$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ]
+    },
+    {
+      "pattern": "^cat [[:^alpha:]]+$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true
+      ]
+    },
+    {
+      "pattern": "^cat [[:bogus:]]+$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\12$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat \\1$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\8$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\0$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true
+      ]
+    },
+    {
+      "pattern": "^cat a{2,}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat (a{20}){0,}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat (a{20}){0}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat a{3,2}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat a{0002}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat a{2,03}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": true,
+      "matches": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        false,
+        false
+      ]
+    },
+    {
+      "pattern": "^cat \\p{Definitely_Not_A_Go_Class}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\p{Alphabetic}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\p{Script=Latin}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    },
+    {
+      "pattern": "^cat \\x{110000}$",
+      "values": [
+        "cat",
+        "cat file",
+        "CAT FILE",
+        "cat a",
+        "cat aaa",
+        "cat 2",
+        "cat !",
+        "cat -",
+        "cat ]",
+        "cat ",
+        "cat a{0002}",
+        "cat a{2,03}",
+        "cat \n",
+        "cat \u0000"
+      ],
+      "valid": false,
+      "matches": null
+    }
+  ]
+}

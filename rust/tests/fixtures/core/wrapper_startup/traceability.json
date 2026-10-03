@@ -1,0 +1,49 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "scope": "Owned detached wrapper startup primitives; production core/ACK/binary integration is a separate receipt.",
+  "sources": [
+    {
+      "go": "internal/hub/spawn_unix.go:setCmdSysProcAttr",
+      "rust": "process/wrapper_startup_unix.rs:Child::spawn",
+      "contract": "setsid before exec; transferred wrapper is independent of Hub runtime shutdown",
+      "tests": ["startup_fixture", "detached_child_reaping_survives_hub_runtime_shutdown"]
+    },
+    {
+      "go": "internal/hub/spawn_windows.go:setCmdSysProcAttr",
+      "rust": "process/wrapper_startup_windows.rs:Child::spawn_with_assignment",
+      "contract": "CREATE_NEW_PROCESS_GROUP and CREATE_NO_WINDOW, with suspended assignment to the existing kill-on-close policy before resume",
+      "tests": ["failed_job_assignment_never_resumes_the_owned_child", "acknowledged_transfer_survives_owner_shutdown_and_exits_explicitly"],
+      "acceptance": "Windows native CI and supported-version acceptance pending; Linux test success does not verify this adapter"
+    },
+    {
+      "go": "internal/hub/spawn_handler.go:startWrapProcess (null stdin, private spawn log, cmd.Wait)",
+      "rust": "process/wrapper_startup.rs:WrapperStartup::spawn and ReapReceipt",
+      "contract": "caller-owned private File stdio; no drainable pipes; independent retained direct-child reaper",
+      "tests": ["failed_exec_and_non_null_stdin_create_no_wrapper", "acknowledged_transfer_survives_owner_shutdown_and_exits_explicitly", "early_exit_cleans_startup_descendant_and_preserves_status"]
+    },
+    {
+      "go": "internal/hub/spawn_handler.go:terminateUnregisteredWrap and waitForSessionByLabelContext",
+      "rust": "process/wrapper_startup.rs:WrapperStartup and ProvisionalWrapper",
+      "contract": "bounded startup caller must release its unique startup owner on timeout/failure/drop; transfer requires a core-created exact-attempt/PID/binding proof receipt",
+      "tests": ["unacknowledged_owner_future_drop_reaps_wrapper_and_owned_descendant", "failed_or_lost_initial_ack_does_not_start_provider", "mismatched_attempt_or_owned_pid_cannot_transfer", "delivery_uncertain_provisional_drop_detaches_but_known_pre_ack_failure_aborts"]
+    },
+    {
+      "go": "internal/wrapper/wrapper.go:initial registered response, hub_shutdown and session_dismissed handling",
+      "rust": "wrapper/startup.rs:StartupLifetime and existing wrapper/runtime.rs",
+      "contract": "adopt Windows startup Job before registration, strip metadata and handle inheritance before provider execution, retain adopted Job until actual process exit",
+      "tests": ["startup_job_metadata_is_removed_from_every_provider_override_spelling", "standalone_wrapper_needs_no_startup_job_and_invalid_metadata_is_rejected", "acknowledged_transfer_survives_owner_shutdown_and_exits_explicitly"]
+    }
+  ],
+  "intentional_boundaries": [
+    "Go's launch-label scan is not copied: the existing Rust one-use SpawnRegistrationProof and launch lease remain authoritative.",
+    "Startup containment is stronger than Go's direct Process.Kill: owned Unix startup groups and Windows Jobs terminate ordinary descendants before registration.",
+    "Startup accepts only already-open private file handles. Opening/log-name selection and any source-compatible null-output fallback belong to the caller.",
+    "Pre-ACK ownership disarm avoids killing an acknowledged wrapper during Hub shutdown. An uncertain ACK/drop detaches; a known pre-send failure can explicitly abort. The normal wrapper registration deadline bounds an unacknowledged child.",
+    "The provider PTY has a separate owner/group/Job. These startup tests do not replace provider PTY, full HTTP/WebSocket, installed-home, external-provider or native-platform acceptance."
+  ],
+  "upstream": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute",
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects",
+    "https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-exitprocess"
+  ]
+}
