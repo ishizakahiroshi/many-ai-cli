@@ -1,11 +1,11 @@
 # #5 many-ai-cli dots-bridge-c1-20261003
 
-> 最終更新: 2026-10-03(土) 18:40:00 JST
+> 最終更新: 2026-10-03(土) 18:57:54 JST
 
 ## 現在地
 
 - 受付番号：#5。C1の調査・比較HTML・順位付けを受付し、固定版 INSTRUCTIONS.md / REVIEW.md を読了。
-- 段階：複数方式を比較するC2試験設計の追加指示を受付・読了。設計文書のみ更新する。実表示QAの全項目検収とC2接続実験・構築は未着手。
+- 段階：複数方式を比較するC2_TEST_PLANとFINDINGS/HTMLの更新原稿が完成。静的検査・独立レビューへ進む。実表示QAの全項目検収とC2接続実験・構築は未着手。
 - ソース基準：`21d0bc7935a2c4696fb89ccff2e324157a528c2d`。
 - 指示commit・作業起点：`c2822a8f39a18809bca8fe9484f1c84bd387f64b`。
 - 専用文書branch：`docs/dots-bridge-c1-comparison-20261003`。指示branch `docs/dots-local-ai-bridge-c1-20261003` は変更しない。
@@ -112,7 +112,7 @@
 - [PUBLIC_RESEARCH](PUBLIC_RESEARCH.md)、[FINDINGS](FINDINGS.md)、[比較HTML](comparison.html)、PROGRESSの4文書と必要な生成indexのみが今回の差分。7候補の順位変更なし、8事例と候補別C2検証条件を追加。
 - 静的検査、git diff --check、secrets-scan構造検査、承認ルール混入検査、omitnix鮮度、pre-push instrumentation合格。非公開watchlistは利用できず未実施。製品のbuild/test・外部通信実験は未実施。
 - CIスナップショット（2026-10-03 09:02 UTC、本文head fe661da）：secret-scan成功、Validate実行中。受付head 1d70de9は両workflow成功。初回head 755db76のmacOS Go失敗の原因・再現性は未確定のままで、本体修正やテスト緩和はしていない。最新headの確定結果はPR checksとPR本文を参照。
-- この後は提出証跡としてPROGRESSだけを更新する。最終ボードheadはこのファイルのGit履歴とPR headから確認でき、本文のレビューtreeと区別する。
+- 公開実践例の提出段階ではPROGRESSだけを更新した。その後、固定d533a72の追加指示でC2設計本文を更新する。各ボードheadはこのファイルのGit履歴とPR headで区別する。
 - 未実施：実ブラウザ/スマホ表示の全項目QA、dotsと別Botの往復、plugin登録/購読、本人PC/Hub/CLI実動、実費・遅延、C2接続実験。必要な本人操作はFINDINGSの候補別条件へ記載。
 
 ## 複数方式のC2試験設計（受付）
@@ -122,3 +122,14 @@
 - C2_TEST_PLAN、FINDINGS、comparison.html、PROGRESSと必要な生成indexだけを更新。コード・依存・設定・Build・Hub/CLI起動・外部試験・常設監視・mergeは範囲外。
 - 初回追加調査head855786adのValidate/secret-scanは成功済み。本人はHTMLを確認したが、全表示項目/スマホQAや接続実測の合格とはしない。
 - 暫定運用：本人がdotsの返信通知を見て、ローカルAIへ「#5の進捗を見て」と伝える。ローカルAIが認可済みSlack/GitHubから取得・照合する。本文転記不要、自動通知/定期監視/自動起動は未導入。
+
+## 複数方式のC2試験設計（原稿完成）
+
+- 受付公開head：`11f2b968588e516b435a79d0fc24b39881b48659`。GitHub読戻しで確認。
+- [C2_TEST_PLAN](C2_TEST_PLAN.md)の10節に、構成/設定、既存APIと新規ファイル案、同課題比較、UX、複数入口/復旧、再開の種類、役割別検収、将来コマンド、予算/撤収、採用/引き継ぎを記載。FINDINGS/HTMLの旧試行フローを置換。
+- Hub基準ソース・関連testを読んだ。起動POSTはrequest_idのみ、run一覧/詳細GETで相関。動的prompt・AI認証の自動継承は前提にせず、専用mailboxを新規adapter契約として提案。コード/test/依存は未変更。
+- 新しいローカルセッションの読順：この現行方針 → 固定d533a72 → C2_TEST_PLAN → FINDINGS基準ソース → PUBLIC_RESEARCH → 固定成果headのdiff。最初の操作は対象head/稼働版/追加許可の照合。
+- 次の一手：静的検査・独立レビューで旧方針残留と二重実行/共通障害を確認し、固定SHAを公開する。現在許可されるのは文書作成/検査/commit/push/既存draft PR更新のみ。
+
+- 設計稿静的検査：7方式の往復14図＋共通queue図1件、108リンク、51 ID、重複ID/内部anchor/相対リンク欠損なし。旧PUBLIC_RESEARCHのC2節リンクはFINDINGSの互換anchorで現行方針へ接続。外部asset 0。HTML約45KB、C2_TEST_PLAN約33KB。実画面QAは未実施。
+- C2_TEST_PLAN追加をomitnix鮮度検査が検知したため生成。discovered 1134→1135、unclaimed 206→207、既存analyzed 922と解析警告は変わらない。

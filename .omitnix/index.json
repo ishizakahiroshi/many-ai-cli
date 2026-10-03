@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "1d70de98797670907e1435dc88ca9896ecf3e797",
+    "commit": "11f2b968588e516b435a79d0fc24b39881b48659",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -134,11 +134,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1134,
+    "discovered": 1135,
     "analyzed": 922,
     "unresolved": 5,
     "unknown": 1,
-    "unclaimed": 206,
+    "unclaimed": 207,
     "skipped_by_config": 0
   },
   "files": [
@@ -769,6 +769,14 @@
     },
     {
       "path": "docs/bot/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/dots-local-ai-bridge/C2_TEST_PLAN.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
