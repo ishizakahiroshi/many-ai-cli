@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: C5 integration, PR and independent review
 
-> 最終更新: 2026-10-03(土) 12:07:40
+> 最終更新: 2026-10-03(土) 12:44:31
 
 ## Prerequisites and ownership
 
@@ -17,6 +17,12 @@ C1 APIs are fixed; C2/C3/C4 have implementation and focused test receipts. The p
 7. In the isolated runtime, exercise A01-A12 and frozen Web screens. Verify served version and binary/embedded assets; observe pane/chat/history/approval input/reconnect/Files/Git/profile/routine/voice/tray flows. Browser, mobile, OS/native and real remote results are separate receipts. If not observed, mark pending.
 8. Add CHANGELOG Unreleased entries for implemented user-visible C1-C4 behavior and clarify README candidate status, compatibility and rollback. Do not alter historical release descriptions to conceal differences.
 9. Create a develop-targeted draft PR titled with the task label #3 many-ai-cli rust. Describe concrete behavior, traceability, tests, limitations and rollback. Include PROGRESS updates. Request Codex independent review through the operator's established path, then correct confirmed findings with regression tests and rerun relevant checks.
+
+## Diff base and reviewed revisions
+
+Use the initial instruction commit `6b0fb8e198750245ef8b4b475fbac9070db0ac3e` as the implementation-review diff base. The older Go SHA is the behavior oracle, not the instruction-publication base. Identify later instruction/board supplements separately; documentation and the required generated inventory in a PR are not automatically unrelated implementation changes.
+
+Review the actual code SHA, record the independent reviewer and its verdict, and distinguish that SHA from the latest progress-only commit. After a fix, identify the changed code SHA and rerun/review the affected scope. Do not claim the old reviewed SHA covers newer code. Validate historical-data loading separately from new-input validation using the synthetic cases in 00-contracts.
 
 ## Git and external boundaries
 

@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 12:24:17
+> 最終更新: 2026-10-03(土) 12:44:28
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
@@ -18,6 +18,33 @@ Rust implementation: source inventory and shared contracts being prepared. Rust/
 | C4 launcher/delivery | dots launcher lane | pending | After C1, parallel with C2/C3 |
 | C5 integration/PR | dots integration owner; Codex independent review | pending | Complete traceability; build/test/CI; open develop draft PR |
 | C6 manual/data/cutover | operator; Codex evidence review | pending | Candidate accepted, rollback rehearsal, real devices, stability |
+
+## Delivery, acknowledgment and capabilities
+
+The following checkpoint is based on the published progress commit `f48c6086a2be662233f09d051373a716ca44ce6a`; it preserves the bot's report without treating it as independently observed Slack or runtime evidence.
+
+| Receipt | Current knowledge | Evidence level / owner |
+|---|---|---|
+| Start request sent and full body read back | Not verified by local Codex | Operator checks actual #3 conversation; a different task's send is not evidence |
+| Recognized task and number collision | Board identifies #3; collision acknowledgment not independently verified | Operator records dots reply |
+| Instruction read | dots reports reading initial commit 6b0fb8e and 00–06 briefs | Bot self-report in C1 checkpoint |
+| Start conversation | Private locator maintained by operator; not supplied to this checkout | Do not expose private Slack/thread identifiers publicly |
+| Execution capabilities | dots initially reported missing Rust/Bun/Go, then reported isolated installation authorization and downloads pending | Preserve checkpoint times; tools usable, fetch complete and tests pass need distinct receipts |
+| Instruction supplement acknowledgment | Pending | dots records revision read at its next checkpoint |
+
+## Revision identities
+
+| Identity | Value / rule |
+|---|---|
+| Go behavioral oracle | 21d0bc7935a2c4696fb89ccff2e324157a528c2d |
+| Initial instruction commit | 6b0fb8e198750245ef8b4b475fbac9070db0ac3e |
+| Progress checkpoint read before this supplement | f48c6086a2be662233f09d051373a716ca44ce6a; progress-only commit |
+| Implementation code SHA | Not yet verified locally; dots records actual code commit when available |
+| Reviewed code SHA / reviewer | Pending; changes after review require the corrected SHA and re-review receipt |
+| Board update commit | Read actual commit from GitHub history, or record it in a later receipt; no self-reference |
+| Supplemental instruction revision | dots records the published revision it actually reads; supplement is not a new task |
+
+Use immutable commit URLs for requested instructions and the branch URL for current progress. A board-only commit does not change the tested/reviewed code SHA. Record capability and receipt claims with the actor, time and verification level; do not change a pending acknowledgment to verified just because the board says work began.
 
 ## Update format
 

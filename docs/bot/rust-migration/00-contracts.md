@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: compatibility and isolation contracts
 
-> 最終更新: 2026-10-03(土) 12:07:34
+> 最終更新: 2026-10-03(土) 12:44:29
 
 ## Fixed interfaces and module ownership
 
@@ -11,6 +11,12 @@ Freeze the Go implementation and existing Web TypeScript. The migration must por
 Trial mode must require an explicit runtime root and isolated loopback port. Propagate that root to both binaries and all config/data/DB/log/token/profile/PID/active/lock/temp/model/runtime/update/usage-hook paths. Do not fall back to the real home if a trial path is absent. Do not change system HOME, CODEX_HOME or shell profiles. Disable trial notification/probe/periodic refresh and remote provider calls unless separately selected for acceptance. Child stop, update, discovery and cleanup must identify only trial-owned processes/files.
 
 Keep production default CLI/storage semantics. Trial isolation is an explicit mode, not a silent change of users' defaults. Do not permit old/new simultaneous writes to one DB. Start with synthetic files, stubs and databases, then copied data, then operator-led acceptance.
+
+## Existing-data reads versus new writes
+
+Keep loading historical configuration, profile formats and persisted records separate from validating newly submitted values. Do not reuse stricter creation/update validators to reject values the Go baseline can read. Preserve unknown/optional fields, tolerated old representations and version-specific defaults where the source contract requires them; mandatory security checks remain in force.
+
+Add synthetic fixtures for a historically accepted record, a newly invalid input, an older schema/version and an unknown optional field. Show the old record loads without destructive reset, the new invalid value is rejected on write, and read/write round trips retain supported data. If a historical value genuinely cannot be supported, record the migration and recovery behavior before applying it to real data.
 
 ## Required traceability
 

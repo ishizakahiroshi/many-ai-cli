@@ -1,6 +1,6 @@
 # #3 many-ai-cli rust: execution instructions
 
-> 最終更新: 2026-10-03(土) 12:07:33
+> 最終更新: 2026-10-03(土) 12:44:27
 
 このディレクトリを開始指示として受け取ったdotsは、現行Go版の全機能をRustへ移植し、両binaryが使える状態まで実装・検証し、develop向けPRを作る。作業の途中で [PROGRESS.md](PROGRESS.md) を更新する。Codexが実差分と証跡を独立レビューするまで、全体完了やmergeを宣言しない。
 
@@ -30,10 +30,20 @@ Goの基準SHAは `21d0bc7935a2c4696fb89ccff2e324157a528c2d`。実装branchは `
 
 WindowsではPowerShell7またはフルパス指定のGit Bashを使い、WSLを起動しない。私有config/認証/環境変数を全文列挙しない。secret、端末名、実ホームパス、実顧客データをcommit/PR/logへ写さない。fixturesは合成データ。
 
+## Instruction revisions and acknowledgment
+
+Initial instruction commit: `6b0fb8e198750245ef8b4b475fbac9070db0ac3e`. The Go behavior oracle remains `21d0bc7935a2c4696fb89ccff2e324157a528c2d`. Use commit-pinned instruction links in the start request; use the branch URL for current PROGRESS. Later instruction supplements must be identified separately and do not restart the task or erase its earlier receipts.
+
+At acceptance, report the recognized coordination number, collision check, instruction commit read, and whether dependencies/tests are executable. Before recording the next checkpoint, check for published instruction/progress supplements, incorporate them without overwriting concurrent work, and state which revision was read. Preserve the original implementation scope and any separately approved environment decisions.
+
+A successful send, a read-back of the posted text, dots acknowledgment, dependency fetch, test success and real acceptance are distinct evidence states. Record only what was observed, with its source; label bot/environment reports as self-reported until verified. The operator verifies message body and acknowledgment in the same conversation. Keep private conversation links in the operator's private record rather than public GitHub documents.
+
 ## Progress and PR contract
 
 各工程の開始・停止・実装完了時とcommitを作るときにPROGRESSを更新する。記録するのは担当、状態、具体的changed paths、実行commandとexit code、結果を証明するcommit/CI/artifact、未実施の受入、次の一手。本文やsecretを記録しない。
 
 状態は `pending` → `in_progress` → `implementation_complete` → `reviewed` → `accepted`。`blocked` には原因と解除に必要な入力を書く。子の完了、test pass、PR作成、手動受入、切り替え、安定稼働を同じ状態にしない。
+
+指示書SHA、実装コードSHA、レビュー対象SHA、看板更新commitを別々に記録する。看板自身の更新commitを同じcommitの本文に埋め込もうとせず、GitHub履歴から読むか後続のreceiptで記録する。
 
 PRはdevelop向けdraftから開始し、全Kと確認方法、意図的な互換差、未実施実機項目、データ復元方法を自己完結で説明する。Codex独立レビューで指摘された欠陥を実装と回帰testで直し、差分と再検証receiptを更新する。レビュー前のmerge/tag/releaseは禁止。release v1.0.0は実機受入・復元実演・安定稼働の確認後に扱う。
