@@ -201,3 +201,73 @@ async fn actual_main_shell_init_uses_only_explicit_owned_trial_root() {
     assert!(root.path().join("config.yaml").is_file());
     assert_eq!(std::fs::read_dir(home.path()).unwrap().count(), 0);
 }
+
+#[tokio::test]
+async fn actual_trial_launcher_binary_retains_and_serves_the_embedded_ui() {
+    use many_ai_cli::process::{ExitOutcome, ManagedProcess, ProcessEvent, ProcessPlan};
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let (mut process, mut events) = ManagedProcess::spawn_owned(
+        ProcessPlan {
+            executable: env!("CARGO_BIN_EXE_many-ai-cli-launcher").into(),
+            args: vec![
+                "--trial-root".into(),
+                root.path().into(),
+                "--trial-port".into(),
+                "49388".into(),
+            ],
+            cwd: root.path().into(),
+            env: ["HOME", "USERPROFILE"]
+                .into_iter()
+                .map(|key| (key.into(), Some(home.path().as_os_str().to_owned())))
+                .collect(),
+            stdin: vec![],
+            timeout: Duration::from_secs(10),
+            output_cap: 64 * 1024,
+            pipe_drain_timeout: Duration::from_secs(1),
+        },
+        32,
+    );
+    let url = tokio::time::timeout(Duration::from_secs(5), async {
+        let mut output = vec![];
+        loop {
+            if let ProcessEvent::Output {
+                stream: OutputStream::Stdout,
+                bytes,
+            } = events.recv().await.unwrap()
+            {
+                output.extend(bytes);
+                let text = String::from_utf8_lossy(&output);
+                if let Some(line) = text
+                    .split_inclusive('\n')
+                    .filter(|line| line.ends_with('\n'))
+                    .find_map(|line| line.strip_prefix("Opening connection selection page: "))
+                {
+                    break line.trim().to_owned();
+                }
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap();
+    let response = client.get(url).send().await.unwrap();
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        response.bytes().await.unwrap().as_ref(),
+        many_ai_cli::assets::LAUNCHER_UI
+    );
+    // End only this owned fixture process. Graceful UI/task draining is covered
+    // separately by the library shutdown test; this test proves actual linkage.
+    process.close();
+    let result = tokio::time::timeout(Duration::from_secs(3), process.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.outcome, ExitOutcome::Cancelled);
+    assert_eq!(std::fs::read_dir(home.path()).unwrap().count(), 0);
+}

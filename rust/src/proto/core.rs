@@ -1638,6 +1638,17 @@ pub enum ApprovalActionError {
     Transport(String),
     Cancelled,
 }
+/// A single-lock, freshly re-detected native approval snapshot for batch
+/// matching. Disconnected entries remain visible, as in Go matched counts;
+/// prepare_and_send still validates the exact live transport before input.
+#[derive(Clone)]
+pub struct PendingNativeApprovalAction {
+    pub binding: ApprovalActionBinding,
+    pub provider: String,
+    pub cwd: String,
+    pub summary: super::ApprovalSummary,
+    pub connected: bool,
+}
 pub struct ReservedApprovalAction {
     pub reservation: ApprovalReservationId,
     pub binding: ApprovalActionBinding,
@@ -1648,6 +1659,7 @@ pub struct ReservedApprovalAction {
 /// acquisition and before each delayed frame. Failure releases it. Commit cannot
 /// clear a replacement candidate or silently retarget a reattached wrapper.
 pub trait ApprovalActions: Send + Sync {
+    fn pending_native_approval_actions(&self) -> Vec<PendingNativeApprovalAction>;
     fn prepare_and_send<'a>(
         &'a self,
         request: NativeActionRequest,

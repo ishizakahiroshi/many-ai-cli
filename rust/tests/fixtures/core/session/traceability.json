@@ -65,13 +65,17 @@
       "failed_nonce_consume_releases_only_lease_without_clearing_pending_record",
       "dropping_action_during_send_releases_reservation_and_unsent_frame",
       "absent_live_automatic_policy_releases_reservation_before_any_send",
-      "commit_from_replaced_wrapper_cannot_clear_restored_pending_record"
+      "commit_from_replaced_wrapper_cannot_clear_restored_pending_record",
+      "batch_snapshot_redetects_summary_without_mutating_immutable_record",
+      "batch_and_automatic_recheck_low_risk_after_fifo_but_one_tap_allows_mid",
+      "batch_snapshot_excludes_vanished_prompts_and_notices_without_options",
+      "captured_batch_match_remains_counted_when_connection_disappears_before_apply"
     ],
     "rust/tests/storage_legacy_ordering_contracts.rs": [
       "late_lifecycle_event_overwrite_matches_fixed_go_for_registration_and_reattach"
     ]
   },
-  "rust_execution": "Historical frozen snapshot: 430 passed/0 ignored (journal8 + session21 + warm lifecycle unit). Current typed-selection author slice: selection unit1 + session suite33 passed/0 ignored and strict lib/session clippy exit0; the current suite has24 existing tests and9 action transaction tests. No full current-tree or independent-review result is claimed by this receipt.",
+  "rust_execution": "Scoped author receipts are recorded in typed_action_selection_receipt, batch_snapshot_receipt and inherited_card_label_ordering.rust_validation. The historical full_snapshot_receipt retains its original 430-test scope; later full-tree/clock/platform receipts belong to the integration coordinator.",
   "go_mask_oracle": {
     "generator": "rust/tests/fixtures/core/journal/mask_oracle.go",
     "fixture": "rust/tests/fixtures/core/journal/mask-oracle-21d0bc7.json",
@@ -162,5 +166,22 @@
     },
     "future_fix": "An explicit compatibility decision is required before changing inherited lifecycle-event/card metadata precedence.",
     "condition": "Hub body logging must be enabled for its queued lifecycle events; StoreEvent applies the nonempty wrapper label when that event commits."
+  },
+  "batch_snapshot_receipt": {
+    "kind": "ordinary author synthetic test run",
+    "action_caller_tests_passed": 13,
+    "failed": 0,
+    "ignored": 0,
+    "other_session_tests_filtered_out": 24,
+    "strict_lib_session_clippy_exit_code": 0,
+    "package_cache_boundary": "Owned many-ai-cli artifacts were cleaned once after switching from the frozen clock checkout to live; dependency cache retained.",
+    "new_tests": [
+      "batch_snapshot_redetects_summary_without_mutating_immutable_record",
+      "batch_and_automatic_recheck_low_risk_after_fifo_but_one_tap_allows_mid",
+      "batch_snapshot_excludes_vanished_prompts_and_notices_without_options",
+      "captured_batch_match_remains_counted_when_connection_disappears_before_apply"
+    ],
+    "initial_fixture_failure_retained": true,
+    "boundary": "No full current-tree, HTTP route, native or independent-review claim."
   }
 }

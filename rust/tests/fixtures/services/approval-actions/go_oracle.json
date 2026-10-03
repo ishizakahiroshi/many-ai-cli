@@ -1,0 +1,166 @@
+{
+  "decode": [
+    {
+      "action": "",
+      "input": "null",
+      "ok": true,
+      "session_id": 0,
+      "signature": ""
+    },
+    {
+      "action": "",
+      "input": "{}",
+      "ok": true,
+      "session_id": 0,
+      "signature": ""
+    },
+    {
+      "action": "approve",
+      "input": "{\"SIGNATURE\":\"group\",\"ACTION\":\"approve\",\"SESSION_ID\":null}",
+      "ok": true,
+      "session_id": 0,
+      "signature": "group"
+    },
+    {
+      "action": "approve",
+      "input": "{\"signature\":\"first\",\"signature\":null,\"action\":\"approve\"}",
+      "ok": true,
+      "session_id": 0,
+      "signature": "first"
+    },
+    {
+      "action": "approve",
+      "input": "{\"signature\":\"first\",\"signature\":\"last\",\"action\":\"approve\"} trailing",
+      "ok": true,
+      "session_id": 0,
+      "signature": "last"
+    },
+    {
+      "input": "{\"signature\":5,\"signature\":\"later\"}",
+      "ok": false
+    },
+    {
+      "input": "{\"session_id\":1.5}",
+      "ok": false
+    },
+    {
+      "input": "[]",
+      "ok": false
+    },
+    {
+      "input": "{",
+      "ok": false
+    },
+    {
+      "action": "deny_session",
+      "input": "{\"signature\":\"group\",\"action\":\"deny_session\",\"session_id\":2,\"unknown\":1e999}",
+      "ok": true,
+      "session_id": 2,
+      "signature": "group"
+    },
+    {
+      "action": "approve",
+      "input": "{\"signature\":\"group\",\"action\":\"approve\"}{\"action\":\"auto_rule\"}",
+      "ok": true,
+      "session_id": 0,
+      "signature": "group"
+    }
+  ],
+  "errors": [
+    {
+      "body": {
+        "detail": "invalid or expired action token",
+        "error": "invalid_action_token",
+        "ok": false
+      },
+      "name": "invalid",
+      "status": 401
+    },
+    {
+      "body": {
+        "detail": "invalid or expired action token",
+        "error": "invalid_action_token",
+        "ok": false
+      },
+      "name": "expired",
+      "status": 401
+    },
+    {
+      "body": {
+        "detail": "action already used",
+        "error": "action_already_used",
+        "ok": false
+      },
+      "name": "consumed",
+      "status": 409
+    },
+    {
+      "body": {
+        "detail": "open Hub to confirm this high-risk approval",
+        "error": "high_risk_requires_in_app_confirmation",
+        "ok": false
+      },
+      "name": "high_risk",
+      "status": 403
+    },
+    {
+      "body": {
+        "detail": "approval is no longer pending",
+        "error": "approval_not_pending",
+        "ok": false
+      },
+      "name": "not_pending",
+      "status": 409
+    },
+    {
+      "body": {
+        "detail": "approval action was not applied",
+        "error": "action_not_applied",
+        "ok": false
+      },
+      "name": "other",
+      "status": 409
+    }
+  ],
+  "expiry": [
+    {
+      "offset_nanos": -1,
+      "result": "ok",
+      "used": 1
+    },
+    {
+      "offset_nanos": 0,
+      "result": "expired",
+      "used": 0
+    },
+    {
+      "offset_nanos": 1,
+      "result": "expired",
+      "used": 0
+    }
+  ],
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "signatures": [
+    {
+      "command": " git status ",
+      "cwd": " /synthetic/project ",
+      "provider": " CODEX ",
+      "risk": "low",
+      "signature": "codex\u0000git status\u0000low\u0000/synthetic/project"
+    },
+    {
+      "command": "a\u0000b",
+      "cwd": "/synthetic/é",
+      "provider": "İ",
+      "risk": "mid",
+      "signature": "i\u0000a\u0000b\u0000mid\u0000/synthetic/é"
+    },
+    {
+      "command": "cmd",
+      "cwd": "/x",
+      "provider": " CLAUDE ",
+      "risk": " low ",
+      "signature": "claude\u0000cmd\u0000 low \u0000/x"
+    }
+  ]
+}

@@ -381,6 +381,60 @@ impl FilesService {
         }
     }
 }
+// Git for Windows interprets GIT_INDEX_FILE itself; the canonical Win32
+// verbatim drive spelling is not an accepted Git index filename. Convert only
+// a held directory's spelling, and reject any conversion that resolves to a
+// different directory before Git receives it.
+fn git_index_path(dir: &super::super::safe_fs::Dir, name: &str) -> std::io::Result<PathBuf> {
+    super::super::safe_fs::basename(name)?;
+    #[cfg(windows)]
+    {
+        use std::{
+            ffi::OsString,
+            path::{Component, Prefix},
+        };
+        let mut components = dir.path().components();
+        let prefix = match components.next() {
+            Some(Component::Prefix(prefix)) => prefix.kind(),
+            _ => {
+                return Err(std::io::Error::other(
+                    "Git index directory has no Windows prefix",
+                ));
+            }
+        };
+        let mut plain = OsString::new();
+        match prefix {
+            Prefix::VerbatimDisk(drive) => plain.push(format!("{}:", char::from(drive))),
+            Prefix::VerbatimUNC(server, share) => {
+                plain.push(r"\\");
+                plain.push(server);
+                plain.push(r"\");
+                plain.push(share);
+            }
+            Prefix::Disk(_) | Prefix::UNC(_, _) => return Ok(dir.path().join(name)),
+            _ => {
+                return Err(std::io::Error::other(
+                    "Git cannot represent this index directory",
+                ));
+            }
+        }
+        let mut plain = PathBuf::from(plain);
+        for component in components {
+            plain.push(component.as_os_str());
+        }
+        // In particular, never silently normalize a verbatim-only trailing
+        // dot/space component into a different ordinary Win32 directory.
+        if std::fs::canonicalize(&plain)? != std::fs::canonicalize(dir.path())? {
+            return Err(std::io::Error::other(
+                "Git index path changes directory identity",
+            ));
+        }
+        Ok(plain.join(name))
+    }
+    #[cfg(not(windows))]
+    Ok(dir.path().join(name))
+}
+
 impl Git<'_> {
     pub(super) async fn worktree_tree(&self, root: &Path) -> Result<String> {
         let base = super::super::safe_fs::Dir::open(self.service.paths.root())
@@ -396,9 +450,10 @@ impl Git<'_> {
         let dir = temporary
             .child_dir(&name, true)
             .map_err(|e| super::super::io_error(e, "snapshot_failed"))?;
-        let index = dir.path().join("index");
-        let env = BTreeMap::from([("GIT_INDEX_FILE".into(), Some(index.as_os_str().into()))]);
         let result = async {
+            let index = git_index_path(&dir, "index")
+                .map_err(|_| "Git cannot represent the private index path".to_owned())?;
+            let env = BTreeMap::from([("GIT_INDEX_FILE".into(), Some(index.as_os_str().into()))]);
             let head = self
                 .run(root, &["rev-parse", "--verify", "HEAD^{tree}"])
                 .await

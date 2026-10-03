@@ -197,6 +197,35 @@ mod platform {
             }
             Ok(file)
         }
+        /// Open/create one private lock inode without a create-then-reopen
+        /// sharing window. The caller owns the returned OS lock lifetime.
+        pub fn open_lock(&self, name: &str) -> io::Result<File> {
+            let name = c(name)?;
+            // SAFETY: relative to the held directory; no truncation or following.
+            // O_NONBLOCK prevents a non-regular entry from stalling before fstat.
+            let file = fd_file(unsafe {
+                libc::openat(
+                    self.file.as_raw_fd(),
+                    name.as_ptr(),
+                    libc::O_RDWR
+                        | libc::O_CREAT
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC
+                        | libc::O_NONBLOCK,
+                    0o600u32,
+                )
+            })?;
+            if !file.metadata()?.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a regular lock file",
+                ));
+            }
+            if unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(file)
+        }
         pub fn metadata(&self, name: &str) -> io::Result<Metadata> {
             self.open_file(name, false)?.metadata()
         }
@@ -574,6 +603,46 @@ mod platform {
             security.restrict_file(&file)?;
             Ok(file)
         }
+        /// All contenders open the same lock file with compatible access and
+        /// sharing before LockFileEx serializes them. CREATE_NEW with read-only
+        /// sharing can fail while an earlier read/write contender holds it.
+        pub fn open_lock(&self, name: &str) -> io::Result<File> {
+            use windows_sys::Win32::Storage::FileSystem::{
+                FILE_GENERIC_READ, OPEN_ALWAYS, WRITE_DAC,
+            };
+            basename(name)?;
+            let security = crate::config::private_io::PrivateSecurity::for_current_user(false)?;
+            let attributes = security.attributes();
+            let path = wide(&self.path.join(name))?;
+            // SAFETY: descriptor/path outlive this call; no inheritance, truncate
+            // or delete sharing. Reparse objects are opened themselves/rejected.
+            let handle = unsafe {
+                CreateFileW(
+                    path.as_ptr(),
+                    FILE_GENERIC_READ | FILE_GENERIC_WRITE | WRITE_DAC,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &attributes,
+                    OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                    std::ptr::null_mut(),
+                )
+            };
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: this successful call returned a new owned handle.
+            let file = unsafe { File::from_raw_handle(handle) };
+            let metadata = file.metadata()?;
+            if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a plain lock file",
+                ));
+            }
+            security.restrict_file(&file)?;
+            Ok(file)
+        }
         pub fn metadata(&self, name: &str) -> io::Result<Metadata> {
             self.open_file(name, false)?.metadata()
         }
@@ -747,5 +816,31 @@ mod windows_path_tests {
             .create_new("fixture.txt", b"owned fixture", 0o600)
             .unwrap();
         assert_eq!(child.read("fixture.txt", 100).unwrap(), b"owned fixture");
+    }
+}
+
+#[cfg(test)]
+mod lock_file_tests {
+    use super::*;
+
+    #[test]
+    fn independent_lock_opens_serialize_without_truncating_the_same_file() {
+        use std::io::Write;
+        let root = tempfile::tempdir().unwrap();
+        let dir = Dir::open(root.path()).unwrap();
+        let mut first = dir.open_lock("fixture.lock").unwrap();
+        first.lock().unwrap();
+        first.write_all(b"owned lock fixture").unwrap();
+        first.sync_all().unwrap();
+        let mut second = dir.open_lock("fixture.lock").unwrap();
+        assert!(matches!(
+            second.try_lock(),
+            Err(std::fs::TryLockError::WouldBlock)
+        ));
+        drop(first);
+        second.lock().unwrap();
+        let mut bytes = vec![];
+        second.read_to_end(&mut bytes).unwrap();
+        assert_eq!(bytes, b"owned lock fixture");
     }
 }

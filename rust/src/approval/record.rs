@@ -181,8 +181,16 @@ impl ApprovalState {
         {
             return Err(ApprovalActionError::StaleCandidate);
         }
+        // Native action commits retain the exact selected input, including CR.
+        // Go commitNativeApprovalAction assigns result.input directly; only
+        // transcript/marker answers use truncateApprovalAnswer.
+        let answer = if record.data().origin == "native" {
+            selected.to_owned()
+        } else {
+            truncate_answer(selected)
+        };
         self.mark_consumed(record.data().candidate.clone());
-        Ok(self.close(ApprovalCloseReason::Answered, selected, now))
+        Ok(self.close_with_answer(ApprovalCloseReason::Answered, answer, now))
     }
     pub fn submitted_turn(&mut self, text: &str, now: Timestamp) -> CoreEffects {
         if let Some(record) = &self.record
@@ -199,6 +207,14 @@ impl ApprovalState {
         answer: &str,
         now: Timestamp,
     ) -> CoreEffects {
+        self.close_with_answer(reason, truncate_answer(answer), now)
+    }
+    fn close_with_answer(
+        &mut self,
+        reason: ApprovalCloseReason,
+        answer: String,
+        now: Timestamp,
+    ) -> CoreEffects {
         let Some(record) = self.record.take() else {
             return CoreEffects::default();
         };
@@ -212,7 +228,7 @@ impl ApprovalState {
                 .push(CoreEffect::Persist(PersistenceEffect::ApprovalConsumed {
                     session: self.session,
                     sig: record.sig.clone(),
-                    selected_text: truncate_answer(answer),
+                    selected_text: answer,
                     resolved_at: now,
                 }));
         }

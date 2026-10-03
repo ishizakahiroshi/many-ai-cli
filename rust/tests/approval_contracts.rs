@@ -206,6 +206,52 @@ fn late_consumption_cannot_close_newer_record() {
     assert!(state.record().is_some());
 }
 #[test]
+fn native_action_answers_preserve_exact_input_while_marker_answers_stay_bounded() {
+    let now = Timestamp::UNIX_EPOCH;
+    for selected in ["\r".to_owned(), " \u{1b}[B\r ".to_owned(), "界".repeat(201)] {
+        for origin in ["native", "marker"] {
+            let mut state = ApprovalState::new(LiveSessionId(1), "claude".into());
+            state.observe(data("claude", "continue?", "go_vt", origin), None, now);
+            let record = state.record().unwrap().data();
+            let binding = ApprovalActionBinding {
+                session: SessionBinding {
+                    session: LiveSessionId(1),
+                    incarnation: SessionIncarnation(1),
+                    wrapper: WrapperConnectionId(1),
+                },
+                candidate_key: record.candidate.key.clone(),
+                source_epoch: record.candidate.source_epoch,
+                sig: record.sig.clone(),
+            };
+            let effects = state.consume(&binding, &selected, now).unwrap();
+            let CoreEffect::Persist(PersistenceEffect::ApprovalConsumed { selected_text, .. }) =
+                &effects.0[0]
+            else {
+                panic!("approval consumption must precede its broadcast");
+            };
+            let expected = if origin == "native" {
+                selected.clone()
+            } else {
+                selected.trim().chars().take(200).collect()
+            };
+            assert_eq!(selected_text, &expected, "origin: {origin}");
+        }
+    }
+
+    let mut state = ApprovalState::new(LiveSessionId(1), "claude".into());
+    state.observe(
+        data("claude", "continue?", "transcript", "marker"),
+        None,
+        now,
+    );
+    let effects = state.submitted_turn(&format!("\r {} \n", "界".repeat(201)), now);
+    assert!(matches!(
+        &effects.0[0],
+        CoreEffect::Persist(PersistenceEffect::ApprovalConsumed { selected_text, .. })
+            if selected_text == &"界".repeat(200)
+    ));
+}
+#[test]
 fn ledger_restore_is_narrow_and_preserves_different_consumed_slot() {
     let mut state = ApprovalState::new(LiveSessionId(1), "grok".into());
     let id = candidate(

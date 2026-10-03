@@ -33,6 +33,56 @@ impl Drop for ActionGuard<'_> {
     }
 }
 impl ApprovalActions for SessionEngine {
+    fn pending_native_approval_actions(&self) -> Vec<PendingNativeApprovalAction> {
+        let state = lock(&self.state);
+        state
+            .sessions
+            .values()
+            .filter_map(|session| {
+                let record = session.approval.record()?.data();
+                if record.origin != "native" || record.options.is_empty() {
+                    return None;
+                }
+                let phrases = self
+                    .options
+                    .approval_phrases
+                    .get(&session.snapshot.provider)
+                    .map(Vec::as_slice)
+                    .unwrap_or_default();
+                let live = detect::detect_native(
+                    &session.snapshot.provider,
+                    &session.vt.lines(),
+                    phrases,
+                )?;
+                if live.sig != record.sig {
+                    return None;
+                }
+                let candidate = identity::candidate(
+                    &session.snapshot.provider,
+                    &live.kind,
+                    &live.question,
+                    &live.context,
+                    &live.options,
+                    session.approval.epoch(),
+                );
+                // Match counts in the Go batch endpoint include a pending record
+                // even when its wrapper is absent. Delivery still validates the
+                // retained exact binding after FIFO acquisition.
+                Some(PendingNativeApprovalAction {
+                    binding: ApprovalActionBinding {
+                        session: session.binding,
+                        candidate_key: candidate.key,
+                        source_epoch: candidate.source_epoch,
+                        sig: live.sig,
+                    },
+                    provider: session.snapshot.provider.clone(),
+                    cwd: session.snapshot.cwd.clone(),
+                    summary: live.summary,
+                    connected: session.connected,
+                })
+            })
+            .collect()
+    }
     fn prepare_and_send<'a>(
         &'a self,
         request: NativeActionRequest,
@@ -111,11 +161,15 @@ impl ApprovalActions for SessionEngine {
                         (send_text.clone(), selected_text.clone())
                     }
                     NativeActionSelection::ApproveOnce => {
-                        if live.summary.risk == "high"
-                            || matches!(request.origin, NativeActionOrigin::Automatic { .. })
-                                && live.summary.risk != "low"
-                        {
+                        if live.summary.risk == "high" {
                             return Err(ApprovalActionError::HighRisk);
+                        }
+                        if matches!(
+                            request.origin,
+                            NativeActionOrigin::Batch | NativeActionOrigin::Automatic { .. }
+                        ) && live.summary.risk != "low"
+                        {
+                            return Err(ApprovalActionError::StaleCandidate);
                         }
                         let input = selection::approve_once_input(&live.options);
                         (input.clone(), input)

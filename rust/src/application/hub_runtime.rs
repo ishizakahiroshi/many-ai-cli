@@ -66,12 +66,7 @@ impl RuntimeLedger {
         })
     }
     fn lock(&self) -> io::Result<File> {
-        match self.dir.create_new(LOCK, &[], 0o600) {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(e) => return Err(e),
-        }
-        let file = self.dir.open_file(LOCK, true)?;
+        let file = self.dir.open_lock(LOCK)?;
         file.lock()?;
         Ok(file)
     }

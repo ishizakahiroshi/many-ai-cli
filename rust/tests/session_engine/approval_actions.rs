@@ -511,3 +511,206 @@ async fn commit_from_replaced_wrapper_cannot_clear_restored_pending_record() {
     assert_eq!(frames[1].0, replacement);
     assert!(pending(&f, replacement));
 }
+
+async fn shortcut_session(f: &Fixture) -> SessionBinding {
+    let registered = f
+        .engine
+        .register(
+            RegisterRequest {
+                message: proto::Message {
+                    provider: "codex".into(),
+                    cwd: "/fixture/project".into(),
+                    pid: 7,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+                spawn_proof: None,
+            },
+            WrapperConnectionId(1),
+            now(),
+        )
+        .await
+        .unwrap();
+    f.sink.apply(registered.after_registered).await.unwrap();
+    shortcut_repaint(f, registered.binding, "git status").await;
+    registered.binding
+}
+async fn shortcut_repaint(f: &Fixture, session: SessionBinding, command: &str) {
+    let text =
+        format!("\x1b[2J\x1b[HRun: {command}\r\nWould you like to run?\r\nApprove (y)\r\nDeny (n)");
+    f.sink
+        .apply(
+            f.engine
+                .observe_output(
+                    session,
+                    OutputChunk {
+                        total_pty_bytes: text.len() as i64,
+                        bytes: text.into_bytes(),
+                    },
+                    now(),
+                )
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn batch_snapshot_redetects_summary_without_mutating_immutable_record() {
+    let f = fixture();
+    let session = shortcut_session(&f).await;
+    let original = f.engine.details(session.session).unwrap().approval;
+    assert_eq!(original.record.as_ref().unwrap().data().summary.risk, "low");
+    let first = f.engine.pending_native_approval_actions();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].provider, "codex");
+    assert_eq!(first[0].cwd, "/fixture/project");
+    assert!(first[0].connected);
+    shortcut_repaint(&f, session, "git branch foo").await;
+    // Shortcut identity excludes command context, so the immutable pending
+    // record still carries the original summary while the live VT changed.
+    let retained = f.engine.details(session.session).unwrap().approval;
+    assert!(retained == original);
+    let fresh = f.engine.pending_native_approval_actions();
+    assert_eq!(fresh.len(), 1);
+    assert_eq!(fresh[0].binding, first[0].binding);
+    assert_eq!(fresh[0].summary.command, "git branch foo");
+    assert_eq!(fresh[0].summary.risk, "mid");
+    assert!(f.engine.details(session.session).unwrap().approval == retained);
+    assert!(sent(&f).is_empty());
+}
+
+#[tokio::test]
+async fn batch_and_automatic_recheck_low_risk_after_fifo_but_one_tap_allows_mid() {
+    for origin in [
+        NativeActionOrigin::Batch,
+        NativeActionOrigin::Automatic {
+            rule_id: "synthetic-rule".into(),
+        },
+    ] {
+        let f = fixture();
+        let session = shortcut_session(&f).await;
+        let bound = binding(&f, session);
+        let cancel = TaskCancellation::default();
+        let predecessor = f.engine.submit(
+            session,
+            InputRequest {
+                bytes: b"unsent predecessor".to_vec(),
+                authority: InputAuthority::Internal,
+            },
+            now(),
+            &cancel,
+        );
+        let mut queued = f.engine.prepare_and_send(
+            NativeActionRequest {
+                binding: bound.clone(),
+                selection: NativeActionSelection::ApproveOnce,
+                origin,
+            },
+            &cancel,
+        );
+        assert!(matches!(
+            futures_util::poll!(&mut queued),
+            std::task::Poll::Pending
+        ));
+        shortcut_repaint(&f, session, "git branch foo").await;
+        assert_eq!(
+            f.engine.pending_native_approval_actions()[0].summary.risk,
+            "mid"
+        );
+        assert_eq!(binding(&f, session), bound);
+        drop(predecessor);
+        assert!(matches!(
+            queued.await,
+            Err(ApprovalActionError::StaleCandidate)
+        ));
+        assert!(sent(&f).is_empty());
+        assert!(pending(&f, session));
+        let manual = f
+            .engine
+            .prepare_and_send(
+                NativeActionRequest {
+                    binding: bound,
+                    selection: NativeActionSelection::ApproveOnce,
+                    origin: NativeActionOrigin::OneTap {
+                        nonce: "synthetic-mid-intent".into(),
+                    },
+                },
+                &cancel,
+            )
+            .await
+            .unwrap();
+        assert_eq!(sent(&f), vec![b"y".to_vec()]);
+        f.engine.release(manual);
+    }
+}
+
+#[tokio::test]
+async fn batch_snapshot_excludes_vanished_prompts_and_notices_without_options() {
+    let f = fixture();
+    let session = native_session(&f, "git status", "Yes", true).await;
+    for text in [
+        "\x1b[2J\x1b[HWorking...",
+        "\x1b[2J\x1b[HChoose a mode?\r\n❯ 1. Type something.\r\n 2. Chat about this",
+    ] {
+        f.sink
+            .apply(
+                f.engine
+                    .observe_output(
+                        session,
+                        OutputChunk {
+                            total_pty_bytes: text.len() as i64,
+                            bytes: text.as_bytes().to_vec(),
+                        },
+                        now(),
+                    )
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            pending(&f, session),
+            "stored record is retained independently of live matching"
+        );
+        assert!(f.engine.pending_native_approval_actions().is_empty());
+    }
+    assert!(
+        f.engine
+            .details(session.session)
+            .unwrap()
+            .approval
+            .record
+            .unwrap()
+            .data()
+            .options
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn captured_batch_match_remains_counted_when_connection_disappears_before_apply() {
+    let f = fixture();
+    let session = shortcut_session(&f).await;
+    let matched = f.engine.pending_native_approval_actions();
+    assert_eq!(matched.len(), 1);
+    f.sink
+        .apply(f.engine.disconnected(session, now()).unwrap())
+        .await
+        .unwrap();
+    assert!(matches!(
+        f.engine
+            .prepare_and_send(
+                request(
+                    matched[0].binding.clone(),
+                    NativeActionSelection::ApproveOnce
+                ),
+                &TaskCancellation::default()
+            )
+            .await,
+        Err(ApprovalActionError::StaleWrapper)
+    ));
+    assert_eq!(matched.len(), 1);
+    assert!(sent(&f).is_empty());
+    assert!(f.engine.pending_native_approval_actions().is_empty());
+}

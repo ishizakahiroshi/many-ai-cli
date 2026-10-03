@@ -30,12 +30,7 @@ impl LauncherStore {
             .ok_or_else(|| io::Error::other("invalid launcher resource name"))
     }
     pub(crate) fn lock(&self, name: &str) -> io::Result<File> {
-        match self.dir.create_new(name, &[], 0o600) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error),
-        }
-        let file = self.dir.open_file(name, true)?;
+        let file = self.dir.open_lock(name)?;
         file.lock()?;
         Ok(file)
     }
