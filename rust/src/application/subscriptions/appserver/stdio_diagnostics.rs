@@ -30,9 +30,14 @@ struct Case {
     no_window: bool,
     env_clear: bool,
     stderr_null: bool,
+    ps_module_path: bool,
+    local_app_data: bool,
+    module_analysis_cache_path: bool,
+    dotnet_exists: bool,
+    dotnet_append: bool,
 }
 
-fn cases() -> [Case; 11] {
+fn cases() -> [Case; 7] {
     let baseline = Case {
         name: "baseline",
         compare_to: "baseline",
@@ -45,54 +50,39 @@ fn cases() -> [Case; 11] {
         no_window: true,
         env_clear: true,
         stderr_null: true,
+        ps_module_path: false,
+        local_app_data: false,
+        module_analysis_cache_path: false,
+        dotnet_exists: false,
+        dotnet_append: false,
     };
     [
         baseline,
         Case {
-            name: "no_window_false",
-            no_window: false,
+            name: "ps_module_path",
+            ps_module_path: true,
             ..baseline
         },
         Case {
-            name: "env_clear_false",
-            env_clear: false,
+            name: "local_app_data",
+            local_app_data: true,
             ..baseline
         },
         Case {
-            name: "stderr_null_false",
-            stderr_null: false,
+            name: "module_analysis_cache_path",
+            module_analysis_cache_path: true,
             ..baseline
         },
         Case {
-            name: "console_in",
-            console_in: true,
+            name: "dotnet_exists",
+            dotnet_exists: true,
             ..baseline
         },
         Case {
-            name: "pwsh_file_via_cmd",
-            pwsh: true,
-            ..baseline
-        },
-        Case {
-            name: "command_via_cmd",
-            command_mode: true,
-            ..baseline
-        },
-        Case {
-            name: "explicit_flush",
-            explicit_flush: true,
-            ..baseline
-        },
-        Case {
-            name: "no_batch_stderr_redirect",
-            batch_stderr_redirect: false,
-            ..baseline
-        },
-        Case {
-            name: "direct_file",
-            compare_to: "no_batch_stderr_redirect",
-            via_cmd: false,
-            batch_stderr_redirect: false,
+            name: "dotnet_exists_append",
+            compare_to: "dotnet_exists",
+            dotnet_exists: true,
+            dotnet_append: true,
             ..baseline
         },
         Case {
@@ -128,7 +118,13 @@ struct Stages {
     after_read: bool,
     read_null: Option<bool>,
     read_length: Option<u64>,
+    before_test_path: bool,
+    after_test_path: bool,
     first_line: bool,
+    before_append: bool,
+    after_append: bool,
+    before_convert_from_json: bool,
+    after_convert_from_json: bool,
     script_error: bool,
     script_error_kind: Option<&'static str>,
     stderr_file_nonempty: bool,
@@ -181,11 +177,23 @@ fn fixture(case: Case, stages: &mut Stages) -> io::Result<(tempfile::TempDir, Pr
     }
     let profile = root.path().join("profile");
     std::fs::create_dir(&profile)?;
+    let local_app_data = root.path().join("local-app-data");
+    std::fs::create_dir(&local_app_data)?;
     let script = root.path().join("rpc.ps1");
     let reader = if case.console_in {
         "[Console]::In.ReadLine()"
     } else {
         "[Console]::ReadLine()"
+    };
+    let exists = if case.dotnet_exists {
+        "[System.IO.File]::Exists($firstLine)"
+    } else {
+        "Test-Path -LiteralPath $firstLine"
+    };
+    let append = if case.dotnet_append {
+        "[System.IO.File]::AppendAllText($log, ($line + [System.Environment]::NewLine))"
+    } else {
+        "Add-Content -LiteralPath $log -Value $line"
     };
     let script_text = format!(
         "$ErrorActionPreference = 'Stop'\n$root = '{}'\n",
@@ -194,7 +202,13 @@ fn fixture(case: Case, stages: &mut Stages) -> io::Result<(tempfile::TempDir, Pr
 $beforeRead = [System.IO.Path]::Combine($root, 'before-read.txt')
 $afterRead = [System.IO.Path]::Combine($root, 'after-read.txt')
 $readResult = [System.IO.Path]::Combine($root, 'read-result.json')
+$beforeTestPath = [System.IO.Path]::Combine($root, 'before-test-path.txt')
+$afterTestPath = [System.IO.Path]::Combine($root, 'after-test-path.txt')
 $firstLine = [System.IO.Path]::Combine($root, 'first-line.txt')
+$beforeAppend = [System.IO.Path]::Combine($root, 'before-append.txt')
+$afterAppend = [System.IO.Path]::Combine($root, 'after-append.txt')
+$beforeConvert = [System.IO.Path]::Combine($root, 'before-convert-from-json.txt')
+$afterConvert = [System.IO.Path]::Combine($root, 'after-convert-from-json.txt')
 $scriptError = [System.IO.Path]::Combine($root, 'script-error.txt')
 $log = [System.IO.Path]::Combine($root, 'requests.txt')
 [System.IO.File]::WriteAllText($started, 'true')
@@ -206,9 +220,16 @@ try {
  $length = if ($null -eq $line) { 'null' } else { $line.Length.ToString([System.Globalization.CultureInfo]::InvariantCulture) }
  [System.IO.File]::WriteAllText($readResult, ('{"null":' + $isNull + ',"length":' + $length + '}'))
  while ($null -ne $line) {
-  if (-not (Test-Path -LiteralPath $firstLine)) { [System.IO.File]::WriteAllText($firstLine, 'received') }
-  Add-Content -LiteralPath $log -Value $line
+  [System.IO.File]::WriteAllText($beforeTestPath, 'true')
+  $firstLineExists = @EXISTS@
+  [System.IO.File]::WriteAllText($afterTestPath, 'true')
+  if (-not $firstLineExists) { [System.IO.File]::WriteAllText($firstLine, 'received') }
+  [System.IO.File]::WriteAllText($beforeAppend, 'true')
+  @APPEND@
+  [System.IO.File]::WriteAllText($afterAppend, 'true')
+  [System.IO.File]::WriteAllText($beforeConvert, 'true')
   $r = $line | ConvertFrom-Json
+  [System.IO.File]::WriteAllText($afterConvert, 'true')
   switch ($r.method) {
    'initialize' { [Console]::WriteLine('{"id":0,"result":{}}') }
   }
@@ -219,7 +240,9 @@ try {
  throw
 }
 "#
-    .replace("@READ@", reader);
+    .replace("@READ@", reader)
+    .replace("@EXISTS@", exists)
+    .replace("@APPEND@", append);
     std::fs::write(&script, script_text)?;
 
     let engine_in_batch = if case.pwsh {
@@ -262,6 +285,26 @@ try {
         })
         .collect();
     env.insert("CODEX_HOME".into(), Some(profile.into_os_string()));
+    if case.ps_module_path {
+        let modules = PathBuf::from(&system_root)
+            .join("System32")
+            .join("WindowsPowerShell")
+            .join("v1.0")
+            .join("Modules");
+        if !modules.is_dir() {
+            return Err(io::Error::from(io::ErrorKind::NotFound));
+        }
+        env.insert("PSModulePath".into(), Some(modules.into_os_string()));
+    }
+    if case.local_app_data {
+        env.insert("LOCALAPPDATA".into(), Some(local_app_data.into_os_string()));
+    }
+    if case.module_analysis_cache_path {
+        env.insert(
+            "PSModuleAnalysisCachePath".into(),
+            Some(root.path().join("ModuleAnalysisCache").into_os_string()),
+        );
+    }
     let (executable, args) = if case.via_cmd {
         let (executable, args) = crate::application::subscriptions::cli::vendor_command(
             &environment,
@@ -356,7 +399,13 @@ fn collect_markers(root: &Path, stages: &mut Stages) {
     stages.script_started = root.join("script-started.txt").is_file();
     stages.before_read = root.join("before-read.txt").is_file();
     stages.after_read = root.join("after-read.txt").is_file();
+    stages.before_test_path = root.join("before-test-path.txt").is_file();
+    stages.after_test_path = root.join("after-test-path.txt").is_file();
     stages.first_line = root.join("first-line.txt").is_file();
+    stages.before_append = root.join("before-append.txt").is_file();
+    stages.after_append = root.join("after-append.txt").is_file();
+    stages.before_convert_from_json = root.join("before-convert-from-json.txt").is_file();
+    stages.after_convert_from_json = root.join("after-convert-from-json.txt").is_file();
     stages.script_error = root.join("script-error.txt").is_file();
     stages.script_error_kind = std::fs::read_to_string(root.join("script-error.txt"))
         .ok()
@@ -495,7 +544,8 @@ async fn windows_stdio_one_factor_diagnostics_require_baseline_success() {
     for case in cases() {
         reports.push(run_case(case).await);
     }
-    let baseline_passed = reports[0].stages.passed && reports[10].stages.passed;
+    let baseline_passed =
+        reports[0].stages.passed && reports.last().is_some_and(|report| report.stages.passed);
     // Only fixed labels, booleans, numeric stages and ErrorKind names serialize.
     // Never include paths, environment values, output text or request contents.
     let report = serde_json::to_string_pretty(&serde_json::json!({
