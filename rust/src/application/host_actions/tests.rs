@@ -117,63 +117,104 @@ fn fixed_windows_picker_scripts_preserve_owner_dialog_and_exact_executable_filte
 async fn synthetic_detached_child_survives_hub_effect_shutdown() {
     let root = tempfile::tempdir().unwrap();
     let marker = root.path().join("dispatch-receipt.txt");
+    let started = root.path().join("dispatch-started.txt");
+    let release = root.path().join("dispatch-release.txt");
+    let failure = root.path().join("dispatch-failure.txt");
     let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
-    // Exercise the dispatch Start receipt using a synthetic non-GUI command.
-    // The native GUI API remains uninvoked in this acceptance.
-    #[cfg(windows)]
-    let (program, args) = {
-        let script = root.path().join("detached-fixture.ps1");
-        std::fs::write(
-            &script,
-            "Start-Sleep -Milliseconds 400; [IO.File]::WriteAllText($args[0], 'completed')",
-        )
-        .unwrap();
-        (
-            r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-            vec![
-                "-NoProfile".into(),
-                "-NonInteractive".into(),
-                "-ExecutionPolicy".into(),
-                "Bypass".into(),
-                "-File".into(),
-                script.as_os_str().to_owned(),
-                marker.as_os_str().to_owned(),
-            ],
-        )
-    };
-    #[cfg(unix)]
-    let (program, args) = (
-        "/bin/sh",
-        vec![
-            "-c".into(),
-            "sleep 0.4; printf completed > \"$1\"".into(),
-            "host-fixture".into(),
-            marker.as_os_str().to_owned(),
-        ],
-    );
+    // Use this test binary as the synthetic command on every OS. This avoids
+    // making the process-lifetime contract depend on a shell or interpreter.
+    let mut environment = synthetic_environment(root.path());
+    environment.extend([
+        "MANY_AI_HOST_ACTIONS_CHILD_RUN=1".into(),
+        format!("MANY_AI_HOST_ACTIONS_CHILD_STARTED={}", started.display()),
+        format!("MANY_AI_HOST_ACTIONS_CHILD_RELEASE={}", release.display()),
+        format!("MANY_AI_HOST_ACTIONS_CHILD_MARKER={}", marker.display()),
+        format!("MANY_AI_HOST_ACTIONS_CHILD_FAILURE={}", failure.display()),
+    ]);
+    let executable = std::env::current_exe().unwrap();
     let native = NativeHostDispatch::new(
         RuntimePaths::production(root.path()).unwrap(),
         root.path().to_owned(),
-        synthetic_environment(root.path()),
+        environment,
         owner.handle(),
     )
     .unwrap();
-    native.detached(program, args).unwrap();
+    native
+        .detached(
+            executable.to_str().unwrap(),
+            vec![
+                "--exact".into(),
+                "application::host_actions::tests::detached_fixture_child".into(),
+            ],
+        )
+        .unwrap();
+    wait_for_child_receipt(&started, &failure, "start").await;
     owner.stop_requests();
     owner.stop_effects().unwrap();
     owner.cancel_effects().unwrap();
     drop(owner);
+    write_child_receipt(&release, b"release").unwrap();
+    wait_for_child_receipt(&marker, &failure, "completion").await;
+    assert_eq!(std::fs::read_to_string(marker).unwrap(), "completed");
+}
+
+#[test]
+fn detached_fixture_child() {
+    if std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_RUN").is_none() {
+        return;
+    }
+    let started = std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_STARTED").unwrap();
+    let release = std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_RELEASE").unwrap();
+    let marker = std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_MARKER").unwrap();
+    let failure = std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_FAILURE").unwrap();
+    let result = (|| -> io::Result<()> {
+        write_child_receipt(Path::new(&started), b"started")?;
+        let release = Path::new(&release);
+        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        while !release.exists() {
+            if std::time::Instant::now() >= deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "parent did not release the detached child after shutdown",
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        write_child_receipt(Path::new(&marker), b"completed")
+    })();
+    if let Err(error) = result {
+        let _ = write_child_receipt(
+            Path::new(&failure),
+            format!("{:?}", error.kind()).as_bytes(),
+        );
+        panic!("detached fixture child could not write its receipt");
+    }
+}
+
+fn write_child_receipt(path: &Path, contents: &[u8]) -> io::Result<()> {
+    let temporary = path.with_extension("pending");
+    std::fs::write(&temporary, contents)?;
+    std::fs::rename(temporary, path)
+}
+
+async fn wait_for_child_receipt(marker: &Path, failure: &Path, phase: &str) {
     tokio::time::timeout(Duration::from_secs(20), async {
         loop {
             if marker.exists() {
                 break;
             }
+            if failure.exists() {
+                panic!(
+                    "detached fixture child failed during {phase}: {}",
+                    std::fs::read_to_string(failure)
+                        .unwrap_or_else(|_| "unreadable error receipt".into())
+                );
+            }
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
     })
     .await
-    .unwrap();
-    assert_eq!(std::fs::read_to_string(marker).unwrap(), "completed");
+    .unwrap_or_else(|_| panic!("detached fixture child timed out during {phase}"));
 }
 
 fn synthetic_environment(root: &Path) -> Vec<String> {

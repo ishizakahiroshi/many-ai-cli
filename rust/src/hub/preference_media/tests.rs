@@ -345,7 +345,7 @@ fn failed_save_keeps_binary_and_publication_then_successful_retry_persists() {
 }
 
 #[test]
-fn existing_file_is_truncated_without_replacing_its_mode() {
+fn existing_file_upload_preserves_ordinary_mode_bits() {
     let f = fixture(json!({}), false);
     let path = f.paths.resource(Resource::Avatar);
     std::fs::write(&path, vec![0; 256]).unwrap();
@@ -375,6 +375,27 @@ fn existing_file_is_truncated_without_replacing_its_mode() {
             0o600
         );
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn upload_clears_setuid_from_existing_media() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let f = fixture(json!({}), false);
+    let path = f.paths.resource(Resource::Avatar);
+    std::fs::write(&path, b"GIF89a").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o4600)).unwrap();
+    assert_ne!(
+        std::fs::metadata(&path).unwrap().permissions().mode() & 0o4000,
+        0,
+        "fixture filesystem did not retain the setuid bit"
+    );
+
+    assert_eq!(call(&f, "PUT", AVATAR_UPLOAD_PATH, b"GIF89a").status, 200);
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+    assert_eq!(mode & 0o7000, 0);
+    assert_eq!(mode & 0o777, 0o600);
 }
 
 #[test]
@@ -512,21 +533,39 @@ fn existing_other_local_file_is_never_an_avatar_source() {
 
 #[test]
 fn simultaneous_first_uploads_to_same_media_file_succeed() {
-    for (path, bytes) in [
-        (AVATAR_UPLOAD_PATH, b"GIF89asynthetic".as_slice()),
-        (SOUND_PATH, b"ID3synthetic".as_slice()),
+    for (path, magic) in [
+        (AVATAR_UPLOAD_PATH, b"GIF89a".as_slice()),
+        (SOUND_PATH, b"ID3".as_slice()),
     ] {
         for _ in 0..2 {
             let f = fixture(json!({}), false);
+            let payloads: Arc<Vec<Vec<u8>>> = Arc::new(
+                (0..16)
+                    .map(|index| {
+                        let mut body = if path == SOUND_PATH {
+                            if index % 2 == 0 {
+                                b"ID3".to_vec()
+                            } else {
+                                b"RIFF0000WAVE".to_vec()
+                            }
+                        } else {
+                            magic.to_vec()
+                        };
+                        body.extend(format!("synthetic-{index:02}").into_bytes());
+                        body
+                    })
+                    .collect(),
+            );
             let barrier = Arc::new(std::sync::Barrier::new(16));
             let threads: Vec<_> = (0..16)
-                .map(|_| {
+                .map(|index| {
                     let store = f.store.clone();
                     let paths = f.paths.clone();
                     let barrier = barrier.clone();
+                    let body = payloads[index].clone();
                     std::thread::spawn(move || {
                         barrier.wait();
-                        handle_authenticated(&request("PUT", path, bytes), &store, &paths, |_| {})
+                        handle_authenticated(&request("PUT", path, &body), &store, &paths, |_| {})
                             .unwrap()
                     })
                 })
@@ -539,6 +578,10 @@ fn simultaneous_first_uploads_to_same_media_file_succeed() {
                     "{}",
                     String::from_utf8_lossy(&response.body)
                 );
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&response.body).unwrap(),
+                    json!({"ok": true})
+                );
             }
             assert_eq!(f.store.snapshot().unwrap().revision, 16);
             let get = if path == AVATAR_UPLOAD_PATH {
@@ -546,7 +589,42 @@ fn simultaneous_first_uploads_to_same_media_file_succeed() {
             } else {
                 SOUND_PATH
             };
-            assert_eq!(call(&f, "GET", get, b"").body, bytes);
+            let response = call(&f, "GET", get, b"");
+            assert_eq!(
+                response.status,
+                200,
+                "{}",
+                String::from_utf8_lossy(&response.body)
+            );
+            assert!(
+                payloads.iter().any(|body| body == &response.body),
+                "final GET is not one complete accepted payload"
+            );
+            if path == SOUND_PATH {
+                let stored_mime = f
+                    .store
+                    .snapshot()
+                    .unwrap()
+                    .config
+                    .user_prefs
+                    .notify_sound
+                    .custom_mime;
+                assert_eq!(stored_mime, audio_mime(&response.body).unwrap());
+            }
+            let media_name = if path == AVATAR_UPLOAD_PATH {
+                "user_avatar.bin"
+            } else {
+                "notify_sound_custom.bin"
+            };
+            let entries = Dir::open(f.paths.root()).unwrap().entries().unwrap();
+            assert!(entries.iter().any(|entry| entry == "config.yaml"));
+            assert!(entries.iter().any(|entry| entry == media_name));
+            assert!(
+                !entries
+                    .iter()
+                    .any(|entry| { entry.starts_with(".many-ai-cli-") && entry.ends_with(".tmp") }),
+                "replacement temporary file remained"
+            );
         }
     }
 }

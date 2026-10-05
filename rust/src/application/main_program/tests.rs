@@ -411,7 +411,9 @@ async fn production_log_spelling_is_preserved_while_selected_cwd_controls_actual
         );
         let composition = HubComposition::new(context, ServeOptions::default())
             .await
-            .unwrap();
+            .unwrap_or_else(|error| {
+                panic!("HubComposition failed for log_dir={configured:?}: {error}")
+            });
         assert_eq!(
             composition
                 .dependencies

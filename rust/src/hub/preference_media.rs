@@ -11,10 +11,7 @@ use crate::{
     proto::unicode::simple_lower,
     routine::memo::sniff_image,
 };
-use std::{
-    io::{self, Write},
-    path::Path,
-};
+use std::{io, path::Path};
 
 pub const AVATAR_PATH: &str = "/api/avatar";
 pub const AVATAR_UPLOAD_PATH: &str = "/api/user-prefs/avatar";
@@ -46,6 +43,7 @@ pub fn handle_authenticated(
     Some(match (request.path.as_str(), request.method.as_str()) {
         (AVATAR_PATH, _) => avatar_get(store, paths),
         (AVATAR_UPLOAD_PATH, "DELETE") => {
+            let _media_guard = lock_media();
             // Source never reads the DELETE body or removes user_avatar.bin.
             publish_media(store, |cfg| cfg.user_prefs.avatar.clear(), warning)
         }
@@ -57,6 +55,7 @@ pub fn handle_authenticated(
 }
 
 fn avatar_get(store: &ConfigStore, paths: &RuntimePaths) -> Response {
+    let _media_guard = lock_media();
     let snapshot = match store.snapshot() {
         Ok(snapshot) => snapshot,
         Err(error) => return save_error(error),
@@ -91,6 +90,7 @@ fn avatar_not_found() -> Response {
     )
 }
 fn sound_get(store: &ConfigStore, paths: &RuntimePaths) -> Response {
+    let _media_guard = lock_media();
     let bytes = match read_media(&paths.resource(Resource::NotifySound)) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -152,6 +152,7 @@ fn put(
             },
         );
     };
+    let _media_guard = lock_media();
     let path = paths.resource(if avatar {
         Resource::Avatar
     } else {
@@ -209,12 +210,64 @@ fn read_media(path: &Path) -> io::Result<Vec<u8>> {
     // Go GET uses os.ReadFile without applying its upload-size limit.
     dir.read(path.file_name().unwrap().to_str().unwrap(), usize::MAX)
 }
+static MEDIA_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_media() -> std::sync::MutexGuard<'static, ()> {
+    MEDIA_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
 fn write_media(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let dir = Dir::open(path.parent().expect("fixed media parent"))?;
     let name = path.file_name().unwrap().to_str().unwrap();
+    // Unix publishes a first upload atomically; later writes keep the existing
+    // inode, ACLs, and ordinary mode bits. Windows keeps its reparse-checked
+    // OPEN_ALWAYS path. The lock prevents same-Hub writes from interleaving.
+    #[cfg(unix)]
+    {
+        match dir.metadata(name) {
+            Ok(_) => truncate_in_place(&dir, name, bytes),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                dir.replace(name, bytes, 0o600)
+            }
+            // Mode 0200 cannot be opened read-only. The write-only open below
+            // still validates the entry and preserves the existing inode.
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                truncate_in_place(&dir, name, bytes)
+            }
+            Err(error) => Err(error),
+        }
+    }
+    #[cfg(windows)]
+    {
+        truncate_in_place(&dir, name, bytes)
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        truncate_in_place(&dir, name, bytes)
+    }
+}
+fn truncate_in_place(dir: &Dir, name: &str, bytes: &[u8]) -> io::Result<()> {
+    use std::io::Write;
     let mut file = dir.open_write_or_create(name, 0o600)?;
+    #[cfg(unix)]
+    clear_unix_special_bits(&file)?;
     file.set_len(0)?;
     file.write_all(bytes)
+}
+#[cfg(unix)]
+fn clear_unix_special_bits(file: &std::fs::File) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = file.metadata()?.permissions();
+    let mode = permissions.mode();
+    if mode & 0o7000 != 0 {
+        // A privileged Hub process may retain set-ID bits on ordinary writes;
+        // uploaded media must never inherit those bits from an old file.
+        permissions.set_mode(mode & 0o777);
+        file.set_permissions(permissions)?;
+    }
+    Ok(())
 }
 fn candidate_key(path: &str) -> String {
     let clean = clean_native_path(path, cfg!(windows));

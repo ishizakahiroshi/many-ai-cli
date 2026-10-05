@@ -496,17 +496,27 @@ async fn launcher_manager_timeout_only_bounds_connecting_and_closes_own_connecti
         })
         .unwrap();
     let config = stub_config(&store, t.path(), "ready");
-    let manager =
-        ConnectionManager::with_timeout(store.clone(), config, Duration::from_millis(500));
+    let connect_timeout = Duration::from_secs(3);
+    let manager = ConnectionManager::with_timeout(store.clone(), config, connect_timeout);
     manager.connect("remote").await.unwrap();
-    for _ in 0..100 {
-        if manager.status().await["status"] == "connected" {
-            break;
+    let connected = tokio::time::timeout(connect_timeout, async {
+        loop {
+            let status = manager.status().await;
+            if status["status"] == "connected" || status["status"] == "error" {
+                break status;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    assert_eq!(manager.status().await["status"], "connected");
-    tokio::time::sleep(Duration::from_millis(650)).await;
+    })
+    .await
+    .expect("connection reaches a terminal state within the configured timeout");
+    assert_eq!(
+        connected["status"],
+        "connected",
+        "unexpected terminal connection error: {}",
+        connected.get("error").unwrap_or(&serde_json::Value::Null)
+    );
+    tokio::time::sleep(connect_timeout + Duration::from_millis(100)).await;
     assert!(manager.owns("remote").await);
     assert_eq!(store.load_profiles().unwrap().last_used, "remote");
     manager.close_all().await;

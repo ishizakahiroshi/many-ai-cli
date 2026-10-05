@@ -54,7 +54,8 @@ while ($null -ne ($line = [Console]::ReadLine())) {{
 "#,
         script.display()
     );
-    std::fs::write(root.path().join("codex.cmd"), cmd.replace('\n', "\r\n")).unwrap();
+    let cmd = cmd.replace("\r\n", "\n").replace('\n', "\r\n");
+    std::fs::write(root.path().join("codex.cmd"), cmd).unwrap();
     let environment = vec![
         format!("PATH={}", root.path().display()),
         "PATHEXT=.CMD;.EXE".into(),
@@ -71,7 +72,16 @@ while ($null -ne ($line = [Console]::ReadLine())) {{
     )
     .await
     .expect("bounded synthetic app-server receipt");
-    let requests = std::fs::read_to_string(log).unwrap();
+    let result_summary = result
+        .as_ref()
+        .map(|_| "Ok".to_owned())
+        .unwrap_or_else(|error| format!("Err({:?})", error.kind()));
+    let requests = std::fs::read_to_string(log).unwrap_or_else(|error| {
+        panic!(
+            "synthetic app-server request log unavailable; usage result={result_summary}; log read kind={:?}",
+            error.kind()
+        )
+    });
     (result, requests)
 }
 #[cfg(windows)]

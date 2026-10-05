@@ -428,10 +428,15 @@ async fn linked_parent_uses_shared_info_exclude_and_relative_cwd_uses_process_cw
     )
     .await;
     let tree = f.prepare(Path::new("linked parent"), "nested").await;
-    assert_eq!(Path::new(&tree.parent_dir), linked);
     assert_eq!(
-        Path::new(&tree.path).parent().unwrap(),
-        linked.join(".git-worktrees")
+        fs::canonicalize(Path::new(&tree.parent_dir)).unwrap(),
+        fs::canonicalize(&linked).unwrap(),
+        "Git and the fixture must identify the same linked parent directory"
+    );
+    assert_eq!(
+        fs::canonicalize(Path::new(&tree.path).parent().unwrap()).unwrap(),
+        fs::canonicalize(linked.join(".git-worktrees")).unwrap(),
+        "worktree path must remain below the linked parent"
     );
     assert!(
         fs::read_to_string(repo.join(".git/info/exclude"))

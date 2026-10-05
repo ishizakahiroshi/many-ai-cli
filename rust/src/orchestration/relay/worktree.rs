@@ -732,6 +732,8 @@ mod tests {
 case "$3:$4" in
 worktree:remove) exit 1 ;;
 worktree:list)
+    # Real Git always emits the main worktree, even when the target is unregistered.
+    printf 'worktree %s\000HEAD synthetic\000branch refs/heads/synthetic\000\000' "$2"
     if [ -f "$SYNTHETIC_REGISTRATION" ]; then
         printf 'worktree %s\000HEAD synthetic\000branch refs/heads/synthetic\000\000' "$SYNTHETIC_TARGET"
     fi
