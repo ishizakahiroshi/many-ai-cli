@@ -3,7 +3,7 @@ use crate::{
     application::{
         orchestration_program::OrchestrationDependencies, session_workers::SessionWorkers,
     },
-    config::Config,
+    config::{Config, OrchestrationConfig},
     files::FilesService,
     hub::task_owner::HubTaskOwner,
     orchestration::child_launch::ChildPreparer,
@@ -16,6 +16,330 @@ use crate::{
     },
 };
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+#[tokio::test]
+async fn relay_start_id_is_exclusive_while_preparation_is_pending() {
+    let f = fixture(4).await;
+    let id = format!("r{}-synthetic-same-timestamp", f.parent.session.0);
+    let first = f.program.claim_start_id(&id).expect("first claim succeeds");
+    assert!(f.program.owns(&id));
+    assert!(matches!(
+        f.program.claim_start_id(&id),
+        Err(RelayError { code, .. }) if code == "relay_identity_collision"
+    ));
+    drop(first);
+    assert!(!f.program.owns(&id));
+    assert!(f.program.claim_start_id(&id).is_ok());
+
+    let first_parent = f.program.claim_start_parent(f.parent.session).unwrap();
+    assert!(matches!(
+        f.program
+            .claim_start_parent(f.parent.session)
+            .err()
+            .map(|error| error.code),
+        Some(code) if code == "relay_startup_in_progress"
+    ));
+    drop(first_parent);
+    assert!(f.program.claim_start_parent(f.parent.session).is_ok());
+}
+
+async fn cleanup_terminal_worktree(f: &Fixture, path: &Path) -> RelayError {
+    let mut file = persisted(f, "cleanup-target", "2026-10-05T00:00:00Z", 0, "");
+    file.mode = "worktree".into();
+    file.state = "stopped".into();
+    file.reason = "timeout".into();
+    file.worktree_path = path.to_string_lossy().into_owned();
+    let mut run = Run::new(file, Timestamp::now());
+    run.parent_attached = true;
+    f.program.publish_meta(&run);
+    lock(&f.program.state)
+        .runs
+        .insert("cleanup-target".into(), Arc::new(AsyncMutex::new(run)));
+    f.program
+        .cleanup_relay(
+            f.parent.session,
+            "cleanup-target",
+            Timestamp::now(),
+            TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .expect("the fixture has no Git executable")
+}
+
+#[tokio::test]
+async fn cleanup_missing_worktree_token_parent_and_root_reach_git_cleanup() {
+    for missing in ["worktree", "token-parent", "root"] {
+        let f = fixture(4).await;
+        let cfg = f.config.snapshot().unwrap().config.orchestration;
+        let root = RelayGit::root(f.paths.root(), &cfg);
+        let token = root.join("synthetic-token");
+        let path = token.join("relay");
+        match missing {
+            "worktree" => std::fs::create_dir_all(&token).unwrap(),
+            "token-parent" => std::fs::create_dir_all(&root).unwrap(),
+            "root" => {}
+            _ => unreachable!(),
+        }
+        assert!(!path.exists());
+        let error = cleanup_terminal_worktree(&f, &path).await;
+        // The real lifecycle caller must reach RelayGit cleanup/prune, rather
+        // than treating disappearance as an already-completed cleanup.
+        assert_eq!(error.code, "relay_cleanup_error", "{missing}: {error:?}");
+        let (saved, warnings) = f.program.store.load().unwrap();
+        assert!(warnings.is_empty());
+        let saved = saved
+            .iter()
+            .find(|file| file.orchestration_id == "cleanup-target")
+            .unwrap();
+        assert_eq!(Path::new(&saved.worktree_path), path);
+    }
+}
+
+#[tokio::test]
+async fn cleanup_recovers_child_label_from_trusted_orchestration_metadata() {
+    let f = fixture(4).await;
+    let initial = start(&f, "cleanup-metadata-fallback", false, false).await;
+    let child = LiveSessionId(initial.implementation_session_id);
+    let before = f.core.details(child).expect("registered relay child");
+    assert_eq!(before.snapshot.orchestration_id.0, initial.orchestration_id);
+    assert!(ROLES.contains(&before.snapshot.role.as_str()));
+
+    let cfg = f.config.snapshot().unwrap().config.orchestration;
+    let tree = RelayGit::root(f.paths.root(), &cfg).join("metadata-fallback/relay");
+    std::fs::create_dir_all(&tree).unwrap();
+    let handle = lock(&f.program.state).runs[&initial.orchestration_id].clone();
+    {
+        let mut run = handle.lock().await;
+        run.file.mode = "worktree".into();
+        run.file.state = "stopped".into();
+        run.file.reason = "timeout".into();
+        run.file.worktree_path = tree.to_string_lossy().into_owned();
+        for role in ROLES {
+            run.file.set_child(role, 0, String::new(), 0);
+        }
+    }
+
+    let error = f
+        .program
+        .cleanup_relay(
+            f.parent.session,
+            &initial.orchestration_id,
+            Timestamp::now(),
+            TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .expect("cleanup reaches the fixture's missing Git executable");
+    assert_eq!(error.code, "relay_cleanup_error", "{error:?}");
+    assert!(
+        f.core.details(child).is_none(),
+        "the unsaved child checkpoint must be recovered and dismissed before worktree cleanup"
+    );
+}
+
+#[tokio::test]
+async fn cleanup_existing_file_and_outside_missing_target_are_rejected() {
+    for outside in [false, true] {
+        let f = fixture(4).await;
+        let cfg = f.config.snapshot().unwrap().config.orchestration;
+        let root = RelayGit::root(f.paths.root(), &cfg);
+        std::fs::create_dir_all(&root).unwrap();
+        let path = if outside {
+            f.paths.root().join("outside-missing-relay")
+        } else {
+            root.join("regular-file")
+        };
+        if !outside {
+            std::fs::write(&path, b"retain regular file").unwrap();
+        }
+        let error = cleanup_terminal_worktree(&f, &path).await;
+        assert_eq!(error.code, "bad_request", "{error:?}");
+        if outside {
+            assert!(!path.exists());
+        } else {
+            assert_eq!(std::fs::read(&path).unwrap(), b"retain regular file");
+        }
+        assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn cleanup_final_symlink_and_dangling_link_are_not_missing_worktrees() {
+    for dangling in [false, true] {
+        let f = fixture(4).await;
+        let cfg = f.config.snapshot().unwrap().config.orchestration;
+        let root = RelayGit::root(f.paths.root(), &cfg);
+        std::fs::create_dir_all(&root).unwrap();
+        // Even a final link to an otherwise allowed directory must not be
+        // passed to Git cleanup as a directory or a missing registration.
+        let target = root.join("retained-target");
+        if !dangling {
+            std::fs::create_dir(&target).unwrap();
+            std::fs::write(target.join("sentinel"), b"retain linked directory").unwrap();
+        }
+        let path = root.join("linked-relay");
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        let error = cleanup_terminal_worktree(&f, &path).await;
+        assert_eq!(error.code, "bad_request", "{error:?}");
+        assert!(
+            std::fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        if !dangling {
+            assert_eq!(
+                std::fs::read(target.join("sentinel")).unwrap(),
+                b"retain linked directory"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn worktree_adoption_keeps_legacy_repository_for_validation_and_cleanup() {
+    let f = fixture(8).await;
+    let origin = f.paths.root().join("original-repository");
+    std::fs::create_dir(&origin).unwrap();
+    let cfg = f.config.snapshot().unwrap().config.orchestration;
+    let tree = RelayGit::root(&origin, &cfg).join("adopted/relay");
+    std::fs::create_dir_all(&tree).unwrap();
+    let sentinel = tree.join("retained-work.txt");
+    std::fs::write(&sentinel, b"original repository work").unwrap();
+    let mut file = persisted(&f, "adopted-root", "2026-10-04T00:00:00Z", 0, "");
+    file.mode = "worktree".into();
+    file.state = "stopped".into();
+    file.reason = "timeout".into();
+    file.parent_session_id = 88;
+    file.parent_cwd = origin.to_string_lossy().into_owned();
+    file.worktree_path = tree.to_string_lossy().into_owned();
+    file.branch = "synthetic-original-branch".into();
+    // Legacy on-disk records fall back to their parent cwd before adoption.
+    assert!(file.worktree_origin_cwd.is_empty());
+    assert_eq!(Path::new(file.repository_cwd()), origin);
+    let mut run = Run::new(file, Timestamp::now());
+    let adopter = f.core.details(f.parent.session).unwrap();
+    assert_ne!(adopter.snapshot.cwd, run.file.parent_cwd);
+    RelayProgram::adopt_parent_context(&mut run, &adopter);
+    assert_eq!(run.file.parent_cwd, adopter.snapshot.cwd);
+    assert_eq!(Path::new(run.file.repository_cwd()), origin);
+    let relative_cfg = OrchestrationConfig {
+        worktree_dir_root: ".synthetic-worktrees".into(),
+        ..cfg.clone()
+    };
+    let relative_tree = RelayGit::root(&origin, &relative_cfg).join("adopted/relay");
+    std::fs::create_dir_all(&relative_tree).unwrap();
+    f.program
+        .git
+        .validate_cleanup(
+            Path::new(run.file.repository_cwd()),
+            &relative_tree,
+            &relative_cfg,
+        )
+        .unwrap();
+    assert!(
+        f.program
+            .git
+            .validate_cleanup(
+                Path::new(&run.file.parent_cwd),
+                &relative_tree,
+                &relative_cfg
+            )
+            .is_err()
+    );
+    // Use the real lifecycle cleanup route. The fixture deliberately has no
+    // Git executable, so reaching cleanup_error proves its root validation
+    // accepted the original repository rather than the adopter's new cwd.
+    let id = run.file.orchestration_id.clone();
+    f.program.publish_meta(&run);
+    lock(&f.program.state)
+        .runs
+        .insert(id.clone(), Arc::new(AsyncMutex::new(run)));
+    let error = f
+        .program
+        .cleanup_relay(
+            f.parent.session,
+            &id,
+            Timestamp::now(),
+            TaskCancellation::default(),
+        )
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(error.code, "relay_cleanup_error");
+    assert_eq!(
+        std::fs::read(&sentinel).unwrap(),
+        b"original repository work"
+    );
+    let (saved, warnings) = f.program.store.load().unwrap();
+    assert!(warnings.is_empty());
+    let saved = saved
+        .iter()
+        .find(|file| file.orchestration_id == id)
+        .unwrap();
+    assert_eq!(Path::new(saved.repository_cwd()), origin);
+    assert_eq!(saved.parent_cwd, adopter.snapshot.cwd);
+}
+
+#[tokio::test]
+async fn failed_reattach_binding_preserves_parent_and_child_run_identity_and_timers() {
+    let f = fixture(8).await;
+    for parent_match in [true, false] {
+        let binding = if parent_match {
+            f.parent
+        } else {
+            cold_registration(&f, "restored-worker", "2026-10-05T01:00:00Z").await
+        };
+        let mut details = f.core.details(binding.session).unwrap();
+        let mut file = persisted(
+            &f,
+            "transactional-reidentify",
+            "old-parent",
+            88,
+            "restored-worker",
+        );
+        file.parent_session_id = 77;
+        if parent_match {
+            file.parent_started_at = details.snapshot.started_at.clone();
+            file.parent_cwd = details.snapshot.cwd.clone();
+            file.parent_provider = details.snapshot.provider.clone();
+        }
+        let mut run = Run::new(file, Timestamp::now());
+        run.parent_attached = false;
+        run.reconnected.insert(REVIEW.into());
+        let timer_at = Timestamp::now();
+        run.timers.insert(
+            88,
+            relay::ChildTimer {
+                assigned_at: Some(timer_at),
+                exit_handled: true,
+                ..Default::default()
+            },
+        );
+        let before = serde_json::to_value(&run.file).unwrap();
+        let before_reconnected = run.reconnected.clone();
+        // Keep the real, connected snapshot but supply a stale wrapper binding:
+        // apply_relay_binding must reject it without consuming restore identity.
+        details.binding.wrapper = WrapperConnectionId(u64::MAX);
+        let error = f
+            .program
+            .reidentify_one(&mut run, &details, Timestamp::now())
+            .await
+            .err()
+            .unwrap();
+        assert!(error.detail.contains("StaleBinding"));
+        assert_eq!(serde_json::to_value(&run.file).unwrap(), before);
+        assert!(!run.parent_attached);
+        assert_eq!(run.reconnected, before_reconnected);
+        assert_eq!(run.timers.len(), 1);
+        assert_eq!(run.timers[&88].assigned_at, Some(timer_at));
+        assert!(run.timers[&88].exit_handled);
+        assert!(!run.timers.contains_key(&binding.session.0));
+    }
+}
+
 #[derive(Default)]
 struct Io {
     engine: Mutex<Weak<SessionEngine>>,
@@ -852,10 +1176,20 @@ async fn strong_escalation_resets_round_and_next_c_returns_to_cheap_implementer(
     assert_eq!(next.state, "implementing");
 }
 async fn cold_registration(f: &Fixture, label: &str, started: &str) -> SessionBinding {
+    let cwd = f.paths.root().to_string_lossy().into_owned();
+    cold_registration_with_cwd(f, label, started, &cwd).await
+}
+
+async fn cold_registration_with_cwd(
+    f: &Fixture,
+    label: &str,
+    started: &str,
+    cwd: &str,
+) -> SessionBinding {
     let message = proto::Message {
         session_id: 500 + f.core.snapshots().len() as i64,
         provider: "codex".into(),
-        cwd: f.paths.root().to_string_lossy().into_owned(),
+        cwd: cwd.into(),
         label: label.into(),
         started_at: started.into(),
         pid: 800 + f.core.snapshots().len() as i64,
@@ -953,7 +1287,36 @@ async fn restored_children_do_not_adopt_recycled_parent_ids_and_preack_preserves
     assert_eq!(f.io.starts.load(Ordering::SeqCst), 0);
     assert!(f.core.details(unrelated.session).is_some());
     assert!(f.program.list(f.parent.session).unwrap().is_empty());
-    let parent = cold_registration(&f, "restored-parent", "2026-10-04T00:00:00Z").await;
+    let child_before_parent = f.core.details(child.session).unwrap();
+    assert_eq!(child_before_parent.snapshot.launch_label, "old-worker");
+    assert_eq!(
+        child_before_parent.snapshot.orchestration_id.0,
+        file.orchestration_id
+    );
+    {
+        let run = handle.lock().await;
+        assert!(run.reconnected.contains(IMPLEMENTATION));
+        assert!(run.awaiting_reconnect);
+        assert_eq!(run.file.child_id(IMPLEMENTATION), child.session.0);
+        assert_eq!(run.file.child_label(IMPLEMENTATION), "old-worker");
+    }
+    let child_before_parent = f.core.details(child.session).unwrap();
+    assert_eq!(
+        child_before_parent.snapshot.orchestration_id.0,
+        file.orchestration_id
+    );
+    assert_eq!(child_before_parent.snapshot.launch_label, "old-worker");
+    let parent = cold_registration_with_cwd(
+        &f,
+        "restored-parent",
+        "2026-10-04T00:00:00Z",
+        &file.parent_cwd,
+    )
+    .await;
+    assert_eq!(
+        f.core.details(parent.session).unwrap().snapshot.cwd,
+        file.parent_cwd
+    );
     f.program.prepare_reattach(parent, at).await.unwrap();
     assert_eq!(
         f.core

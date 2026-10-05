@@ -51,6 +51,10 @@ const RELAY_SCHEMAS: &[Schema] = &[
                 kind: "string",
             },
             Field {
+                name: "worktree_origin_cwd",
+                kind: "string",
+            },
+            Field {
                 name: "plan_path",
                 kind: "string",
             },

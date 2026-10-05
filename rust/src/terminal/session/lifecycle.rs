@@ -669,6 +669,17 @@ impl SessionEngine {
         orchestration: OrchestrationId,
         board_path: String,
     ) -> Result<CoreEffects, SessionError> {
+        self.mark_conductor_with_previous(binding, orchestration, board_path)
+            .map(|(effects, _)| effects)
+    }
+    /// Capture the replaced card metadata under the same lock as the write.
+    /// Startup compensation must use this receipt, rather than an earlier snapshot.
+    pub fn mark_conductor_with_previous(
+        &self,
+        binding: SessionBinding,
+        orchestration: OrchestrationId,
+        board_path: String,
+    ) -> Result<(CoreEffects, (OrchestrationId, String)), SessionError> {
         let mut state = lock(&self.state);
         let session = state
             .sessions
@@ -677,13 +688,48 @@ impl SessionEngine {
         if session.binding.incarnation != binding.incarnation {
             return Err(SessionError::StaleBinding);
         }
+        let previous = (
+            session.snapshot.orchestration_id.clone(),
+            session.snapshot.board_path.clone(),
+        );
         if session.snapshot.orchestration_id == orchestration
             && session.snapshot.board_path == board_path
         {
-            return Ok(CoreEffects::default());
+            return Ok((CoreEffects::default(), previous));
         }
         session.snapshot.orchestration_id = orchestration;
         session.snapshot.board_path = board_path;
+        let message = session.update_message();
+        Ok((
+            state.route(CoreEffects(vec![CoreEffect::Broadcast(message)])),
+            previous,
+        ))
+    }
+    /// A failed startup may restore its parent card only while the exact
+    /// session incarnation and relay identity still match. A warm reconnect
+    /// retains that owner; a newer incarnation or relay is left untouched.
+    pub fn restore_conductor_if_matches(
+        &self,
+        binding: SessionBinding,
+        expected_id: &OrchestrationId,
+        expected_path: &str,
+        previous_id: OrchestrationId,
+        previous_path: String,
+    ) -> Result<CoreEffects, SessionError> {
+        let mut state = lock(&self.state);
+        let Some(session) = state.sessions.get_mut(&binding.session) else {
+            return Ok(CoreEffects::default());
+        };
+        if session.binding.incarnation != binding.incarnation
+            || session.snapshot.orchestration_id != *expected_id
+            || session.snapshot.board_path != expected_path
+            || (session.snapshot.orchestration_id == previous_id
+                && session.snapshot.board_path == previous_path)
+        {
+            return Ok(CoreEffects::default());
+        }
+        session.snapshot.orchestration_id = previous_id;
+        session.snapshot.board_path = previous_path;
         let message = session.update_message();
         Ok(state.route(CoreEffects(vec![CoreEffect::Broadcast(message)])))
     }

@@ -126,10 +126,10 @@ impl RelayProgram {
                     "relay worktree no longer exists; it cannot be resumed",
                 ));
             }
-            let parent_cwd = if run.file.parent_cwd.trim().is_empty() {
+            let parent_cwd = if run.file.repository_cwd().trim().is_empty() {
                 &parent.snapshot.cwd
             } else {
-                &run.file.parent_cwd
+                run.file.repository_cwd()
             };
             self.git
                 .validate(
@@ -176,11 +176,7 @@ impl RelayProgram {
         run.admission = reservation.id.clone();
         let old = LiveSessionId(run.file.parent_session_id);
         if !run.parent_attached || old != parent.binding.session {
-            run.file.parent_session_id = parent.binding.session.0;
-            run.parent_attached = true;
-            run.file.parent_started_at = parent.snapshot.started_at.clone();
-            run.file.parent_provider = parent.snapshot.provider.clone();
-            run.file.parent_cwd = parent.snapshot.cwd.clone();
+            Self::adopt_parent_context(&mut run, &parent);
             self.deps.orchestration.rebind_relay_parent(
                 &OrchestrationId(run.file.orchestration_id.clone()),
                 old,
@@ -303,19 +299,29 @@ impl RelayProgram {
                     "relay worktree has already been cleaned up",
                 ));
             }
+            validate_cleanup_entry(Path::new(&run.file.worktree_path))?;
             self.git
                 .validate_cleanup(
-                    Path::new(&run.file.parent_cwd),
+                    Path::new(run.file.repository_cwd()),
                     Path::new(&run.file.worktree_path),
                     &self.cfg()?.orchestration,
                 )
                 .map_err(RelayError::bad)?;
             let claim = CleanupClaim::acquire(run.cleanup_in_progress.clone())?;
-            let labels = ROLES
+            let mut labels = ROLES
                 .iter()
                 .map(|role| run.file.child_label(role).to_owned())
                 .filter(|label| !label.is_empty())
                 .collect::<Vec<_>>();
+            for binding in self.owned_children(&run, &core) {
+                if let Some(details) = core.details(binding.session)
+                    && !details.snapshot.launch_label.trim().is_empty()
+                {
+                    labels.push(details.snapshot.launch_label);
+                }
+            }
+            labels.sort();
+            labels.dedup();
             for label in &labels {
                 if !run.file.revoked_child_labels.contains(label) {
                     run.file.revoked_child_labels.push(label.clone());
@@ -335,7 +341,7 @@ impl RelayProgram {
             )?;
             (
                 run.file.worktree_path.clone(),
-                run.file.parent_cwd.clone(),
+                run.file.repository_cwd().to_owned(),
                 run.file.child_ids(),
                 children,
                 claim,
@@ -360,7 +366,9 @@ impl RelayProgram {
                 "relay child sessions are still present; close them before cleaning up the worktree",
             ));
         }
-        if !run.file.terminal() || run.file.child_ids() != ids || run.file.parent_cwd != parent_cwd
+        if !run.file.terminal()
+            || run.file.child_ids() != ids
+            || run.file.repository_cwd() != parent_cwd
         {
             return Err(RelayError::new(
                 409,
@@ -375,13 +383,18 @@ impl RelayProgram {
                 "relay worktree has already been cleaned up",
             ));
         }
-        if !Path::new(&path).is_dir() {
-            return Err(RelayError::new(
-                409,
-                "relay_worktree_missing",
-                "relay worktree is no longer present",
-            ));
-        }
+        // Child dismissal can await effects. Revalidate the filesystem after
+        // that wait, but allow a genuinely absent tail so Git can prune its
+        // stale worktree registration. An existing non-directory or link must
+        // never be mistaken for an absent worktree.
+        validate_cleanup_entry(Path::new(&path))?;
+        self.git
+            .validate_cleanup(
+                Path::new(&parent_cwd),
+                Path::new(&path),
+                &self.cfg()?.orchestration,
+            )
+            .map_err(RelayError::bad)?;
         self.git
             .cleanup(Path::new(&parent_cwd), Path::new(&path), &cancel)
             .await
@@ -767,7 +780,53 @@ impl RelayProgram {
         }
         Ok(())
     }
-    async fn reidentify_one(
+    pub(super) fn adopt_parent_context(run: &mut Run, parent: &SessionDetails) {
+        // Legacy records have no origin field: freeze their original repository
+        // before adopting the new conductor's working directory.
+        run.file.adopt_parent_context(&parent.snapshot.cwd);
+        run.file.parent_session_id = parent.binding.session.0;
+        run.parent_attached = true;
+        run.file.parent_started_at = parent.snapshot.started_at.clone();
+        run.file.parent_provider = parent.snapshot.provider.clone();
+    }
+    pub(super) async fn reidentify_one(
+        &self,
+        run: &mut Run,
+        details: &SessionDetails,
+        now: Timestamp,
+    ) -> Result<(), RelayError> {
+        let file = run.file.clone();
+        let attached = run.parent_attached;
+        let reconnected = run.reconnected.clone();
+        let timers = run
+            .timers
+            .iter()
+            .map(|(id, timer)| {
+                (
+                    *id,
+                    relay::ChildTimer {
+                        assigned_at: timer.assigned_at,
+                        last_write_at: timer.last_write_at,
+                        stamp: timer.stamp,
+                        standby_since: timer.standby_since,
+                        startup_wait_notified: timer.startup_wait_notified,
+                        nudge_wait_notified: timer.nudge_wait_notified,
+                        exit_handled: timer.exit_handled,
+                        pending_done_at: timer.pending_done_at,
+                    },
+                )
+            })
+            .collect();
+        let result = self.reidentify_one_inner(run, details, now).await;
+        if result.is_err() {
+            run.file = file;
+            run.parent_attached = attached;
+            run.reconnected = reconnected;
+            run.timers = timers;
+        }
+        result
+    }
+    async fn reidentify_one_inner(
         &self,
         run: &mut Run,
         details: &SessionDetails,
@@ -786,8 +845,6 @@ impl RelayProgram {
             && snapshot.provider == run.file.parent_provider
         {
             let old = LiveSessionId(run.file.parent_session_id);
-            run.file.parent_session_id = snapshot.id.0;
-            run.parent_attached = true;
             self.effects(core.apply_relay_binding(
                 details.binding,
                 LiveSessionId(0),
@@ -797,6 +854,8 @@ impl RelayProgram {
                 now,
             )?)
             .await?;
+            run.file.parent_session_id = snapshot.id.0;
+            run.parent_attached = true;
             self.deps.orchestration.rebind_relay_parent(
                 &OrchestrationId(run.file.orchestration_id.clone()),
                 old,
@@ -849,16 +908,6 @@ impl RelayProgram {
             let old = run.file.child_id(role);
             let progress = run.file.progress_id(role);
             let label = run.file.child_label(role).to_owned();
-            run.file.set_child(role, snapshot.id.0, label, progress);
-            run.reconnected.insert(role.into());
-            run.timers.insert(
-                snapshot.id.0,
-                relay::ChildTimer {
-                    assigned_at: Some(now),
-                    last_write_at: Some(now),
-                    ..Default::default()
-                },
-            );
             let parent = LiveSessionId(if run.parent_attached {
                 run.file.parent_session_id
             } else {
@@ -873,6 +922,16 @@ impl RelayProgram {
                 now,
             )?)
             .await?;
+            run.file.set_child(role, snapshot.id.0, label, progress);
+            run.reconnected.insert(role.into());
+            run.timers.insert(
+                snapshot.id.0,
+                relay::ChildTimer {
+                    assigned_at: Some(now),
+                    last_write_at: Some(now),
+                    ..Default::default()
+                },
+            );
             self.board(run,&format!("child reattached role={role} session={} (was #{old}, progress file child-{progress}.md)",snapshot.id.0),now);
             changed = true;
         }
@@ -880,5 +939,28 @@ impl RelayProgram {
             self.save(run).await;
         }
         Ok(())
+    }
+}
+
+fn validate_cleanup_entry(path: &Path) -> Result<(), RelayError> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            let linked = metadata.file_type().is_symlink();
+            #[cfg(windows)]
+            let linked = {
+                use std::os::windows::fs::MetadataExt;
+                linked || metadata.file_attributes() & 0x400 != 0
+            };
+            if linked || !metadata.is_dir() {
+                return Err(RelayError::bad(
+                    "relay worktree cleanup target must be a directory, not a file or link",
+                ));
+            }
+            Ok(())
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(RelayError::bad(format!(
+            "cannot inspect relay worktree cleanup target: {error}"
+        ))),
     }
 }

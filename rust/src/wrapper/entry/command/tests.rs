@@ -58,6 +58,18 @@ fn trial_provider_resolution_confines_path_custom_and_cwd_without_production_cha
         io::ErrorKind::PermissionDenied
     );
 
+    let production = RuntimePaths::production(&fixture.outside).unwrap();
+    let resolver = CommandResolver::new(&production, &environment, fixture.paths.root());
+    let resolved = resolver.resolve_provider(name, None, &[]).unwrap();
+    assert_eq!(Path::new(&resolved.executable), outside);
+    assert_eq!(
+        resolver
+            .resolve_provider("missing-synthetic", None, &[])
+            .unwrap()
+            .executable,
+        "missing-synthetic"
+    );
+
     let inside = fixture.file(fixture.paths.root(), name, b"synthetic only");
     let custom = vec![inside.to_string_lossy().into_owned(), "base".into()];
     let resolved = resolver
@@ -70,18 +82,6 @@ fn trial_provider_resolution_confines_path_custom_and_cwd_without_production_cha
     assert_eq!(resolved.args, ["base", "tail"]);
     let wrong_cwd = CommandResolver::new(&fixture.paths, &environment, &fixture.outside);
     permission_denied(wrong_cwd.resolve_provider("synthetic", Some(&custom), &[]));
-
-    let production = RuntimePaths::production(&fixture.outside).unwrap();
-    let resolver = CommandResolver::new(&production, &environment, fixture.paths.root());
-    let resolved = resolver.resolve_provider(name, None, &[]).unwrap();
-    assert_eq!(Path::new(&resolved.executable), outside);
-    assert_eq!(
-        resolver
-            .resolve_provider("missing-synthetic", None, &[])
-            .unwrap()
-            .executable,
-        "missing-synthetic"
-    );
 }
 
 #[cfg(unix)]

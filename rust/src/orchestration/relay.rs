@@ -81,6 +81,11 @@ pub struct RelayFile {
     pub parent_provider: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub parent_cwd: String,
+    /// Repository cwd that resolves a relative worktree root.
+    /// Adoption may replace `parent_cwd` with the new session cwd.
+    /// Empty on legacy records: `repository_cwd` falls back to `parent_cwd`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub worktree_origin_cwd: String,
     pub plan_path: String,
     pub mode: String,
     pub max_rounds: i64,
@@ -141,6 +146,27 @@ pub struct RelayFile {
     pub updated_at: String,
 }
 impl RelayFile {
+    /// Cwd used to resolve and confine the relay worktree.
+    /// A stored origin wins. Legacy records keep using `parent_cwd`.
+    pub fn repository_cwd(&self) -> &str {
+        if !self.worktree_origin_cwd.trim().is_empty() {
+            &self.worktree_origin_cwd
+        } else {
+            &self.parent_cwd
+        }
+    }
+    /// Freeze the original repository cwd before adoption overwrites `parent_cwd`.
+    /// Same-tree relays have no worktree root to preserve. A second adoption
+    /// must not replace an origin that is already stored.
+    pub fn adopt_parent_context(&mut self, cwd: &str) {
+        if self.mode == "worktree"
+            && self.worktree_origin_cwd.trim().is_empty()
+            && !self.parent_cwd.trim().is_empty()
+        {
+            self.worktree_origin_cwd.clone_from(&self.parent_cwd);
+        }
+        self.parent_cwd = cwd.to_owned();
+    }
     pub fn terminal(&self) -> bool {
         matches!(self.state.as_str(), "completed" | "stopped")
     }

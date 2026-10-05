@@ -44,6 +44,7 @@ struct Notice {
 struct Board {
     path: PathBuf,
     sessions: BTreeMap<LiveSessionId, String>,
+    conductor_bindings: BTreeMap<LiveSessionId, SessionBinding>,
     children: BTreeMap<LiveSessionId, Child>,
     events: VecDeque<Notice>,
     overflow: BTreeMap<LiveSessionId, u64>,
@@ -58,6 +59,7 @@ impl Board {
         Self {
             path,
             sessions: BTreeMap::new(),
+            conductor_bindings: BTreeMap::new(),
             children: BTreeMap::new(),
             events: VecDeque::new(),
             overflow: BTreeMap::new(),
@@ -78,6 +80,7 @@ impl Board {
     }
 }
 struct Child {
+    registration_owner: Arc<()>,
     registration: RegisteredChild,
     stamp: Option<(u64, std::time::SystemTime)>,
     cursor: usize,
@@ -150,16 +153,78 @@ impl OrchestrationProgram {
     pub fn claim_relay_board(&self, id: &OrchestrationId) {
         lock(&self.state).relay_boards.insert(id.clone());
     }
+    /// Compensate only this startup's board/conductor bookkeeping. Children and
+    /// on-disk progress are retained; callers must separately retire owned children.
+    pub fn release_relay_board_if_matches(
+        &self,
+        parent: SessionBinding,
+        id: &OrchestrationId,
+        path: &Path,
+    ) -> bool {
+        let mut state = lock(&self.state);
+        if !state.relay_boards.contains(id) {
+            return false;
+        }
+        if let Some(board) = state.boards.get(id) {
+            if board.path != path
+                || board.conductor_bindings.values().any(|binding| {
+                    binding.session != parent.session || binding.incarnation != parent.incarnation
+                })
+                || board
+                    .conductor_bindings
+                    .get(&parent.session)
+                    .is_some_and(|binding| binding.incarnation != parent.incarnation)
+                || (board.sessions.contains_key(&parent.session)
+                    && (board.sessions.get(&parent.session).map(String::as_str)
+                        != Some("conductor")
+                        || board
+                            .conductor_bindings
+                            .get(&parent.session)
+                            .is_none_or(|binding| binding.incarnation != parent.incarnation)))
+            {
+                return false;
+            }
+        } else if self.boards.path(&id.0) != path {
+            return false;
+        }
+        state.relay_boards.remove(id);
+        let remove_board = if let Some(board) = state.boards.get_mut(id) {
+            if board
+                .conductor_bindings
+                .get(&parent.session)
+                .is_some_and(|binding| binding.incarnation == parent.incarnation)
+            {
+                board.conductor_bindings.remove(&parent.session);
+                board.sessions.remove(&parent.session);
+            }
+            board.sessions.is_empty() && board.children.is_empty()
+        } else {
+            false
+        };
+        if remove_board {
+            state.boards.remove(id);
+        }
+        true
+    }
     pub fn rebind_relay_parent(
         &self,
         id: &OrchestrationId,
         old: LiveSessionId,
         new: LiveSessionId,
     ) {
+        let new_binding = self
+            .core()
+            .ok()
+            .and_then(|core| core.details(new))
+            .map(|details| details.binding);
         let mut state = lock(&self.state);
         if let Some(board) = state.boards.get_mut(id) {
             board.sessions.remove(&old);
+            board.conductor_bindings.remove(&old);
             board.sessions.insert(new, "conductor".into());
+            if let Some(binding) = new_binding {
+                board.conductor_bindings.insert(new, binding);
+            }
             for child in board.children.values_mut() {
                 if child.registration.parent.session == old {
                     child.registration.parent.session = new;
@@ -842,6 +907,9 @@ impl ChildLaunchServices for OrchestrationProgram {
             ));
         }
         board.sessions.insert(parent.session, "conductor".into());
+        board
+            .conductor_bindings
+            .insert(parent.session, details.binding);
         Ok(())
     }
     fn child_registered<'a>(
@@ -867,17 +935,22 @@ impl ChildLaunchServices for OrchestrationProgram {
             // binding and restart context are installed; an enqueue failure rolls back.
             let id = child.preparation.orchestration.clone();
             let child_id = child.binding.session;
-            {
+            let role = child.role.clone();
+            let request =
+                crate::orchestration::initial_prompt::InitialPromptRequest::for_child(&child);
+            let registration_owner = Arc::new(());
+            let (previous_role, previous_child) = {
                 let mut state = lock(&self.state);
                 let board = state
                     .boards
                     .get_mut(&id)
                     .ok_or(SessionError::StaleBinding)?;
-                board.sessions.insert(child_id, child.role.clone());
+                let previous_role = board.sessions.insert(child_id, role.clone());
                 let spawned = child.spawned_at;
-                board.children.insert(
+                let previous_child = board.children.insert(
                     child_id,
                     Child {
+                        registration_owner: registration_owner.clone(),
                         registration: child,
                         stamp: None,
                         cursor: 0,
@@ -891,21 +964,31 @@ impl ChildLaunchServices for OrchestrationProgram {
                         retries: 0,
                     },
                 );
-            }
-            let request = {
-                let state = lock(&self.state);
-                let child = &state
-                    .boards
-                    .get(&id)
-                    .expect("registered board")
-                    .children
-                    .get(&child_id)
-                    .expect("registered child")
-                    .registration;
-                crate::orchestration::initial_prompt::InitialPromptRequest::for_child(child)
+                (previous_role, previous_child)
             };
-            if let Some(request) = request {
-                self.deps.workers.enqueue_initial_request(request)?;
+            if let Some(request) = request
+                && let Err(error) = self.deps.workers.enqueue_initial_request(request)
+            {
+                let mut state = lock(&self.state);
+                if let Some(board) = state.boards.get_mut(&id)
+                    && board.children.get(&child_id).is_some_and(|child| {
+                        Arc::ptr_eq(&child.registration_owner, &registration_owner)
+                    })
+                {
+                    board.children.remove(&child_id);
+                    if let Some(child) = previous_child {
+                        board.children.insert(child_id, child);
+                    }
+                    // A concurrent conductor registration can update the
+                    // session role without replacing child metadata.
+                    if board.sessions.get(&child_id) == Some(&role) {
+                        board.sessions.remove(&child_id);
+                        if let Some(role) = previous_role {
+                            board.sessions.insert(child_id, role);
+                        }
+                    }
+                }
+                return Err(error);
             }
             Ok(())
         })

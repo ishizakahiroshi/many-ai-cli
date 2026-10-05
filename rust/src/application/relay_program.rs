@@ -27,7 +27,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, Weak},
     time::Duration,
@@ -142,6 +142,8 @@ struct Meta {
 #[derive(Default)]
 struct State {
     runs: BTreeMap<String, Arc<AsyncMutex<Run>>>,
+    starting_ids: BTreeSet<String>,
+    starting_parents: BTreeSet<LiveSessionId>,
     meta: BTreeMap<String, Meta>,
     sequence: u64,
 }
@@ -212,11 +214,51 @@ struct AdmissionRelease {
     id: AdmissionId,
     armed: bool,
 }
+struct StartupRollback {
+    parent: SessionBinding,
+    previous_conductor: (OrchestrationId, String),
+    detail: String,
+    now: Timestamp,
+}
 impl Drop for AdmissionRelease {
     fn drop(&mut self) {
         if self.armed {
             self.core.release_children(&self.id);
         }
+    }
+}
+/// Reserve the stable relay ID before worktree preparation can yield. The ID
+/// is moved to `runs` when the startup checkpoint is installed.
+struct StartIdClaim<'a> {
+    state: &'a Mutex<State>,
+    id: String,
+    armed: bool,
+}
+impl StartIdClaim<'_> {
+    fn install(mut self, run: Arc<AsyncMutex<Run>>) {
+        let mut state = lock(self.state);
+        state.starting_ids.remove(&self.id);
+        state.runs.insert(self.id.clone(), run);
+        self.armed = false;
+    }
+}
+impl Drop for StartIdClaim<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            lock(self.state).starting_ids.remove(&self.id);
+        }
+    }
+}
+/// Only one startup may replace a parent's single conductor card at a time.
+/// Keep this claim through child spawn or rollback so a failed predecessor can
+/// never be restored by a later startup's compensation.
+struct StartParentClaim<'a> {
+    state: &'a Mutex<State>,
+    parent: LiveSessionId,
+}
+impl Drop for StartParentClaim<'_> {
+    fn drop(&mut self) {
+        lock(self.state).starting_parents.remove(&self.parent);
     }
 }
 /// An owned operation may be dropped by Hub shutdown while awaiting IO. Keep
@@ -282,10 +324,16 @@ impl RelayProgram {
         core.snapshots()
             .into_iter()
             .filter_map(|snapshot| {
-                let owned = ROLES.iter().any(|role| {
+                let launch_label_owned = ROLES.iter().any(|role| {
                     !run.file.child_label(role).is_empty()
                         && snapshot.launch_label == run.file.child_label(role)
                 });
+                // A child checkpoint may fail after the session was registered.
+                // Its trusted launch metadata still carries the relay identity,
+                // allowing a later cleanup or restart to find it by role.
+                let relay_metadata_owned = snapshot.orchestration_id.0 == run.file.orchestration_id
+                    && ROLES.contains(&snapshot.role.as_str());
+                let owned = launch_label_owned || relay_metadata_owned;
                 owned
                     .then(|| core.details(snapshot.id))
                     .flatten()
@@ -354,7 +402,39 @@ impl RelayProgram {
         None
     }
     pub fn owns(&self, id: &str) -> bool {
-        lock(&self.state).runs.contains_key(id)
+        let state = lock(&self.state);
+        state.runs.contains_key(id) || state.starting_ids.contains(id)
+    }
+    fn claim_start_id(&self, id: &str) -> Result<StartIdClaim<'_>, RelayError> {
+        let mut state = lock(&self.state);
+        if state.runs.contains_key(id) || !state.starting_ids.insert(id.to_owned()) {
+            return Err(RelayError::new(
+                409,
+                "relay_identity_collision",
+                "relay identity already exists",
+            ));
+        }
+        Ok(StartIdClaim {
+            state: &self.state,
+            id: id.to_owned(),
+            armed: true,
+        })
+    }
+    fn claim_start_parent(
+        &self,
+        parent: LiveSessionId,
+    ) -> Result<StartParentClaim<'_>, RelayError> {
+        if !lock(&self.state).starting_parents.insert(parent) {
+            return Err(RelayError::new(
+                409,
+                "relay_startup_in_progress",
+                "another relay startup for this parent is still in progress",
+            ));
+        }
+        Ok(StartParentClaim {
+            state: &self.state,
+            parent,
+        })
     }
     pub fn list(&self, parent: LiveSessionId) -> Result<Vec<RelayItem>, RelayError> {
         if self.core()?.details(parent).is_none() {
@@ -526,15 +606,10 @@ impl RelayProgram {
                 ),
             ));
         }
-        let mut admission = self.reserve(parent.binding.session, 2)?;
         let id = format!("r{}-{}", parent.binding.session.0, now.unix_nanos());
-        if self.owns(&id) {
-            return Err(RelayError::new(
-                409,
-                "relay_identity_collision",
-                "relay identity already exists",
-            ));
-        }
+        let start_id_claim = self.claim_start_id(&id)?;
+        let _start_parent_claim = self.claim_start_parent(parent.binding.session)?;
+        let mut admission = self.reserve(parent.binding.session, 2)?;
         let (worktree, branch, base) = if request.mode == "worktree" {
             self.git
                 .prepare(
@@ -554,37 +629,14 @@ impl RelayProgram {
         } else {
             (PathBuf::new(), String::new(), String::new())
         };
+        // `prepare` returns an empty base when it reuses an existing worktree.
+        // A failed startup may clean only a worktree this invocation created.
+        let created_worktree = request.mode == "worktree" && !base.is_empty();
         let child_cwd = if worktree.as_os_str().is_empty() {
             parent.snapshot.cwd.clone()
         } else {
             worktree.to_string_lossy().into_owned()
         };
-        let board = self
-            .boards
-            .ensure(
-                &id,
-                &parent.snapshot,
-                &format!(
-                    "relay: {}",
-                    plan.file_name().unwrap_or_default().to_string_lossy()
-                ),
-                now,
-            )
-            .map_err(|e| RelayError::new(500, "board_error", e.to_string()))?;
-        self.deps
-            .orchestration
-            .claim_relay_board(&OrchestrationId(id.clone()));
-        self.effects(core.mark_conductor(
-            parent.binding,
-            OrchestrationId(id.clone()),
-            board.to_string_lossy().into_owned(),
-        )?)
-        .await?;
-        self.deps.orchestration.register_conductor(
-            parent.binding,
-            &OrchestrationId(id.clone()),
-            &board,
-        )?;
         let base = if base.is_empty() {
             self.git
                 .head(Path::new(&child_cwd), &cancel)
@@ -593,15 +645,26 @@ impl RelayProgram {
         } else {
             base
         };
+        let board_path = self.boards.path(&id);
+        let mut previous_conductor = (
+            parent.snapshot.orchestration_id.clone(),
+            parent.snapshot.board_path.clone(),
+        );
+        let parent_cwd = parent.snapshot.cwd.clone();
         let mut run = Run::new(
             RelayFile {
                 version: 1,
                 orchestration_id: id.clone(),
-                board_path: board.to_string_lossy().into_owned(),
+                board_path: board_path.to_string_lossy().into_owned(),
                 parent_session_id: parent.binding.session.0,
-                parent_started_at: parent.snapshot.started_at,
-                parent_provider: parent.snapshot.provider,
-                parent_cwd: parent.snapshot.cwd,
+                parent_started_at: parent.snapshot.started_at.clone(),
+                parent_provider: parent.snapshot.provider.clone(),
+                parent_cwd: parent_cwd.clone(),
+                worktree_origin_cwd: if request.mode == "worktree" {
+                    parent_cwd.clone()
+                } else {
+                    String::new()
+                },
                 plan_path: plan.to_string_lossy().into_owned(),
                 mode: request.mode,
                 max_rounds: request.max_rounds,
@@ -637,6 +700,135 @@ impl RelayProgram {
         if let Some(event) = run.file.events.last_mut() {
             event.commit = run.file.base_commit.clone();
         }
+        let run = Arc::new(AsyncMutex::new(run));
+        start_id_claim.install(run.clone());
+        let mut run = run.lock().await;
+        self.publish_meta(&run);
+        if let Err(error) = self.store.save(&run.file) {
+            self.warn("relay startup checkpoint", &error);
+            if created_worktree {
+                match self
+                    .git
+                    .cleanup(Path::new(&parent_cwd), &worktree, &cancel)
+                    .await
+                {
+                    Ok(()) => {
+                        run.file.worktree_path.clear();
+                        run.file.child_cwd = parent_cwd.clone();
+                    }
+                    Err(cleanup_error) => {
+                        self.warn("relay startup worktree rollback", &cleanup_error);
+                    }
+                }
+            }
+            self.rollback_startup(
+                &core,
+                &mut run,
+                &mut admission,
+                StartupRollback {
+                    parent: parent.binding,
+                    previous_conductor: previous_conductor.clone(),
+                    detail: "relay startup record could not be saved".into(),
+                    now,
+                },
+            )
+            .await;
+            return Err(RelayError::new(
+                500,
+                "relay_persistence_error",
+                "relay startup record could not be saved",
+            ));
+        }
+        let board = match self.boards.ensure(
+            &id,
+            &parent.snapshot,
+            &format!(
+                "relay: {}",
+                plan.file_name().unwrap_or_default().to_string_lossy()
+            ),
+            now,
+        ) {
+            Ok(board) => board,
+            Err(error) => {
+                let relay_error = RelayError::new(500, "board_error", error.to_string());
+                self.rollback_startup(
+                    &core,
+                    &mut run,
+                    &mut admission,
+                    StartupRollback {
+                        parent: parent.binding,
+                        previous_conductor: previous_conductor.clone(),
+                        detail: relay_error.detail.clone(),
+                        now,
+                    },
+                )
+                .await;
+                return Err(relay_error);
+            }
+        };
+        self.deps
+            .orchestration
+            .claim_relay_board(&OrchestrationId(id.clone()));
+        let (mark_effects, replaced_conductor) = match core.mark_conductor_with_previous(
+            parent.binding,
+            OrchestrationId(id.clone()),
+            board.to_string_lossy().into_owned(),
+        ) {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                let relay_error = RelayError::from(error);
+                self.rollback_startup(
+                    &core,
+                    &mut run,
+                    &mut admission,
+                    StartupRollback {
+                        parent: parent.binding,
+                        previous_conductor: previous_conductor.clone(),
+                        detail: relay_error.detail.clone(),
+                        now,
+                    },
+                )
+                .await;
+                return Err(relay_error);
+            }
+        };
+        previous_conductor = replaced_conductor;
+        if let Err(error) = self.effects(mark_effects).await {
+            let relay_error = RelayError::from(error);
+            self.rollback_startup(
+                &core,
+                &mut run,
+                &mut admission,
+                StartupRollback {
+                    parent: parent.binding,
+                    previous_conductor: previous_conductor.clone(),
+                    detail: relay_error.detail.clone(),
+                    now,
+                },
+            )
+            .await;
+            return Err(relay_error);
+        }
+        if let Err(error) = self.deps.orchestration.register_conductor(
+            parent.binding,
+            &OrchestrationId(id.clone()),
+            &board,
+        ) {
+            let relay_error = RelayError::from(error);
+            self.rollback_startup(
+                &core,
+                &mut run,
+                &mut admission,
+                StartupRollback {
+                    parent: parent.binding,
+                    previous_conductor: previous_conductor.clone(),
+                    detail: relay_error.detail.clone(),
+                    now,
+                },
+            )
+            .await;
+            return Err(relay_error);
+        }
         self.board(
             &run,
             &format!(
@@ -649,12 +841,6 @@ impl RelayProgram {
             ),
             now,
         );
-        let run = Arc::new(AsyncMutex::new(run));
-        {
-            lock(&self.state).runs.insert(id, run.clone());
-        }
-        let mut run = run.lock().await;
-        self.publish_meta(&run);
         let prompt = run.file.prompts().implementation_prompt();
         if let Err(error) = self
             .spawn(&mut run, IMPLEMENTATION, prompt, None, &cancel, now)
@@ -673,6 +859,43 @@ impl RelayProgram {
         self.transition(&mut run, "implementing", "", now).await;
         admission.armed = false;
         Ok((run.file.status(), run.file.board_path.clone()))
+    }
+    async fn rollback_startup(
+        &self,
+        core: &SessionEngine,
+        run: &mut Run,
+        admission: &mut AdmissionRelease,
+        rollback: StartupRollback,
+    ) {
+        let StartupRollback {
+            parent,
+            previous_conductor,
+            detail,
+            now,
+        } = rollback;
+        let id = OrchestrationId(run.file.orchestration_id.clone());
+        match core.restore_conductor_if_matches(
+            parent,
+            &id,
+            &run.file.board_path,
+            previous_conductor.0,
+            previous_conductor.1,
+        ) {
+            Ok(effects) => {
+                if let Err(error) = self.effects(effects).await {
+                    self.warn("relay startup conductor rollback", &error);
+                }
+            }
+            Err(error) => self.warn("relay startup conductor rollback", &error),
+        }
+        self.deps.orchestration.release_relay_board_if_matches(
+            parent,
+            &id,
+            Path::new(&run.file.board_path),
+        );
+        self.finish(run, "stopped", "startup_failed", &detail, now)
+            .await;
+        admission.armed = false;
     }
     pub async fn stop_relay(
         &self,
@@ -988,10 +1211,17 @@ impl RelayProgram {
                             ..Default::default()
                         },
                     );
-                    self.publish_meta(run);
                     if let Err(error) = self.store.save(&run.file) {
-                        self.warn("relay registered child save", error)
+                        self.warn("relay registered child save", &error);
+                        // Keep the immutable launch identity in memory even
+                        // when its checkpoint fails. Child-launch rollback may
+                        // be refused or race a reattach; cleanup must still be
+                        // able to find the live process by this label.
+                        self.publish_meta(run);
+                        return Err(SessionError::Transport(error.to_string()));
                     }
+                    self.publish_meta(run);
+                    Ok(())
                 },
                 cancel.clone(),
             )

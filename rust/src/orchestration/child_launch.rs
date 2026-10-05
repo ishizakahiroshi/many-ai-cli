@@ -349,7 +349,8 @@ pub struct RegisteredChild {
     pub spawned_at: Timestamp,
 }
 
-pub type RelayRegistrationCallback<'a> = dyn FnMut(SessionBinding, &str) + Send + 'a;
+pub type RelayRegistrationCallback<'a> =
+    dyn FnMut(SessionBinding, &str) -> Result<(), SessionError> + Send + 'a;
 pub struct ChildLaunchExecutor {
     engine: Weak<SessionEngine>,
     config: Arc<ConfigStore>,
@@ -378,6 +379,43 @@ impl ChildLaunchExecutor {
             .snapshot()
             .map(|snapshot| snapshot.config)
             .map_err(|e| SessionError::Transport(e.to_string()))
+    }
+    async fn rollback_registered_child(
+        &self,
+        engine: &SessionEngine,
+        binding: SessionBinding,
+    ) -> Result<(), SessionError> {
+        let Some(details) = engine.details(binding.session) else {
+            return Ok(());
+        };
+        if details.binding != binding {
+            return Err(SessionError::StaleBinding);
+        }
+        let effects = engine.dismiss_bound(binding, Timestamp::now())?;
+        self.services.apply_effects(effects).await?;
+        if engine
+            .details(binding.session)
+            .is_some_and(|details| details.binding == binding)
+        {
+            // A pending confirmation may refuse dismissal. Still cancel the
+            // exact registered binding. The relay retains its launch label in
+            // memory so a later explicit cleanup can still find a live child.
+            let effects = engine.stop_bound(binding, StopReason::Dismissed, Timestamp::now())?;
+            self.services.apply_effects(effects).await?;
+            return Err(SessionError::Transport(
+                "child remains registered after rollback cancellation".into(),
+            ));
+        }
+        Ok(())
+    }
+    async fn rollback_child_registration_failure(
+        &self,
+        engine: &SessionEngine,
+        binding: SessionBinding,
+    ) {
+        if let Err(error) = self.rollback_registered_child(engine, binding).await {
+            self.services.warning("child registration rollback", &error);
+        }
     }
     async fn launch(
         &self,
@@ -659,17 +697,25 @@ impl ChildLaunchExecutor {
             SpawnWaitOutcome::WaiterCancelled => return Err(SessionError::Cancelled),
             SpawnWaitOutcome::HubStopped => return Err(SessionError::Shutdown),
         };
+        let relay_owned = relay_registered.is_some();
         // Transfer the registered identity synchronously to the relay before
-        // any fallible/awaited prompt or board bookkeeping. On later failure,
-        // its stopped record still owns the child and cleanup can dismiss it.
-        if let Some(registered) = relay_registered {
-            if replace.is_none() {
-                engine.consume_children(&admission, 1);
-            }
-            registered(binding, &spec.label);
+        // any fallible/awaited prompt or board bookkeeping. If the checkpoint
+        // fails, the relay keeps this launch label while rollback is attempted.
+        if let Some(registered) = relay_registered
+            && let Err(error) = registered(binding, &spec.label)
+        {
+            self.rollback_child_registration_failure(&engine, binding)
+                .await;
+            return Err(error);
         }
-        self.services
-            .register_conductor(parent_binding, &prep.orchestration, &prep.board_path)?;
+        if let Err(error) =
+            self.services
+                .register_conductor(parent_binding, &prep.orchestration, &prep.board_path)
+        {
+            self.rollback_child_registration_failure(&engine, binding)
+                .await;
+            return Err(error);
+        }
         let inject = matches!(delivery, PromptDelivery::AfterRegistration).then(|| {
             child_initial_prompt(
                 &body.initial_prompt,
@@ -679,7 +725,8 @@ impl ChildLaunchExecutor {
                 &binding.session.0.to_string(),
             )
         });
-        self.services
+        if let Err(error) = self
+            .services
             .child_registered(
                 RegisteredChild {
                     binding,
@@ -694,7 +741,15 @@ impl ChildLaunchExecutor {
                 },
                 cancel,
             )
-            .await?;
+            .await
+        {
+            self.rollback_child_registration_failure(&engine, binding)
+                .await;
+            return Err(error);
+        }
+        if relay_owned && replace.is_none() {
+            engine.consume_children(&admission, 1);
+        }
         self.remember_success(&request.requested_provider, body);
         Ok(ChildSpawnResult {
             id: binding.session,

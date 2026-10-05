@@ -36,6 +36,30 @@ impl SpawnAdmission for SessionEngine {
             .admission_matches(admission, parent, slots)
     }
 }
+impl SessionEngine {
+    /// Create a cancellation effect only for the exact wrapper binding that was
+    /// checked by the caller. A replacement wrapper must not inherit a stale
+    /// registration rollback.
+    pub(crate) fn stop_bound(
+        &self,
+        binding: SessionBinding,
+        reason: StopReason,
+        _now: Timestamp,
+    ) -> Result<CoreEffects, SessionError> {
+        let state = lock(&self.state);
+        let session = state
+            .sessions
+            .get(&binding.session)
+            .ok_or(SessionError::NotFound(binding.session))?;
+        if session.binding != binding {
+            return Err(SessionError::StaleBinding);
+        }
+        Ok(CoreEffects(vec![CoreEffect::CancelSession {
+            binding,
+            reason,
+        }]))
+    }
+}
 impl ProviderUpdateAdmission for SessionEngine {
     fn begin_provider_spawn(
         &self,

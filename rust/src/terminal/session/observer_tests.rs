@@ -66,6 +66,46 @@ async fn register(core: &SessionEngine, pid: i64) -> SessionBinding {
     .unwrap()
     .binding
 }
+#[tokio::test]
+async fn stop_bound_does_not_cancel_a_replacement_wrapper() {
+    let (_root, core) = fixture();
+    let old = register(&core, 1911).await;
+    let previous = core.details(old.session).unwrap().snapshot;
+    let reattached = core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: old.session.0,
+                    provider: previous.provider,
+                    pid: 1911,
+                    cwd: previous.cwd,
+                    started_at: previous.started_at,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(1912),
+            now(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reattached.binding.incarnation, old.incarnation);
+    assert_ne!(reattached.binding.wrapper, old.wrapper);
+    assert!(matches!(
+        core.stop_bound(old, StopReason::Dismissed, now()),
+        Err(SessionError::StaleBinding)
+    ));
+    let effects = core
+        .stop_bound(reattached.binding, StopReason::Dismissed, now())
+        .unwrap();
+    assert!(effects.0.iter().any(|effect| matches!(
+        effect,
+        CoreEffect::CancelSession { binding, reason: StopReason::Dismissed }
+            if *binding == reattached.binding
+    )));
+}
 fn output(core: &SessionEngine, binding: SessionBinding, bytes: Vec<u8>) -> CoreEffects {
     core.observe_output(
         binding,

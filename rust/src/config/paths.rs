@@ -22,7 +22,7 @@ pub(crate) fn native_system_path(path: &Path) -> std::borrow::Cow<'_, Path> {
     std::borrow::Cow::Borrowed(path)
 }
 
-fn equivalent_root_prefix(path: &Path) -> PathBuf {
+pub(crate) fn equivalent_root_prefix(path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
         use std::path::Prefix;
@@ -239,6 +239,30 @@ impl RuntimePaths {
                     .components()
                     .all(|c| matches!(c, Component::Normal(_)))
             {
+                return Ok(relative.to_path_buf());
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "path is outside selected root",
+        ))
+    }
+    /// Return an absolute path's raw suffix beneath the selected root while
+    /// retaining parent components for callers that must resolve them in
+    /// order. This must not be used as a confinement check by itself.
+    pub(crate) fn relative_to_selected_root_preserving_parent(
+        &self,
+        path: &Path,
+    ) -> io::Result<PathBuf> {
+        if !path.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "path is outside selected root",
+            ));
+        }
+        let path = equivalent_root_prefix(path);
+        for root in [&self.root, &self.selected_root] {
+            if let Ok(relative) = path.strip_prefix(equivalent_root_prefix(root)) {
                 return Ok(relative.to_path_buf());
             }
         }

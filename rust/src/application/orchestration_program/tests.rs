@@ -190,6 +190,182 @@ async fn fixture() -> Fixture {
     }
 }
 #[tokio::test]
+async fn sequential_startups_restore_live_predecessor_and_ignore_stale_rollback() {
+    let f = fixture().await;
+    let first = OrchestrationId("synthetic-first-startup".into());
+    let second = OrchestrationId("synthetic-second-startup".into());
+    let (_, first_previous) = f
+        .core
+        .mark_conductor_with_previous(f.binding, first.clone(), "first-board".into())
+        .unwrap();
+    assert!(first_previous.0 == f.id);
+    assert_eq!(first_previous.1, f.path.to_string_lossy());
+    f.core
+        .restore_conductor_if_matches(
+            f.binding,
+            &first,
+            "first-board",
+            first_previous.0.clone(),
+            first_previous.1.clone(),
+        )
+        .unwrap();
+    assert!(f.core.snapshot(f.binding.session).unwrap().orchestration_id == f.id);
+
+    let (_, second_previous) = f
+        .core
+        .mark_conductor_with_previous(f.binding, second.clone(), "second-board".into())
+        .unwrap();
+    assert!(second_previous.0 == f.id);
+    assert_eq!(second_previous.1, f.path.to_string_lossy());
+    let (effects, unchanged_previous) = f
+        .core
+        .mark_conductor_with_previous(f.binding, second.clone(), "second-board".into())
+        .unwrap();
+    assert!(effects.0.is_empty());
+    assert!(unchanged_previous.0 == second);
+    assert_eq!(unchanged_previous.1, "second-board");
+    // A delayed compensation from the completed first start must not replace
+    // the newer startup, even though both belong to the same parent session.
+    assert!(
+        f.core
+            .restore_conductor_if_matches(
+                f.binding,
+                &first,
+                "first-board",
+                first_previous.0.clone(),
+                first_previous.1.clone(),
+            )
+            .unwrap()
+            .0
+            .is_empty()
+    );
+    assert!(f.core.snapshot(f.binding.session).unwrap().orchestration_id == second);
+    f.core
+        .restore_conductor_if_matches(
+            f.binding,
+            &second,
+            "second-board",
+            second_previous.0.clone(),
+            second_previous.1.clone(),
+        )
+        .unwrap();
+    let restored = f.core.snapshot(f.binding.session).unwrap();
+    assert!(restored.orchestration_id == f.id);
+    assert_eq!(restored.board_path, f.path.to_string_lossy());
+}
+#[tokio::test]
+async fn startup_rollback_restores_card_and_board_after_warm_wrapper_reattach() {
+    let f = fixture().await;
+    let at = Timestamp::now();
+    let relay = OrchestrationId("synthetic-warm-rollback".into());
+    let snapshot = f.core.snapshot(f.binding.session).unwrap();
+    let relay_path = f
+        .owner
+        .boards
+        .ensure(&relay.0, &snapshot, "synthetic", at)
+        .unwrap();
+    let relay_path_text = relay_path.to_string_lossy().into_owned();
+    f.owner.claim_relay_board(&relay);
+    let (_, previous) = f
+        .core
+        .mark_conductor_with_previous(f.binding, relay.clone(), relay_path_text.clone())
+        .unwrap();
+    assert!(previous.0 == f.id);
+    assert_eq!(previous.1, f.path.to_string_lossy());
+    let reattached = f
+        .core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: crate::proto::Message {
+                    session_id: f.binding.session.0,
+                    provider: snapshot.provider,
+                    cwd: snapshot.cwd,
+                    pid: 7,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(2),
+            at,
+        )
+        .await
+        .unwrap()
+        .binding;
+    assert!(reattached != f.binding);
+    assert!(reattached.session == f.binding.session);
+    assert!(reattached.incarnation == f.binding.incarnation);
+    // The startup still holds its original wrapper binding, but the board
+    // records the currently attached wrapper of that same parent incarnation.
+    f.owner
+        .register_conductor(f.binding, &relay, &relay_path)
+        .unwrap();
+    assert!(
+        lock(&f.owner.state).boards[&relay].conductor_bindings[&f.binding.session] == reattached
+    );
+    let other_incarnation = SessionBinding {
+        incarnation: SessionIncarnation(f.binding.incarnation.0 + 1),
+        ..f.binding
+    };
+    for (binding, id, path) in [
+        (other_incarnation, relay.clone(), relay_path_text.clone()),
+        (
+            f.binding,
+            OrchestrationId("different-relay".into()),
+            relay_path_text.clone(),
+        ),
+        (f.binding, relay.clone(), "different-board".into()),
+    ] {
+        assert!(
+            f.core
+                .restore_conductor_if_matches(
+                    binding,
+                    &id,
+                    &path,
+                    previous.0.clone(),
+                    previous.1.clone(),
+                )
+                .unwrap()
+                .0
+                .is_empty()
+        );
+    }
+    assert!(
+        !f.owner
+            .release_relay_board_if_matches(other_incarnation, &relay, &relay_path)
+    );
+    assert!(
+        !f.owner
+            .release_relay_board_if_matches(f.binding, &relay, &f.path)
+    );
+    f.core
+        .restore_conductor_if_matches(
+            f.binding,
+            &relay,
+            &relay_path_text,
+            previous.0.clone(),
+            previous.1.clone(),
+        )
+        .unwrap();
+    let restored = f.core.details(reattached.session).unwrap();
+    assert!(restored.binding == reattached);
+    assert!(restored.snapshot.orchestration_id == previous.0);
+    assert_eq!(restored.snapshot.board_path, previous.1);
+    assert!(
+        f.owner
+            .release_relay_board_if_matches(f.binding, &relay, &relay_path)
+    );
+    let state = lock(&f.owner.state);
+    assert!(!state.relay_boards.contains(&relay));
+    assert!(!state.boards.contains_key(&relay));
+    assert!(
+        state.boards[&f.id]
+            .sessions
+            .contains_key(&f.binding.session)
+    );
+}
+#[tokio::test]
 async fn actionable_fifo_is_held_through_approval_then_sends_one_framed_notice_per_poll() {
     let f = fixture().await;
     let at = Timestamp::now();
