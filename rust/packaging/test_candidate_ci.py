@@ -1,5 +1,6 @@
 """Candidate identity/failure receipts; no toolchain or network needed."""
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -59,6 +60,31 @@ class CandidateReceiptTests(unittest.TestCase):
     def test_host_parser_does_not_guess_target(self):
         self.assertEqual(ci.host_from_verbose('rustc 1.90.0\nhost: aarch64-apple-darwin\n'), 'aarch64-apple-darwin')
         self.assertEqual(ci.host_from_verbose('rustc 1.90.0'), '')
+
+    def test_stdio_diagnostic_report_is_optional_and_echoed_as_json(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with patch.object(sys, 'stdout', new_callable=io.StringIO) as output:
+                ci.emit_windows_stdio_diagnostics(root)
+                self.assertEqual(output.getvalue(), '')
+                report = root / 'test-diagnostics' / 'windows-appserver-stdio.json'
+                report.parent.mkdir()
+                value = {'schema_version': 1, 'cases': []}
+                report.write_text(json.dumps(value), encoding='utf-8')
+                ci.emit_windows_stdio_diagnostics(root)
+                self.assertEqual(json.loads(output.getvalue().split(': ', 1)[1]), value)
+
+    def test_stdio_diagnostic_report_rejects_oversize_and_wrong_schema(self):
+        with tempfile.TemporaryDirectory() as temp:
+            report = Path(temp) / 'test-diagnostics' / 'windows-appserver-stdio.json'
+            report.parent.mkdir()
+            report.write_bytes(b' ' * 65537)
+            with self.assertRaisesRegex(ValueError, 'invalid Windows'):
+                ci.emit_windows_stdio_diagnostics(Path(temp))
+            for value in ([], {'schema_version': 2}):
+                report.write_text(json.dumps(value), encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'unsupported Windows'):
+                    ci.emit_windows_stdio_diagnostics(Path(temp))
 
 if __name__ == '__main__':
     unittest.main()

@@ -219,9 +219,12 @@ pub struct ManagedProcess {
 }
 enum InputCommand {
     Write(Vec<u8>, tokio::sync::oneshot::Sender<io::Result<()>>),
+    #[cfg(all(test, windows))]
+    FlushForDiagnostics(tokio::sync::oneshot::Sender<io::Result<()>>),
     Close(tokio::sync::oneshot::Sender<io::Result<()>>),
 }
-/// Writes are acknowledged only after the contained child's pipe accepts them.
+/// Writes are acknowledged after Tokio's write_all completes. On Windows this
+/// can acknowledge a queued blocking write, before its OS write has completed.
 #[derive(Clone)]
 pub struct InputSender(tokio::sync::mpsc::Sender<InputCommand>);
 impl InputSender {
@@ -229,6 +232,17 @@ impl InputSender {
         let (sender, receiver) = tokio::sync::oneshot::channel();
         self.0
             .send(InputCommand::Write(bytes, sender))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?;
+        receiver
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?
+    }
+    #[cfg(all(test, windows))]
+    pub(crate) async fn flush_for_diagnostics(&self) -> io::Result<()> {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.0
+            .send(InputCommand::FlushForDiagnostics(sender))
             .await
             .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?;
         receiver
@@ -575,6 +589,18 @@ async fn run_observed(
                             let result = tokio::select! {
                                 _ = input_stop.cancelled() => Err(io::Error::new(io::ErrorKind::BrokenPipe, "process exited")),
                                 result = stdin.write_all(&bytes) => result,
+                            };
+                            let failed = result.is_err();
+                            let _ = receipt.send(result);
+                            if failed {
+                                break;
+                            }
+                        }
+                        #[cfg(all(test, windows))]
+                        Some(InputCommand::FlushForDiagnostics(receipt)) => {
+                            let result = tokio::select! {
+                                _ = input_stop.cancelled() => Err(io::Error::new(io::ErrorKind::BrokenPipe, "process exited")),
+                                result = stdin.flush() => result,
                             };
                             let failed = result.is_err();
                             let _ = receipt.send(result);

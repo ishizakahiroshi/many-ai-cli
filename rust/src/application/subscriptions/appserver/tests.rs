@@ -1,4 +1,7 @@
 use super::*;
+#[cfg(windows)]
+#[path = "stdio_diagnostics.rs"]
+mod stdio_diagnostics;
 #[test]
 fn official_usage_requires_chatgpt_valid_window_and_preserves_zero_presence() {
     let account=br#"{"account":{"type":"chatgpt","email":"synthetic-secret@example.com","planType":"plus"}}"#;
@@ -182,16 +185,23 @@ async fn api_key_account_stops_before_rate_limit_request() {
         !outer_timeout,
         "API key synthetic app-server outer timeout elapsed; {diagnostics}"
     );
-    assert!(
-        result.is_err(),
-        "API key account unexpectedly succeeded; {diagnostics}"
+    assert_eq!(
+        result.as_ref().err().map(std::io::Error::kind),
+        Some(std::io::ErrorKind::Other),
+        "API key account must fail with account rejection, not a timeout; {diagnostics}"
     );
-    assert!(
-        requests.contains("account/read"),
-        "missing account/read; {diagnostics}"
-    );
-    assert!(
-        !requests.contains("account/rateLimits/read"),
-        "API key issued a rate-limit request; {diagnostics}"
+    let methods = requests
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<serde_json::Value>(line).unwrap()["method"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        methods,
+        ["initialize", "initialized", "account/read"],
+        "API key request sequence differs; {diagnostics}"
     );
 }

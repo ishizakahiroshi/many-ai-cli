@@ -76,6 +76,18 @@ def digest(path: Path) -> str:
             value.update(block)
     return value.hexdigest()
 
+def emit_windows_stdio_diagnostics(output: Path) -> None:
+    """Expose the test's bounded, synthetic stage report even when Cargo passes."""
+    report = output / "test-diagnostics" / "windows-appserver-stdio.json"
+    if not report.exists():
+        return
+    if report.is_symlink() or not report.is_file() or report.stat().st_size > 65536:
+        raise ValueError("invalid Windows stdio diagnostic artifact")
+    value = json.loads(report.read_text(encoding="utf-8"))
+    if not isinstance(value, dict) or value.get("schema_version") != 1:
+        raise ValueError("unsupported Windows stdio diagnostic schema")
+    print("Windows synthetic stdio diagnostics: " + json.dumps(value, sort_keys=True), flush=True)
+
 def host_from_verbose(version: str) -> str:
     return next((line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: ")), "")
 
@@ -115,6 +127,7 @@ def main() -> None:
         "MANY_AI_BUILD_VERSION": f"0.0.0-rust-candidate+{source[:12]}",
         "MANY_AI_BUILD_COMMIT": source,
         "MANY_AI_BUILD_TIME": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "MANY_AI_TEST_DIAGNOSTIC_DIR": str(output / "test-diagnostics"),
     })
     # Populate selected caches before isolated Go fixtures deliberately disable
     # network access and replace HOME. Their child environment keeps these paths.
@@ -131,7 +144,10 @@ def main() -> None:
     # Cargo places command before its command-specific manifest/lock arguments.
     run(["cargo", "fmt", "--manifest-path", "rust/Cargo.toml", "--", "--check"], env)
     run(["cargo", "clippy", *cargo[1:], "--target", args.target, "--all-targets", "--", "-D", "warnings"], env)
-    run(["cargo", "test", *cargo[1:], "--target", args.target, "--all-targets", "--no-fail-fast", "--", "--test-threads=8"], env)
+    try:
+        run(["cargo", "test", *cargo[1:], "--target", args.target, "--all-targets", "--no-fail-fast", "--", "--test-threads=8"], env)
+    finally:
+        emit_windows_stdio_diagnostics(output)
     run(["cargo", "test", *cargo[1:], "--target", args.target, "--doc"], env)
     build_messages = output / "cargo-build.jsonl"
     run(["cargo", "build", *cargo[1:], "--target", args.target, "--release", "--bins", "--message-format=json"], env, stdout_file=build_messages)

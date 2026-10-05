@@ -308,6 +308,30 @@
       "removalCondition": "原因特定後、または次回リリース前の早い方で make debug-purge id=ui-freeze-recorder を実行。利用者の明示指示により、原因未確定でもリリース前の purge は必須。共有フックは残し sink と登録をパージする",
       "reason": "2026-09-27 新タブでも音声入力中に全操作が停止。停止後のブラウザ観測はタイムアウトし現行ログに証拠がない。1MB x3、認証必須、入力本文を受理しない固定スキーマ。\n2026-09-28 12:14 JSTにHubブラウザのフリーズが再発。現行Hubには診断sinkがなく今回の記録を取得できなかったため、次の自然な再発を記録するため復元。\n2026-09-28 18:41〜18:43 JSTに3タブで停止を記録（リンク検出の修正 812b184a を含む Hub）。3件とも terminal.links の begin だけが残り end が無いが、関数内のどこかは分からない。terminal.links の中に段階の記録点 links.expand / rows / url / winpath / unixpath / relpath / crunch / callback を追加した。size は begin が入力規模（バッファ行数・物理行数・結合文字数）、end が出力件数で、本文は含まない。共有フック probeSpan の終了関数は end 側の fields を受け取れるよう拡張した。",
       "due": "2026-10-12"
+    },
+    {
+      "id": "rust-windows-appserver-stdio",
+      "status": "active",
+      "purpose": "PR #11 の Windows app-server 初回入力タイムアウトを、起動経路・stdio 条件を一要因ずつ変えて切り分ける",
+      "addedIn": "unreleased",
+      "due": "2026-10-08",
+      "gate": "cfg(all(test, windows))。保存は CI が MANY_AI_TEST_DIAGNOSTIC_DIR を明示した場合のみ。合成入力だけを使い、stage・bool・長さ・エラー分類のみを記録する",
+      "files": [
+        "rust/src/application/subscriptions/appserver/stdio_diagnostics.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/application/subscriptions/appserver/tests.rs",
+        "rust/src/process/mod.rs",
+        "scripts/rust-candidate-ci.py"
+      ],
+      "channels": [
+        "rust-windows-appserver-stdio"
+      ],
+      "artifactNeedles": [
+        "windows-appserver-stdio.json"
+      ],
+      "removalCondition": "Windows runner で要因を特定して回帰テストへ固定後、診断専用 probe と flush hook を単独撤去 commit で除去する。リリース前に必ず撤去する",
+      "reason": "Rust 1.90 CI run 37342570450 は Windows のみ初回 stdin が観測できず 2/987 lib tests に失敗。原因は未確定であり、assertion・timeout・skip 条件は緩めない"
     }
   ]
 }
