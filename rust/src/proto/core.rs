@@ -368,6 +368,16 @@ pub struct SessionStart {
     pub subscription_id: String,
 }
 
+#[derive(Clone, Default)]
+pub struct SessionOrchestrationMeta {
+    pub parent: LiveSessionId,
+    pub role: String,
+    pub auto: bool,
+    pub depth: i64,
+    pub orchestration: OrchestrationId,
+    pub board_path: String,
+}
+
 /// Source sessionMetaPatch: omitted/null fields do not replace existing values.
 #[derive(Clone, Default)]
 pub struct SessionCardMetaPatch {
@@ -1015,6 +1025,18 @@ pub trait SessionStorage: Send + Sync {
     fn store_event_async(&self, session: LiveSessionId, event: HistoryEvent) -> EnqueueOutcome;
     fn start_session(&self, start: SessionStart) -> StorageResult<DbSessionId>;
     fn close_stale_sessions(&self, ended_at: Timestamp, reason: &str) -> StorageResult<i64>;
+    /// Additive recovery capability; updates only the selected persisted row's
+    /// orchestration fields and never revives a completed row or reopens logs.
+    fn update_session_orchestration(
+        &self,
+        _id: DbSessionId,
+        _meta: &SessionOrchestrationMeta,
+    ) -> StorageResult<()> {
+        Err(StorageError {
+            kind: StorageErrorKind::Write,
+            detail: "orchestration metadata update unavailable".into(),
+        })
+    }
     fn update_session_messages(&self, session: LiveSessionId, first: &str, last: &str);
     fn update_session_state(&self, session: LiveSessionId, state: &str, last_output_at: &str);
     fn session_card_meta_by_live_session(
@@ -1178,6 +1200,8 @@ pub struct RegisterRequest {
 #[derive(Clone)]
 pub struct ReattachRequest {
     pub message: super::Message,
+    /// Server-owned cold-recovery metadata, never decoded from a wrapper frame.
+    pub restored_metadata: Option<SpawnRegistrationMetadata>,
 }
 pub struct Registration {
     /// Present only after core consumes its one-use launch proof. The transport
@@ -1711,6 +1735,11 @@ pub trait ApprovalActions: Send + Sync {
 }
 
 pub enum PersistenceEffect {
+    OrchestrationMeta {
+        session: LiveSessionId,
+        database: DbSessionId,
+        meta: SessionOrchestrationMeta,
+    },
     Event {
         session: LiveSessionId,
         event: HistoryEvent,

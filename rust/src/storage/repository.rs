@@ -1,6 +1,17 @@
 use super::*;
 
 impl SessionStorage for SqliteSessionStorage {
+    fn update_session_orchestration(
+        &self,
+        id: DbSessionId,
+        meta: &SessionOrchestrationMeta,
+    ) -> StorageResult<()> {
+        self.with_conn(StorageErrorKind::Write, |connection| {
+            connection.execute("UPDATE sessions SET parent_session_id=?,role=?,auto=?,depth=?,orchestration_id=?,board_path=? WHERE id=?",
+                params![meta.parent.0, meta.role, meta.auto, meta.depth, meta.orchestration.0, meta.board_path, id.0]).map(|_| ())
+        })
+    }
+
     fn open(paths: &RuntimePaths, options: StorageOptions) -> StorageResult<Self> {
         if options.queue_capacity == 0
             || options.query_timeout.is_zero()

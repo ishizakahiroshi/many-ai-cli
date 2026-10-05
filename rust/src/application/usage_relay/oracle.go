@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Package usagerelay は "many-ai-cli usage-relay" 隠しサブコマンドの実装。
 //
 // Claude（statusLine）/ Codex（Stop フック）の両モードに対応し、

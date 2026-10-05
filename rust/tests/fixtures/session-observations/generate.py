@@ -17,7 +17,7 @@ import("encoding/json";"os";"regexp";"strconv";"strings";"unicode/utf8";"many-ai
 '''+source+'''
 func main(){ var cases []struct{ Name string `json:"name"`; Lines []string `json:"lines"`; Journal string `json:"journal"` };raw,err:=os.ReadFile(os.Args[1]);if err!=nil{panic(err)};if err=json.Unmarshal(raw,&cases);err!=nil{panic(err)};out:=[]map[string]any{};for _,row:=range cases{parser:=workflowJournalRecordParser{};for _,b:=range []byte(row.Journal){parser.feed(b)};event,ok:=parser.event();var journal any;if ok{journal=event};out=append(out,map[string]any{"name":row.Name,"workflow":parseWorkflowVT(row.Lines),"cross":detectCrossSessionMessage(row.Lines),"journal":journal})};if err=json.NewEncoder(os.Stdout).Encode(out);err!=nil{panic(err)}}
 '''
-(out/'oracle.go').write_text(main,encoding='utf-8')
+(out/'oracle.go').write_text('//go:build ignore\n\n'+main,encoding='utf-8')
 cases=[]
 for path in sorted((root/'internal/hub/testdata/workflow_vt').glob('*.txt')):
     cases.append({'name':path.stem,'lines':path.read_text(encoding='utf-8').splitlines()})

@@ -39,7 +39,7 @@ func main() {
  json.NewEncoder(os.Stdout).Encode(results)
 }
 '''
-(here/'oracle.go').write_text(source,encoding='utf-8')
+(here/'oracle.go').write_text('//go:build ignore\n\n'+source,encoding='utf-8')
 cases=[]
 def claude(name,v): cases.append(dict(Name=name,Provider='claude',Input=v if isinstance(v,str) else json.dumps(v),Rollout=''))
 def codex(name,rows): cases.append(dict(Name=name,Provider='codex',Input='{"model":"gpt-test"}',Rollout='\n'.join(x if isinstance(x,str) else json.dumps(x) for x in rows)))

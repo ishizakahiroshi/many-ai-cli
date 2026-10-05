@@ -863,6 +863,7 @@ async fn observation_rejects_old_wrapper_but_cleanup_follows_same_incarnation() 
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: old.session.0,
                     provider: "claude".into(),
@@ -923,6 +924,7 @@ async fn retired_incarnation_cannot_clear_a_replacement_sessions_gate() {
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: old.session.0,
                     provider: "claude".into(),

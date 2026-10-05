@@ -36,6 +36,7 @@ mod input;
 mod lane;
 mod lifecycle;
 mod observations;
+mod relay;
 mod spawning;
 mod ui;
 mod usage;
@@ -123,6 +124,7 @@ struct State {
     auth_epoch: AuthEpoch,
     sessions: BTreeMap<LiveSessionId, Session>,
     dismissed: BTreeSet<LiveSessionId>,
+    revoked_relay_children: BTreeSet<String>,
     uis: BTreeMap<UiConnectionId, UiState>,
     retired_uis: BTreeMap<(UiConnectionId, AuthEpoch), Arc<authorization::UiWorkState>>,
     last_ui_size: TerminalSize,
@@ -251,6 +253,7 @@ impl SessionEngine {
                 auth_epoch: AuthEpoch(0),
                 sessions: BTreeMap::new(),
                 dismissed: BTreeSet::new(),
+                revoked_relay_children: BTreeSet::new(),
                 uis: BTreeMap::new(),
                 retired_uis: BTreeMap::new(),
                 last_ui_size: TerminalSize::default(),
@@ -490,6 +493,7 @@ impl State {
                         let scope = if matches!(
                             effect,
                             PersistenceEffect::EndSession { .. }
+                                | PersistenceEffect::OrchestrationMeta { .. }
                                 | PersistenceEffect::SessionState { .. }
                         ) {
                             PersistenceBindingScope::ExactWrapper

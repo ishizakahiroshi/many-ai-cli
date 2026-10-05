@@ -65,3 +65,5 @@ pub mod notify_routes;
 pub mod preference_media;
 pub mod preferences;
 pub mod spawn_routes;
+
+pub mod relay_routes;

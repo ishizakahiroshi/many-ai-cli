@@ -1,8 +1,10 @@
 //! Trial orchestration board mutations stay under the selected synthetic root.
+#[cfg(unix)]
+use many_ai_cli::proto::core::SessionSnapshot;
 use many_ai_cli::{
     config::{Resource, RuntimePaths},
     orchestration::child_launch::board::BoardStore,
-    proto::{core::SessionSnapshot, time::Timestamp},
+    proto::time::Timestamp,
 };
 use std::{fs, path::PathBuf};
 

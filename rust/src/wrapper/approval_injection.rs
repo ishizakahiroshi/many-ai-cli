@@ -175,27 +175,14 @@ impl InstructionFiles {
         Ok(result)
     }
     fn directory(&self, path: &Path, create: bool) -> io::Result<Dir> {
-        let path = crate::files::scope::clean(path);
         let (mut dir, relative) = if self.paths.is_trial() {
-            let root = self.paths.root();
-            // Normalize only Windows verbatim spelling, never traversal.
-            let root_plain = PathBuf::from(
-                root.to_string_lossy()
-                    .strip_prefix(r"\\?\")
-                    .unwrap_or(&root.to_string_lossy()),
-            );
-            let relative = path
-                .strip_prefix(root)
-                .or_else(|_| path.strip_prefix(&root_plain))
-                .map_err(|_| {
-                    io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "instruction target escapes trial",
-                    )
-                })?
-                .to_path_buf();
-            (Dir::open(root)?, relative)
+            // Keep the caller's components intact until the shared boundary has
+            // checked the selected lexical/canonical root spellings. Descendants
+            // still open through no-follow directory capabilities below.
+            let relative = self.paths.relative_to_selected_root(path)?;
+            (Dir::open(self.paths.root())?, relative)
         } else {
+            let path = crate::files::scope::clean(path);
             let root = path
                 .ancestors()
                 .last()

@@ -8,3 +8,5 @@ pub mod subagent;
 pub mod child_launch;
 pub mod initial_prompt;
 pub mod normal_worktree;
+
+pub mod relay;

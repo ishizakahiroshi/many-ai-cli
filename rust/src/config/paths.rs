@@ -22,6 +22,38 @@ pub(crate) fn native_system_path(path: &Path) -> std::borrow::Cow<'_, Path> {
     std::borrow::Cow::Borrowed(path)
 }
 
+fn equivalent_root_prefix(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use std::path::Prefix;
+        let mut components = path.components();
+        let mut normalized = match components.next() {
+            Some(Component::Prefix(prefix)) => match prefix.kind() {
+                Prefix::VerbatimDisk(drive) | Prefix::Disk(drive) => {
+                    PathBuf::from(format!("{}:", char::from(drive.to_ascii_uppercase())))
+                }
+                Prefix::VerbatimUNC(server, share) | Prefix::UNC(server, share) => {
+                    let mut root = std::ffi::OsString::from("\\\\");
+                    root.push(server);
+                    root.push("\\");
+                    root.push(share);
+                    PathBuf::from(root)
+                }
+                _ => return path.to_path_buf(),
+            },
+            _ => return path.to_path_buf(),
+        };
+        for component in components {
+            normalized.push(component.as_os_str());
+        }
+        normalized
+    }
+    #[cfg(not(windows))]
+    {
+        path.to_path_buf()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resource {
     Config,
@@ -66,6 +98,8 @@ pub enum Resource {
 #[derive(Clone, Debug)]
 pub struct RuntimePaths {
     root: PathBuf,
+    selected_root: PathBuf,
+    database_override: Option<PathBuf>,
     log_dir: PathBuf,
     trial: bool,
     port: u16,
@@ -78,6 +112,8 @@ impl RuntimePaths {
         }
         Ok(Self {
             root: home.join(".many-ai-cli"),
+            selected_root: home.join(".many-ai-cli"),
+            database_override: None,
             log_dir: home.join(".many-ai-cli").join("logs"),
             trial: false,
             port: 47777,
@@ -112,7 +148,37 @@ impl RuntimePaths {
         if self.trial && (log_dir != self.root.join("logs")) {
             return Err(io::Error::other("trial log directory cannot be overridden"));
         }
+        if self.log_dir != log_dir {
+            self.database_override = None;
+        }
         self.log_dir = log_dir.into();
+        Ok(self)
+    }
+    /// Resolve the caller's selected working directory without changing Go's
+    /// relative log-directory database-parent rule or its public configuration.
+    /// An empty production directory means cwd logs but no usable history store;
+    /// the application must retain that separate history-open failure.
+    pub fn with_log_dir_at(mut self, log_dir: &Path, cwd: &Path) -> io::Result<Self> {
+        if !cwd.is_absolute() {
+            return Err(io::Error::other(
+                "explicit log working directory must be absolute",
+            ));
+        }
+        if log_dir.as_os_str().is_empty() && !self.trial {
+            self.log_dir = cwd.to_path_buf();
+            self.database_override = Some(cwd.join("any-ai-cli.db"));
+            return Ok(self);
+        }
+        self = self.with_log_dir(log_dir)?;
+        let database = self.resource(Resource::Database);
+        self.database_override = Some(if database.is_absolute() {
+            database
+        } else {
+            cwd.join(database)
+        });
+        if !self.log_dir.is_absolute() {
+            self.log_dir = cwd.join(&self.log_dir);
+        }
         Ok(self)
     }
     pub fn usage_hook_temporary_dir(&self, system_temporary: &Path) -> PathBuf {
@@ -133,6 +199,7 @@ impl RuntimePaths {
                 "trial root cannot contain parent traversal",
             ));
         }
+        let selected_root = root.to_path_buf();
         let root = std::fs::canonicalize(root)?;
         let installed = canonicalize_allow_missing(installed_root)?;
         if root == installed || root.starts_with(&installed) || installed.starts_with(&root) {
@@ -146,12 +213,39 @@ impl RuntimePaths {
         Ok(Self {
             log_dir: root.join("logs"),
             root,
+            selected_root,
+            database_override: None,
             trial: true,
             port,
         })
     }
     pub fn root(&self) -> &Path {
         &self.root
+    }
+    /// Only spellings of the root selected at construction are accepted. The
+    /// target itself is never canonicalized: callers must walk this relative
+    /// suffix through their held root capability and reject descendant aliases.
+    pub fn relative_to_selected_root(&self, path: &Path) -> io::Result<PathBuf> {
+        if !path.is_absolute() || path.components().any(|c| matches!(c, Component::ParentDir)) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "path is outside selected root",
+            ));
+        }
+        let path = equivalent_root_prefix(path);
+        for root in [&self.root, &self.selected_root] {
+            if let Ok(relative) = path.strip_prefix(equivalent_root_prefix(root))
+                && relative
+                    .components()
+                    .all(|c| matches!(c, Component::Normal(_)))
+            {
+                return Ok(relative.to_path_buf());
+            }
+        }
+        Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "path is outside selected root",
+        ))
     }
     pub fn is_trial(&self) -> bool {
         self.trial
@@ -166,6 +260,9 @@ impl RuntimePaths {
         match resource {
             Resource::Logs => return self.log_dir.clone(),
             Resource::Database => {
+                if let Some(path) = &self.database_override {
+                    return path.clone();
+                }
                 let clean = clean_path(&self.log_dir);
                 let parent = clean
                     .parent()
@@ -478,5 +575,30 @@ mod tests {
         std::os::unix::fs::symlink(t.path(), &alias).unwrap();
         assert!(RuntimePaths::trial(t.path(), 49001, &alias.join(".many-ai-cli")).is_err());
         assert!(RuntimePaths::trial(t.path(), 49001, Path::new("relative-installed")).is_err());
+    }
+    #[test]
+    fn explicit_cwd_resolution_keeps_relative_database_contract_and_empty_history_distinct() {
+        let home = tempfile::tempdir().unwrap();
+        let cwd = home.path().join("work");
+        std::fs::create_dir(&cwd).unwrap();
+        let paths = RuntimePaths::production(home.path()).unwrap();
+        for (log, database) in [
+            ("logs", "logs/any-ai-cli.db"),
+            ("one/logs", "one/any-ai-cli.db"),
+        ] {
+            let paths = paths.clone().with_log_dir_at(Path::new(log), &cwd).unwrap();
+            assert_eq!(paths.resource(Resource::Database), cwd.join(database));
+            let copied = paths
+                .clone()
+                .with_log_dir(&paths.resource(Resource::Logs))
+                .unwrap();
+            assert_eq!(copied.resource(Resource::Database), cwd.join(database));
+        }
+        let empty = paths.clone().with_log_dir_at(Path::new(""), &cwd).unwrap();
+        assert_eq!(empty.resource(Resource::Logs), cwd);
+        assert!(
+            paths.with_log_dir(Path::new("")).is_err(),
+            "direct history input still rejects empty"
+        );
     }
 }

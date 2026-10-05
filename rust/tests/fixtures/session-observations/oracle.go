@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 import("encoding/json";"os";"regexp";"strconv";"strings";"unicode/utf8";"many-ai-cli/internal/proto")
 var (

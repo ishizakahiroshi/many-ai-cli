@@ -73,6 +73,7 @@ pub struct HubCompositionDependencies {
     pub instruction_rules: Arc<crate::application::instruction_rules::InstructionRules>,
     pub approval_pattern_io: Arc<dyn crate::application::slash_commands::SlashIo>,
     pub orchestration: Arc<crate::application::orchestration_program::OrchestrationProgram>,
+    pub relay: Arc<crate::application::relay_program::RelayProgram>,
     pub routines: Arc<crate::routine::runner::RoutineRunner>,
     pub routine_store: Arc<crate::routine::store::RoutineStore>,
     pub servers: Arc<crate::launcher::ConnectionManager>,
@@ -154,20 +155,24 @@ impl HubComposition {
         let paths = context
             .paths
             .clone()
-            .with_log_dir(std::path::Path::new(&config.hub.log_dir))?;
+            .with_log_dir_at(std::path::Path::new(&config.hub.log_dir), &context.cwd)?;
         // A configured log directory can point two distinct runtime roots at
         // one physical database. Acquire that directory's lifetime lock before
         // reset/schema/stale-session writes. Lock contention is never degraded.
         let database = paths.resource(Resource::Database);
-        let database_lease = match super::ownership::OwnerLease::acquire(
-            database
-                .parent()
-                .ok_or_else(|| io::Error::other("database parent unavailable"))?,
-            "rust-database-owner.lock",
-        ) {
-            Ok(lease) => Some(lease),
-            Err(error) if error.kind() == io::ErrorKind::AddrInUse => return Err(error),
-            Err(_) => None,
+        let database_lease = if config.hub.log_dir.is_empty() {
+            None
+        } else {
+            match super::ownership::OwnerLease::acquire(
+                database
+                    .parent()
+                    .ok_or_else(|| io::Error::other("database parent unavailable"))?,
+                "rust-database-owner.lock",
+            ) {
+                Ok(lease) => Some(lease),
+                Err(error) if error.kind() == io::ErrorKind::AddrInUse => return Err(error),
+                Err(_) => None,
+            }
         };
         let storage = database_lease.as_ref().and_then(|_| {
             SqliteSessionStorage::open(
@@ -303,10 +308,15 @@ impl HubComposition {
                 None
             }
         };
-        let notifications = crate::notify::Manager::new(config.notify.clone(), tasks.clone(), {
-            let logger = logger.clone();
-            Arc::new(move |operation, detail| logger.write("WARN", operation, detail))
-        })
+        let notifications = crate::notify::Manager::new_for_runtime(
+            config.notify.clone(),
+            tasks.clone(),
+            {
+                let logger = logger.clone();
+                Arc::new(move |operation, detail| logger.write("WARN", operation, detail))
+            },
+            &paths,
+        )
         .map_err(io::Error::other)?;
         let security = crate::application::push::security::SecurityNotifications::new(
             notifications.clone(),
@@ -650,16 +660,42 @@ impl HubComposition {
             ),
         )
         .map_err(|error| io::Error::other(error.detail))?;
+        let actual_child_executor = Arc::new(
+            crate::orchestration::child_launch::ChildLaunchExecutor::new(
+                Arc::downgrade(&core),
+                context.config.clone(),
+                preparer.with_board_store(orchestration.board_store()),
+                orchestration.clone(),
+            ),
+        );
         child_executor
-            .bind(Arc::new(
-                crate::orchestration::child_launch::ChildLaunchExecutor::new(
-                    Arc::downgrade(&core),
-                    context.config.clone(),
-                    preparer,
-                    orchestration.clone(),
-                ),
-            ))
+            .bind(actual_child_executor.clone())
             .map_err(session_error)?;
+        let relay = crate::application::relay_program::RelayProgram::new(
+            crate::application::relay_program::RelayDependencies {
+                core: Arc::downgrade(&core),
+                effects: Arc::downgrade(&effects),
+                config: context.config.clone(),
+                paths: paths.clone(),
+                orchestration: orchestration.clone(),
+                executor: actual_child_executor,
+                git: crate::orchestration::child_launch::worktree::WorktreeGit::new(
+                    files.git_executable.clone(),
+                    files.git_environment.clone(),
+                ),
+                hub_cwd: context.cwd.clone(),
+                tasks: tasks.clone(),
+                warning: warning.clone(),
+            },
+        )
+        .map_err(session_error)?;
+        if relay.restore(Timestamp::now()).await.is_err() {
+            logger.write(
+                "WARN",
+                "relay restore unavailable",
+                "existing relay records retained for recovery",
+            );
+        }
         let routine_cancel = TaskCancellation::default();
         let routine_warning = warning.clone();
         let routines = Arc::new(
@@ -1128,6 +1164,9 @@ impl HubComposition {
             context.config.clone(),
             tasks.clone(),
         )))
+        .with_relay(Arc::new(crate::hub::relay_routes::RelayHttp::new(
+            relay.clone(),
+        )))
         .with_child_controls(Arc::new(crate::hub::child_control::ChildControl::new(
             core.clone(),
             orchestration.clone(),
@@ -1255,6 +1294,7 @@ impl HubComposition {
                 instruction_rules,
                 approval_pattern_io,
                 orchestration,
+                relay,
                 routines,
                 routine_store,
                 servers,
@@ -1304,6 +1344,7 @@ impl HubComposition {
                 rules: self.dependencies.instruction_rules.clone(),
                 usage: self.dependencies.usage_hooks.clone(),
                 cancel: self.service_cancel.clone(),
+                relay: self.dependencies.relay.clone(),
             }))
             .with_registration_hook(Arc::new(HubRegistrationHooks(
                 self.dependencies.workers.clone(),
@@ -1352,6 +1393,14 @@ impl HubComposition {
             Ok(guard) => guard,
             Err(error) => {
                 worker_guard.stop_and_join().await;
+                return Err(session_error(error));
+            }
+        };
+        let relay_guard = match self.dependencies.relay.start() {
+            Ok(guard) => guard,
+            Err(error) => {
+                worker_guard.stop_and_join().await;
+                orchestration_guard.stop_and_join().await;
                 return Err(session_error(error));
             }
         };
@@ -1417,6 +1466,7 @@ impl HubComposition {
         // All source producers must stop before closing effect admission.
         worker_guard.stop_and_join().await;
         routine_guard.stop_and_join().await;
+        relay_guard.stop_and_join().await;
         orchestration_guard.stop_and_join().await;
         idle_guard.stop_and_join().await;
         websockets.shutdown_and_drain().await;
@@ -1469,8 +1519,29 @@ struct HubRegistrationPreparation {
     rules: Arc<crate::application::instruction_rules::InstructionRules>,
     usage: Arc<crate::application::usage_hooks::UsageHooks>,
     cancel: Cancellation,
+    relay: Arc<crate::application::relay_program::RelayProgram>,
 }
 impl crate::hub::websocket::RegistrationPreparation for HubRegistrationPreparation {
+    fn restored_metadata(
+        &self,
+        message: &crate::proto::Message,
+    ) -> Option<SpawnRegistrationMetadata> {
+        self.relay.resolve_reattach_metadata(message)
+    }
+    fn before_ack<'a>(
+        &'a self,
+        binding: SessionBinding,
+        reattach: bool,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            if reattach {
+                self.relay
+                    .prepare_reattach(binding, Timestamp::now())
+                    .await?;
+            }
+            Ok(())
+        })
+    }
     fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>> {
         Box::pin(async move {
             self.rules.registered(&self.cancel).await;

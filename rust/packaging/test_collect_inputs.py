@@ -3,6 +3,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
+import runpy
 from pathlib import Path
 import tarfile
 import tempfile
@@ -20,7 +22,10 @@ class InputEvidenceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # The owned directory is selected first; normalize only this fixture
+        # boundary. macOS tempfile paths can use /var -> /private/var. Keep the
+        # collector's source/cache symlink rejection intact below that boundary.
+        self.root = Path(self.temp.name).resolve(strict=True)
         self.cache = self.root / "registry/cache/test-registry"
         self.cache.mkdir(parents=True)
         self.source = self.root / "registry/src/test-registry/example-1.0.0"
@@ -80,6 +85,42 @@ class InputEvidenceTests(unittest.TestCase):
         messages.write_text(''.join(json.dumps(message) + '\n' for message in self.messages))
         return collector.collect(lock, metadata, messages, [self.cache],
                                  "x86_64-unknown-linux-gnu", "a" * 40)
+
+    def make_directory_alias(self):
+        alias = self.root / "selected-root-alias"
+        try:
+            alias.symlink_to(self.root, target_is_directory=True)
+        except OSError as error:
+            if os.name == "nt" and error.winerror == 1314:
+                self.skipTest("Windows runner lacks the symbolic-link privilege for this fixture")
+            raise
+        return alias
+
+    def test_fixture_canonicalizes_an_aliased_temporary_directory(self):
+        alias = self.make_directory_alias()
+        environment = os.environ.copy()
+        environment["TMPDIR"] = str(alias)
+        environment["TEMP"] = str(alias)
+        environment["TMP"] = str(alias)
+        environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", str(Path(__file__).parent),
+             "-p", "test_collect_inputs.py", "-k", "test_verified_actual_sources_legal_texts_and_build_kinds"],
+            env=environment, capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Ran 1 test", result.stderr)
+
+    def test_collector_still_rejects_a_symlinked_source_root_ancestor(self):
+        alias = self.make_directory_alias()
+        package = {**self.package, "manifest_path": str(alias / "registry/src/test-registry/example-1.0.0/Cargo.toml")}
+        with self.assertRaisesRegex(ValueError, "symlink in Cargo source path"):
+            collector.crate_evidence(package, [alias / "registry/cache/test-registry"])
+
+    def test_unsupported_python_has_an_explicit_toolchain_diagnostic(self):
+        with patch.object(sys, "version_info", (3, 10, 0)):
+            with self.assertRaisesRegex(SystemExit, r"requires Python 3.11\+.*pinned Python 3.12"):
+                runpy.run_path(collector.__file__, run_name="packaging_version_fixture")
 
     def test_verified_actual_sources_legal_texts_and_build_kinds(self):
         report, notice = self.collect()

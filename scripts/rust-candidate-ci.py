@@ -174,7 +174,7 @@ def main() -> None:
         "source_sha": source, "review_head_sha": env.get("MANY_AI_REVIEW_HEAD_SHA", source),
         "oracle_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
         "target": args.target, "target_name": TARGETS[args.target],
-        "rustc": rustc, "go": go, "bun": bun,
+        "rustc": rustc, "go": go, "bun": bun, "python": sys.version.split()[0],
         "version": env["MANY_AI_BUILD_VERSION"], "build_time": env["MANY_AI_BUILD_TIME"],
         "cargo_lock_sha256": digest(ROOT / "rust" / "Cargo.lock"),
         "binaries": binary_entries, "generated_web_asset_inputs": web_entries,
@@ -186,6 +186,8 @@ def main() -> None:
     }
     (output / "BUILD-RECEIPT.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     (output / "NOT-FOR-CUTOVER.txt").write_text("WIP Rust migration candidate. Native compilation and synthetic tests are not full compatibility, signing, packaging, rollback or user acceptance. Do not replace an installed Go binary.\n", encoding="utf-8")
+    print("CANDIDATE-BINARY-HASHES " + json.dumps({"source_sha": source, "target": args.target,
+          "cargo_lock_sha256": receipt["cargo_lock_sha256"], "binaries": binary_entries}), flush=True)
     if packaging_exit:
         raise SystemExit("native binaries built; packaging input evidence is incomplete (see receipt)")
     print(f"Native candidate receipt: {TARGETS[args.target]} / {source}", flush=True)

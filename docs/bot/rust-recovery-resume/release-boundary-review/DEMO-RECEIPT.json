@@ -1,0 +1,144 @@
+{
+  "scope": "synthetic offline model, not actual runner isolation/build/signing/publishing",
+  "signature_verification": "NOT RUN; inert transport markers only",
+  "tests": [
+    {
+      "name": "four_targets_two_roles_and_npm_main_identity",
+      "result": "PASS"
+    },
+    {
+      "name": "archive_tamper",
+      "result": "PASS_REJECTED",
+      "reason": "file content mismatch"
+    },
+    {
+      "name": "signature_marker_tamper",
+      "result": "PASS_REJECTED",
+      "reason": "file content mismatch"
+    },
+    {
+      "name": "checksum_tamper",
+      "result": "PASS_REJECTED",
+      "reason": "file content mismatch"
+    },
+    {
+      "name": "manifest_self_rewrite_without_control_pin",
+      "result": "PASS_REJECTED",
+      "reason": "manifest digest mismatch"
+    },
+    {
+      "name": "reject_wrong_source_sha",
+      "result": "PASS_REJECTED",
+      "reason": "source/tag/workflow/run identity mismatch"
+    },
+    {
+      "name": "reject_wrong_tag",
+      "result": "PASS_REJECTED",
+      "reason": "source/tag/workflow/run identity mismatch"
+    },
+    {
+      "name": "reject_wrong_workflow",
+      "result": "PASS_REJECTED",
+      "reason": "source/tag/workflow/run identity mismatch"
+    },
+    {
+      "name": "reject_wrong_run_id",
+      "result": "PASS_REJECTED",
+      "reason": "source/tag/workflow/run identity mismatch"
+    },
+    {
+      "name": "reject_wrong_run_attempt",
+      "result": "PASS_REJECTED",
+      "reason": "source/tag/workflow/run identity mismatch"
+    },
+    {
+      "name": "missing_target_even_with_new_digest",
+      "result": "PASS_REJECTED",
+      "reason": "target set mismatch"
+    },
+    {
+      "name": "undeclared_workspace_file",
+      "result": "PASS_REJECTED",
+      "reason": "undeclared or missing file"
+    },
+    {
+      "name": "declared_dependency_hook_rejected",
+      "result": "PASS_REJECTED",
+      "reason": "forbidden transfer file"
+    },
+    {
+      "name": "selfconsistent_outer_hashes_cannot_hide_npm_main_drift",
+      "result": "PASS_REJECTED",
+      "reason": "consumer main byte mismatch"
+    },
+    {
+      "name": "path_traversal_zip",
+      "result": "PASS_REJECTED",
+      "reason": "unsafe path"
+    },
+    {
+      "name": "symlink_zip",
+      "result": "PASS_REJECTED",
+      "reason": "nonregular ZIP member"
+    },
+    {
+      "name": "symlink_tar",
+      "result": "PASS_REJECTED",
+      "reason": "nonregular tar member"
+    },
+    {
+      "name": "absolute_path_tar",
+      "result": "PASS_REJECTED",
+      "reason": "unsafe path"
+    },
+    {
+      "name": "oversized_tar",
+      "result": "PASS_REJECTED",
+      "reason": "oversized tar stream"
+    },
+    {
+      "name": "compromised_producer_cannot_be_detected_by_custody_hashes",
+      "result": "EXPECTED_RESIDUAL_RISK"
+    },
+    {
+      "name": "same_directory_later_step_reads_public_canary",
+      "result": "PASS_MODEL_ONLY"
+    },
+    {
+      "name": "allowlisted_transfer_preserves_bytes_excludes_helper",
+      "result": "PASS_MODEL_ONLY"
+    }
+  ],
+  "counts": {
+    "cases": 22,
+    "unexpected_failures": 0
+  },
+  "payload_identity": {
+    "windows-x64": {
+      "main": "8fafc440909624b9dd795e59031ed9ca1c5aef57c6a96267379d0665448c2335",
+      "launcher": "b7769b49c723097519b68b1f4bf231e9e2376e0f64284f9e6937b2a2479a4a98"
+    },
+    "linux-x64": {
+      "main": "7f43f8478ce6ede2826ecdac487253754776aab43e0741770ae720f7835eceaf",
+      "launcher": "6b79eb913b34831e6a01502c79f02766118e94cd6bade809225a2a301fcb3f0b"
+    },
+    "macos-intel": {
+      "main": "c4547c540b314fdd3b85edc58f4b919f57a265f0eb57f3e10065f5aed1b48960",
+      "launcher": "f972a2aa126c80aa2a1049c36b7dbf43d97bc8a502752d61081eebf66c826698"
+    },
+    "macos-apple-silicon": {
+      "main": "eb222cb6d35d105b6b1248f0048d7d62a4804e0d38134a19ec72f7c9e7bdce26",
+      "launcher": "10c67ca6520bc27708267952b056991d44ef75ed654e358ed7c3597b78911a63"
+    }
+  },
+  "manifest_sha256": "0fc505a3be925438401a2ae5ae95217ba930b76c2cb1b5d282d42ed02b04d793",
+  "limitations": [
+    "same host and UID",
+    "no real native artifacts or platform smoke",
+    "no authenticity/cryptographic signature verification",
+    "no token/OIDC/network use",
+    "no actual GitHub artifact service transfer",
+    "no deb/rpm generation or validation",
+    "not a production verifier"
+  ]
+}

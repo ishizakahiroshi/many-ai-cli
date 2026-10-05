@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 import("regexp";"strings";"encoding/json";"os")
 type SlashCmd struct {Cmd string `json:"cmd"`;Desc string `json:"desc"`}

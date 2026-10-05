@@ -53,6 +53,16 @@ type Warning = dyn Fn(&str, &SessionError) + Send + Sync;
 /// Preparation which the fixed registration caller completes before allowing
 /// a newly registered provider to start. Reattach intentionally runs after ACK.
 pub trait RegistrationPreparation: Send + Sync {
+    fn restored_metadata(&self, _message: &proto::Message) -> Option<SpawnRegistrationMetadata> {
+        None
+    }
+    fn before_ack<'a>(
+        &'a self,
+        _binding: SessionBinding,
+        _reattach: bool,
+    ) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async { Ok(()) })
+    }
     fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>>;
 }
 
@@ -233,10 +243,20 @@ impl WebSocketService {
             let closed = self.sockets.reserve_wrapper(connection, writer)?;
             let requested = first.session_id;
             let reattach = first.r#type == "reattach";
+            let restored_metadata = if reattach {
+                self.registration_preparation
+                    .as_ref()
+                    .and_then(|owner| owner.restored_metadata(&first))
+            } else {
+                None
+            };
             let registration = if reattach {
                 self.core
                     .reattach(
-                        ReattachRequest { message: first },
+                        ReattachRequest {
+                            restored_metadata,
+                            message: first,
+                        },
                         connection,
                         Timestamp::now(),
                     )
@@ -279,12 +299,17 @@ impl WebSocketService {
                     return Err(error);
                 }
             };
-            if !reattach
-                && let Some(preparation) = &self.registration_preparation
-                && let Err(error) = preparation.prepare().await
-            {
-                // Preparation precedes ownership transfer, so a never-sent ACK
-                // cannot be mistaken for uncertain delivery by its RAII guard.
+            let prepared = async {
+                if let Some(preparation) = &self.registration_preparation {
+                    preparation.before_ack(binding, reattach).await?;
+                    if !reattach {
+                        preparation.prepare().await?;
+                    }
+                }
+                Ok::<(), SessionError>(())
+            }
+            .await;
+            if let Err(error) = prepared {
                 self.sockets.close_pending_wrapper(connection).await?;
                 if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
                     && let Err(failure) = self.apply(effects).await

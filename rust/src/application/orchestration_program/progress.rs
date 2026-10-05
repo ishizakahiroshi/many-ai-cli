@@ -151,6 +151,7 @@ pub(super) async fn poll(owner: &OrchestrationProgram) -> Result<(), SessionErro
         state
             .boards
             .iter()
+            .filter(|(id, _)| !state.relay_boards.contains(*id))
             .map(|(id, board)| {
                 (
                     id.clone(),

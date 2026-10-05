@@ -394,6 +394,13 @@ impl SessionJournal {
         let storage = self.storage.as_ref();
         match effect {
             PersistenceEffect::Event { .. } => unreachable!(),
+            PersistenceEffect::OrchestrationMeta { database, meta, .. } => {
+                if let Some(storage) = storage {
+                    storage
+                        .update_session_orchestration(database, &meta)
+                        .map_err(SessionError::Storage)?;
+                }
+            }
             PersistenceEffect::ApprovalDetected(d) => {
                 if let Some(s) = storage {
                     s.store_approval_detected(d);
@@ -616,7 +623,8 @@ fn go_basename(path: &str) -> String {
 
 pub(crate) fn persistence_session(effect: &PersistenceEffect) -> LiveSessionId {
     match effect {
-        PersistenceEffect::Event { session, .. }
+        PersistenceEffect::OrchestrationMeta { session, .. }
+        | PersistenceEffect::Event { session, .. }
         | PersistenceEffect::ApprovalConsumed { session, .. }
         | PersistenceEffect::CardMeta { session, .. }
         | PersistenceEffect::CardMetaBestEffort { session, .. }

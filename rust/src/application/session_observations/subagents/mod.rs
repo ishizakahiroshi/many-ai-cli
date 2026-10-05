@@ -7,7 +7,7 @@ use crate::files::safe_fs::Dir;
 use std::{
     fs::{self, File},
     io::{self, Read, Seek, SeekFrom},
-    path::{Path, PathBuf},
+    path::Path,
 };
 pub struct ReadBudget {
     pub head_bytes: u64,
@@ -25,13 +25,11 @@ impl Default for ReadBudget {
 }
 pub fn check_path(paths: &RuntimePaths, path: &Path) -> io::Result<()> {
     if paths.is_trial() {
-        let root = fs::canonicalize(paths.root())?;
-        let resolved = fs::canonicalize(path)?;
-        if !resolved.starts_with(root) {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "provider artifact escapes trial root",
-            ));
+        // Validate through the same held capabilities as the eventual read.
+        // Canonicalizing an arbitrary target here would admit unselected aliases.
+        paths.relative_to_selected_root(path)?;
+        if open_directory(paths, path).is_err() {
+            open_artifact(paths, path)?;
         }
     }
     Ok(())
@@ -51,45 +49,6 @@ pub fn read_tail(paths: &RuntimePaths, path: &Path, cap: u64) -> io::Result<Vec<
     file.take(cap).read_to_end(&mut bytes)?;
     Ok(bytes)
 }
-fn relative_artifact(root: &Path, path: &Path) -> io::Result<PathBuf> {
-    if let Ok(relative) = path.strip_prefix(root) {
-        return Ok(relative.into());
-    }
-    // RuntimePaths pins a canonical Windows root. A native wrapper may report
-    // the same drive/UNC path without the canonical verbatim prefix. Change
-    // only that prefix spelling; retain every caller-supplied component so the
-    // subsequent held-directory walk still rejects traversal and aliases.
-    #[cfg(windows)]
-    {
-        use std::path::{Component, Prefix};
-        let mut components = root.components();
-        let mut ordinary = PathBuf::new();
-        if let Some(Component::Prefix(prefix)) = components.next() {
-            match prefix.kind() {
-                Prefix::VerbatimDisk(drive) => ordinary.push(format!("{}:", char::from(drive))),
-                Prefix::VerbatimUNC(server, share) => {
-                    ordinary.push(Path::new(r"\\").join(server).join(share));
-                }
-                _ => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::PermissionDenied,
-                        "provider artifact escapes trial root",
-                    ));
-                }
-            }
-            for component in components {
-                ordinary.push(component.as_os_str());
-            }
-            if let Ok(relative) = path.strip_prefix(ordinary) {
-                return Ok(relative.into());
-            }
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::PermissionDenied,
-        "provider artifact escapes trial root",
-    ))
-}
 /// Trial opens walk from the held selected-root capability. Every component is
 /// opened relative to its pinned parent, refusing replaced symlinks/reparse
 /// points rather than re-resolving an authorized absolute name afterward.
@@ -98,7 +57,7 @@ pub fn open_artifact(paths: &RuntimePaths, path: &Path) -> io::Result<File> {
         return File::open(path);
     }
     let mut directory = Dir::open(paths.root())?;
-    let relative = relative_artifact(paths.root(), path)?;
+    let relative = paths.relative_to_selected_root(path)?;
     let mut components = relative.components().peekable();
     while let Some(component) = components.next() {
         let std::path::Component::Normal(name) = component else {
@@ -128,7 +87,7 @@ pub fn open_directory(paths: &RuntimePaths, path: &Path) -> io::Result<Dir> {
         return Dir::open(path);
     }
     let mut directory = Dir::open(paths.root())?;
-    let relative = relative_artifact(paths.root(), path)?;
+    let relative = paths.relative_to_selected_root(path)?;
     for component in relative.components() {
         let std::path::Component::Normal(name) = component else {
             return Err(io::Error::new(
@@ -194,5 +153,52 @@ mod tests {
         let outside = installed.path().join("record.jsonl");
         fs::write(&outside, b"outside").unwrap();
         assert!(open_artifact(&paths, &outside).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn selected_trial_alias_keeps_artifacts_in_the_canonical_tree() {
+        use std::os::unix::fs::symlink;
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("physical");
+        let installed = temp.path().join("installed");
+        fs::create_dir_all(root.join("records")).unwrap();
+        fs::create_dir_all(installed.join("records")).unwrap();
+        fs::write(root.join("records/events.jsonl"), b"original").unwrap();
+        fs::write(installed.join("records/events.jsonl"), b"outside").unwrap();
+        let selected = temp.path().join("selected");
+        let unselected = temp.path().join("unselected");
+        symlink(&root, &selected).unwrap();
+        symlink(&root, &unselected).unwrap();
+        let paths = RuntimePaths::trial(&selected, 49325, &installed).unwrap();
+        let file = selected.join("records/events.jsonl");
+        assert_eq!(read_head(&paths, &file, 8).unwrap(), b"original");
+        assert_eq!(
+            read_tail(&paths, &paths.root().join("records/events.jsonl"), 4).unwrap(),
+            b"inal"
+        );
+        assert!(open_directory(&paths, &selected).is_ok());
+        assert!(check_path(&paths, &file).is_ok());
+        assert!(check_path(&paths, &unselected.join("records/events.jsonl")).is_err());
+        assert!(check_path(&paths, &selected.join("records/../records/events.jsonl")).is_err());
+        symlink(root.join("records"), root.join("inside-alias")).unwrap();
+        symlink(&installed, root.join("outside-alias")).unwrap();
+        symlink(root.join("records/events.jsonl"), root.join("leaf-alias")).unwrap();
+        for alias in [
+            "inside-alias/events.jsonl",
+            "outside-alias/records/events.jsonl",
+            "leaf-alias",
+        ] {
+            assert!(open_artifact(&paths, &selected.join(alias)).is_err());
+            assert!(check_path(&paths, &selected.join(alias)).is_err());
+        }
+        fs::remove_file(&selected).unwrap();
+        symlink(&installed, &selected).unwrap();
+        assert_eq!(read_head(&paths, &file, 8).unwrap(), b"original");
+        assert!(check_path(&paths, &file).is_ok());
+        assert_eq!(
+            entries(&paths, &selected.join("records")).unwrap()[0].name,
+            "events.jsonl"
+        );
     }
 }

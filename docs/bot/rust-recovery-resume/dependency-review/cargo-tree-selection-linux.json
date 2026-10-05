@@ -1,0 +1,1818 @@
+{
+  "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+  "target": "x86_64-unknown-linux-gnu",
+  "command": "cargo tree --manifest-path rust/Cargo.toml --offline --locked --target x86_64-unknown-linux-gnu -e normal,build --prefix none --format {p}|{f}",
+  "scope": "Cargo current normal/build dependency selection, not compiler-artifact or final linkage evidence. Resolver feature unification can include features from dev-dependencies.",
+  "selected_registry_packages": 237,
+  "packages": [
+    {
+      "name": "adler2",
+      "version": "2.0.1",
+      "features": []
+    },
+    {
+      "name": "aead",
+      "version": "0.5.2",
+      "features": [
+        "alloc"
+      ]
+    },
+    {
+      "name": "aes",
+      "version": "0.8.4",
+      "features": []
+    },
+    {
+      "name": "aes-gcm",
+      "version": "0.10.3",
+      "features": [
+        "aes",
+        "alloc"
+      ]
+    },
+    {
+      "name": "aho-corasick",
+      "version": "1.1.5",
+      "features": [
+        "perf-literal",
+        "std"
+      ]
+    },
+    {
+      "name": "annotate-snippets",
+      "version": "0.12.16",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "anstyle",
+      "version": "1.0.14",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "anyhow",
+      "version": "1.0.104",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "arraydeque",
+      "version": "0.5.1",
+      "features": []
+    },
+    {
+      "name": "atomic-waker",
+      "version": "1.1.2",
+      "features": []
+    },
+    {
+      "name": "autocfg",
+      "version": "1.5.1",
+      "features": []
+    },
+    {
+      "name": "aws-lc-rs",
+      "version": "1.18.1",
+      "features": [
+        "aws-lc-sys",
+        "prebuilt-nasm"
+      ]
+    },
+    {
+      "name": "aws-lc-sys",
+      "version": "0.45.0",
+      "features": [
+        "prebuilt-nasm"
+      ]
+    },
+    {
+      "name": "axum",
+      "version": "0.8.9",
+      "features": [
+        "default",
+        "form",
+        "http1",
+        "json",
+        "matched-path",
+        "multipart",
+        "original-uri",
+        "query",
+        "tokio",
+        "tower-log",
+        "tracing",
+        "ws"
+      ]
+    },
+    {
+      "name": "axum-core",
+      "version": "0.5.6",
+      "features": [
+        "tracing"
+      ]
+    },
+    {
+      "name": "base16ct",
+      "version": "0.2.0",
+      "features": [
+        "alloc"
+      ]
+    },
+    {
+      "name": "base64",
+      "version": "0.22.1",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "base64",
+      "version": "0.23.1",
+      "features": [
+        "alloc",
+        "default",
+        "simd-unsafe",
+        "std"
+      ]
+    },
+    {
+      "name": "bcrypt",
+      "version": "0.19.3",
+      "features": [
+        "default",
+        "getrandom",
+        "std",
+        "zeroize"
+      ]
+    },
+    {
+      "name": "bitflags",
+      "version": "2.13.2",
+      "features": []
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.10.4",
+      "features": []
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.12.1",
+      "features": []
+    },
+    {
+      "name": "blowfish",
+      "version": "0.10.0",
+      "features": [
+        "bcrypt"
+      ]
+    },
+    {
+      "name": "byteorder",
+      "version": "1.5.0",
+      "features": []
+    },
+    {
+      "name": "bytes",
+      "version": "1.12.1",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "cc",
+      "version": "1.6.0",
+      "features": [
+        "parallel"
+      ]
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "features": []
+    },
+    {
+      "name": "cfg_aliases",
+      "version": "0.1.1",
+      "features": []
+    },
+    {
+      "name": "chrono",
+      "version": "0.4.45",
+      "features": [
+        "alloc",
+        "clock",
+        "iana-time-zone",
+        "now",
+        "std",
+        "winapi",
+        "windows-link"
+      ]
+    },
+    {
+      "name": "chrono-tz",
+      "version": "0.10.4",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "cipher",
+      "version": "0.4.4",
+      "features": []
+    },
+    {
+      "name": "cipher",
+      "version": "0.5.2",
+      "features": []
+    },
+    {
+      "name": "cmake",
+      "version": "0.1.58",
+      "features": []
+    },
+    {
+      "name": "cmov",
+      "version": "0.5.4",
+      "features": []
+    },
+    {
+      "name": "const-oid",
+      "version": "0.10.2",
+      "features": []
+    },
+    {
+      "name": "const-oid",
+      "version": "0.9.6",
+      "features": []
+    },
+    {
+      "name": "core_detect",
+      "version": "1.0.0",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "features": []
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.3.1",
+      "features": []
+    },
+    {
+      "name": "crc32fast",
+      "version": "1.5.2",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "crypto-bigint",
+      "version": "0.5.5",
+      "features": [
+        "generic-array",
+        "rand_core",
+        "zeroize"
+      ]
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.2.2",
+      "features": []
+    },
+    {
+      "name": "ctr",
+      "version": "0.9.2",
+      "features": []
+    },
+    {
+      "name": "ctutils",
+      "version": "0.4.2",
+      "features": []
+    },
+    {
+      "name": "data-encoding",
+      "version": "2.11.1",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "der",
+      "version": "0.7.10",
+      "features": [
+        "alloc",
+        "oid",
+        "std",
+        "zeroize"
+      ]
+    },
+    {
+      "name": "digest",
+      "version": "0.10.7",
+      "features": [
+        "alloc",
+        "block-buffer",
+        "const-oid",
+        "core-api",
+        "default",
+        "mac",
+        "oid",
+        "std",
+        "subtle"
+      ]
+    },
+    {
+      "name": "digest",
+      "version": "0.11.3",
+      "features": [
+        "alloc",
+        "block-api",
+        "default",
+        "mac",
+        "oid"
+      ]
+    },
+    {
+      "name": "displaydoc",
+      "version": "0.2.7",
+      "features": []
+    },
+    {
+      "name": "downcast-rs",
+      "version": "1.2.1",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "dunce",
+      "version": "1.0.5",
+      "features": []
+    },
+    {
+      "name": "ecdsa",
+      "version": "0.16.9",
+      "features": [
+        "alloc",
+        "arithmetic",
+        "der",
+        "digest",
+        "hazmat",
+        "rfc6979",
+        "signing",
+        "spki",
+        "std",
+        "verifying"
+      ]
+    },
+    {
+      "name": "elliptic-curve",
+      "version": "0.13.8",
+      "features": [
+        "alloc",
+        "arithmetic",
+        "digest",
+        "ecdh",
+        "ff",
+        "group",
+        "hazmat",
+        "sec1",
+        "std"
+      ]
+    },
+    {
+      "name": "encoding_rs",
+      "version": "0.8.42",
+      "features": [
+        "alloc",
+        "default"
+      ]
+    },
+    {
+      "name": "encoding_rs_io",
+      "version": "0.1.8",
+      "features": []
+    },
+    {
+      "name": "equivalent",
+      "version": "1.0.2",
+      "features": []
+    },
+    {
+      "name": "errno",
+      "version": "0.3.14",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "fallible-iterator",
+      "version": "0.3.0",
+      "features": [
+        "alloc",
+        "default"
+      ]
+    },
+    {
+      "name": "fallible-streaming-iterator",
+      "version": "0.1.9",
+      "features": []
+    },
+    {
+      "name": "ff",
+      "version": "0.13.1",
+      "features": [
+        "alloc"
+      ]
+    },
+    {
+      "name": "filedescriptor",
+      "version": "0.8.3",
+      "features": []
+    },
+    {
+      "name": "filetime",
+      "version": "0.2.29",
+      "features": []
+    },
+    {
+      "name": "find-msvc-tools",
+      "version": "0.1.14",
+      "features": []
+    },
+    {
+      "name": "flate2",
+      "version": "1.1.10",
+      "features": [
+        "any_impl",
+        "any_zlib",
+        "default",
+        "miniz_oxide",
+        "runtime_detection",
+        "rust_backend",
+        "zlib-rs"
+      ]
+    },
+    {
+      "name": "form_urlencoded",
+      "version": "1.2.2",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "fs_extra",
+      "version": "1.3.0",
+      "features": []
+    },
+    {
+      "name": "futures-channel",
+      "version": "0.3.34",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "futures-core",
+      "version": "0.3.34",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "futures-macro",
+      "version": "0.3.34",
+      "features": []
+    },
+    {
+      "name": "futures-sink",
+      "version": "0.3.34",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "futures-task",
+      "version": "0.3.34",
+      "features": [
+        "alloc",
+        "std"
+      ]
+    },
+    {
+      "name": "futures-util",
+      "version": "0.3.34",
+      "features": [
+        "alloc",
+        "async-await",
+        "async-await-macro",
+        "default",
+        "futures-macro",
+        "futures-sink",
+        "sink",
+        "slab",
+        "std"
+      ]
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7",
+      "features": [
+        "more_lengths",
+        "zeroize"
+      ]
+    },
+    {
+      "name": "getrandom",
+      "version": "0.2.17",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "getrandom",
+      "version": "0.3.4",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "getrandom",
+      "version": "0.4.3",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "ghash",
+      "version": "0.5.1",
+      "features": []
+    },
+    {
+      "name": "granit-parser",
+      "version": "1.3.0",
+      "features": [
+        "default",
+        "error_messages",
+        "std"
+      ]
+    },
+    {
+      "name": "group",
+      "version": "0.13.0",
+      "features": [
+        "alloc"
+      ]
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.17.1",
+      "features": []
+    },
+    {
+      "name": "hkdf",
+      "version": "0.12.4",
+      "features": []
+    },
+    {
+      "name": "hmac",
+      "version": "0.12.1",
+      "features": [
+        "reset"
+      ]
+    },
+    {
+      "name": "hmac",
+      "version": "0.13.0",
+      "features": []
+    },
+    {
+      "name": "http",
+      "version": "1.5.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "http-body",
+      "version": "1.1.0",
+      "features": []
+    },
+    {
+      "name": "http-body-util",
+      "version": "0.1.5",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "httparse",
+      "version": "1.10.1",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "httpdate",
+      "version": "1.0.3",
+      "features": []
+    },
+    {
+      "name": "hybrid-array",
+      "version": "0.4.15",
+      "features": []
+    },
+    {
+      "name": "hyper",
+      "version": "1.11.1",
+      "features": [
+        "client",
+        "default",
+        "http1",
+        "server"
+      ]
+    },
+    {
+      "name": "hyper-rustls",
+      "version": "0.27.10",
+      "features": [
+        "aws-lc-rs",
+        "http1",
+        "tls12"
+      ]
+    },
+    {
+      "name": "hyper-util",
+      "version": "0.1.21",
+      "features": [
+        "client",
+        "client-legacy",
+        "client-proxy",
+        "default",
+        "http1",
+        "server",
+        "service",
+        "tokio"
+      ]
+    },
+    {
+      "name": "iana-time-zone",
+      "version": "0.1.65",
+      "features": [
+        "fallback"
+      ]
+    },
+    {
+      "name": "icu_collections",
+      "version": "2.3.0",
+      "features": []
+    },
+    {
+      "name": "icu_locale_core",
+      "version": "2.3.0",
+      "features": [
+        "zerovec"
+      ]
+    },
+    {
+      "name": "icu_normalizer",
+      "version": "2.3.0",
+      "features": [
+        "compiled_data"
+      ]
+    },
+    {
+      "name": "icu_normalizer_data",
+      "version": "2.3.0",
+      "features": []
+    },
+    {
+      "name": "icu_properties",
+      "version": "2.3.0",
+      "features": [
+        "compiled_data"
+      ]
+    },
+    {
+      "name": "icu_properties_data",
+      "version": "2.3.0",
+      "features": []
+    },
+    {
+      "name": "icu_provider",
+      "version": "2.3.1",
+      "features": [
+        "baked"
+      ]
+    },
+    {
+      "name": "idna",
+      "version": "1.1.0",
+      "features": [
+        "alloc",
+        "compiled_data",
+        "std"
+      ]
+    },
+    {
+      "name": "idna_adapter",
+      "version": "1.2.2",
+      "features": [
+        "compiled_data"
+      ]
+    },
+    {
+      "name": "indexmap",
+      "version": "2.14.2",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "inout",
+      "version": "0.1.4",
+      "features": []
+    },
+    {
+      "name": "inout",
+      "version": "0.2.2",
+      "features": []
+    },
+    {
+      "name": "ipnet",
+      "version": "2.12.2",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "features": []
+    },
+    {
+      "name": "jobserver",
+      "version": "0.1.35",
+      "features": []
+    },
+    {
+      "name": "libc",
+      "version": "0.2.190",
+      "features": [
+        "default",
+        "extra_traits",
+        "std"
+      ]
+    },
+    {
+      "name": "libsqlite3-sys",
+      "version": "0.38.2",
+      "features": [
+        "bundled",
+        "bundled_bindings",
+        "cc",
+        "default",
+        "min_sqlite_version_3_34_1",
+        "pkg-config",
+        "vcpkg"
+      ]
+    },
+    {
+      "name": "litemap",
+      "version": "0.8.3",
+      "features": []
+    },
+    {
+      "name": "log",
+      "version": "0.4.34",
+      "features": []
+    },
+    {
+      "name": "matchit",
+      "version": "0.8.4",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "mime",
+      "version": "0.3.17",
+      "features": []
+    },
+    {
+      "name": "mime_guess",
+      "version": "2.0.5",
+      "features": []
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.9.1",
+      "features": [
+        "default",
+        "simd",
+        "simd-adler32",
+        "with-alloc"
+      ]
+    },
+    {
+      "name": "mio",
+      "version": "1.2.3",
+      "features": [
+        "net",
+        "os-ext",
+        "os-poll"
+      ]
+    },
+    {
+      "name": "multer",
+      "version": "3.1.0",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "multiversion_no_op",
+      "version": "1.0.0",
+      "features": []
+    },
+    {
+      "name": "nix",
+      "version": "0.28.0",
+      "features": [
+        "default",
+        "fs",
+        "term"
+      ]
+    },
+    {
+      "name": "nohash-hasher",
+      "version": "0.2.0",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "num-traits",
+      "version": "0.2.19",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "features": [
+        "alloc",
+        "default",
+        "race",
+        "std"
+      ]
+    },
+    {
+      "name": "opaque-debug",
+      "version": "0.3.1",
+      "features": []
+    },
+    {
+      "name": "openssl-probe",
+      "version": "0.2.1",
+      "features": []
+    },
+    {
+      "name": "p256",
+      "version": "0.13.2",
+      "features": [
+        "alloc",
+        "arithmetic",
+        "digest",
+        "ecdh",
+        "ecdsa",
+        "ecdsa-core",
+        "sha2",
+        "sha256",
+        "std"
+      ]
+    },
+    {
+      "name": "percent-encoding",
+      "version": "2.3.2",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "phf",
+      "version": "0.12.1",
+      "features": []
+    },
+    {
+      "name": "phf_shared",
+      "version": "0.12.1",
+      "features": []
+    },
+    {
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "features": []
+    },
+    {
+      "name": "pkg-config",
+      "version": "0.3.34",
+      "features": []
+    },
+    {
+      "name": "polyval",
+      "version": "0.6.2",
+      "features": []
+    },
+    {
+      "name": "portable-pty",
+      "version": "0.9.0",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "potential_utf",
+      "version": "0.1.6",
+      "features": [
+        "zerovec"
+      ]
+    },
+    {
+      "name": "ppv-lite86",
+      "version": "0.2.21",
+      "features": [
+        "simd",
+        "std"
+      ]
+    },
+    {
+      "name": "primeorder",
+      "version": "0.13.6",
+      "features": []
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "features": [
+        "default",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "features": [
+        "default",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "rand",
+      "version": "0.9.5",
+      "features": [
+        "alloc",
+        "default",
+        "os_rng",
+        "small_rng",
+        "std",
+        "std_rng",
+        "thread_rng"
+      ]
+    },
+    {
+      "name": "rand_chacha",
+      "version": "0.9.0",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "rand_core",
+      "version": "0.6.4",
+      "features": [
+        "alloc",
+        "getrandom",
+        "std"
+      ]
+    },
+    {
+      "name": "rand_core",
+      "version": "0.9.5",
+      "features": [
+        "os_rng",
+        "std"
+      ]
+    },
+    {
+      "name": "regex",
+      "version": "1.13.1",
+      "features": [
+        "default",
+        "perf",
+        "perf-backtrack",
+        "perf-cache",
+        "perf-dfa",
+        "perf-inline",
+        "perf-literal",
+        "perf-onepass",
+        "std",
+        "unicode",
+        "unicode-age",
+        "unicode-bool",
+        "unicode-case",
+        "unicode-gencat",
+        "unicode-perl",
+        "unicode-script",
+        "unicode-segment"
+      ]
+    },
+    {
+      "name": "regex-automata",
+      "version": "0.4.18",
+      "features": [
+        "alloc",
+        "dfa-onepass",
+        "hybrid",
+        "meta",
+        "nfa-backtrack",
+        "nfa-pikevm",
+        "nfa-thompson",
+        "perf-inline",
+        "perf-literal",
+        "perf-literal-multisubstring",
+        "perf-literal-substring",
+        "std",
+        "syntax",
+        "unicode",
+        "unicode-age",
+        "unicode-bool",
+        "unicode-case",
+        "unicode-gencat",
+        "unicode-perl",
+        "unicode-script",
+        "unicode-segment",
+        "unicode-word-boundary"
+      ]
+    },
+    {
+      "name": "regex-syntax",
+      "version": "0.8.11",
+      "features": [
+        "default",
+        "std",
+        "unicode",
+        "unicode-age",
+        "unicode-bool",
+        "unicode-case",
+        "unicode-gencat",
+        "unicode-perl",
+        "unicode-script",
+        "unicode-segment"
+      ]
+    },
+    {
+      "name": "reqwest",
+      "version": "0.13.5",
+      "features": [
+        "__rustls",
+        "__rustls-aws-lc-rs",
+        "__tls",
+        "json",
+        "multipart",
+        "query",
+        "rustls",
+        "stream"
+      ]
+    },
+    {
+      "name": "rfc6979",
+      "version": "0.4.0",
+      "features": []
+    },
+    {
+      "name": "rusqlite",
+      "version": "0.40.2",
+      "features": [
+        "backup",
+        "bundled",
+        "hooks",
+        "modern_sqlite"
+      ]
+    },
+    {
+      "name": "rustls",
+      "version": "0.23.45",
+      "features": [
+        "aws-lc-rs",
+        "aws_lc_rs",
+        "std",
+        "tls12"
+      ]
+    },
+    {
+      "name": "rustls-native-certs",
+      "version": "0.8.4",
+      "features": []
+    },
+    {
+      "name": "rustls-pki-types",
+      "version": "1.15.1",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "rustls-platform-verifier",
+      "version": "0.7.1",
+      "features": []
+    },
+    {
+      "name": "rustls-webpki",
+      "version": "0.103.15",
+      "features": [
+        "alloc",
+        "aws-lc-rs",
+        "std"
+      ]
+    },
+    {
+      "name": "rustversion",
+      "version": "1.0.23",
+      "features": []
+    },
+    {
+      "name": "ryu",
+      "version": "1.0.23",
+      "features": []
+    },
+    {
+      "name": "scopeguard",
+      "version": "1.2.0",
+      "features": []
+    },
+    {
+      "name": "sec1",
+      "version": "0.7.3",
+      "features": [
+        "alloc",
+        "default",
+        "der",
+        "point",
+        "std",
+        "subtle",
+        "zeroize"
+      ]
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "features": [
+        "default",
+        "derive",
+        "serde_derive",
+        "std"
+      ]
+    },
+    {
+      "name": "serde-saphyr",
+      "version": "1.3.0",
+      "features": [
+        "default",
+        "deserialize",
+        "serialize"
+      ]
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.229",
+      "features": [
+        "alloc",
+        "default",
+        "result",
+        "std"
+      ]
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "features": [
+        "default"
+      ]
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.151",
+      "features": [
+        "default",
+        "raw_value",
+        "std"
+      ]
+    },
+    {
+      "name": "serde_path_to_error",
+      "version": "0.1.20",
+      "features": []
+    },
+    {
+      "name": "serde_urlencoded",
+      "version": "0.7.1",
+      "features": []
+    },
+    {
+      "name": "serial2",
+      "version": "0.2.38",
+      "features": []
+    },
+    {
+      "name": "sha1",
+      "version": "0.10.7",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "sha2",
+      "version": "0.10.9",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "sha2",
+      "version": "0.11.0",
+      "features": [
+        "alloc",
+        "default",
+        "oid"
+      ]
+    },
+    {
+      "name": "shell-words",
+      "version": "1.1.1",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "shlex",
+      "version": "2.0.1",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "signal-hook-registry",
+      "version": "1.4.8",
+      "features": []
+    },
+    {
+      "name": "signature",
+      "version": "2.2.0",
+      "features": [
+        "alloc",
+        "digest",
+        "rand_core",
+        "std"
+      ]
+    },
+    {
+      "name": "simd-adler32",
+      "version": "0.3.10",
+      "features": []
+    },
+    {
+      "name": "simdutf8",
+      "version": "0.1.5",
+      "features": [
+        "aarch64_neon",
+        "public_imp"
+      ]
+    },
+    {
+      "name": "siphasher",
+      "version": "1.0.4",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "slab",
+      "version": "0.4.12",
+      "features": [
+        "std"
+      ]
+    },
+    {
+      "name": "smallvec",
+      "version": "1.16.2",
+      "features": [
+        "const_generics",
+        "const_new"
+      ]
+    },
+    {
+      "name": "socket2",
+      "version": "0.6.5",
+      "features": [
+        "all"
+      ]
+    },
+    {
+      "name": "spin",
+      "version": "0.9.9",
+      "features": [
+        "mutex",
+        "spin_mutex"
+      ]
+    },
+    {
+      "name": "spki",
+      "version": "0.7.3",
+      "features": [
+        "alloc"
+      ]
+    },
+    {
+      "name": "stable_deref_trait",
+      "version": "1.2.1",
+      "features": []
+    },
+    {
+      "name": "subtle",
+      "version": "2.6.1",
+      "features": [
+        "default",
+        "i128",
+        "std"
+      ]
+    },
+    {
+      "name": "syn",
+      "version": "2.0.119",
+      "features": [
+        "clone-impls",
+        "default",
+        "derive",
+        "parsing",
+        "printing",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "syn",
+      "version": "3.0.6",
+      "features": [
+        "clone-impls",
+        "default",
+        "derive",
+        "extra-traits",
+        "fold",
+        "full",
+        "parsing",
+        "printing",
+        "proc-macro",
+        "visit"
+      ]
+    },
+    {
+      "name": "sync_wrapper",
+      "version": "1.0.2",
+      "features": [
+        "futures",
+        "futures-core"
+      ]
+    },
+    {
+      "name": "synstructure",
+      "version": "0.14.0",
+      "features": [
+        "default",
+        "proc-macro"
+      ]
+    },
+    {
+      "name": "tar",
+      "version": "0.4.46",
+      "features": []
+    },
+    {
+      "name": "thiserror",
+      "version": "1.0.69",
+      "features": []
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.21",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "1.0.69",
+      "features": []
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "2.0.21",
+      "features": []
+    },
+    {
+      "name": "tinystr",
+      "version": "0.8.4",
+      "features": [
+        "zerovec"
+      ]
+    },
+    {
+      "name": "tokio",
+      "version": "1.53.1",
+      "features": [
+        "bytes",
+        "default",
+        "fs",
+        "io-util",
+        "libc",
+        "macros",
+        "mio",
+        "net",
+        "process",
+        "rt",
+        "rt-multi-thread",
+        "signal",
+        "signal-hook-registry",
+        "socket2",
+        "sync",
+        "time",
+        "tokio-macros"
+      ]
+    },
+    {
+      "name": "tokio-macros",
+      "version": "2.7.2",
+      "features": []
+    },
+    {
+      "name": "tokio-rustls",
+      "version": "0.26.6",
+      "features": [
+        "aws-lc-rs",
+        "aws_lc_rs",
+        "tls12"
+      ]
+    },
+    {
+      "name": "tokio-tungstenite",
+      "version": "0.29.0",
+      "features": [
+        "connect",
+        "default",
+        "handshake",
+        "stream"
+      ]
+    },
+    {
+      "name": "tokio-util",
+      "version": "0.7.19",
+      "features": [
+        "io"
+      ]
+    },
+    {
+      "name": "toml_datetime",
+      "version": "1.1.1+spec-1.1.0",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "toml_edit",
+      "version": "0.25.15+spec-1.1.0",
+      "features": [
+        "default",
+        "display",
+        "parse"
+      ]
+    },
+    {
+      "name": "toml_parser",
+      "version": "1.1.3+spec-1.1.0",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "toml_writer",
+      "version": "1.1.2+spec-1.1.0",
+      "features": [
+        "alloc",
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "tower",
+      "version": "0.5.3",
+      "features": [
+        "futures-core",
+        "futures-util",
+        "log",
+        "make",
+        "pin-project-lite",
+        "retry",
+        "sync_wrapper",
+        "timeout",
+        "tokio",
+        "tracing",
+        "util"
+      ]
+    },
+    {
+      "name": "tower-http",
+      "version": "0.6.11",
+      "features": [
+        "follow-redirect",
+        "futures-util",
+        "tower"
+      ]
+    },
+    {
+      "name": "tower-layer",
+      "version": "0.3.3",
+      "features": []
+    },
+    {
+      "name": "tower-service",
+      "version": "0.3.3",
+      "features": []
+    },
+    {
+      "name": "tracing",
+      "version": "0.1.44",
+      "features": [
+        "log",
+        "std"
+      ]
+    },
+    {
+      "name": "tracing-core",
+      "version": "0.1.36",
+      "features": [
+        "once_cell",
+        "std"
+      ]
+    },
+    {
+      "name": "try-lock",
+      "version": "0.2.5",
+      "features": []
+    },
+    {
+      "name": "tungstenite",
+      "version": "0.29.0",
+      "features": [
+        "data-encoding",
+        "handshake",
+        "http",
+        "httparse",
+        "sha1"
+      ]
+    },
+    {
+      "name": "typed-path",
+      "version": "0.12.3",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "typenum",
+      "version": "1.20.1",
+      "features": [
+        "const-generics"
+      ]
+    },
+    {
+      "name": "unicase",
+      "version": "2.9.0",
+      "features": []
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.26",
+      "features": []
+    },
+    {
+      "name": "unicode-width",
+      "version": "0.2.2",
+      "features": [
+        "cjk",
+        "default"
+      ]
+    },
+    {
+      "name": "universal-hash",
+      "version": "0.5.1",
+      "features": []
+    },
+    {
+      "name": "untrusted",
+      "version": "0.9.0",
+      "features": []
+    },
+    {
+      "name": "url",
+      "version": "2.5.8",
+      "features": [
+        "default",
+        "std"
+      ]
+    },
+    {
+      "name": "utf8_iter",
+      "version": "1.0.4",
+      "features": []
+    },
+    {
+      "name": "vcpkg",
+      "version": "0.2.15",
+      "features": []
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "features": []
+    },
+    {
+      "name": "want",
+      "version": "0.3.1",
+      "features": []
+    },
+    {
+      "name": "winnow",
+      "version": "1.0.4",
+      "features": [
+        "alloc",
+        "ascii",
+        "binary",
+        "default",
+        "parser",
+        "std"
+      ]
+    },
+    {
+      "name": "writeable",
+      "version": "0.6.4",
+      "features": []
+    },
+    {
+      "name": "yoke",
+      "version": "0.8.3",
+      "features": [
+        "derive",
+        "zerofrom"
+      ]
+    },
+    {
+      "name": "yoke-derive",
+      "version": "0.8.4",
+      "features": []
+    },
+    {
+      "name": "zerocopy",
+      "version": "0.8.59",
+      "features": [
+        "simd"
+      ]
+    },
+    {
+      "name": "zerofrom",
+      "version": "0.1.8",
+      "features": [
+        "derive"
+      ]
+    },
+    {
+      "name": "zerofrom-derive",
+      "version": "0.1.8",
+      "features": []
+    },
+    {
+      "name": "zeroize",
+      "version": "1.9.0",
+      "features": [
+        "alloc",
+        "default"
+      ]
+    },
+    {
+      "name": "zerotrie",
+      "version": "0.2.5",
+      "features": [
+        "yoke",
+        "zerofrom"
+      ]
+    },
+    {
+      "name": "zerovec",
+      "version": "0.11.8",
+      "features": [
+        "derive",
+        "yoke"
+      ]
+    },
+    {
+      "name": "zerovec-derive",
+      "version": "0.11.6",
+      "features": []
+    },
+    {
+      "name": "zip",
+      "version": "8.6.0",
+      "features": [
+        "_deflate-any",
+        "deflate-flate2",
+        "deflate-flate2-zlib-rs"
+      ]
+    },
+    {
+      "name": "zlib-rs",
+      "version": "0.6.8",
+      "features": [
+        "rust-allocator",
+        "std"
+      ]
+    },
+    {
+      "name": "zmij",
+      "version": "1.0.23",
+      "features": []
+    }
+  ]
+}

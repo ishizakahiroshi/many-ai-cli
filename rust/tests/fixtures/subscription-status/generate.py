@@ -25,5 +25,5 @@ var openCodeCredentialCountRe=regexp.MustCompile(`(\\d+)\\s+credentials?`)
 type Case struct{Provider string `json:"provider"`;Output string `json:"output"`;Code int `json:"code"`}
 func main(){var cases []Case;data,e:=os.ReadFile(os.Args[1]);if e!=nil{panic(e)};if e=json.Unmarshal(data,&cases);e!=nil{panic(e)};items:=[]any{};for _,c:=range cases{var status Status;var err error;switch c.Provider{case"claude":supplied=c.Output;status,err=(claudeAdapter{}).Status(context.Background(),"synthetic");case"codex":status=parseCodexLoginStatus(c.Output,c.Code);case"grok":status=parseGrokModelsStatus(c.Output);case"opencode":status=parseOpenCodeProvidersList(c.Output)};errorText:="";if err!=nil{errorText=err.Error()};items=append(items,map[string]any{"status":status,"error":errorText})};encoded,e:=json.MarshalIndent(items,"","  ");if e!=nil{panic(e)};if e=os.WriteFile(os.Args[2],encoded,0600);e!=nil{panic(e)}}
 '''
-(out/'oracle.go').write_text(program)
+(out/'oracle.go').write_text('//go:build ignore\n\n'+program)
 print(len(cases),'synthetic status cases generated')

@@ -333,6 +333,14 @@ impl SessionEngine {
         connection: WrapperConnectionId,
         now: Timestamp,
     ) -> Result<Reattachment, SessionError> {
+        // Reject already-revoked immutable labels before waiting for registration
+        // or ordered persistence. Terminal/skipped relays may supply no metadata.
+        if lock(&self.state)
+            .revoked_relay_children
+            .contains(&request.message.label)
+        {
+            return Err(SessionError::InvalidRequest("session dismissed".into()));
+        }
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
@@ -410,15 +418,37 @@ impl SessionEngine {
             cols: m.cols,
             rows: m.rows,
         };
-        let initialized = self.initialize(
-            binding,
-            &m,
-            size,
-            &started_text,
-            started,
-            true,
-            &SpawnRegistrationMetadata::default(),
-        );
+        // Preserve server-owned warm metadata before the storage upsert. Cold
+        // metadata is supplied only by the relay identity resolver, not JSON.
+        let metadata = {
+            let state = lock(&self.state);
+            state
+                .sessions
+                .get(&binding.session)
+                .map(|old| SpawnRegistrationMetadata {
+                    parent: old.snapshot.parent_session_id,
+                    role: old.snapshot.role.clone(),
+                    auto: old.snapshot.auto,
+                    depth: old.snapshot.depth,
+                    orchestration: old.snapshot.orchestration_id.clone(),
+                    board_path: old.snapshot.board_path.clone(),
+                    worktree_branch: old.snapshot.worktree_branch.clone(),
+                    normal_worktree: old.snapshot.normal_worktree.clone(),
+                    worktree_cleanup: old.snapshot.worktree_cleanup.clone(),
+                    ..Default::default()
+                })
+                .or(request.restored_metadata)
+                .unwrap_or_default()
+        };
+        {
+            let mut state = lock(&self.state);
+            if state.revoked_relay_children.contains(&m.label) {
+                state.admission.end_provider_spawn(&lease);
+                return Err(SessionError::InvalidRequest("session dismissed".into()));
+            }
+        }
+        let initialized =
+            self.initialize(binding, &m, size, &started_text, started, true, &metadata);
         let mut session = match initialized {
             Ok(s) => s,
             Err(e) => {
@@ -427,7 +457,7 @@ impl SessionEngine {
             }
         };
         let mut state = lock(&self.state);
-        if state.dismissed.contains(&requested) {
+        if state.dismissed.contains(&requested) || state.revoked_relay_children.contains(&m.label) {
             state.admission.end_provider_spawn(&lease);
             drop(state);
             self.journal.close_writer(binding.session);
@@ -658,7 +688,14 @@ impl SessionEngine {
         Ok(state.route(CoreEffects(vec![CoreEffect::Broadcast(message)])))
     }
     pub fn dismiss(&self, id: LiveSessionId, now: Timestamp) -> Result<CoreEffects, SessionError> {
-        self.dismiss_authorized(None, id, now)
+        self.dismiss_authorized(None, None, id, now)
+    }
+    pub(crate) fn dismiss_bound(
+        &self,
+        binding: SessionBinding,
+        now: Timestamp,
+    ) -> Result<CoreEffects, SessionError> {
+        self.dismiss_authorized(None, Some(binding), binding.session, now)
     }
     pub fn dismiss_from_ui(
         &self,
@@ -666,17 +703,26 @@ impl SessionEngine {
         id: LiveSessionId,
         now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
-        self.dismiss_authorized(Some(ui), id, now)
+        self.dismiss_authorized(Some(ui), None, id, now)
     }
     fn dismiss_authorized(
         &self,
         ui: Option<UiBinding>,
+        expected: Option<SessionBinding>,
         id: LiveSessionId,
         now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         let mut state = lock(&self.state);
         if ui.is_some_and(|ui| !state.authorized(ui)) {
             return Err(SessionError::AuthenticationExpired);
+        }
+        if expected.is_some_and(|binding| {
+            state
+                .sessions
+                .get(&id)
+                .is_none_or(|session| session.binding != binding)
+        }) {
+            return Err(SessionError::StaleBinding);
         }
         if state.confirmations.values().any(|c| c.pending.parent == id) {
             return Ok(

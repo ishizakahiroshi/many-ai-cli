@@ -206,3 +206,24 @@ fn rollback_reload_failure_restores_pointers_and_live_registry() {
         to_go_json(&old).unwrap()
     );
 }
+
+#[test]
+fn unknown_distribution_suffix_allows_any_method_through_guard_then_returns_not_found() {
+    let (_root, _paths, owner) = fixture();
+    for method in ["TRACE", "CUSTOM", "POST"] {
+        assert_eq!(
+            owner
+                .handle_authenticated(&request(method, "missing"))
+                .unwrap()
+                .status,
+            404
+        );
+    }
+    assert_eq!(
+        owner
+            .handle_authenticated(&request("CUSTOM", "status"))
+            .unwrap()
+            .status,
+        405
+    );
+}

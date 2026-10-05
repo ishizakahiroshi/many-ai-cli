@@ -374,3 +374,239 @@ async fn actual_registration_ack_observes_instruction_file_and_shutdown_restores
         .unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"synthetic original\n");
 }
+
+#[tokio::test]
+async fn production_log_spelling_is_preserved_while_selected_cwd_controls_actual_storage() {
+    for (configured, relative_database) in [
+        ("logs", Some("logs/any-ai-cli.db")),
+        ("one/logs", Some("one/any-ai-cli.db")),
+        ("", None),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let mut context = fixture_context(&root).await;
+        let port = context.paths.port();
+        let home = root.path().join("synthetic-home");
+        std::fs::create_dir(&home).unwrap();
+        let paths = RuntimePaths::production(&home).unwrap();
+        let cwd = context.cwd.clone();
+        let mut config = Config {
+            token: "synthetic-production-fixture-token".into(),
+            ..Default::default()
+        };
+        config.hub.port = i64::from(port);
+        config.hub.log_dir = configured.into();
+        config.log.enabled = true;
+        context.paths = paths.clone();
+        context.config = Arc::new(ConfigStore::new(paths, config).unwrap());
+        context.environment = vec![
+            format!("HOME={}", home.display()),
+            format!("USERPROFILE={}", home.display()),
+            "PATH=".into(),
+        ];
+        context.vendor_home = home.clone();
+        context.application_home = home;
+        assert_eq!(
+            context.config.snapshot().unwrap().config.hub.log_dir,
+            configured
+        );
+        let composition = HubComposition::new(context, ServeOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            composition
+                .dependencies
+                .config
+                .snapshot()
+                .unwrap()
+                .config
+                .hub
+                .log_dir,
+            configured
+        );
+        if let Some(relative) = relative_database {
+            assert!(cwd.join(relative).is_file());
+        } else {
+            assert!(!cwd.join("any-ai-cli.db").exists());
+            assert!(
+                cwd.join("hub.log").is_file(),
+                "empty configured logs use cwd, never default runtime/logs"
+            );
+        }
+        drop(composition);
+    }
+}
+
+#[tokio::test]
+async fn actual_trial_composition_keeps_native_notifications_disabled_after_config_refresh() {
+    use crate::config::NotifyBackendConfig;
+    let root = tempfile::tempdir().unwrap();
+    let context = fixture_context(&root).await;
+    let receiver = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let url = format!(
+        "http://127.0.0.1:{}/synthetic",
+        receiver.local_addr().unwrap().port()
+    );
+    let composition = HubComposition::new(context, ServeOptions::default())
+        .await
+        .unwrap();
+    let config = crate::config::NotifyConfig {
+        events: Some(vec!["approval".into(), "done".into()]),
+        backends: Some(vec![NotifyBackendConfig {
+            r#type: "webhook".into(),
+            url,
+            ..Default::default()
+        }]),
+        ..Default::default()
+    };
+    composition.dependencies.notifications.update_config(config);
+    assert!(
+        !composition
+            .dependencies
+            .notifications
+            .send_security("synthetic".into(), "synthetic".into())
+            .unwrap()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), receiver.accept())
+            .await
+            .is_err()
+    );
+    drop(composition);
+}
+
+#[tokio::test]
+async fn actual_http_composition_keeps_relay_guards_and_trial_notification_denial() {
+    let root = tempfile::tempdir().unwrap();
+    let context = fixture_context(&root).await;
+    let port = context.paths.port();
+    let receiver = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        .await
+        .unwrap();
+    let backend = serde_json::json!({"type":"webhook","url":format!(
+        "http://127.0.0.1:{}/synthetic",receiver.local_addr().unwrap().port())});
+    let composition = HubComposition::new(context, ServeOptions::default())
+        .await
+        .unwrap();
+    let shutdown = Cancellation::default();
+    let cancelled = shutdown.clone();
+    let task = tokio::spawn(async move { composition.run(&cancelled).await });
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap();
+    let endpoint =
+        |path: &str| format!("http://127.0.0.1:{port}{path}?token=synthetic-loopback-token");
+    // Each action reaches the real relay owner, with no parent/provider launch.
+    for (method, action, expected) in [
+        ("GET", "relay", 404),
+        ("POST", "relay", 404),
+        ("POST", "relay-stop", 404),
+        ("POST", "relay-resume", 404),
+        ("POST", "relay-cleanup", 400),
+    ] {
+        let reply = client
+            .request(
+                method.parse().unwrap(),
+                endpoint(&format!("/api/sessions/999/{action}")),
+            )
+            .body("{}")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(reply.status().as_u16(), expected, "{method} {action}");
+        let body: serde_json::Value = reply.json().await.unwrap();
+        assert_ne!(body["error"], "migration_unimplemented");
+    }
+    assert_eq!(
+        client
+            .get(format!("http://127.0.0.1:{port}/api/sessions/999/relay"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        401
+    );
+    assert_eq!(
+        client
+            .get(endpoint("/api/sessions/999/relay-stop"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        405
+    );
+    // Prefix shape/id errors precede Host/method guards for unknown suffixes.
+    for (path, expected) in [
+        ("/api/sessions/999/unknown", 404),
+        ("/api/sessions/no/unknown", 400),
+    ] {
+        assert_eq!(
+            client
+                .request(reqwest::Method::TRACE, endpoint(path))
+                .header("Host", "wrong.invalid")
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16(),
+            expected
+        );
+    }
+    assert_eq!(
+        client
+            .request(
+                reqwest::Method::TRACE,
+                endpoint("/api/provider-distributions/unknown")
+            )
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+    assert_eq!(
+        client
+            .post(endpoint("/api/jev/evaluate"))
+            .body("{")
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        503
+    );
+    assert!(
+        client
+            .post(endpoint("/api/notify-config"))
+            .json(&serde_json::json!({"events":["approval","done"],"backends":[backend.clone()]}))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    let denied = client
+        .post(endpoint("/api/notify-test"))
+        .json(&serde_json::json!({"backend":backend}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status().as_u16(), 502);
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), receiver.accept())
+            .await
+            .is_err()
+    );
+    shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(15), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}

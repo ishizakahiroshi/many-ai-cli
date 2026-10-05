@@ -8,6 +8,13 @@ established by these helpers. The fixed Go oracle remains
 
 ## Offline collection from an actual successful build
 
+Python 3.11 or later is required for the standard-library `tomllib`; candidate CI
+uses the pinned Python 3.12 toolchain. The synthetic fixtures canonicalize their
+newly created temporary root before constructing cache/metadata paths, because
+macOS can supply temporary paths through `/var` -> `/private/var`. This does not
+relax the collector's no-symlink source/cache checks: aliased source ancestors
+remain rejected and have a separate negative regression.
+
 The integration owner captures one complete build's Cargo JSON stdout, preserves
 stderr and rendered compiler diagnostics, and checks its exit code independently.
 The two commands must use the same clean source, lockfile, Cargo home, toolchain,

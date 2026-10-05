@@ -23,7 +23,7 @@ impl DistributionHttp {
         match path.strip_prefix("/api/provider-distributions/")? {
             "status" | "diff" => Some(&["GET"]),
             "check" | "accept" | "rollback" => Some(&["POST"]),
-            _ => Some(&["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]),
+            _ => Some(&[]),
         }
     }
     pub fn handle_authenticated(&self, request: &Request) -> Option<Response> {

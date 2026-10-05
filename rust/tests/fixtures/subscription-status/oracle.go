@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 import("context";"encoding/json";"fmt";"strings";"regexp";"strconv";"os")
 type Status struct{LoggedIn bool `json:"logged_in"`;Plan string `json:"plan,omitempty"`;Method string `json:"method,omitempty"`}

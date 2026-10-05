@@ -862,3 +862,55 @@ fn last_useful_line(screen: &[String]) -> String {
     }
     String::new()
 }
+
+impl SessionEngine {
+    /// Relay completion uses the shared redaction/handoff/notification path,
+    /// but does not advance the parent's ordinary turn clock or Git capture.
+    pub fn publish_relay_done(&self, mut summary: proto::DoneSummary) -> CoreEffects {
+        summary.text = truncate(&mask_secrets(&summary.text));
+        if summary.text.is_empty() {
+            return CoreEffects::default();
+        }
+        if summary.kind.is_empty() {
+            summary.kind = classify(&summary.text).into();
+        }
+        if summary.at.is_empty() {
+            summary.at = timestamp(Timestamp::now()).unwrap_or_default();
+        }
+        let mut state = lock(&self.state);
+        let mut effects = CoreEffects::default();
+        let binding = state
+            .sessions
+            .get(&LiveSessionId(summary.session_id))
+            .map(|session| session.binding);
+        if let Some(binding) = binding {
+            effects
+                .0
+                .push(CoreEffect::Notify(CoreEvent::RoutineCompleted {
+                    binding,
+                    summary: summary.clone(),
+                }));
+            effects
+                .0
+                .push(CoreEffect::Notify(CoreEvent::CompletionRecord {
+                    binding,
+                    summary: summary.clone(),
+                }));
+        }
+        effects.0.push(CoreEffect::Broadcast(proto::Message {
+            r#type: "done_summary".into(),
+            session_id: summary.session_id,
+            provider: summary.provider.clone(),
+            done_summary: Some(summary.clone()),
+            ..Default::default()
+        }));
+        if let Some(binding) = binding {
+            effects.0.push(CoreEffect::Notify(CoreEvent::Completed {
+                binding,
+                fallback: summary.fallback,
+                summary,
+            }));
+        }
+        state.route(effects)
+    }
+}

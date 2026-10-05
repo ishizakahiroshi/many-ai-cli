@@ -413,4 +413,55 @@ mod tests {
         store.store_event(LiveSessionId(1), event(2)).unwrap();
         assert_eq!(store.usage_summary().unwrap().total_messages, 1);
     }
+    #[test]
+    fn recovery_metadata_targets_database_identity_without_reviving_or_replacing_a_row() {
+        let (_root, _installed, store) = fixture(8);
+        let first = store
+            .session_overview_by_live_session(LiveSessionId(1))
+            .unwrap()
+            .id;
+        store.end_session(
+            LiveSessionId(1),
+            "completed",
+            "synthetic-finished",
+            Timestamp::now(),
+        );
+        let second = store
+            .start_session(SessionStart {
+                live_session_id: LiveSessionId(1),
+                jsonl_path: "distinct-synthetic-log".into(),
+                state: "running".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        store
+            .update_session_orchestration(
+                first,
+                &SessionOrchestrationMeta {
+                    parent: LiveSessionId(9),
+                    role: "review".into(),
+                    auto: true,
+                    depth: 1,
+                    orchestration: OrchestrationId("synthetic-relay".into()),
+                    board_path: "synthetic-board".into(),
+                },
+            )
+            .unwrap();
+        let old = store.session_overview_by_session_id(first).unwrap();
+        let current = store.session_overview_by_session_id(second).unwrap();
+        assert_eq!(old.parent_session_id, LiveSessionId(9));
+        assert_eq!(old.state, "completed");
+        assert_eq!(current.parent_session_id, LiveSessionId(0));
+        assert_eq!(current.state, "running");
+        let ended: bool = store
+            .with_conn(StorageErrorKind::Query, |connection| {
+                connection.query_row(
+                    "SELECT ended_at IS NOT NULL FROM sessions WHERE id=?",
+                    [first.0],
+                    |r| r.get(0),
+                )
+            })
+            .unwrap();
+        assert!(ended);
+    }
 }

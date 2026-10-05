@@ -586,6 +586,7 @@ async fn pending_survives_disconnect_and_warm_reattach_uses_current_parent_bindi
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: f.parent.session.0,
                     provider: "codex".into(),

@@ -1,0 +1,10 @@
+{
+  "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+  "packages": 316,
+  "archive_member_types": {
+    "file": 20285
+  },
+  "invalid_members": [],
+  "valid": true,
+  "scope": "Read-only archive member path/type checks, including directory entries. No extraction or package execution."
+}

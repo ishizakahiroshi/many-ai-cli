@@ -115,6 +115,7 @@ async fn reattach_only_restart_event_follows_existing_registered_in_after_ack_ef
     let receipt = core
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: binding.session.0,
                     provider: "claude".into(),

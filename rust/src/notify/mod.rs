@@ -1,7 +1,7 @@
 //! Outbound notifications, retained by the Hub effect owner. Request waiters
 //! never own delivery; an aborted delivery releases its deduplication claim.
 use crate::{
-    config::{NotifyBackendConfig, NotifyConfig},
+    config::{NotifyBackendConfig, NotifyConfig, RuntimePaths},
     hub::task_owner::HubTaskHandle,
     proto::{core::SessionError, time::Timestamp},
     storage::mask_secrets,
@@ -37,8 +37,15 @@ struct State {
     pending: std::collections::BTreeSet<String>,
 }
 pub type Warning = dyn Fn(&str, &'static str) + Send + Sync;
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum DeliveryPolicy {
+    Production,
+    TrialDenied,
+}
 pub struct Manager {
     config: Mutex<NotifyConfig>,
+    // Runtime isolation is fixed at construction, never configurable in Settings.
+    delivery: DeliveryPolicy,
     state: Mutex<State>,
     client: reqwest::Client,
     tasks: HubTaskHandle,
@@ -57,13 +64,39 @@ impl Drop for Claim {
     }
 }
 impl Manager {
+    /// Construct an ordinary delivery manager. Runtime owners must use
+    /// `new_for_runtime` so trial isolation cannot be lost at composition.
     pub fn new(
         config: NotifyConfig,
         tasks: HubTaskHandle,
         warning: Arc<Warning>,
     ) -> Result<Arc<Self>, reqwest::Error> {
+        Self::with_delivery_policy(config, tasks, warning, DeliveryPolicy::Production)
+    }
+    /// Capture the runtime's delivery policy once. Notification configuration
+    /// updates and per-request test backends cannot authorize trial delivery.
+    pub fn new_for_runtime(
+        config: NotifyConfig,
+        tasks: HubTaskHandle,
+        warning: Arc<Warning>,
+        paths: &RuntimePaths,
+    ) -> Result<Arc<Self>, reqwest::Error> {
+        let delivery = if paths.is_trial() {
+            DeliveryPolicy::TrialDenied
+        } else {
+            DeliveryPolicy::Production
+        };
+        Self::with_delivery_policy(config, tasks, warning, delivery)
+    }
+    fn with_delivery_policy(
+        config: NotifyConfig,
+        tasks: HubTaskHandle,
+        warning: Arc<Warning>,
+        delivery: DeliveryPolicy,
+    ) -> Result<Arc<Self>, reqwest::Error> {
         Ok(Arc::new(Self {
             config: Mutex::new(config),
+            delivery,
             state: Mutex::default(),
             client: reqwest::Client::builder()
                 .timeout(Duration::from_secs(10))
@@ -149,6 +182,11 @@ impl Manager {
         approval: Option<ApprovalPayload>,
         kind: Option<String>,
     ) -> Result<bool, SessionError> {
+        // Deny before deduplication state changes or Hub effect admission, even
+        // for security events (which deliberately bypass the event filter).
+        if self.delivery == DeliveryPolicy::TrialDenied {
+            return Ok(false);
+        }
         let backends = config.backends.unwrap_or_default();
         if backends.is_empty() {
             return Ok(false);
@@ -207,6 +245,11 @@ impl Manager {
         approval: Option<ApprovalPayload>,
         kind: Option<String>,
     ) -> bool {
+        // The Settings test-send path bypasses enqueue. Guard the common native
+        // transport before building a request, including loopback destinations.
+        if self.delivery == DeliveryPolicy::TrialDenied {
+            return false;
+        }
         let request = match backend.r#type.trim().to_ascii_lowercase().as_str() {
             "webhook" => {
                 let mut json = serde_json::json!({"title":title,"body":body});

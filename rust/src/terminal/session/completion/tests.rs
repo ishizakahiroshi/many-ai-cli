@@ -498,6 +498,7 @@ async fn reattachment_preserves_done_marker_gate_and_rejects_stale_worker_bindin
     let attached = engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: binding.session.0,
                     provider: "claude".into(),

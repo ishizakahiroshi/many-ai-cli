@@ -418,6 +418,24 @@ impl SessionEngine {
             self.warn("post-input effects", &error);
         }
     }
+    /// Read the canonical input gate for this exact wrapper incarnation.
+    /// Observing an expired gate does not clear or otherwise mutate it.
+    pub fn initial_gate_pending(
+        &self,
+        binding: SessionBinding,
+        now: Timestamp,
+    ) -> Result<bool, SessionError> {
+        timestamp(now)?;
+        let state = lock(&self.state);
+        let session = state
+            .sessions
+            .get(&binding.session)
+            .ok_or(SessionError::NotFound(binding.session))?;
+        if session.binding != binding || !session.connected {
+            return Err(SessionError::StaleBinding);
+        }
+        Ok(session.input.gated(now))
+    }
     pub fn set_initial_gate(
         &self,
         binding: SessionBinding,

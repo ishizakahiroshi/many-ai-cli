@@ -473,6 +473,7 @@ async fn commit_from_replaced_wrapper_cannot_clear_restored_pending_record() {
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: session.session.0,
                     provider: "claude".into(),

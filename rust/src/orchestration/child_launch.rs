@@ -171,6 +171,12 @@ impl ChildPreparer {
             home,
         })
     }
+    /// Application composition shares one append serialization owner with the
+    /// orchestration and relay programs. Existing isolated fixtures keep new().
+    pub fn with_board_store(mut self, boards: Arc<BoardStore>) -> Self {
+        self.boards = boards;
+        self
+    }
     pub fn resolve_cwd(
         &self,
         parent: &SessionSnapshot,
@@ -343,6 +349,7 @@ pub struct RegisteredChild {
     pub spawned_at: Timestamp,
 }
 
+pub type RelayRegistrationCallback<'a> = dyn FnMut(SessionBinding, &str) + Send + 'a;
 pub struct ChildLaunchExecutor {
     engine: Weak<SessionEngine>,
     config: Arc<ConfigStore>,
@@ -375,6 +382,37 @@ impl ChildLaunchExecutor {
     async fn launch(
         &self,
         request: ConfirmedChildRequest,
+        cancel: TaskCancellation,
+    ) -> Result<ChildSpawnResult, SessionError> {
+        self.launch_with_preparation(request, None, None, None, cancel)
+            .await
+    }
+    /// A relay owns its board/worktree and its two-slot reservation. Replacement
+    /// is allowed only for its completed headless child, matching relayRespawn.
+    /// Provider admission and registration still run through SessionEngine.
+    pub async fn launch_relay(
+        &self,
+        request: ConfirmedChildRequest,
+        preparation: ChildPreparation,
+        replace: Option<LiveSessionId>,
+        registered: &mut RelayRegistrationCallback<'_>,
+        cancel: TaskCancellation,
+    ) -> Result<ChildSpawnResult, SessionError> {
+        self.launch_with_preparation(
+            request,
+            Some(preparation),
+            replace,
+            Some(registered),
+            cancel,
+        )
+        .await
+    }
+    async fn launch_with_preparation(
+        &self,
+        request: ConfirmedChildRequest,
+        relay_preparation: Option<ChildPreparation>,
+        replace: Option<LiveSessionId>,
+        relay_registered: Option<&mut RelayRegistrationCallback<'_>>,
         cancel: TaskCancellation,
     ) -> Result<ChildSpawnResult, SessionError> {
         let engine = self.engine()?;
@@ -441,7 +479,29 @@ impl ChildLaunchExecutor {
             )
             .into());
         }
-        let admission = if engine.admission_matches(&request.admission, parent.id, 1) {
+        let relay = relay_preparation.is_some();
+        if let Some(previous) = replace {
+            let prior = engine
+                .details(previous)
+                .ok_or(SessionError::NotFound(previous))?;
+            if !relay
+                || prior.connected
+                || prior.snapshot.state != "completed"
+                || prior.snapshot.parent_session_id != parent.id
+                || prior.snapshot.role != body.role
+                || !config::is_headless_execution_mode(&prior.snapshot.execution_mode)
+                || relay_preparation
+                    .as_ref()
+                    .is_none_or(|prep| prior.snapshot.orchestration_id != prep.orchestration)
+            {
+                return Err(SessionError::InvalidRequest(
+                    "relay replacement is not a completed owned headless child".into(),
+                ));
+            }
+        }
+        let admission = if replace.is_some() {
+            AdmissionId::default()
+        } else if engine.admission_matches(&request.admission, parent.id, 1) {
             request.admission
         } else {
             match engine.reserve_children(
@@ -473,33 +533,36 @@ impl ChildLaunchExecutor {
                 }
             }
         };
-        let _release = AdmissionRelease {
+        let _release = (!relay).then(|| AdmissionRelease {
             engine: engine.clone(),
-            admission,
-        };
+            admission: admission.clone(),
+        });
         if !body.force
             && let Some(id) = live_child_for_role(&engine, parent.id, &body.role)
         {
             return Err(ChildLaunchError::new(409, "duplicate_role_child", format!("live child #{} already exists for role {:?}; use `many-ai-cli orchestrate send --role {} \"<text>\"` to instruct it, or pass --force to spawn another", id.0, body.role, body.role)).into());
         }
-        let prep = self
-            .preparation
-            .prepare(
-                &parent,
-                body,
-                &cfg.orchestration,
-                Timestamp::now(),
-                &cancel,
-                |id, board| {
-                    let effects = engine.mark_conductor(
-                        parent_binding,
-                        id.clone(),
-                        board.to_string_lossy().into_owned(),
-                    );
-                    async move { self.services.apply_effects(effects?).await }
-                },
-            )
-            .await?;
+        let prep = if let Some(preparation) = relay_preparation {
+            preparation
+        } else {
+            self.preparation
+                .prepare(
+                    &parent,
+                    body,
+                    &cfg.orchestration,
+                    Timestamp::now(),
+                    &cancel,
+                    |id, board| {
+                        let effects = engine.mark_conductor(
+                            parent_binding,
+                            id.clone(),
+                            board.to_string_lossy().into_owned(),
+                        );
+                        async move { self.services.apply_effects(effects?).await }
+                    },
+                )
+                .await?
+        };
         if !provider_note.is_empty() {
             let _ = self.preparation.boards.append(
                 &prep.board_path,
@@ -596,6 +659,15 @@ impl ChildLaunchExecutor {
             SpawnWaitOutcome::WaiterCancelled => return Err(SessionError::Cancelled),
             SpawnWaitOutcome::HubStopped => return Err(SessionError::Shutdown),
         };
+        // Transfer the registered identity synchronously to the relay before
+        // any fallible/awaited prompt or board bookkeeping. On later failure,
+        // its stopped record still owns the child and cleanup can dismiss it.
+        if let Some(registered) = relay_registered {
+            if replace.is_none() {
+                engine.consume_children(&admission, 1);
+            }
+            registered(binding, &spec.label);
+        }
         self.services
             .register_conductor(parent_binding, &prep.orchestration, &prep.board_path)?;
         let inject = matches!(delivery, PromptDelivery::AfterRegistration).then(|| {

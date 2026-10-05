@@ -286,6 +286,7 @@ async fn reattach(
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: b.session.0,
                     provider: "copilot".into(),
@@ -934,6 +935,7 @@ async fn reattach_ack_is_exact_minimal_go_frame_and_dismissal_precedes_bad_repla
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: b.session.0,
                     replay_b64: "not valid base64!".into(),
@@ -1269,6 +1271,7 @@ async fn warm_reattach_preserves_conversation_activity_and_original_output_clock
             .engine
             .reattach(
                 ReattachRequest {
+                    restored_metadata: None,
                     message: proto::Message {
                         session_id: binding.session.0,
                         provider: "copilot".into(),
@@ -1335,6 +1338,7 @@ async fn exhausted_registration_id_does_not_leak_provider_admission() {
         .engine
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: i64::MAX,
                     provider: "copilot".into(),
@@ -1444,3 +1448,116 @@ async fn details_exposes_exact_output_clock_without_rounding_for_routines() {
 }
 #[path = "session_engine/native_start.rs"]
 mod native_start;
+
+#[tokio::test]
+async fn recovered_relay_metadata_is_persisted_before_ack_and_warm_reattach_does_not_erase_it() {
+    let f = fixture();
+    let at = now();
+    let mut message = proto::Message {
+        session_id: 42,
+        provider: "copilot".into(),
+        cwd: "/synthetic-project".into(),
+        pid: 42,
+        started_at: many_ai_cli::proto::time::format_rfc3339(at).unwrap(),
+        ..Default::default()
+    };
+    let cold = f
+        .engine
+        .reattach(
+            ReattachRequest {
+                message: message.clone(),
+                restored_metadata: Some(SpawnRegistrationMetadata {
+                    role: "review".into(),
+                    auto: true,
+                    depth: 1,
+                    orchestration: OrchestrationId("synthetic-relay".into()),
+                    board_path: "synthetic-board".into(),
+                    ..Default::default()
+                }),
+            },
+            WrapperConnectionId(42),
+            at,
+        )
+        .await
+        .unwrap();
+    let stored = f
+        .store
+        .session_overview_by_live_session(cold.binding.session)
+        .unwrap();
+    assert_eq!(stored.role, "review");
+    assert_eq!(
+        stored.orchestration_id,
+        OrchestrationId("synthetic-relay".into())
+    );
+    // Drain the cold registration's ordered effects before enqueueing a later
+    // metadata write; retaining its persistence ticket would block that write.
+    f.sink.apply(cold.after_registered).await.unwrap();
+    let parent = register(&f).await;
+    let effects = f
+        .engine
+        .apply_relay_binding(
+            cold.binding,
+            parent.binding.session,
+            OrchestrationId("synthetic-relay".into()),
+            "synthetic-board".into(),
+            "review".into(),
+            at,
+        )
+        .unwrap();
+    f.sink.apply(effects).await.unwrap();
+    assert_eq!(
+        f.store
+            .session_overview_by_session_id(stored.id)
+            .unwrap()
+            .parent_session_id,
+        parent.binding.session
+    );
+    assert!(
+        f.engine
+            .reserve_children(
+                AdmissionRequest {
+                    parent: parent.binding.session,
+                    slots: 1,
+                    origin: VerifiedSpawnOrigin::Autonomous,
+                    replace: None
+                },
+                AdmissionLimits {
+                    max_children_per_parent: 1,
+                    max_total_sessions: 100
+                }
+            )
+            .is_err()
+    );
+    message.session_id = cold.binding.session.0;
+    let warm = f
+        .engine
+        .reattach(
+            ReattachRequest {
+                message,
+                restored_metadata: None,
+            },
+            WrapperConnectionId(43),
+            at,
+        )
+        .await
+        .unwrap();
+    assert_eq!(warm.snapshot.role, "review");
+    assert_eq!(
+        f.store
+            .session_overview_by_session_id(stored.id)
+            .unwrap()
+            .parent_session_id,
+        parent.binding.session
+    );
+    assert!(matches!(
+        f.engine.apply_relay_binding(
+            cold.binding,
+            LiveSessionId(999),
+            OrchestrationId("wrong".into()),
+            "wrong".into(),
+            "review".into(),
+            at
+        ),
+        Err(SessionError::StaleBinding)
+    ));
+}

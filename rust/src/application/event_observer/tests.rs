@@ -368,6 +368,7 @@ async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarna
         .core
         .reattach(
             ReattachRequest {
+                restored_metadata: None,
                 message: proto::Message {
                     session_id: f.binding.session.0,
                     provider: "copilot".into(),

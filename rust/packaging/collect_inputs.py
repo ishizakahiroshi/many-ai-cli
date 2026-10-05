@@ -14,6 +14,10 @@ import json
 import re
 import sys
 import tarfile
+
+if sys.version_info < (3, 11):
+    raise SystemExit("packaging input evidence requires Python 3.11+ (tomllib); use the pinned Python 3.12 toolchain")
+
 import tomllib
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote

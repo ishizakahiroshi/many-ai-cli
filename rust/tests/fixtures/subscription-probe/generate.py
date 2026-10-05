@@ -12,5 +12,5 @@ pieces.append(fn(other,'func collapseWhitespace('))
 program='package main\nimport("strings";"unicode";"encoding/json";"os")\n'+'\n'.join(pieces)+r''' 
 func main(){data,e:=os.ReadFile(os.Args[1]);if e!=nil{panic(e)};var cases [][]string;if e=json.Unmarshal(data,&cases);e!=nil{panic(e)};out:=[]any{};for _,lines:=range cases{key,ok:=usageProbeDialogKey(lines);out=append(out,map[string]any{"key":key,"ok":ok,"confirm":usageProbeConfirmDialog(strings.Join(lines,""))})};data,e=json.MarshalIndent(out,"","  ");if e!=nil{panic(e)};if e=os.WriteFile(os.Args[2],data,0600);e!=nil{panic(e)}}
 '''
-(out/'oracle.go').write_text(program)
+(out/'oracle.go').write_text('//go:build ignore\n\n'+program)
 print(len(json.loads((out/'cases.json').read_text())), 'synthetic probe oracle cases')

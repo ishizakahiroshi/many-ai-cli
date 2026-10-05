@@ -476,3 +476,93 @@ fn fixture_junction(source: &Path, target: &Path) -> io::Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn native_trial_selected_and_canonical_spellings_share_file_operations() {
+    let (_temp, owner, _) = fixture();
+    let native = native::NativePlatformIo {
+        actor: crate::application::diagnostics::NativeDiagnosticIo {
+            paths: owner.paths.clone(),
+            cwd: owner.paths.root().into(),
+            environment: vec![],
+        },
+    };
+    let selected = owner.locations.config.join("files");
+    let canonical = owner.paths.root().join(".many-ai-cli/files");
+    native.prepare_directory(&selected).unwrap();
+    native.write(&selected.join("one.txt"), b"one").unwrap();
+    assert!(native.exists(&canonical.join("one.txt")));
+    assert_eq!(std::fs::read(canonical.join("one.txt")).unwrap(), b"one");
+    native.write(&canonical.join("two.txt"), b"two").unwrap();
+    assert!(native.exists(&selected.join("two.txt")));
+    native.remove_file(&selected.join("two.txt")).unwrap();
+    native.remove_file(&canonical.join("one.txt")).unwrap();
+    assert!(!native.exists(&selected.join("one.txt")));
+    assert!(native.remove_data(&selected).unwrap());
+}
+
+#[cfg(unix)]
+#[test]
+fn native_trial_selected_alias_uses_canonical_capabilities_and_rejects_other_aliases() {
+    use std::os::unix::fs::symlink;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("physical");
+    let installed = temp.path().join("installed");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::create_dir_all(installed.join("data")).unwrap();
+    std::fs::write(installed.join("data/retain.txt"), b"outside").unwrap();
+    let selected = temp.path().join("selected");
+    let unselected = temp.path().join("unselected");
+    symlink(&root, &selected).unwrap();
+    symlink(&root, &unselected).unwrap();
+    let paths = RuntimePaths::trial(&selected, 49351, &installed).unwrap();
+    let native = native::NativePlatformIo {
+        actor: crate::application::diagnostics::NativeDiagnosticIo {
+            cwd: paths.root().into(),
+            paths,
+            environment: vec![],
+        },
+    };
+    let data = selected.join("data");
+    let file = data.join("retain.txt");
+    native.prepare_directory(&data).unwrap();
+    native.write(&file, b"inside").unwrap();
+    assert!(native.exists(&file));
+    assert!(!native.exists(&unselected.join("data/retain.txt")));
+    assert!(
+        native
+            .write(&unselected.join("data/retain.txt"), b"no")
+            .is_err()
+    );
+    assert!(
+        native
+            .prepare_directory(&selected.join("data/../unclean"))
+            .is_err()
+    );
+    for (name, target) in [("inside-alias", &root), ("outside-alias", &installed)] {
+        symlink(target, root.join(name)).unwrap();
+        let alias = selected.join(name).join("data");
+        assert!(!native.exists(&alias));
+        assert!(!native.exists(&alias.join("retain.txt")));
+        assert!(native.prepare_directory(&alias).is_err());
+        assert!(native.write(&alias.join("retain.txt"), b"no").is_err());
+        assert!(native.make_executable(&alias.join("retain.txt")).is_err());
+        assert!(native.remove_file(&alias.join("retain.txt")).is_err());
+        assert!(native.remove_data(&alias).is_err());
+    }
+    std::fs::remove_file(&selected).unwrap();
+    symlink(&installed, &selected).unwrap();
+    native.write(&file, b"updated inside").unwrap();
+    native.make_executable(&file).unwrap();
+    assert_eq!(
+        std::fs::read(root.join("data/retain.txt")).unwrap(),
+        b"updated inside"
+    );
+    native.remove_file(&file).unwrap();
+    assert!(!native.exists(&file));
+    assert!(native.remove_data(&data).unwrap());
+    assert_eq!(
+        std::fs::read(installed.join("data/retain.txt")).unwrap(),
+        b"outside"
+    );
+}

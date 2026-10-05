@@ -18,7 +18,7 @@ use crate::{
     terminal::session::{SessionEngine, board_input::BoardEventWrite},
 };
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, Weak},
     time::Duration,
@@ -92,6 +92,7 @@ struct Child {
 }
 #[derive(Default)]
 struct State {
+    relay_boards: BTreeSet<OrchestrationId>,
     boards: BTreeMap<OrchestrationId, Board>,
     roles: BTreeMap<OrchestrationId, BTreeMap<String, RoleSettings>>,
 }
@@ -110,7 +111,7 @@ pub struct OrchestrationDependencies {
 pub struct OrchestrationProgram {
     deps: OrchestrationDependencies,
     state: Mutex<State>,
-    boards: BoardStore,
+    boards: Arc<BoardStore>,
     flush: tokio::sync::Mutex<()>,
     started: std::sync::atomic::AtomicBool,
     this: Weak<OrchestrationProgram>,
@@ -141,6 +142,117 @@ impl OrchestrationGuard {
     }
 }
 impl OrchestrationProgram {
+    /// Relay children retain ordinary prompt/restart metadata but their DONE,
+    /// idle and timeout transitions belong solely to the relay state machine.
+    pub fn board_store(&self) -> Arc<BoardStore> {
+        self.boards.clone()
+    }
+    pub fn claim_relay_board(&self, id: &OrchestrationId) {
+        lock(&self.state).relay_boards.insert(id.clone());
+    }
+    pub fn rebind_relay_parent(
+        &self,
+        id: &OrchestrationId,
+        old: LiveSessionId,
+        new: LiveSessionId,
+    ) {
+        let mut state = lock(&self.state);
+        if let Some(board) = state.boards.get_mut(id) {
+            board.sessions.remove(&old);
+            board.sessions.insert(new, "conductor".into());
+            for child in board.children.values_mut() {
+                if child.registration.parent.session == old {
+                    child.registration.parent.session = new;
+                }
+            }
+        }
+    }
+    pub fn record_relay_progress(
+        &self,
+        id: &OrchestrationId,
+        child: LiveSessionId,
+        stamp: (u64, std::time::SystemTime),
+        now: Timestamp,
+    ) {
+        let mut state = lock(&self.state);
+        if let Some(child) = state
+            .boards
+            .get_mut(id)
+            .and_then(|board| board.children.get_mut(&child))
+        {
+            child.stamp = Some(stamp);
+            child.last_board_write = now;
+        }
+    }
+    pub fn relay_launch_startup_wait(
+        &self,
+        session: LiveSessionId,
+        now: Timestamp,
+    ) -> Result<Option<String>, SessionError> {
+        let spawned = {
+            let state = lock(&self.state);
+            state
+                .boards
+                .values()
+                .find_map(|board| board.children.get(&session))
+                .filter(|child| {
+                    child.registration.prompt_via_launch_arg && child.stamp.is_none() && !child.done
+                })
+                .map(|child| child.registration.spawned_at)
+        };
+        let Some(spawned) = spawned else {
+            return Ok(None);
+        };
+        let core = self.core()?;
+        let Some(details) = core.details(session) else {
+            return Ok(None);
+        };
+        if matches!(
+            core.initial_prompt_outcome(details.binding)?,
+            Some((InitialPromptOutcome::Delivered { .. }, _))
+        ) {
+            return Ok(None);
+        }
+        let (details, screen) = match core.initial_prompt_observation(details.binding) {
+            Ok(view) => view,
+            Err(SessionError::StaleBinding) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        Ok(
+            crate::orchestration::initial_prompt::launch_arg_startup_screen(
+                &details.snapshot.provider,
+                &screen,
+                spawned,
+                details.last_output_at,
+                now,
+            )
+            .map(str::to_owned),
+        )
+    }
+    pub async fn notify_relay_parent(
+        &self,
+        parent: LiveSessionId,
+        id: &OrchestrationId,
+        text: String,
+    ) -> Result<(), SessionError> {
+        let core = self.core()?;
+        let Some(details) = core.details(parent) else {
+            return Ok(());
+        };
+        if !details.snapshot.orchestration_id.0.is_empty()
+            && details.snapshot.parent_session_id.0 == 0
+        {
+            return self.progress_notice(parent, id, text).await;
+        }
+        if core.initial_gate_pending(details.binding, Timestamp::now())? {
+            return Ok(());
+        }
+        self.inject(parent, sanitize_notice(&text), TaskCancellation::default())
+            .await
+    }
+    pub fn relay_owns(&self, id: &OrchestrationId) -> bool {
+        lock(&self.state).relay_boards.contains(id)
+    }
     pub fn launch_instruction_not_taken(
         &self,
         session: LiveSessionId,
@@ -217,7 +329,7 @@ impl OrchestrationProgram {
         crate::profile::subscriptions::check_path(&deps.paths, &deps.hub_cwd)
             .map_err(|_| SessionError::InvalidRequest("orchestration cwd outside trial".into()))?;
         Ok(Arc::new_cyclic(|this| Self {
-            boards: BoardStore::new(&deps.paths),
+            boards: Arc::new(BoardStore::new(&deps.paths)),
             deps,
             state: Mutex::new(State::default()),
             flush: tokio::sync::Mutex::new(()),
@@ -713,7 +825,7 @@ impl ChildLaunchServices for OrchestrationProgram {
             .details(parent.session)
             .ok_or(SessionError::NotFound(parent.session))?;
         if details.binding.incarnation != parent.incarnation
-            || details.snapshot.orchestration_id != *id
+            || (details.snapshot.orchestration_id != *id && !self.relay_owns(id))
         {
             return Err(SessionError::StaleBinding);
         }
@@ -825,13 +937,30 @@ impl ChildLaunchServices for OrchestrationProgram {
                 child_launch::safe_token(limit),
                 detail.replace('\n', " ")
             );
-            let registered = {
+            let core = self.core()?;
+            let Some(details) = core.details(parent.session) else {
+                return Ok(());
+            };
+            if details.binding.incarnation != parent.incarnation {
+                return Err(SessionError::StaleBinding);
+            }
+            let registered = if details.snapshot.parent_session_id.0 == 0
+                && !details.snapshot.orchestration_id.0.is_empty()
+            {
                 let state = lock(&self.state);
-                state.boards.iter().find_map(|(id, board)| {
-                    (board.conductor() == Some(parent.session)).then_some(id.clone())
-                })
+                let id = &details.snapshot.orchestration_id;
+                state
+                    .boards
+                    .get(id)
+                    .filter(|board| board.conductor() == Some(parent.session))
+                    .map(|_| id.clone())
+            } else {
+                None
             };
             if let Some(id) = registered {
+                if self.relay_owns(&id) {
+                    return Ok(());
+                }
                 self.notify_board_event(parent, &id, text, cancel).await
             } else {
                 self.inject(parent.session, text, cancel).await

@@ -21,17 +21,43 @@ impl NativePlatformIo {
         if !self.actor.paths.is_trial() {
             return Ok(());
         }
-        if path
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-            || !same_root_spelling(path).starts_with(same_root_spelling(self.actor.paths.root()))
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "trial platform path is outside selected root",
-            ));
+        self.actor.paths.relative_to_selected_root(path).map(|_| ())
+    }
+    fn directory(&self, path: &Path, create: bool) -> io::Result<Dir> {
+        if !self.actor.paths.is_trial() {
+            return if create {
+                Dir::open_or_create_private(path)
+            } else {
+                Dir::open(path)
+            };
         }
-        Ok(())
+        let relative = self.actor.paths.relative_to_selected_root(path)?;
+        let mut directory = Dir::open(self.actor.paths.root())?;
+        for component in relative.components() {
+            let std::path::Component::Normal(name) = component else {
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "unclean trial platform path",
+                ));
+            };
+            directory = directory.child_dir(
+                name.to_str()
+                    .ok_or_else(|| io::Error::other("invalid platform directory component"))?,
+                create,
+            )?;
+        }
+        Ok(directory)
+    }
+    fn file_parent(&self, path: &Path) -> io::Result<(Dir, String)> {
+        self.checked(path)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| io::Error::other("platform path lacks parent"))?;
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| io::Error::other("invalid platform filename"))?;
+        Ok((self.directory(parent, false)?, name.to_owned()))
     }
     pub async fn locations(
         &self,
@@ -129,69 +155,22 @@ impl NativePlatformIo {
     }
 }
 
-// RuntimePaths pins a canonical Windows root, whose verbatim prefix differs
-// from paths selected by the CLI. Compare the equivalent prefix spellings;
-// filesystem operations still use the original path and no-follow handles.
-fn same_root_spelling(path: &Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        use std::path::{Component, Prefix};
-        let mut components = path.components();
-        let mut result = match components.next() {
-            Some(Component::Prefix(prefix)) => match prefix.kind() {
-                Prefix::VerbatimDisk(drive) | Prefix::Disk(drive) => {
-                    PathBuf::from(format!("{}:", char::from(drive.to_ascii_uppercase())))
-                }
-                Prefix::VerbatimUNC(server, share) | Prefix::UNC(server, share) => {
-                    let mut root = std::ffi::OsString::from("\\\\");
-                    root.push(server);
-                    root.push("\\");
-                    root.push(share);
-                    PathBuf::from(root)
-                }
-                _ => PathBuf::from(prefix.as_os_str()),
-            },
-            _ => return path.to_path_buf(),
-        };
-        for component in components {
-            result.push(component.as_os_str());
-        }
-        result
-    }
-    #[cfg(not(windows))]
-    path.to_path_buf()
-}
 impl PlatformIo for NativePlatformIo {
     fn prepare_directory(&self, path: &Path) -> io::Result<()> {
-        self.checked(path)?;
-        Dir::open_or_create_private(path).map(|_| ())
+        self.directory(path, true).map(|_| ())
     }
     fn write(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
-        self.checked(path)?;
-        let parent = path
-            .parent()
-            .ok_or_else(|| io::Error::other("platform path lacks parent"))?;
-        let name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| io::Error::other("invalid platform filename"))?;
-        Dir::open(parent)?.replace(name, bytes, 0o644)
+        let (parent, name) = self.file_parent(path)?;
+        parent.replace(&name, bytes, 0o644)
     }
     fn make_executable(&self, path: &Path) -> io::Result<()> {
         self.checked(path)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let parent = Dir::open(
-                path.parent()
-                    .ok_or_else(|| io::Error::other("desktop file lacks parent"))?,
-            )?;
-            let name = path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .ok_or_else(|| io::Error::other("invalid desktop filename"))?;
+            let (parent, name) = self.file_parent(path)?;
             parent
-                .open_file(name, false)?
+                .open_file(&name, false)?
                 .set_permissions(std::fs::Permissions::from_mode(0o755))
         }
         #[cfg(not(unix))]
@@ -203,31 +182,22 @@ impl PlatformIo for NativePlatformIo {
         }
     }
     fn exists(&self, path: &Path) -> bool {
-        self.checked(path).is_ok() && path.exists()
+        if !self.actor.paths.is_trial() {
+            return path.exists();
+        }
+        self.directory(path, false).is_ok()
+            || self
+                .file_parent(path)
+                .and_then(|(parent, name)| parent.open_file(&name, false))
+                .is_ok()
     }
     fn remove_file(&self, path: &Path) -> io::Result<()> {
-        self.checked(path)?;
-        Dir::open(
-            path.parent()
-                .ok_or_else(|| io::Error::other("platform path lacks parent"))?,
-        )?
-        .remove_file(
-            path.file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| io::Error::other("invalid filename"))?,
-        )
+        let (parent, name) = self.file_parent(path)?;
+        parent.remove_file(&name)
     }
     fn remove_data(&self, path: &Path) -> io::Result<bool> {
-        self.checked(path)?;
-        let parent = Dir::open(
-            path.parent()
-                .ok_or_else(|| io::Error::other("data path lacks parent"))?,
-        )?;
-        let name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .ok_or_else(|| io::Error::other("invalid data filename"))?;
-        match parent.child_dir(name, false) {
+        let (parent, name) = self.file_parent(path)?;
+        match parent.child_dir(&name, false) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(error),
             Ok(_) => {}
@@ -238,7 +208,7 @@ impl PlatformIo for NativePlatformIo {
         #[cfg(windows)]
         std::fs::remove_dir_all(parent.path().join(name))?;
         #[cfg(not(windows))]
-        parent.remove_tree(name)?;
+        parent.remove_tree(&name)?;
         Ok(true)
     }
     fn shortcut<'a>(

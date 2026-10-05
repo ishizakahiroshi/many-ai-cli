@@ -18,16 +18,21 @@ impl OrchestrationProgram {
     ) -> Result<(), SessionError> {
         let record = {
             let mut owned = lock(&self.state);
-            owned.boards.iter_mut().find_map(|(id, board)| {
-                let child = board.children.get_mut(&session)?;
-                child.done = true;
-                Some((
-                    id.clone(),
-                    board.path.clone(),
-                    child.registration.parent.session,
-                    child.registration.role.clone(),
-                ))
-            })
+            let relay_boards = owned.relay_boards.clone();
+            owned
+                .boards
+                .iter_mut()
+                .filter(|(id, _)| !relay_boards.contains(*id))
+                .find_map(|(id, board)| {
+                    let child = board.children.get_mut(&session)?;
+                    child.done = true;
+                    Some((
+                        id.clone(),
+                        board.path.clone(),
+                        child.registration.parent.session,
+                        child.registration.role.clone(),
+                    ))
+                })
         };
         let Some((id, path, parent, role)) = record else {
             return Ok(());
@@ -277,6 +282,7 @@ pub(super) async fn poll(owner: &OrchestrationProgram, now: Timestamp) -> Result
         state
             .boards
             .iter()
+            .filter(|(id, _)| !state.relay_boards.contains(*id))
             .flat_map(|(id, board)| {
                 board
                     .children

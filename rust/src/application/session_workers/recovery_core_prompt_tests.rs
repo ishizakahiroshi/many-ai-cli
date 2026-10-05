@@ -177,6 +177,7 @@ impl Fixture {
             .core
             .reattach(
                 ReattachRequest {
+                    restored_metadata: None,
                     message: proto::Message {
                         session_id: old.session.0,
                         provider: "claude".into(),

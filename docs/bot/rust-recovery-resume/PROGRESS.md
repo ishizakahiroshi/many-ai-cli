@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 01:36:00 UTC
+> 最終更新: 2026-10-05(月) 03:34:11 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -21,7 +21,7 @@ Local prior-source receipt: 1151 all-target tests / 0 failed / 0 ignored, strict
 | Stage | Owner | State | Evidence / next action |
 |---|---|---|---|
 | Source and instruction publication | Coordinator | published; CI cleanup in progress | Initial publication 7b937e0; actual final revision supplied in the resume message |
-| Existing #3 acknowledgment | dots | pending | Confirm no active duplicate, exact commit read and environment/dependency/CI capability |
+| Existing #3 acknowledgment | dots | acknowledged; preserved source continued | Immutable recovery source and R/V supplement read; one integration owner retained |
 | Remaining behavior matrix and fixes | dots disjoint lanes | pending | Fixed Go oracle, actual caller and failure-path evidence |
 | Clean four-target CI/artifacts | dots integration owner | pending | Exact code SHA, jobs, skips, lock/assets and both binary hashes |
 | Independent review and fixes | Separate reviewer | pending | Inherited source plus continuation diff; re-review final fixed SHA |
@@ -69,3 +69,67 @@ Immutable baseline `7c2d7d3` separately failed Linux all-target invocation at it
 [PR-range secret scan37250575706](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37250575706) examined 24 commits and found the three original `7b937e0` findings already described above; it is NOT accepted. Any exact fingerprint exception requires coordinated approval outside the original path scope; no scanner/allowlist change is included here. [Validate37250575753](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37250575753) also exposed two standalone oracle-driver Go files entering `go build ./...`; explicit ignore build tags and the generator's named-input behavior were repaired under rust/tests/fixtures without changing the Go behavior oracle.
 
 Remaining behavior audit has found five missing relay suffix handlers despite the bound session prefix, and trial webhook/ntfy transport requires a guard independent of web-push. Separate focused work continues before final acceptance. The K/A matrix will state concrete caller coverage; R01–R03/V01–V08 definitions have not been found in the checked-in instruction set and are awaiting an authoritative source. Final code SHA/review SHA/four-target artifacts and all native/provider/device/cutover gates remain pending.
+
+
+## 2026-10-05 second continuation status (publication and validation separated)
+
+### Published identity and roles
+
+- The authorized one-time retry succeeded. All39 changed-file blobs and the tree were created, then the dedicated branch was fast-forwarded to `15db189db643143191e8b8063165fc6f2f5d2b14`; fresh branch and PR#11 reads agreed. The published tree `3a2dcc1fda976140f5b48dd699fd10413e44acbe` is identical to saved local checkpoint `53b8db7aa20fec7e31b1764c70479799da63538b`; commit identities differ because repository API commit metadata differs. Object creation and branch-ref publication are separate observed stages. PR#9/develop were not changed.
+- Sole integration owner retains shared Cargo/config/protocol/core/router/main/CI/Git. Core/wrapper/packaging/Windows-path/notification/source-matrix lanes have returned their scoped checkpoints. The relay implementation lane is completing synthetic state-machine/Git-boundary regressions and strict checks. Independent inherited reviewer returned a checkpoint; final exact-SHA continuation review is still pending and has not been called clean.
+- The authoritative README and [R/V contracts](RV-CONTRACTS.md) at `b454720b631f7004bff8a0ca6fe76900ae64ecc1` were read in full. Only those two documents were imported from the supplemental documentation branch; no older source/index tree replaced current work. [Behavior matrix](BEHAVIOR-MATRIX.md) preserves K01–K15/A01–A12, maps R01–R03, and assigns V01–V08 owners and next actions.
+
+### Work after the published checkpoint
+
+The following changes were working source when this status was prepared, not part of the published15db189d validation identity: relay's five HTTP operations and state/worktree/review/recovery owner; main/core/pre-ACK/database metadata composition; immutable trial notification denial; selected-root Windows spelling handling with held-root callers; production empty/relative log paths; session-prefix error ordering and distribution method fallback; CI Python pin and collector temp-path fixtures; current-lock dependency evidence and the R/V matrix. Their containing commit must be read from history after publication. No final source acceptance is implied by this list.
+
+Relay reuses the existing admission, child launch, shared board, session, process and task owners. Headless DONE waits for observed process exit, and nonzero exit remains authoritative; this is an explicitly documented safety difference from the Go assumption that the old process has already exited, separate from R01–R03. Trial Git metadata must remain within the selected synthetic root; no real repository or provider is used for this evidence.
+
+### Exact published CI and subsequent focused checks
+
+- [Rust four-target run37252669282](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37252669282), head15db189d: all four jobs failed before aggregate tests/release builds. Linux Python3.10 lacked `tomllib`; macOS Intel/arm64 collector tests rejected the aliased temporary directory used by their own fixture; Windows strict Clippy rejected a Unix-only test import. Later test/build/artifact stages are **unrun**, not failed test results. Always-upload now retains failure receipts. Prepared fixes pin Python3.12, canonicalize only fixture roots (production archive/path rejection is retained), add alias-negative regressions, and cfg-scope the import. New native runs are pending.
+- [Validate37252669305](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37252669305), head15db189d: Go build/test/vet/module verification succeeded on Windows, Linux and macOS; Web, instrumentation, third-party, tidy and govulncheck succeeded. Staticcheck/gosec failed on six additional standalone Rust-only Go oracle drivers entering `./...`. Explicit ignore build tags and matching generator output separate those drivers from production package discovery. Pinned Go1.26.8 `go list ./...` and all six explicit-file oracle invocations exited0, with JSON equal to the existing goldens. Fixed Go source and oracle behavior are unchanged. Scanner settings were not weakened.
+- Earlier working-source aggregate1253/0 and strict Clippy exit0 remain the first repair receipt above. They are not fresh full-suite results for the relay/Windows/notification continuation. Focused later Linux checks: paths and three actual callers43/0; immutable trial notification policy6/0; relay program20/0 at its intermediate checkpoint; packaging/CI Python28/0 including aliased temporary-root reproduction. Current shared integration tests and further relay corrections require a fresh aggregate.
+- Current strict Clippy attempt exited101 on a test enum typo and style diagnostics in new paths/relay code. Repairs are being checked. Formatting-only success does not replace compilation or tests. Final clean candidate all-targets/doctests/strict Clippy/two release binaries/four-target artifact hashes and actual build-input SBOM remain pending.
+
+### Independent review and remaining gates
+
+The independent inherited review's five findings concern lifetime DB ownership, degraded history/log startup, advisory shutdown delivery, trial self-bootstrap HOME, and registration instruction preparation before ACK. First checkpoint fixes were inspected, with explicit test limits. The newer empty/relative log and relay/main/core changes still require final review. The previously blocked same-root/two-live-Hub reproduction was not retried or delegated around; the primitive lock test is separate, and the missing integration receipt stays open.
+
+R01 profile seed/user-hook preservation, R02 updater actual argv0 B, and R03 complete remote-script quoting have existing source/regressions and await exact final-candidate receipts. V01 failed Windows Job attachment with retained-grandchild pipes and V02 supported-version native ConPTY lifecycle are mandatory pending with the Windows process/ConPTY owner. V03 remains mandatory pending with integration/release-security owner: evaluate actual build/publish persistence and demonstrate immutable artifact transfer without real publish credentials. Build-only CI is not that sign-off. V04 filesystem/platform, V07 deployment/native identity and V08 installed-data/rollback/cutover gates remain with their assigned owners; only synthetic isolated fixtures are authorized here.
+
+### Secret and dependency evidence
+
+- PR-range [scan37252669269](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37252669269) retains the three historical migration findings; [push scan37252664956](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37252664956) succeeded. Neither implies the other scope succeeded. Exact fingerprint-only handling still awaits approval; `.gitleaksignore` and scanner configuration remain unchanged.
+- Actual historical-value verification confirmed the two inventory fields at original commit7b937e0, lines8996/9026, equal SHA256s of that commit's `rust/src/approval/token.rs` and `rust/src/hub/auth.rs`. They are generated source hashes, not credentials. The third is a synthetic DNS-classification test address, replaced by RFC5737 at the supplied recovery commit. No raw flagged values are published.
+- Separate gitleaks8.24.3 redacted `--all` scan covered847 local-ref commits at15db189d, exit7,38 findings: three known migration findings and35 older non-PR historical findings requiring individual triage. All result secret fields were redacted; a detected synthetic calibration marker was absent from report/log. The first sequential synthetic marker was not detected, so that attempt was not a passed redaction calibration. Private watchlists were unavailable and no secrets were externally uploaded. This full-history result remains unaccepted; no broad ignore or history rewrite is proposed.
+- [V06 current-lock report](dependency-review/REVIEW.md): lock SHA2560466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12,316 registry archives and20,285 source files verified. Pinned RustSec October3 and KEV October4 snapshots have no active affected-range/alias matches within their stated scope. Publisher history is incomplete; SQLite3.53.2 later fixes/crafted-DB reachability and Cargo1.90 advisories require explicit assessment. Cached-source equality and zero range matches do not prove clean final-build/distribution safety. A cancelled metadata-collector poll was not retried or rerouted; saved completed receipts remain bounded evidence.
+
+Next integration actions: finish current caller/relay checks, freeze and normally append the candidate, run all four clean native jobs and collect both binary hashes/notices, perform isolated actual-binary CLI/HTTP/WS/asset receipts, and obtain independent final-SHA review. Native GUI/device/provider/account/SSH/installed-data checks remain assigned pending. No merge/tag/release/registry publication, production replacement or Go cutover is authorized.
+
+
+## 2026-10-05 relay repair checkpoint after interrupted validation
+
+This preserves the existing staged continuation and its final unstaged repairs on the same branch/PR. The original source/index/patches were retained before integration. The prior committed public identity is `15db189db643143191e8b8063165fc6f2f5d2b14`; obtain this checkpoint's immutable identity from its containing commit and subsequent PR receipt. Publication is distinct from acceptance.
+
+### New independent findings and fixes
+
+The independent source review found cleanup/resume worktree deletion races, prefix-only trial Git metadata inspection, incomplete resume recovery records, retained-child replacement and recycled/cold session identity hazards. The current checkpoint adds:
+
+- Cancellation-safe cleanup ownership, concurrent resume/cleanup rejection and final state/identity revalidation. This corrects a race also present in the fixed Go oracle.
+- Cap+1 complete-input rejection for config/config.worktree, gitdir, commondir and alternates before trial Git execution.
+- A durable stopped/hub_restart image before launch and nonterminal in-memory transition guarding, so interruption remains resumable. The registration callback persists the actual new child identity before implementing state.
+- Resume refusal while a saved immutable child launch identity still exists. Retained/disconnected children must be explicitly closed first. Cleanup uses immutable launch identity plus expected-binding dismissal instead of trusting recycled numeric IDs.
+- Persisted old-label revocation, installed before child dismissal and reinstated even from skipped completed records. Reattach checks it before persistence waits and before insertion, including when the actual metadata resolver returns None. Existing matching sessions are also recognized without relay metadata. This closes late/cold admission at the session owner; it does not prove native provider process exit.
+
+The earlier inherited history degradation, advisory shutdown, bootstrap HOME, pre-ACK preparation and trial executable-resolution repairs received source-level review. The previously blocked two-live-Hub reproduction was not retried. Final immutable-SHA review remains pending.
+
+### Actual checks and unaccepted work
+
+- The latest completed focused Linux run, before the final metadata-free matching refinement, passed **67 tests, 0 failed, 0 ignored**, with951 filtered: `cargo test --manifest-path rust/Cargo.toml --locked --offline --lib relay -- --test-threads=8`, exit0. The final refinement adds an explicit actual-resolver/no-metadata retained-child regression; its execution and the new aggregate remain pending at this publication checkpoint.
+- The resumed earlier aggregate exposed a fixture expecting404 instead of the contract's400 for an empty cleanup ID (library1012 passed/1 failed), then an integration fixture retained ordered registration effects while awaiting a later write. The owned hung run was interrupted, exit130. Completed summaries before interruption totalled1161 passed/1 failed. Both fixtures were corrected; no aggregate success is claimed.
+- The attempted next strict-Clippy command was interrupted before execution was confirmed. Earlier Clippy and1253-test receipts do not apply to current changed bytes. Fresh full all-targets/doctests/Clippy, both release binaries, clean four-target CI/artifact hashes, actual-binary smoke and final exact-SHA review follow this checkpoint.
+- [V03 source/workflow review](release-boundary-review/REVIEW.md) and its standalone credential-free custody model are prepared. The model ran22 cases with zero unexpected failures. Inert signature markers are not signatures, and separate directories are not isolated runners. Actual isolated native-artifact/signature evidence remains mandatory pending; production release workflow, permissions and credentials are unchanged.
+- [V06 current-lock report](dependency-review/REVIEW.md) and [sanitized secret receipt](SECRET-SCAN-RECEIPT.json) remain bounded evidence. Historical fingerprint approval is still pending; `.gitleaksignore` and scanner configuration are unchanged. The cancelled upstream metadata poll was not retried.
+
+Next: normally fast-forward this reviewable partial checkpoint, run its exact head on all four native targets, collect both binary/build-input identities, and finish final-SHA independent review. V01/V02 supported Windows lifecycle, V07 target/provider/device/remote and V08 installed-data/rollback/cutover acceptance remain assigned pending. No merge/tag/release, package publication or running-Go replacement is authorized.

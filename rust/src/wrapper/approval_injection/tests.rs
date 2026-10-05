@@ -170,3 +170,52 @@ fn oversize_instruction_rmw_rejects_before_mutation_and_preserves_actual_tail() 
         assert_eq!(after, tail);
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn selected_trial_alias_stays_bound_to_canonical_instruction_tree() {
+    use std::os::unix::fs::symlink;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("physical");
+    let installed = temp.path().join("installed");
+    std::fs::create_dir_all(root.join("actor")).unwrap();
+    std::fs::create_dir(&installed).unwrap();
+    let selected = temp.path().join("selected");
+    let unselected = temp.path().join("unselected");
+    symlink(&root, &selected).unwrap();
+    symlink(&root, &unselected).unwrap();
+    let paths = RuntimePaths::trial(&selected, 49337, &installed).unwrap();
+    let files = InstructionFiles::new(paths.clone(), selected.join("actor")).unwrap();
+    let target = selected.join("project/AGENTS.md");
+    files.write(&target, b"original", false).unwrap();
+    assert_eq!(
+        files.read(&paths.root().join("project/AGENTS.md")).unwrap(),
+        b"original"
+    );
+    assert!(files.read(&unselected.join("project/AGENTS.md")).is_err());
+    assert!(InstructionFiles::new(paths, selected.join("actor/../actor")).is_err());
+    symlink(root.join("project"), root.join("descendant-alias")).unwrap();
+    assert!(
+        files
+            .read(&selected.join("descendant-alias/AGENTS.md"))
+            .is_err()
+    );
+    symlink(&installed, root.join("outside-alias")).unwrap();
+    assert!(
+        files
+            .write(&selected.join("outside-alias/AGENTS.md"), b"no", false)
+            .is_err()
+    );
+    // An already-selected alias is only a spelling. Replacing it must not
+    // redirect a later instruction write away from the validated root.
+    std::fs::remove_file(&selected).unwrap();
+    symlink(&installed, &selected).unwrap();
+    files.inject("codex", &target).unwrap();
+    files.remove("codex", &target, false).unwrap();
+    assert_eq!(files.read(&target).unwrap(), b"original");
+    assert_eq!(
+        std::fs::read(root.join("project/AGENTS.md")).unwrap(),
+        b"original"
+    );
+    assert_eq!(std::fs::read_dir(&installed).unwrap().count(), 0);
+}

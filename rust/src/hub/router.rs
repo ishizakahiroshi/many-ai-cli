@@ -26,6 +26,7 @@ pub struct ServiceRouter {
     confirmations: Option<Arc<super::confirmations::ConfirmationHttp>>,
     children: Option<Arc<super::child_routes::ChildHttp>>,
     child_controls: Option<Arc<super::child_control::ChildControl>>,
+    relay: Option<Arc<super::relay_routes::RelayHttp>>,
     auto_approval: Option<Arc<super::auto_approval::AutoApprovalHttp>>,
     handoff: Option<Arc<super::handoff_routes::HandoffHttp>>,
     tasks: Option<super::task_owner::HubTaskHandle>,
@@ -129,6 +130,9 @@ impl ServiceRouter {
             .map_err(|_| Response::error(500, "internal", "configuration unavailable"))?;
         let config = &snapshot.config;
         let port = i64::from(self.bound_port);
+        if let Some(error) = session_prefix_error(request, config) {
+            return Err(error);
+        }
         if super::confirmations::is_confirmation_route(&request.path)
             || super::child_routes::is_spawn_route(&request.path)
             || super::child_control::is_control_route(&request.path)
@@ -204,6 +208,7 @@ impl ServiceRouter {
             confirmations: None,
             children: None,
             child_controls: None,
+            relay: None,
             auto_approval: None,
             handoff: None,
             tasks: None,
@@ -331,6 +336,10 @@ impl ServiceRouter {
     }
     pub fn with_children(mut self, children: Arc<super::child_routes::ChildHttp>) -> Self {
         self.children = Some(children);
+        self
+    }
+    pub fn with_relay(mut self, relay: Arc<super::relay_routes::RelayHttp>) -> Self {
+        self.relay = Some(relay);
         self
     }
     pub fn with_child_controls(
@@ -672,6 +681,21 @@ impl ServiceRouter {
                     "handoff service is not initialized",
                 ),
             });
+        }
+        if super::relay_routes::is_relay_route(&request.path) {
+            let Some(owner) = &self.relay else {
+                return Dispatch::response(Response::error(
+                    503,
+                    "relay_unavailable",
+                    "relay service unavailable",
+                ));
+            };
+            return Dispatch::response(
+                owner
+                    .handle_authenticated(request, waiter, at)
+                    .await
+                    .expect("recognized relay route"),
+            );
         }
         if super::child_control::is_control_route(&request.path) {
             return Dispatch::response(
@@ -1050,6 +1074,7 @@ impl ServiceRouter {
             confirmations: None,
             children: None,
             child_controls: None,
+            relay: None,
             auto_approval: None,
             handoff: None,
             tasks: None,
@@ -1282,6 +1307,9 @@ impl ServiceRouter {
         };
         let config = &snapshot.config;
         let port = i64::from(self.bound_port);
+        if let Some(error) = session_prefix_error(request, config) {
+            return Dispatch::response(error);
+        }
         let response = if request.path == "/"
             || (!request.path.starts_with("/api/")
                 && request.path != "/ws"
@@ -1564,6 +1592,7 @@ pub(crate) fn needs_owned_request(path: &str) -> bool {
         || super::confirmations::is_confirmation_route(path)
         || super::child_routes::is_spawn_route(path)
         || super::child_control::is_control_route(path)
+        || super::relay_routes::is_relay_route(path)
         || path == super::handoff_routes::PATH
         || path.starts_with(super::handoff_routes::PREFIX)
         || super::session_routes::is_metadata_route(path)
@@ -1702,6 +1731,7 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         "/api/approval/batch" => &["POST"],
         p if super::confirmations::is_confirmation_route(p) => &["POST"],
         p if super::child_routes::is_spawn_route(p) => &["POST"],
+        p if super::relay_routes::is_relay_route(p) => super::relay_routes::methods(p),
         p if super::child_control::is_control_route(p) => {
             if p.trim_end_matches('/').ends_with("/children") {
                 &["GET"]
@@ -1746,5 +1776,59 @@ fn guard_methods(path: &str) -> &'static [&'static str] {
         | "/api/notify-generate-topic" => &["POST"],
         p if settings::PATHS.contains(&p) => &["GET", "POST"],
         _ => &[],
+    }
+}
+
+fn session_prefix_error(request: &Request, config: &crate::config::Config) -> Option<Response> {
+    let rest = request.path.strip_prefix("/api/sessions/")?;
+    if !auth::token_or_trusted(request, config) {
+        return Some(Response::error(401, "unauthorized", "unauthorized"));
+    }
+    if let Err(error) = super::confirmations::parent_path(&request.path) {
+        return Some(error);
+    }
+    let suffix = rest.trim_matches('/').rsplit('/').next().unwrap_or("");
+    if !matches!(
+        suffix,
+        "meta"
+            | "spawn-child"
+            | "spawn-confirm"
+            | "send-child"
+            | "inject"
+            | "children"
+            | "relay"
+            | "relay-stop"
+            | "relay-resume"
+            | "relay-cleanup"
+    ) {
+        return Some(Response::error(404, "not_found", "not found"));
+    }
+    None
+}
+
+#[cfg(test)]
+mod recovery_prefix_tests {
+    use super::*;
+    #[test]
+    fn unknown_session_suffix_keeps_token_shape_id_precedence_before_host_and_method() {
+        let config = crate::config::Config {
+            token: "synthetic".into(),
+            ..Default::default()
+        };
+        let mut request = Request {
+            method: "TRACE".into(),
+            path: "/api/sessions/no-id/unknown".into(),
+            host: "outside.invalid".into(),
+            ..Default::default()
+        };
+        assert_eq!(session_prefix_error(&request, &config).unwrap().status, 401);
+        request.query = "token=synthetic".into();
+        assert_eq!(session_prefix_error(&request, &config).unwrap().status, 400);
+        request.path = "/api/sessions/1/unknown/extra".into();
+        assert_eq!(session_prefix_error(&request, &config).unwrap().status, 404);
+        request.path = "/api/sessions/1/unknown".into();
+        assert_eq!(session_prefix_error(&request, &config).unwrap().status, 404);
+        request.path = "/api/sessions/1/relay".into();
+        assert!(session_prefix_error(&request, &config).is_none());
     }
 }
