@@ -6,7 +6,8 @@ use crate::{
     application::{main_program::MainContext, subscriptions::cli::NativeSubscriptionCli},
     config::RuntimePaths,
     process::{
-        ExitOutcome, InputSender, ManagedProcess, OutputStream, ProcessEvent, ProcessPlan, SpawnOptions,
+        ExitOutcome, InputSender, ManagedProcess, OutputStream, ProcessEvent, ProcessPlan,
+        SpawnOptions,
     },
 };
 use serde::Serialize;
@@ -384,9 +385,11 @@ try {
         }
     }
     if case.captured_environment && !case.trial_environment {
-        overrides.extend(SYNTHETIC_HOME_DIRS.iter().map(|(key, directory)| {
-            format!("{key}={}", root.path().join(directory).display())
-        }));
+        overrides.extend(
+            SYNTHETIC_HOME_DIRS
+                .iter()
+                .map(|(key, directory)| format!("{key}={}", root.path().join(directory).display())),
+        );
     }
     if let Some(key) = case.restored_key {
         let value = if key == "APPDATA" {
@@ -439,11 +442,8 @@ try {
         // Start from the same captured seed plus baseline/CODEX_HOME and the
         // conditional XDG_DATA_HOME/PSModuleAnalysisCachePath safety overlays.
         // The production isolation helper supplies this case's home overrides.
-        environment = MainContext::trial_environment_for_diagnostics(
-            &paths,
-            installed.path(),
-            environment,
-        )?;
+        environment =
+            MainContext::trial_environment_for_diagnostics(&paths, installed.path(), environment)?;
     }
     let cli = NativeSubscriptionCli::new(paths, root.path().into(), environment);
     let mut plan = cli.command("codex", &profile, Duration::ZERO)?;

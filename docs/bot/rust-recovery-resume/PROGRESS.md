@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 18:43 UTC
+> 最終更新: 2026-10-05(月) 18:57 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -213,3 +213,8 @@ Production scope remains explicit: normal MainContext captures and preserves the
 Instrumentation follow-through: instrumentation.json now includes the missing rust/packaging/test_candidate_ci.py shared file and the test-only MainContext wrapper. Due remains2026-10-08; it is not silently extended. Dedicated cleanup must remove the probe file, tests.rs module declaration, InputSender flush hook, MainContext test wrapper, CI diagnostic sink/env/echo, and their diagnostic helper tests. Automatic purge of the dedicated file alone is insufficient. Previous JSON receipts remain as immutable evidence after code removal.
 
 Final verification policy: the final candidate SHA will remain frozen with no further push until all four target jobs are terminal, allowing the approximately35-minute Intel build to finish. This is not a35-minute timeout or permission to stop early. The first9be3d983 Intel job was cancelled during release build after1353 all-target tests and3 doctests passed; it is not a successful target/artifact result. All final987 original Windows library tests, remaining targets, artifacts and final exact-SHA review remain pending. PR-range scan pagination and the separate Go Validate failure remain separate open items; no exclusions or unrelated Go behavior are changed.
+
+
+## 2026-10-05 18:57 UTC formatter-only follow-up
+
+Third diagnostic append published exact `e819f8c6710e63bddfa037d6d0949e1c7837ea29`, tree `9d61e1c67defbeeec560c2976ff0624f4a9e7f17`, parente19c9884. Independent review verified all six public blobs/modes match reviewed local `c111b1c8b7d8efb0519811164ca81837798d9e36`. [Run37359226441](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37359226441) failed on all four targets at cargo fmt --check, before Rust compilation or diagnostic execution. The runner requested three layout changes in stdio_diagnostics.rs: import wrapping, iterator-chain layout, and the trial-helper call. This successor applies exactly those formatting changes, with no test/behavior/timeout modification. There are no14-case results to infer from that failed run. All four jobs are terminal; the corrected successor will receive fresh CI. The no-push-until-all-targets-terminal policy remains required for the final acceptance candidate.
