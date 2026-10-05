@@ -322,7 +322,9 @@
       "sharedFiles": [
         "rust/src/application/subscriptions/appserver/tests.rs",
         "rust/src/process/mod.rs",
-        "scripts/rust-candidate-ci.py"
+        "scripts/rust-candidate-ci.py",
+        "rust/packaging/test_candidate_ci.py",
+        "rust/src/application/main_program/context.rs"
       ],
       "channels": [
         "rust-windows-appserver-stdio"
@@ -331,7 +333,7 @@
         "windows-appserver-stdio.json"
       ],
       "removalCondition": "Windows runner で要因を特定して回帰テストへ固定後、診断専用 probe と flush hook を単独撤去 commit で除去する。リリース前に必ず撤去する",
-      "reason": "Rust 1.90 CI run 37342570450 は Windows のみ初回 stdin が観測できず 2/987 lib tests に失敗。原因は未確定であり、assertion・timeout・skip 条件は緩めない"
+      "reason": "Rust 1.90 CI run 37342570450 は Windows のみ初回 stdin が観測できず 2/987 lib tests に失敗。原因は未確定であり、assertion・timeout・skip 条件は緩めない。次の比較は cmdlet と Windows host 環境変数を個別に絞り、本番の環境受渡し形も合成 CLI で検証する。期限延長はせず、調査後の単独 cleanup で sharedFiles の import/hook も明示撤去する"
     }
   ]
 }

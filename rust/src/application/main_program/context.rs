@@ -22,6 +22,16 @@ pub struct MainContext {
     pub terminal_size: TerminalSize,
 }
 impl MainContext {
+    #[cfg(all(test, windows))]
+    pub(crate) fn trial_environment_for_diagnostics(
+        paths: &RuntimePaths,
+        installed_home: &std::path::Path,
+        environment: Vec<String>,
+    ) -> io::Result<Vec<String>> {
+        isolate_trial_environment(paths, installed_home, environment)
+            .map(|(_, environment)| environment)
+    }
+
     pub fn load(trial: Option<&TrialOptions>) -> io::Result<Self> {
         let application_home = runtime_context::user_home()?;
         let paths = runtime_context::runtime_paths(trial, &application_home)?;

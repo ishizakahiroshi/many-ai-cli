@@ -31,10 +31,6 @@ async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, 
     let paths = RuntimePaths::trial(root.path(), 49274, installed.path()).unwrap();
     let profile = root.path().join("profile");
     std::fs::create_dir(&profile).unwrap();
-    // MainContext's trial environment supplies this synthetic cache root.
-    // Windows PowerShell command discovery must not depend on the runner's home.
-    let local_app_data = root.path().join("local-app-data");
-    std::fs::create_dir(&local_app_data).unwrap();
     let log = root.path().join("requests.txt");
     let started = root.path().join("script-started.txt");
     let first_line = root.path().join("first-line.txt");
@@ -92,7 +88,6 @@ exit /b %exit_code%
         format!("SystemRoot={}", std::env::var("SystemRoot").unwrap()),
         format!("USERPROFILE={}", root.path().display()),
         format!("HOME={}", root.path().display()),
-        format!("LOCALAPPDATA={}", local_app_data.display()),
         format!("TEMP={}", root.path().display()),
         format!("TMP={}", root.path().display()),
     ];

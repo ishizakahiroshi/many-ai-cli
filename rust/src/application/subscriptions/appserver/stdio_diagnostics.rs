@@ -2,13 +2,15 @@
 //! No provider or account is invoked; the original app-server tests remain authoritative.
 #![cfg(all(test, windows))]
 
-use crate::process::{
-    ExitOutcome, InputSender, ManagedProcess, OutputStream, ProcessEvent, ProcessPlan, SpawnOptions,
+use crate::{
+    application::{main_program::MainContext, subscriptions::cli::NativeSubscriptionCli},
+    config::RuntimePaths,
+    process::{
+        ExitOutcome, InputSender, ManagedProcess, OutputStream, ProcessEvent, ProcessPlan, SpawnOptions,
+    },
 };
 use serde::Serialize;
 use std::{
-    collections::BTreeMap,
-    ffi::OsString,
     io,
     path::{Path, PathBuf},
     time::Duration,
@@ -16,6 +18,24 @@ use std::{
 
 const INNER_TIMEOUT: Duration = Duration::from_secs(15);
 const OUTER_TIMEOUT: Duration = Duration::from_secs(20);
+// Every case creates these directories. The captured-runtime control redirects
+// these home/profile keys in addition to the seven baseline keys and CODEX_HOME;
+// it deliberately is not a byte-identical production environment.
+// Both full seeds also redirect XDG_DATA_HOME and PSModuleAnalysisCachePath
+// only when inherited. Those safety overlays do not alter the trial helper.
+const SYNTHETIC_HOME_DIRS: &[(&str, &str)] = &[
+    ("APPDATA", "app-data"),
+    ("LOCALAPPDATA", "local-app-data"),
+    ("XDG_CONFIG_HOME", "config"),
+    ("XDG_CACHE_HOME", "cache"),
+    ("TMPDIR", "tmp"),
+    ("CLAUDE_CONFIG_DIR", "claude"),
+    ("GROK_HOME", "grok"),
+    ("COPILOT_CONFIG_DIR", "copilot"),
+    ("CURSOR_CONFIG_DIR", "cursor"),
+    ("OPENCODE_CONFIG_DIR", "opencode"),
+    ("COMMAND_CODE_HOME", "command-code"),
+];
 
 #[derive(Clone, Copy, Serialize)]
 struct Case {
@@ -35,9 +55,12 @@ struct Case {
     module_analysis_cache_path: bool,
     dotnet_exists: bool,
     dotnet_append: bool,
+    restored_key: Option<&'static str>,
+    captured_environment: bool,
+    trial_environment: bool,
 }
 
-fn cases() -> [Case; 7] {
+fn cases() -> [Case; 14] {
     let baseline = Case {
         name: "baseline",
         compare_to: "baseline",
@@ -55,34 +78,74 @@ fn cases() -> [Case; 7] {
         module_analysis_cache_path: false,
         dotnet_exists: false,
         dotnet_append: false,
+        restored_key: None,
+        captured_environment: false,
+        trial_environment: false,
     };
     [
         baseline,
         Case {
-            name: "ps_module_path",
-            ps_module_path: true,
+            name: "windir",
+            restored_key: Some("WINDIR"),
             ..baseline
         },
         Case {
-            name: "local_app_data",
+            name: "system_drive",
+            restored_key: Some("SystemDrive"),
+            ..baseline
+        },
+        Case {
+            name: "comspec",
+            restored_key: Some("ComSpec"),
+            ..baseline
+        },
+        Case {
+            name: "program_files",
+            restored_key: Some("ProgramFiles"),
+            ..baseline
+        },
+        Case {
+            name: "program_files_x86",
+            restored_key: Some("ProgramFiles(x86)"),
+            ..baseline
+        },
+        Case {
+            name: "program_w6432",
+            restored_key: Some("ProgramW6432"),
+            ..baseline
+        },
+        Case {
+            name: "app_data",
+            restored_key: Some("APPDATA"),
+            ..baseline
+        },
+        Case {
+            name: "appdata_localappdata",
+            compare_to: "app_data",
+            restored_key: Some("APPDATA"),
             local_app_data: true,
             ..baseline
         },
         Case {
-            name: "module_analysis_cache_path",
-            module_analysis_cache_path: true,
+            name: "program_data",
+            restored_key: Some("ProgramData"),
             ..baseline
         },
         Case {
-            name: "dotnet_exists",
-            dotnet_exists: true,
+            name: "all_users_profile",
+            restored_key: Some("ALLUSERSPROFILE"),
             ..baseline
         },
         Case {
-            name: "dotnet_exists_append",
-            compare_to: "dotnet_exists",
-            dotnet_exists: true,
-            dotnet_append: true,
+            name: "captured_environment",
+            captured_environment: true,
+            ..baseline
+        },
+        Case {
+            name: "trial_environment",
+            compare_to: "captured_environment",
+            captured_environment: true,
+            trial_environment: true,
             ..baseline
         },
         Case {
@@ -158,8 +221,26 @@ fn pwsh_path() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn fixture(case: Case, stages: &mut Stages) -> io::Result<(tempfile::TempDir, ProcessPlan)> {
+fn captured_environment() -> Vec<String> {
+    std::env::vars_os()
+        .filter_map(|(key, value)| {
+            let key = key.into_string().ok()?;
+            if key.is_empty() || key.starts_with('=') {
+                return None;
+            }
+            Some(format!("{key}={}", value.to_string_lossy()))
+        })
+        .collect()
+}
+
+fn fixture(
+    case: Case,
+    seed: &[String],
+    stages: &mut Stages,
+) -> io::Result<(tempfile::TempDir, tempfile::TempDir, ProcessPlan)> {
     let root = tempfile::tempdir()?;
+    let installed = tempfile::tempdir()?;
+    let paths = RuntimePaths::trial(root.path(), 49274, installed.path())?;
     let system_root =
         std::env::var_os("SystemRoot").ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
     let engine = if case.pwsh {
@@ -177,8 +258,12 @@ fn fixture(case: Case, stages: &mut Stages) -> io::Result<(tempfile::TempDir, Pr
     }
     let profile = root.path().join("profile");
     std::fs::create_dir(&profile)?;
+    for (_, directory) in SYNTHETIC_HOME_DIRS {
+        std::fs::create_dir(root.path().join(directory))?;
+    }
+    std::fs::create_dir(root.path().join("data"))?;
     let local_app_data = root.path().join("local-app-data");
-    std::fs::create_dir(&local_app_data)?;
+    let app_data = root.path().join("app-data");
     let script = root.path().join("rpc.ps1");
     let reader = if case.console_in {
         "[Console]::In.ReadLine()"
@@ -268,7 +353,7 @@ try {
     std::fs::write(&cmd, batch.replace('\n', "\r\n"))?;
 
     // Match synthetic_account and NativeSubscriptionCli::command at d9f892a.
-    let environment = [
+    let base_environment = [
         format!("PATH={}", root.path().display()),
         "PATHEXT=.CMD;.EXE".into(),
         format!("SystemRoot={}", system_root.to_string_lossy()),
@@ -277,14 +362,48 @@ try {
         format!("TEMP={}", root.path().display()),
         format!("TMP={}", root.path().display()),
     ];
-    let mut env: BTreeMap<OsString, Option<OsString>> = environment
-        .iter()
-        .map(|entry| {
-            let (key, value) = entry.split_once('=').expect("fixed synthetic environment");
-            (key.into(), Some(value.into()))
-        })
-        .collect();
-    env.insert("CODEX_HOME".into(), Some(profile.into_os_string()));
+    let mut environment = if case.captured_environment {
+        seed.to_vec()
+    } else {
+        Vec::new()
+    };
+    let mut overrides = Vec::from(base_environment);
+    overrides.push(format!("CODEX_HOME={}", profile.display()));
+    if case.captured_environment {
+        for (key, destination) in [
+            ("XDG_DATA_HOME", "data"),
+            ("PSModuleAnalysisCachePath", "ModuleAnalysisCache"),
+        ] {
+            if seed.iter().any(|entry| {
+                entry
+                    .split_once('=')
+                    .is_some_and(|(name, _)| name.eq_ignore_ascii_case(key))
+            }) {
+                overrides.push(format!("{key}={}", root.path().join(destination).display()));
+            }
+        }
+    }
+    if case.captured_environment && !case.trial_environment {
+        overrides.extend(SYNTHETIC_HOME_DIRS.iter().map(|(key, directory)| {
+            format!("{key}={}", root.path().join(directory).display())
+        }));
+    }
+    if let Some(key) = case.restored_key {
+        let value = if key == "APPDATA" {
+            app_data.to_string_lossy().into_owned()
+        } else {
+            seed.iter()
+                .rev()
+                .find_map(|entry| {
+                    entry
+                        .split_once('=')
+                        .filter(|(name, _)| name.eq_ignore_ascii_case(key))
+                        .map(|(_, value)| value.to_owned())
+                })
+                .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?
+        };
+        overrides.push(format!("{key}={value}"));
+    }
     if case.ps_module_path {
         let modules = PathBuf::from(&system_root)
             .join("System32")
@@ -294,21 +413,44 @@ try {
         if !modules.is_dir() {
             return Err(io::Error::from(io::ErrorKind::NotFound));
         }
-        env.insert("PSModulePath".into(), Some(modules.into_os_string()));
+        overrides.push(format!("PSModulePath={}", modules.display()));
     }
     if case.local_app_data {
-        env.insert("LOCALAPPDATA".into(), Some(local_app_data.into_os_string()));
+        overrides.push(format!("LOCALAPPDATA={}", local_app_data.display()));
     }
     if case.module_analysis_cache_path {
-        env.insert(
-            "PSModuleAnalysisCachePath".into(),
-            Some(root.path().join("ModuleAnalysisCache").into_os_string()),
-        );
+        overrides.push(format!(
+            "PSModuleAnalysisCachePath={}",
+            root.path().join("ModuleAnalysisCache").display()
+        ));
     }
+    for entry in overrides {
+        let (key, _) = entry
+            .split_once('=')
+            .expect("fixed diagnostic environment override");
+        environment.retain(|existing| {
+            !existing
+                .split_once('=')
+                .is_some_and(|(name, _)| name.eq_ignore_ascii_case(key))
+        });
+        environment.push(entry);
+    }
+    if case.trial_environment {
+        // Start from the same captured seed plus baseline/CODEX_HOME and the
+        // conditional XDG_DATA_HOME/PSModuleAnalysisCachePath safety overlays.
+        // The production isolation helper supplies this case's home overrides.
+        environment = MainContext::trial_environment_for_diagnostics(
+            &paths,
+            installed.path(),
+            environment,
+        )?;
+    }
+    let cli = NativeSubscriptionCli::new(paths, root.path().into(), environment);
+    let mut plan = cli.command("codex", &profile, Duration::ZERO)?;
     let (executable, args) = if case.via_cmd {
         let (executable, args) = crate::application::subscriptions::cli::vendor_command(
-            &environment,
-            cmd.to_string_lossy().into_owned(),
+            &cli.environment,
+            cli.lookup("codex")?,
             vec!["app-server".into(), "--stdio".into()],
         );
         (PathBuf::from(executable), args)
@@ -327,17 +469,9 @@ try {
             ],
         )
     };
-    let plan = ProcessPlan {
-        executable,
-        args,
-        cwd: root.path().into(),
-        env,
-        stdin: vec![],
-        timeout: Duration::ZERO,
-        output_cap: 16 * 1024 * 1024,
-        pipe_drain_timeout: Duration::from_secs(2),
-    };
-    Ok((root, plan))
+    plan.executable = executable;
+    plan.args = args;
+    Ok((root, installed, plan))
 }
 
 async fn initialize(
@@ -438,9 +572,9 @@ fn collect_markers(root: &Path, stages: &mut Stages) {
     }
 }
 
-async fn run_case(case: Case) -> CaseReport {
+async fn run_case(case: Case, seed: &[String]) -> CaseReport {
     let mut stages = Stages::default();
-    let (root, plan) = match fixture(case, &mut stages) {
+    let (root, _installed, plan) = match fixture(case, seed, &mut stages) {
         Ok(fixture) => fixture,
         Err(error) => {
             stages.failure_stage = Some("fixture");
@@ -540,9 +674,10 @@ fn write_artifact(report: &[u8]) -> io::Result<()> {
 
 #[tokio::test]
 async fn windows_stdio_one_factor_diagnostics_require_baseline_success() {
+    let seed = captured_environment();
     let mut reports = Vec::new();
     for case in cases() {
-        reports.push(run_case(case).await);
+        reports.push(run_case(case, &seed).await);
     }
     let baseline_passed =
         reports[0].stages.passed && reports.last().is_some_and(|report| report.stages.passed);
@@ -551,6 +686,7 @@ async fn windows_stdio_one_factor_diagnostics_require_baseline_success() {
     let report = serde_json::to_string_pretty(&serde_json::json!({
         "schema_version": 1,
         "scope": "first_initialize_transport",
+        "captured_environment_scope": "captured_runtime_with_synthetic_home_profile_overlay",
         "operation_timeout_seconds": INNER_TIMEOUT.as_secs(),
         "outer_timeout_seconds": OUTER_TIMEOUT.as_secs(),
         "cases": reports,
