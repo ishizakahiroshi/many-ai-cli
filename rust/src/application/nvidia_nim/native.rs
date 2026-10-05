@@ -215,7 +215,7 @@ mod tests {
     }
     #[test]
     fn fixed_authority_dns_rejects_every_private_or_mixed_answer_before_dial() {
-        let public = "8.8.8.8:443".parse().unwrap();
+        let public = "203.0.113.8:443".parse().unwrap();
         assert_eq!(public_addresses(&[public]).unwrap(), vec![public]);
         assert!(public_addresses(&[]).is_err());
         let private = std::net::SocketAddr::new(

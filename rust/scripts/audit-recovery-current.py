@@ -198,7 +198,7 @@ for command in cli["commands"]:
                      "dispatch_refs":dispatch_refs,
                      "dispatch_state": "source_dispatch_present_unaccepted",
                      "native_acceptance": "pending", "accepted": False})
-snapshot = {"schema_version": 1, "generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+snapshot = {"schema_version": 2, "generated_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "scope": "Current DERIVED recovery source snapshot; read-only source audit, not acceptance",
             "baseline_go_sha": services["baseline_go_sha"], "pinned_go_checkpoint": 951,
             "historical_inventory_preserved": {"path": str(historical.relative_to(ROOT)).replace("\\", "/"), "sha256": historical_hash},
@@ -219,7 +219,8 @@ snapshot = {"schema_version": 1, "generated_at_utc": datetime.datetime.now(datet
                 "Historical WS lexical inventory contains dir/file/text DTO discriminator false positives; all49 original rows retained with three marked non-message.",
                 "Historical outgoing session_dismiss literal is an internal relay handleDismiss request, not a Go WebSocket emission; canonical Rust UI request consumer and session_removed response remain present.",
                 "Parent owns final full-suite/clippy receipts and archive/provenance closure; static binding evidence cannot replace these receipts."],
-            "source_hashes": {p: hashlib.sha256(s.encode()).hexdigest() for p, s in sources.items()}}
+            "source_hashes": [{"path": p, "sha256": hashlib.sha256(s.encode()).hexdigest()}
+                              for p, s in sources.items()]}
 OUT.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 assert hashlib.sha256(historical.read_bytes()).hexdigest() == historical_hash
 print(json.dumps({"http": len(http), "ws_rows": len(ws), "non_ws_rows": len(false_literals),

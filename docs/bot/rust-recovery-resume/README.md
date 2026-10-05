@@ -12,7 +12,7 @@ last_reviewed: 2026-10-05
 
 This continues existing task #3, not GitHub issue/PR number 3 and not a second concurrent rewrite. The previous environment was lost; its recovery handoff reported that implementation/publication had stopped. Before resuming, acknowledge whether another #3 worker is active. Do not start a duplicate worker.
 
-Repository: `ishizakahiroshi/many-ai-cli`. Existing draft PR: #9, `feat/rust-migration` → `develop`. This instruction is prepared locally and has not been published or delivered. The coordinator must publish the reviewed recovered source together with these instructions on a dedicated recovery branch and provide its actual immutable commit URL. The old PR head alone does not contain this recovery candidate. Read the actual supplied commit before editing; report its SHA and working branch in the acknowledgment.
+Repository: `ishizakahiroshi/many-ai-cli`. Existing draft PR: #9, `feat/rust-migration` → `develop`. The reviewed recovered source and instructions have been published on `dots/rust-recovery-resume-3`; delivery and acknowledgment remain pending. The coordinator supplies the actual immutable commit URL in the resume message. The old PR head alone does not contain this recovery candidate. Read the actual supplied commit before editing; report its SHA and working branch in the acknowledgment.
 
 ## Goal and current point
 
