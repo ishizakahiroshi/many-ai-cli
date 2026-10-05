@@ -1491,7 +1491,7 @@ async fn recovered_relay_metadata_is_persisted_before_ack_and_warm_reattach_does
     );
     // Drain the cold registration's ordered effects before enqueueing a later
     // metadata write; retaining its persistence ticket would block that write.
-    f.sink.apply(cold.after_registered).await.unwrap();
+    f.sink.apply(cold.after_reattached).await.unwrap();
     let parent = register(&f).await;
     let effects = f
         .engine

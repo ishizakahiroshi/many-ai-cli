@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 03:51:57 UTC
+> 最終更新: 2026-10-05(月) 04:15:26 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -142,3 +142,14 @@ Local checkpoint `39216624274e9885057e5fc8892de0a3489f5dca`, tree `8ef59f5f4d2f8
 The checkpoint's fresh all-target build exited101 before tests: a new regression used `after_registered` on `Reattachment`, whose actual field is `after_reattached`. Independent exact-SHA review identified the same compile blocker. This follow-up corrects that test field. The reviewer found the reported lifecycle/metadata-boundary repairs addressed in source; executed tests and native acceptance remain separate. The full suite is being rerun after the correction.
 
 The owner explicitly approved only these three fixed historical fingerprints for `.gitleaksignore`: the two generated source SHA256 inventory values at original7b937e0 lines8996/9026 and the original synthetic DNS-test address at line218. They are appended with individual reasons; all existing exclusions are preserved. No path-wide, regex or rule exclusion and no scanner/workflow weakening is included. The exact diff is the accompanying `.gitleaksignore` change. Its publication SHA and new exact-head PR-range/latest-push results remain pending. The original all-history38-hit receipt remains historical evidence; the other35 findings have not been accepted. No blanket historical acceptance is implied.
+
+
+## 2026-10-05 publication stopped; corrected-source Linux verification
+
+The explicitly authorized single retry of the85-file checkpoint's GitHub tree creation also returned a cancellation response. Readback at04:14 UTC found expected tree `8ef59f5f4d2f85dc47bc9eadd1d8c5d11b4068c8` unavailable (404) and PR#11 unchanged at `15db189db643143191e8b8063165fc6f2f5d2b14`. No remote commit/ref update was attempted. Cancellation origin is not established. Publication is stopped; no further retry or alternate publication route is being used.
+
+Local successor `fbc0cb379079933951eb8b57a5bd7628e6c90242` preserved the first test-field correction and exact approved fingerprint changes. Its separate all-target compilation exited101 before execution because the integration fixture also used `cold.after_registered` instead of `cold.after_reattached`. This checkpoint integrates that exact one-line correction. Patch SHA256: `e5880ef644a1cf656139a33832802723869b269533740b65405a1339088ff910`.
+
+An independent validation checkout of **fbc0cb3 plus that exact patch**, rather than unmodified fbc0cb3, completed Linux locked/offline all-targets: **1326 passed,0 failed,0 ignored**,32 summaries including all51 session-engine tests. Formatting, strict all-target Clippy and3 doctests exited0. Release binaries are still being built by that same validation run. These receipts bind the corrected source/patch; they are not yet a clean four-target CI result, a remotely published SHA, or native/provider/installed-data acceptance. The new local commit also updates this progress document; its identity comes from history. Final native artifact identities and independent review stay separately recorded.
+
+The approved3-fingerprint exception does not accept the other35 historical findings. Exact public-head PR-range/latest-push checks cannot be rerun for unpublished code; local scan receipts will be labeled local scope. All four native CI/artifact, V01/V02, target/provider/device/SSH and installed-data/rollback/cutover gates remain open as previously assigned. A reviewable source backup and ordinary handoff are the next publication recovery step; merge/release and running-Go replacement remain unauthorized.
