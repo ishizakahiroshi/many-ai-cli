@@ -82,7 +82,18 @@ exit /b %exit_code%
     );
     let cmd = cmd.replace("\r\n", "\n").replace('\n', "\r\n");
     std::fs::write(root.path().join("codex.cmd"), cmd).unwrap();
-    let environment = vec![
+    // Preserve the host runtime inputs, as MainContext does, while keeping all
+    // provider lookup and trial home/profile/cache locations synthetic.
+    let mut environment: Vec<String> = std::env::vars_os()
+        .filter_map(|(key, value)| {
+            let key = key.into_string().ok()?;
+            if key.is_empty() || key.starts_with('=') {
+                return None;
+            }
+            Some(format!("{key}={}", value.to_string_lossy()))
+        })
+        .collect();
+    let mut overrides = vec![
         format!("PATH={}", root.path().display()),
         "PATHEXT=.CMD;.EXE".into(),
         format!("SystemRoot={}", std::env::var("SystemRoot").unwrap()),
@@ -90,7 +101,36 @@ exit /b %exit_code%
         format!("HOME={}", root.path().display()),
         format!("TEMP={}", root.path().display()),
         format!("TMP={}", root.path().display()),
+        format!("CODEX_HOME={}", profile.display()),
     ];
+    std::fs::create_dir(root.path().join("data")).unwrap();
+    for (key, destination) in [
+        ("XDG_DATA_HOME", "data"),
+        ("PSModuleAnalysisCachePath", "ModuleAnalysisCache"),
+    ] {
+        if environment.iter().any(|entry| {
+            entry
+                .split_once('=')
+                .is_some_and(|(name, _)| name.eq_ignore_ascii_case(key))
+        }) {
+            overrides.push(format!("{key}={}", root.path().join(destination).display()));
+        }
+    }
+    for entry in overrides {
+        let (key, _) = entry.split_once('=').unwrap();
+        environment.retain(|existing| {
+            !existing
+                .split_once('=')
+                .is_some_and(|(name, _)| name.eq_ignore_ascii_case(key))
+        });
+        environment.push(entry);
+    }
+    let (_, environment) = crate::application::main_program::isolate_trial_environment(
+        &paths,
+        installed.path(),
+        environment,
+    )
+    .unwrap();
     let cli = NativeSubscriptionCli::new(paths, root.path().into(), environment);
     let outcome = tokio::time::timeout(
         Duration::from_secs(20),

@@ -16,6 +16,10 @@ pub use bootstrap::{ensure_hub, running_port};
 pub use context::{MainContext, ServeOptions};
 pub use existing_hub::open_existing_hub;
 pub use serve::{HubComposition, HubCompositionDependencies};
+
+#[cfg(all(test, windows))]
+pub(crate) use context::isolate_trial_environment;
+
 #[cfg(test)]
 mod tests;
 

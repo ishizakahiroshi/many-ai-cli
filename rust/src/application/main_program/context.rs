@@ -83,7 +83,7 @@ pub(super) fn environment_value<'a>(environment: &'a [String], key: &str) -> Opt
             .map(|(_, value)| value)
     })
 }
-fn isolate_trial_environment(
+pub(crate) fn isolate_trial_environment(
     paths: &RuntimePaths,
     installed_home: &std::path::Path,
     mut environment: Vec<String>,

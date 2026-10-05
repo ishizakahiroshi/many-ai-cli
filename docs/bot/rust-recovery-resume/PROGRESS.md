@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 18:57 UTC
+> 最終更新: 2026-10-05(月) 19:21 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -218,3 +218,16 @@ Final verification policy: the final candidate SHA will remain frozen with no fu
 ## 2026-10-05 18:57 UTC formatter-only follow-up
 
 Third diagnostic append published exact `e819f8c6710e63bddfa037d6d0949e1c7837ea29`, tree `9d61e1c67defbeeec560c2976ff0624f4a9e7f17`, parente19c9884. Independent review verified all six public blobs/modes match reviewed local `c111b1c8b7d8efb0519811164ca81837798d9e36`. [Run37359226441](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37359226441) failed on all four targets at cargo fmt --check, before Rust compilation or diagnostic execution. The runner requested three layout changes in stdio_diagnostics.rs: import wrapping, iterator-chain layout, and the trial-helper call. This successor applies exactly those formatting changes, with no test/behavior/timeout modification. There are no14-case results to infer from that failed run. All four jobs are terminal; the corrected successor will receive fresh CI. The no-push-until-all-targets-terminal policy remains required for the final acceptance candidate.
+
+
+## 2026-10-05 19:21 UTC environment-composition correction candidate
+
+Formatting successor `bcd052f8e0cde0323102f7832aff78946a69e195` published normally with tree `33c62a63898302d848131c90911073270d096632`, parente819f8c6. Independent review verified the two public blobs match local `85514cc6851d611923f714cad534f500024e3ec6` and the exact runner formatter requests. [Run37360286971](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37360286971), [Windows job111932891433](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37360286971/job/111932891433), now supplies the executed [14-case receipt](WINDOWS-STDIO-bcd052f8.json). Windows library result was985 passed /3 failed /0 ignored: the original two fixtures plus the diagnostic baseline. Fmt/strict Clippy/compilation passed, and the other integration targets completed. The original complete RPC tests have not yet passed on this runner.
+
+All nine single-variable additions, the APPDATA/LOCALAPPDATA interaction and both minimal baselines stopped at Test-Path. Both captured-runtime-with-synthetic-home and actual trial-isolation controls completed Test-Path, Add-Content, ConvertFrom-Json, the initialize response and owned cleanup without forced pipe closure. The precise individual variable or internal PowerShell dependency is still unknown. The supported conclusion is narrower: the minimal synthetic environment prevented cmdlet initialization in this runner, while the application's captured-and-isolated environment composition avoided the observed failure. This does not guarantee every real provider/environment/device behavior.
+
+This candidate corrects the original two fixtures to use that demonstrated composition. It captures runtime environment entries using MainContext's pseudo-key filtering, removes overridden keys case-insensitively, forces lookup to the synthetic codex.cmd and profile, redirects inherited optional data/cache paths, and calls the existing trial-isolation function before NativeSubscriptionCli. Fresh disjoint trial/installed TempDirs remain alive throughout the call. Windows PowerShell5, .cmd/-File, env_clear, no_window, stderr_null, deadlines, all protocol/account/privacy assertions and the stronger exact API-key rejection checks remain unchanged. The ineffective standalone LOCALAPPDATA addition is absent.
+
+The existing isolation function becomes crate-visible and is re-exported only for Windows unit tests; normal MainContext still calls the same implementation. That implementation creates its directories beneath the trial root, so it is not a side-effect-free accessor. The temporary diagnostic wrapper remains separate and will be removed with all diagnostic code in the immediately following dedicated cleanup commit. No production process-launch or RPC algorithm changes are made.
+
+The fixture correction and diagnostic removal will remain distinct commits. Their final combined candidate must receive independent exact-SHA review and fresh complete four-target CI, including all987 original Windows library tests and both binaries. Once that final head is published, no board-only or other push will interrupt it; it will be held until every target is terminal, allowing the full Intel-Mac build duration. Real-provider/device/installed-data acceptance and cutover remain pending. Full PR-range secret coverage remains separately unverified because of the pinned action's30-commit pagination defect.
