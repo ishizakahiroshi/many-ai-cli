@@ -1,6 +1,16 @@
 use super::*;
 
+struct WriterCompletion<'a>(&'a Inner);
+impl Drop for WriterCompletion<'_> {
+    fn drop(&mut self) {
+        // Shutdown must join and surface a panicked writer, rather than waiting
+        // until its drain deadline for a thread that has already stopped.
+        self.0.done.store(true, Ordering::Release);
+    }
+}
+
 pub(super) fn run(inner: Arc<Inner>, receiver: mpsc::Receiver<QueuedHistoryEvent>) {
+    let _completion = WriterCompletion(&inner);
     for queued in receiver {
         if inner.stop.load(Ordering::Acquire) {
             inner.pending.fetch_sub(1, Ordering::AcqRel);
@@ -25,7 +35,6 @@ pub(super) fn run(inner: Arc<Inner>, receiver: mpsc::Receiver<QueuedHistoryEvent
         // Invoke application observers without database/history locks held.
         inner.notify(queued.live_session_id, result);
     }
-    inner.done.store(true, Ordering::Release);
 }
 impl SqliteSessionStorage {
     pub(super) fn begin_close(&self) {
@@ -50,20 +59,28 @@ impl SqliteSessionStorage {
         self.ensure_external_close()?;
         let _serial = lock(&self.close_lock);
         let mut handle = lock(&self.writer);
-        if let Some(worker) = handle.take() {
-            worker.join().map_err(|_| {
+        let writer_result = match handle.take() {
+            Some(worker) => worker.join().map_err(|_| {
                 error(
                     StorageErrorKind::Write,
                     "database writer stopped unexpectedly",
                 )
-            })?;
-        }
-        if let Some(connection) = lock(&self.inner.connection).take() {
-            connection
+            }),
+            None => Ok(()),
+        };
+        // A failed join is a terminal writer result, not permission to leave
+        // the physical connection open. Finish cleanup before returning it.
+        let close_result = match lock(&self.inner.connection).take() {
+            Some(connection) => connection
                 .close()
-                .map_err(|(_, e)| sql_error(StorageErrorKind::Write, e))?;
+                .map_err(|(_, e)| sql_error(StorageErrorKind::Write, e)),
+            None => Ok(()),
+        };
+        let result = writer_result.and(close_result);
+        if let Err(error) = &result {
+            *lock(&self.inner.last_error) = Some(error.clone());
         }
-        Ok(())
+        result
     }
     pub(super) fn shutdown_report(&self) -> ShutdownReport {
         ShutdownReport {
@@ -80,6 +97,94 @@ impl SqliteSessionStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn recovery_core_panicked_observer_reports_stopped_writer_without_timeout_and_closes_connection()
+     {
+        let root = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let paths = RuntimePaths::trial(root.path(), 49116, installed.path()).unwrap();
+        let store = SqliteSessionStorage::open(
+            &paths,
+            StorageOptions::baseline(paths.resource(Resource::Logs)),
+        )
+        .unwrap();
+        store
+            .start_session(SessionStart {
+                live_session_id: LiveSessionId(1),
+                ..Default::default()
+            })
+            .unwrap();
+        store.inner.with_conn(StorageErrorKind::Write, |connection| {
+            connection.execute_batch("CREATE TRIGGER reject_async BEFORE INSERT ON events WHEN NEW.type='reject' BEGIN SELECT RAISE(ABORT,'synthetic'); END")
+        }).unwrap();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let release = Mutex::new(release_rx);
+        store.set_on_write_error(Some(Arc::new(move |_, _| {
+            entered_tx.send(()).unwrap();
+            lock(&release).recv_timeout(Duration::from_secs(2)).unwrap();
+            panic!("synthetic write-error observer panic");
+        })));
+        let event = |kind: &str| {
+            HistoryEvent(
+                serde_json::json!({"type":kind,"text":"synthetic"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )
+        };
+        assert!(matches!(
+            store.store_event_async(LiveSessionId(1), event("reject")),
+            EnqueueOutcome::Queued { .. }
+        ));
+        entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        for _ in 0..3 {
+            assert!(matches!(
+                store.store_event_async(LiveSessionId(1), event("user_input")),
+                EnqueueOutcome::Queued { .. }
+            ));
+        }
+        release_tx.send(()).unwrap();
+        let report = store
+            .shutdown(
+                ShutdownPolicy::Drain {
+                    timeout: Duration::from_secs(1),
+                },
+                &HubShutdownCancellation::default(),
+            )
+            .await;
+        assert!(
+            !report.timed_out,
+            "a stopped writer must report failure rather than waiting for a drain timeout: {report:?}"
+        );
+        assert!(!report.cancelled);
+        assert_eq!(report.written, 0);
+        assert_eq!(
+            report.remaining, 3,
+            "accepted work after the failed observer was not persisted"
+        );
+        assert_eq!(report.error.as_ref().unwrap().kind, StorageErrorKind::Write);
+        assert_eq!(
+            report.error.as_ref().unwrap().detail,
+            "database writer stopped unexpectedly"
+        );
+        assert!(
+            lock(&store.inner.connection).is_none(),
+            "failed writer join must not skip closing the physical connection"
+        );
+        let repeated = store
+            .shutdown(
+                ShutdownPolicy::Drain {
+                    timeout: Duration::from_secs(1),
+                },
+                &HubShutdownCancellation::default(),
+            )
+            .await;
+        assert!(!repeated.timed_out);
+        assert_eq!(repeated.error, report.error);
+        store.set_on_write_error(None);
+    }
+
     /// The outer case supervises a real child test process so a regression in
     /// callback/close lock ordering cannot hang the entire test runner.
     #[test]

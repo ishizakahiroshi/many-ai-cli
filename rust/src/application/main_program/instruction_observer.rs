@@ -53,7 +53,8 @@ impl OrderedEventObserver for InstructionObserver {
             let result = self.next.observe(event).await;
             if let Some(rules) = self.rules.get().and_then(Weak::upgrade) {
                 match event {
-                    CoreEvent::Registered(_) => rules.registered(&self.cancel).await,
+                    // Register/reattach preparation belongs to the WebSocket
+                    // caller's pre/post-ACK barrier, never this publication pass.
                     CoreEvent::Ended { .. } | CoreEvent::Dismissed(_) => {
                         rules.ended(&self.cancel).await
                     }

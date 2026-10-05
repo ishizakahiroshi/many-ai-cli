@@ -50,6 +50,12 @@ pub const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 pub const UI_PING_INTERVAL: Duration = Duration::from_secs(30);
 type Warning = dyn Fn(&str, &SessionError) + Send + Sync;
 
+/// Preparation which the fixed registration caller completes before allowing
+/// a newly registered provider to start. Reattach intentionally runs after ACK.
+pub trait RegistrationPreparation: Send + Sync {
+    fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>>;
+}
+
 pub struct WebSocketService {
     services: Arc<ServiceRouter>,
     core: Arc<dyn SessionCore>,
@@ -59,6 +65,7 @@ pub struct WebSocketService {
     warning: Arc<Warning>,
     startups: Option<Arc<crate::application::wrapped_spawn::ProcessWrappedSpawner>>,
     registration_hook: Option<Arc<dyn crate::application::session_workers::RegistrationHook>>,
+    registration_preparation: Option<Arc<dyn RegistrationPreparation>>,
     runs: Arc<RunOwner>,
     ordinary: Option<Arc<crate::application::ordinary_spawn::OrdinarySpawnService>>,
 }
@@ -80,6 +87,7 @@ impl WebSocketService {
             warning,
             startups: None,
             registration_hook: None,
+            registration_preparation: None,
             runs: Arc::default(),
             ordinary: None,
         }
@@ -128,6 +136,13 @@ impl WebSocketService {
         hook: Arc<dyn crate::application::session_workers::RegistrationHook>,
     ) -> Self {
         self.registration_hook = Some(hook);
+        self
+    }
+    pub fn with_registration_preparation(
+        mut self,
+        preparation: Arc<dyn RegistrationPreparation>,
+    ) -> Self {
+        self.registration_preparation = Some(preparation);
         self
     }
     pub fn with_ordinary_spawn_owner(
@@ -264,6 +279,20 @@ impl WebSocketService {
                     return Err(error);
                 }
             };
+            if !reattach
+                && let Some(preparation) = &self.registration_preparation
+                && let Err(error) = preparation.prepare().await
+            {
+                // Preparation precedes ownership transfer, so a never-sent ACK
+                // cannot be mistaken for uncertain delivery by its RAII guard.
+                self.sockets.close_pending_wrapper(connection).await?;
+                if let Ok(effects) = self.core.disconnected(binding, Timestamp::now())
+                    && let Err(failure) = self.apply(effects).await
+                {
+                    (self.warning)("failed registration preparation cleanup", &failure);
+                }
+                return Err(error);
+            }
             let mut startup = if let Some(receipt) = receipt {
                 let prepared = if let Some(owner) = &self.startups {
                     owner.prepare_registration(receipt).await.map_err(|_| {
@@ -313,6 +342,9 @@ impl WebSocketService {
                     }
                 }
                 sent?;
+                if reattach && let Some(preparation) = &self.registration_preparation {
+                    preparation.prepare().await?;
+                }
                 if let (Some(hook), Some(metadata)) = (&self.registration_hook, &metadata) {
                     hook.registered(binding, metadata)?;
                 }

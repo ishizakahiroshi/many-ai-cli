@@ -11,7 +11,6 @@ use crate::{
     orchestration::headless,
     process::{
         Cancellation, ProcessPlan,
-        execpath::{NativeFs, Platform, Resolver},
         pty::{NativePtyFactory, PtyExit},
     },
     proto::{
@@ -20,6 +19,9 @@ use crate::{
     },
 };
 use std::{collections::BTreeMap, io, path::Path, time::Duration};
+
+mod command;
+use command::CommandResolver;
 
 pub struct WrapperContext<'a> {
     pub config: &'a Config,
@@ -80,13 +82,6 @@ fn prompt_path(context: &WrapperContext<'_>, raw: &str) -> std::path::PathBuf {
     }
 }
 
-fn platform() -> Platform {
-    if cfg!(windows) {
-        Platform::Windows
-    } else {
-        Platform::Unix
-    }
-}
 fn effective_port(context: &WrapperContext<'_>) -> io::Result<u16> {
     if context.paths.is_trial() {
         return Ok(context.paths.port());
@@ -221,12 +216,12 @@ pub async fn run_cli(
             .unwrap_or(5),
     );
     let connector = LoopbackConnector::new(port, context.config.token.clone(), write_timeout)?;
-    let resolver = Resolver::new(platform(), context.environment, context.cwd, &NativeFs);
+    let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
     let command = resolver.resolve_provider(
         provider,
         launch.custom_argv.as_deref(),
         &launch.provider_args,
-    );
+    )?;
     let color = if launch.headless {
         "off"
     } else {
@@ -288,7 +283,7 @@ pub async fn run_cli(
             let mut args = launch.provider_args.clone();
             apply_hooks(&context, &launch, registered, port, &mut hooks, &mut args)?;
             if !launch.args.prompt_file.trim().is_empty() {
-                let shim = resolver.launch_shell_shim(provider, launch.custom_argv.as_deref());
+                let shim = resolver.launch_shell_shim(provider, launch.custom_argv.as_deref())?;
                 let prepared = launch::prepare_launch_prompt(
                     context.paths,
                     &prompt_path(&context, &launch.args.prompt_file),
@@ -301,7 +296,8 @@ pub async fn run_cli(
                 }
                 prompt = Some(prepared);
             }
-            let command = resolver.resolve_provider(provider, launch.custom_argv.as_deref(), &args);
+            let command =
+                resolver.resolve_provider(provider, launch.custom_argv.as_deref(), &args)?;
             process.executable = command.executable.into();
             process.args = command.args.into_iter().map(Into::into).collect();
             Ok(())
@@ -347,8 +343,9 @@ async fn run_headless(
         registered.session_id,
     );
     args = headless::build_argv(def, &args, &prompt);
-    let resolver = Resolver::new(platform(), context.environment, context.cwd, &NativeFs);
-    let command = resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args);
+    let resolver = CommandResolver::new(context.paths, context.environment, context.cwd);
+    let command =
+        resolver.resolve_provider(&launch.provider, launch.custom_argv.as_deref(), &args)?;
     process.executable = command.executable.into();
     process.args = command.args.into_iter().map(Into::into).collect();
     process.env.insert(

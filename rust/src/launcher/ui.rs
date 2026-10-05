@@ -1,5 +1,9 @@
 //! Authenticated five-route selection UI using the frozen embedded HTML.
-use super::{ConnectionManager, LauncherError, Profile, profile::SCHEMAS};
+use super::{
+    ConnectionManager, LauncherError, Profile,
+    profile::SCHEMAS,
+    ui_deadlines::{DeadlineIo, Deadlines, HeaderTimer, READ_TIMEOUT},
+};
 use crate::{
     hub::http::{Request, Response},
     process::Cancellation,
@@ -13,7 +17,6 @@ use std::{
         Arc,
         atomic::{AtomicU16, Ordering},
     },
-    time::Duration,
 };
 use subtle::ConstantTimeEq;
 
@@ -173,16 +176,15 @@ impl UiServer {
         let url = self.page_url();
         let stop = cancel.clone();
         let task = tokio::spawn(async move {
-            use axum::routing::any;
-            let router = axum::Router::new()
-                .fallback(any(transport_handle))
-                .with_state(server.clone());
             let mut connections = tokio::task::JoinSet::new();
             loop {
                 tokio::select! {
                     _=stop.cancelled()=>break,
                     Some(_)=connections.join_next(),if !connections.is_empty()=>{},
-                    accepted=listener.accept()=>{let(stream,_)=accepted?;let service=hyper_util::service::TowerToHyperService::new(router.clone());connections.spawn(async move{let mut builder=hyper::server::conn::http1::Builder::new();builder.timer(hyper_util::rt::TokioTimer::new()).header_read_timeout(Duration::from_secs(30));builder.serve_connection(hyper_util::rt::TokioIo::new(stream),service).await});}
+                    accepted = listener.accept() => {
+                        let (stream, _) = accepted?;
+                        connections.spawn(serve_connection(stream, server.clone()));
+                    }
                 }
             }
             connections.abort_all();
@@ -197,6 +199,28 @@ impl UiServer {
         })
     }
 }
+async fn serve_connection<T>(stream: T, server: Arc<UiServer>) -> Result<(), hyper::Error>
+where
+    T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    let deadlines = Deadlines::new();
+    let router = axum::Router::new()
+        .fallback(axum::routing::any(transport_handle))
+        .layer(axum::Extension(deadlines.clone()))
+        .with_state(server);
+    let service = hyper_util::service::TowerToHyperService::new(router);
+    let mut builder = hyper::server::conn::http1::Builder::new();
+    builder
+        .timer(HeaderTimer(deadlines.clone()))
+        .header_read_timeout(READ_TIMEOUT);
+    builder
+        .serve_connection(
+            hyper_util::rt::TokioIo::new(DeadlineIo::new(stream, deadlines)),
+            service,
+        )
+        .await
+}
+
 pub struct UiServerHandle {
     pub url: String,
     cancel: Cancellation,
@@ -282,10 +306,12 @@ pub fn allowed_ui_origin(origin: &str, port: u16) -> bool {
 }
 async fn transport_handle(
     axum::extract::State(server): axum::extract::State<Arc<UiServer>>,
+    axum::Extension(deadlines): axum::Extension<Deadlines>,
     raw: axum::extract::Request,
 ) -> axum::response::Response {
     use axum::body::HttpBody;
     use std::{future::poll_fn, pin::Pin};
+    let read_deadline = deadlines.begin_response();
     let (parts, mut body) = raw.into_parts();
     let mut request = Request {
         method: parts.method.to_string(),
@@ -345,7 +371,7 @@ async fn transport_handle(
             Ok::<_, io::Error>(())
         };
         if !matches!(
-            tokio::time::timeout(Duration::from_secs(30), read).await,
+            tokio::time::timeout_at(read_deadline, read).await,
             Ok(Ok(()))
         ) {
             return crate::hub::transport::response(ui_error(400, "invalid json"));
@@ -495,5 +521,119 @@ fn parse_ranges(raw: &str, size: usize) -> Result<Vec<(usize, usize)>, bool> {
         Err(true)
     } else {
         Ok(ranges)
+    }
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::*;
+    use crate::{
+        config::RuntimePaths,
+        launcher::{ConnectorConfig, LauncherStore},
+    };
+    use std::{error::Error, time::Duration};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn server() -> (tempfile::TempDir, Arc<UiServer>) {
+        let root = tempfile::tempdir().unwrap();
+        let trial = root.path().join("trial");
+        std::fs::create_dir(&trial).unwrap();
+        let paths = RuntimePaths::trial(&trial, 49001, &root.path().join("installed")).unwrap();
+        let store = LauncherStore::open(paths.clone()).unwrap();
+        let manager =
+            ConnectionManager::new(store, ConnectorConfig::new(paths, root.path().into()));
+        let server = UiServer::from_token(manager, "synthetic-deadline".into(), 49001).unwrap();
+        (root, server)
+    }
+    async fn run_ready() {
+        // Drive both peers without allowing Tokio's paused clock to auto-advance.
+        for _ in 0..8 {
+            tokio::task::yield_now().await;
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cumulative_header_and_body_budget_is_thirty_seconds() {
+        let (_root, server) = server();
+        let (mut client, stream) = tokio::io::duplex(4096);
+        let task = tokio::spawn(serve_connection(stream, server));
+        let begin = tokio::time::Instant::now();
+        client
+            .write_all(b"POST /api/profiles?token=synthetic-deadline HTTP/1.1\r\nHost:")
+            .await
+            .unwrap();
+        run_ready().await;
+        tokio::time::advance(Duration::from_secs(20)).await;
+        client.write_all(b" localhost:49001\r\nContent-Length: 10000\r\nConnection: close\r\n\r\n{\"profiles\":").await.unwrap();
+        run_ready().await;
+        tokio::time::advance(Duration::from_secs(9)).await;
+        run_ready().await;
+        assert!(!task.is_finished());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 400"));
+        assert_eq!(tokio::time::Instant::now() - begin, READ_TIMEOUT);
+        task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn headers_that_never_finish_expire_without_a_response_write_budget() {
+        let (_root, server) = server();
+        let (mut client, stream) = tokio::io::duplex(4096);
+        let task = tokio::spawn(serve_connection(stream, server));
+        client.write_all(b"GET / HTTP/1.1\r\nHost:").await.unwrap();
+        run_ready().await;
+        tokio::time::advance(Duration::from_secs(29)).await;
+        assert!(!task.is_finished());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        assert!(task.await.unwrap().unwrap_err().is_timeout());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn complete_json_before_absolute_read_deadline_succeeds() {
+        let (_root, server) = server();
+        let (mut client, stream) = tokio::io::duplex(4096);
+        let task = tokio::spawn(serve_connection(stream, server));
+        client
+            .write_all(b"POST /api/profiles?token=synthetic-deadline HTTP/1.1\r\nHost:")
+            .await
+            .unwrap();
+        run_ready().await;
+        tokio::time::advance(Duration::from_secs(20)).await;
+        client.write_all(b" localhost:49001\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"profiles\":").await.unwrap();
+        run_ready().await;
+        tokio::time::advance(Duration::from_secs(9)).await;
+        client.write_all(b"[]}").await.unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).await.unwrap();
+        assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200"));
+        task.await.unwrap().unwrap();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn unread_actual_http_response_expires_at_sixty_seconds() {
+        let (_root, server) = server();
+        let (mut client, stream) = tokio::io::duplex(64);
+        let task = tokio::spawn(serve_connection(stream, server));
+        client.write_all(b"GET /?token=synthetic-deadline HTTP/1.1\r\nHost: localhost:49001\r\nConnection: close\r\n\r\n").await.unwrap();
+        run_ready().await;
+        tokio::time::advance(Duration::from_secs(59)).await;
+        assert!(!task.is_finished());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let error = task.await.unwrap().unwrap_err();
+        let mut source: &(dyn Error + 'static) = &error;
+        let mut timed_out = false;
+        loop {
+            if source
+                .downcast_ref::<io::Error>()
+                .is_some_and(|error| error.kind() == io::ErrorKind::TimedOut)
+            {
+                timed_out = true;
+            }
+            let Some(next) = source.source() else { break };
+            source = next;
+        }
+        assert!(timed_out, "{error:?}");
     }
 }

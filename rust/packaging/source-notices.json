@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "notices": [
+    {
+      "package": "libsqlite3-sys",
+      "version": "0.38.2",
+      "path": "sqlite3/sqlite3.h",
+      "sha256": "9e69a1353a4288450b0d5239ede11fc7f1f4c8e5eb07491fc8317eacb5b7de7e",
+      "first_line": 1,
+      "last_line": 10,
+      "scope": "SQLite 3.53.2 public-domain source header in the bundled upstream archive; compiled selection must be checked against recorded Cargo features/build output."
+    }
+  ]
+}

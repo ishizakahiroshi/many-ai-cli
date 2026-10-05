@@ -9,6 +9,7 @@ mod instruction_observer;
 mod logger;
 pub mod model_cache;
 pub mod model_catalog;
+mod ownership;
 mod routines;
 mod serve;
 pub use bootstrap::{ensure_hub, running_port};

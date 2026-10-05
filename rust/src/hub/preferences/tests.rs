@@ -89,6 +89,26 @@ fn persisted(f: &Fixture) -> Value {
         .public_json()
 }
 
+fn native_expected_paths(value: Value) -> Value {
+    match value {
+        Value::String(text) => match text.as_str() {
+            "<root>\\user_avatar.bin" => {
+                format!("<root>{}user_avatar.bin", std::path::MAIN_SEPARATOR).into()
+            }
+            "<root>\\notify_sound_custom.bin" => {
+                format!("<root>{}notify_sound_custom.bin", std::path::MAIN_SEPARATOR).into()
+            }
+            _ => text.into(),
+        },
+        Value::Array(items) => items.into_iter().map(native_expected_paths).collect(),
+        Value::Object(items) => items
+            .into_iter()
+            .map(|(key, value)| (key, native_expected_paths(value)))
+            .collect(),
+        other => other,
+    }
+}
+
 #[test]
 fn fixed_go_get_put_decoder_sanitizers_hashes_and_saved_snapshots() {
     let cases: Vec<Case> = serde_json::from_str(include_str!(
@@ -105,6 +125,7 @@ fn fixed_go_get_put_decoder_sanitizers_hashes_and_saved_snapshots() {
     );
     assert_eq!(cases.len(), observed["cases"].as_array().unwrap().len());
     for (case, expected) in cases.into_iter().zip(observed["cases"].as_array().unwrap()) {
+        let expected = native_expected_paths(expected.clone());
         assert_eq!(case.name, expected["name"], "case sequence");
         let f = fixture(case.initial, case.backends);
         if case.fail_save {

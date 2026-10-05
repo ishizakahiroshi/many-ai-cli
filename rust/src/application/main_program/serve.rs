@@ -83,7 +83,7 @@ pub struct HubComposition {
     services: ServiceRouter,
     sockets: Arc<SocketRegistry>,
     spawner: Arc<ProcessWrappedSpawner>,
-    storage: Arc<SqliteSessionStorage>,
+    storage: Option<Arc<SqliteSessionStorage>>,
     owner: HubTaskOwner,
     ledger: RuntimeLedger,
     listener: tokio::net::TcpListener,
@@ -94,6 +94,9 @@ pub struct HubComposition {
     logger: Arc<super::logger::HubLogger>,
     shutdown_owner: Arc<crate::hub::lifecycle::ShutdownOwner>,
     routine_cancel: TaskCancellation,
+    // Kept after all database-bearing owners in drop order.
+    _database_lease: Option<super::ownership::OwnerLease>,
+    _runtime_lease: super::ownership::OwnerLease,
 }
 struct TrialPathEnvironment;
 impl PathEnvironment for TrialPathEnvironment {
@@ -137,6 +140,7 @@ impl HubComposition {
                     .map_err(io::Error::other)?,
             );
         }
+        let runtime_lease = super::ownership::OwnerLease::runtime(&context.paths)?;
         let requested = if context.paths.is_trial() {
             context.paths.port()
         } else {
@@ -151,21 +155,53 @@ impl HubComposition {
             .paths
             .clone()
             .with_log_dir(std::path::Path::new(&config.hub.log_dir))?;
-        let storage = Arc::new(
+        // A configured log directory can point two distinct runtime roots at
+        // one physical database. Acquire that directory's lifetime lock before
+        // reset/schema/stale-session writes. Lock contention is never degraded.
+        let database = paths.resource(Resource::Database);
+        let database_lease = match super::ownership::OwnerLease::acquire(
+            database
+                .parent()
+                .ok_or_else(|| io::Error::other("database parent unavailable"))?,
+            "rust-database-owner.lock",
+        ) {
+            Ok(lease) => Some(lease),
+            Err(error) if error.kind() == io::ErrorKind::AddrInUse => return Err(error),
+            Err(_) => None,
+        };
+        let storage = database_lease.as_ref().and_then(|_| {
             SqliteSessionStorage::open(
                 &paths,
                 StorageOptions::baseline(paths.resource(Resource::Logs)),
             )
-            .map_err(io::Error::other)?,
-        );
-        storage
-            .close_stale_sessions(Timestamp::now(), "hub_restart")
-            .map_err(io::Error::other)?;
+            .ok()
+            .map(Arc::new)
+        });
+        // Fixed Go keeps the Hub available if history initialization fails.
+        // Never reset or replace a corrupt database to manufacture success.
+        let stale_error = storage.as_ref().and_then(|storage| {
+            storage
+                .close_stale_sessions(Timestamp::now(), "hub_restart")
+                .err()
+        });
         let logger = super::logger::HubLogger::new(
             paths.resource(Resource::Logs).as_path(),
             config.log.clone(),
             options.debug,
         )?;
+        if storage.is_none() {
+            logger.write(
+                "WARN",
+                "session history disabled",
+                "database initialization unavailable",
+            );
+        } else if stale_error.is_some() {
+            logger.write(
+                "WARN",
+                "stale history cleanup unavailable",
+                "history remains open",
+            );
+        }
         let warning_logger = logger.clone();
         let warning: EventWarning = Arc::new(move |operation, error| {
             warning_logger.write("WARN", operation, &format!("{error:?}"))
@@ -177,7 +213,9 @@ impl HubComposition {
         );
         let journal = Arc::new(SessionJournal::new(
             paths.clone(),
-            Some(storage.clone()),
+            storage
+                .clone()
+                .map(|storage| storage as Arc<dyn SessionStorage>),
             JournalOptions {
                 session_enabled: config.log.session_enabled,
                 max_bytes: config.log.session_max_size_mb.saturating_mul(1024 * 1024),
@@ -282,12 +320,9 @@ impl HubComposition {
             crate::approval::token::OneTapManager::new()
                 .map_err(|_| io::Error::other("one-tap signing randomness unavailable"))?,
         );
-        let audit_log = crate::logging::RollingLog::new(
-            Arc::new(Dir::open_or_create_private(
-                paths.resource(Resource::Logs).as_path(),
-            )?),
-            "auto-approval.jsonl",
-        )?;
+        let audit_log = Dir::open_or_create_private(paths.resource(Resource::Logs).as_path())
+            .and_then(|dir| crate::logging::RollingLog::new(Arc::new(dir), "auto-approval.jsonl"))
+            .ok();
         let audit_config = context.config.clone();
         let approval_rules = crate::application::approval_rules::ApprovalRules::new(
             context.config.clone(),
@@ -298,7 +333,10 @@ impl HubComposition {
                 let config = audit_config.snapshot().map_err(io::Error::other)?.config;
                 let mut line = serde_json::to_vec(record).map_err(io::Error::other)?;
                 line.push(b'\n');
-                audit_log.write_and_close(&config.log, &line)
+                audit_log
+                    .as_ref()
+                    .ok_or_else(|| io::Error::other("approval audit log unavailable"))?
+                    .write_and_close(&config.log, &line)
             }),
         );
         let bound_core = Arc::new(OnceLock::<Weak<SessionEngine>>::new());
@@ -1114,7 +1152,13 @@ impl HubComposition {
                 let _ = instruction_observer.settings_published();
             }
         }))
-        .with_files(files.clone(), Some(storage.clone()), workspace)
+        .with_files(
+            files.clone(),
+            storage
+                .clone()
+                .map(|storage| storage as Arc<dyn SessionStorage>),
+            workspace,
+        )
         .with_session_routes(sessions, info, effects.clone())
         .with_provider_routes(
             registry.clone(),
@@ -1230,6 +1274,8 @@ impl HubComposition {
             logger,
             shutdown_owner,
             routine_cancel,
+            _database_lease: database_lease,
+            _runtime_lease: runtime_lease,
         })
     }
     /// Finish endpoint integration before creating the WebSocket/router owners
@@ -1254,9 +1300,13 @@ impl HubComposition {
                 self.warning.clone(),
             )
             .with_startup_owner(self.spawner.clone())
+            .with_registration_preparation(Arc::new(HubRegistrationPreparation {
+                rules: self.dependencies.instruction_rules.clone(),
+                usage: self.dependencies.usage_hooks.clone(),
+                cancel: self.service_cancel.clone(),
+            }))
             .with_registration_hook(Arc::new(HubRegistrationHooks(
                 self.dependencies.workers.clone(),
-                self.dependencies.usage_hooks.clone(),
             )))
             .with_ordinary_spawn_owner(self.dependencies.ordinary.clone()),
         );
@@ -1394,13 +1444,16 @@ impl HubComposition {
             .shutdown(&Cancellation::default())
             .await;
         self.dependencies.journal.close_all();
-        let report = self
-            .storage
-            .shutdown(
-                ShutdownPolicy::CompatibilityStop,
-                &HubShutdownCancellation::default(),
-            )
-            .await;
+        let report = if let Some(storage) = &self.storage {
+            storage
+                .shutdown(
+                    ShutdownPolicy::CompatibilityStop,
+                    &HubShutdownCancellation::default(),
+                )
+                .await
+        } else {
+            ShutdownReport::default()
+        };
         let remove = self.ledger.remove_if_pid(pid);
         self.logger
             .write("INFO", "MANY-AI-CLI stopped", &format!("pid={pid}"));
@@ -1409,16 +1462,24 @@ impl HubComposition {
         }
         result?;
         remove?;
-        if let Some(error) = report.error {
-            return Err(io::Error::other(error));
-        }
-        Ok(())
+        check_storage_shutdown(report)
     }
 }
-struct HubRegistrationHooks(
-    Arc<SessionWorkers>,
-    Arc<crate::application::usage_hooks::UsageHooks>,
-);
+struct HubRegistrationPreparation {
+    rules: Arc<crate::application::instruction_rules::InstructionRules>,
+    usage: Arc<crate::application::usage_hooks::UsageHooks>,
+    cancel: Cancellation,
+}
+impl crate::hub::websocket::RegistrationPreparation for HubRegistrationPreparation {
+    fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            self.rules.registered(&self.cancel).await;
+            self.usage.registered();
+            Ok(())
+        })
+    }
+}
+struct HubRegistrationHooks(Arc<SessionWorkers>);
 impl crate::application::session_workers::RegistrationHook for HubRegistrationHooks {
     fn registered(
         &self,
@@ -1430,7 +1491,6 @@ impl crate::application::session_workers::RegistrationHook for HubRegistrationHo
             binding,
             metadata,
         )?;
-        self.1.registered();
         Ok(())
     }
 }
@@ -1478,4 +1538,16 @@ async fn bind_listener(port: u16, trial: bool) -> io::Result<tokio::net::TcpList
         io::ErrorKind::AddrInUse,
         "no available Hub port in configured range",
     ))
+}
+
+fn check_storage_shutdown(report: ShutdownReport) -> io::Result<()> {
+    if let Some(error) = report.error {
+        return Err(io::Error::other(error));
+    }
+    if report.timed_out || report.cancelled || report.remaining != 0 {
+        return Err(io::Error::other(
+            "session history writer did not finish shutdown",
+        ));
+    }
+    Ok(())
 }

@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 01:11:33 UTC
+> 最終更新: 2026-10-05(月) 01:36:00 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -45,3 +45,27 @@ Append dated checkpoints with owners, changed paths, command/exit outcomes, fail
 - Independent inherited-source review has raised startup DB ownership/degradation, advisory shutdown delivery and trial self-bootstrap environment findings. Reproduction, focused fixes and re-review are in progress; these are not accepted fixes yet. Actual locked-crate licensing/SBOM inputs are being collected; the empty Windows whisper runtime payload remains an explicit native packaging gap.
 
 Current code baseline: `7c2d7d320e04cd1d550d937d97515ff692500c6a`. Independent final reviewed SHA, final candidate test exits, CI runs and artifact identities: pending. The earlier 1151-test receipt remains historical; later targeted audit/IP fixes do not inherit that receipt.
+
+## 2026-10-05 first repair checkpoint
+
+[Recovered continuation Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11) targets develop. PR #9 remains unchanged; reconciliation is owner-pending. Initial acknowledgment was published as `3a538ee8fb5424224eefc43b1e5fdafded66fe9d`. HTTPS Git publication had no local credentials, so publication used the authorized repository connector and remote readback.
+
+The independent inherited-source review produced concrete startup/history, advisory shutdown, trial bootstrap, and pre-ACK instruction-order findings. This checkpoint contains lifetime runtime/database leases, optional history and stderr log degradation, shutdown delivery independence, the self-bootstrap home identity repair, and a register-before-ACK/reattach-after-ACK preparation barrier using the existing instruction and usage-hook owners. Focused inherited gate/write panic/board and wrapper-boundary regressions are retained. No same-root/two-live-Hub reproduction is rerun after a reviewer safety block; the existing artifact observation has no assigned final source SHA. The lifetime lock primitive is tested separately, and the integration limitation remains open. Empty/relative production log-directory compatibility remains under review.
+
+Current working-source validation (pre-commit, build identity still based on acknowledgment HEAD; not final clean-CI identity):
+
+| Command / scope | Exit | Observed result |
+|---|---:|---|
+| `cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets --no-fail-fast -- --test-threads=8` | 0 | Linux 1253 passed, 0 failed, 0 ignored; 32 summaries, including copied-data rollback after pinned Go cache preparation |
+| `cargo clippy --manifest-path rust/Cargo.toml --locked --offline --all-targets -- -D warnings` | 0 | Linux strict check; later edits need their own repeat |
+| `cargo fmt --manifest-path rust/Cargo.toml` / standalone checks | 0 | Formatting only |
+| pinned Go1.26.8 preference/media generators | 0 | 83 / 170 cases agree; source hashes unchanged. Only two source-created filename placeholders need native separator adaptation; arbitrary user paths are not normalized. |
+| `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s rust/packaging -p 'test_*.py'` | 0 | 25 packaging/CI receipt tests |
+
+Immutable baseline `7c2d7d3` separately failed Linux all-target invocation at its library: 921 passed / 2 failed / 0 ignored, exit101; later targets were not run by that baseline command. These failures were Windows-origin expected filename separators. The prior Windows 1151 count remains a different historical receipt.
+
+[Initial four-target run37250575786](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37250575786) at PR head `3a538ee8` is red. Linux and both macOS jobs stopped at strict Clippy casts in whisper/native.rs; subsequent test/build/artifact stages did not run. Windows passed Clippy but library had 841 passed / 34 failed, plus copied-data rollback failed because its deliberately offline Go child had no module cache. Windows source checkout CRLF and selected 8.3-vs-long path identities are being addressed, not waived. This checkpoint preserves committed bytes in CI, prepares selected Go caches, limits test concurrency to eight, runs all-targets and doctests explicitly, checks out the actual PR head, and retains command/exit/failure logs even when validation fails. Two release binaries and actual observed-build licensing/SBOM collection are still pending.
+
+[PR-range secret scan37250575706](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37250575706) examined 24 commits and found the three original `7b937e0` findings already described above; it is NOT accepted. Any exact fingerprint exception requires coordinated approval outside the original path scope; no scanner/allowlist change is included here. [Validate37250575753](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37250575753) also exposed two standalone oracle-driver Go files entering `go build ./...`; explicit ignore build tags and the generator's named-input behavior were repaired under rust/tests/fixtures without changing the Go behavior oracle.
+
+Remaining behavior audit has found five missing relay suffix handlers despite the bound session prefix, and trial webhook/ntfy transport requires a guard independent of web-push. Separate focused work continues before final acceptance. The K/A matrix will state concrete caller coverage; R01–R03/V01–V08 definitions have not been found in the checked-in instruction set and are awaiting an authoritative source. Final code SHA/review SHA/four-target artifacts and all native/provider/device/cutover gates remain pending.

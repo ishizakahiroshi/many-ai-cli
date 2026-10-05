@@ -293,3 +293,84 @@ async fn routine_routes_persist_in_selected_runtime_and_routine_prompt_metadata_
     ));
     assert_eq!(loaded.definitions().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn corrupt_history_and_obstructed_logs_do_not_abort_all_hub_composition() {
+    for obstruct_logs in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let context = fixture_context(&root).await;
+        let database = context.paths.resource(crate::config::Resource::Database);
+        std::fs::write(&database, b"synthetic non-SQLite input\n").unwrap();
+        if obstruct_logs {
+            std::fs::write(
+                context.paths.resource(crate::config::Resource::Logs),
+                b"synthetic log obstruction",
+            )
+            .unwrap();
+        }
+        let composition = HubComposition::new(context, ServeOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read(&database).unwrap(),
+            b"synthetic non-SQLite input\n"
+        );
+        drop(composition);
+    }
+}
+#[tokio::test]
+async fn actual_registration_ack_observes_instruction_file_and_shutdown_restores_original() {
+    use futures_util::{SinkExt, StreamExt};
+    let root = tempfile::tempdir().unwrap();
+    let context = fixture_context(&root).await;
+    let paths = context.paths.clone();
+    let project = context.cwd.clone();
+    let target = project.join("AGENTS.md");
+    std::fs::write(&target, b"synthetic original\n").unwrap();
+    let composition = HubComposition::new(context, ServeOptions::default())
+        .await
+        .unwrap();
+    composition
+        .dependencies
+        .instruction_rules
+        .change("enable", &Cancellation::default())
+        .await
+        .unwrap();
+    let shutdown = Cancellation::default();
+    let cancel = shutdown.clone();
+    let task = tokio::spawn(async move { composition.run(&cancel).await });
+    let (mut wrapper, _) =
+        tokio_tungstenite::connect_async(format!("ws://127.0.0.1:{}/ws", paths.port()))
+            .await
+            .unwrap();
+    wrapper
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            serde_json::json!({"type":"register","provider":"copilot","pid":3011,
+            "cwd":project,"home_dir":paths.root(),"token":"synthetic-loopback-token"})
+            .to_string()
+            .into(),
+        ))
+        .await
+        .unwrap();
+    let ack = tokio::time::timeout(Duration::from_secs(5), wrapper.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let ack: serde_json::Value = serde_json::from_str(ack.to_text().unwrap()).unwrap();
+    assert_eq!(ack["type"], "registered");
+    let prepared = std::fs::read_to_string(&target).unwrap();
+    assert_ne!(
+        prepared, "synthetic original\n",
+        "ACK must follow actual instruction mutation"
+    );
+    assert!(prepared.contains("synthetic original"));
+    wrapper.close(None).await.unwrap();
+    shutdown.cancel();
+    tokio::time::timeout(Duration::from_secs(15), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(std::fs::read(&target).unwrap(), b"synthetic original\n");
+}

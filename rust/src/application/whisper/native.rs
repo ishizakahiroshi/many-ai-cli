@@ -228,5 +228,6 @@ fn available(path: &Path) -> io::Result<u64> {
         return Err(io::Error::last_os_error());
     }
     let data = unsafe { data.assume_init() };
-    Ok((data.f_bavail as u64).saturating_mul(data.f_frsize as u64))
+    // Widen native ABI fields first; the supported Unix types differ.
+    Ok(u64::try_from(u128::from(data.f_bavail) * u128::from(data.f_frsize)).unwrap_or(u64::MAX))
 }

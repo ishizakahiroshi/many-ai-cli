@@ -27,6 +27,7 @@ mod manager;
 pub use manager::*;
 
 mod ui;
+mod ui_deadlines;
 pub use ui::*;
 
 pub mod delivery;

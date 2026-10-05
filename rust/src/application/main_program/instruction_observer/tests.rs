@@ -51,7 +51,8 @@ impl OrderedEventObserver for FailedPublication {
 }
 
 #[tokio::test]
-async fn downstream_failure_preserves_error_and_still_injects_then_cleans_actual_target() {
+async fn downstream_failure_preserves_error_after_registration_prepares_then_cleans_actual_target()
+{
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(root.path(), 49337, installed.path()).unwrap();
@@ -111,6 +112,9 @@ async fn downstream_failure_preserves_error_and_still_injects_then_cleans_actual
         .await
         .unwrap()
         .binding;
+    // The WebSocket registration barrier invokes this before ACK. Event
+    // publication is a later phase and must not own a second injection sweep.
+    rules.registered(&cancel).await;
     let tasks = HubTaskOwner::new(tokio::runtime::Handle::current());
     let original_error = SessionError::Transport("synthetic board publication failed".into());
     let observer = InstructionObserver::new(

@@ -37,6 +37,8 @@ use std::{
 mod handoff_hooks;
 mod observations;
 #[cfg(test)]
+mod recovery_core_prompt_tests;
+#[cfg(test)]
 mod tests;
 mod transcript_path;
 type ActiveRoutineProbe = dyn Fn(&str, Timestamp) -> bool + Send + Sync;
@@ -184,7 +186,7 @@ impl SessionWorkers {
             Arc::downgrade(&self.core()?),
             self.this.upgrade().ok_or(SessionError::Shutdown)?,
         ));
-        drop(driver.start(self.tasks.effect_permit()?, request));
+        drop(driver.start_owned(&self.tasks, request)?);
         Ok(())
     }
     pub(crate) fn conductor_prompt(id: &str) -> String {
@@ -195,11 +197,7 @@ impl SessionWorkers {
         child: &crate::orchestration::child_launch::RegisteredChild,
     ) -> Result<(), SessionError> {
         if let Some(request) = InitialPromptRequest::for_child(child) {
-            let driver = Arc::new(InitialPromptDriver::new(
-                Arc::downgrade(&self.core()?),
-                self.this.upgrade().ok_or(SessionError::Shutdown)?,
-            ));
-            drop(driver.start(self.tasks.effect_permit()?, request));
+            self.enqueue_initial_request(request)?;
         }
         Ok(())
     }
@@ -635,11 +633,7 @@ impl RegistrationHook for SessionWorkers {
                 None => Ok(transcript_path::conductor_prompt(&orchestration.0)),
             })?;
         if let Some(request) = request {
-            let driver = Arc::new(InitialPromptDriver::new(
-                Arc::downgrade(&self.core()?),
-                self.this.upgrade().ok_or(SessionError::Shutdown)?,
-            ));
-            drop(driver.start(self.tasks.effect_permit()?, request));
+            self.enqueue_initial_request(request)?;
         }
         Ok(())
     }

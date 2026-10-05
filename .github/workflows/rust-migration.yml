@@ -41,9 +41,13 @@ jobs:
       GOTOOLCHAIN: local
       MANY_AI_REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
+      - name: Preserve committed source bytes on every runner
+        shell: bash
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.8'
@@ -68,10 +72,11 @@ jobs:
         shell: pwsh
         run: python scripts/rust-candidate-ci.py --target '${{ matrix.target }}'
       - name: Retain unaccepted build receipts and both binaries
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: rust-candidate-${{ matrix.target }}-${{ github.sha }}
+          name: rust-candidate-${{ matrix.target }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: .rust-candidate-artifacts/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
           include-hidden-files: true

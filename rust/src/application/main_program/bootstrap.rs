@@ -113,6 +113,13 @@ pub async fn ensure_hub(context: &mut MainContext, cancel: &Cancellation) -> io:
             command.env(key, value);
         }
     }
+    if context.paths.is_trial() {
+        // This is our exact executable, not a provider. Preserve the original
+        // installation identity only through its bootstrap; MainContext then
+        // recreates the confined vendor environment before any provider work.
+        command.env("HOME", &context.application_home);
+        command.env("USERPROFILE", &context.application_home);
+    }
     command.env_remove(crate::process::wrapper_startup::STARTUP_JOB_ENV);
     command.env_remove("MANY_AI_CLI_INTERNAL_SPAWN_PROOF");
     command.stdin(Stdio::null());

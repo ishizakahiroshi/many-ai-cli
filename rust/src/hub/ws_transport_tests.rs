@@ -56,6 +56,12 @@ async fn fixture() -> Fixture {
     fixture_with_observer(Arc::new(SyntheticObserver)).await
 }
 async fn fixture_with_observer(observer: Arc<dyn OrderedEventObserver>) -> Fixture {
+    fixture_with_preparation(observer, None).await
+}
+async fn fixture_with_preparation(
+    observer: Arc<dyn OrderedEventObserver>,
+    preparation: Option<Arc<dyn RegistrationPreparation>>,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let trial = root.path().join("trial");
     std::fs::create_dir(&trial).unwrap();
@@ -110,14 +116,18 @@ async fn fixture_with_observer(observer: Arc<dyn OrderedEventObserver>) -> Fixtu
     sockets.bind_core(Arc::downgrade(&core)).unwrap();
     let services = Arc::new(ServiceRouter::new(config, paths, core.clone(), port).unwrap());
     let cancel = Cancellation::default();
-    let websocket = Arc::new(WebSocketService::new(
+    let mut websocket = WebSocketService::new(
         services.clone(),
         core.clone(),
         sockets.clone(),
         effects.clone(),
         cancel.clone(),
         Arc::new(|_, _| {}),
-    ));
+    );
+    if let Some(preparation) = preparation {
+        websocket = websocket.with_registration_preparation(preparation);
+    }
+    let websocket = Arc::new(websocket);
     let server = tokio::spawn(transport::serve_with_websockets(
         listener,
         services,
@@ -478,5 +488,66 @@ async fn real_reattach_ack_precedes_unacked_replay_and_disconnected_input_flush(
     ui.json(serde_json::json!({"type":"pty_input","session_id":id,"text":"fresh"}))
         .await;
     assert_eq!(next.until("pty_input").await["data"], "ZnJlc2g=");
+    fixture.stop().await;
+}
+
+struct PreparationBarrier {
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Semaphore,
+}
+impl RegistrationPreparation for PreparationBarrier {
+    fn prepare<'a>(&'a self) -> CoreFuture<'a, Result<(), SessionError>> {
+        Box::pin(async move {
+            self.entered.notify_one();
+            self.release
+                .acquire()
+                .await
+                .map_err(|_| SessionError::Shutdown)?
+                .forget();
+            Ok(())
+        })
+    }
+}
+#[tokio::test]
+async fn register_ack_and_registered_publication_wait_for_preparation_but_reattach_ack_does_not() {
+    let barrier = Arc::new(PreparationBarrier {
+        entered: tokio::sync::Notify::new(),
+        release: tokio::sync::Semaphore::new(0),
+    });
+    let fixture =
+        fixture_with_preparation(Arc::new(SyntheticObserver), Some(barrier.clone())).await;
+    let (mut wrapper, _) = Client::connect(fixture.port, "").await;
+    wrapper
+        .json(serde_json::json!({"type":"register","provider":"shell",
+        "cwd":fixture._root.path(),"pid":321,"token":"synthetic-websocket-token"}))
+        .await;
+    tokio::time::timeout(Duration::from_secs(2), barrier.entered.notified())
+        .await
+        .unwrap();
+    // A readiness check consumes no bytes. No registration ACK or pending input
+    // can pass the actual socket caller while its preparation barrier is held.
+    let mut peek = [0u8; 1];
+    assert!(
+        tokio::time::timeout(Duration::from_millis(25), wrapper.0.peek(&mut peek))
+            .await
+            .is_err()
+    );
+    barrier.release.add_permits(1);
+    let ack = wrapper.frame().await.unwrap();
+    assert_eq!(ack["type"], "registered");
+    let id = ack["session_id"].as_i64().unwrap();
+    let (mut reattach, _) = Client::connect(fixture.port, "").await;
+    reattach
+        .json(serde_json::json!({"type":"reattach","session_id":id,
+        "provider":"shell","cwd":fixture._root.path(),"pid":321,
+        "token":"synthetic-websocket-token"}))
+        .await;
+    assert_eq!(reattach.frame().await.unwrap()["type"], "reattach_ack");
+    tokio::time::timeout(Duration::from_secs(2), barrier.entered.notified())
+        .await
+        .unwrap();
+    barrier.release.add_permits(1);
+    drop(wrapper);
+    drop(reattach);
     fixture.stop().await;
 }

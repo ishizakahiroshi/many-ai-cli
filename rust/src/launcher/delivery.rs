@@ -156,8 +156,14 @@ fn hex(value: &str, n: usize) -> bool {
     value.len() == n && value.bytes().all(|b| b.is_ascii_hexdigit())
 }
 fn relative(path: &str) -> bool {
+    // Manifests are shared across all four hosts. A Unix Path parser would
+    // otherwise accept Windows drive/ADS spellings, and components() silently
+    // normalizes aliases such as "dir/./file" or repeated separators.
     !path.is_empty()
-        && !path.contains('\\')
+        && !path.contains(['\\', ':'])
+        && path
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
         && Path::new(path)
             .components()
             .all(|c| matches!(c, Component::Normal(_)))
@@ -303,5 +309,34 @@ impl DeliveryManifest {
             "type":"Binary","name":artifact.target.binary(artifact.launcher),"path":format!("{repository_relative_candidate_dir}/{}",artifact.file.path),
             "goos":artifact.target.goos(),"goarch":artifact.target.goarch(),"extra":{"ID":if artifact.launcher{"many-ai-cli-launcher"}else{"many-ai-cli"}},
         })).collect()))
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::relative;
+
+    #[test]
+    fn delivery_paths_have_one_portable_relative_spelling() {
+        for allowed in ["linux-x64/many-ai-cli", "web/dist/index.html", "file"] {
+            assert!(relative(allowed), "{allowed}");
+        }
+        for denied in [
+            "",
+            ".",
+            "..",
+            "../file",
+            "/file",
+            "dir/../file",
+            "dir/./file",
+            "dir//file",
+            "dir/",
+            "C:/file",
+            "C:file",
+            "dir/file:stream",
+            "dir\\file",
+        ] {
+            assert!(!relative(denied), "{denied}");
+        }
     }
 }

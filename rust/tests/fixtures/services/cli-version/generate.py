@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix='cli-version-oracle-') as tmp:
  for name in ['requireMethodOneOf','writeJSON(','writeJSONStatus','writeJSONError']:hub+=function('internal/hub/http_helpers.go',name)
  hub+=structure('internal/hub/http_helpers.go','httpErrorResp')
  write(root,'source.go',hub)
- write(root,'main.go',(HERE/'oracle.go').read_text())
+ write(root,'main.go',(HERE/'oracle.go').read_text().removeprefix('//go:build ignore\n\n'))
  for directory in ['home','temporary']:(root/directory).mkdir()
  env=dict(os.environ,HOME=str(root/'home'),TMPDIR=str(root/'temporary'),GOTOOLCHAIN='local',GOPROXY='off',GOSUMDB='off',GO111MODULE='on',TZ='UTC')
  executable=os.environ.get('CLI_VERSION_GO','/workspace/shared/many-ai-rust-tools/go/bin/go')

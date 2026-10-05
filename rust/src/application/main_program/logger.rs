@@ -1,14 +1,18 @@
 use crate::{config::LogConfig, files::safe_fs::Dir, logging::RollingLog, storage::mask_secrets};
 use std::{io, path::Path, sync::Arc};
 pub struct HubLogger {
-    file: RollingLog,
+    file: Option<RollingLog>,
     config: LogConfig,
     debug: bool,
 }
 impl HubLogger {
     pub fn new(directory: &Path, config: LogConfig, debug: bool) -> io::Result<Arc<Self>> {
         Ok(Arc::new(Self {
-            file: RollingLog::new(Arc::new(Dir::open_or_create_private(directory)?), "hub.log")?,
+            // Fixed Go falls back to stderr when safe file logging is not
+            // available. Never follow an alias or replace an obstructing file.
+            file: Dir::open_or_create_private(directory)
+                .ok()
+                .and_then(|dir| RollingLog::new(Arc::new(dir), "hub.log").ok()),
             config,
             debug,
         }))
@@ -25,13 +29,18 @@ impl HubLogger {
             "time={} level={level} msg={message} detail={detail}\n",
             chrono::Local::now().to_rfc3339()
         );
-        if self.config.enabled && self.file.write(&self.config, line.as_bytes()).is_err() {
+        if self.config.enabled
+            && self
+                .file
+                .as_ref()
+                .is_some_and(|file| file.write(&self.config, line.as_bytes()).is_err())
+        {
             eprintln!("Hub diagnostic log write unavailable");
         }
         eprint!("{line}");
     }
     pub fn close(&self) -> io::Result<()> {
-        self.file.close()
+        self.file.as_ref().map_or(Ok(()), RollingLog::close)
     }
 }
 #[cfg(test)]
@@ -59,5 +68,16 @@ mod tests {
                 .unwrap()
                 .contains("visible")
         );
+    }
+    #[test]
+    fn obstructed_log_directory_uses_stderr_without_overwriting_it() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("logs");
+        std::fs::write(&path, b"synthetic obstruction").unwrap();
+        let logger = HubLogger::new(&path, LogConfig::default(), false).unwrap();
+        assert!(logger.file.is_none());
+        logger.write("INFO", "synthetic fallback", "");
+        logger.close().unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), b"synthetic obstruction");
     }
 }

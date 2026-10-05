@@ -5,7 +5,7 @@
 //! the typed route; launch-argument/headless acceptance is observed elsewhere.
 //! A transport write is never recorded as provider acceptance.
 use crate::{
-    hub::task_owner::{OwnedTaskPermit, TaskWaiter},
+    hub::task_owner::{HubTaskHandle, OwnedTaskPermit, TaskWaiter},
     proto::{core::*, time::Timestamp},
     terminal::session::SessionEngine,
 };
@@ -208,6 +208,25 @@ impl InitialPromptDriver {
         permit: OwnedTaskPermit,
         request: InitialPromptRequest,
     ) -> Result<TaskWaiter<Result<InitialPromptCompletion, SessionError>>, SessionError> {
+        self.start_admitted(request, || Ok(permit))
+    }
+
+    /// Acquire production effect ownership after installing the same cleanup
+    /// guard as direct starts. A closed Hub lane must not strand a registration
+    /// gate merely because no delivery future was admitted.
+    pub fn start_owned(
+        self: &Arc<Self>,
+        tasks: &HubTaskHandle,
+        request: InitialPromptRequest,
+    ) -> Result<TaskWaiter<Result<InitialPromptCompletion, SessionError>>, SessionError> {
+        self.start_admitted(request, || tasks.effect_permit())
+    }
+
+    fn start_admitted(
+        self: &Arc<Self>,
+        request: InitialPromptRequest,
+        acquire: impl FnOnce() -> Result<OwnedTaskPermit, SessionError>,
+    ) -> Result<TaskWaiter<Result<InitialPromptCompletion, SessionError>>, SessionError> {
         let engine = self.engine.upgrade().ok_or(SessionError::Shutdown)?;
         // Validate before transferring the task. Construct the guard now so an
         // unpolled future also clears its own gate on runtime/owner abandonment.
@@ -220,6 +239,7 @@ impl InitialPromptDriver {
             finished: false,
         };
         engine.initial_prompt_observation(request.binding)?;
+        let permit = acquire()?;
         let cancel = permit.cancellation();
         let driver = self.clone();
         Ok(permit.start(async move { driver.run(engine, request, cancel, guard).await }))

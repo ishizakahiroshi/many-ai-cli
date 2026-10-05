@@ -123,6 +123,26 @@ fn file_observation(path: &Path) -> Value {
     std::fs::read(path).map_or(Value::Null, |bytes| digest(&bytes))
 }
 
+fn native_expected_paths(value: Value) -> Value {
+    match value {
+        Value::String(text) => match text.as_str() {
+            "<root>\\user_avatar.bin" => {
+                format!("<root>{}user_avatar.bin", std::path::MAIN_SEPARATOR).into()
+            }
+            "<root>\\notify_sound_custom.bin" => {
+                format!("<root>{}notify_sound_custom.bin", std::path::MAIN_SEPARATOR).into()
+            }
+            _ => text.into(),
+        },
+        Value::Array(items) => items.into_iter().map(native_expected_paths).collect(),
+        Value::Object(items) => items
+            .into_iter()
+            .map(|(key, value)| (key, native_expected_paths(value)))
+            .collect(),
+        other => other,
+    }
+}
+
 #[test]
 fn pinned_go_media_corpus_matches_body_headers_and_failure_state() {
     let cases: Vec<Case> = serde_json::from_str(include_str!(
@@ -137,6 +157,7 @@ fn pinned_go_media_corpus_matches_body_headers_and_failure_state() {
     assert_eq!(cases.len(), 170);
     assert_eq!(cases.len(), expected.len());
     for (case, expected) in cases.iter().zip(expected) {
+        let expected = native_expected_paths(expected.clone());
         let f = fixture(case.initial.clone(), case.missing_root);
         for (key, payload) in &case.media {
             let path = f.paths.resource(if key == "avatar" {
@@ -228,7 +249,7 @@ fn pinned_go_media_corpus_matches_body_headers_and_failure_state() {
             ""
         };
         let observed = json!({"name":case.name,"status":response.status,"body":body,"headers":headers,"runtime":runtime,"saved":saved,"files":{"avatar":file_observation(&f.paths.resource(Resource::Avatar)),"sound":file_observation(&f.paths.resource(Resource::NotifySound))},"source_detail_prefix":detail_prefix});
-        assert_eq!(&observed, expected, "source corpus case {}", case.name);
+        assert_eq!(observed, expected, "source corpus case {}", case.name);
         assert_eq!(
             warnings.load(Ordering::SeqCst),
             usize::from(response.status == 500 && observed["body"]["error"] == "save_failed"),
