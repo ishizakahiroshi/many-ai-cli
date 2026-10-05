@@ -385,7 +385,10 @@ async fn production_log_spelling_is_preserved_while_selected_cwd_controls_actual
         let root = tempfile::tempdir().unwrap();
         let mut context = fixture_context(&root).await;
         let port = context.paths.port();
-        let home = root.path().join("synthetic-home");
+        // The production instruction-home walk starts at the filesystem root
+        // and uses O_NOFOLLOW, so it does not expand macOS /var, /tmp, or /etc.
+        // tempfile sits on that alias; hold the same directory by its physical spelling.
+        let home = crate::config::paths::native_system_path(root.path()).join("synthetic-home");
         std::fs::create_dir(&home).unwrap();
         let paths = RuntimePaths::production(&home).unwrap();
         let cwd = context.cwd.clone();

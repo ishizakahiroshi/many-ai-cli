@@ -122,6 +122,7 @@ struct Fixture {
     core: Arc<SessionEngine>,
     observer: Arc<ApplicationEventObserver>,
     callbacks: Arc<Callbacks>,
+    warnings: Arc<Mutex<Vec<String>>>,
     owner: HubTaskOwner,
     binding: SessionBinding,
 }
@@ -232,12 +233,19 @@ async fn fixture(handoff_enabled: bool, summary: bool) -> Fixture {
         block: AtomicBool::new(false),
     });
     let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
+    let warnings = Arc::new(Mutex::new(Vec::new()));
+    let warning_sink = warnings.clone();
     let observer = Arc::new(ApplicationEventObserver::new(
         config,
         paths,
         files.clone(),
         callbacks.clone(),
-        Arc::new(|_, _| {}),
+        Arc::new(move |message, error| {
+            warning_sink
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(format!("{message}: {error:?}"));
+        }),
         owner.handle(),
     ));
     let effects: Arc<dyn CoreEffectSink> = sink;
@@ -251,6 +259,7 @@ async fn fixture(handoff_enabled: bool, summary: bool) -> Fixture {
         core,
         observer,
         callbacks,
+        warnings,
         owner,
         binding: registration.binding,
     }
@@ -398,9 +407,26 @@ async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarna
     assert_eq!(completed.snapshot.files, 1);
     assert!(f.core.is_current(warm.binding));
     drop(completed);
+    let warnings_before = f
+        .warnings
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .len();
     f.observer
         .observe(&event(warm.binding, false))
         .await
         .unwrap();
-    assert!(f.files.reserve_git_turn_end(warm.binding).is_some());
+    let reservation = f.files.reserve_git_turn_end(warm.binding);
+    let warnings = f
+        .warnings
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .iter()
+        .skip(warnings_before)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(
+        reservation.is_some(),
+        "post-reconnect start did not establish a Git-turn reservation; warnings={warnings:?}"
+    );
 }
