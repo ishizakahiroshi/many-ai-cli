@@ -4,7 +4,7 @@ status: draft
 tags: [rust, recovery, dots]
 owner: unknown
 review_status: draft
-related: [REVIEW.md, PROGRESS.md]
+related: [REVIEW.md, PROGRESS.md, RV-CONTRACTS.md]
 last_reviewed: 2026-10-05
 ---
 
@@ -12,11 +12,11 @@ last_reviewed: 2026-10-05
 
 This continues existing task #3, not GitHub issue/PR number 3 and not a second concurrent rewrite. The previous environment was lost; its recovery handoff reported that implementation/publication had stopped. Before resuming, acknowledge whether another #3 worker is active. Do not start a duplicate worker.
 
-Repository: `ishizakahiroshi/many-ai-cli`. Existing draft PR: #9, `feat/rust-migration` → `develop`. The reviewed recovered source and instructions have been published on `dots/rust-recovery-resume-3`; delivery and acknowledgment remain pending. The coordinator supplies the actual immutable commit URL in the resume message. The old PR head alone does not contain this recovery candidate. Read the actual supplied commit before editing; report its SHA and working branch in the acknowledgment.
+Repository: `ishizakahiroshi/many-ai-cli`. Recovery draft PR: #11, `dots/rust-recovery-resume-3` → `develop`; old draft PR #9 remains preserved. The reviewed recovered source and instructions were published at `7c2d7d320e04cd1d550d937d97515ff692500c6a`, delivered to the existing #3 conversation and acknowledged on 2026-10-05. The R/V reference correction is a separate documentation supplement; its delivery receipt belongs in PROGRESS.md after it is actually read. The coordinator supplies the actual immutable commit URL in the supplement message. The old PR head alone does not contain this recovery candidate. Read the actual supplied commit before editing; report its SHA and working branch in the acknowledgment.
 
 ## Goal and current point
 
-Finish the Rust implementation and reproducible automated acceptance against fixed Go behavior SHA `21d0bc7935a2c4696fb89ccff2e324157a528c2d`. Preserve the original contracts in `../rust-migration/00-contracts.md` and integration instructions in `../rust-migration/05-integration-review.md`; these contain K01–K15, A01–A12, R01–R03 and V01–V08 and are referenced for their full behavior matrix. Source and tests at the fixed Go SHA remain the behavior oracle. Do not delegate application behavior back to a Go executable.
+Finish the Rust implementation and reproducible automated acceptance against fixed Go behavior SHA `21d0bc7935a2c4696fb89ccff2e324157a528c2d`. Preserve K01–K15 and A01–A12 in [the original contracts](../rust-migration/00-contracts.md) and [integration instructions](../rust-migration/05-integration-review.md). Read [RV-CONTRACTS.md](RV-CONTRACTS.md) for the numbered R01–R03 and V01–V08 definitions. The earlier recovery README incorrectly attributed those numbered definitions to the original public instructions, which contain their unnumbered behavioral and validation requirements. This supplement supplies the missing identifiers without restarting #3 or adding new requirements. Source and tests at the fixed Go SHA remain the behavior oracle; record the intentional R01–R03 defect corrections separately from baseline equivalence. Do not delegate application behavior back to a Go executable.
 
 The recovered 775 checkpoint was preserved separately and its historical test success was not reproducible without repairs. Its 29 later recovered files have been inspected and integrated in the local candidate, along with missing application owners and regression fixes. The complete historical 1422-test source is still unavailable. Do not claim it was recovered or use 1422 as a target test count.
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b",
+    "commit": "3a538ee8fb5424224eefc43b1e5fdafded66fe9d",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1839,
+    "discovered": 1840,
     "analyzed": 1470,
     "unresolved": 9,
     "unknown": 1,
-    "unclaimed": 359,
+    "unclaimed": 360,
     "skipped_by_config": 0
   },
   "files": [
@@ -893,6 +893,14 @@
     },
     {
       "path": "docs/bot/rust-recovery-resume/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/RV-CONTRACTS.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
