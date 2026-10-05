@@ -1,6 +1,8 @@
 //! Frozen Go/Web wire contract. Go's optional zero values and base64 bytes are explicit.
 pub mod core;
 mod generated;
+pub mod go_quote;
+pub mod unicode;
 pub use generated::*;
 use serde::{Deserialize, Deserializer};
 

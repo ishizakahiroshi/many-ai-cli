@@ -30,8 +30,12 @@ impl LauncherStore {
             .ok_or_else(|| io::Error::other("invalid launcher resource name"))
     }
     pub(crate) fn lock(&self, name: &str) -> io::Result<File> {
-        let file = self.dir.open_lock(name)?;
-        file.lock()?;
+        let file = self.dir.open_lock(name).map_err(|error| {
+            io::Error::new(error.kind(), format!("open launcher lock: {error}"))
+        })?;
+        file.lock().map_err(|error| {
+            io::Error::new(error.kind(), format!("acquire launcher lock: {error}"))
+        })?;
         Ok(file)
     }
     pub fn load_profiles(&self) -> io::Result<ProfilesFile> {
@@ -76,6 +80,24 @@ impl LauncherStore {
             file.validate()
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
         })
+    }
+    /// Keeps load/validation/save error stages while holding the same store lock.
+    pub fn replace_profiles_staged(
+        &self,
+        profiles: Option<Vec<Profile>>,
+    ) -> Result<(), super::manager::LauncherError> {
+        use super::manager::LauncherError;
+        let _lock = self
+            .lock("launcher-profiles.yaml.lock")
+            .map_err(|e| LauncherError::new(500, "save_failed", e.to_string()))?;
+        let mut file = self
+            .load_profiles()
+            .map_err(|e| LauncherError::new(500, "load_failed", e.to_string()))?;
+        file.profiles = profiles;
+        file.validate()
+            .map_err(|e| LauncherError::new(400, "invalid_profile", e))?;
+        self.save_profiles_unlocked(&file)
+            .map_err(|e| LauncherError::new(500, "save_failed", e.to_string()))
     }
     pub fn set_last_used(&self, name: &str) -> io::Result<()> {
         self.update_profiles(|file| {

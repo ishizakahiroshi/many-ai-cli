@@ -31,6 +31,12 @@ struct TransportState {
     sink: Arc<dyn CoreEffectSink>,
     websockets: Option<Arc<super::websocket::WebSocketService>>,
 }
+struct HttpWaitGuard(crate::proto::core::HttpWaitCancellation);
+impl Drop for HttpWaitGuard {
+    fn drop(&mut self) {
+        self.0.cancel();
+    }
+}
 pub fn router(services: Arc<ServiceRouter>, sink: Arc<dyn CoreEffectSink>) -> Router {
     Router::new()
         .fallback(any(handle))
@@ -178,6 +184,46 @@ async fn handle(
     if let Err(rejection) = state.services.preflight(&request, now) {
         return response(rejection);
     }
+    if request.path == super::voice_routes::PATH {
+        let Some(voice) = state.services.voice.clone() else {
+            return response(Response::error(
+                503,
+                "whisper_unavailable",
+                "voice service is not initialized",
+            ));
+        };
+        let permit = match state.services.owned_request_permit() {
+            Ok(permit) => permit,
+            Err(_) => {
+                return response(Response::error(
+                    503,
+                    "whisper_unavailable",
+                    "voice service is shutting down",
+                ));
+            }
+        };
+        let cancellation = permit.cancellation();
+        let waiter = crate::proto::core::HttpWaitCancellation::default();
+        let _guard = HttpWaitGuard(waiter.clone());
+        let waiter_token = waiter.token().clone();
+        let completion=permit.start(async move {
+            let operation=async {
+                // Go starts or verifies a managed service before reading raw
+                // audio; failures therefore don't wait on a slow upload.
+                let config=match voice.prepare(cancellation.token()).await {Ok(config)=>config,Err(response)=>return response};
+                let audio=match read_body(body,super::voice_routes::PATH).await {Ok(audio)=>audio,Err(_)=>return Response::error(400,"bad_request","read audio failed")};
+                voice.transcribe_audio(&config,&audio,cancellation.token()).await
+            };
+            tokio::select! {
+                result=operation=>result,
+                _=waiter_token.cancelled()=>Response::error(502,"whisper_unreachable","whisper unreachable: request cancelled"),
+                _=cancellation.token().cancelled()=>Response::error(503,"whisper_unavailable","voice service is shutting down"),
+            }
+        });
+        return response(completion.wait().await.unwrap_or_else(|_| {
+            Response::error(503, "whisper_unavailable", "voice request owner ended")
+        }));
+    }
     let reads_body = !matches!(request.method.as_str(), "GET" | "HEAD" | "OPTIONS")
         && request.path.starts_with("/api/")
         && !request
@@ -185,13 +231,50 @@ async fn handle(
             .starts_with(super::approval_actions::ONE_TAP_PREFIX)
         && !(request.method == "DELETE"
             && (request.path == "/api/routines" || request.path.starts_with("/api/routines/")))
+        && !(request.method == "DELETE" && request.path.starts_with("/api/providers/"))
+        && !(request.method == "DELETE"
+            && matches!(
+                request.path.as_str(),
+                "/api/nvidia-nim/key" | "/api/mobile-connect/tailscale/serve"
+            ))
+        && !(request.method == "DELETE"
+            && request.path == super::preference_media::AVATAR_UPLOAD_PATH)
+        && !(request.method == "POST"
+            && matches!(
+                request.path.as_str(),
+                "/api/models"
+                    | "/api/session-store/reset"
+                    | "/api/session-store/prune-transcript-noise"
+                    | "/api/logs/purge"
+                    | "/api/kill-all"
+                    | "/api/agent-log/open"
+                    | "/api/approval/enable"
+                    | "/api/approval/disable"
+                    | "/api/approval/dismiss"
+                    | "/api/nvidia-nim/test"
+                    | "/api/nvidia-nim/key"
+                    | "/api/mobile-connect/tailscale/serve"
+                    | "/api/shutdown"
+                    | "/api/notify-generate-topic"
+                    | "/api/slash-commands"
+                    | "/api/provider-distributions/check"
+                    | "/api/provider-distributions/accept"
+                    | "/api/provider-distributions/rollback"
+            ))
         && !matches!(
             request.path.as_str(),
-            "/api/auth/logout" | "/api/auth/revoke-all" | "/api/notify-generate-topic"
+            "/api/auth/logout"
+                | "/api/auth/revoke-all"
+                | "/api/notify-generate-topic"
+                | "/api/pick-directory"
+                | "/api/pick-file"
         );
     if reads_body {
         request.body = match read_body(body, &request.path).await {
             Ok(v) => v,
+            Err(_) if request.path.starts_with("/api/provider-icons/") => {
+                return response(Response::error(400, "bad_request", "could not read image"));
+            }
             Err(_) => return response(Response::error(400, "bad_request", "invalid json")),
         };
     }
@@ -207,13 +290,15 @@ async fn handle(
             }
         };
         let cancellation = permit.cancellation();
+        let waiter = crate::proto::core::HttpWaitCancellation::default();
+        let _wait_guard = HttpWaitGuard(waiter.clone());
         // The lifecycle owns the whole accepted operation, including every batch
         // item and its committed effects. A dropped socket waits for nothing and
         // cannot cancel this task. Captured services hold only weak task handles.
         let completion = permit.start(async move {
             let dispatch = state
                 .services
-                .handle_owned_async_at(&request, captured_at, &cancellation)
+                .handle_owned_async_at(&request, captured_at, &cancellation, &waiter)
                 .await;
             match state.sink.apply(dispatch.effects).await {
                 Ok(()) => dispatch.response,
@@ -263,7 +348,12 @@ fn decode_path(path: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&out).into_owned())
 }
 fn body_policy(path: &str) -> (usize, bool) {
+    if path.starts_with("/api/provider-icons/") {
+        return (crate::application::provider_assets::ICON_LIMIT, false);
+    }
     match path {
+        "/api/logs/legacy-notice" => (1 << 16, true),
+        super::jev_routes::PATH => (8192, false),
         "/api/attach" => (11 * 1024 * 1024, false),
         "/api/voice/transcribe" => (25 * 1024 * 1024, false),
         "/api/memo-images" | "/api/memo-images/" => (10 * 1024 * 1024, false),
@@ -459,6 +549,76 @@ mod tests {
         proto::core::{CoreEffects, CoreFuture},
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    #[tokio::test]
+    async fn managed_voice_failure_returns_before_incomplete_audio_upload() {
+        struct FailingManaged;
+        impl crate::hub::voice_routes::ManagedWhisper for FailingManaged {
+            fn ensure<'a>(
+                &'a self,
+                _: crate::config::VoiceWhisperConfig,
+                _: &'a Cancellation,
+            ) -> CoreFuture<'a, Result<crate::config::VoiceWhisperConfig, Response>> {
+                Box::pin(async {
+                    Err(Response::error(
+                        503,
+                        "synthetic_managed_failure",
+                        "synthetic unavailable",
+                    ))
+                })
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let installed = tempfile::tempdir().unwrap();
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let paths = RuntimePaths::trial(dir.path(), port, installed.path()).unwrap();
+        let mut cfg = Config {
+            token: "synthetic-voice".into(),
+            ..Default::default()
+        };
+        cfg.voice.whisper.managed = true;
+        let config = Arc::new(ConfigStore::new(paths.clone(), cfg).unwrap());
+        let tasks = super::super::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current());
+        let services = Arc::new(
+            ServiceRouter::isolated_at_port(config.clone(), paths, port)
+                .unwrap()
+                .with_task_owner(tasks.handle())
+                .with_voice(Arc::new(super::super::voice_routes::VoiceHttp::new(
+                    config,
+                    Arc::new(FailingManaged),
+                ))),
+        );
+        let cancel = Cancellation::default();
+        let server = tokio::spawn(serve(
+            listener,
+            services,
+            Arc::new(EmptyEffects),
+            cancel.clone(),
+        ));
+        let mut socket = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        socket.write_all(format!("POST /api/voice/transcribe?token=synthetic-voice HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\n").as_bytes()).await.unwrap();
+        let mut bytes = vec![0; 8192];
+        let count =
+            tokio::time::timeout(std::time::Duration::from_secs(3), socket.read(&mut bytes))
+                .await
+                .unwrap()
+                .unwrap();
+        let response = String::from_utf8_lossy(&bytes[..count]);
+        assert!(response.starts_with("HTTP/1.1 503"), "{response}");
+        assert!(response.contains("synthetic_managed_failure"), "{response}");
+        drop(socket);
+        cancel.cancel();
+        tokio::time::timeout(std::time::Duration::from_secs(3), server)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(tasks.snapshot().requests.running, 0);
+    }
     struct EmptyEffects;
     impl CoreEffectSink for EmptyEffects {
         fn apply<'a>(
@@ -509,6 +669,11 @@ mod tests {
             .unwrap(),
         );
         let mut services = ServiceRouter::isolated(config, paths);
+        let request_owner = routines
+            .then(|| crate::hub::task_owner::HubTaskOwner::new(tokio::runtime::Handle::current()));
+        if let Some(owner) = &request_owner {
+            services = services.with_task_owner(owner.handle());
+        }
         if routines {
             let store = Arc::new(crate::routine::store::RoutineStore::open(Arc::new(
                 crate::files::safe_fs::Dir::open(&root).unwrap(),
@@ -521,12 +686,19 @@ mod tests {
         }
         let services = Arc::new(services);
         let cancel = Cancellation::default();
-        let task = tokio::spawn(serve(
-            listener,
-            services,
-            Arc::new(EmptyEffects),
-            cancel.clone(),
-        ));
+        let server_cancel = cancel.clone();
+        let task = tokio::spawn(async move {
+            let result = serve(listener, services, Arc::new(EmptyEffects), server_cancel).await;
+            if let Some(owner) = request_owner {
+                owner.stop_requests();
+                owner.cancel_requests().unwrap();
+                owner.drain_requests().await;
+                owner.stop_effects().unwrap();
+                owner.cancel_effects().unwrap();
+                owner.drain_effects().await;
+            }
+            result
+        });
         (dir, port, cancel, task)
     }
     async fn exchange(port: u16, raw: String) -> String {

@@ -468,6 +468,20 @@ fn stop_reason(reason: StopReason) -> Result<&'static str, SessionError> {
 /// capture) run before the same event is published for asynchronous consumers.
 pub trait OrderedEventObserver: Send + Sync {
     fn observe<'a>(&'a self, event: &'a CoreEvent) -> CoreFuture<'a, Result<(), SessionError>>;
+    fn approval_opened<'a>(
+        &'a self,
+        session: LiveSessionId,
+        record: &'a ImmutableApprovalRecord,
+    ) -> CoreFuture<'a, Result<bool, SessionError>> {
+        Box::pin(async move {
+            self.observe(&CoreEvent::ApprovalOpened {
+                session,
+                record: record.clone(),
+            })
+            .await?;
+            Ok(false)
+        })
+    }
 }
 pub struct EffectDriver {
     sockets: Arc<SocketRegistry>,
@@ -572,7 +586,64 @@ impl EffectDriver {
 impl CoreEffectSink for EffectDriver {
     fn apply<'a>(&'a self, effects: CoreEffects) -> CoreFuture<'a, Result<(), CoreEffectFailure>> {
         Box::pin(async move {
+            let mut automatically_consumed = Vec::<(LiveSessionId, CandidateIdentity)>::new();
             for (index, effect) in effects.0.into_iter().enumerate() {
+                if let CoreEffect::Notify(CoreEvent::ApprovalOpened { session, record }) = &effect {
+                    let consumed = self
+                        .observer
+                        .approval_opened(*session, record)
+                        .await
+                        .map_err(|error| CoreEffectFailure { index, error })?;
+                    if consumed {
+                        automatically_consumed.push((*session, record.data().candidate.clone()));
+                    } else {
+                        self.publisher
+                            .publish(CoreEvent::ApprovalOpened {
+                                session: *session,
+                                record: record.clone(),
+                            })
+                            .map_err(|error| CoreEffectFailure { index, error })?;
+                    }
+                    continue;
+                }
+                let suppressed = match &effect {
+                    CoreEffect::Notify(CoreEvent::ApprovalPublished { session, record }) => {
+                        automatically_consumed.iter().any(|(id, candidate)| {
+                            id == session && candidate.same_candidate(&record.data().candidate)
+                        })
+                    }
+                    CoreEffect::Persist(PersistenceEffect::ApprovalDetected(detected)) => {
+                        automatically_consumed.iter().any(|(session, candidate)| {
+                            *session == detected.live_session_id
+                                && candidate.key == detected.candidate_key
+                                && candidate.source_epoch == detected.source_epoch
+                        })
+                    }
+                    CoreEffect::PersistBound {
+                        effect: PersistenceEffect::ApprovalDetected(detected),
+                        ..
+                    } => automatically_consumed.iter().any(|(session, candidate)| {
+                        *session == detected.live_session_id
+                            && candidate.key == detected.candidate_key
+                            && candidate.source_epoch == detected.source_epoch
+                    }),
+                    CoreEffect::SendUi { message, .. }
+                    | CoreEffect::SendUiBestEffort { message, .. } => message
+                        .approval_state
+                        .as_ref()
+                        .and_then(|state| state.open.as_ref())
+                        .is_some_and(|open| {
+                            automatically_consumed.iter().any(|(session, candidate)| {
+                                session.0 == message.session_id
+                                    && candidate.key == open.candidate_key
+                                    && candidate.source_epoch.0 == open.source_epoch
+                            })
+                        }),
+                    _ => false,
+                };
+                if suppressed {
+                    continue;
+                }
                 self.apply_one(effect)
                     .await
                     .map_err(|error| CoreEffectFailure { index, error })?;

@@ -41,6 +41,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", choices=TARGETS, required=True)
     args = parser.parse_args()
+    # HEAD identifies the compiled inputs only for a clean source checkout.
+    # Dirty local recovery candidates need their separate source-manifest receipt.
+    if capture(["git", "status", "--porcelain=v1", "--untracked-files=normal"]):
+        raise SystemExit("candidate CI requires a clean checkout; use a separate source-manifest receipt for local recovery builds")
     rustc = capture(["rustc", "--version", "--verbose"])
     if not rustc.startswith("rustc 1.90.0 ") or host_from_verbose(rustc) != args.target:
         raise SystemExit("native runner host or pinned Rust version does not match matrix target")
@@ -88,6 +92,15 @@ def main() -> None:
         binary_entries.append({"name": name, "bytes": destination.stat().st_size, "sha256": checksum})
     web_entries = [{"path": path.relative_to(ROOT / "web" / "dist").as_posix(), "sha256": digest(path)}
                    for path in sorted((ROOT / "web" / "dist").rglob("*")) if path.is_file()]
+    notice_entries = []
+    for relative in ("rust/THIRD-PARTY-NOTICES.md", "rust/src/approval/policy/go_regex/GO-LICENSE"):
+        notice = ROOT / relative
+        destination = output / notice.name
+        checksum = digest(notice)
+        shutil.copy2(notice, destination)
+        if digest(destination) != checksum:
+            raise SystemExit("candidate notice copy hash mismatch")
+        notice_entries.append({"name": notice.name, "sha256": checksum})
     receipt = {
         "schema_version": 1, "status": "native-build-only-not-accepted-for-cutover",
         "source_sha": source, "review_head_sha": env.get("MANY_AI_REVIEW_HEAD_SHA", source),
@@ -97,6 +110,7 @@ def main() -> None:
         "version": env["MANY_AI_BUILD_VERSION"], "build_time": env["MANY_AI_BUILD_TIME"],
         "cargo_lock_sha256": digest(ROOT / "rust" / "Cargo.lock"),
         "binaries": binary_entries, "generated_web_asset_inputs": web_entries,
+        "third_party_notices": notice_entries,
         "launcher_ui_input_sha256": digest(ROOT / "internal" / "launcher" / "ui" / "index.html"),
         "receipt_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
         "pending": ["binary-entrypoint-and-asset-retention", "full-application-behavior", "native-device-remote-acceptance", "signed-channel-packaging", "rollback-rehearsal", "user-cutover-approval"],

@@ -144,6 +144,12 @@ impl ApprovalState {
         let record = ImmutableApprovalRecord::new(data);
         effects
             .0
+            .push(CoreEffect::Notify(CoreEvent::ApprovalOpened {
+                session: self.session,
+                record: record.clone(),
+            }));
+        effects
+            .0
             .push(CoreEffect::Persist(PersistenceEffect::ApprovalDetected(
                 detected,
             )));
@@ -158,6 +164,12 @@ impl ApprovalState {
             }),
             ..Default::default()
         }));
+        effects
+            .0
+            .push(CoreEffect::Notify(CoreEvent::ApprovalPublished {
+                session: self.session,
+                record: record.clone(),
+            }));
         self.record = Some(record);
         effects
     }

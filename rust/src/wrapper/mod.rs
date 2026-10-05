@@ -6,6 +6,7 @@ pub mod runtime;
 pub mod shell;
 pub mod transport;
 
+pub mod approval_injection;
 pub mod entry;
 pub mod hooks;
 pub mod output;

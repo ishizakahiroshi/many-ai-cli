@@ -7,6 +7,8 @@ use tokio::sync::Notify;
 /// Already authenticated and validated request with the existing reservation.
 /// Production executors retain a Weak<SessionEngine>, never another session map.
 pub struct ConfirmedChildRequest {
+    /// Original pending options remain available for source change-note evidence.
+    pub original_body: ResolvedChildSpawn,
     pub parent: SessionBinding,
     pub requested_provider: String,
     pub body: ResolvedChildSpawn,
@@ -553,6 +555,7 @@ impl CommittedDecision {
                 .executor
                 .spawn(
                     ConfirmedChildRequest {
+                        original_body: self.pending.body.clone(),
                         parent: self.parent,
                         requested_provider: self.pending.requested_provider.clone(),
                         body,

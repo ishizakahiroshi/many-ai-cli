@@ -158,7 +158,10 @@ impl ConnectorConfig {
             let (mut child, mut events) = ManagedProcess::spawn_owned_with_options(
                 plan,
                 512,
-                SpawnOptions { no_window: true },
+                SpawnOptions {
+                    no_window: true,
+                    ..SpawnOptions::default()
+                },
             );
             let mut scans = Scanners::default();
             let ready = await_url(
@@ -219,8 +222,14 @@ impl ConnectorConfig {
             wsl_serve_args(p, port, self.remote_trial.as_ref()),
             Duration::ZERO,
         );
-        let (mut child, mut events) =
-            ManagedProcess::spawn_owned_with_options(plan, 512, SpawnOptions { no_window: true });
+        let (mut child, mut events) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            512,
+            SpawnOptions {
+                no_window: true,
+                ..SpawnOptions::default()
+            },
+        );
         let mut scans = Scanners::default();
         let result = match await_url(
             &mut child,
@@ -267,8 +276,14 @@ impl ConnectorConfig {
             )
         };
         let plan = self.plan(executable, args, Duration::from_secs(5));
-        let (mut process, _) =
-            ManagedProcess::spawn_owned_with_options(plan, 16, SpawnOptions { no_window: true });
+        let (mut process, _) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            16,
+            SpawnOptions {
+                no_window: true,
+                ..SpawnOptions::default()
+            },
+        );
         let _ = process.wait().await;
     }
     async fn run_tunnel(
@@ -278,8 +293,14 @@ impl ConnectorConfig {
         sender: &mut Option<oneshot::Sender<Result<String, String>>>,
     ) -> Result<(), String> {
         let plan = self.plan(&self.ssh_executable, ssh_tunnel_args(p), Duration::ZERO);
-        let (mut tunnel, mut events) =
-            ManagedProcess::spawn_owned_with_options(plan, 512, SpawnOptions { no_window: true });
+        let (mut tunnel, mut events) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            512,
+            SpawnOptions {
+                no_window: true,
+                ..SpawnOptions::default()
+            },
+        );
         // Observe actual successful process creation before running token_command.
         loop {
             tokio::select! {
@@ -369,8 +390,14 @@ impl ConnectorConfig {
         plan: ProcessPlan,
         cancel: &Cancellation,
     ) -> Result<ProcessOutput, String> {
-        let (mut child, _) =
-            ManagedProcess::spawn_owned_with_options(plan, 16, SpawnOptions { no_window: true });
+        let (mut child, _) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            16,
+            SpawnOptions {
+                no_window: true,
+                ..SpawnOptions::default()
+            },
+        );
         tokio::select! {
             output=child.wait()=>output.map_err(|e|e.to_string()),
             _=cancel.cancelled()=>{child.close();let _=child.wait().await;Err("cancelled".into())}

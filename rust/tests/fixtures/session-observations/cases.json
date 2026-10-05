@@ -1,0 +1,285 @@
+[
+  {
+    "name": "boxed_workflow",
+    "lines": [
+      "unrelated terminal output",
+      "⚙ workflow with-border",
+      "╭─── Review ───╮",
+      "  ✓ review:bugs",
+      "  ⠋ review:perf",
+      "╰───────────────╯"
+    ]
+  },
+  {
+    "name": "broken_resize",
+    "lines": [
+      "⚙ workflow synthetic-resize",
+      "  ▸ Inspect",
+      "    ✓",
+      "wrapped label fragment without its state glyph",
+      "ordinary terminal output"
+    ]
+  },
+  {
+    "name": "summary_done",
+    "lines": [
+      "✓ synthetic-review 5/5 agents done · 7m 34s · ↓ 544.5k"
+    ]
+  },
+  {
+    "name": "summary_running",
+    "lines": [
+      "terminal output outside the workflow block",
+      "◯ synthetic-review 1/5 agents done · 4m 21s · ↓ 501.0k",
+      "*Waiting for 1 dynamic workflow to finish"
+    ]
+  },
+  {
+    "name": "tip_and_agent_footer",
+    "lines": [
+      "earlier scrollback line, unrelated to workflows",
+      "  ⎿  Tip: Dynamic workflows let Claude coordinate several agents at once — ask Claude to use a workflow directly.",
+      "",
+      "────────────────────────────────────────",
+      "❯",
+      "⏵⏵ bypass permissions on",
+      "● main",
+      "◯ general-purpose  Searching …  9m 02s · ↓ 42.5k tokens"
+    ]
+  },
+  {
+    "name": "tip_no_boundary",
+    "lines": [
+      "earlier scrollback line, unrelated content",
+      "  ⎿  Tip: Dynamic workflows let Claude coordinate several agents at once — ask Claude to use a workflow directly.",
+      "",
+      "⏵⏵ bypass permissions on",
+      "● main",
+      "◯ general-purpose  Searching …  9m 02s · ↓ 42.5k tokens"
+    ]
+  },
+  {
+    "name": "tree_running",
+    "lines": [
+      "unrelated terminal output",
+      "⚙ workflow synthetic-review",
+      "  ▸ Inspect",
+      "    ✓ inspect:alpha  12s · ↓ 8.0k",
+      "    ⠋ inspect:beta  4s · ↓ 2.0k",
+      "  ▸ Verify",
+      "    ○ verify:gamma"
+    ]
+  },
+  {
+    "name": "workflows_view",
+    "lines": [
+      "Workflows",
+      "  ▸ Completed",
+      "    ✔ agent-one",
+      "  ▸ Running",
+      "    ◐ agent-two  1m 2s · ↓ 10.0k",
+      "    ◌ agent-three"
+    ]
+  },
+  {
+    "name": "boundary-0",
+    "lines": []
+  },
+  {
+    "name": "boundary-1",
+    "lines": [
+      "ordinary output",
+      "✓ completed a normal edit"
+    ]
+  },
+  {
+    "name": "boundary-2",
+    "lines": [
+      "Waiting for 2 dynamic workflows to finish"
+    ]
+  },
+  {
+    "name": "boundary-3",
+    "lines": [
+      "Workflow",
+      "●x"
+    ]
+  },
+  {
+    "name": "boundary-4",
+    "lines": [
+      "Workflow",
+      "● x"
+    ]
+  },
+  {
+    "name": "boundary-5",
+    "lines": [
+      "Workflow",
+      "✓ done",
+      "❯ user input",
+      "● footer"
+    ]
+  },
+  {
+    "name": "boundary-6",
+    "lines": [
+      "Workflow",
+      "10000/10000 agents"
+    ]
+  },
+  {
+    "name": "boundary-7",
+    "lines": [
+      "Workflow",
+      "9/2 agents"
+    ]
+  },
+  {
+    "name": "boundary-8",
+    "lines": [
+      "Workflow",
+      "0/0 agents"
+    ]
+  },
+  {
+    "name": "boundary-9",
+    "lines": [
+      "Workflow",
+      "1/2 agents · 1h 2m 3s · ↓ 4k"
+    ]
+  },
+  {
+    "name": "boundary-10",
+    "lines": [
+      "Workflow",
+      "✓ あああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああ"
+    ]
+  },
+  {
+    "name": "boundary-11",
+    "lines": [
+      "Workflow",
+      "✓ ああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああああ"
+    ]
+  },
+  {
+    "name": "boundary-12",
+    "lines": [
+      "⏺ Message from researcher"
+    ]
+  },
+  {
+    "name": "boundary-13",
+    "lines": [
+      "Received message from reviewer",
+      "Message from conductor"
+    ]
+  },
+  {
+    "name": "boundary-14",
+    "lines": [
+      "message received from a tool"
+    ]
+  },
+  {
+    "name": "boundary-15",
+    "lines": [
+      "Message from"
+    ]
+  },
+  {
+    "name": "boundary-16",
+    "lines": [
+      "received message to researcher"
+    ]
+  },
+  {
+    "name": "boundary-17",
+    "lines": [
+      "the assistant said Message from researcher"
+    ]
+  },
+  {
+    "name": "boundary-18",
+    "lines": [
+      "• MESSAGE FROM agent\r"
+    ]
+  },
+  {
+    "name": "boundary-19",
+    "lines": [
+      " Message from agent "
+    ]
+  },
+  {
+    "name": "boundary-20",
+    "lines": [
+      "⚙ Workflow running",
+      "● one  1s",
+      "✗ two",
+      "○ three",
+      "50%"
+    ]
+  },
+  {
+    "name": "journal-0",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"a\"}"
+  },
+  {
+    "name": "journal-1",
+    "lines": [],
+    "journal": "{\"agentId\":\"a\",\"type\":\"result\",\"result\":\"synthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-bodysynthetic-body\"}"
+  },
+  {
+    "name": "journal-2",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"old\",\"agentId\":\"new\"}"
+  },
+  {
+    "name": "journal-3",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"nested\":{\"agentId\":\"wrong\"},\"agentId\":\"right\"}"
+  },
+  {
+    "name": "journal-4",
+    "lines": [],
+    "journal": "{\"type\":null,\"agentId\":\"a\"}"
+  },
+  {
+    "name": "journal-5",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":42}"
+  },
+  {
+    "name": "journal-6",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"a\"}trailing"
+  },
+  {
+    "name": "journal-7",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+  },
+  {
+    "name": "journal-8",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"\\u3042\"}"
+  },
+  {
+    "name": "journal-9",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"result\":{\"a\":[{\"x\":\"}\\\"\"}]},\"agentId\":\"a\"}"
+  },
+  {
+    "name": "journal-10",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"a\",}"
+  },
+  {
+    "name": "journal-11",
+    "lines": [],
+    "journal": "{\"type\":\"started\",\"agentId\":\"a\""
+  }
+]

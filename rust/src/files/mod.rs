@@ -14,7 +14,7 @@ use crate::{
     hub::http::{Request, Response},
     proto::core::{LiveSessionId, PersistenceEffectSink, SessionCore, SessionStorage},
 };
-pub use git::{GitTurnCompleted, GitTurnSnapshot, GitTurnState};
+pub use git::{GitTurnCompleted, GitTurnEndReservation, GitTurnSnapshot, GitTurnState};
 use std::path::PathBuf;
 
 /// Values come from the actual memo/handoff stores, never request body claims.

@@ -64,6 +64,74 @@ impl ProviderUpdateAdmission for SessionEngine {
     }
 }
 impl WrappedSessionSpawner for SessionEngine {
+    fn start_wrapped<'a>(
+        &'a self,
+        mut request: WrappedStartRequest,
+        waiter: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnStartOutcome> {
+        Box::pin(async move {
+            let spec = &mut request.spec;
+            let lease = if let Some(id) = spec.spawn_attempt {
+                ProviderSpawnLease {
+                    id,
+                    provider: spec.provider.clone(),
+                }
+            } else {
+                match self.begin_provider_spawn(&spec.provider) {
+                    Ok(lease) => lease,
+                    Err(error) => {
+                        return SpawnStartOutcome::Failed(format!(
+                            "provider admission failed: {error:?}"
+                        ));
+                    }
+                }
+            };
+            let proof = match SpawnRegistrationProof::issue() {
+                Ok(proof) => proof,
+                Err(_) => {
+                    self.end_provider_spawn(lease);
+                    return SpawnStartOutcome::Failed(
+                        "registration proof generation failed".into(),
+                    );
+                }
+            };
+            {
+                let mut state = lock(&self.state);
+                if state
+                    .spawn_proofs
+                    .values()
+                    .any(|pending| pending.lease.id == lease.id)
+                {
+                    return SpawnStartOutcome::Failed("start attempt is already launched".into());
+                }
+                state.spawn_proofs.insert(
+                    crate::approval::identity::digest(proof.as_header_value()),
+                    PendingSpawn {
+                        lease: lease.clone(),
+                        metadata: spec.registration_metadata.clone(),
+                    },
+                );
+            }
+            spec.registration_proof = Some(proof);
+            spec.spawn_attempt = Some(lease.id);
+            let outcome = match self.spawner.start_wrapped(request, waiter).await {
+                SpawnStartOutcome::Started { pid: 0 } => {
+                    SpawnStartOutcome::Failed("launcher reported an invalid native PID".into())
+                }
+                other => other,
+            };
+            // Native Start is not registration. Keep admission/proof while the
+            // accepted process runs, even if its HTTP observer disconnects.
+            // Registration or the exact process-owner failure releases it.
+            if matches!(
+                outcome,
+                SpawnStartOutcome::Failed(_) | SpawnStartOutcome::HubStopped
+            ) {
+                self.end_provider_spawn(lease);
+            }
+            outcome
+        })
+    }
     fn spawn_and_wait<'a>(
         &'a self,
         mut spec: WrappedSpawnSpec,
@@ -141,6 +209,19 @@ impl WrappedSessionSpawner for SessionEngine {
     }
 }
 impl SessionEngine {
+    /// Read the canonical proof-bound startup metadata before an exact owner
+    /// failure removes it. Callers use this for rollback, never label lookup.
+    pub fn peek_spawn_metadata(
+        &self,
+        attempt: SpawnAttemptId,
+        provider: &str,
+    ) -> Option<SpawnRegistrationMetadata> {
+        lock(&self.state)
+            .spawn_proofs
+            .values()
+            .find(|pending| pending.lease.id == attempt && pending.lease.provider == provider)
+            .map(|pending| pending.metadata.clone())
+    }
     pub fn spawn_failed(
         &self,
         attempt: SpawnAttemptId,
@@ -158,5 +239,11 @@ impl SessionEngine {
             provider: provider.into(),
         });
         Ok(CoreEffects::default())
+    }
+}
+
+impl SessionEngine {
+    pub fn provider_updating(&self, provider: &str) -> bool {
+        lock(&self.state).admission.provider_updating(provider)
     }
 }

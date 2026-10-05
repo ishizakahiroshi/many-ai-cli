@@ -29,6 +29,7 @@ fn walk(root: &Path, dir: &Path, entries: &mut Vec<(String, PathBuf)>) -> io::Re
 
 fn main() {
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    prepare_native_windows_test_fixture(&manifest);
     let root = manifest.parent().unwrap();
     let web = root.join("web/dist");
     if !web.join("index.html").is_file() {
@@ -80,4 +81,35 @@ fn main() {
             env::var(name).unwrap_or_else(|_| default.into())
         );
     }
+}
+
+fn prepare_native_windows_test_fixture(manifest: &Path) {
+    let host = env::var("HOST").expect("Cargo host target");
+    let target = env::var("TARGET").expect("Cargo compilation target");
+    if host != target || !target.contains("windows") {
+        return;
+    }
+    let source = manifest.join("tests/fixtures/application/wrapped_spawn/owned-wrapper-windows.rs");
+    println!("cargo:rerun-if-changed={}", source.display());
+    println!("cargo:rerun-if-env-changed=RUSTC");
+    let executable = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo build output directory"))
+        .join("owned-wrapper-windows.exe");
+    let status = std::process::Command::new(env::var_os("RUSTC").expect("Cargo Rust compiler"))
+        .arg("--edition=2024")
+        .arg("--crate-name=owned_wrapper_windows")
+        .arg("--target")
+        .arg(&target)
+        .arg(&source)
+        .arg("-o")
+        .arg(&executable)
+        .status()
+        .expect("start Rust compiler for synthetic Windows test fixture");
+    assert!(
+        status.success(),
+        "synthetic Windows test fixture compilation failed: {status}"
+    );
+    println!(
+        "cargo:rustc-env=MANY_AI_NATIVE_TEST_WRAPPER={}",
+        executable.display()
+    );
 }

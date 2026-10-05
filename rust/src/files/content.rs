@@ -237,7 +237,7 @@ fn list(r: &Request, s: &Scope, remote: bool) -> Result<Response> {
     if let Ok(cap) = cap {
         walk(&root, &cap, &s.cwd, s, 1, &mut items, &mut truncated);
     }
-    items.sort_by(|a, b| b.0.cmp(&a.0));
+    items.sort_by_key(|item| std::cmp::Reverse(item.0));
     let items: Vec<Value> = items.into_iter().map(|(_, v)| v).collect();
     Ok(Response::json(
         200,

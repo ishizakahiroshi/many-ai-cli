@@ -43,16 +43,11 @@ impl ApprovalActions for SessionEngine {
                 if record.origin != "native" || record.options.is_empty() {
                     return None;
                 }
-                let phrases = self
-                    .options
-                    .approval_phrases
-                    .get(&session.snapshot.provider)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default();
+                let phrases = self.approval_phrases_for(&session.snapshot.provider);
                 let live = detect::detect_native(
                     &session.snapshot.provider,
                     &session.vt.lines(),
-                    phrases,
+                    &phrases,
                 )?;
                 if live.sig != record.sig {
                     return None;
@@ -118,13 +113,8 @@ impl ApprovalActions for SessionEngine {
                 }
                 // A record can outlive a repaint. Re-detect under the input lane
                 // immediately before reserving; never send against stale UI text.
-                let phrases = self
-                    .options
-                    .approval_phrases
-                    .get(&s.snapshot.provider)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default();
-                let live = detect::detect_native(&s.snapshot.provider, &s.vt.lines(), phrases)
+                let phrases = self.approval_phrases_for(&s.snapshot.provider);
+                let live = detect::detect_native(&s.snapshot.provider, &s.vt.lines(), &phrases)
                     .ok_or(ApprovalActionError::StaleCandidate)?;
                 let candidate = identity::candidate(
                     &s.snapshot.provider,
@@ -261,6 +251,28 @@ impl ApprovalActions for SessionEngine {
         if !terminal(&s.snapshot.state) {
             s.snapshot.state = s.snapshot.activity.display_state().into();
             effects.0.push(CoreEffect::Broadcast(s.update_message()));
+        }
+        if matches!(action.origin, NativeActionOrigin::Automatic { .. }) {
+            // Priming broadcasts were queued before the ordered application
+            // observer could make its automatic decision. Remove only this
+            // candidate's unflushed open; retain all earlier ledger closures
+            // and every unrelated session/event in the priming queue.
+            for ui in state.uis.values_mut() {
+                ui.queued.retain(|frame| match frame {
+                    UiFrame::Message(message) => {
+                        !(message.session_id == action.binding.session.session.0
+                            && message
+                                .approval_state
+                                .as_ref()
+                                .and_then(|state| state.open.as_ref())
+                                .is_some_and(|open| {
+                                    open.candidate_key == action.binding.candidate_key
+                                        && open.source_epoch == action.binding.source_epoch.0
+                                }))
+                    }
+                    UiFrame::GitTurn(_) => true,
+                });
+            }
         }
         Ok(state.route(effects))
     }

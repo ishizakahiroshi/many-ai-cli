@@ -233,35 +233,7 @@ pub(crate) fn space_or_control(c: char) -> bool {
 }
 /// Go %q uses printable Unicode and Go escapes, rather than Rust's \u{...} syntax.
 pub fn quote(value: &str) -> String {
-    static PRINTABLE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let printable = PRINTABLE.get_or_init(|| {
-        regex::Regex::new(r"\A[\pL\pM\pN\pP\pS ]\z").expect("constant Go printable Unicode classes")
-    });
-    let mut out = String::from("\"");
-    for c in value.chars() {
-        match c {
-            '\"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{7}' => out.push_str("\\a"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{b}' => out.push_str("\\v"),
-            '\u{c}' => out.push_str("\\f"),
-            c if c < '\u{20}' || c == '\u{7f}' => out.push_str(&format!("\\x{:02x}", c as u32)),
-            c if !printable.is_match(c.encode_utf8(&mut [0u8; 4])) => {
-                if c as u32 <= 0xffff {
-                    out.push_str(&format!("\\u{:04x}", c as u32));
-                } else {
-                    out.push_str(&format!("\\U{:08x}", c as u32));
-                }
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
+    crate::proto::go_quote::quote(value)
 }
 pub fn unique_profile_name(existing: &[Profile], name: &str) -> String {
     let name = name.trim();
@@ -366,3 +338,19 @@ pub static YAML_SCHEMAS: &[crate::config::YamlSchema] = &[
         fields: yaml_fields!("profile"=>"string", "pid"=>"int", "started_at"=>"time.Time"),
     },
 ];
+
+#[cfg(test)]
+mod quote_consumer_tests {
+    use super::*;
+
+    #[test]
+    fn missing_profile_error_uses_pinned_unicode_assignments() {
+        // U+2EBF0 was assigned after the Go baseline's Unicode 15.0 tables.
+        assert_eq!(
+            ProfilesFile::fresh()
+                .select("\u{2ebf0}", false)
+                .unwrap_err(),
+            "profile \"\\U0002ebf0\" not found in launcher-profiles.yaml"
+        );
+    }
+}

@@ -1,0 +1,34 @@
+type payload struct { Hex string `json:"hex"`; PadTo int `json:"pad_to"`; Directory bool `json:"directory"`; WriteOnly bool `json:"write_only"` }
+func(p payload) bytes()[]byte{b,e:=hex.DecodeString(p.Hex);must(e);if p.PadTo>len(b){b=append(b,make([]byte,p.PadTo-len(b))...)};return b}
+type input struct{
+ Name string `json:"name"`; Path string `json:"path"`; Method string `json:"method"`; Body payload `json:"body"`; ContentType string `json:"content_type"`
+ Initial config.UserPrefs `json:"initial"`; Media map[string]payload `json:"media"`; FailSave bool `json:"fail_save"`; MissingRoot bool `json:"missing_root"`
+}
+func digest(b []byte)map[string]any{return map[string]any{"len":len(b),"sha256":fmt.Sprintf("%x",sha256.Sum256(b))}}
+func main(){
+ raw,e:=os.ReadFile(os.Args[1]);must(e);var cases []input;must(json.Unmarshal(raw,&cases));rows:=[]any{}
+ for _,c:=range cases{
+  home,e:=os.MkdirTemp("","preference-media-owned-");must(e);must(os.Setenv("HOME",home));must(os.Setenv("USERPROFILE",home))
+  root:=filepath.Join(home,".many-ai-cli");if !c.MissingRoot{must(os.MkdirAll(root,0700))}
+  encodedRoot,e:=json.Marshal(root);must(e);rootJSON:=string(encodedRoot[1:len(encodedRoot)-1])
+  expand:=func(s string)string{return strings.ReplaceAll(strings.ReplaceAll(s,`\u003croot\u003e`,rootJSON),"<root>",rootJSON)}
+  b,e:=json.Marshal(c.Initial);must(e);must(json.Unmarshal([]byte(expand(string(b))),&c.Initial))
+  cfg:=&config.Config{UserPrefs:c.Initial};s:=&Server{cfg:cfg,logger:slog.New(slog.NewTextHandler(io.Discard,nil))}
+  names:=map[string]string{"avatar":"user_avatar.bin","sound":"notify_sound_custom.bin"}
+  for key,p:=range c.Media{path:=filepath.Join(root,names[key]);if p.Directory{must(os.Mkdir(path,0700))}else{must(os.WriteFile(path,p.bytes(),0600));if p.WriteOnly&&runtime.GOOS!="windows"{must(os.Chmod(path,0200))}}}
+  if c.FailSave{must(os.Mkdir(filepath.Join(root,"config.yaml"),0700))}
+  r:=httptest.NewRequest(c.Method,"http://127.0.0.1:49962"+c.Path,strings.NewReader(string(c.Body.bytes())));r.Header.Set("Content-Type",c.ContentType)
+  w:=httptest.NewRecorder();switch c.Path{case "/api/avatar":s.handleAvatar(w,r);case "/api/user-prefs/avatar":s.handleUserPrefsAvatarUpload(w,r);case "/api/user-prefs/notify-sound-custom":s.handleUserPrefsNotifySoundCustom(w,r);default:panic("unknown fixture route")}
+  normalize:=func(value any)any{bytes,e:=json.Marshal(value);must(e);var out any;must(json.Unmarshal([]byte(strings.ReplaceAll(string(bytes),rootJSON,"<root>")),&out));return out}
+  project:=func(p config.UserPrefs)any{return normalize(map[string]any{"avatar":p.Avatar,"notify_sound":p.NotifySound})}
+  var body any;var detail string
+  if w.Header().Get("Content-Type")=="application/json"{must(json.Unmarshal(w.Body.Bytes(),&body));if w.Code==500{m:=body.(map[string]any);detail=m["detail"].(string);prefix:=strings.SplitN(detail,":",2)[0];m["detail"]=prefix+": <owned filesystem error>"}}else if w.Body.Len()<1024{body=map[string]any{"base64":base64.StdEncoding.EncodeToString(w.Body.Bytes())}}else{body=digest(w.Body.Bytes())}
+  for key,p:=range c.Media{if p.WriteOnly&&runtime.GOOS!="windows"{must(os.Chmod(filepath.Join(root,names[key]),0600))}}
+  files:=map[string]any{};for key,name:=range names{path:=filepath.Join(root,name);if b,e:=os.ReadFile(path);e==nil{files[key]=digest(b)}else if st,e:=os.Stat(path);e==nil&&st.IsDir(){files[key]="directory"}else{files[key]=nil}}
+  var saved any;if b,e:=os.ReadFile(filepath.Join(root,"config.yaml"));e==nil{var loaded config.Config;must(yaml.Unmarshal(b,&loaded));saved=project(loaded.UserPrefs)}
+  headers:=map[string]string{};for _,name:=range []string{"Content-Type","Cache-Control","Content-Disposition"}{headers[name]=w.Header().Get(name)}
+  rows=append(rows,map[string]any{"name":c.Name,"status":w.Code,"body":body,"headers":headers,"runtime":project(cfg.UserPrefs),"saved":saved,"files":files,"source_detail_prefix":strings.SplitN(detail,":",2)[0]})
+  must(os.RemoveAll(home))
+ }
+ enc:=json.NewEncoder(os.Stdout);enc.SetIndent("","  ");must(enc.Encode(rows))
+}

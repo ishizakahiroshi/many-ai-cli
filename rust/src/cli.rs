@@ -278,6 +278,13 @@ mod launcher_tests {
         v.iter().map(|s| s.to_string()).collect()
     }
     #[test]
+    fn invalid_boolean_error_quotes_format_and_private_use_scalars() {
+        assert_eq!(
+            parse_launcher(&args(&["--ui=\u{ad}\u{e000}\u{f0000}"])).unwrap_err(),
+            "invalid boolean value \"\\u00ad\\ue000\\U000f0000\" for -ui: parse error"
+        );
+    }
+    #[test]
     fn launcher_defaults_and_go_flags() {
         assert_eq!(parse_launcher(&[]).unwrap(), LauncherInvocation::default());
         assert_eq!(
@@ -306,35 +313,5 @@ mod launcher_tests {
 }
 
 fn go_quote(value: &str) -> String {
-    use std::fmt::Write;
-    let mut out = String::from("\"");
-    for c in value.chars() {
-        match c {
-            '\"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{7}' => out.push_str("\\a"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{b}' => out.push_str("\\v"),
-            '\u{c}' => out.push_str("\\f"),
-            c if c.is_ascii_control() => {
-                write!(&mut out, "\\x{:02x}", c as u32).unwrap();
-            }
-            c if c.is_control()
-                || (c.is_whitespace() && c != ' ')
-                || matches!(c, '\u{200b}' | '\u{200c}' | '\u{200d}' | '\u{feff}') =>
-            {
-                if (c as u32) <= 0xffff {
-                    write!(&mut out, "\\u{:04x}", c as u32).unwrap();
-                } else {
-                    write!(&mut out, "\\U{:08x}", c as u32).unwrap();
-                }
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('\"');
-    out
+    crate::proto::go_quote::quote(value)
 }

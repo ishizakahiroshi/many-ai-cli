@@ -1,0 +1,2974 @@
+[
+  {
+    "name": "avatar-put-png",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "text/html"
+  },
+  {
+    "name": "avatar-get-png",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-2",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "8950"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-3",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-4",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e47"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-5",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-6",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-png-7",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-put-jpeg",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "ffd8ff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "text/html"
+  },
+  {
+    "name": "avatar-get-jpeg",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "ffd8ff"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-jpeg-1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "ff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-jpeg-2",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "ffd8"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-put-gif87",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "474946383761"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "text/html"
+  },
+  {
+    "name": "avatar-get-gif87",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "474946383761"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif87-1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "47"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif87-2",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "4749"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif87-3",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "474946"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif87-4",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "47494638"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif87-5",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "4749463837"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-put-gif89",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "474946383961"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "text/html"
+  },
+  {
+    "name": "avatar-get-gif89",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "474946383961"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif89-1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "47"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif89-2",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "4749"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif89-3",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "474946"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif89-4",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "47494638"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-gif89-5",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "4749463839"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-put-webp",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff574542505650"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "text/html"
+  },
+  {
+    "name": "avatar-get-webp",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "52494646ffffffff574542505650"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-2",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "5249"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-3",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "524946"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-4",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-5",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-6",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-7",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-8",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-9",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-10",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff5745"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-11",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff574542"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-12",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57454250"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-truncated-webp-13",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff5745425056"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-put-aiff",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffffff41494646"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-truncated-aiff-1",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "46"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-2",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-3",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f52"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-4",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524d"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-5",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-6",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-7",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-8",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-9",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffffff41"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-10",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffffff4149"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-aiff-11",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffffff414946"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-put-mpeg",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "494433"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-truncated-mpeg-1",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "49"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-mpeg-2",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4944"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-put-midi",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d54686400000006"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-truncated-midi-1",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-midi-2",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d54"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-midi-3",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d5468"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-midi-4",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d546864"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-midi-5",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d54686400"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-midi-6",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d5468640000"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-midi-7",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4d546864000000"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-put-wave",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-truncated-wave-1",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-2",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "5249"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-3",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "524946"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-4",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-5",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-6",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-7",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-8",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-9",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-10",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff5741"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-truncated-wave-11",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff574156"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-reject-empty",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-empty",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-html",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "3c68746d6c3e73796e746865746963"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-html",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "3c68746d6c3e73796e746865746963"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-svg",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "3c3f786d6c2076657273696f6e3d22312e30223f3e3c7376672f3e"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-svg",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "3c3f786d6c2076657273696f6e3d22312e30223f3e3c7376672f3e"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-text",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "73796e74686574696320706c61696e2074657874"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-text",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "73796e74686574696320706c61696e2074657874"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-ogg",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "4f67675300"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-ogg",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "4f67675300"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-mp3-frame",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "fffb9000"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-mp3-frame",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "fffb9000"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-flac",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "664c6143"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-flac",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "664c6143"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-aac",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "fff15080"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-aac",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "fff15080"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-webm",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "1a45dfa3"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-webm",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "1a45dfa3"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-bmp",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "424d"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-bmp",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "424d"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-icon",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "00000100"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-icon",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "00000100"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-pdf",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "255044462d312e37"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-pdf",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "255044462d312e37"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-mp4",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "00000010667479706d70343200000000"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-mp4",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "00000010667479706d70343200000000"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-nul-png",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "0089504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-nul-png",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "0089504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-space-wave",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "2052494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-space-wave",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "2052494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "avatar-reject-lower-id3",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "696433"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "image/png"
+  },
+  {
+    "name": "sound-reject-lower-id3",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "696433"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "content_type": "audio/ogg"
+  },
+  {
+    "name": "sound-reject-image-png",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-reject-image-jpeg",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "ffd8ff"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-reject-image-gif87",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "474946383761"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-reject-image-gif89",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "474946383961"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-reject-image-webp",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff574542505650"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-reject-audio-aiff",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "464f524dffffffff41494646"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-reject-audio-mpeg",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "494433"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-reject-audio-midi",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "4d54686400000006"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-reject-audio-wave",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-limit--1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a",
+      "pad_to": 5242879
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-limit-0",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a",
+      "pad_to": 5242880
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-limit-1",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a",
+      "pad_to": 5242881
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-invalid-over-limit",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "",
+      "pad_to": 5242881
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-save-failure-published",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "fail_save": true,
+    "media": {
+      "avatar": {
+        "hex": "deadbeef"
+      }
+    }
+  },
+  {
+    "name": "avatar-write-failure-unpublished",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "avatar": {
+        "directory": true
+      }
+    }
+  },
+  {
+    "name": "avatar-missing-root",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "missing_root": true
+  },
+  {
+    "name": "avatar-replace-shorter",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "avatar": {
+        "hex": "00",
+        "pad_to": 128
+      }
+    }
+  },
+  {
+    "name": "sound-limit--1",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645",
+      "pad_to": 2097151
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-limit-0",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645",
+      "pad_to": 2097152
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-limit-1",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645",
+      "pad_to": 2097153
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-invalid-over-limit",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "",
+      "pad_to": 2097153
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-save-failure-published",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "fail_save": true,
+    "media": {
+      "sound": {
+        "hex": "deadbeef"
+      }
+    }
+  },
+  {
+    "name": "sound-write-failure-unpublished",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "sound": {
+        "directory": true
+      }
+    }
+  },
+  {
+    "name": "sound-missing-root",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "missing_root": true
+  },
+  {
+    "name": "sound-replace-shorter",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "PUT",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "00",
+        "pad_to": 128
+      }
+    }
+  },
+  {
+    "name": "avatar-upload-method-POST",
+    "path": "/api/user-prefs/avatar",
+    "method": "POST",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-upload-method-GET",
+    "path": "/api/user-prefs/avatar",
+    "method": "GET",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-upload-method-HEAD",
+    "path": "/api/user-prefs/avatar",
+    "method": "HEAD",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-upload-method-PATCH",
+    "path": "/api/user-prefs/avatar",
+    "method": "PATCH",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-method-PUT",
+    "path": "/api/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-method-DELETE",
+    "path": "/api/avatar",
+    "method": "DELETE",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-method-HEAD",
+    "path": "/api/avatar",
+    "method": "HEAD",
+    "body": {
+      "hex": "89504e470d0a1a0a"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-method-DELETE",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "DELETE",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-method-POST",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "POST",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-method-HEAD",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "HEAD",
+    "body": {
+      "hex": "52494646ffffffff57415645"
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-unset",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": ""
+    }
+  },
+  {
+    "name": "avatar-get-https",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/image.png"
+    }
+  },
+  {
+    "name": "avatar-get-http",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "http://example.invalid/image.png"
+    }
+  },
+  {
+    "name": "avatar-get-other-fixed-file",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/config.yaml"
+    }
+  },
+  {
+    "name": "avatar-get-other-file",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/missing.bin"
+    }
+  },
+  {
+    "name": "avatar-get-missing",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    }
+  },
+  {
+    "name": "avatar-get-clean-parent",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/x/../user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-clean-dot",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/./user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-untrimmed",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": " <root>/user_avatar.bin "
+    },
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-empty",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": ""
+      }
+    }
+  },
+  {
+    "name": "avatar-get-corrupt",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "3c68746d6c3e73796e746865746963"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-audio",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "52494646ffffffff57415645"
+      }
+    }
+  },
+  {
+    "name": "avatar-get-directory",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "directory": true
+      }
+    }
+  },
+  {
+    "name": "avatar-get-oversize-existing",
+    "path": "/api/avatar",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "<root>/user_avatar.bin"
+    },
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a",
+        "pad_to": 5242881
+      }
+    }
+  },
+  {
+    "name": "sound-get-empty-mime",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "notify_sound": {
+        "custom_file": "<root>/another.bin",
+        "custom_mime": ""
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "3c68746d6c3e73796e746865746963"
+      }
+    }
+  },
+  {
+    "name": "sound-get-invalid-mime",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "notify_sound": {
+        "custom_file": "<root>/another.bin",
+        "custom_mime": "text/html"
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "3c68746d6c3e73796e746865746963"
+      }
+    }
+  },
+  {
+    "name": "sound-get-historical-ogg",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "notify_sound": {
+        "custom_file": "<root>/another.bin",
+        "custom_mime": "audio/ogg"
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "3c68746d6c3e73796e746865746963"
+      }
+    }
+  },
+  {
+    "name": "sound-get-historical-spelling",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "notify_sound": {
+        "custom_file": "<root>/another.bin",
+        "custom_mime": " AuDiO/Custom ; codec=synthetic "
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "3c68746d6c3e73796e746865746963"
+      }
+    }
+  },
+  {
+    "name": "sound-get-prefix-only",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "notify_sound": {
+        "custom_file": "<root>/another.bin",
+        "custom_mime": "audio/"
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "3c68746d6c3e73796e746865746963"
+      }
+    }
+  },
+  {
+    "name": "sound-get-missing",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    }
+  },
+  {
+    "name": "sound-get-directory",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "sound": {
+        "directory": true
+      }
+    }
+  },
+  {
+    "name": "sound-get-empty",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": ""
+      }
+    }
+  },
+  {
+    "name": "sound-get-oversize-existing",
+    "path": "/api/user-prefs/notify-sound-custom",
+    "method": "GET",
+    "body": {
+      "hex": ""
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "media": {
+      "sound": {
+        "hex": "52494646ffffffff57415645",
+        "pad_to": 2097153
+      }
+    }
+  },
+  {
+    "name": "avatar-delete-success",
+    "path": "/api/user-prefs/avatar",
+    "method": "DELETE",
+    "body": {
+      "hex": "ff",
+      "pad_to": 5242881
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "fail_save": false,
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a"
+      },
+      "sound": {
+        "hex": "52494646ffffffff57415645"
+      }
+    }
+  },
+  {
+    "name": "avatar-delete-save-failure",
+    "path": "/api/user-prefs/avatar",
+    "method": "DELETE",
+    "body": {
+      "hex": "ff",
+      "pad_to": 5242881
+    },
+    "initial": {
+      "avatar": "https://example.invalid/existing.png",
+      "notify_sound": {
+        "enabled": true,
+        "type": "custom",
+        "custom_file": "<root>/notify_sound_custom.bin",
+        "custom_mime": "audio/old"
+      }
+    },
+    "fail_save": true,
+    "media": {
+      "avatar": {
+        "hex": "89504e470d0a1a0a"
+      },
+      "sound": {
+        "hex": "52494646ffffffff57415645"
+      }
+    }
+  },
+  {
+    "name": "avatar-replace-write-only",
+    "path": "/api/user-prefs/avatar",
+    "method": "PUT",
+    "body": {
+      "hex": "474946383961"
+    },
+    "initial": {},
+    "media": {
+      "avatar": {
+        "hex": "00",
+        "pad_to": 128,
+        "write_only": true
+      }
+    }
+  }
+]

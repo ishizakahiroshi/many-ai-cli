@@ -1,6 +1,6 @@
 use super::plan::UpdatePlan;
 use crate::{
-    process::{ExitOutcome, ProcessOutput, run_capped},
+    process::{ExitOutcome, ProcessOutput, SpawnOptions, run_capped_with_options},
     proto::core::{ProviderAdmissionError, ProviderUpdateAdmission, ProviderUpdateLease},
 };
 use std::{io, sync::Arc};
@@ -41,9 +41,17 @@ pub async fn execute(
     };
     let argv = plan.argv();
     let mut log = plan.log_header().into_bytes();
-    let output = run_capped(&plan.command.process, &plan.command.cancellation)
-        .await
-        .map_err(UpdateError::Io)?;
+    let output = run_capped_with_options(
+        &plan.command.process,
+        &plan.command.cancellation,
+        SpawnOptions {
+            combined_output: true,
+            no_window: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .map_err(UpdateError::Io)?;
     // Process capture is individually bounded; keep the Go combined log budget.
     let cap = 1024 * 1024;
     let header_len = log.len();

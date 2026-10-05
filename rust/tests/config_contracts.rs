@@ -18,6 +18,48 @@ fn trial() -> (tempfile::TempDir, tempfile::TempDir, RuntimePaths) {
 }
 
 #[test]
+fn profile_reservation_cannot_rollback_a_newer_writer_and_save_preserves_receipt() {
+    let (_root, _installed, paths) = trial();
+    let store = ConfigStore::new(paths.clone(), Config::defaults(&paths)).unwrap();
+    let original = store.snapshot().unwrap();
+    let mut reserved = original.config.clone();
+    reserved.hub.idle_timeout_min = 17;
+    let receipt = store
+        .publish_legacy_without_persist(original.revision, reserved)
+        .unwrap();
+    assert_eq!(store.snapshot().unwrap().config.hub.idle_timeout_min, 17);
+    assert!(!paths.resource(Resource::Config).exists());
+    assert_eq!(
+        store
+            .persist_published_legacy(receipt.revision)
+            .unwrap()
+            .revision,
+        receipt.revision
+    );
+    let mut concurrent = receipt.config.clone();
+    concurrent.hub.idle_timeout_min = 29;
+    let latest = store.persist(receipt.revision, concurrent).unwrap();
+    assert!(matches!(
+        store.publish_legacy_without_persist(receipt.revision, original.config),
+        Err(ConfigError::Conflict { .. })
+    ));
+    assert!(matches!(
+        store.persist_published_legacy(receipt.revision),
+        Err(ConfigError::Conflict { .. })
+    ));
+    assert_eq!(store.snapshot().unwrap().revision, latest.revision);
+    assert_eq!(store.snapshot().unwrap().config.hub.idle_timeout_min, 29);
+    let saved = std::fs::read_to_string(paths.resource(Resource::Config)).unwrap();
+    assert_eq!(
+        Config::from_yaml(&saved, &paths)
+            .unwrap()
+            .hub
+            .idle_timeout_min,
+        29
+    );
+}
+
+#[test]
 fn every_source_field_matches_go_public_projection() {
     let config: Config = serde_saphyr::from_str(include_str!(
         "fixtures/foundation/config/all-fields.private.yaml"

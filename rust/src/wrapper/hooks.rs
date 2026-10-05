@@ -1,5 +1,6 @@
 //! Session-owned files. Persistent shell profiles and shared Claude settings are
 //! never changed. OpenCode's required project overlay retains rollback evidence.
+pub mod codex;
 use crate::{config::RuntimePaths, files::safe_fs::Dir, process::pid_alive, proto::Message};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Value, json};

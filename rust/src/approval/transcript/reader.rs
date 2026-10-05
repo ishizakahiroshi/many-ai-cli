@@ -122,6 +122,29 @@ pub fn read_range<F>(
     offset: u64,
     state: &mut ReadState,
     budget: &ReadBudget,
+    handle: F,
+) -> io::Result<ReadStats>
+where
+    F: FnMut(&[u8], u64, u64) -> io::Result<()>,
+{
+    if state.next_offset != offset {
+        state.reset(offset);
+    }
+    let metadata = path.metadata()?;
+    if metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "transcript path is a directory",
+        ));
+    }
+    read_range_file(File::open(path)?, offset, state, budget, handle)
+}
+/// Read and inspect the same already authorized file handle.
+pub fn read_range_file<F>(
+    mut file: File,
+    offset: u64,
+    state: &mut ReadState,
+    budget: &ReadBudget,
     mut handle: F,
 ) -> io::Result<ReadStats>
 where
@@ -135,7 +158,7 @@ where
         safe_offset: state.safe_offset,
         ..Default::default()
     };
-    let metadata = path.metadata()?;
+    let metadata = file.metadata()?;
     if metadata.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -146,7 +169,6 @@ where
         stats.complete = true;
         return Ok(stats);
     }
-    let mut file = File::open(path)?;
     file.seek(SeekFrom::Start(offset))?;
     let max_bytes = if budget.max_bytes == 0 {
         READ_BYTES
@@ -225,6 +247,15 @@ pub fn read_tail_page(
     end_offset: Option<u64>,
     budget: &ReadBudget,
 ) -> io::Result<(Vec<TailRecord>, ReadStats)> {
+    read_tail_page_file(File::open(path)?, max_records, end_offset, budget)
+}
+/// The selected capability handle supplies both metadata and bytes.
+pub fn read_tail_page_file(
+    mut file: File,
+    max_records: usize,
+    end_offset: Option<u64>,
+    budget: &ReadBudget,
+) -> io::Result<(Vec<TailRecord>, ReadStats)> {
     let max_records = if max_records == 0 {
         PAGE_RECORDS
     } else {
@@ -240,7 +271,7 @@ pub fn read_tail_page(
     } else {
         budget.max_records
     };
-    let metadata = path.metadata()?;
+    let metadata = file.metadata()?;
     if metadata.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -256,7 +287,6 @@ pub fn read_tail_page(
         ..Default::default()
     };
     let mut window = vec![0; size];
-    let mut file = File::open(path)?;
     let mut loaded_start = size;
     while loaded_start > 0 {
         if budget.expired() {

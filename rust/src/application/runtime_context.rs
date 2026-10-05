@@ -42,20 +42,79 @@ impl ShutdownSignals {
         let mut terminate =
             tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
         let task = tokio::spawn(async move {
-            #[cfg(unix)]
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {},
-                _ = terminate.recv() => {},
-            }
-            #[cfg(not(unix))]
-            let _ = tokio::signal::ctrl_c().await;
-            cancel.cancel();
+            let signal = async {
+                #[cfg(unix)]
+                tokio::select! {
+                    result = tokio::signal::ctrl_c() => result,
+                    received = terminate.recv() => received.ok_or_else(|| io::Error::other("shutdown signal stream closed")),
+                }
+                #[cfg(not(unix))]
+                tokio::signal::ctrl_c().await
+            };
+            wait_for_shutdown_signal(signal, cancel).await;
         });
         Ok(Self { task })
+    }
+}
+async fn wait_for_shutdown_signal(
+    signal: impl std::future::Future<Output = io::Result<()>>,
+    cancel: Cancellation,
+) {
+    // A failed signal registration or a closed stream is not a user signal.
+    if signal.await.is_ok() {
+        cancel.cancel();
     }
 }
 impl Drop for ShutdownSignals {
     fn drop(&mut self) {
         self.task.abort();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        future::Future,
+        task::{Context, Poll, Waker},
+    };
+
+    async fn signal_result(result: io::Result<()>, expected_cancelled: bool) {
+        let cancel = Cancellation::default();
+        let mut wait = std::pin::pin!(cancel.cancelled());
+        assert_eq!(
+            wait.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+            Poll::Pending
+        );
+        let (send, receive) = tokio::sync::oneshot::channel();
+        let owned_cancel = cancel.clone();
+        let task = tokio::spawn(async move {
+            wait_for_shutdown_signal(async { receive.await.unwrap() }, owned_cancel).await;
+        });
+        send.send(result).unwrap();
+        task.await.unwrap();
+        assert_eq!(cancel.is_cancelled(), expected_cancelled);
+        assert_eq!(
+            wait.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+            if expected_cancelled {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn received_signal_cancels_the_owned_shutdown_waiter() {
+        signal_result(Ok(()), true).await;
+    }
+
+    #[tokio::test]
+    async fn signal_registration_failure_does_not_cancel_the_owned_shutdown_waiter() {
+        signal_result(
+            Err(io::Error::other("synthetic registration failure")),
+            false,
+        )
+        .await;
     }
 }

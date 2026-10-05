@@ -140,9 +140,10 @@
     {
       "path": "/api/info",
       "source_handler": "handleInfo",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
     },
     {
       "path": "/api/jev/evaluate",
@@ -154,16 +155,18 @@
     {
       "path": "/api/providers",
       "source_handler": "handleProviders",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/profile/store.rs + rust/src/hub/provider_routes.rs + router.rs",
+      "fixture": "profile::store::tests + hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Reset/restore/diff/backups/recovery/distribution/icon operations, actual main bootstrap and browser/manual acceptance pending"
     },
     {
       "path": "/api/providers/",
       "source_handler": "handleProviderRoute",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/profile/store.rs + rust/src/hub/provider_routes.rs + router.rs",
+      "fixture": "profile::store::tests + hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Reset/restore/diff/backups/recovery/distribution/icon operations, actual main bootstrap and browser/manual acceptance pending"
     },
     {
       "path": "/api/provider-distributions/",
@@ -384,16 +387,18 @@
     {
       "path": "/api/session-chat",
       "source_handler": "handleSessionChat",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
     },
     {
       "path": "/api/session-log",
       "source_handler": "handleSessionLog",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
     },
     {
       "path": "/api/agent-log",
@@ -426,23 +431,26 @@
     {
       "path": "/api/session-search",
       "source_handler": "handleSessionSearch",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
     },
     {
       "path": "/api/session-history",
       "source_handler": "handleSessionHistory",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
     },
     {
       "path": "/api/approval-history",
       "source_handler": "handleApprovalHistory",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes.rs + session_routes/ + router.rs",
+      "fixture": "hub::session_routes::tests + registered_http_session_routes_preserve_guards_and_real_store_effects",
+      "remaining": "Actual main Hub bootstrap context/caller and browser/manual acceptance pending; nonregular log-file behavior remains a documented boundary"
     },
     {
       "path": "/api/session-store/reset",
@@ -1168,9 +1176,10 @@
         "POST"
       ],
       "source_handler": "handleProviderValidate",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/providers/{id}",
@@ -1178,9 +1187,10 @@
         "GET"
       ],
       "source_handler": "handleProviderDetail",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/providers/{id}",
@@ -1188,9 +1198,10 @@
         "PATCH"
       ],
       "source_handler": "handleProviderPatch",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/providers/{id}",
@@ -1198,9 +1209,10 @@
         "DELETE"
       ],
       "source_handler": "handleProviderDelete",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/providers/{id}/history",
@@ -1208,9 +1220,10 @@
         "GET"
       ],
       "source_handler": "handleProviderHistory",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/provider_routes.rs",
+      "fixture": "hub::provider_routes::tests + provider_transport_tests",
+      "remaining": "Full prefix family and actual main bootstrap/native/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/providers/{id}/history/{revision}/diff",
@@ -1351,9 +1364,10 @@
         "PATCH"
       ],
       "source_handler": "handleSessionMeta",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes/metadata.rs + rust/src/terminal/session/observations.rs",
+      "fixture": "hub::session_routes::tests + loopback_tests",
+      "remaining": "Actual main bootstrap/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/sessions/{id}/meta",
@@ -1361,9 +1375,10 @@
         "PATCH"
       ],
       "source_handler": "handleSessionMeta",
-      "status": "unresolved",
-      "implementation": null,
-      "fixture": null
+      "status": "partial",
+      "implementation": "rust/src/hub/session_routes/metadata.rs + rust/src/terminal/session/observations.rs",
+      "fixture": "hub::session_routes::tests + loopback_tests",
+      "remaining": "Actual main bootstrap/browser/manual acceptance pending"
     },
     {
       "pattern": "/api/sessions/{id}/spawn-child",
@@ -1670,5 +1685,10 @@
     "reported_at_utc": "2026-10-03T14:06:00Z",
     "state": "author implementation; integration freeze validation follows",
     "scope": "Six registered routes and one dynamic confirmation operation advance to partial; zero accepted routes. Earlier aggregate430 receipt is retained as historical evidence."
+  },
+  "persisted_launch_addition": {
+    "status": "author_frozen_775_tests_fmt_clippy_pass",
+    "scope": "Persisted provider layers, exact launch policy, session reads/metadata, child preparation, initial prompt driver and pinned Unicode regex",
+    "no_route_accepted": true
   }
 }

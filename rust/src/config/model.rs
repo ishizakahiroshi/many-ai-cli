@@ -3436,7 +3436,7 @@ fn is_private_model_host(raw: &str) -> bool {
 }
 
 pub fn normalize_subscription_id(raw: &str) -> String {
-    raw.trim().to_lowercase()
+    crate::proto::unicode::simple_lower(raw.trim())
 }
 fn valid_id_shape(id: &str) -> bool {
     id.as_bytes()
@@ -3825,6 +3825,51 @@ impl ConfigStore {
             revision,
             config: next,
         };
+        Ok(guard.clone())
+    }
+    /// Reserves source-visible state before asynchronous profile seeding. The
+    /// revision receipt prevents a failed seed from rolling back another writer.
+    pub fn publish_legacy_without_persist(
+        &self,
+        expected_revision: u64,
+        mut next: Config,
+    ) -> Result<ConfigSnapshot, ConfigError> {
+        let mut guard = self.state.lock().map_err(|_| ConfigError::Poisoned)?;
+        if expected_revision != guard.revision {
+            return Err(ConfigError::Conflict {
+                expected: expected_revision,
+                actual: guard.revision,
+            });
+        }
+        let revision = guard
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| ConfigError::invalid("config revision exhausted"))?;
+        next.apply_defaults(&self.paths);
+        next.validate_paths(&self.paths)?;
+        *guard = ConfigSnapshot {
+            revision,
+            config: next,
+        };
+        Ok(guard.clone())
+    }
+    /// Saves the reserved generation without republishing it. Save failures
+    /// preserve visible state, matching the source's mutation-before-save flow.
+    pub fn persist_published_legacy(
+        &self,
+        expected_revision: u64,
+    ) -> Result<ConfigSnapshot, ConfigError> {
+        let guard = self.state.lock().map_err(|_| ConfigError::Poisoned)?;
+        if expected_revision != guard.revision {
+            return Err(ConfigError::Conflict {
+                expected: expected_revision,
+                actual: guard.revision,
+            });
+        }
+        guard.config.validate()?;
+        let payload = guard.config.to_private_yaml()?;
+        self.directory()?
+            .replace("config.yaml", payload.as_bytes(), 0o600)?;
         Ok(guard.clone())
     }
     /// Source-specific Go handlers assign shared memory before calling Save.
@@ -4571,6 +4616,195 @@ impl CustomProvider {
     pub fn argv(&self) -> Result<Vec<String>, ConfigError> {
         split_command_line(&self.command)
     }
+}
+
+/// Public user-preferences projection using the canonical config schema.
+impl UserPrefs {
+    pub fn public_json(&self) -> Value {
+        project(
+            serde_json::to_value(self).expect("preferences are JSON-compatible"),
+            "UserPrefs",
+            true,
+        )
+    }
+}
+
+/// Decode one Go HTTP struct value, retaining duplicate/null merge semantics.
+pub fn decode_user_prefs_http_json(bytes: &[u8]) -> Result<UserPrefs, serde_json::Error> {
+    use crate::proto::wire;
+    static SCHEMAS: std::sync::LazyLock<Vec<wire::Schema>> = std::sync::LazyLock::new(|| {
+        let mut pending = vec!["UserPrefs"];
+        let mut seen = BTreeSet::new();
+        let mut out = Vec::new();
+        while let Some(kind) = pending.pop() {
+            if !seen.insert(kind) {
+                continue;
+            }
+            let fields = schema(kind);
+            if fields.is_empty() {
+                continue;
+            }
+            let mut wire_fields = Vec::new();
+            for field in fields {
+                if field.kind == "SessionOrderIDs" {
+                    continue;
+                }
+                let mut inner = field.kind;
+                while let Some(next) = inner
+                    .strip_prefix('*')
+                    .or_else(|| inner.strip_prefix("[]"))
+                    .or_else(|| inner.strip_prefix("map[string]"))
+                {
+                    inner = next;
+                }
+                pending.push(inner);
+                wire_fields.push(wire::Field {
+                    name: field.json,
+                    kind: field.kind,
+                });
+            }
+            out.push(wire::Schema {
+                name: kind,
+                fields: Box::leak(wire_fields.into_boxed_slice()),
+            });
+        }
+        out
+    });
+    fn yaml_names(value: Value, kind: &str) -> Value {
+        if let Some(inner) = kind.strip_prefix('*') {
+            return yaml_names(value, inner);
+        }
+        if let Some(inner) = kind.strip_prefix("[]") {
+            return match value {
+                Value::Array(v) => {
+                    Value::Array(v.into_iter().map(|v| yaml_names(v, inner)).collect())
+                }
+                v => v,
+            };
+        }
+        if let Some(inner) = kind.strip_prefix("map[string]") {
+            return match value {
+                Value::Object(v) => Value::Object(
+                    v.into_iter()
+                        .map(|(k, v)| (k, yaml_names(v, inner)))
+                        .collect(),
+                ),
+                v => v,
+            };
+        }
+        let Value::Object(mut object) = value else {
+            return value;
+        };
+        if schema(kind).is_empty() {
+            return Value::Object(object);
+        }
+        Value::Object(
+            schema(kind)
+                .iter()
+                .filter_map(|field| {
+                    object
+                        .remove(field.json)
+                        .map(|v| (field.yaml.into(), yaml_names(v, field.kind)))
+                })
+                .collect(),
+        )
+    }
+    let raw = wire::first_http_raw(bytes)?;
+    let mut value: Value = wire::decode_http_schema(raw.get().as_bytes(), "UserPrefs", &SCHEMAS)?;
+    // This custom Go UnmarshalJSON deliberately ignores malformed/type-invalid
+    // session-order values while keeping the rest of the preferences request.
+    if let Some(members) = wire::decode_go_json_members(raw.get().as_bytes())?
+        && let Some(order) = wire::last_go_raw_field(&members, "session_order")
+    {
+        let order = Value::Array(
+            session_order_http(order)
+                .into_iter()
+                .map(Value::from)
+                .collect(),
+        );
+        value
+            .as_object_mut()
+            .expect("struct merge returns object")
+            .insert("session_order".into(), order);
+    }
+    let normalized = normalize_node(
+        yaml_names(value, "UserPrefs"),
+        "UserPrefs",
+        "user_prefs",
+        false,
+    )
+    .map_err(|_| {
+        <serde_json::Error as serde::de::Error>::custom("incompatible preferences field")
+    })?;
+    serde_json::from_value(normalized)
+}
+
+// SessionOrderIDs's custom []any decoder validates every nested number, but
+// only top-level integral numbers and numeric strings become session IDs.
+// Inspect RawValue containers iteratively: ignored deep values do not acquire
+// the generic map/interface projection's narrower resource limit.
+fn session_order_http(bytes: &[u8]) -> Vec<i64> {
+    use serde_json::value::RawValue;
+    let decoded = (|| -> Result<Vec<i64>, serde_json::Error> {
+        let raw = crate::proto::wire::first_http_raw(bytes)?;
+        let values: Vec<Box<RawValue>> = serde_json::from_str(raw.get())?;
+        let mut result = Vec::new();
+        for value in &values {
+            let source = value.get();
+            match source.as_bytes().first() {
+                Some(b'"') => {
+                    let value: String = serde_json::from_str(source)?;
+                    if let Ok(id) = value.trim().parse::<isize>() {
+                        result.push(id as i64);
+                    }
+                }
+                Some(b'-' | b'0'..=b'9') => {
+                    let number = source.parse::<f64>().map_err(|_| {
+                        <serde_json::Error as serde::de::Error>::custom(
+                            "invalid session-order number",
+                        )
+                    })?;
+                    let minimum = isize::MIN as f64;
+                    let maximum_exclusive = -(isize::MIN as f64);
+                    if number >= minimum && number < maximum_exclusive {
+                        let id = number as isize;
+                        if id as f64 == number {
+                            result.push(id as i64);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut pending = values;
+        while let Some(value) = pending.pop() {
+            let source = value.get();
+            match source.as_bytes().first() {
+                Some(b'[') => pending.extend(serde_json::from_str::<Vec<Box<RawValue>>>(source)?),
+                Some(b'{') => {
+                    if let Some(members) =
+                        crate::proto::wire::decode_go_json_members(source.as_bytes())?
+                    {
+                        for (_, value) in members {
+                            pending.push(RawValue::from_string(
+                                String::from_utf8(value).expect("normalized raw JSON is UTF-8"),
+                            )?);
+                        }
+                    }
+                }
+                Some(b'-' | b'0'..=b'9') => {
+                    if !source.parse::<f64>().is_ok_and(f64::is_finite) {
+                        return Err(<serde_json::Error as serde::de::Error>::custom(
+                            "session-order number overflows float64",
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(result)
+    })();
+    decoded.unwrap_or_default()
 }
 
 #[cfg(test)]

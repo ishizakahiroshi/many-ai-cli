@@ -14,20 +14,22 @@ use crate::{
     },
     proto::core::{
         CoreFuture, HttpWaitCancellation, SessionBinding, SessionError, SpawnAttemptId,
-        SpawnWaitOutcome, WrappedSessionSpawner, WrappedSpawnSpec,
+        SpawnStartOutcome, SpawnWaitOutcome, WrappedSessionSpawner, WrappedSpawnSpec,
+        WrappedStartKind, WrappedStartRequest,
     },
 };
 use std::{
     collections::BTreeMap,
     io,
     panic::{AssertUnwindSafe, catch_unwind},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard, OnceLock},
     time::Duration,
 };
 use tokio::sync::watch;
 
 pub type SpawnFailureCallback =
     Arc<dyn Fn(SpawnAttemptId, &str) -> Result<(), SessionError> + Send + Sync>;
+pub type NativeProbeStartObserver = Arc<dyn Fn(&str, u32) + Send + Sync>;
 pub type SpawnWarningCallback = Arc<dyn Fn(&'static str) + Send + Sync>;
 
 // Destructor paths must not inherit a panic from application callbacks. Forget
@@ -64,6 +66,9 @@ enum Phase {
 struct EntryState {
     phase: Phase,
     reap: Option<ReapReceipt>,
+    // Set under the ownership lock only after native creation/containment.
+    // This survives registration, later exit, cancellation and Hub shutdown.
+    native_start: Option<u32>,
 }
 struct Entry {
     attempt: SpawnAttemptId,
@@ -71,8 +76,18 @@ struct Entry {
     state: Mutex<EntryState>,
     changed: watch::Sender<u64>,
     outcome: watch::Sender<Option<SpawnWaitOutcome>>,
+    start: watch::Sender<Option<SpawnStartOutcome>>,
 }
 impl Entry {
+    fn publish_start(&self, outcome: SpawnStartOutcome) {
+        self.start.send_if_modified(|value| {
+            if value.is_some() {
+                return false;
+            }
+            *value = Some(outcome);
+            true
+        });
+    }
     fn notify(&self) {
         self.changed
             .send_modify(|version| *version = version.wrapping_add(1));
@@ -90,6 +105,7 @@ struct Inner {
     warn: SpawnWarningCallback,
     active: watch::Sender<usize>,
     cleanup_failures: Mutex<usize>,
+    probe_started: OnceLock<NativeProbeStartObserver>,
 }
 impl Inner {
     fn remove(&self, entry: &Entry) {
@@ -97,9 +113,12 @@ impl Inner {
     }
     /// All caller callbacks run after releasing ownership/registry locks.
     fn fail(&self, entry: &Entry, outcome: SpawnWaitOutcome) {
-        {
+        let start = {
             let mut state = lock(&entry.state);
             if matches!(state.phase, Phase::HandedOff | Phase::Terminal) {
+                if let Some(pid) = state.native_start {
+                    entry.publish_start(SpawnStartOutcome::Started { pid });
+                }
                 return;
             }
             let phase = std::mem::replace(&mut state.phase, Phase::Terminal);
@@ -107,11 +126,16 @@ impl Inner {
                 state.reap = Some(bundle.owner.abort());
                 drop(bundle.prompt);
             }
-        }
+            state.native_start.map_or_else(
+                || start_failure(&outcome),
+                |pid| SpawnStartOutcome::Started { pid },
+            )
+        };
         self.remove(entry);
         // Publish completion before advisory callbacks: their failure must not
         // strand an HTTP or registration observer after ownership is closed.
         entry.outcome.send_replace(Some(outcome));
+        entry.publish_start(start);
         entry.notify();
         match contained(|| (self.failed)(entry.attempt, &entry.provider).is_err()) {
             Some(false) => {}
@@ -158,8 +182,89 @@ impl ProcessWrappedSpawner {
                 warn,
                 active,
                 cleanup_failures: Mutex::new(0),
+                probe_started: OnceLock::new(),
             }),
         })
+    }
+    /// Bound by the production probe composition before accepting requests.
+    /// Only server-authored probe specs emit this native creation receipt.
+    pub fn set_probe_start_observer(&self, observer: NativeProbeStartObserver) -> io::Result<()> {
+        self.inner
+            .probe_started
+            .set(observer)
+            .map_err(|_| io::Error::other("probe native start observer already bound"))
+    }
+    fn reserve(
+        &self,
+        spec: &WrappedSpawnSpec,
+        registration_wait: Option<Duration>,
+    ) -> Result<Arc<Entry>, SpawnWaitOutcome> {
+        let attempt = spec
+            .spawn_attempt
+            .ok_or_else(|| SpawnWaitOutcome::Failed("core spawn attempt is required".into()))?;
+        if spec.registration_proof.is_none() {
+            return Err(SpawnWaitOutcome::Failed(
+                "core registration proof is required".into(),
+            ));
+        }
+        if spec.cancellation.token().is_cancelled() {
+            return Err(SpawnWaitOutcome::Failed(
+                "wrapper startup task cancelled".into(),
+            ));
+        }
+        if registration_wait
+            .is_some_and(|wait| tokio::time::Instant::now().checked_add(wait).is_none())
+        {
+            return Err(SpawnWaitOutcome::Failed(
+                "invalid wrapper registration deadline".into(),
+            ));
+        }
+        let (outcome, _) = watch::channel(None);
+        let (start, _) = watch::channel(None);
+        let (changed, _) = watch::channel(0);
+        let entry = Arc::new(Entry {
+            attempt,
+            provider: spec.provider.clone(),
+            state: Mutex::new(EntryState {
+                phase: Phase::Installing,
+                reap: None,
+                native_start: None,
+            }),
+            changed,
+            outcome,
+            start,
+        });
+        let mut registry = lock(&self.inner.registry);
+        if registry.closed {
+            return Err(SpawnWaitOutcome::HubStopped);
+        }
+        if registry.entries.contains_key(&attempt) {
+            return Err(SpawnWaitOutcome::Failed(
+                "wrapper attempt already pending".into(),
+            ));
+        }
+        if registry.entries.len() >= self.inner.options.pending_capacity {
+            return Err(SpawnWaitOutcome::Failed(
+                "wrapper startup capacity reached".into(),
+            ));
+        }
+        registry.entries.insert(attempt, entry.clone());
+        self.inner.active.send_modify(|count| *count += 1);
+        Ok(entry)
+    }
+    fn launch(&self, entry: Arc<Entry>, spec: WrappedSpawnSpec, mode: CompletionMode) {
+        // Install the independent owner before the observer's first await.
+        tokio::spawn(lifecycle(
+            self.inner.clone(),
+            entry.clone(),
+            spec,
+            mode,
+            StartupJob {
+                inner: self.inner.clone(),
+                entry,
+                reap: None,
+            },
+        ));
     }
     pub fn pending_count(&self) -> usize {
         lock(&self.inner.registry).entries.len()
@@ -402,21 +507,50 @@ impl Drop for StartupJob {
         self.inner.active.send_modify(|count| *count -= 1);
     }
 }
+fn start_failure(outcome: &SpawnWaitOutcome) -> SpawnStartOutcome {
+    match outcome {
+        SpawnWaitOutcome::HubStopped => SpawnStartOutcome::HubStopped,
+        SpawnWaitOutcome::WaiterCancelled => SpawnStartOutcome::WaiterCancelled,
+        SpawnWaitOutcome::Failed(message) => SpawnStartOutcome::Failed(message.clone()),
+        // Neither registration nor its deadline is a native Start receipt.
+        _ => SpawnStartOutcome::Failed("wrapper ended without a native Start receipt".into()),
+    }
+}
+enum CompletionMode {
+    RegistrationWait(Duration),
+    NativeStart {
+        policy: ResolvedSpawnPolicy,
+        kind: WrappedStartKind,
+    },
+}
 async fn lifecycle(
     inner: Arc<Inner>,
     entry: Arc<Entry>,
     spec: WrappedSpawnSpec,
-    startup_wait: Duration,
+    mode: CompletionMode,
     mut job: StartupJob,
 ) {
-    let launched = launch::prepare(
-        &inner.options,
-        inner.policy.as_ref(),
-        &spec,
-        inner.warn.as_ref(),
-    )
-    .and_then(|prepared| {
-        if !matches!(lock(&entry.state).phase, Phase::Installing) {
+    let prepared = match &mode {
+        CompletionMode::RegistrationWait(_) => launch::prepare(
+            &inner.options,
+            inner.policy.as_ref(),
+            &spec,
+            inner.warn.as_ref(),
+        ),
+        CompletionMode::NativeStart { policy, kind } => launch::prepare_start(
+            &inner.options,
+            inner.policy.as_ref(),
+            &spec,
+            policy,
+            *kind,
+            inner.warn.as_ref(),
+        ),
+    };
+    let launched = prepared.and_then(|mut prepared| {
+        // Serialize only native creation/installation with close. Policy and all
+        // advisory callbacks stay outside locks and may safely reenter close.
+        let mut state = lock(&entry.state);
+        if !matches!(state.phase, Phase::Installing) || spec.cancellation.token().is_cancelled() {
             return Err(io::Error::new(
                 io::ErrorKind::Interrupted,
                 "wrapper startup closed",
@@ -428,24 +562,46 @@ async fn lifecycle(
             prepared.stdout,
             prepared.stderr,
         )?;
-        Ok(StartupBundle {
+        let receipt = owner.receipt();
+        state.native_start = Some(owner.pid());
+        // Ordinary Start owns this advisory write, never the eventual ACK.
+        let record_at_start = matches!(mode, CompletionMode::NativeStart { .. })
+            .then(|| prepared.record_model.take())
+            .flatten();
+        state.phase = Phase::Starting(StartupBundle {
             owner,
             prompt: prepared.prompt,
             record_model: prepared.record_model,
-        })
+        });
+        Ok((receipt, record_at_start))
     });
     let receipt = match launched {
-        Ok(bundle) => {
-            let receipt = bundle.owner.receipt();
-            let mut state = lock(&entry.state);
-            if matches!(state.phase, Phase::Installing) {
-                state.phase = Phase::Starting(bundle);
-            } else {
-                state.reap = Some(bundle.owner.abort());
-                drop(bundle.prompt);
-            }
-            drop(state);
+        Ok((receipt, record_model)) => {
+            // Registration can transfer while optional persistence is running.
+            // The immutable native receipt is already retained under the lock.
             entry.notify();
+            if spec.usage_probe
+                && let Some(observer) = inner.probe_started.get()
+                && contained(|| observer(&spec.label, receipt.pid())).is_none()
+            {
+                warn_safely(&inner.warn, "probe native start observer panicked");
+            }
+            if let Some(model) = record_model {
+                match contained(|| {
+                    inner
+                        .policy
+                        .registered_model(&entry.provider, &model)
+                        .is_err()
+                }) {
+                    Some(false) => {}
+                    Some(true) => warn_safely(
+                        &inner.warn,
+                        "started wrapper model preference could not be saved",
+                    ),
+                    None => warn_safely(&inner.warn, "started wrapper model callback panicked"),
+                }
+            }
+            entry.publish_start(SpawnStartOutcome::Started { pid: receipt.pid() });
             Some(receipt)
         }
         Err(_) => {
@@ -458,7 +614,14 @@ async fn lifecycle(
     };
     if let Some(receipt) = receipt {
         let mut changed = entry.changed.subscribe();
-        let deadline = tokio::time::sleep(startup_wait);
+        let deadline = async {
+            match mode {
+                CompletionMode::RegistrationWait(wait) => tokio::time::sleep(wait).await,
+                // Ordinary Go Start has no registration timer. Capacity, process
+                // exit, registration, task cancellation and close bound ownership.
+                CompletionMode::NativeStart { .. } => std::future::pending::<()>().await,
+            }
+        };
         tokio::pin!(deadline);
         loop {
             changed.borrow_and_update();
@@ -493,6 +656,39 @@ async fn lifecycle(
     job.reap = None;
 }
 impl WrappedSessionSpawner for ProcessWrappedSpawner {
+    fn start_wrapped<'a>(
+        &'a self,
+        request: WrappedStartRequest,
+        waiter: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnStartOutcome> {
+        Box::pin(async move {
+            let entry = match self.reserve(&request.spec, None) {
+                Ok(entry) => entry,
+                Err(outcome) => return start_failure(&outcome),
+            };
+            let mut result = entry.start.subscribe();
+            self.launch(
+                entry,
+                request.spec,
+                CompletionMode::NativeStart {
+                    policy: request.policy,
+                    kind: request.kind,
+                },
+            );
+            loop {
+                if let Some(outcome) = result.borrow_and_update().clone() {
+                    return outcome;
+                }
+                tokio::select! {
+                    biased;
+                    value = result.changed() => if value.is_err() {
+                        return SpawnStartOutcome::Failed("wrapper lifecycle ended".into());
+                    },
+                    _ = waiter.token().cancelled() => return SpawnStartOutcome::WaiterCancelled,
+                }
+            }
+        })
+    }
     fn spawn_and_wait<'a>(
         &'a self,
         spec: WrappedSpawnSpec,
@@ -500,62 +696,17 @@ impl WrappedSessionSpawner for ProcessWrappedSpawner {
         waiter: &'a HttpWaitCancellation,
     ) -> CoreFuture<'a, SpawnWaitOutcome> {
         Box::pin(async move {
-            let Some(attempt) = spec.spawn_attempt else {
-                return SpawnWaitOutcome::Failed("core spawn attempt is required".into());
-            };
-            if spec.registration_proof.is_none() {
-                return SpawnWaitOutcome::Failed("core registration proof is required".into());
-            }
-            if spec.cancellation.token().is_cancelled() {
-                return SpawnWaitOutcome::Failed("wrapper startup task cancelled".into());
-            }
             let wait = if wait.is_zero() {
                 Duration::from_secs(1)
             } else {
                 wait
             };
-            if tokio::time::Instant::now().checked_add(wait).is_none() {
-                return SpawnWaitOutcome::Failed("invalid wrapper registration deadline".into());
-            }
-            let (outcome, mut result) = watch::channel(None);
-            let (changed, _) = watch::channel(0);
-            let entry = Arc::new(Entry {
-                attempt,
-                provider: spec.provider.clone(),
-                state: Mutex::new(EntryState {
-                    phase: Phase::Installing,
-                    reap: None,
-                }),
-                changed,
-                outcome,
-            });
-            {
-                let mut registry = lock(&self.inner.registry);
-                if registry.closed {
-                    return SpawnWaitOutcome::HubStopped;
-                }
-                if registry.entries.contains_key(&attempt) {
-                    return SpawnWaitOutcome::Failed("wrapper attempt already pending".into());
-                }
-                if registry.entries.len() >= self.inner.options.pending_capacity {
-                    return SpawnWaitOutcome::Failed("wrapper startup capacity reached".into());
-                }
-                registry.entries.insert(attempt, entry.clone());
-                self.inner.active.send_modify(|count| *count += 1);
-            }
-            // Spawn before the first await: dropping the HTTP future cannot own
-            // or cancel the process lifecycle once the attempt was reserved.
-            tokio::spawn(lifecycle(
-                self.inner.clone(),
-                entry.clone(),
-                spec,
-                wait,
-                StartupJob {
-                    inner: self.inner.clone(),
-                    entry,
-                    reap: None,
-                },
-            ));
+            let entry = match self.reserve(&spec, Some(wait)) {
+                Ok(entry) => entry,
+                Err(outcome) => return outcome,
+            };
+            let mut result = entry.outcome.subscribe();
+            self.launch(entry, spec, CompletionMode::RegistrationWait(wait));
             let deadline = tokio::time::sleep(wait);
             tokio::pin!(deadline);
             loop {

@@ -1,0 +1,476 @@
+[
+  {
+    "input": 1000000,
+    "model": "gpt-4.1",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-4.1",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-4.1",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "gpt-4.1-mini",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-4.1-mini",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-4.1-mini",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "gpt-4.1-nano",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-4.1-nano",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-4.1-nano",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "gpt-4o",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-4o",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-4o",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "gpt-4o-mini",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-4o-mini",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-4o-mini",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "gpt-5",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-5",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-5",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "gpt-5.5",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "gpt-5.5",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "gpt-5.5",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "o3",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "o3",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "o3",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "o4-mini",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "o4-mini",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "o4-mini",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-opus-4",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-opus-4",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-opus-4",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-sonnet-4",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-sonnet-4",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-sonnet-4",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-haiku-4",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-haiku-4",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-haiku-4",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-fable-5",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-fable-5",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-fable-5",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-opus-4-8",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-opus-4-8",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-opus-4-8",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-opus-4-7",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-opus-4-7",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-opus-4-7",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-opus-4-6",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-opus-4-6",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-opus-4-6",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-sonnet-4-6",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-sonnet-4-6",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-sonnet-4-6",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-opus-4-5",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-opus-4-5",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-opus-4-5",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-sonnet-4-5",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-sonnet-4-5",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-sonnet-4-5",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-haiku-4-5",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-haiku-4-5",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-haiku-4-5",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-3-5-sonnet",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-3-5-sonnet",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-3-5-sonnet",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-3-5-haiku",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-3-5-haiku",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-3-5-haiku",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-3-opus",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-3-opus",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-3-opus",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-3-sonnet",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-3-sonnet",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-3-sonnet",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "input": 1000000,
+    "model": "claude-3-haiku",
+    "output": 250000,
+    "cache": 300000
+  },
+  {
+    "input": 1000,
+    "model": "claude-3-haiku",
+    "output": 25,
+    "cache": 2000
+  },
+  {
+    "input": -1,
+    "model": "claude-3-haiku",
+    "output": -2,
+    "cache": -3
+  },
+  {
+    "model": "gpt-4.1 medium",
+    "input": 1000000,
+    "cache": 500000,
+    "output": 1000000
+  },
+  {
+    "model": "gpt-4.1-20261005",
+    "input": 1000000,
+    "cache": 500000,
+    "output": 1000000
+  },
+  {
+    "model": "gpt-4.1 medium",
+    "input": 1000000,
+    "cache": 500000,
+    "output": 1000000
+  },
+  {
+    "model": "unknown",
+    "input": 1000000,
+    "cache": 500000,
+    "output": 1000000
+  }
+]

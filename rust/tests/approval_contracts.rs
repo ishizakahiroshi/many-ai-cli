@@ -111,7 +111,7 @@ fn record_closure_precedes_reused_signature_insert() {
             .observe(data("claude", "first?", "transcript", "marker"), None, now)
             .0
             .len(),
-        2
+        4
     );
     let effects = state.observe(data("claude", "second?", "transcript", "marker"), None, now);
     assert!(matches!(
@@ -121,7 +121,16 @@ fn record_closure_precedes_reused_signature_insert() {
     assert!(matches!(effects.0[1], CoreEffect::Broadcast(_)));
     assert!(matches!(
         effects.0[2],
+        CoreEffect::Notify(CoreEvent::ApprovalOpened { .. })
+    ));
+    assert!(matches!(
+        effects.0[3],
         CoreEffect::Persist(PersistenceEffect::ApprovalDetected(_))
+    ));
+    assert!(matches!(effects.0[4], CoreEffect::Broadcast(_)));
+    assert!(matches!(
+        effects.0[5],
+        CoreEffect::Notify(CoreEvent::ApprovalPublished { .. })
     ));
     assert_eq!(state.version(), ApprovalStateVersion(3));
     assert_eq!(state.record().unwrap().data().question, "second?");

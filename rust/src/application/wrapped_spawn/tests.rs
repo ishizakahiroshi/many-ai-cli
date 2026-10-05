@@ -24,6 +24,7 @@ impl SpawnLaunchPolicy for Policy {
             route_environment: vec!["SYNTHETIC_PRECEDENCE=route".into()],
             subscription_environment: vec!["SYNTHETIC_PRECEDENCE=subscription".into()],
             effective_route: spec.route.clone(),
+            ordinary_model_args: vec![],
             current_model: spec.model.clone(),
             resolved_model: spec.model.trim().to_owned(),
             effort_args: if spec.effort.is_empty() {
@@ -97,6 +98,7 @@ fn runtime(capacity: usize, fail_policy: bool) -> TestRuntime {
     let options = WrapperSpawnOptions {
         paths: RuntimePaths::trial(root.path(), 49171, installed.path()).unwrap(),
         executable,
+        application_home: installed.path().to_path_buf(),
         environment: vec![
             format!("SYNTHETIC_WRAPPER_ROOT={}", root.path().display()),
             "PATH=/usr/bin:/bin".into(),
@@ -138,6 +140,33 @@ fn runtime(capacity: usize, fail_policy: bool) -> TestRuntime {
         failures,
         spawner,
     }
+}
+#[cfg(windows)]
+fn windows_native_runtime() -> TestRuntime {
+    let mut test = runtime(8, false);
+    let source = std::path::PathBuf::from(
+        std::env::var_os("MANY_TEST_NATIVE_WRAPPER_EXE")
+            .or_else(|| option_env!("MANY_AI_NATIVE_TEST_WRAPPER").map(Into::into))
+            .expect("native Windows build must prepare the synthetic wrapper test fixture"),
+    );
+    assert!(source.is_absolute() && source.is_file());
+    let executable = test.root.path().join("synthetic-native-wrapper.exe");
+    std::fs::copy(source, &executable).unwrap();
+    test.options.executable = executable;
+    let failed = test.failures.clone();
+    test.spawner = Arc::new(
+        ProcessWrappedSpawner::new(
+            test.options.clone(),
+            test.policy.clone(),
+            Arc::new(move |_, _| {
+                failed.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }),
+            Arc::new(|_| {}),
+        )
+        .unwrap(),
+    );
+    test
 }
 #[cfg(unix)]
 fn binding() -> SessionBinding {
@@ -545,9 +574,11 @@ async fn fast_registration_waits_for_exact_installation_and_failure_wakes_waiter
             state: Mutex::new(EntryState {
                 phase: Phase::Installing,
                 reap: None,
+                native_start: None,
             }),
             changed,
             outcome,
+            start: watch::channel(None).0,
         });
         lock(&t.spawner.inner.registry)
             .entries
@@ -1056,3 +1087,6 @@ fn invalid_model_and_label_still_observe_the_once_only_profile_policy_boundary()
         assert!(!t.root.path().join("pid").exists());
     }
 }
+
+#[path = "start_tests.rs"]
+mod start_tests;

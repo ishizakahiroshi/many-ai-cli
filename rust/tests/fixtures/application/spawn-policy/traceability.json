@@ -1,0 +1,265 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "scope": "Production spawn launch policy, spawn-time subscription selection/seeding and native CLI folder trust",
+  "status": "implementation_complete",
+  "source_entries": [
+    "internal/hub/spawn_handler.go:spawnWrappedSession/startWrapProcess/resolveSpawnModelForDefinition/getLastModel/setLastModel",
+    "internal/hub/provider_capability.go:effortWrapArgsForProvider",
+    "internal/hub/subscription.go:subscriptionLaunch/pickAutoSubscription",
+    "internal/subscription/resolve.go:Resolve/Selectable/EnsureProfileDirFor",
+    "internal/subscription/seed.go:SeedProfileDirFor/defaultHomeFromEnv",
+    "internal/hub/env_preset.go:EnvPresetForWithOllamaBase/RouteForModel/mergeOpenCodeNVIDIANIMConfig",
+    "internal/nvidianim/secret.go:ResolveAPIKey",
+    "internal/hub/spawn_command.go:sanitizeEnv",
+    "internal/hub/path_expand_windows.go:expandPathEntries",
+    "internal/clitrust/clitrust.go:Grant/ReclaimStaleTempFiles",
+    "internal/clitrust/claude.go:claudeGrant",
+    "internal/clitrust/codex.go:codexGrant",
+    "internal/clitrust/claude_project.go:claudePlanFor",
+    "internal/clitrust/codex_project.go:codexPlanFor"
+  ],
+  "implementation": [
+    "rust/src/application/spawn_policy.rs",
+    "rust/src/application/spawn_policy/environment.rs",
+    "rust/src/application/spawn_policy/routes.rs",
+    "rust/src/application/spawn_policy/trust.rs",
+    "rust/src/application/spawn_policy/trust/project.rs",
+    "rust/src/application/spawn_policy/trust/claude.rs",
+    "rust/src/application/spawn_policy/trust/codex.rs",
+    "rust/src/profile/subscriptions.rs",
+    "rust/src/profile/subscriptions/seed.rs",
+    "rust/src/profile/subscriptions/links.rs"
+  ],
+  "tests": [
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "route_inference_precedence_and_official_inherited_environment"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "login_ignores_inferred_and_explicit_route_configuration_after_profile_resolution"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "nim_key_prefers_environment_and_runtime_config_merges_without_exposing_keys"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "rejects_absent_provider_invalid_route_and_invalid_profile_without_fallback"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "model_publication_uses_shared_store_and_preserves_memory_on_write_failure"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "synthetic_windows_path_refresh_preserves_unknown_refs_and_recovers_missing_entries"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "native_unix_sanitizer_only_removes_empty_path_entries"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "raw_registry_effort_mapping_and_invalid_declared_level_match_go"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "custom_model_suppression_and_explicit_registry_mapping"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "folder_trust_uses_selected_profile_environment_without_advancing_auto_again"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "claude_trust_preserves_raw_siblings_and_unknown_entries_updates_unanswered_false"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "codex_trust_appends_preserving_bytes_and_prior_refusal_prevents_broader_trust"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "repository_and_linked_worktree_trust_share_main_repository_key"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "broad_home_and_unsupported_provider_trust_are_rejected_without_writes"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "claude_trust_preserves_config_symlink_and_existing_mode_within_owned_trial"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "invalid_model_consumes_only_one_auto_choice_before_route_key_work"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "disabled_provider_registry_is_not_overridden_by_builtin_defaults"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "claude_stale_temp_recovery_removes_only_aged_matching_regular_files"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "model_and_route_config_are_reread_after_profile_preparation"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "relative_vendor_environment_keeps_child_spelling_and_trust_uses_hub_actor_cwd"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/tests.rs",
+      "name": "relative_vendor_seed_reads_hub_cwd_and_retains_environment_text"
+    },
+    {
+      "file": "rust/src/application/spawn_policy/trust/project.rs",
+      "name": "windows_verbatim_key_simplification_keeps_unsafe_components"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "no_profile_does_not_read_or_modify_vendor_settings_or_environment"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "auto_is_ordered_once_and_invalid_profiles_never_fall_back"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "failed_selected_directory_does_not_advance_again_or_use_another_account"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "profile_seeds_only_named_settings_and_preserves_existing_state"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "settings_sync_overrides_and_malformed_source_preserve_destination"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "codex_first_seed_keeps_user_hooks_and_never_copies_auth"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "open_code_only_changes_data_home_and_grok_seeds_policy"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "synthetic_default_rule_links_track_changes_and_trial_escape_is_rejected"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "trial_paths_reject_parent_components_before_opening_original_spelling"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "trial_path_alias_to_owned_root_is_allowed"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "relative_subscription_tree_override_keeps_go_classification_before_absolutizing"
+    },
+    {
+      "file": "rust/src/profile/subscriptions/tests.rs",
+      "name": "relative_filesystem_inputs_are_resolved_before_trial_root_validation"
+    }
+  ],
+  "evidence": {
+    "prior_linux_tests": {
+      "policy": 18,
+      "subscriptions": 8,
+      "result": "passed before bounded alias/parent-component repair and generated Windows registry API amendment"
+    },
+    "latest_linux_retest": {
+      "policy": 22,
+      "subscriptions": 12,
+      "exit_code": 0,
+      "scope": "Explicit Hub cwd and unchanged relative child-env/config spelling amendment",
+      "commands": [
+        "cargo test --offline --locked --manifest-path rust/Cargo.toml --lib application::spawn_policy",
+        "cargo test --offline --locked --manifest-path rust/Cargo.toml --lib profile::subscriptions"
+      ]
+    },
+    "native_windows": "not run",
+    "native_macos": "not run",
+    "independent_review": "not requested; existing blocked gate unchanged",
+    "bounded_linux_retest": {
+      "policy": 20,
+      "subscriptions": 10,
+      "result": "passed after bounded alias/parent-component repair, generated Windows Registry API amendment, and recovery/config-reread fixtures"
+    },
+    "bounded_linux_clippy": "cargo clippy --offline --locked --manifest-path rust/Cargo.toml --lib -- -D warnings: exit 0",
+    "latest_linux_clippy": {
+      "command": "cargo clippy --offline --locked --manifest-path rust/Cargo.toml --lib -- -D warnings",
+      "exit_code": 0
+    },
+    "latest_format": {
+      "command": "rustfmt --check --edition 2024 rust/src/application/spawn_policy.rs rust/src/profile/subscriptions.rs",
+      "exit_code": 0
+    },
+    "build_context": {
+      "rust": "1.90.0",
+      "jobs": 2,
+      "incremental": false,
+      "dev_debug": 0,
+      "test_debug": 0,
+      "mode": "offline locked, existing serialized runtime target"
+    },
+    "earlier_failures": [
+      {
+        "phase": "initial compile",
+        "exit_code": 101,
+        "detail": "Synthetic fixture referred to cfg.hub.token, which does not exist; removed. No shared API change."
+      },
+      {
+        "phase": "initial lib clippy",
+        "exit_code": 101,
+        "detail": "Two nonminimal_bool expressions in owned Claude trust code; simplified and subsequent clippy passed."
+      }
+    ]
+  },
+  "isolation": "All configuration, credential-shaped placeholders, vendor defaults, worktree metadata, files and trust records are synthetic and beneath owned temporary roots. No provider/network/SSH/WSL command, account login, usage probe or real home/config/credential access is performed by these tests.",
+  "remaining_integration": [
+    "Compose registry and stale local-model snapshots from actual shared services",
+    "Compose seed/trust outcome observers and board/log recording",
+    "Call NativeFolderTrust::reclaim at Hub startup for configured default/profile environments",
+    "Provide explicitly isolated child vendor configuration environment for unprofiled trial launches"
+  ],
+  "source_compatibility_gaps": [
+    "Trust failures expose io::Error without the Go partial attempted file/key result",
+    "Capability-based NIM-key and existing profile-settings access rejects source-supported destination symlinks",
+    "Capability-based Codex append secures existing file/directory permissions more tightly than Go",
+    "Grok TOML formatting-only differences can trigger an otherwise semantically unnecessary rewrite",
+    "Bounded settings/key/trust reads impose limits beyond the original unbounded Go file reads"
+  ],
+  "acceptance_gates": [
+    "Native Windows registry refresh, junction fallback, canonical trust-key spelling and config writes",
+    "Native macOS alias and filesystem behavior",
+    "Concurrent filesystem replacement/race resistance is not accepted by these ordinary synthetic fixtures",
+    "Actual runtime composition and provider acceptance remain separate from unit tests"
+  ],
+  "retained_source_quirks": [
+    "Relative inherited vendor env is preserved unchanged. Seed and trust filesystem work resolves against explicit Hub cwd, even when the vendor child will interpret the same env against its different cwd.",
+    "Relative default vendor paths are classified as outside the absolute subscriptions tree before resolution, matching the Go filepath.Rel failure for mixed absolute/relative operands.",
+    "Registry effort argv is forwarded verbatim. Unknown wrapper flags and invalid declared effort mappings retain the inherited Go behavior instead of being normalized to --effort."
+  ],
+  "status_scope": "Bounded author implementation only. The listed source-compatibility gaps, production composition and native acceptance remain unaccepted.",
+  "verified_source_sha256": {
+    "rust/src/application/spawn_policy.rs": "f4b0dc6a7dc0deff745a777cc3c5bb34604071042f7105680bbc579ff0b98736",
+    "rust/src/application/spawn_policy/environment.rs": "09296d69059e8a76c1a5156d471a7e643597d938f084b2fc6ce47186348ba3c3",
+    "rust/src/application/spawn_policy/routes.rs": "d637e013d218db6664b7a022173d53a6a87d35041fd515f152c35d225122aa21",
+    "rust/src/application/spawn_policy/tests.rs": "1516576a560bf558ed8fd810c1ff0531eb910b3a1bb971ed56f5cbf96b399bfe",
+    "rust/src/application/spawn_policy/trust.rs": "e954ec04a025781c83d11037960eca77234f497fed80ceac98ef8433865a4bf0",
+    "rust/src/application/spawn_policy/trust/claude.rs": "f5848a216d304adf374c7e4627dbfc53e2cb934ea271306452a5b5c40e2a8bd1",
+    "rust/src/application/spawn_policy/trust/codex.rs": "b72b0a2ad6ad7b16513460fc839beda95a678bb6851017e4aa7aafc8585e1985",
+    "rust/src/application/spawn_policy/trust/project.rs": "2c507912dfc89fd2cf921891be14e18fc2975c1dd22dde0a5d26cfe7246a561c",
+    "rust/src/profile/subscriptions.rs": "571a3752bd3a2843e668fa80d7ffdf30dd8888ea076279412a386024b336ec89",
+    "rust/src/profile/subscriptions/links.rs": "b93b2cccc0ba20dbcb108eeab380d8863d47c0563727d24861b2d8714fe2180c",
+    "rust/src/profile/subscriptions/seed.rs": "3cb8437a10a261e9e0f2c661e5024c3ac29f9c60866c6133d081f5f420c8b1bf",
+    "rust/src/profile/subscriptions/tests.rs": "4bb89eb59a218408db23a0199e11896775500f63a80412f289884d1c16b4742f"
+  }
+}

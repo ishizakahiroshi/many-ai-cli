@@ -45,11 +45,45 @@ pub struct GitTurnCompleted {
     // Dropping the completed result releases the per-incarnation capture gate.
     _completion: tokio::sync::OwnedMutexGuard<()>,
 }
+/// Acquired synchronously before an owned end-capture task is scheduled. The
+/// next confirmed input waits on this same per-incarnation Files capture gate.
+pub struct GitTurnEndReservation {
+    binding: SessionBinding,
+    gate: tokio::sync::OwnedMutexGuard<()>,
+}
 pub(super) fn format_turn_timestamp(time: Timestamp) -> Result<String> {
     crate::proto::time::format_rfc3339(time)
         .map_err(|_| err(500, "invalid_timestamp", "invalid turn timestamp"))
 }
 impl FilesService {
+    /// Fixed Go end semantics: no active baseline or an in-flight capture means
+    /// there is nothing to schedule. This creates no second session registry.
+    pub fn reserve_git_turn_end(&self, binding: SessionBinding) -> Option<GitTurnEndReservation> {
+        let state = self.turns.lock().unwrap_or_else(|e| e.into_inner());
+        let turn = state.sessions.get(&binding.session.0)?;
+        if turn.binding.incarnation != binding.incarnation || turn.start.is_none() {
+            return None;
+        }
+        let gate = turn.gate.clone().try_lock_owned().ok()?;
+        Some(GitTurnEndReservation { binding, gate })
+    }
+    pub async fn observe_reserved_git_turn_end(
+        &self,
+        core: &dyn SessionCore,
+        reservation: GitTurnEndReservation,
+        ended_at: &str,
+    ) -> Result<Option<GitTurnCompleted>> {
+        // A warm wrapper reconnect preserves the logical capture incarnation.
+        // Re-resolve its current transport binding rather than rejecting work
+        // already reserved by the same live session before that reconnect.
+        let binding = core
+            .details(reservation.binding.session)
+            .filter(|current| current.binding.incarnation == reservation.binding.incarnation)
+            .map(|current| current.binding)
+            .ok_or_else(|| err(409, "stale_binding", "session binding changed"))?;
+        self.capture_git_turn(core, binding, "", Some(ended_at), reservation.gate)
+            .await
+    }
     /// Must be awaited BEFORE the matching confirmed input is delivered. End
     /// capture may run asynchronously, but the next start waits on the same gate.
     /// The returned completed turn is then handed to the real handoff writer and
@@ -87,6 +121,17 @@ impl FilesService {
             entry.gate.clone()
         };
         let _gate = gate.lock_owned().await;
+        self.capture_git_turn(core, binding, started_at, ended_at, _gate)
+            .await
+    }
+    async fn capture_git_turn(
+        &self,
+        core: &dyn SessionCore,
+        binding: SessionBinding,
+        started_at: &str,
+        ended_at: Option<&str>,
+        _gate: tokio::sync::OwnedMutexGuard<()>,
+    ) -> Result<Option<GitTurnCompleted>> {
         if !core.is_current(binding) {
             return Err(err(409, "stale_binding", "session binding changed"));
         }

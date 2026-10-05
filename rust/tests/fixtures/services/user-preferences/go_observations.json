@@ -1,0 +1,5841 @@
+{
+  "baseline": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "source_sha256": {
+    "internal/config/child_permission.go": "e0297861ac408172b09da533b7b77088d3ac96c293798279b9a80f878dcefb87",
+    "internal/config/config.go": "b487210ee59a19cec4270534a5539d563afe6a171f1e5ecab34fd2942bf45a16",
+    "internal/config/custom_provider.go": "190d55b47b3e7ee9f5e079e75dcef4fa95c71b7002181a590df72a039381777d",
+    "internal/config/custom_provider_command.go": "b2417ef23e005d65594a6fb66e07d82ad09d09be9e11e43472a35ee864f7b39d",
+    "internal/config/effort.go": "62a92f2472a9a53077002d35a28a3a9bd7c90cf532d277bedda56a9bd6ad3d72",
+    "internal/config/headless.go": "2a90ed738382c874fbd48f8b536ddea2856490aa03cb2690e88284dbdec8f78a",
+    "internal/config/launch_prompt.go": "64bdf682cf1168bb56950c0066c999d32f778757fcd5b901cd9a5fae95e97e98",
+    "internal/config/provider_legacy.go": "d3a3bf643c8806e0b5c17b6c4aaa81477aa107e52a1e48bc2006bd934a5d2099",
+    "internal/config/subscription.go": "5251e3e45fd4e957ab5ddb196f6726c3be502d0181d8d3b84b44929f8d23a52c",
+    "internal/hub/done_summary.go": "5c816fc081a5c4cc9bbd469c208198afc6e2c8cd061f8e6af55aad01cd0be30b",
+    "internal/hub/http_helpers.go": "6175da5759f10b3d17fb6c664ce38102a15ee9029658af6f05d6c1bc146be450",
+    "internal/hub/misc_handlers.go": "a7323dccce83b4ac21584e4d3f25866695c7304edce4586a1d3c4c5fe6c5d0f2",
+    "internal/hub/user_prefs_handlers.go": "6dd1c6d9ee4d1b1a3076e51f5ba13b2e15aa53d596b165f8811feadde520118d",
+    "internal/securefile/atomic.go": "3d3ff3c1e43e5156c51461bffc7b21a78c5a66d27a36dd52368e730a06bb42d7",
+    "internal/securefile/securefile.go": "4ea99b562da17fce5845d224014b15d6c625608650e40498f31242532ab6dbd1",
+    "internal/securefile/securefile_other.go": "69f869197e5931b6353638fda818f71ef948654cd4b0deb1d80bc41da658d077",
+    "internal/securefile/securefile_windows.go": "8a268089885cda34dc61a5140edc4157a24f97d19115547eaf9f3d729e5014a4",
+    "internal/wslutil/wslutil_unix.go": "6d3d692a2a44fbff6f164fbb71c7bc4d5f7d413f891441f586c8dff4c9760818",
+    "internal/wslutil/wslutil_windows.go": "e54844f900484145e35bc7445011efd880ffec654ce410353193f442bd4d8958"
+  },
+  "cases": [
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": false
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "get-default",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": true
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "get-backend",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": true
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "get-push",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": false
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "get-explicit-false",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": false
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": true
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "get-explicit-true",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {
+          "enabled": true
+        },
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {
+          "auto_approval_enabled": true,
+          "auto_switch": true,
+          "high_risk_confirmation_mode": "dialog"
+        },
+        "avatar": "https://example.invalid/synthetic.png",
+        "collapsed_nodes": [
+          "b",
+          "session:9"
+        ],
+        "cwd_favorites": [
+          "/synthetic/beta"
+        ],
+        "cwd_history": [
+          "/synthetic/alpha"
+        ],
+        "desktop_notifications": {
+          "enabled": true
+        },
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 80,
+              "hue": 220,
+              "id": "u-ok",
+              "mode": "dark",
+              "name": "night"
+            }
+          ],
+          "font_size": "large",
+          "lang": "ja",
+          "live_status_bg": "#000000",
+          "live_status_fg": "#ffffff",
+          "locked_mode": "all",
+          "theme": "u-ok"
+        },
+        "display_name": "Synthetic user",
+        "done_summary_notify": {
+          "enabled": false
+        },
+        "group_order": [
+          "b",
+          "a"
+        ],
+        "migrated_from_localstorage": true,
+        "notify_sound": {
+          "enabled": true,
+          "type": "bell"
+        },
+        "open_project": "/synthetic/alpha",
+        "project_favorites": [
+          "b"
+        ],
+        "project_views": {
+          "/synthetic/alpha": {
+            "session_id": 9,
+            "tab": "git"
+          }
+        },
+        "push_notifications": {
+          "enabled": true
+        },
+        "quick_cmds": {
+          "cmd1": "one",
+          "cmd2": "two",
+          "cmd3": "three",
+          "cmd4": "four",
+          "cmd5": "five",
+          "show1": false,
+          "show2": true,
+          "show3": false,
+          "show4": true,
+          "show5": false
+        },
+        "session_order": [
+          9,
+          2,
+          5
+        ],
+        "sidebar_pin_migrated": true,
+        "spawn": {
+          "defaults": {
+            "codex": "synthetic"
+          },
+          "delegation_auto": true,
+          "last_model": {
+            "claude": "synthetic-model"
+          },
+          "role_effort": {
+            "review": "high"
+          },
+          "role_permission": {
+            "review": "default"
+          },
+          "role_provider": {
+            "review": "codex"
+          },
+          "worktree_auto": true,
+          "worktree_cleanup": "always"
+        },
+        "template_send": {
+          "immediate": false
+        },
+        "templates": [
+          {
+            "body": "synthetic B",
+            "label": "second",
+            "providers": [
+              "codex",
+              "claude"
+            ],
+            "tags": [
+              "work",
+              "CJK \u65e5\u672c\u8a9e"
+            ]
+          },
+          {
+            "body": "synthetic A",
+            "label": "first"
+          }
+        ],
+        "token_statusbar": {
+          "enabled": false,
+          "segments": {
+            "cost": false,
+            "tokens": true
+          }
+        },
+        "trigger": {
+          "enabled": true,
+          "phrase": "synthetic trigger"
+        },
+        "usage_links": {
+          "claude": "https://example.invalid/claude",
+          "codex": "https://example.invalid/codex",
+          "command-code": "g",
+          "copilot": "c",
+          "cursor-agent": "d",
+          "grok": "f",
+          "opencode": "e"
+        },
+        "usage_probe_model": "synthetic-model",
+        "voice": {
+          "grace_seconds": 7,
+          "input_disabled": true,
+          "wake_word_enabled": true,
+          "wake_word_phrase": "hello"
+        },
+        "workflow_completion_notify": {
+          "enabled": true
+        }
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "all-fields-full-snapshot",
+      "runtime": {
+        "approval": {
+          "auto_approval_enabled": true,
+          "auto_switch": true,
+          "high_risk_confirmation_mode": "dialog"
+        },
+        "avatar": "https://example.invalid/synthetic.png",
+        "collapsed_nodes": [
+          "b",
+          "session:9"
+        ],
+        "cwd_favorites": [
+          "/synthetic/beta"
+        ],
+        "cwd_history": [
+          "/synthetic/alpha"
+        ],
+        "desktop_notifications": {
+          "enabled": true
+        },
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 80,
+              "hue": 220,
+              "id": "u-ok",
+              "mode": "dark",
+              "name": "night"
+            }
+          ],
+          "font_size": "large",
+          "lang": "ja",
+          "live_status_bg": "#000000",
+          "live_status_fg": "#ffffff",
+          "locked_mode": "all",
+          "theme": "u-ok"
+        },
+        "display_name": "Synthetic user",
+        "done_summary_notify": {
+          "enabled": false
+        },
+        "group_order": [
+          "b",
+          "a"
+        ],
+        "migrated_from_localstorage": true,
+        "notify_sound": {
+          "enabled": true,
+          "type": "bell"
+        },
+        "open_project": "/synthetic/alpha",
+        "project_favorites": [
+          "b"
+        ],
+        "project_views": {
+          "/synthetic/alpha": {
+            "session_id": 9,
+            "tab": "git"
+          }
+        },
+        "push_notifications": {
+          "enabled": true
+        },
+        "quick_cmds": {
+          "cmd1": "one",
+          "cmd2": "two",
+          "cmd3": "three",
+          "cmd4": "four",
+          "cmd5": "five",
+          "show1": false,
+          "show2": true,
+          "show3": false,
+          "show4": true,
+          "show5": false
+        },
+        "session_order": [
+          9,
+          2,
+          5
+        ],
+        "sidebar_pin_migrated": true,
+        "spawn": {
+          "defaults": {
+            "codex": "synthetic"
+          },
+          "delegation_auto": true,
+          "last_model": {
+            "claude": "synthetic-model"
+          },
+          "role_effort": {
+            "review": "high"
+          },
+          "role_permission": {
+            "review": "default"
+          },
+          "role_provider": {
+            "review": "codex"
+          },
+          "worktree_auto": true,
+          "worktree_cleanup": "always"
+        },
+        "template_send": {
+          "immediate": false
+        },
+        "templates": [
+          {
+            "body": "synthetic B",
+            "label": "second",
+            "providers": [
+              "codex",
+              "claude"
+            ],
+            "tags": [
+              "work",
+              "CJK \u65e5\u672c\u8a9e"
+            ]
+          },
+          {
+            "body": "synthetic A",
+            "label": "first"
+          }
+        ],
+        "token_statusbar": {
+          "enabled": false,
+          "segments": {
+            "cost": false,
+            "tokens": true
+          }
+        },
+        "trigger": {
+          "enabled": true,
+          "phrase": "synthetic trigger"
+        },
+        "usage_links": {
+          "claude": "https://example.invalid/claude",
+          "codex": "https://example.invalid/codex",
+          "command-code": "g",
+          "copilot": "c",
+          "cursor-agent": "d",
+          "grok": "f",
+          "opencode": "e"
+        },
+        "usage_probe_model": "synthetic-model",
+        "voice": {
+          "grace_seconds": 7,
+          "input_disabled": true,
+          "wake_word_enabled": true,
+          "wake_word_phrase": "hello"
+        },
+        "workflow_completion_notify": {
+          "enabled": true
+        }
+      },
+      "saved": {
+        "approval": {
+          "auto_approval_enabled": true,
+          "auto_switch": true,
+          "high_risk_confirmation_mode": "dialog"
+        },
+        "avatar": "https://example.invalid/synthetic.png",
+        "collapsed_nodes": [
+          "b",
+          "session:9"
+        ],
+        "cwd_favorites": [
+          "/synthetic/beta"
+        ],
+        "cwd_history": [
+          "/synthetic/alpha"
+        ],
+        "desktop_notifications": {
+          "enabled": true
+        },
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 80,
+              "hue": 220,
+              "id": "u-ok",
+              "mode": "dark",
+              "name": "night"
+            }
+          ],
+          "font_size": "large",
+          "lang": "ja",
+          "live_status_bg": "#000000",
+          "live_status_fg": "#ffffff",
+          "locked_mode": "all",
+          "theme": "u-ok"
+        },
+        "display_name": "Synthetic user",
+        "done_summary_notify": {
+          "enabled": false
+        },
+        "group_order": [
+          "b",
+          "a"
+        ],
+        "migrated_from_localstorage": true,
+        "notify_sound": {
+          "enabled": true,
+          "type": "bell"
+        },
+        "open_project": "/synthetic/alpha",
+        "project_favorites": [
+          "b"
+        ],
+        "project_views": {
+          "/synthetic/alpha": {
+            "session_id": 9,
+            "tab": "git"
+          }
+        },
+        "push_notifications": {
+          "enabled": true
+        },
+        "quick_cmds": {
+          "cmd1": "one",
+          "cmd2": "two",
+          "cmd3": "three",
+          "cmd4": "four",
+          "cmd5": "five",
+          "show1": false,
+          "show2": true,
+          "show3": false,
+          "show4": true,
+          "show5": false
+        },
+        "session_order": [
+          9,
+          2,
+          5
+        ],
+        "sidebar_pin_migrated": true,
+        "spawn": {
+          "defaults": {
+            "codex": "synthetic"
+          },
+          "delegation_auto": true,
+          "last_model": {
+            "claude": "synthetic-model"
+          },
+          "role_effort": {
+            "review": "high"
+          },
+          "role_permission": {
+            "review": "default"
+          },
+          "role_provider": {
+            "review": "codex"
+          },
+          "worktree_auto": true,
+          "worktree_cleanup": "always"
+        },
+        "template_send": {
+          "immediate": false
+        },
+        "templates": [
+          {
+            "body": "synthetic B",
+            "label": "second",
+            "providers": [
+              "codex",
+              "claude"
+            ],
+            "tags": [
+              "work",
+              "CJK \u65e5\u672c\u8a9e"
+            ]
+          },
+          {
+            "body": "synthetic A",
+            "label": "first"
+          }
+        ],
+        "token_statusbar": {
+          "enabled": false,
+          "segments": {
+            "cost": false,
+            "tokens": true
+          }
+        },
+        "trigger": {
+          "enabled": true,
+          "phrase": "synthetic trigger"
+        },
+        "usage_links": {
+          "claude": "https://example.invalid/claude",
+          "codex": "https://example.invalid/codex",
+          "command-code": "g",
+          "copilot": "c",
+          "cursor-agent": "d",
+          "grok": "f",
+          "opencode": "e"
+        },
+        "usage_probe_model": "synthetic-model",
+        "voice": {
+          "grace_seconds": 7,
+          "input_disabled": true,
+          "wake_word_enabled": true,
+          "wake_word_phrase": "hello"
+        },
+        "workflow_completion_notify": {
+          "enabled": true
+        }
+      },
+      "status": 200,
+      "version": "0ceab30ea58c6f16c2cf4c5aeac37f7f8a222ae76f994d35d74aaf67c98bc12f"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "0ceab30ea58c6f16c2cf4c5aeac37f7f8a222ae76f994d35d74aaf67c98bc12f",
+      "name": "empty-snapshot-clears",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "0ceab30ea58c6f16c2cf4c5aeac37f7f8a222ae76f994d35d74aaf67c98bc12f",
+      "name": "null-snapshot-clears",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "probe-model-8",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "probe-model-9",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "probe-model-10",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "synthetic:model/1",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "probe-model-11",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "synthetic:model/1",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "synthetic:model/1",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "synthetic-model",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "probe-model-12",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "synthetic-model",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "synthetic-model",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "updated",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-13",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "updated",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "updated",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "55b2ec4a7555ca2431f02331efb8a10f43c4f75e18c6392b5d2cdf5e071a39d0"
+    },
+    {
+      "body": {
+        "detail": "shared templates changed on another device",
+        "error": "template_conflict",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-14",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 409,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "shared templates changed on another device",
+        "error": "template_conflict",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-15",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 409,
+      "version": ""
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "open_project": "/synthetic/new",
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-16",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "open_project": "/synthetic/new",
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "open_project": "/synthetic/new",
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-17",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-18",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-19",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-20",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-policy-21",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "detail": "save failed: <owned filesystem error>",
+        "error": "save_failed",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "e970d074375efba9ca4fb81ca025679c36ee18925914045d4702118da8661eb1",
+      "name": "template-save-failure",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "synthetic initial",
+            "label": "original",
+            "providers": [
+              "codex"
+            ],
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 500,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "save failed: <owned filesystem error>",
+        "error": "save_failed",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "non-template-save-failure",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "original",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 500,
+      "version": ""
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "<>&\u2028\u2029\u65e5\u672c\u8a9e",
+            "label": "quoted \" x",
+            "providers": [
+              "codex",
+              "claude"
+            ],
+            "tags": [
+              "<tag>"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "template-encoding-24",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "<>&\u2028\u2029\u65e5\u672c\u8a9e",
+            "label": "quoted \" x",
+            "providers": [
+              "codex",
+              "claude"
+            ],
+            "tags": [
+              "<tag>"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "<>&\u2028\u2029\u65e5\u672c\u8a9e",
+            "label": "quoted \" x",
+            "providers": [
+              "codex",
+              "claude"
+            ],
+            "tags": [
+              "<tag>"
+            ]
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "1f976e99fa772eb41f49dbdbbb5ab805ae69596bf39ca2d401f8a5a4de43871e"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "template-encoding-25",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "41c6b9908e84439fbca22ce7bff9ece648316f9157e521783b43ce0a85eac114"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "template-encoding-26",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "41c6b9908e84439fbca22ce7bff9ece648316f9157e521783b43ce0a85eac114"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "e",
+            "label": "a"
+          },
+          {
+            "body": "d",
+            "label": "c"
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "template-encoding-27",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "e",
+            "label": "a"
+          },
+          {
+            "body": "d",
+            "label": "c"
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "e",
+            "label": "a"
+          },
+          {
+            "body": "d",
+            "label": "c"
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "87a69c82bc2b3ed48ec771a38f392bd96a93938937773926676cd297c82b4a12"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "e",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "template-encoding-28",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "e",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "e",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "23daab295a210c80ce5586f485a59c5ed9ed24e137d52ba6ed98e56ec877b5f3"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": "b"
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "template-encoding-29",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": "b"
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": "b"
+          }
+        ],
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "6982c5978aa0d2ec9f9de7d3f2932c697539e192ca992d1770596145a86a7c91"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-30",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "avatar": "https://example.invalid/x.png",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-31",
+      "runtime": {
+        "approval": {},
+        "avatar": "https://example.invalid/x.png",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "avatar": "https://example.invalid/x.png",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "avatar": "http://",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-32",
+      "runtime": {
+        "approval": {},
+        "avatar": "http://",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "avatar": "http://",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-33",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-34",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-35",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "avatar": "<root>/user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-36",
+      "runtime": {
+        "approval": {},
+        "avatar": "<root>/user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "avatar": "<root>/user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "avatar": "<root>/nested/../user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-37",
+      "runtime": {
+        "approval": {},
+        "avatar": "<root>/nested/../user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "avatar": "<root>/nested/../user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "avatar": "<root>/./user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-38",
+      "runtime": {
+        "approval": {},
+        "avatar": "<root>/./user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "avatar": "<root>/./user_avatar.bin",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "avatar": "<root>/user_avatar.bin/",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-39",
+      "runtime": {
+        "approval": {},
+        "avatar": "<root>/user_avatar.bin/",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "avatar": "<root>/user_avatar.bin/",
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "avatar-40",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-41",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wav",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-42",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wav",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/wav",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": " AUDIO/WAV ; codec=x ",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-43",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": " AUDIO/WAV ; codec=x ",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": " AUDIO/WAV ; codec=x ",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-44",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "custom_file": "<root>\\notify_sound_custom.bin",
+          "custom_mime": "audio/",
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-45",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-46",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-47",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-48",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "sound-49",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {
+          "enabled": true,
+          "type": "custom"
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 0,
+              "hue": 359,
+              "id": "u-ok",
+              "mode": "dark",
+              "name": "Synthetic \u65e5\u672c\u8a9eabc"
+            }
+          ],
+          "theme": "u-ok"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "theme-sanitize",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 0,
+              "hue": 359,
+              "id": "u-ok",
+              "mode": "dark",
+              "name": "Synthetic \u65e5\u672c\u8a9eabc"
+            }
+          ],
+          "theme": "u-ok"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 0,
+              "hue": 359,
+              "id": "u-ok",
+              "mode": "dark",
+              "name": "Synthetic \u65e5\u672c\u8a9eabc"
+            }
+          ],
+          "theme": "u-ok"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "theme": "light"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "theme-missing-falls-light",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "theme": "light"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "theme": "light"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "theme-blank-stays-blank",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 0,
+              "hue": 0,
+              "id": "u-x00",
+              "mode": "light",
+              "name": "theme0"
+            },
+            {
+              "contrast": 1,
+              "hue": 1,
+              "id": "u-x01",
+              "mode": "light",
+              "name": "theme1"
+            },
+            {
+              "contrast": 2,
+              "hue": 2,
+              "id": "u-x02",
+              "mode": "light",
+              "name": "theme2"
+            },
+            {
+              "contrast": 3,
+              "hue": 3,
+              "id": "u-x03",
+              "mode": "light",
+              "name": "theme3"
+            },
+            {
+              "contrast": 4,
+              "hue": 4,
+              "id": "u-x04",
+              "mode": "light",
+              "name": "theme4"
+            },
+            {
+              "contrast": 5,
+              "hue": 5,
+              "id": "u-x05",
+              "mode": "light",
+              "name": "theme5"
+            },
+            {
+              "contrast": 6,
+              "hue": 6,
+              "id": "u-x06",
+              "mode": "light",
+              "name": "theme6"
+            },
+            {
+              "contrast": 7,
+              "hue": 7,
+              "id": "u-x07",
+              "mode": "light",
+              "name": "theme7"
+            },
+            {
+              "contrast": 8,
+              "hue": 8,
+              "id": "u-x08",
+              "mode": "light",
+              "name": "theme8"
+            },
+            {
+              "contrast": 9,
+              "hue": 9,
+              "id": "u-x09",
+              "mode": "light",
+              "name": "theme9"
+            },
+            {
+              "contrast": 10,
+              "hue": 10,
+              "id": "u-x10",
+              "mode": "light",
+              "name": "theme10"
+            },
+            {
+              "contrast": 11,
+              "hue": 11,
+              "id": "u-x11",
+              "mode": "light",
+              "name": "theme11"
+            },
+            {
+              "contrast": 12,
+              "hue": 12,
+              "id": "u-x12",
+              "mode": "light",
+              "name": "theme12"
+            },
+            {
+              "contrast": 13,
+              "hue": 13,
+              "id": "u-x13",
+              "mode": "light",
+              "name": "theme13"
+            },
+            {
+              "contrast": 14,
+              "hue": 14,
+              "id": "u-x14",
+              "mode": "light",
+              "name": "theme14"
+            },
+            {
+              "contrast": 15,
+              "hue": 15,
+              "id": "u-x15",
+              "mode": "light",
+              "name": "theme15"
+            },
+            {
+              "contrast": 16,
+              "hue": 16,
+              "id": "u-x16",
+              "mode": "light",
+              "name": "theme16"
+            },
+            {
+              "contrast": 17,
+              "hue": 17,
+              "id": "u-x17",
+              "mode": "light",
+              "name": "theme17"
+            },
+            {
+              "contrast": 18,
+              "hue": 18,
+              "id": "u-x18",
+              "mode": "light",
+              "name": "theme18"
+            },
+            {
+              "contrast": 19,
+              "hue": 19,
+              "id": "u-x19",
+              "mode": "light",
+              "name": "theme19"
+            }
+          ],
+          "theme": "light"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "theme-limit",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 0,
+              "hue": 0,
+              "id": "u-x00",
+              "mode": "light",
+              "name": "theme0"
+            },
+            {
+              "contrast": 1,
+              "hue": 1,
+              "id": "u-x01",
+              "mode": "light",
+              "name": "theme1"
+            },
+            {
+              "contrast": 2,
+              "hue": 2,
+              "id": "u-x02",
+              "mode": "light",
+              "name": "theme2"
+            },
+            {
+              "contrast": 3,
+              "hue": 3,
+              "id": "u-x03",
+              "mode": "light",
+              "name": "theme3"
+            },
+            {
+              "contrast": 4,
+              "hue": 4,
+              "id": "u-x04",
+              "mode": "light",
+              "name": "theme4"
+            },
+            {
+              "contrast": 5,
+              "hue": 5,
+              "id": "u-x05",
+              "mode": "light",
+              "name": "theme5"
+            },
+            {
+              "contrast": 6,
+              "hue": 6,
+              "id": "u-x06",
+              "mode": "light",
+              "name": "theme6"
+            },
+            {
+              "contrast": 7,
+              "hue": 7,
+              "id": "u-x07",
+              "mode": "light",
+              "name": "theme7"
+            },
+            {
+              "contrast": 8,
+              "hue": 8,
+              "id": "u-x08",
+              "mode": "light",
+              "name": "theme8"
+            },
+            {
+              "contrast": 9,
+              "hue": 9,
+              "id": "u-x09",
+              "mode": "light",
+              "name": "theme9"
+            },
+            {
+              "contrast": 10,
+              "hue": 10,
+              "id": "u-x10",
+              "mode": "light",
+              "name": "theme10"
+            },
+            {
+              "contrast": 11,
+              "hue": 11,
+              "id": "u-x11",
+              "mode": "light",
+              "name": "theme11"
+            },
+            {
+              "contrast": 12,
+              "hue": 12,
+              "id": "u-x12",
+              "mode": "light",
+              "name": "theme12"
+            },
+            {
+              "contrast": 13,
+              "hue": 13,
+              "id": "u-x13",
+              "mode": "light",
+              "name": "theme13"
+            },
+            {
+              "contrast": 14,
+              "hue": 14,
+              "id": "u-x14",
+              "mode": "light",
+              "name": "theme14"
+            },
+            {
+              "contrast": 15,
+              "hue": 15,
+              "id": "u-x15",
+              "mode": "light",
+              "name": "theme15"
+            },
+            {
+              "contrast": 16,
+              "hue": 16,
+              "id": "u-x16",
+              "mode": "light",
+              "name": "theme16"
+            },
+            {
+              "contrast": 17,
+              "hue": 17,
+              "id": "u-x17",
+              "mode": "light",
+              "name": "theme17"
+            },
+            {
+              "contrast": 18,
+              "hue": 18,
+              "id": "u-x18",
+              "mode": "light",
+              "name": "theme18"
+            },
+            {
+              "contrast": 19,
+              "hue": 19,
+              "id": "u-x19",
+              "mode": "light",
+              "name": "theme19"
+            }
+          ],
+          "theme": "light"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "custom_themes": [
+            {
+              "contrast": 0,
+              "hue": 0,
+              "id": "u-x00",
+              "mode": "light",
+              "name": "theme0"
+            },
+            {
+              "contrast": 1,
+              "hue": 1,
+              "id": "u-x01",
+              "mode": "light",
+              "name": "theme1"
+            },
+            {
+              "contrast": 2,
+              "hue": 2,
+              "id": "u-x02",
+              "mode": "light",
+              "name": "theme2"
+            },
+            {
+              "contrast": 3,
+              "hue": 3,
+              "id": "u-x03",
+              "mode": "light",
+              "name": "theme3"
+            },
+            {
+              "contrast": 4,
+              "hue": 4,
+              "id": "u-x04",
+              "mode": "light",
+              "name": "theme4"
+            },
+            {
+              "contrast": 5,
+              "hue": 5,
+              "id": "u-x05",
+              "mode": "light",
+              "name": "theme5"
+            },
+            {
+              "contrast": 6,
+              "hue": 6,
+              "id": "u-x06",
+              "mode": "light",
+              "name": "theme6"
+            },
+            {
+              "contrast": 7,
+              "hue": 7,
+              "id": "u-x07",
+              "mode": "light",
+              "name": "theme7"
+            },
+            {
+              "contrast": 8,
+              "hue": 8,
+              "id": "u-x08",
+              "mode": "light",
+              "name": "theme8"
+            },
+            {
+              "contrast": 9,
+              "hue": 9,
+              "id": "u-x09",
+              "mode": "light",
+              "name": "theme9"
+            },
+            {
+              "contrast": 10,
+              "hue": 10,
+              "id": "u-x10",
+              "mode": "light",
+              "name": "theme10"
+            },
+            {
+              "contrast": 11,
+              "hue": 11,
+              "id": "u-x11",
+              "mode": "light",
+              "name": "theme11"
+            },
+            {
+              "contrast": 12,
+              "hue": 12,
+              "id": "u-x12",
+              "mode": "light",
+              "name": "theme12"
+            },
+            {
+              "contrast": 13,
+              "hue": 13,
+              "id": "u-x13",
+              "mode": "light",
+              "name": "theme13"
+            },
+            {
+              "contrast": 14,
+              "hue": 14,
+              "id": "u-x14",
+              "mode": "light",
+              "name": "theme14"
+            },
+            {
+              "contrast": 15,
+              "hue": 15,
+              "id": "u-x15",
+              "mode": "light",
+              "name": "theme15"
+            },
+            {
+              "contrast": 16,
+              "hue": 16,
+              "id": "u-x16",
+              "mode": "light",
+              "name": "theme16"
+            },
+            {
+              "contrast": 17,
+              "hue": 17,
+              "id": "u-x17",
+              "mode": "light",
+              "name": "theme17"
+            },
+            {
+              "contrast": 18,
+              "hue": 18,
+              "id": "u-x18",
+              "mode": "light",
+              "name": "theme18"
+            },
+            {
+              "contrast": 19,
+              "hue": 19,
+              "id": "u-x19",
+              "mode": "light",
+              "name": "theme19"
+            }
+          ],
+          "theme": "light"
+        },
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "all-null-collections",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "project_views": {
+          "a": {}
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "codex": ""
+          }
+        },
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {
+          "segments": {
+            "cost": false
+          }
+        },
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "nested-null-collections",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "project_views": {
+          "a": {}
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "codex": ""
+          }
+        },
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {
+          "segments": {
+            "cost": false
+          }
+        },
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "project_views": {
+          "a": {}
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "codex": ""
+          }
+        },
+        "template_send": {},
+        "templates": [
+          {
+            "body": "",
+            "label": ""
+          }
+        ],
+        "token_statusbar": {
+          "segments": {
+            "cost": false
+          }
+        },
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "41c6b9908e84439fbca22ce7bff9ece648316f9157e521783b43ce0a85eac114"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "kept",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {
+          "enabled": true,
+          "phrase": "kept"
+        },
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "null-scalar-retains",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "kept",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {
+          "enabled": true,
+          "phrase": "kept"
+        },
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "kept",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {
+          "enabled": true,
+          "phrase": "kept"
+        },
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "pointer-null-clears",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "project_views": {
+          "a": {
+            "tab": "terminal"
+          },
+          "b": {
+            "session_id": 2
+          }
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "a": "x",
+            "b": "y"
+          }
+        },
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "map-merge-replace",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "project_views": {
+          "a": {
+            "tab": "terminal"
+          },
+          "b": {
+            "session_id": 2
+          }
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "a": "x",
+            "b": "y"
+          }
+        },
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "project_views": {
+          "a": {
+            "tab": "terminal"
+          },
+          "b": {
+            "session_id": 2
+          }
+        },
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "a": "x",
+            "b": "y"
+          }
+        },
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "b": "y"
+          }
+        },
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "map-null-reset",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "b": "y"
+          }
+        },
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {
+          "defaults": {
+            "b": "y"
+          }
+        },
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "theme": "dark"
+        },
+        "display_name": "name",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {
+          "show1": false
+        },
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {
+          "enabled": true
+        },
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "casefold-known-fields",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "theme": "dark"
+        },
+        "display_name": "name",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {
+          "show1": false
+        },
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {
+          "enabled": true
+        },
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {
+          "theme": "dark"
+        },
+        "display_name": "name",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {
+          "show1": false
+        },
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {
+          "enabled": true
+        },
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          1,
+          2,
+          2,
+          -4
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-61",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          1,
+          2,
+          2,
+          -4
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          1,
+          2,
+          2,
+          -4
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-62",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-63",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-64",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          9007199254740992,
+          -9223372036854775808,
+          9223372036854775807
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-65",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          9007199254740992,
+          -9223372036854775808,
+          9223372036854775807
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          9007199254740992,
+          -9223372036854775808,
+          9223372036854775807
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          3
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-replace",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          3
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          3
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-reset",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-68",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-69",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-70",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-71",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-72",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-73",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-74",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-75",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "detail": "invalid json",
+        "error": "bad_request",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "invalid-json-76",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 400,
+      "version": ""
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "first",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "first-value-trailing",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "first",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "display_name": "first",
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "unknown-large-number",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "unknown-depth",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "detail": "method not allowed",
+        "error": "method_not_allowed",
+        "ok": false
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "wrong-method-before-body",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": null,
+      "status": 405,
+      "version": ""
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          7,
+          8
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-deep-ignored-neighbors",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          7,
+          8
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "session_order": [
+          7,
+          8
+        ],
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "body": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "content_type": "application/json",
+      "initial_version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "name": "session-order-deep-overflow-clears",
+      "runtime": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "saved": {
+        "approval": {},
+        "desktop_notifications": {},
+        "display": {},
+        "done_summary_notify": {},
+        "notify_sound": {},
+        "push_notifications": {},
+        "quick_cmds": {},
+        "spawn": {},
+        "template_send": {},
+        "token_statusbar": {},
+        "trigger": {},
+        "usage_links": {},
+        "usage_probe_model": "claude-haiku-4-5",
+        "voice": {},
+        "workflow_completion_notify": {}
+      },
+      "status": 200,
+      "version": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  ]
+}

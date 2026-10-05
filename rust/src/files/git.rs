@@ -21,7 +21,7 @@ use std::{
 mod suggest;
 #[path = "git_turns.rs"]
 mod turns;
-pub use turns::{GitTurnCompleted, GitTurnSnapshot, GitTurnState};
+pub use turns::{GitTurnCompleted, GitTurnEndReservation, GitTurnSnapshot, GitTurnState};
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct GitRequest {

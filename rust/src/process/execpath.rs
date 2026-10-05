@@ -271,6 +271,33 @@ impl<'a> Resolver<'a> {
             Err(not_found(self.platform))
         }
     }
+    /// Fixed Go lookPathLikeSpawn skips relative PATH entries while retaining
+    /// direct-path lookup and Windows PATHEXT handling. PATH is already expanded
+    /// by the caller's explicit spawn-time environment source.
+    pub fn look_path_like_spawn(&self, name: &str) -> io::Result<String> {
+        if name.contains('/') || (self.platform == Platform::Windows && name.contains(['\\', ':']))
+        {
+            return self.look_path(name);
+        }
+        let directories = if self.platform == Platform::Windows {
+            split_windows_path_list(self.env("PATH").unwrap_or(""))
+        } else {
+            self.env("PATH")
+                .unwrap_or("")
+                .split(':')
+                .map(str::to_owned)
+                .collect()
+        };
+        for directory in directories {
+            if directory.trim().is_empty() || !is_absolute(&directory, self.platform) {
+                continue;
+            }
+            if let Ok(path) = self.look_path(&join(&directory, name, self.platform)) {
+                return Ok(path);
+            }
+        }
+        Err(not_found(self.platform))
+    }
     fn windows_extensions(&self) -> Vec<String> {
         match self.env("PATHEXT").filter(|s| !s.is_empty()) {
             None => [".com", ".exe", ".bat", ".cmd"]

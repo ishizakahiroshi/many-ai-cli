@@ -147,10 +147,48 @@ source must remain untouched.
   exit; provider plans remove bootstrap metadata and handle inheritance.
 - `PolicyStore` is shared by persisted batch rules and the live automatic-action
   callback. Enabled preferences are read live, and reload failure removes stale
-  authorization. Exact Go Unicode15 regex property/casefold compatibility remains
-  unfinished; the current bounded slice warns/disables unsupported valid-Go
-  forms rather than accepting a wider pattern. See its source fixture README.
+  authorization. The generated Go Unicode15 property/SimpleFold adapter preserves the pinned
+  corpus, with 29 explicitly unsupported anchored-surrogate optimization forms.
+  See the exact differential fixture and carried Go license; this is not proof
+  of every Go regexp pattern.
 
 These additions are not covered by the old C1 independent-pass receipt. Current
 independent re-review, full CLI/Hub/orchestration/service composition, native
 startup acceptance, real-data rollback and cutover remain separate open gates.
+
+
+## Persisted provider, launch and session additions (author implementation)
+
+- `ProviderRegistryStore` publishes immutable five-layer registry snapshots.
+  Its startup degradation, reload error retention and intentionally discarded
+  load diagnostics mirror the pinned callers. Typed Go JSON bytes define all
+  digests. The accepted-distribution reader does not perform network acceptance
+  or signature verification of new downloads. Router command discovery and
+  private warnings are explicit dependencies; callbacks run outside store locks.
+- `ConfigSpawnLaunchPolicy` requires the actual provider registry, stale local
+  model cache, native path environment, vendor home and Hub cwd. Select/seed the
+  subscription once before model/label validation and route/key resolution. Raw
+  registry effort argv and empty custom-model resolution are preserved. Relative
+  vendor settings I/O uses Hub cwd while child environment spelling is retained,
+  including the source's Hub/child relative-cwd mismatch.
+- `ChildLaunchExecutor` owns real board/Git preparation and invokes required
+  production services for restart, parent notice and prompt delivery. A
+  `RegisteredChild` retains its exact role independently of the cleared restart
+  metadata. No successful placeholder child-registration callback is provided.
+- `SessionCardMetaPatch` is applied atomically to the one SessionEngine state.
+  Like Go, invalid color may leave earlier label/pinned changes in memory without
+  persistence or broadcast. Successful persistence precedes notification.
+  `registered_session_count` includes retained completed/disconnected/probe
+  sessions because Go info reports map length, not only visible active cards.
+- `InitialPromptDriver` consumes an owned Hub effect permit, the exact session
+  binding and required outcome/board/parent/effect callbacks. The read-only
+  observation and synchronous gate cleanup live on SessionEngine; cleanup may
+  match the same incarnation after reconnect but never a retired/reused ID.
+  Registration prompt selection skips launch-argument prompts and auto children.
+  The generic input retry and orchestration composer retry remain distinct.
+  Go's delayed CR path does not recheck approval/blocker state at delivery; that
+  inherited race is documented, not silently strengthened here.
+
+These interfaces still require full application startup/event/restart/scheduler
+composition and native/manual acceptance. Initial instruction transport writes
+are not provider acceptance, and independent re-review remains unverified.

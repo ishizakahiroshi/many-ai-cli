@@ -1,0 +1,911 @@
+[
+  {
+    "name": "get-default",
+    "method": "GET",
+    "body": "",
+    "initial": {},
+    "backends": 0,
+    "push": 0
+  },
+  {
+    "name": "get-backend",
+    "method": "GET",
+    "body": "",
+    "initial": {},
+    "backends": 1,
+    "push": 0
+  },
+  {
+    "name": "get-push",
+    "method": "GET",
+    "body": "",
+    "initial": {},
+    "backends": 0,
+    "push": 1
+  },
+  {
+    "name": "get-explicit-false",
+    "method": "GET",
+    "body": "",
+    "initial": {
+      "done_summary_notify": {
+        "enabled": false
+      }
+    },
+    "backends": 2,
+    "push": 2
+  },
+  {
+    "name": "get-explicit-true",
+    "method": "GET",
+    "body": "",
+    "initial": {
+      "done_summary_notify": {
+        "enabled": true
+      }
+    },
+    "backends": 0,
+    "push": 0
+  },
+  {
+    "name": "all-fields-full-snapshot",
+    "method": "PUT",
+    "body": "{\"trigger\": {\"enabled\": true, \"phrase\": \"synthetic trigger\"}, \"notify_sound\": {\"enabled\": true, \"type\": \"bell\"}, \"desktop_notifications\": {\"enabled\": true}, \"push_notifications\": {\"enabled\": true}, \"approval\": {\"auto_switch\": true, \"auto_approval_enabled\": true, \"high_risk_confirmation_mode\": \"dialog\"}, \"quick_cmds\": {\"cmd1\": \"one\", \"cmd2\": \"two\", \"cmd3\": \"three\", \"cmd4\": \"four\", \"cmd5\": \"five\", \"show1\": false, \"show2\": true, \"show3\": false, \"show4\": true, \"show5\": false}, \"templates\": [{\"label\": \"second\", \"body\": \"synthetic B\", \"providers\": [\"codex\", \"claude\"], \"tags\": [\"work\", \"CJK \u65e5\u672c\u8a9e\"]}, {\"label\": \"first\", \"body\": \"synthetic A\"}], \"template_send\": {\"immediate\": false}, \"usage_links\": {\"claude\": \"https://example.invalid/claude\", \"codex\": \"https://example.invalid/codex\", \"copilot\": \"c\", \"cursor-agent\": \"d\", \"opencode\": \"e\", \"grok\": \"f\", \"command-code\": \"g\"}, \"usage_probe_model\": \"  synthetic-model  \", \"voice\": {\"grace_seconds\": 7, \"wake_word_enabled\": true, \"wake_word_phrase\": \"hello\", \"input_disabled\": true}, \"session_order\": [9, 2, 5], \"group_order\": [\"b\", \"a\"], \"project_favorites\": [\"b\"], \"collapsed_nodes\": [\"b\", \"session:9\"], \"cwd_history\": [\"/synthetic/alpha\"], \"cwd_favorites\": [\"/synthetic/beta\"], \"spawn\": {\"defaults\": {\"codex\": \"synthetic\"}, \"last_model\": {\"claude\": \"synthetic-model\"}, \"worktree_auto\": true, \"worktree_cleanup\": \"always\", \"delegation_auto\": true, \"role_provider\": {\"review\": \"codex\"}, \"role_effort\": {\"review\": \"high\"}, \"role_permission\": {\"review\": \"default\"}}, \"display\": {\"theme\": \"u-ok\", \"custom_themes\": [{\"id\": \"u-ok\", \"name\": \"night\", \"mode\": \"dark\", \"hue\": 220, \"contrast\": 80}], \"font_size\": \"large\", \"lang\": \"ja\", \"locked_mode\": \"all\", \"live_status_bg\": \"#000000\", \"live_status_fg\": \"#ffffff\"}, \"migrated_from_localstorage\": true, \"sidebar_pin_migrated\": true, \"project_views\": {\"/synthetic/alpha\": {\"session_id\": 9, \"tab\": \"git\"}}, \"open_project\": \"/synthetic/alpha\", \"avatar\": \"https://example.invalid/synthetic.png\", \"display_name\": \"Synthetic user\", \"token_statusbar\": {\"enabled\": false, \"segments\": {\"cost\": false, \"tokens\": true}}, \"done_summary_notify\": {\"enabled\": false}, \"workflow_completion_notify\": {\"enabled\": true}}"
+  },
+  {
+    "name": "empty-snapshot-clears",
+    "method": "PUT",
+    "body": "{}",
+    "initial": {
+      "trigger": {
+        "enabled": true,
+        "phrase": "synthetic trigger"
+      },
+      "notify_sound": {
+        "enabled": true,
+        "type": "bell"
+      },
+      "desktop_notifications": {
+        "enabled": true
+      },
+      "push_notifications": {
+        "enabled": true
+      },
+      "approval": {
+        "auto_switch": true,
+        "auto_approval_enabled": true,
+        "high_risk_confirmation_mode": "dialog"
+      },
+      "quick_cmds": {
+        "cmd1": "one",
+        "cmd2": "two",
+        "cmd3": "three",
+        "cmd4": "four",
+        "cmd5": "five",
+        "show1": false,
+        "show2": true,
+        "show3": false,
+        "show4": true,
+        "show5": false
+      },
+      "templates": [
+        {
+          "label": "second",
+          "body": "synthetic B",
+          "providers": [
+            "codex",
+            "claude"
+          ],
+          "tags": [
+            "work",
+            "CJK \u65e5\u672c\u8a9e"
+          ]
+        },
+        {
+          "label": "first",
+          "body": "synthetic A"
+        }
+      ],
+      "template_send": {
+        "immediate": false
+      },
+      "usage_links": {
+        "claude": "https://example.invalid/claude",
+        "codex": "https://example.invalid/codex",
+        "copilot": "c",
+        "cursor-agent": "d",
+        "opencode": "e",
+        "grok": "f",
+        "command-code": "g"
+      },
+      "usage_probe_model": "  synthetic-model  ",
+      "voice": {
+        "grace_seconds": 7,
+        "wake_word_enabled": true,
+        "wake_word_phrase": "hello",
+        "input_disabled": true
+      },
+      "session_order": [
+        9,
+        2,
+        5
+      ],
+      "group_order": [
+        "b",
+        "a"
+      ],
+      "project_favorites": [
+        "b"
+      ],
+      "collapsed_nodes": [
+        "b",
+        "session:9"
+      ],
+      "cwd_history": [
+        "/synthetic/alpha"
+      ],
+      "cwd_favorites": [
+        "/synthetic/beta"
+      ],
+      "spawn": {
+        "defaults": {
+          "codex": "synthetic"
+        },
+        "last_model": {
+          "claude": "synthetic-model"
+        },
+        "worktree_auto": true,
+        "worktree_cleanup": "always",
+        "delegation_auto": true,
+        "role_provider": {
+          "review": "codex"
+        },
+        "role_effort": {
+          "review": "high"
+        },
+        "role_permission": {
+          "review": "default"
+        }
+      },
+      "display": {
+        "theme": "u-ok",
+        "custom_themes": [
+          {
+            "id": "u-ok",
+            "name": "night",
+            "mode": "dark",
+            "hue": 220,
+            "contrast": 80
+          }
+        ],
+        "font_size": "large",
+        "lang": "ja",
+        "locked_mode": "all",
+        "live_status_bg": "#000000",
+        "live_status_fg": "#ffffff"
+      },
+      "migrated_from_localstorage": true,
+      "sidebar_pin_migrated": true,
+      "project_views": {
+        "/synthetic/alpha": {
+          "session_id": 9,
+          "tab": "git"
+        }
+      },
+      "open_project": "/synthetic/alpha",
+      "avatar": "https://example.invalid/synthetic.png",
+      "display_name": "Synthetic user",
+      "token_statusbar": {
+        "enabled": false,
+        "segments": {
+          "cost": false,
+          "tokens": true
+        }
+      },
+      "done_summary_notify": {
+        "enabled": false
+      },
+      "workflow_completion_notify": {
+        "enabled": true
+      }
+    }
+  },
+  {
+    "name": "null-snapshot-clears",
+    "method": "PUT",
+    "body": "null",
+    "initial": {
+      "trigger": {
+        "enabled": true,
+        "phrase": "synthetic trigger"
+      },
+      "notify_sound": {
+        "enabled": true,
+        "type": "bell"
+      },
+      "desktop_notifications": {
+        "enabled": true
+      },
+      "push_notifications": {
+        "enabled": true
+      },
+      "approval": {
+        "auto_switch": true,
+        "auto_approval_enabled": true,
+        "high_risk_confirmation_mode": "dialog"
+      },
+      "quick_cmds": {
+        "cmd1": "one",
+        "cmd2": "two",
+        "cmd3": "three",
+        "cmd4": "four",
+        "cmd5": "five",
+        "show1": false,
+        "show2": true,
+        "show3": false,
+        "show4": true,
+        "show5": false
+      },
+      "templates": [
+        {
+          "label": "second",
+          "body": "synthetic B",
+          "providers": [
+            "codex",
+            "claude"
+          ],
+          "tags": [
+            "work",
+            "CJK \u65e5\u672c\u8a9e"
+          ]
+        },
+        {
+          "label": "first",
+          "body": "synthetic A"
+        }
+      ],
+      "template_send": {
+        "immediate": false
+      },
+      "usage_links": {
+        "claude": "https://example.invalid/claude",
+        "codex": "https://example.invalid/codex",
+        "copilot": "c",
+        "cursor-agent": "d",
+        "opencode": "e",
+        "grok": "f",
+        "command-code": "g"
+      },
+      "usage_probe_model": "  synthetic-model  ",
+      "voice": {
+        "grace_seconds": 7,
+        "wake_word_enabled": true,
+        "wake_word_phrase": "hello",
+        "input_disabled": true
+      },
+      "session_order": [
+        9,
+        2,
+        5
+      ],
+      "group_order": [
+        "b",
+        "a"
+      ],
+      "project_favorites": [
+        "b"
+      ],
+      "collapsed_nodes": [
+        "b",
+        "session:9"
+      ],
+      "cwd_history": [
+        "/synthetic/alpha"
+      ],
+      "cwd_favorites": [
+        "/synthetic/beta"
+      ],
+      "spawn": {
+        "defaults": {
+          "codex": "synthetic"
+        },
+        "last_model": {
+          "claude": "synthetic-model"
+        },
+        "worktree_auto": true,
+        "worktree_cleanup": "always",
+        "delegation_auto": true,
+        "role_provider": {
+          "review": "codex"
+        },
+        "role_effort": {
+          "review": "high"
+        },
+        "role_permission": {
+          "review": "default"
+        }
+      },
+      "display": {
+        "theme": "u-ok",
+        "custom_themes": [
+          {
+            "id": "u-ok",
+            "name": "night",
+            "mode": "dark",
+            "hue": 220,
+            "contrast": 80
+          }
+        ],
+        "font_size": "large",
+        "lang": "ja",
+        "locked_mode": "all",
+        "live_status_bg": "#000000",
+        "live_status_fg": "#ffffff"
+      },
+      "migrated_from_localstorage": true,
+      "sidebar_pin_migrated": true,
+      "project_views": {
+        "/synthetic/alpha": {
+          "session_id": 9,
+          "tab": "git"
+        }
+      },
+      "open_project": "/synthetic/alpha",
+      "avatar": "https://example.invalid/synthetic.png",
+      "display_name": "Synthetic user",
+      "token_statusbar": {
+        "enabled": false,
+        "segments": {
+          "cost": false,
+          "tokens": true
+        }
+      },
+      "done_summary_notify": {
+        "enabled": false
+      },
+      "workflow_completion_notify": {
+        "enabled": true
+      }
+    }
+  },
+  {
+    "name": "probe-model-8",
+    "method": "PUT",
+    "body": "{\"usage_probe_model\": \"\"}"
+  },
+  {
+    "name": "probe-model-9",
+    "method": "PUT",
+    "body": "{\"usage_probe_model\": \"synthetic model\"}"
+  },
+  {
+    "name": "probe-model-10",
+    "method": "PUT",
+    "body": "{\"usage_probe_model\": \"foo;bar\"}"
+  },
+  {
+    "name": "probe-model-11",
+    "method": "PUT",
+    "body": "{\"usage_probe_model\": \"synthetic:model/1\"}"
+  },
+  {
+    "name": "probe-model-12",
+    "method": "PUT",
+    "body": "{\"usage_probe_model\": \"  synthetic-model  \"}"
+  },
+  {
+    "name": "template-policy-13",
+    "method": "PUT",
+    "body": "{\"templates\": [{\"body\": \"updated\"}]}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "compare",
+    "version": "current"
+  },
+  {
+    "name": "template-policy-14",
+    "method": "PUT",
+    "body": "{\"templates\": [{\"body\": \"updated\"}]}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "compare",
+    "version": "stale"
+  },
+  {
+    "name": "template-policy-15",
+    "method": "PUT",
+    "body": "{\"templates\": [{\"body\": \"updated\"}]}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "compare",
+    "version": ""
+  },
+  {
+    "name": "template-policy-16",
+    "method": "PUT",
+    "body": "{\"templates\": [{\"body\": \"stale cache\"}], \"open_project\": \"/synthetic/new\"}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "preserve",
+    "version": "stale"
+  },
+  {
+    "name": "template-policy-17",
+    "method": "PUT",
+    "body": "{}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "preserve",
+    "version": ""
+  },
+  {
+    "name": "template-policy-18",
+    "method": "PUT",
+    "body": "{\"templates\": []}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "Compare",
+    "version": "stale"
+  },
+  {
+    "name": "template-policy-19",
+    "method": "PUT",
+    "body": "{}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "",
+    "version": "stale"
+  },
+  {
+    "name": "template-policy-20",
+    "method": "PUT",
+    "body": "{\"templates\": []}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "compare",
+    "version": "current"
+  },
+  {
+    "name": "template-policy-21",
+    "method": "PUT",
+    "body": "{\"templates\": null}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "compare",
+    "version": "current"
+  },
+  {
+    "name": "template-save-failure",
+    "method": "PUT",
+    "body": "{\"templates\": [{\"body\": \"unsaved\"}], \"open_project\": \"/synthetic/unsaved\"}",
+    "initial": {
+      "templates": [
+        {
+          "label": "original",
+          "body": "synthetic initial",
+          "providers": [
+            "codex"
+          ],
+          "tags": [
+            "old"
+          ]
+        }
+      ]
+    },
+    "policy": "compare",
+    "version": "current",
+    "fail_save": true
+  },
+  {
+    "name": "non-template-save-failure",
+    "method": "PUT",
+    "body": "{\"display_name\": \"unsaved\"}",
+    "initial": {
+      "display_name": "original"
+    },
+    "fail_save": true
+  },
+  {
+    "name": "template-encoding-24",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"body\":\"<>&\\u2028\\u2029\u65e5\u672c\u8a9e\",\"label\":\"quoted \\\" x\",\"providers\":[\"codex\",\"claude\"],\"tags\":[\"<tag>\"]}]}"
+  },
+  {
+    "name": "template-encoding-25",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"label\":\"\",\"body\":\"\",\"providers\":[],\"tags\":[]}]}"
+  },
+  {
+    "name": "template-encoding-26",
+    "method": "PUT",
+    "body": "{\"templates\":[null]}"
+  },
+  {
+    "name": "template-encoding-27",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"label\":\"a\",\"body\":\"b\"},{\"label\":\"c\",\"body\":\"d\"}],\"templates\":[{\"body\":\"e\"}],\"templates\":[{},{}]}"
+  },
+  {
+    "name": "template-encoding-28",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"label\":\"a\",\"body\":\"b\"}],\"templates\":null,\"templates\":[{\"body\":\"e\"}]}"
+  },
+  {
+    "name": "template-encoding-29",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"body\":\"a\"}],\"templates\":[],\"templates\":[{\"label\":\"b\"}]}"
+  },
+  {
+    "name": "avatar-30",
+    "method": "PUT",
+    "body": "{\"avatar\": \"\"}"
+  },
+  {
+    "name": "avatar-31",
+    "method": "PUT",
+    "body": "{\"avatar\": \" https://example.invalid/x.png \"}"
+  },
+  {
+    "name": "avatar-32",
+    "method": "PUT",
+    "body": "{\"avatar\": \"http://\"}"
+  },
+  {
+    "name": "avatar-33",
+    "method": "PUT",
+    "body": "{\"avatar\": \"HTTPS://example.invalid/x.png\"}"
+  },
+  {
+    "name": "avatar-34",
+    "method": "PUT",
+    "body": "{\"avatar\": \"data:image/png;base64,synthetic\"}"
+  },
+  {
+    "name": "avatar-35",
+    "method": "PUT",
+    "body": "{\"avatar\": \"/synthetic/arbitrary.bin\"}"
+  },
+  {
+    "name": "avatar-36",
+    "method": "PUT",
+    "body": "{\"avatar\": \"<root>/user_avatar.bin\"}"
+  },
+  {
+    "name": "avatar-37",
+    "method": "PUT",
+    "body": "{\"avatar\": \"<root>/nested/../user_avatar.bin\"}"
+  },
+  {
+    "name": "avatar-38",
+    "method": "PUT",
+    "body": "{\"avatar\": \"  <root>/./user_avatar.bin  \"}"
+  },
+  {
+    "name": "avatar-39",
+    "method": "PUT",
+    "body": "{\"avatar\": \"<root>/user_avatar.bin/\"}"
+  },
+  {
+    "name": "avatar-40",
+    "method": "PUT",
+    "body": "{\"avatar\": \"<root>/user_avatar.bin.other\"}"
+  },
+  {
+    "name": "sound-41",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"\", \"custom_mime\": \"\"}}"
+  },
+  {
+    "name": "sound-42",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"<root>/notify_sound_custom.bin\", \"custom_mime\": \"audio/wav\"}}"
+  },
+  {
+    "name": "sound-43",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"<root>/a/../notify_sound_custom.bin\", \"custom_mime\": \" AUDIO/WAV ; codec=x \"}}"
+  },
+  {
+    "name": "sound-44",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"<root>/notify_sound_custom.bin\", \"custom_mime\": \"audio/\"}}"
+  },
+  {
+    "name": "sound-45",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"<root>/notify_sound_custom.bin\", \"custom_mime\": \"text/html\"}}"
+  },
+  {
+    "name": "sound-46",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"/synthetic/elsewhere\", \"custom_mime\": \"audio/wav\"}}"
+  },
+  {
+    "name": "sound-47",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"\", \"custom_mime\": \"audio/wav\"}}"
+  },
+  {
+    "name": "sound-48",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \"<root>/notify_sound_custom.bin\", \"custom_mime\": \"\"}}"
+  },
+  {
+    "name": "sound-49",
+    "method": "PUT",
+    "body": "{\"notify_sound\": {\"enabled\": true, \"type\": \"custom\", \"custom_file\": \" <root>/notify_sound_custom.bin \", \"custom_mime\": \"audio/wav\"}}"
+  },
+  {
+    "name": "theme-sanitize",
+    "method": "PUT",
+    "body": "{\"display\": {\"theme\": \" u-ok \", \"custom_themes\": [{\"id\": \" u-ok \", \"name\": \"\\u0001Synthetic \u65e5\u672c\u8a9eabcdefghijklmnop\u007f\", \"mode\": \"LIGHT\", \"hue\": 500, \"contrast\": -2}, {\"id\": \"u-ok\", \"name\": \"duplicate\"}, {\"id\": \"dark\", \"name\": \"invalid\"}, {\"id\": \"u-99\", \"name\": \"\\u0001\u007f\"}]}}"
+  },
+  {
+    "name": "theme-missing-falls-light",
+    "method": "PUT",
+    "body": "{\"display\": {\"theme\": \"u-missing\"}}"
+  },
+  {
+    "name": "theme-blank-stays-blank",
+    "method": "PUT",
+    "body": "{\"display\": {\"theme\": \"  \"}}"
+  },
+  {
+    "name": "theme-limit",
+    "method": "PUT",
+    "body": "{\"display\": {\"theme\": \"u-x21\", \"custom_themes\": [{\"id\": \"u-x00\", \"name\": \"theme0\", \"mode\": \"light\", \"hue\": 0, \"contrast\": 0}, {\"id\": \"u-x01\", \"name\": \"theme1\", \"mode\": \"light\", \"hue\": 1, \"contrast\": 1}, {\"id\": \"u-x02\", \"name\": \"theme2\", \"mode\": \"light\", \"hue\": 2, \"contrast\": 2}, {\"id\": \"u-x03\", \"name\": \"theme3\", \"mode\": \"light\", \"hue\": 3, \"contrast\": 3}, {\"id\": \"u-x04\", \"name\": \"theme4\", \"mode\": \"light\", \"hue\": 4, \"contrast\": 4}, {\"id\": \"u-x05\", \"name\": \"theme5\", \"mode\": \"light\", \"hue\": 5, \"contrast\": 5}, {\"id\": \"u-x06\", \"name\": \"theme6\", \"mode\": \"light\", \"hue\": 6, \"contrast\": 6}, {\"id\": \"u-x07\", \"name\": \"theme7\", \"mode\": \"light\", \"hue\": 7, \"contrast\": 7}, {\"id\": \"u-x08\", \"name\": \"theme8\", \"mode\": \"light\", \"hue\": 8, \"contrast\": 8}, {\"id\": \"u-x09\", \"name\": \"theme9\", \"mode\": \"light\", \"hue\": 9, \"contrast\": 9}, {\"id\": \"u-x10\", \"name\": \"theme10\", \"mode\": \"light\", \"hue\": 10, \"contrast\": 10}, {\"id\": \"u-x11\", \"name\": \"theme11\", \"mode\": \"light\", \"hue\": 11, \"contrast\": 11}, {\"id\": \"u-x12\", \"name\": \"theme12\", \"mode\": \"light\", \"hue\": 12, \"contrast\": 12}, {\"id\": \"u-x13\", \"name\": \"theme13\", \"mode\": \"light\", \"hue\": 13, \"contrast\": 13}, {\"id\": \"u-x14\", \"name\": \"theme14\", \"mode\": \"light\", \"hue\": 14, \"contrast\": 14}, {\"id\": \"u-x15\", \"name\": \"theme15\", \"mode\": \"light\", \"hue\": 15, \"contrast\": 15}, {\"id\": \"u-x16\", \"name\": \"theme16\", \"mode\": \"light\", \"hue\": 16, \"contrast\": 16}, {\"id\": \"u-x17\", \"name\": \"theme17\", \"mode\": \"light\", \"hue\": 17, \"contrast\": 17}, {\"id\": \"u-x18\", \"name\": \"theme18\", \"mode\": \"light\", \"hue\": 18, \"contrast\": 18}, {\"id\": \"u-x19\", \"name\": \"theme19\", \"mode\": \"light\", \"hue\": 19, \"contrast\": 19}, {\"id\": \"u-x20\", \"name\": \"theme20\", \"mode\": \"light\", \"hue\": 20, \"contrast\": 20}, {\"id\": \"u-x21\", \"name\": \"theme21\", \"mode\": \"light\", \"hue\": 21, \"contrast\": 21}]}}"
+  },
+  {
+    "name": "all-null-collections",
+    "method": "PUT",
+    "body": "{\"templates\": null, \"session_order\": null, \"group_order\": null, \"project_favorites\": null, \"collapsed_nodes\": null, \"cwd_history\": null, \"cwd_favorites\": null, \"project_views\": null, \"spawn\": {\"defaults\": null, \"last_model\": null, \"role_provider\": null, \"role_effort\": null, \"role_permission\": null}, \"display\": {\"custom_themes\": null}, \"token_statusbar\": {\"segments\": null}, \"template_send\": {\"immediate\": null}, \"quick_cmds\": {\"show1\": null}, \"done_summary_notify\": {\"enabled\": null}}"
+  },
+  {
+    "name": "nested-null-collections",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"providers\":null,\"tags\":null}],\"project_views\":{\"a\":null},\"spawn\":{\"defaults\":{\"codex\":null}},\"token_statusbar\":{\"segments\":{\"cost\":null}}}"
+  },
+  {
+    "name": "null-scalar-retains",
+    "method": "PUT",
+    "body": "{\"display_name\":\"kept\",\"display_name\":null,\"trigger\":{\"enabled\":true,\"phrase\":\"kept\"},\"trigger\":null,\"trigger\":{\"enabled\":null}}"
+  },
+  {
+    "name": "pointer-null-clears",
+    "method": "PUT",
+    "body": "{\"quick_cmds\":{\"show1\":true},\"quick_cmds\":{\"show1\":null},\"done_summary_notify\":{\"enabled\":true},\"done_summary_notify\":{\"enabled\":null}}"
+  },
+  {
+    "name": "map-merge-replace",
+    "method": "PUT",
+    "body": "{\"project_views\":{\"a\":{\"session_id\":7,\"tab\":\"git\"}},\"project_views\":{\"a\":{\"tab\":\"terminal\"},\"b\":{\"session_id\":2}},\"spawn\":{\"defaults\":{\"a\":\"x\"}},\"spawn\":{\"defaults\":{\"b\":\"y\"}}}"
+  },
+  {
+    "name": "map-null-reset",
+    "method": "PUT",
+    "body": "{\"spawn\":{\"defaults\":{\"a\":\"x\"}},\"spawn\":{\"defaults\":null},\"spawn\":{\"defaults\":{\"b\":\"y\"}}}"
+  },
+  {
+    "name": "casefold-known-fields",
+    "method": "PUT",
+    "body": "{\"DISPLAY_NAME\":\"name\",\"TRIGGER\":{\"ENABLED\":true},\"quic\u212a_cmds\":{\"show1\":false},\"di\u017fplay\":{\"theme\":\"dark\"},\"unknown\":{\"deep\":1e1000}}"
+  },
+  {
+    "name": "session-order-61",
+    "method": "PUT",
+    "body": "{\"session_order\":[1,\" 2 \",2.0,3.2,null,true,{},\"bad\",-4]}"
+  },
+  {
+    "name": "session-order-62",
+    "method": "PUT",
+    "body": "{\"session_order\":{}}"
+  },
+  {
+    "name": "session-order-63",
+    "method": "PUT",
+    "body": "{\"session_order\":\"not-array\"}"
+  },
+  {
+    "name": "session-order-64",
+    "method": "PUT",
+    "body": "{\"session_order\":[1e1000]}"
+  },
+  {
+    "name": "session-order-65",
+    "method": "PUT",
+    "body": "{\"session_order\":[9007199254740993,9223372036854775808,-9223372036854775808,\"9223372036854775807\"]}"
+  },
+  {
+    "name": "session-order-replace",
+    "method": "PUT",
+    "body": "{\"session_order\":[1,2],\"SESSION_ORDER\":[null,\"3\"]}"
+  },
+  {
+    "name": "session-order-reset",
+    "method": "PUT",
+    "body": "{\"session_order\":[1,2],\"session_order\":{}}"
+  },
+  {
+    "name": "invalid-json-68",
+    "method": "PUT",
+    "body": ""
+  },
+  {
+    "name": "invalid-json-69",
+    "method": "PUT",
+    "body": "{"
+  },
+  {
+    "name": "invalid-json-70",
+    "method": "PUT",
+    "body": "[]"
+  },
+  {
+    "name": "invalid-json-71",
+    "method": "PUT",
+    "body": "{\"templates\":{}}"
+  },
+  {
+    "name": "invalid-json-72",
+    "method": "PUT",
+    "body": "{\"display_name\":1,\"display_name\":\"later\"}"
+  },
+  {
+    "name": "invalid-json-73",
+    "method": "PUT",
+    "body": "{\"quick_cmds\":{\"show1\":\"bad\"}}"
+  },
+  {
+    "name": "invalid-json-74",
+    "method": "PUT",
+    "body": "{\"voice\":{\"grace_seconds\":1.5}}"
+  },
+  {
+    "name": "invalid-json-75",
+    "method": "PUT",
+    "body": "{\"templates\":[{\"providers\":[1]}]}"
+  },
+  {
+    "name": "invalid-json-76",
+    "method": "PUT",
+    "body": "{\"project_views\":{\"a\":{\"session_id\":\"1\"}}}"
+  },
+  {
+    "name": "first-value-trailing",
+    "method": "PUT",
+    "body": "{\"display_name\":\"first\"} garbage"
+  },
+  {
+    "name": "unknown-large-number",
+    "method": "PUT",
+    "body": "{\"unknown\":1e1000}"
+  },
+  {
+    "name": "unknown-depth",
+    "method": "PUT",
+    "body": "{\"ignored\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]}"
+  },
+  {
+    "name": "wrong-method-before-body",
+    "method": "POST",
+    "body": "{"
+  },
+  {
+    "name": "session-order-deep-ignored-neighbors",
+    "method": "PUT",
+    "body": "{\"session_order\":[7,[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[0]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],\"8\"]}"
+  },
+  {
+    "name": "session-order-deep-overflow-clears",
+    "method": "PUT",
+    "body": "{\"session_order\":[7,[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[1e1000]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]],\"8\"]}"
+  }
+]

@@ -1,0 +1,4 @@
+a4d7b4314e983ef8929b2f9f6812411bc60d7ad9576e40103206ab6b1fab804b  rust/src/approval/policy/go_regex/tables.rs
+979b25d2605380cb154ef13bf84c7f9a1b3a79114d0f46c45ee06a96d62b1f6f  rust/tests/fixtures/services/autoapproval-unicode/generate.go
+d21106c71423c330c95ad44dc94d1f4611d9bf2ed7b2767f1a3ee9512326f8d0  rust/tests/fixtures/services/autoapproval-unicode/go_oracle.json
+6e8474942dce2792d001c37b3c74d34b7736b144650c6e7f9f919b442cfce5a9  rust/tests/fixtures/services/autoapproval-unicode/provenance.json

@@ -241,6 +241,123 @@ pub const PROVIDER_SCHEMAS: &[Schema] = &[
             },
         ],
     },
+    Schema {
+        name: "RevisionRecord",
+        fields: &[
+            Field {
+                name: "schema_version",
+                kind: "int",
+            },
+            Field {
+                name: "provider_id",
+                kind: "string",
+            },
+            Field {
+                name: "revision",
+                kind: "string",
+            },
+            Field {
+                name: "created_at",
+                kind: "string",
+            },
+            Field {
+                name: "reason",
+                kind: "string",
+            },
+            Field {
+                name: "parent_revision",
+                kind: "string",
+            },
+            Field {
+                name: "content_digest",
+                kind: "string",
+            },
+            Field {
+                name: "payload",
+                kind: "Definition",
+            },
+        ],
+    },
+    Schema {
+        name: "DistributionPayload",
+        fields: &[
+            Field {
+                name: "schema_version",
+                kind: "int",
+            },
+            Field {
+                name: "catalog_version",
+                kind: "string",
+            },
+            Field {
+                name: "created_at",
+                kind: "string",
+            },
+            Field {
+                name: "minimum_app_version",
+                kind: "string",
+            },
+            Field {
+                name: "definitions",
+                kind: "[]Definition",
+            },
+            Field {
+                name: "digests",
+                kind: "map[string]string",
+            },
+        ],
+    },
+    Schema {
+        name: "DistributionBundle",
+        fields: &[
+            Field {
+                name: "payload",
+                kind: "DistributionPayload",
+            },
+            Field {
+                name: "key_id",
+                kind: "string",
+            },
+            Field {
+                name: "signature",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "DistributionStatus",
+        fields: &[
+            Field {
+                name: "catalog_version",
+                kind: "string",
+            },
+            Field {
+                name: "digest",
+                kind: "string",
+            },
+            Field {
+                name: "state",
+                kind: "string",
+            },
+            Field {
+                name: "path",
+                kind: "string",
+            },
+        ],
+    },
+    Schema {
+        name: "ProviderPatchRequest",
+        fields: &[
+            Field {
+                name: "expected_revision",
+                kind: "*string",
+            },
+            Field {
+                name: "definition",
+                kind: "Definition",
+            },
+        ],
+    },
 ];
 impl GoWire for Definition {
     const GO_TYPE: &'static str = "Definition";
@@ -276,5 +393,25 @@ impl GoWire for AdapterRefs {
 }
 impl GoWire for SourceRef {
     const GO_TYPE: &'static str = "SourceRef";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+
+impl GoWire for RevisionRecord {
+    const GO_TYPE: &'static str = "RevisionRecord";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+
+impl GoWire for DistributionPayload {
+    const GO_TYPE: &'static str = "DistributionPayload";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+
+impl GoWire for DistributionBundle {
+    const GO_TYPE: &'static str = "DistributionBundle";
+    const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
+}
+
+impl GoWire for DistributionStatus {
+    const GO_TYPE: &'static str = "DistributionStatus";
     const SCHEMAS: &'static [Schema] = PROVIDER_SCHEMAS;
 }

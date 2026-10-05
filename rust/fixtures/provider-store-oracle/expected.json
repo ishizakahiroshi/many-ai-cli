@@ -1,0 +1,59 @@
+{
+  "accepted_bundle": "{\"payload\":{\"schema_version\":1,\"catalog_version\":\"fixture-v1\",\"created_at\":\"2026-10-03T00:01:02Z\",\"definitions\":[{\"schema_version\":1,\"id\":\"distributed-fixture\",\"display_name\":\"Distribution \\u003cfixture\\u003e\",\"launch\":{\"executable\":\"distribution-fixture\"},\"adapters\":{},\"source\":{}}],\"digests\":{\"distributed-fixture\":\"13e556158bb907d0b11f52e66d77b4d4ab4fb0add91c1af100be71243157b5b6\"}},\"key_id\":\"synthetic-fixture-key\",\"signature\":\"GT1ezGPNbbmFKWEjaw/vTueMKf9YdRRuP80znKu86Rakjh9fHO/vGHEsmOTq9yD5tjVgurjIolAwmWt7LZdMAQ==\"}",
+  "accepted_digest": "fc554cbb0738e33b569f6e4225eeb45c4fb15430cb067ad232542caad86fcb23",
+  "registry_diagnostics": [
+    {
+      "code": "unknown_capability",
+      "severity": "warning",
+      "field": "fixture-cli.capabilities.launch",
+      "message": "unknown capability is ignored"
+    }
+  ],
+  "registry_revision": "6dd6aa2148e17cff45470be59f91002ededce6342d8b3f42fb447fae9dde11af",
+  "rows": [
+    {
+      "canonical": "{\"schema_version\":1,\"id\":\"fixture-cli\",\"display_name\":\"CLI \\u003cone\\u003e \\u0026 two\\u2028三\",\"description\":\"ordered fields\",\"enabled\":false,\"launch\":{\"executable\":\"fixture-cli\",\"args\":[\"--agent\"]},\"capabilities\":{\"launch\":true,\"usage\":false},\"adapters\":{},\"source\":{\"origin\":\"user\",\"version\":\"v1\",\"digest\":\"example\",\"revision\":\"parent\"}}",
+      "created_at": "2026-10-03T00:01:02.123456789Z",
+      "definition": {
+        "schema_version": 1,
+        "id": "fixture-cli",
+        "display_name": "CLI \u003cone\u003e \u0026 two\u2028三",
+        "description": "ordered fields",
+        "enabled": false,
+        "launch": {
+          "executable": "fixture-cli",
+          "args": [
+            "--agent"
+          ]
+        },
+        "capabilities": {
+          "launch": true,
+          "usage": false
+        },
+        "adapters": {},
+        "source": {
+          "origin": "user",
+          "version": "v1",
+          "digest": "example",
+          "revision": "parent"
+        }
+      },
+      "digest": "22b846d9fc15c1b2acd0daf3269651869a22f0a6020750d6177851235879523d",
+      "parent": "parent",
+      "revision": "19183cd419dede867f761f8e"
+    },
+    {
+      "canonical": "{\"id\":\"claude\",\"enabled\":false,\"adapters\":{},\"source\":{}}",
+      "created_at": "2026-10-03T00:01:02.123456789Z",
+      "definition": {
+        "id": "claude",
+        "enabled": false,
+        "adapters": {},
+        "source": {}
+      },
+      "digest": "52af86895d8da32c834049a15e50d5ab26e3673a507b84133c433233b160b285",
+      "parent": "parent",
+      "revision": "cf70f6eb980c80f8be738a3d"
+    }
+  ]
+}

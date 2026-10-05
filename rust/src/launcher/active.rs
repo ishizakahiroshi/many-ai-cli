@@ -113,11 +113,21 @@ impl LauncherStore {
     /// Also useful for synthetic registry interoperability tests. Never kills a PID.
     pub fn register_record(&self, record: ActiveConnection) -> io::Result<()> {
         let _lock = self.lock(&self.name(Resource::LauncherActiveLock)?)?;
-        let mut file = self.load_active()?;
+        let mut file = self.load_active().map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("read launcher active registry: {error}"),
+            )
+        })?;
         let records = file.connections.get_or_insert_with(Vec::new);
         records.retain(|c| c.profile != record.profile || c.pid != record.pid);
         records.push(record);
-        self.save_active(&file)
+        self.save_active(&file).map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("save launcher active registry: {error}"),
+            )
+        })
     }
     pub fn unregister_active(&self, profile: &str) -> io::Result<()> {
         self.remove_own(|c| c.profile == profile)

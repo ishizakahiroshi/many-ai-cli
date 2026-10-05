@@ -509,36 +509,22 @@ fn git_turn_line(record: &Record) -> String {
     }
 }
 fn go_quote(text: &str) -> String {
-    use std::fmt::Write;
-    static NONPRINT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let nonprint = NONPRINT.get_or_init(|| {
-        regex::Regex::new(r"[^\p{L}\p{M}\p{N}\p{P}\p{S} ]").expect("Go printable class")
-    });
-    let mut quoted = String::from("\"");
-    for c in text.chars() {
-        match c {
-            '\\' => quoted.push_str("\\\\"),
-            '"' => quoted.push_str("\\\""),
-            '\n' => quoted.push_str("\\n"),
-            '\r' => quoted.push_str("\\r"),
-            '\t' => quoted.push_str("\\t"),
-            '\u{7}' => quoted.push_str("\\a"),
-            '\u{8}' => quoted.push_str("\\b"),
-            '\u{b}' => quoted.push_str("\\v"),
-            '\u{c}' => quoted.push_str("\\f"),
-            c if c < ' ' || c == '\u{7f}' => {
-                write!(quoted, "\\x{:02x}", c as u32).unwrap();
-            }
-            c if nonprint.is_match(c.encode_utf8(&mut [0u8; 4])) => {
-                if c as u32 <= 0xffff {
-                    write!(quoted, "\\u{:04x}", c as u32).unwrap();
-                } else {
-                    write!(quoted, "\\U{:08x}", c as u32).unwrap();
-                }
-            }
-            c => quoted.push(c),
-        }
+    crate::proto::go_quote::quote(text)
+}
+#[cfg(test)]
+mod quote_consumer_tests {
+    use super::*;
+
+    #[test]
+    fn git_subject_rendering_uses_pinned_unicode_assignments() {
+        let record = Record {
+            commit: "0123456789abcdef".into(),
+            commit_subject: "\u{2ebf0}".into(),
+            ..Record::default()
+        };
+        assert_eq!(
+            git_turn_line(&record),
+            "commit 0123456789ab \"\\U0002ebf0\""
+        );
     }
-    quoted.push('"');
-    quoted
 }

@@ -4,7 +4,7 @@ use crate::{
     config::{self, Resource, RuntimePaths},
     files::safe_fs::Dir,
     process::{ProcessPlan, random_token, wrapper_startup::STARTUP_JOB_ENV},
-    proto::core::{SPAWN_PROOF_ENV, WrappedSpawnSpec},
+    proto::core::{SPAWN_PROOF_ENV, WrappedSpawnSpec, WrappedStartKind},
     wrapper::launch::launch_prompt_file_owner,
 };
 use std::{
@@ -21,6 +21,9 @@ pub struct WrapperSpawnOptions {
     pub paths: RuntimePaths,
     /// Exact executable running this Hub, never a PATH rediscovery.
     pub executable: PathBuf,
+    /// Only the many-ai-cli child receives this HOME. Its provider is sanitized
+    /// again by wrapper::entry, retaining the trial vendor/profile directories.
+    pub application_home: PathBuf,
     /// Explicit inherited snapshot; no process-global environment mutation.
     pub environment: Vec<String>,
     pub hub_port: u16,
@@ -42,25 +45,21 @@ impl WrapperSpawnOptions {
                 "invalid wrapper spawn runtime options",
             ));
         }
+        if self.paths.is_trial() {
+            if !self.application_home.is_absolute() {
+                return Err(invalid("trial application home must be absolute"));
+            }
+            // Preserve the same disjoint-root validation performed by main.
+            RuntimePaths::trial(
+                self.paths.root(),
+                self.hub_port,
+                &self.application_home.join(".many-ai-cli"),
+            )?;
+        }
         Ok(())
     }
 }
-/// No Debug: resolved environments can contain provider credentials.
-pub struct ResolvedSpawnPolicy {
-    /// Full sanitized inherited snapshot. Windows policy must also refresh and
-    /// expand PATH from its authorized platform sources as Go expandPathEntries.
-    pub base_environment: Vec<String>,
-    pub route_environment: Vec<String>,
-    pub subscription_environment: Vec<String>,
-    pub effective_route: String,
-    pub current_model: String,
-    /// Final source-resolved model, including suppression for custom definitions
-    /// without model_args. Empty must not fall back to the requested model.
-    pub resolved_model: String,
-    /// Exact registry/fallback wrapper argv, already resolved once. Some Go
-    /// registry mappings are raw provider flags; never rewrite them to --effort.
-    pub effort_args: Vec<String>,
-}
+pub use crate::proto::core::ResolvedSpawnPolicy;
 pub trait SpawnLaunchPolicy: Send + Sync {
     /// Must validate provider, profile enablement/existence, route and configured
     /// model/effort support. Resolve auto subscription exactly once. No fallback
@@ -74,7 +73,8 @@ pub trait SpawnLaunchPolicy: Send + Sync {
     /// Source treats failure as warning and continues launching the same account.
     fn folder_trust(&self, spec: &WrappedSpawnSpec, exact_environment: &[String])
     -> io::Result<()>;
-    /// Source records only accepted non-probe, nonlocal, nonempty model choices.
+    /// Source records nonlocal, nonempty models after registration for child/login
+    /// callers, or after native Start for ordinary AI callers.
     fn registered_model(&self, provider: &str, model: &str) -> io::Result<()>;
 }
 pub(super) struct PromptFile {
@@ -108,32 +108,16 @@ fn invalid(message: &'static str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, message)
 }
 fn valid_model_label(value: &str) -> bool {
-    !value.starts_with('-')
-        && !value.chars().any(|c| {
-            c < ' '
-                || c == '\u{7f}'
-                || matches!(
-                    c,
-                    ' ' | '"'
-                        | '\''
-                        | '|'
-                        | '&'
-                        | '>'
-                        | '<'
-                        | '^'
-                        | '%'
-                        | '('
-                        | ')'
-                        | ';'
-                        | '`'
-                        | '$'
-                )
-        })
+    !value.starts_with('-') && crate::profile::validation::valid_spawn_model_label(value)
 }
 fn local_route(route: &str) -> bool {
     matches!(route, "ollama" | "lm-studio")
 }
-fn risk_confirmation(spec: &WrappedSpawnSpec, policy: &ResolvedSpawnPolicy) -> bool {
+fn risk_confirmation(
+    spec: &WrappedSpawnSpec,
+    policy: &ResolvedSpawnPolicy,
+    ordinary: bool,
+) -> bool {
     if spec.usage_probe || spec.subscription_login || spec.risk_confirmed {
         return false;
     }
@@ -152,6 +136,8 @@ fn risk_confirmation(spec: &WrappedSpawnSpec, policy: &ResolvedSpawnPolicy) -> b
                 || spec.ask_for_approval == "never"
         }
         "shell" => false,
+        "opencode" | "command-code" => spec.permission_mode == "bypassPermissions",
+        _ if ordinary => false,
         _ => spec.permission_mode == "bypassPermissions",
     }
 }
@@ -243,10 +229,36 @@ pub(super) fn prepare(
     // policy repeats those checks after selection and before route/key work;
     // this caller does not silently skip auto-selection's source mutation.
     let resolved = policy.resolve(spec, &options.environment)?;
-    if !valid_model_label(&spec.model) || !valid_model_label(&spec.label) {
+    prepare_resolved(options, policy, spec, &resolved, None, warn)
+}
+/// The ordinary caller already selected its profile/route/model. Never resolve
+/// again here: selection may mutate round-robin state or choose another account.
+pub(super) fn prepare_start(
+    options: &WrapperSpawnOptions,
+    policy: &dyn SpawnLaunchPolicy,
+    spec: &WrappedSpawnSpec,
+    resolved: &ResolvedSpawnPolicy,
+    kind: WrappedStartKind,
+    warn: &(dyn Fn(&'static str) + Send + Sync),
+) -> io::Result<PreparedSpawn> {
+    prepare_resolved(options, policy, spec, resolved, Some(kind), warn)
+}
+fn prepare_resolved(
+    options: &WrapperSpawnOptions,
+    policy: &dyn SpawnLaunchPolicy,
+    spec: &WrappedSpawnSpec,
+    resolved: &ResolvedSpawnPolicy,
+    kind: Option<WrappedStartKind>,
+    warn: &(dyn Fn(&'static str) + Send + Sync),
+) -> io::Result<PreparedSpawn> {
+    if !spec.cwd.is_absolute() {
+        return Err(invalid("invalid wrapper working directory"));
+    }
+    let bare = matches!(kind, Some(WrappedStartKind::Bare | WrappedStartKind::Grid));
+    if (!bare && !valid_model_label(&spec.model)) || !valid_model_label(&spec.label) {
         return Err(invalid("invalid wrapper model or label"));
     }
-    if risk_confirmation(spec, &resolved) {
+    if !bare && risk_confirmation(spec, resolved, kind.is_some()) {
         return Err(invalid("risk confirmation required"));
     }
     let mut args = Vec::<OsString>::new();
@@ -263,10 +275,18 @@ pub(super) fn prepare(
         args.push(format!("--label={}", spec.label).into());
     }
     let mut prompt = None;
-    if spec.subscription_login {
+    if bare {
+        if kind == Some(WrappedStartKind::Bare) && spec.provider == "shell" && spec.utf8_session {
+            args.push("--utf8".into());
+        }
+    } else if kind.is_none() && spec.subscription_login {
         args.push("--subscription-login".into());
     } else {
-        if !resolved.resolved_model.is_empty() {
+        if kind.is_some()
+            && !crate::proto::provider::BUILTIN_PROVIDER_IDS.contains(&spec.provider.as_str())
+        {
+            args.extend(resolved.ordinary_model_args.iter().cloned().map(Into::into));
+        } else if !resolved.resolved_model.is_empty() {
             args.extend(["--model".into(), resolved.resolved_model.clone().into()]);
         }
         match spec.provider.as_str() {
@@ -282,7 +302,14 @@ pub(super) fn prepare(
                 }
             }
             "shell" => {}
-            _ if !spec.permission_mode.is_empty() && spec.permission_mode != "default" => {
+            _ if (kind.is_none()
+                || matches!(
+                    spec.provider.as_str(),
+                    "claude" | "opencode" | "command-code"
+                ))
+                && !spec.permission_mode.is_empty()
+                && spec.permission_mode != "default" =>
+            {
                 args.extend([
                     "--permission-mode".into(),
                     spec.permission_mode.clone().into(),
@@ -323,13 +350,20 @@ pub(super) fn prepare(
             "MANY_AI_CLI=1".into(),
             format!("MANY_AI_CLI_HUB_PORT={}", options.hub_port),
             format!("MANY_AI_CLI_BIN={}", options.executable.to_string_lossy()),
-            format!("MANY_AI_CLI_USAGE_PROBE={}", u8::from(spec.usage_probe)),
-            format!(
-                "MANY_AI_CLI_SUBSCRIPTION_LOGIN={}",
-                u8::from(spec.subscription_login)
-            ),
         ],
     )?;
+    if kind.is_none() {
+        add_environment(
+            &mut environment,
+            &[
+                format!("MANY_AI_CLI_USAGE_PROBE={}", u8::from(spec.usage_probe)),
+                format!(
+                    "MANY_AI_CLI_SUBSCRIPTION_LOGIN={}",
+                    u8::from(spec.subscription_login)
+                ),
+            ],
+        )?;
+    }
     if !options.parent_shell.is_empty() {
         add_environment(
             &mut environment,
@@ -338,6 +372,12 @@ pub(super) fn prepare(
     }
     add_environment(&mut environment, &resolved.route_environment)?;
     add_environment(&mut environment, &resolved.subscription_environment)?;
+    if let Some(WrappedStartKind::OrdinaryAi { delegation }) = kind {
+        add_environment(
+            &mut environment,
+            &[format!("MANY_AI_CLI_DELEGATION={}", u8::from(delegation))],
+        )?;
+    }
     // Internal proof/Job cannot be inherited from another wrapper or replaced by
     // a profile/route. Bootstrap receives only the proof which core just issued.
     environment.retain(|_, (key, _)| {
@@ -368,8 +408,17 @@ pub(super) fn prepare(
     for (key, value) in environment.into_values() {
         overrides.insert(key.into(), Some(value.into()));
     }
-    let log_dir = Dir::open_or_create_private(&options.paths.resource(Resource::Logs))?
-        .child_dir("spawn", true)?;
+    if options.paths.is_trial() {
+        // Apply after capturing the provider environment for folder trust.
+        // This override belongs solely to the exact Hub-owned self executable;
+        // provider subprocesses go through trial_environment::prepare again.
+        for key in ["HOME", "USERPROFILE"] {
+            overrides.insert(
+                key.into(),
+                Some(options.application_home.as_os_str().into()),
+            );
+        }
+    }
     // Preserve Go's provider + local-time append log name. A provider accepted
     // by application policy must still be one basename at this filesystem edge.
     crate::files::safe_fs::basename(&spec.provider)?;
@@ -378,13 +427,33 @@ pub(super) fn prepare(
         spec.provider,
         chrono::Local::now().format("%Y%m%d-%H%M%S%.3f")
     );
-    let stdout = log_dir.open_append(&filename)?;
+    let log = || {
+        Dir::open_or_create_private(&options.paths.resource(Resource::Logs))?
+            .child_dir("spawn", true)?
+            .open_append(&filename)
+    };
+    let stdout = match log() {
+        Ok(file) => file,
+        Err(_) if kind == Some(WrappedStartKind::Grid) => {
+            // Go leaves nil stdout/stderr when optional grid logging fails;
+            // exec maps nil output to the native null device.
+            #[cfg(windows)]
+            let null = "NUL";
+            #[cfg(not(windows))]
+            let null = "/dev/null";
+            std::fs::OpenOptions::new().write(true).open(null)?
+        }
+        Err(error) => return Err(error),
+    };
     let stderr = stdout.try_clone()?;
-    if spec.grants.grant_folder_trust() && policy.folder_trust(spec, &exact_environment).is_err() {
+    if !bare
+        && spec.grants.grant_folder_trust()
+        && policy.folder_trust(spec, &exact_environment).is_err()
+    {
         warn("wrapper folder trust could not be written");
     }
-    let record_model = (!spec.subscription_login
-        && !spec.usage_probe
+    let record_model = (!bare
+        && (kind.is_some() || (!spec.subscription_login && !spec.usage_probe))
         && !resolved.resolved_model.is_empty()
         && !local_route(&resolved.effective_route))
     .then(|| resolved.resolved_model.clone());

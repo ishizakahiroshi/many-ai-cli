@@ -1,0 +1,77 @@
+{
+  "claude": [
+    "do you want to",
+    "esc to cancel",
+    "press enter to confirm or esc to go back",
+    "to review",
+    "to send",
+    "to dismiss"
+  ],
+  "codex": [
+    "approve?",
+    "continue?",
+    "proceed?",
+    "requires approval",
+    "do you want to proceed?",
+    "would you like to run the following command",
+    "would you like to run",
+    "permission"
+  ],
+  "copilot": [
+    "permission required",
+    "permissions required",
+    "requires permission",
+    "requires confirmation",
+    "prompts for user confirmation",
+    "allow all similar",
+    "deny all similar"
+  ],
+  "cursor-agent": [
+    "run this command?",
+    "not in allowlist",
+    "allowlist",
+    "auto-run everything",
+    "skip (esc or n)",
+    "permission required",
+    "requires permission",
+    "requires confirmation"
+  ],
+  "opencode": [
+    "permission required",
+    "allow once",
+    "allow always",
+    "reject",
+    "always allow",
+    "until opencode is restarted"
+  ],
+  "grok": [
+    "always-approve mode",
+    "tab:next option",
+    "type to add feedback",
+    "ctrl+o:always-approve",
+    "yes, proceed",
+    "no, reject",
+    "do you want to",
+    "esc to cancel",
+    "press enter to confirm",
+    "allow this command",
+    "permission required",
+    "approve?",
+    "proceed?"
+  ],
+  "command-code": [
+    "Do you trust the files in this folder?",
+    "Tool Permission",
+    "Command Code needs to run",
+    "Do you want to make this edit",
+    "enter to select",
+    "enter select"
+  ],
+  "common": [
+    "would you like to",
+    "この操作を許可",
+    "続行しますか",
+    "承認しますか",
+    "実行しますか"
+  ]
+}

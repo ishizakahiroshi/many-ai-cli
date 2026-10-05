@@ -285,14 +285,14 @@ fn options(provider: &str, lines: &[String]) -> Option<(Vec<ApprovalOption>, usi
     let (mut best_start, mut best_end, mut cur) = (0, 0, 0);
     for i in 1..parsed.len() {
         if parsed[i].1 - parsed[i - 1].1 > 4 {
-            if i - cur >= best_end - best_start + 1 {
+            if i - cur > best_end - best_start {
                 best_start = cur;
                 best_end = i - 1;
             }
             cur = i;
         }
     }
-    if parsed.len() - cur >= best_end - best_start + 1 {
+    if parsed.len() - cur > best_end - best_start {
         best_start = cur;
         best_end = parsed.len() - 1;
     }

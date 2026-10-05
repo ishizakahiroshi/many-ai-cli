@@ -109,7 +109,7 @@ impl RoutineRunner {
             {
                 Ok(mut spec)
                     if spec.provider == run.provider
-                        && spec.cwd == PathBuf::from(&run.cwd)
+                        && spec.cwd == std::path::Path::new(&run.cwd)
                         && spec.model == run.model
                         && spec.label == run.session_label
                         && spec.spawn_attempt.is_none()

@@ -29,9 +29,6 @@ fn summary(command: &str, risk: &str) -> ApprovalSummary {
 #[test]
 fn fixed_go_load_decisions_ordered_warnings_and_historical_yaml() {
     for case in oracle()["loads"].as_array().unwrap() {
-        if case["name"] == "unsupported_unicode_property" {
-            continue;
-        }
         let (_root, _installed, paths) = fixture();
         if case["missing"] != true {
             write(&paths, case["raw"].as_str().unwrap());
@@ -135,17 +132,6 @@ fn fixed_go_regex_dialect_decisions_without_unicode_widening() {
     for case in oracle()["regexes"].as_array().unwrap() {
         let pattern = case["pattern"].as_str().unwrap();
         let result = go_regex(pattern);
-        if case.get("unsupported").is_some() {
-            assert_eq!(
-                case["valid"], true,
-                "the compatibility gap must be valid Go: {pattern}"
-            );
-            assert!(
-                matches!(result, Err(RegexIssue::Unsupported(_))),
-                "{pattern}: {result:?}"
-            );
-            continue;
-        }
         assert_eq!(result.is_ok(), case["valid"], "{pattern}: {result:?}");
         if let Ok(pattern) = result {
             for (value, expected) in case["values"]
@@ -166,7 +152,7 @@ fn fixed_go_regex_dialect_decisions_without_unicode_widening() {
 }
 
 #[test]
-fn unsupported_valid_go_unicode_pattern_has_explicit_disabled_warning() {
+fn valid_go_unicode_policy_uses_the_pinned_tables() {
     let fixture = oracle();
     let case = fixture["loads"]
         .as_array()
@@ -177,14 +163,9 @@ fn unsupported_valid_go_unicode_pattern_has_explicit_disabled_warning() {
     assert_eq!(case["rules"], 1);
     assert_eq!(case["decisions"][0]["allowed"], true);
     let policy = Policy::from_yaml(case["raw"].as_str().unwrap().as_bytes());
-    assert_eq!(policy.active_rules(), 0);
-    assert_eq!(
-        policy.warnings,
-        vec![
-            "rule \"han\": command disabled: unsupported Go regex (Unicode property classes require Go Unicode 15.0 tables)"
-        ]
-    );
-    assert!(!policy.evaluate("cat 日本語", "/synthetic", "low").allowed);
+    assert_eq!(policy.active_rules(), 1);
+    assert!(policy.warnings.is_empty());
+    assert!(policy.evaluate("cat 日本語", "/synthetic", "low").allowed);
 }
 
 #[test]

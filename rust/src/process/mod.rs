@@ -123,6 +123,13 @@ pub struct SpawnOptions {
     /// Windows background launcher children must not create a console window.
     /// This augments, never replaces, suspended Job-assignment containment.
     pub no_window: bool,
+    /// Share one native pipe for stdout and stderr, preserving write order.
+    pub combined_output: bool,
+    pub stdout_null: bool,
+    pub stderr_null: bool,
+    pub stdin_null: bool,
+    /// Use only ProcessPlan.env, with no ambient environment inheritance.
+    pub env_clear: bool,
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExitOutcome {
@@ -210,7 +217,67 @@ pub struct ManagedProcess {
     task: Option<tokio::task::JoinHandle<Result<ProcessOutput, ProcessFailure>>>,
     cached: Option<Result<ProcessOutput, ProcessFailure>>,
 }
+enum InputCommand {
+    Write(Vec<u8>, tokio::sync::oneshot::Sender<io::Result<()>>),
+    Close(tokio::sync::oneshot::Sender<io::Result<()>>),
+}
+/// Writes are acknowledged only after the contained child's pipe accepts them.
+#[derive(Clone)]
+pub struct InputSender(tokio::sync::mpsc::Sender<InputCommand>);
+impl InputSender {
+    pub async fn write(&self, bytes: Vec<u8>) -> io::Result<()> {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.0
+            .send(InputCommand::Write(bytes, sender))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?;
+        receiver
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?
+    }
+    pub async fn close(&self) -> io::Result<()> {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.0
+            .send(InputCommand::Close(sender))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?;
+        receiver
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "process input closed"))?
+    }
+}
 impl ManagedProcess {
+    pub fn spawn_interactive_owned_with_options(
+        plan: ProcessPlan,
+        event_capacity: usize,
+        options: SpawnOptions,
+    ) -> (Self, InputSender, broadcast::Receiver<ProcessEvent>) {
+        let cancel = Cancellation::default();
+        let (events, receiver) = broadcast::channel(event_capacity.max(1));
+        let (input, input_receiver) = tokio::sync::mpsc::channel(16);
+        let task_cancel = cancel.clone();
+        let task = tokio::spawn(async move {
+            run_observed(
+                &plan,
+                &task_cancel,
+                Some(events),
+                options,
+                Some(input_receiver),
+                None,
+            )
+            .await
+            .map_err(ProcessFailure::from)
+        });
+        (
+            Self {
+                cancel,
+                task: Some(task),
+                cached: None,
+            },
+            InputSender(input),
+            receiver,
+        )
+    }
     pub fn spawn_owned(
         plan: ProcessPlan,
         event_capacity: usize,
@@ -226,7 +293,7 @@ impl ManagedProcess {
         let (events, receiver) = broadcast::channel(event_capacity.max(1));
         let task_cancel = cancel.clone();
         let task = tokio::spawn(async move {
-            run_observed(&plan, &task_cancel, Some(events), options)
+            run_observed(&plan, &task_cancel, Some(events), options, None, None)
                 .await
                 .map_err(ProcessFailure::from)
         });
@@ -241,6 +308,31 @@ impl ManagedProcess {
     }
     pub fn close(&self) {
         self.cancel.cancel();
+    }
+    /// Routes both child streams directly to a caller-held private file. The
+    /// contained process owns these duplicated handles until exit and reap.
+    pub fn spawn_owned_with_log_file(
+        plan: ProcessPlan,
+        event_capacity: usize,
+        options: SpawnOptions,
+        file: std::fs::File,
+    ) -> (Self, broadcast::Receiver<ProcessEvent>) {
+        let cancel = Cancellation::default();
+        let (events, receiver) = broadcast::channel(event_capacity.max(1));
+        let task_cancel = cancel.clone();
+        let task = tokio::spawn(async move {
+            run_observed(&plan, &task_cancel, Some(events), options, None, Some(file))
+                .await
+                .map_err(ProcessFailure::from)
+        });
+        (
+            Self {
+                cancel,
+                task: Some(task),
+                cached: None,
+            },
+            receiver,
+        )
     }
     pub async fn wait(&mut self) -> io::Result<ProcessOutput> {
         if self.cached.is_none() {
@@ -292,16 +384,23 @@ impl Drop for OwnedRunGuard {
 }
 
 pub async fn run_capped(plan: &ProcessPlan, cancel: &Cancellation) -> io::Result<ProcessOutput> {
-    run_observed(plan, cancel, None, SpawnOptions::default()).await
+    run_observed(plan, cancel, None, SpawnOptions::default(), None, None).await
+}
+pub async fn run_capped_with_options(
+    plan: &ProcessPlan,
+    cancel: &Cancellation,
+    options: SpawnOptions,
+) -> io::Result<ProcessOutput> {
+    run_observed(plan, cancel, None, options, None, None).await
 }
 async fn run_observed(
     plan: &ProcessPlan,
     cancel: &Cancellation,
     events: Option<broadcast::Sender<ProcessEvent>>,
     options: SpawnOptions,
+    mut interactive_input: Option<tokio::sync::mpsc::Receiver<InputCommand>>,
+    log_file: Option<std::fs::File>,
 ) -> io::Result<ProcessOutput> {
-    #[cfg(not(windows))]
-    let _ = options;
     if cancel.is_cancelled() {
         return Ok(ProcessOutput {
             stdout: vec![],
@@ -339,6 +438,47 @@ async fn run_observed(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    if options.combined_output && (options.stdout_null || options.stderr_null) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "combined output cannot use null output streams",
+        ));
+    }
+    let combined_reader = if let Some(file) = log_file {
+        if options.combined_output || options.stdout_null || options.stderr_null {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "direct log output cannot combine pipe or null output",
+            ));
+        }
+        cmd.stdout(Stdio::from(file.try_clone()?));
+        cmd.stderr(Stdio::from(file));
+        None
+    } else if options.combined_output {
+        let (reader, writer) = io::pipe()?;
+        cmd.stdout(Stdio::from(writer.try_clone()?));
+        cmd.stderr(Stdio::from(writer));
+        #[cfg(unix)]
+        let reader = std::process::ChildStdout::from(std::os::fd::OwnedFd::from(reader));
+        #[cfg(windows)]
+        let reader =
+            std::process::ChildStdout::from(std::os::windows::io::OwnedHandle::from(reader));
+        Some(tokio::process::ChildStdout::from_std(reader)?)
+    } else {
+        if options.stdout_null {
+            cmd.stdout(Stdio::null());
+        }
+        if options.stderr_null {
+            cmd.stderr(Stdio::null());
+        }
+        None
+    };
+    if options.stdin_null {
+        cmd.stdin(Stdio::null());
+    }
+    if options.env_clear {
+        cmd.env_clear();
+    }
     for (key, value) in &plan.env {
         if let Some(value) = value {
             cmd.env(key, value);
@@ -361,6 +501,9 @@ async fn run_observed(
         cmd.creation_flags(flags);
     }
     let mut child = cmd.spawn()?;
+    // The command retains custom writer handles; release them so EOF depends
+    // only on the owned child and its descendants.
+    drop(cmd);
     if let Some(events) = &events {
         let _ = events.send(ProcessEvent::Started {
             pid: child.id().unwrap_or(0),
@@ -395,23 +538,61 @@ async fn run_observed(
     };
     let out = Arc::new(Mutex::new(Capture::default()));
     let err = Arc::new(Mutex::new(Capture::default()));
-    let out_task = tokio::spawn(read_capped(
-        child.stdout.take().unwrap(),
-        out.clone(),
-        plan.output_cap,
-        events.clone().map(|sender| (sender, OutputStream::Stdout)),
-    ));
-    let err_task = tokio::spawn(read_capped(
-        child.stderr.take().unwrap(),
-        err.clone(),
-        plan.output_cap,
-        events.map(|sender| (sender, OutputStream::Stderr)),
-    ));
-    let mut stdin = child.stdin.take().unwrap();
+    let stdout = combined_reader.or_else(|| child.stdout.take());
+    let stderr = child.stderr.take();
+    let stdout_capture = out.clone();
+    let stderr_capture = err.clone();
+    let cap = plan.output_cap;
+    let stdout_events = events.clone().map(|sender| (sender, OutputStream::Stdout));
+    let stderr_events = events.map(|sender| (sender, OutputStream::Stderr));
+    let out_task = tokio::spawn(async move {
+        if let Some(stdout) = stdout {
+            read_capped(stdout, stdout_capture, cap, stdout_events).await?;
+        }
+        Ok::<(), io::Error>(())
+    });
+    let err_task = tokio::spawn(async move {
+        if let Some(stderr) = stderr {
+            read_capped(stderr, stderr_capture, cap, stderr_events).await?;
+        }
+        Ok::<(), io::Error>(())
+    });
+    let stdin = child.stdin.take();
     let prompt = plan.stdin.clone();
+    let input_finished = Cancellation::default();
+    let input_stop = input_finished.clone();
     let input_task = tokio::spawn(async move {
-        stdin.write_all(&prompt).await?;
-        stdin.shutdown().await
+        if let Some(mut stdin) = stdin {
+            stdin.write_all(&prompt).await?;
+            if let Some(ref mut receiver) = interactive_input {
+                loop {
+                    let command = tokio::select! {
+                        _ = input_stop.cancelled() => break,
+                        command = receiver.recv() => command,
+                    };
+                    match command {
+                        Some(InputCommand::Write(bytes, receipt)) => {
+                            let result = tokio::select! {
+                                _ = input_stop.cancelled() => Err(io::Error::new(io::ErrorKind::BrokenPipe, "process exited")),
+                                result = stdin.write_all(&bytes) => result,
+                            };
+                            let failed = result.is_err();
+                            let _ = receipt.send(result);
+                            if failed {
+                                break;
+                            }
+                        }
+                        Some(InputCommand::Close(receipt)) => {
+                            let _ = receipt.send(stdin.shutdown().await);
+                            return Ok(());
+                        }
+                        None => break,
+                    }
+                }
+            }
+            stdin.shutdown().await?;
+        }
+        Ok::<(), io::Error>(())
     });
     ownership.tasks.extend([
         out_task.abort_handle(),
@@ -428,6 +609,7 @@ async fn run_observed(
         _=cancel.cancelled()=>ExitOutcome::Cancelled,
         _=deadline_wait=>ExitOutcome::TimedOut,
     };
+    input_finished.cancel();
     if !matches!(outcome, ExitOutcome::Exited { .. }) {
         #[cfg(unix)]
         terminate_group(owned_pid);
@@ -629,6 +811,164 @@ pub(crate) mod windows_job {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn stdio_plan(unix_script: &str, windows_script: &str) -> ProcessPlan {
+        #[cfg(unix)]
+        let (executable, args) = ("/bin/sh", vec!["-c".into(), unix_script.into()]);
+        #[cfg(windows)]
+        let (executable, args) = (
+            "pwsh",
+            vec![
+                "-NoProfile".into(),
+                "-Command".into(),
+                windows_script.into(),
+            ],
+        );
+        #[cfg(unix)]
+        let _ = windows_script;
+        #[cfg(windows)]
+        let _ = unix_script;
+        ProcessPlan {
+            executable: executable.into(),
+            args,
+            cwd: std::env::temp_dir(),
+            env: BTreeMap::new(),
+            stdin: Vec::new(),
+            timeout: Duration::from_secs(10),
+            output_cap: 1024,
+            pipe_drain_timeout: Duration::from_secs(1),
+        }
+    }
+    #[tokio::test]
+    async fn direct_log_keeps_both_streams_beyond_capture_cap() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("synthetic-server.log");
+        let file = std::fs::File::create(&path).unwrap();
+        let mut plan = stdio_plan(
+            "printf stdout-payload; printf stderr-payload >&2",
+            "[Console]::Out.Write('stdout-payload'); [Console]::Error.Write('stderr-payload')",
+        );
+        plan.output_cap = 1;
+        let (mut owner, _) =
+            ManagedProcess::spawn_owned_with_log_file(plan, 1, SpawnOptions::default(), file);
+        let output = owner.wait().await.unwrap();
+        assert!(matches!(
+            output.outcome,
+            ExitOutcome::Exited { code: Some(0), .. }
+        ));
+        assert!(output.stdout.is_empty() && output.stderr.is_empty());
+        let bytes = std::fs::read_to_string(path).unwrap();
+        assert!(bytes.contains("stdout-payload"));
+        assert!(bytes.contains("stderr-payload"));
+        assert_eq!(bytes.len(), 28);
+    }
+    #[tokio::test]
+    async fn interactive_input_waits_for_each_reply_and_reaps_with_sender_alive() {
+        let plan = stdio_plan(
+            "read first; printf 'reply-one\\n'; read second; printf 'reply-two\\n'",
+            "$a=[Console]::In.ReadLine(); [Console]::Out.WriteLine('reply-one'); $b=[Console]::In.ReadLine(); [Console]::Out.WriteLine('reply-two')",
+        );
+        let (mut owner, input, mut events) =
+            ManagedProcess::spawn_interactive_owned_with_options(plan, 32, SpawnOptions::default());
+        input.write(b"initialize\n".to_vec()).await.unwrap();
+        let mut first = Vec::new();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !first.contains(&b'\n') {
+                if let ProcessEvent::Output {
+                    stream: OutputStream::Stdout,
+                    bytes,
+                } = events.recv().await.unwrap()
+                {
+                    first.extend(bytes);
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert!(String::from_utf8_lossy(&first).contains("reply-one"));
+        assert!(!owner.task.as_ref().unwrap().is_finished());
+        input.write(b"account/read\n".to_vec()).await.unwrap();
+        let output = owner.wait().await.unwrap();
+        assert!(String::from_utf8_lossy(&output.stdout).contains("reply-two"));
+        assert!(!output.pipes_forced_closed);
+        assert!(input.write(b"late\n".to_vec()).await.is_err());
+    }
+    #[tokio::test]
+    async fn combined_native_pipe_preserves_alternating_writes_and_eof() {
+        let plan = stdio_plan(
+            "printf first; printf second >&2; printf third; printf fourth >&2",
+            "[Console]::Out.Write('first'); [Console]::Error.Write('second'); [Console]::Out.Write('third'); [Console]::Error.Write('fourth')",
+        );
+        let (mut owner, _) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            16,
+            SpawnOptions {
+                combined_output: true,
+                stdin_null: true,
+                ..Default::default()
+            },
+        );
+        let output = owner.wait().await.unwrap();
+        assert_eq!(output.stdout, b"firstsecondthirdfourth");
+        assert!(output.stderr.is_empty());
+        assert!(!output.pipes_forced_closed);
+        assert!(matches!(
+            output.outcome,
+            ExitOutcome::Exited { code: Some(0), .. }
+        ));
+    }
+    #[tokio::test]
+    async fn null_streams_close_stdin_and_discard_output() {
+        let plan = stdio_plan(
+            "if read line; then exit 9; fi; printf discarded; printf discarded >&2",
+            "if ($null -ne [Console]::In.ReadLine()) { exit 9 }; [Console]::Out.Write('discarded'); [Console]::Error.Write('discarded')",
+        );
+        let (mut owner, _) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            16,
+            SpawnOptions {
+                stdin_null: true,
+                stdout_null: true,
+                stderr_null: true,
+                ..Default::default()
+            },
+        );
+        let output = owner.wait().await.unwrap();
+        assert!(output.stdout.is_empty() && output.stderr.is_empty());
+        assert!(matches!(
+            output.outcome,
+            ExitOutcome::Exited { code: Some(0), .. }
+        ));
+    }
+    #[tokio::test]
+    async fn combined_pipe_retains_output_cap_and_cancellation() {
+        let mut plan = stdio_plan(
+            "printf abcdef >&2; sleep 30",
+            "[Console]::Error.Write('abcdef'); Start-Sleep 30",
+        );
+        plan.output_cap = 3;
+        let (mut owner, mut events) = ManagedProcess::spawn_owned_with_options(
+            plan,
+            16,
+            SpawnOptions {
+                combined_output: true,
+                stdin_null: true,
+                ..Default::default()
+            },
+        );
+        loop {
+            if matches!(events.recv().await.unwrap(), ProcessEvent::Output { .. }) {
+                break;
+            }
+        }
+        owner.close();
+        let output = tokio::time::timeout(Duration::from_secs(4), owner.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(output.stdout, b"abc");
+        assert!(output.stdout_truncated);
+        assert_eq!(output.outcome, ExitOutcome::Cancelled);
+    }
     #[test]
     fn process_future_can_be_owned_by_a_multithread_runtime() {
         fn requires_send<T: Send>(_: T) {}

@@ -129,22 +129,40 @@ pub fn resolve_permission(
     origin: &VerifiedSpawnOrigin,
     cfg: &OrchestrationConfig,
 ) -> ChildApproval {
-    let row = TABLE
-        .iter()
-        .find(|row| row.provider == provider.trim())
-        .unwrap_or(&FALLBACK);
+    resolve_permission_for_origin(provider, preset, execution_mode, launch_origin(origin), cfg)
+}
+fn resolve_permission_for_origin(
+    provider: &str,
+    preset: &str,
+    execution_mode: &str,
+    origin: &str,
+    cfg: &OrchestrationConfig,
+) -> ChildApproval {
     let requested = if !cfg.child_full_bypass_enabled() {
         config::PERMISSION_PRESET_ATTENDED.to_owned()
     } else if !preset.trim().is_empty() {
         preset.trim().to_owned()
-    } else if launch_origin(origin) == config::LAUNCH_ORIGIN_UI
+    } else if origin == config::LAUNCH_ORIGIN_UI
         && execution_mode.trim() != config::EXECUTION_MODE_HEADLESS
     {
         config::PERMISSION_PRESET_ATTENDED.to_owned()
     } else {
         cfg.child_permission_default_tier()
     };
-    let (fields, tier, fallback_from) = match requested.as_str() {
+    permission_preset_approval(provider, &requested, cfg)
+}
+/// Ordinary UI requests explicitly select a preset. The source's direct table
+/// lookup does not apply autonomous defaults or alter human risk confirmation.
+pub fn permission_preset_approval(
+    provider: &str,
+    requested: &str,
+    cfg: &OrchestrationConfig,
+) -> ChildApproval {
+    let row = TABLE
+        .iter()
+        .find(|row| row.provider == provider.trim())
+        .unwrap_or(&FALLBACK);
+    let (fields, tier, fallback_from) = match requested.trim() {
         config::PERMISSION_PRESET_ATTENDED => (EMPTY, config::PERMISSION_PRESET_ATTENDED, ""),
         config::PERMISSION_PRESET_BOUNDED => match row.bounded {
             Some(fields) => (fields, config::PERMISSION_PRESET_BOUNDED, ""),
@@ -176,6 +194,13 @@ fn execution_mode(
     origin: &VerifiedSpawnOrigin,
     cfg: &Config,
 ) -> Result<String, ConfigError> {
+    execution_mode_for_origin(body, launch_origin(origin), cfg)
+}
+fn execution_mode_for_origin(
+    body: &ChildSpawnRequest,
+    origin: &str,
+    cfg: &Config,
+) -> Result<String, ConfigError> {
     let mut requested = config::normalize_execution_mode(&body.execution_mode);
     if requested.is_empty() {
         requested = cfg.orchestration.child_execution_mode_default();
@@ -183,7 +208,7 @@ fn execution_mode(
     config::resolve_execution_mode(
         &requested,
         config::headless_def_for(&body.provider, Some(cfg)).is_some(),
-        launch_origin(origin),
+        origin,
         false,
     )
 }
@@ -229,8 +254,31 @@ pub fn preview_tiers(
     body: &ResolvedChildSpawn,
     cfg: &Config,
 ) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
+    preview_for(
+        body.request(),
+        launch_origin(body.origin()),
+        body.grants().allowed_tools(),
+        cfg,
+    )
+}
+/// Pure /api/info disclosure. This returns data, never a UI-origin capability
+/// or a resolved launch request, and requires no WebSocket/auth proof minting.
+pub fn preview_ui_tiers(cfg: &Config) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
+    preview_for(
+        &ChildSpawnRequest::default(),
+        config::LAUNCH_ORIGIN_UI,
+        &[],
+        cfg,
+    )
+}
+fn preview_for(
+    body: &ChildSpawnRequest,
+    origin: &str,
+    allowed_tools: &[String],
+    cfg: &Config,
+) -> BTreeMap<String, BTreeMap<String, ChildApproval>> {
     let mut providers: Vec<&str> = ORCHESTRATION_PROVIDERS.to_vec();
-    let requested_provider = body.request().provider.trim();
+    let requested_provider = body.provider.trim();
     if !requested_provider.is_empty() && !providers.contains(&requested_provider) {
         providers.push(requested_provider);
     }
@@ -239,20 +287,18 @@ pub fn preview_tiers(
     let mut out: BTreeMap<String, BTreeMap<String, ChildApproval>> = BTreeMap::new();
     for tier in tiers {
         for provider in &providers {
-            let mut request = body.request().clone();
+            let mut request = body.clone();
             request.provider = (*provider).into();
             if !tier.is_empty() {
                 request.permission_preset.clone_from(&tier);
             }
-            request.execution_mode =
-                execution_mode(&request, body.origin(), cfg).unwrap_or_else(|_| {
-                    config::normalize_execution_mode(&body.request().execution_mode)
-                });
-            let mut permission = resolve_permission(
+            request.execution_mode = execution_mode_for_origin(&request, origin, cfg)
+                .unwrap_or_else(|_| config::normalize_execution_mode(&body.execution_mode));
+            let mut permission = resolve_permission_for_origin(
                 provider,
                 &request.permission_preset,
                 &request.execution_mode,
-                body.origin(),
+                origin,
                 &cfg.orchestration,
             );
             fill_request(&mut request, &permission);
@@ -260,8 +306,8 @@ pub fn preview_tiers(
             permission.sandbox = request.sandbox;
             permission.ask_for_approval = request.ask_for_approval;
             permission.risk_confirmed = request.risk_confirmed;
-            if !body.grants().allowed_tools().is_empty() {
-                permission.allowed_tools = body.grants().allowed_tools().to_vec();
+            if !allowed_tools.is_empty() {
+                permission.allowed_tools = allowed_tools.to_vec();
             }
             out.entry((*provider).into())
                 .or_default()

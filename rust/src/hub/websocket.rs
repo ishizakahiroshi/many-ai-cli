@@ -16,7 +16,35 @@ use futures_util::{
     SinkExt, StreamExt,
     stream::{FuturesUnordered, SplitSink, SplitStream},
 };
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+#[derive(Default)]
+struct RunState {
+    closing: bool,
+    active: usize,
+}
+#[derive(Default)]
+struct RunOwner {
+    state: Mutex<RunState>,
+    drained: tokio::sync::Notify,
+}
+struct RunGuard(Arc<RunOwner>);
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        let mut state = self
+            .0
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        state.active -= 1;
+        if state.active == 0 {
+            self.0.drained.notify_waiters();
+        }
+    }
+}
 
 pub const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 pub const UI_PING_INTERVAL: Duration = Duration::from_secs(30);
@@ -30,6 +58,9 @@ pub struct WebSocketService {
     shutdown: Cancellation,
     warning: Arc<Warning>,
     startups: Option<Arc<crate::application::wrapped_spawn::ProcessWrappedSpawner>>,
+    registration_hook: Option<Arc<dyn crate::application::session_workers::RegistrationHook>>,
+    runs: Arc<RunOwner>,
+    ordinary: Option<Arc<crate::application::ordinary_spawn::OrdinarySpawnService>>,
 }
 impl WebSocketService {
     pub fn new(
@@ -48,6 +79,9 @@ impl WebSocketService {
             shutdown,
             warning,
             startups: None,
+            registration_hook: None,
+            runs: Arc::default(),
+            ordinary: None,
         }
     }
     pub fn with_startup_owner(
@@ -72,8 +106,61 @@ impl WebSocketService {
         )
     }
     pub async fn run(self: Arc<Self>, socket: WebSocket, request: Request) {
+        let guard = {
+            let mut state = self
+                .runs
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            if state.closing {
+                return;
+            }
+            state.active += 1;
+            RunGuard(self.runs.clone())
+        };
         if let Err(error) = self.run_inner(socket, request).await {
             (self.warning)("websocket closed", &error);
+        }
+        drop(guard);
+    }
+    pub fn with_registration_hook(
+        mut self,
+        hook: Arc<dyn crate::application::session_workers::RegistrationHook>,
+    ) -> Self {
+        self.registration_hook = Some(hook);
+        self
+    }
+    pub fn with_ordinary_spawn_owner(
+        mut self,
+        ordinary: Arc<crate::application::ordinary_spawn::OrdinarySpawnService>,
+    ) -> Self {
+        self.ordinary = Some(ordinary);
+        self
+    }
+    /// Close admission before cancellation so delayed upgrade callbacks cannot
+    /// create a producer after the caller has drained the effect lane.
+    pub async fn shutdown_and_drain(&self) {
+        self.runs
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .closing = true;
+        self.shutdown.cancel();
+        loop {
+            let notified = self.runs.drained.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self
+                .runs
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .active
+                == 0
+            {
+                return;
+            }
+            notified.await;
         }
     }
     async fn run_inner(&self, socket: WebSocket, request: Request) -> Result<(), SessionError> {
@@ -100,6 +187,8 @@ impl WebSocketService {
         }
         let writer = Box::new(WsWriter(writer));
         if first.role == "ui" {
+            self.services
+                .note_authenticated_remote(&request, "ws", Timestamp::now());
             let binding = UiBinding {
                 connection: self.sockets.next_ui()?,
                 auth_epoch: epoch,
@@ -137,7 +226,7 @@ impl WebSocketService {
                         Timestamp::now(),
                     )
                     .await
-                    .map(|r| (r.binding, r.reattached, r.after_reattached, None))
+                    .map(|r| (r.binding, r.reattached, r.after_reattached, None, None))
             } else {
                 SessionCore::register(
                     self.core.as_ref(),
@@ -155,10 +244,11 @@ impl WebSocketService {
                         r.registered,
                         r.after_registered,
                         r.startup_receipt,
+                        Some(r.startup_metadata),
                     )
                 })
             };
-            let (binding, ack, effects, receipt) = match registration {
+            let (binding, ack, effects, receipt, metadata) = match registration {
                 Ok(registration) => registration,
                 Err(error) => {
                     if reattach && let Some(rejection) = reattach_rejection(requested, &error) {
@@ -223,6 +313,9 @@ impl WebSocketService {
                     }
                 }
                 sent?;
+                if let (Some(hook), Some(metadata)) = (&self.registration_hook, &metadata) {
+                    hook.registered(binding, metadata)?;
+                }
                 self.apply(effects).await?;
                 // The baseline starts flushPendingInput only after reattach_ack.
                 // Keep it owned by this socket lifecycle and poll the reader in
@@ -315,6 +408,7 @@ impl WebSocketService {
                             Err(error) => break Err(error),
                         }
                     };
+                    let dismissed_snapshot = if message.r#type == "session_dismiss" { self.core.details(session).map(|details| details.snapshot) } else { None };
                     let effects = match message.r#type.as_str() {
                         "pty_input" => {
                             match self.core.claim_ui_session(binding, session, None, at) {
@@ -344,7 +438,11 @@ impl WebSocketService {
                         _ => continue,
                     };
                     match effects {
-                        Ok(effects) => if let Err(error) = self.apply(effects).await { break Err(error); },
+                        Ok(effects) => {
+                            let dismissed = effects.0.iter().any(|effect| matches!(effect, CoreEffect::Notify(CoreEvent::Dismissed(id)) if *id == session));
+                            if let Err(error) = self.apply(effects).await { break Err(error); }
+                            if dismissed && let (Some(ordinary), Some(snapshot)) = (&self.ordinary, dismissed_snapshot) { ordinary.dismissed(&snapshot).await; }
+                        },
                         Err(SessionError::NotFound(_)) => {},
                         Err(SessionError::AuthenticationExpired) => break Err(SessionError::AuthenticationExpired),
                         Err(error) => (self.warning)("UI message", &error),

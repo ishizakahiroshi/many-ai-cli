@@ -1,9 +1,22 @@
+#[path = "asset_content.rs"]
+mod asset_content;
 use super::{
     auth::*,
     http::{Request, Response, content_security_policy, random_hex, require_method},
     pin::AuthService,
 };
 use crate::config::Config;
+pub trait AssetSource: Send + Sync {
+    fn static_response(&self, request: &Request) -> Response;
+    fn index_bytes(&self) -> std::io::Result<Vec<u8>>;
+}
+/// Preserve the pinned FileServer directory/range/HEAD semantics for a live
+/// source asset table assembled by the explicitly selected developer owner.
+pub fn file_table_response(request: &Request, assets: &[(&str, &[u8])]) -> Response {
+    let mut response = asset_content::file_server(request, assets);
+    response.security_headers();
+    response
+}
 pub const STATIC_PATHS: &[&str] = &[
     "/app-entry.js",
     "/app.js",
@@ -41,49 +54,14 @@ fn mime(path: &str) -> &'static str {
         "woff2" => "font/woff2",
         "woff" => "font/woff",
         "html" => "text/html; charset=utf-8",
+        "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     }
 }
 pub fn static_asset(request: &Request) -> Response {
     // Static assets intentionally do not inherit API token/Host/PIN guards.
-    if !matches!(request.method.as_str(), "GET" | "HEAD") {
-        let mut r = Response::bytes(
-            405,
-            "text/plain; charset=utf-8",
-            b"Method Not Allowed\n".to_vec(),
-        );
-        r.headers.insert("Allow".into(), "GET, HEAD".into());
-        return r;
-    }
-    if request.path.split('/').any(|s| matches!(s, "." | "..")) {
-        return Response::bytes(
-            404,
-            "text/plain; charset=utf-8",
-            b"404 page not found\n".to_vec(),
-        );
-    }
-    let Some(bytes) = crate::assets::web_asset(&request.path) else {
-        return Response::bytes(
-            404,
-            "text/plain; charset=utf-8",
-            b"404 page not found\n".to_vec(),
-        );
-    };
-    let mut response = Response::bytes(
-        200,
-        mime(&request.path),
-        if request.method == "HEAD" {
-            vec![]
-        } else {
-            bytes.to_vec()
-        },
-    );
-    response
-        .headers
-        .insert("Content-Length".into(), bytes.len().to_string());
-    response
-        .headers
-        .insert("Accept-Ranges".into(), "bytes".into());
+    let mut response = asset_content::file_server(request, crate::assets::WEB_ASSETS);
+    response.security_headers();
     response
 }
 pub fn index(
@@ -92,6 +70,16 @@ pub fn index(
     port: i64,
     auth: &AuthService,
     now: i64,
+) -> Response {
+    index_with_source(request, config, port, auth, now, None)
+}
+pub fn index_with_source(
+    request: &Request,
+    config: &Config,
+    port: i64,
+    auth: &AuthService,
+    now: i64,
+    source: Option<&dyn AssetSource>,
 ) -> Response {
     let authed = token_or_trusted(request, config);
     let wants_document = request
@@ -114,14 +102,22 @@ pub fn index(
     if !authed {
         return reauth();
     }
-    let Some(bytes) = crate::assets::web_asset("index.html") else {
+    let bytes = source.map_or_else(
+        || {
+            crate::assets::web_asset("index.html")
+                .map(<[u8]>::to_vec)
+                .ok_or_else(|| std::io::Error::other("embedded index missing"))
+        },
+        |source| source.index_bytes(),
+    );
+    let Ok(bytes) = bytes else {
         return Response::bytes(
             500,
             "text/plain; charset=utf-8",
             b"asset missing\n".to_vec(),
         );
     };
-    let mut response = Response::bytes(200, "text/html; charset=utf-8", bytes.to_vec());
+    let mut response = Response::bytes(200, "text/html; charset=utf-8", bytes);
     response
         .headers
         .insert("Cache-Control".into(), "no-store, must-revalidate".into());

@@ -368,6 +368,20 @@ pub struct SessionStart {
     pub subscription_id: String,
 }
 
+/// Source sessionMetaPatch: omitted/null fields do not replace existing values.
+#[derive(Clone, Default)]
+pub struct SessionCardMetaPatch {
+    pub label: Option<String>,
+    pub pinned: Option<bool>,
+    pub color: Option<String>,
+    pub note: Option<String>,
+}
+pub struct SessionCardMetaUpdate {
+    pub meta: SessionCardMeta,
+    /// Persist first; only after success route `notification` through broadcast_ui.
+    pub effects: CoreEffects,
+    pub notification: super::Message,
+}
 /// Source: `internal/sessionstore/store.go`, `SessionCardMeta`.
 #[derive(Clone, Default, PartialEq)]
 pub struct SessionCardMeta {
@@ -1275,6 +1289,9 @@ pub trait SessionCore:
     ) -> CoreFuture<'a, Result<Reattachment, SessionError>>;
     fn snapshot(&self, session: LiveSessionId) -> Option<SessionSnapshot>;
     fn snapshots(&self) -> Vec<SessionSnapshot>;
+    fn registered_session_ids(&self) -> Vec<LiveSessionId> {
+        self.snapshots().into_iter().map(|s| s.id).collect()
+    }
     fn details(&self, session: LiveSessionId) -> Option<SessionDetails>;
     fn active_ids(&self) -> Vec<LiveSessionId>;
     /// Release only the matching terminal startup failure. An HTTP waiter
@@ -1341,6 +1358,12 @@ pub trait SessionCore:
         reason: StopReason,
         now: Timestamp,
     ) -> Result<CoreEffects, SessionError>;
+    fn registered_session_count(&self) -> usize;
+    fn patch_card_meta(
+        &self,
+        session: LiveSessionId,
+        patch: SessionCardMetaPatch,
+    ) -> Result<SessionCardMetaUpdate, SessionError>;
     fn update_card_meta(
         &self,
         session: LiveSessionId,
@@ -1760,7 +1783,27 @@ pub enum SessionObservation {
 /// Cross-owner notifications, not a new external WebSocket protocol.
 #[derive(Clone)]
 pub enum CoreEvent {
+    RoutineCompleted {
+        binding: SessionBinding,
+        summary: super::DoneSummary,
+    },
+    HandoffNoteWritten {
+        binding: SessionBinding,
+        path: std::path::PathBuf,
+    },
+    ApprovalOpened {
+        session: LiveSessionId,
+        record: ImmutableApprovalRecord,
+    },
+    ApprovalPublished {
+        session: LiveSessionId,
+        record: ImmutableApprovalRecord,
+    },
     Registered(SessionBinding),
+    /// Source reattach restarts retained artifact polls even before new input.
+    /// Initial registration emits only Registered; this accompanies it only
+    /// in the authoritative after-reattach-ACK effect sequence.
+    Reattached(SessionBinding),
     SessionState {
         binding: SessionBinding,
         activity: super::SessionActivity,
@@ -1770,6 +1813,10 @@ pub enum CoreEvent {
         binding: SessionBinding,
         first: String,
         last: String,
+    },
+    CompletionRecord {
+        binding: SessionBinding,
+        summary: super::DoneSummary,
     },
     Completed {
         binding: SessionBinding,
@@ -1781,6 +1828,16 @@ pub enum CoreEvent {
         path: std::path::PathBuf,
         safe_offset: i64,
         grew_at: String,
+    },
+    TurnSummary {
+        binding: SessionBinding,
+        turn: i64,
+        text: String,
+    },
+    OutputObserved {
+        binding: SessionBinding,
+        clean: String,
+        at: Timestamp,
     },
     WorkflowChanged {
         binding: SessionBinding,
@@ -2324,6 +2381,25 @@ impl SpawnRegistrationMetadata {
             && !self.prompt_at_launch
     }
 }
+/// The exact policy resolved before a native launch. Credential-bearing
+/// environment values deliberately have no Debug or serialization exposure.
+pub struct ResolvedSpawnPolicy {
+    /// Full sanitized inherited snapshot. Windows policy must also refresh and
+    /// expand PATH from its authorized platform sources as Go expandPathEntries.
+    pub base_environment: Vec<String>,
+    pub route_environment: Vec<String>,
+    pub subscription_environment: Vec<String>,
+    pub effective_route: String,
+    pub current_model: String,
+    /// Final source-resolved model, including suppression for custom definitions
+    /// without model_args. Empty must not fall back to the requested model.
+    pub resolved_model: String,
+    /// Exact registry/fallback wrapper argv, already resolved once. Some Go
+    /// registry mappings are raw provider flags; never rewrite them to --effort.
+    pub effort_args: Vec<String>,
+    pub ordinary_model_args: Vec<String>,
+}
+
 #[derive(Clone)]
 pub struct WrappedSpawnSpec {
     pub registration_metadata: SpawnRegistrationMetadata,
@@ -2380,7 +2456,37 @@ pub enum SpawnWaitOutcome {
     WaiterCancelled,
     HubStopped,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WrappedStartKind {
+    Bare,
+    /// Source spawn-grid passes only provider and label; log setup is optional.
+    Grid,
+    OrdinaryAi {
+        delegation: bool,
+    },
+}
+pub struct WrappedStartRequest {
+    pub spec: WrappedSpawnSpec,
+    pub policy: ResolvedSpawnPolicy,
+    pub kind: WrappedStartKind,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SpawnStartOutcome {
+    Started { pid: u32 },
+    Failed(String),
+    WaiterCancelled,
+    HubStopped,
+}
 pub trait WrappedSessionSpawner: Send + Sync {
+    /// A native Start receipt is distinct from registration. Implementations
+    /// without native start support fail explicitly, retaining existing callers.
+    fn start_wrapped<'a>(
+        &'a self,
+        _request: WrappedStartRequest,
+        _waiter: &'a HttpWaitCancellation,
+    ) -> CoreFuture<'a, SpawnStartOutcome> {
+        Box::pin(async { SpawnStartOutcome::Failed("native wrapper Start is unavailable".into()) })
+    }
     fn spawn_and_wait<'a>(
         &'a self,
         spec: WrappedSpawnSpec,
@@ -2479,6 +2585,10 @@ pub struct AdmissionSession {
     pub provider: String,
 }
 impl AdmissionState {
+    pub fn provider_updating(&self, provider: &str) -> bool {
+        self.updates.contains_key(provider)
+    }
+
     fn next(&mut self) -> Result<u64, ProviderAdmissionError> {
         self.next_id = self
             .next_id

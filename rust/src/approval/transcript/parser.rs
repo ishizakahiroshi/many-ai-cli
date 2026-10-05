@@ -345,10 +345,20 @@ impl ParseState {
         format: ProviderFormat,
         budget: &ReadBudget,
     ) -> io::Result<Vec<AgentChatMessage>> {
+        self.read_forward_file(std::fs::File::open(path)?, format, budget)
+    }
+    /// Continue parsing from an authorized handle; preserve the existing partial
+    /// record continuation and safe offsets across bounded polls.
+    pub fn read_forward_file(
+        &mut self,
+        file: std::fs::File,
+        format: ProviderFormat,
+        budget: &ReadBudget,
+    ) -> io::Result<Vec<AgentChatMessage>> {
         self.begin_batch();
         let mut continuation = std::mem::take(&mut self.read_state);
         let offset = continuation.next_offset;
-        let result = read_range(path, offset, &mut continuation, budget, |line, _, _| {
+        let result = read_range_file(file, offset, &mut continuation, budget, |line, _, _| {
             self.parse_record(format, line);
             Ok(())
         });
@@ -365,9 +375,19 @@ impl ParseState {
         end: Option<u64>,
         budget: &ReadBudget,
     ) -> io::Result<Vec<AgentChatMessage>> {
+        self.read_tail_file(std::fs::File::open(path)?, format, end, budget)
+    }
+    /// Decode from an already authorized capability, without reopening its path.
+    pub fn read_tail_file(
+        &mut self,
+        file: std::fs::File,
+        format: ProviderFormat,
+        end: Option<u64>,
+        budget: &ReadBudget,
+    ) -> io::Result<Vec<AgentChatMessage>> {
         self.begin_batch();
         let (records, mut stats) =
-            read_tail_page(path, tail_record_limit(self.max_messages), end, budget)?;
+            read_tail_page_file(file, tail_record_limit(self.max_messages), end, budget)?;
         let mut cursor = stats.offset;
         if !stats.tail_page_ready {
             stats.hit_budget = true;
@@ -1147,5 +1167,65 @@ fn go_value_json(value: &Value) -> String {
                 .collect::<Vec<_>>()
                 .join(",")
         ),
+    }
+}
+
+#[cfg(test)]
+mod authorized_forward_tests {
+    use super::*;
+    use std::{
+        fs::File,
+        io::Write,
+        sync::Arc,
+        time::{Duration, Instant},
+    };
+    #[test]
+    fn authorized_handle_ignores_replaced_name_and_keeps_partial_record_cursor() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected.jsonl");
+        let retired = root.path().join("retired.jsonl");
+        let prefix = b"{\"type\":\"assistant\",\"message\":{\"content\":\"authorized";
+        std::fs::write(&selected, prefix).unwrap();
+        let handle = File::open(&selected).unwrap();
+        std::fs::rename(&selected, &retired).unwrap();
+        std::fs::write(&selected,b"{\"type\":\"assistant\",\"message\":{\"content\":\"replacement must not be read\"}}\n").unwrap();
+        let fixed = Instant::now();
+        let budget = ReadBudget {
+            deadline: fixed + Duration::from_secs(60),
+            clock: Arc::new(move || fixed),
+            ..ReadBudget::live()
+        };
+        let mut parser = ParseState::default();
+        assert!(
+            parser
+                .read_forward_file(handle, ProviderFormat::Claude, &budget)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(parser.read_state.next_offset, prefix.len() as u64);
+        assert_eq!(parser.read_state.safe_offset, 0);
+        assert!(parser.read_state.has_partial_record());
+        let suffix = b" original\"}}\n";
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&retired)
+            .unwrap()
+            .write_all(suffix)
+            .unwrap();
+        let page = parser
+            .read_forward_file(
+                File::open(&retired).unwrap(),
+                ProviderFormat::Claude,
+                &budget,
+            )
+            .unwrap();
+        assert_eq!(page.len(), 1);
+        assert_eq!(page[0].text, "authorized original");
+        assert_eq!(
+            parser.read_state.safe_offset,
+            (prefix.len() + suffix.len()) as u64
+        );
+        assert_eq!(parser.read_state.next_offset, parser.read_state.safe_offset);
+        assert!(!parser.read_state.has_partial_record());
     }
 }

@@ -460,3 +460,14 @@ pub fn validate_definition(
     sort_diagnostics(&mut out);
     Ok((def, out))
 }
+
+/// Fixed Go spawnValidModelLabel, shared by child and ordinary launch paths.
+/// Leading dashes are rejected separately where the value could become a flag.
+pub fn valid_spawn_model_label(value: &str) -> bool {
+    !value.chars().any(|c| {
+        let n = c as u32;
+        n < 0x20
+            || n == 0x7f
+            || [32, 34, 39, 124, 38, 62, 60, 94, 37, 40, 41, 59, 96, 36].contains(&n)
+    })
+}

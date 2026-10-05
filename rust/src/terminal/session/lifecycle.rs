@@ -1,4 +1,31 @@
 use super::*;
+impl Session {
+    /// Go finalizeWorkflowOnSessionEnd publishes the timeout frame while
+    /// deliberately consuming completion without sending a completion push.
+    fn finalize_workflow(&mut self, effects: &mut CoreEffects) {
+        let Some(progress) = self.workflow.as_mut().filter(|progress| {
+            !progress.settled
+                || progress.running != 0
+                || progress.pending != 0
+                || progress.waiting_dynamic != 0
+        }) else {
+            return;
+        };
+        progress.running = 0;
+        progress.pending = 0;
+        progress.waiting_dynamic = 0;
+        if !progress.settled {
+            progress.settled = true;
+            progress.settled_by = "timeout".into();
+        }
+        effects.0.push(CoreEffect::Broadcast(proto::Message {
+            r#type: "workflow_progress".into(),
+            session_id: self.binding.session.0,
+            workflow_progress: Some(progress.clone()),
+            ..Default::default()
+        }));
+    }
+}
 impl SessionEngine {
     pub async fn register(
         &self,
@@ -269,10 +296,14 @@ impl SessionEngine {
             transcript_offset: 0,
             approval: ApprovalState::new(binding.session, m.provider.clone()),
             marker_source: TranscriptSource::default(),
+            marker_suppression: MarkerSuppressionState::default(),
             approval_reservation: None,
             workflow: None,
             subagents: None,
+            observer_turn_started_at: started,
+            cross_message_screen_signature: String::new(),
             done: None,
+            completion: Default::default(),
             replay: ReplayBuffer::default(),
             replay_epoch: ReplayEpoch(1),
             pty_bytes_seen: 0,
@@ -286,8 +317,13 @@ impl SessionEngine {
             last_output: None,
             output_generation: 0,
             usage_probe: m.usage_probe,
+            subscription_login: m.subscription_login,
             custom_provider: self.options.custom_providers.contains(&m.provider),
             native_tail: String::new(),
+            usage: None,
+            model_revision: 0,
+            initial_model_scan_bytes: 0,
+            initial_model_scan_done: false,
             ended: None,
         })
     }
@@ -426,6 +462,7 @@ impl SessionEngine {
             }
             session.approval = old.approval;
             session.marker_source = old.marker_source;
+            session.marker_suppression = old.marker_suppression;
             session.input = old.input;
             session.input_lane = old.input_lane;
             session.awaiting_submit_enter = old.awaiting_submit_enter;
@@ -434,7 +471,10 @@ impl SessionEngine {
             session.git_root = old.git_root;
             session.workflow = old.workflow;
             session.subagents = old.subagents;
+            session.observer_turn_started_at = old.observer_turn_started_at;
+            session.cross_message_screen_signature = old.cross_message_screen_signature;
             session.done = old.done;
+            session.completion = old.completion;
             session.last_output = old.last_output;
             preserve_warm_conversation(&mut session.snapshot, &old.snapshot);
             session.snapshot.effort = old.snapshot.effort;
@@ -493,6 +533,9 @@ impl SessionEngine {
             .0
             .push(CoreEffect::Notify(CoreEvent::Registered(binding)));
         state.sessions.insert(binding.session, session);
+        effects
+            .0
+            .push(CoreEffect::Notify(CoreEvent::Reattached(binding)));
         Ok(Reattachment {
             binding,
             snapshot,
@@ -524,6 +567,7 @@ impl SessionEngine {
             }
         }
         s.ended = Some(end.clone());
+        s.finalize_workflow(&mut effects);
         effects
             .0
             .push(CoreEffect::Notify(CoreEvent::Ended { binding, end }));
@@ -548,6 +592,7 @@ impl SessionEngine {
             return Ok(CoreEffects::default());
         }
         s.connected = false;
+        s.usage = None;
         s.input.disconnected(binding.wrapper, false);
         if !s.input.ack_capable() {
             s.input.take_pending();
@@ -556,6 +601,7 @@ impl SessionEngine {
             s.snapshot.state = "disconnected".into();
         }
         let mut effects = s.approval.close(ApprovalCloseReason::SessionEnd, "", now);
+        s.finalize_workflow(&mut effects);
         s.approval_reservation = None;
         effects
             .0

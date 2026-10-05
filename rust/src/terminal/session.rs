@@ -11,7 +11,11 @@ use super::{
 };
 use crate::proto::time::Timestamp;
 use crate::{
-    approval::{marker::TranscriptSource, record::ApprovalState},
+    approval::{
+        marker::TranscriptSource,
+        record::ApprovalState,
+        suppression::{MarkerSuppressionDecision, MarkerSuppressionState},
+    },
     proto::{self, core::*},
     storage::mask_secrets,
 };
@@ -19,12 +23,14 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::Duration,
 };
 
 mod approvals;
 mod authorization;
+pub mod board_input;
+pub mod completion;
 pub mod confirmations;
 mod input;
 mod lane;
@@ -32,14 +38,18 @@ mod lifecycle;
 mod observations;
 mod spawning;
 mod ui;
+mod usage;
 
 pub const USER_TURN_MARKER: &[u8] = b"\x1b]47777;user-turn\x07";
 pub type LiveApprovalPolicy =
     Arc<dyn Fn(&str, &str, &proto::ApprovalSummary) -> bool + Send + Sync>;
 pub type EngineWarningHandler = Arc<dyn Fn(&str, &SessionError) + Send + Sync>;
+pub type DetectedModelRoute = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
 pub struct EngineOptions {
     pub hub_instance: String,
     pub token_statusbar: bool,
+    /// Live cache/config route inference; never performs network IO.
+    pub model_route: DetectedModelRoute,
     pub submit_timing: SubmitTiming,
     pub idle_after: Duration,
     pub approval_phrases: BTreeMap<String, Vec<String>>,
@@ -57,6 +67,22 @@ impl Default for EngineOptions {
         Self {
             hub_instance: String::new(),
             token_statusbar: true,
+            model_route: Arc::new(|provider, model| {
+                if model.trim().is_empty() {
+                    ""
+                } else if model.contains(":cloud") {
+                    "ollama"
+                } else if provider == "opencode" && model.trim().starts_with("nvidia/") {
+                    "nvidia-nim"
+                } else if provider == "claude" {
+                    "anthropic"
+                } else if provider == "codex" {
+                    "openai"
+                } else {
+                    ""
+                }
+                .into()
+            }),
             submit_timing: SubmitTiming::default(),
             idle_after: Duration::from_secs(3),
             approval_phrases: BTreeMap::new(),
@@ -68,7 +94,9 @@ impl Default for EngineOptions {
     }
 }
 pub struct SessionEngine {
+    ui_presence: tokio::sync::watch::Sender<UiPresence>,
     options: EngineOptions,
+    approval_phrases: RwLock<BTreeMap<String, Vec<String>>>,
     state: Mutex<State>,
     /// Serializes init/restore I/O without blocking output/input under state.
     registration: tokio::sync::Mutex<()>,
@@ -77,6 +105,12 @@ pub struct SessionEngine {
     effects: Arc<dyn CoreEffectSink>,
     spawner: Arc<dyn WrappedSessionSpawner>,
     events: CoreEventBus,
+}
+#[derive(Clone, Copy, Debug, Default)]
+pub struct UiPresence {
+    pub generation: u64,
+    pub count: usize,
+    pub disconnected_at: Option<tokio::time::Instant>,
 }
 struct PendingSpawn {
     lease: ProviderSpawnLease,
@@ -111,10 +145,14 @@ struct Session {
     transcript_offset: i64,
     approval: ApprovalState,
     marker_source: TranscriptSource,
+    marker_suppression: MarkerSuppressionState,
     approval_reservation: Option<(ApprovalReservationId, ApprovalActionBinding)>,
     workflow: Option<proto::WorkflowProgress>,
     subagents: Option<proto::SubagentTree>,
+    observer_turn_started_at: Timestamp,
+    cross_message_screen_signature: String,
     done: Option<proto::DoneSummary>,
+    completion: completion::CompletionState,
     replay: ReplayBuffer,
     replay_epoch: ReplayEpoch,
     pty_bytes_seen: i64,
@@ -128,9 +166,22 @@ struct Session {
     last_output: Option<Timestamp>,
     output_generation: u64,
     usage_probe: bool,
+    subscription_login: bool,
     custom_provider: bool,
     native_tail: String,
+    usage: Option<proto::Message>,
+    model_revision: u64,
+    initial_model_scan_bytes: usize,
+    initial_model_scan_done: bool,
     ended: Option<SessionEnd>,
+}
+pub struct SessionObservationSnapshot {
+    pub details: SessionDetails,
+    pub tail: Vec<String>,
+    pub output_generation: u64,
+    pub confirmed_turn: u64,
+    pub turn_started_at: Timestamp,
+    pub resize_debounce: Option<Timestamp>,
 }
 struct UiState {
     binding: UiBinding,
@@ -190,7 +241,9 @@ impl SessionEngine {
         events: CoreEventBus,
     ) -> Self {
         Self {
+            approval_phrases: RwLock::new(options.approval_phrases.clone()),
             options,
+            ui_presence: tokio::sync::watch::channel(UiPresence::default()).0,
             state: Mutex::new(State {
                 next_id: 0,
                 next_incarnation: 0,
@@ -220,11 +273,48 @@ impl SessionEngine {
     pub fn journal(&self) -> &Arc<SessionJournal> {
         &self.journal
     }
+    pub fn set_approval_phrases(&self, set: BTreeMap<String, Vec<String>>) {
+        *self
+            .approval_phrases
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = set;
+    }
+    fn approval_phrases_for(&self, provider: &str) -> Vec<String> {
+        let set = self
+            .approval_phrases
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let mut phrases = set.get(provider).cloned().unwrap_or_default();
+        if provider != "common" {
+            phrases.extend(set.get("common").into_iter().flatten().cloned());
+        }
+        phrases
+    }
     pub fn snapshot(&self, id: LiveSessionId) -> Option<SessionSnapshot> {
         lock(&self.state)
             .sessions
             .get(&id)
             .map(|s| s.snapshot.clone())
+    }
+    pub fn registered_session_count(&self) -> usize {
+        lock(&self.state).sessions.len()
+    }
+    pub fn registered_session_ids(&self) -> Vec<LiveSessionId> {
+        lock(&self.state).sessions.keys().copied().collect()
+    }
+    /// Usage hook reference counts include hidden probes, like Go's registry.
+    pub fn usage_hook_sessions(&self) -> Vec<SessionSnapshot> {
+        lock(&self.state)
+            .sessions
+            .values()
+            .filter(|s| {
+                !matches!(
+                    s.snapshot.state.as_str(),
+                    "completed" | "error" | "disconnected"
+                )
+            })
+            .map(|s| s.snapshot.clone())
+            .collect()
     }
     pub fn snapshots(&self) -> Vec<SessionSnapshot> {
         lock(&self.state)
@@ -235,19 +325,55 @@ impl SessionEngine {
             .collect()
     }
     pub fn details(&self, id: LiveSessionId) -> Option<SessionDetails> {
-        lock(&self.state).sessions.get(&id).map(|s| SessionDetails {
-            binding: s.binding,
-            last_output_at: s.last_output,
-            snapshot: s.snapshot.clone(),
-            db_id: s.db_id,
-            git_root: s.git_root.clone(),
-            transcript: s.transcript.clone(),
-            approval: s.approval.snapshot(),
-            workflow: s.workflow.clone(),
-            subagents: s.subagents.clone(),
-            done: s.done.clone(),
-            connected: s.connected,
+        lock(&self.state).sessions.get(&id).map(Session::details)
+    }
+    /// Atomic worker view. File/adapter callbacks must run after this returns.
+    pub fn session_observation_snapshot(
+        &self,
+        binding: SessionBinding,
+    ) -> Result<SessionObservationSnapshot, SessionError> {
+        let mut state = lock(&self.state);
+        let s = state.session(binding)?;
+        if !s.connected {
+            return Err(SessionError::StaleBinding);
+        }
+        Ok(SessionObservationSnapshot {
+            details: s.details(),
+            tail: s.vt.tail_lines_with_scrollback(200),
+            output_generation: s.output_generation,
+            confirmed_turn: s.completion.confirmed_turn,
+            turn_started_at: s.observer_turn_started_at,
+            resize_debounce: s.resize_debounce,
         })
+    }
+    /// One-lock observation for initial delivery. This is read-only and carries
+    /// no stronger approval guarantee than the fixed Go input path.
+    pub fn initial_prompt_observation(
+        &self,
+        binding: SessionBinding,
+    ) -> Result<(SessionDetails, Vec<String>), SessionError> {
+        let state = lock(&self.state);
+        let session = state
+            .sessions
+            .get(&binding.session)
+            .ok_or(SessionError::NotFound(binding.session))?;
+        if session.binding != binding || !session.connected {
+            return Err(SessionError::StaleBinding);
+        }
+        Ok((session.details(), session.vt.lines()))
+    }
+    /// Cleanup belongs to a session incarnation, not a retired socket. Warm
+    /// reattach may release the same gate; an ID reused for a new session may not.
+    pub fn clear_initial_gate_scoped(&self, binding: SessionBinding) -> bool {
+        let mut state = lock(&self.state);
+        let Some(session) = state.sessions.get_mut(&binding.session) else {
+            return false;
+        };
+        if session.binding.incarnation != binding.incarnation {
+            return false;
+        }
+        session.input.clear_initial_gate();
+        true
     }
     pub fn active_ids(&self) -> Vec<LiveSessionId> {
         lock(&self.state)
@@ -387,6 +513,21 @@ impl State {
     }
 }
 impl Session {
+    fn details(&self) -> SessionDetails {
+        SessionDetails {
+            binding: self.binding,
+            last_output_at: self.last_output,
+            snapshot: self.snapshot.clone(),
+            db_id: self.db_id,
+            git_root: self.git_root.clone(),
+            transcript: self.transcript.clone(),
+            approval: self.approval.snapshot(),
+            workflow: self.workflow.clone(),
+            subagents: self.subagents.clone(),
+            done: self.done.clone(),
+            connected: self.connected,
+        }
+    }
     fn card_meta(&self) -> SessionCardMeta {
         SessionCardMeta {
             label: self.snapshot.label.clone(),
@@ -538,6 +679,9 @@ impl SessionCore for SessionEngine {
     fn snapshots(&self) -> Vec<SessionSnapshot> {
         SessionEngine::snapshots(self)
     }
+    fn registered_session_ids(&self) -> Vec<LiveSessionId> {
+        SessionEngine::registered_session_ids(self)
+    }
     fn details(&self, id: LiveSessionId) -> Option<SessionDetails> {
         SessionEngine::details(self, id)
     }
@@ -627,6 +771,16 @@ impl SessionCore for SessionEngine {
         now: Timestamp,
     ) -> Result<CoreEffects, SessionError> {
         SessionEngine::stop(self, id, reason, now)
+    }
+    fn registered_session_count(&self) -> usize {
+        SessionEngine::registered_session_count(self)
+    }
+    fn patch_card_meta(
+        &self,
+        id: LiveSessionId,
+        patch: SessionCardMetaPatch,
+    ) -> Result<SessionCardMetaUpdate, SessionError> {
+        SessionEngine::patch_card_meta(self, id, patch)
     }
     fn update_card_meta(
         &self,

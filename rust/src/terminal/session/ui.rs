@@ -1,5 +1,44 @@
 use super::*;
 impl SessionEngine {
+    pub fn subscribe_ui_presence(&self) -> tokio::sync::watch::Receiver<super::UiPresence> {
+        self.ui_presence.subscribe()
+    }
+    /// A timer's generation and current UI membership are checked under the
+    /// same lock as attach/detach. A stale timer cannot select new wrappers.
+    pub fn expire_ui_idle(&self, generation: u64) -> CoreEffects {
+        let state = lock(&self.state);
+        let mut presence = *self.ui_presence.borrow();
+        if !state.uis.is_empty()
+            || presence.generation != generation
+            || presence.disconnected_at.is_none()
+        {
+            return CoreEffects::default();
+        }
+        presence.disconnected_at = None;
+        self.ui_presence.send_replace(presence);
+        CoreEffects(
+            state
+                .sessions
+                .values()
+                .filter(|session| session.connected)
+                .map(|session| CoreEffect::CancelSession {
+                    binding: session.binding,
+                    reason: StopReason::IdleTimeout,
+                })
+                .collect(),
+        )
+    }
+    fn publish_ui_presence(&self, count: usize) {
+        self.ui_presence.send_modify(|presence| {
+            presence.generation = presence.generation.wrapping_add(1);
+            presence.count = count;
+            presence.disconnected_at = (count == 0).then(tokio::time::Instant::now);
+        });
+    }
+    pub fn restart_ui_idle_timer(&self) {
+        let state = lock(&self.state);
+        self.publish_ui_presence(state.uis.len());
+    }
     pub fn broadcast_ui(&self, message: proto::Message) -> CoreEffects {
         lock(&self.state).route(CoreEffects(vec![CoreEffect::Broadcast(message)]))
     }
@@ -50,6 +89,7 @@ impl SessionEngine {
                 work: Arc::new(authorization::UiWorkState::default()),
             },
         );
+        self.publish_ui_presence(state.uis.len());
         let mut frames = Vec::new();
         let mut sessions = Vec::new();
         for s in state.sessions.values_mut().filter(|s| !s.usage_probe) {
@@ -150,6 +190,7 @@ impl SessionEngine {
             return CoreEffects::default();
         }
         let retired = state.uis.remove(&ui.connection).expect("validated UI");
+        self.publish_ui_presence(state.uis.len());
         state
             .retired_uis
             .insert((ui.connection, ui.auth_epoch), retired.work);
@@ -164,6 +205,9 @@ impl SessionEngine {
         let mut state = lock(&self.state);
         state.auth_epoch.0 = state.auth_epoch.0.wrapping_add(1);
         let uis = std::mem::take(&mut state.uis);
+        if !uis.is_empty() {
+            self.publish_ui_presence(0);
+        }
         for s in state.sessions.values_mut() {
             s.controlling_ui = None;
         }

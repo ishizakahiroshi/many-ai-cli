@@ -237,6 +237,36 @@ fn json_response(response: &Response) -> serde_json::Value {
     serde_json::from_slice(&response.body).unwrap()
 }
 #[test]
+fn approval_pattern_item_guards_auth_host_and_origin_before_endpoint_methods() {
+    let (_root, router) = router();
+    for path in [
+        "/api/approval-patterns/profile",
+        "/api/approval-patterns/copy-official",
+        "/api/approval-patterns/claude",
+    ] {
+        let mut r = request();
+        r.path = path.into();
+        r.method = "DELETE".into();
+        r.query.clear();
+        r.host = "evil.invalid".into();
+        assert_eq!(router.preflight(&r, 1000).unwrap_err().status, 401);
+        r.query = "token=synthetic".into();
+        let denied = router.preflight(&r, 1000).unwrap_err();
+        assert_eq!(denied.status, 403);
+        assert!(
+            String::from_utf8(denied.body)
+                .unwrap()
+                .contains("host not allowed")
+        );
+        r.host = "127.0.0.1:48888".into();
+        r.headers
+            .push(("Origin".into(), "https://evil.invalid".into()));
+        assert_eq!(router.preflight(&r, 1000).unwrap_err().status, 403);
+        r.headers.clear();
+        assert!(router.preflight(&r, 1000).is_ok());
+    }
+}
+#[test]
 fn service_settings_first_value_case_fold_null_unknown_and_reload() {
     let (_dir, router) = router();
     let mut r = request();

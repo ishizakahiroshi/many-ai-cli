@@ -1,7 +1,7 @@
 //! Go-compatible timestamp helpers. Storage/approval use local RFC3339 seconds;
 //! JSON time values use RFC3339Nano. Callers must select precision explicitly.
 use chrono::{DateTime, Datelike, FixedOffset, Local, NaiveDate, Offset, Timelike, Utc};
-use std::{fmt, sync::OnceLock};
+use std::{fmt, sync::OnceLock, time::Duration};
 mod clock;
 pub use clock::{EarlierTimestamp, Timestamp, UNIX_EPOCH};
 
@@ -68,6 +68,48 @@ pub fn format_with_offset(
         let minutes = offset_seconds.unsigned_abs() / 60;
         out.push(if offset_seconds / 60 < 0 { '-' } else { '+' });
         out.push_str(&format!("{:02}:{:02}", minutes / 60, minutes % 60));
+    }
+    Ok(out)
+}
+/// Match Go's time.Format RFC3339 layouts, including signed/extended years and
+/// FixedZone offsets outside RFC3339's parsing range. This is a display layout,
+/// not the stricter RFC3339 serialization boundary used by format_with_offset.
+pub fn format_go_rfc3339_layout(
+    time: Timestamp,
+    offset_seconds: i32,
+    nano: bool,
+) -> Result<String, TimestampError> {
+    let offset = Duration::from_secs(u64::from(offset_seconds.unsigned_abs()));
+    let local = if offset_seconds < 0 {
+        time.checked_sub(offset)
+    } else {
+        time.checked_add(offset)
+    }
+    .ok_or(TimestampError)?;
+    let date = utc(local)?;
+    let year = date.year();
+    let mut out = format!(
+        "{}{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+        if year < 0 { "-" } else { "" },
+        year.unsigned_abs(),
+        date.month(),
+        date.day(),
+        date.hour(),
+        date.minute(),
+        date.second()
+    );
+    if nano && date.nanosecond() != 0 {
+        out.push('.');
+        out.push_str(format!("{:09}", date.nanosecond()).trim_end_matches('0'));
+    }
+    if offset_seconds == 0 {
+        out.push('Z');
+    } else {
+        // Go determines the sign after truncation to minutes, even for -30s.
+        let minutes = offset_seconds / 60;
+        let magnitude = minutes.unsigned_abs();
+        out.push(if minutes < 0 { '-' } else { '+' });
+        out.push_str(&format!("{:02}:{:02}", magnitude / 60, magnitude % 60));
     }
     Ok(out)
 }

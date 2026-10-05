@@ -182,6 +182,32 @@ mod platform {
             }
             Ok(f)
         }
+        /// Match write-only O_CREAT without truncating before inode validation.
+        /// Existing permissions remain unchanged; all first creators share one
+        /// directory-relative inode even when their opens overlap.
+        pub fn open_write_or_create(&self, name: &str, mode: u32) -> io::Result<File> {
+            let name = c(name)?;
+            // SAFETY: one validated component beneath the pinned directory.
+            let file = fd_file(unsafe {
+                libc::openat(
+                    self.file.as_raw_fd(),
+                    name.as_ptr(),
+                    libc::O_WRONLY
+                        | libc::O_CREAT
+                        | libc::O_NOFOLLOW
+                        | libc::O_CLOEXEC
+                        | libc::O_NONBLOCK,
+                    mode,
+                )
+            })?;
+            if !file.metadata()?.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a regular file",
+                ));
+            }
+            Ok(file)
+        }
         /// Open a private log for kernel-atomic append. The handle stays bound
         /// to this directory inode across rename; no seek-then-write window exists.
         pub fn open_append(&self, name: &str) -> io::Result<File> {
@@ -633,6 +659,41 @@ mod platform {
                 return Err(io::Error::other("not a plain file"));
             }
             Ok(f)
+        }
+        pub fn open_write_or_create(&self, name: &str, _mode: u32) -> io::Result<File> {
+            use windows_sys::Win32::Storage::FileSystem::{FILE_READ_ATTRIBUTES, OPEN_ALWAYS};
+            basename(name)?;
+            let security = crate::config::private_io::PrivateSecurity::for_current_user(false)?;
+            let attributes = security.attributes();
+            let path = wide(&self.path.join(name))?;
+            // SAFETY: held ancestors cannot be replaced; OPEN_ALWAYS admits
+            // concurrent first writers. No read-data, truncate or delete access.
+            // The ACL applies only on creation; existing file permissions stay.
+            let handle = unsafe {
+                CreateFileW(
+                    path.as_ptr(),
+                    FILE_GENERIC_WRITE | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &attributes,
+                    OPEN_ALWAYS,
+                    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                    std::ptr::null_mut(),
+                )
+            };
+            if handle == INVALID_HANDLE_VALUE {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: this successful call returns one newly owned handle.
+            let file = unsafe { File::from_raw_handle(handle) };
+            let metadata = file.metadata()?;
+            if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "not a plain file",
+                ));
+            }
+            Ok(file)
         }
         /// Append-only access keeps concurrent writers at EOF in the kernel.
         /// Every ancestor is held without delete sharing by this Dir.

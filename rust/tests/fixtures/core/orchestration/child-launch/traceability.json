@@ -1,0 +1,89 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "scope": "K10 bounded child preparation and ConfirmationExecutor; not whole orchestration acceptance",
+  "sources": [
+    "internal/hub/orchestration.go:1122-1280",
+    "internal/hub/orchestration.go:1348-1437",
+    "internal/hub/orchestration.go:1879-1896",
+    "internal/hub/orchestration.go:4071-4183",
+    "internal/hub/orchestration.go:4232-4303",
+    "internal/hub/worktree_identity.go",
+    "internal/hub/spawn_handler.go:1702-1777"
+  ],
+  "rust": [
+    "rust/src/orchestration/child_launch.rs",
+    "rust/src/orchestration/child_launch/board.rs",
+    "rust/src/orchestration/child_launch/prompt.rs",
+    "rust/src/orchestration/child_launch/worktree.rs"
+  ],
+  "tests": "rust/src/orchestration/child_launch/tests.rs",
+  "verified": [
+    {
+      "command": "GOTOOLCHAIN=local GOCACHE=<isolated cache> <pinned Go1.26.8>/bin/go run rust/tests/fixtures/core/orchestration/child-launch/oracle.go",
+      "exit": 0,
+      "result": "generated prompt-go-21d0bc7.json; repeated output compared byte-for-byte with cmp"
+    },
+    {
+      "command": "<pinned Rust1.90>/bin/rustfmt --edition 2024 --check child_launch.rs and all owned subfiles",
+      "exit": 0
+    },
+    {
+      "command": "cargo clippy --offline --locked --manifest-path rust/Cargo.toml --lib --tests -- -D warnings",
+      "exit": 0
+    }
+  ],
+  "cargo_tests": {
+    "command": "cargo test --offline --locked --manifest-path rust/Cargo.toml --lib orchestration::child_launch -- --nocapture",
+    "exit": 0,
+    "passed": 14,
+    "failed": 0,
+    "ignored": 0,
+    "filtered_out": 389
+  },
+  "required_caller_services": [
+    "production ChildLaunchServices composition: exact native launch-arg usability",
+    "existing orchestration role map subscription lookup",
+    "core effect sink application",
+    "board conductor/child/restart tracking in existing owner",
+    "owned once-only initial prompt delivery after registered ACK",
+    "board events including gone-waiter and limit delivery",
+    "confirmation change diagnostics and source limit notifications"
+  ],
+  "not_claimed": [
+    "whole Hub production wiring",
+    "HTTP route composition",
+    "real provider or credential operations",
+    "existing user worktree behavior",
+    "Windows and macOS native execution",
+    "initial-prompt echo/submit state machine",
+    "relay/restart timers or board scanning",
+    "independent review"
+  ],
+  "semantics": [
+    "Board append uses normal append files and preserves ordinary hardlinks",
+    "Go lexical cwd behavior retained; no added confinement or VFS boundary",
+    "SessionEngine remains sole session/admission registry",
+    "real synthetic Git worktrees only in tests",
+    "external Go implementation not invoked by Rust production code"
+  ],
+  "verified_at_utc": "2026-10-03T14:36:21Z",
+  "execution_environment": {
+    "rust": "1.90.0",
+    "go": "1.26.8",
+    "cargo_target": "isolated runtime-target",
+    "jobs": 2,
+    "incremental": 0,
+    "dev_debug": 0,
+    "test_debug": 0,
+    "network": "offline locked Cargo; native Git operations limited to synthetic temporary repositories"
+  },
+  "initial_test_failure": {
+    "passed": 13,
+    "failed": 1,
+    "exit": 101,
+    "cause": "Test incorrectly requested Codex headless, which fixed-Go intentionally rejects. Fixture corrected to Codex interactive and Claude headless without changing capability behavior."
+  },
+  "compatibility_caveats": [
+    "Managed process captures stdout/stderr separately; failed git worktree add note joins stdout then stderr rather than retaining arbitrary cross-stream interleaving from Go CombinedOutput. Native Git success/create/reuse and checked-out-branch error paths are tested; exact mixed-stream failing-command diagnostics remain an integration detail."
+  ]
+}

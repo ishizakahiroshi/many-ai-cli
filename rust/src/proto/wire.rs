@@ -96,6 +96,13 @@ fn merge(
     extra: &'static [Schema],
 ) -> Result<Decoded, serde_json::Error> {
     let source = raw.get();
+    // RawMessage copies this occurrence's JSON bytes rather than decoding its
+    // contents. The internal DTO projection is a string containing those bytes;
+    // a later typed decoder must still see duplicate keys and invalid earlier
+    // occurrences. JSON null is the four raw bytes "null", not a nil pointer.
+    if kind == "json.RawMessage" {
+        return Ok(Decoded::Leaf(Value::String(source.into())));
+    }
     if let Some(inner) = kind.strip_prefix('*') {
         if source == "null" {
             return Ok(Decoded::Leaf(Value::Null));
@@ -327,11 +334,25 @@ pub fn decode<T: GoWire>(bytes: &[u8]) -> Result<T, serde_json::Error> {
 /// ignoring subsequent values or trailing data. HTTP callers enforce their
 /// route-specific body limit before calling; WS callers instead use `decode`.
 pub fn decode_http_json<T: GoWire>(bytes: &[u8]) -> Result<T, serde_json::Error> {
+    decode_http_schema(bytes, T::GO_TYPE, T::SCHEMAS)
+}
+
+/// Shared first-value syntax boundary for HTTP structs with service schemas.
+pub fn first_http_raw(bytes: &[u8]) -> Result<Box<RawValue>, serde_json::Error> {
     let bytes = go_unicode(bytes);
     let mut deserializer = serde_json::Deserializer::from_slice(&bytes);
     let raw = Box::<RawValue>::deserialize(&mut deserializer)?;
     check_depth(raw.get().as_bytes())?;
-    serde_json::from_value(merge(T::GO_TYPE, None, &raw, T::SCHEMAS)?.finish())
+    Ok(raw)
+}
+
+pub fn decode_http_schema<T: DeserializeOwned>(
+    bytes: &[u8],
+    kind: &str,
+    schemas: &'static [Schema],
+) -> Result<T, serde_json::Error> {
+    let raw = first_http_raw(bytes)?;
+    serde_json::from_value(merge(kind, None, &raw, schemas)?.finish())
 }
 
 /// First-value map/interface boundary (not a struct decoder): exact object keys,
@@ -458,6 +479,16 @@ pub fn decode_go_json_members(bytes: &[u8]) -> Result<Option<GoJsonMembers>, ser
     }
 }
 
+/// Ordered members of the first Go HTTP JSON value, after Go Unicode repair.
+/// Callers that deliberately ignore field type errors can retain earlier values.
+pub fn decode_http_go_members(bytes: &[u8]) -> Result<Option<GoJsonMembers>, serde_json::Error> {
+    let normalized = go_unicode(bytes);
+    check_depth(&normalized)?;
+    let mut decoder = serde_json::Deserializer::from_slice(&normalized);
+    let first = Box::<RawValue>::deserialize(&mut decoder)?;
+    decode_go_json_members(first.get().as_bytes())
+}
+
 /// Last-exact-key-wins projection matching Go map[string]json.RawMessage.
 pub fn decode_go_json_object(
     bytes: &[u8],
@@ -541,4 +572,83 @@ impl GoWire for u8 {
 }
 impl GoWire for f64 {
     const GO_TYPE: &'static str = "float64";
+}
+#[cfg(test)]
+mod raw_message_tests {
+    use super::*;
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default)]
+    struct Envelope {
+        raw: Option<String>,
+    }
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default)]
+    struct Payload {
+        count: i64,
+    }
+    const SCHEMAS: &[Schema] = &[
+        Schema {
+            name: "RawProjectionEnvelope",
+            fields: &[Field {
+                name: "raw",
+                kind: "json.RawMessage",
+            }],
+        },
+        Schema {
+            name: "RawProjectionPayload",
+            fields: &[Field {
+                name: "count",
+                kind: "int64",
+            }],
+        },
+    ];
+    impl GoWire for Envelope {
+        const GO_TYPE: &'static str = "RawProjectionEnvelope";
+        const SCHEMAS: &'static [Schema] = SCHEMAS;
+    }
+    impl GoWire for Payload {
+        const GO_TYPE: &'static str = "RawProjectionPayload";
+        const SCHEMAS: &'static [Schema] = SCHEMAS;
+    }
+    #[test]
+    fn raw_projection_preserves_duplicates_for_later_destination_validation() {
+        let envelope =
+            decode::<Envelope>(br#"{"raw":{"count":"invalid","count":2,"ignored":1e1000}}"#)
+                .unwrap();
+        let raw = envelope.raw.unwrap();
+        assert_eq!(raw, r#"{"count":"invalid","count":2,"ignored":1e1000}"#);
+        assert!(decode::<Payload>(raw.as_bytes()).is_err());
+        let valid = decode::<Envelope>(br#"{"raw":{"count":1,"count":2}}"#).unwrap();
+        assert_eq!(
+            decode::<Payload>(valid.raw.unwrap().as_bytes())
+                .unwrap()
+                .count,
+            2
+        );
+    }
+    #[test]
+    fn raw_null_is_copied_and_a_later_occurrence_replaces_the_whole_raw_value() {
+        assert_eq!(
+            decode::<Envelope>(br#"{"raw":null}"#)
+                .unwrap()
+                .raw
+                .as_deref(),
+            Some("null")
+        );
+        assert!(decode::<Envelope>(b"{}").unwrap().raw.is_none());
+        assert_eq!(
+            decode::<Envelope>(br#"{"raw":{"count":1},"raw":null}"#)
+                .unwrap()
+                .raw
+                .as_deref(),
+            Some("null")
+        );
+        assert_eq!(
+            decode::<Envelope>(br#"{"raw":null,"raw":{"count":2}}"#)
+                .unwrap()
+                .raw
+                .as_deref(),
+            Some(r#"{"count":2}"#)
+        );
+    }
 }

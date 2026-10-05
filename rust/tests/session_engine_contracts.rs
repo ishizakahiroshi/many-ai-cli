@@ -3,6 +3,8 @@
 use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 #[path = "session_engine/approval_actions.rs"]
 mod approval_actions;
+#[path = "session_engine/marker_suppression.rs"]
+mod marker_suppression;
 #[path = "session_engine/startup_registration.rs"]
 mod startup_registration;
 use many_ai_cli::{
@@ -131,6 +133,12 @@ fn fixture() -> Fixture {
     fixture_with_spawner(Arc::new(NoSpawn))
 }
 fn fixture_with_spawner(spawner: Arc<dyn WrappedSessionSpawner>) -> Fixture {
+    fixture_with_warning(spawner, Arc::new(|_, _| {}))
+}
+fn fixture_with_warning(
+    spawner: Arc<dyn WrappedSessionSpawner>,
+    warning: many_ai_cli::terminal::session::EngineWarningHandler,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(root.path(), 49121, installed.path()).unwrap();
@@ -167,7 +175,7 @@ fn fixture_with_spawner(spawner: Arc<dyn WrappedSessionSpawner>) -> Fixture {
             poll: Duration::from_millis(1),
             confirm_window: Duration::from_millis(2),
         },
-        warning: Arc::new(|_, _| {}),
+        warning,
         ..Default::default()
     };
     let engine = Arc::new(SessionEngine::new(
@@ -226,6 +234,44 @@ fn ui(f: &Fixture, n: u64) -> UiBinding {
     f.engine.attach_ui(b, None, None).unwrap();
     assert!(f.engine.finish_ui_priming(b).unwrap().0.is_empty());
     b
+}
+#[tokio::test(start_paused = true)]
+async fn ui_idle_timer_generation_rejects_reconnect_and_only_claims_current_last_disconnect() {
+    let fixture = fixture();
+    let registration = register(&fixture).await;
+    let presence = fixture.engine.subscribe_ui_presence();
+    assert!(presence.borrow().disconnected_at.is_none());
+    let first = ui(&fixture, 700);
+    assert_eq!(presence.borrow().count, 1);
+    let second = ui(&fixture, 701);
+    fixture.engine.detach_ui(first);
+    assert_eq!(presence.borrow().count, 1);
+    assert!(presence.borrow().disconnected_at.is_none());
+    fixture.engine.detach_ui(second);
+    let stale_generation = presence.borrow().generation;
+    assert_eq!(
+        presence.borrow().disconnected_at,
+        Some(tokio::time::Instant::now())
+    );
+    tokio::time::advance(Duration::from_secs(60)).await;
+    let new_ui = ui(&fixture, 702);
+    assert!(fixture.engine.expire_ui_idle(stale_generation).0.is_empty());
+    fixture.engine.detach_ui(new_ui);
+    let current_generation = presence.borrow().generation;
+    let effects = fixture.engine.expire_ui_idle(current_generation);
+    assert!(
+        matches!(effects.0.as_slice(),[CoreEffect::CancelSession{binding,reason:StopReason::IdleTimeout}] if *binding == registration.binding)
+    );
+    assert!(
+        fixture
+            .engine
+            .expire_ui_idle(current_generation)
+            .0
+            .is_empty()
+    );
+    fixture.engine.restart_ui_idle_timer();
+    assert!(presence.borrow().disconnected_at.is_some());
+    assert_ne!(presence.borrow().generation, current_generation);
 }
 async fn reattach(
     f: &Fixture,
@@ -1396,3 +1442,5 @@ async fn details_exposes_exact_output_clock_without_rounding_for_routines() {
         Some(precise)
     );
 }
+#[path = "session_engine/native_start.rs"]
+mod native_start;

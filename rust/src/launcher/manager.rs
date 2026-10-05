@@ -110,24 +110,9 @@ impl ConnectionManager {
         profiles: Option<Vec<Profile>>,
     ) -> Result<(), LauncherError> {
         let store = self.store.clone();
-        tokio::task::spawn_blocking(move || store.replace_profiles(profiles))
+        tokio::task::spawn_blocking(move || store.replace_profiles_staged(profiles))
             .await
             .map_err(|_| LauncherError::new(500, "save_failed", "profile save interrupted"))?
-            .map_err(|e| {
-                LauncherError::new(
-                    if e.kind() == std::io::ErrorKind::InvalidInput {
-                        400
-                    } else {
-                        500
-                    },
-                    if e.kind() == std::io::ErrorKind::InvalidInput {
-                        "invalid_profile"
-                    } else {
-                        "save_failed"
-                    },
-                    e.to_string(),
-                )
-            })
     }
     /// The caller decides whether to trim `name`: launcher UI does not; Hub does.
     pub async fn connect(self: &Arc<Self>, name: &str) -> Result<(), LauncherError> {

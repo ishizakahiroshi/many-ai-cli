@@ -49,7 +49,7 @@ impl SessionEngine {
         }
         Ok(())
     }
-    async fn write_frame(
+    pub(super) async fn write_frame(
         &self,
         binding: SessionBinding,
         bytes: Vec<u8>,
@@ -314,10 +314,18 @@ impl SessionEngine {
         let raw = proto::wire::go_utf8_lossy(&request.bytes);
         if let Some(text) = confirmed_turn_text(&raw) {
             if matches!(request.authority, InputAuthority::Ui(_)) {
+                s.completion.discard_text_question();
                 if text == "/clear" {
                     s.snapshot.first_message.clear();
                     s.snapshot.last_message.clear();
                 } else {
+                    s.completion.user_turn();
+                    if s.subagents
+                        .as_ref()
+                        .is_none_or(|tree| !tree.nodes.iter().any(|n| n.state == "running"))
+                    {
+                        s.observer_turn_started_at = now;
+                    }
                     let latest = marker::extract_vt(&s.vt).map(|m| {
                         identity::marker_candidate(
                             &s.snapshot.provider,
