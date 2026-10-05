@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 03:34:11 UTC
+> 最終更新: 2026-10-05(月) 03:51:57 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -133,3 +133,12 @@ The earlier inherited history degradation, advisory shutdown, bootstrap HOME, pr
 - [V06 current-lock report](dependency-review/REVIEW.md) and [sanitized secret receipt](SECRET-SCAN-RECEIPT.json) remain bounded evidence. Historical fingerprint approval is still pending; `.gitleaksignore` and scanner configuration are unchanged. The cancelled upstream metadata poll was not retried.
 
 Next: normally fast-forward this reviewable partial checkpoint, run its exact head on all four native targets, collect both binary/build-input identities, and finish final-SHA independent review. V01/V02 supported Windows lifecycle, V07 target/provider/device/remote and V08 installed-data/rollback/cutover acceptance remain assigned pending. No merge/tag/release, package publication or running-Go replacement is authorized.
+
+
+## 2026-10-05 local checkpoint and narrowly approved scan exceptions
+
+Local checkpoint `39216624274e9885057e5fc8892de0a3489f5dca`, tree `8ef59f5f4d2f85dc47bc9eadd1d8c5d11b4068c8`, preserves85 changed files. GitHub tree creation returned a cancellation result; exact remote tree read returned404 and PR#11 remained `15db189db643143191e8b8063165fc6f2f5d2b14`. No commit/ref publication succeeded. Publication is paused pending a specifically coordinated retry; local verification continues independently.
+
+The checkpoint's fresh all-target build exited101 before tests: a new regression used `after_registered` on `Reattachment`, whose actual field is `after_reattached`. Independent exact-SHA review identified the same compile blocker. This follow-up corrects that test field. The reviewer found the reported lifecycle/metadata-boundary repairs addressed in source; executed tests and native acceptance remain separate. The full suite is being rerun after the correction.
+
+The owner explicitly approved only these three fixed historical fingerprints for `.gitleaksignore`: the two generated source SHA256 inventory values at original7b937e0 lines8996/9026 and the original synthetic DNS-test address at line218. They are appended with individual reasons; all existing exclusions are preserved. No path-wide, regex or rule exclusion and no scanner/workflow weakening is included. The exact diff is the accompanying `.gitleaksignore` change. Its publication SHA and new exact-head PR-range/latest-push results remain pending. The original all-history38-hit receipt remains historical evidence; the other35 findings have not been accepted. No blanket historical acceptance is implied.

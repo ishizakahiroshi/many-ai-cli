@@ -1745,7 +1745,7 @@ async fn resume_rejects_old_launch_identity_even_without_restored_relay_metadata
         )
         .await
         .unwrap();
-    drop(old.after_registered);
+    drop(old.after_reattached);
     assert!(
         f.core
             .details(old.binding.session)

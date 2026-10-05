@@ -13,3 +13,10 @@
 # Exact synthetic Go redaction oracle: invalid bytes abc + FF, no key material.
 # Future delimiter construction preserves the same observed input bytes.
 a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_oracle.go:private-key-block:28
+
+# Exact recovery inventory value: independently recomputed SHA256 of token.rs, not a credential.
+7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/inventory/recovery-current-20261005.json:generic-api-key:8996
+# Exact recovery inventory value: independently recomputed SHA256 of auth.rs, not a credential.
+7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/inventory/recovery-current-20261005.json:generic-api-key:9026
+# Exact synthetic DNS-classification example; replaced by RFC5737 documentation address in 7c2d7d3.
+7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/src/application/nvidia_nim/native.rs:public-ipv4-literal:218
