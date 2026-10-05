@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 04:15:26 UTC
+> 最終更新: 2026-10-05(月) 04:23:50 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -153,3 +153,16 @@ Local successor `fbc0cb379079933951eb8b57a5bd7628e6c90242` preserved the first t
 An independent validation checkout of **fbc0cb3 plus that exact patch**, rather than unmodified fbc0cb3, completed Linux locked/offline all-targets: **1326 passed,0 failed,0 ignored**,32 summaries including all51 session-engine tests. Formatting, strict all-target Clippy and3 doctests exited0. Release binaries are still being built by that same validation run. These receipts bind the corrected source/patch; they are not yet a clean four-target CI result, a remotely published SHA, or native/provider/installed-data acceptance. The new local commit also updates this progress document; its identity comes from history. Final native artifact identities and independent review stay separately recorded.
 
 The approved3-fingerprint exception does not accept the other35 historical findings. Exact public-head PR-range/latest-push checks cannot be rerun for unpublished code; local scan receipts will be labeled local scope. All four native CI/artifact, V01/V02, target/provider/device/SSH and installed-data/rollback/cutover gates remain open as previously assigned. A reviewable source backup and ordinary handoff are the next publication recovery step; merge/release and running-Go replacement remain unauthorized.
+
+
+## 2026-10-05 completed Linux receipts and final local handoff
+
+Reviewed local code: `5493c0eea093fb146b257fbca419736eeea22d3e`, tree `5643401ce7c1c0bf51c329c4da386ad3c5872fed`. Independent exact-SHA source review reports no remaining material finding in the corrected successor diff; prior relay/trial/recovery findings are source-level closed. This is not native/installed-data acceptance. This subsequent documentation-only commit adds the receipts below without changing Rust source.
+
+[Local validation receipt](LOCAL-VALIDATION-RECEIPT.json) binds the actually executed source `fbc0cb379079933951eb8b57a5bd7628e6c90242+patch.e5880ef644a1cf656139a33832802723869b269533740b65405a1339088ff910`. All719 tracked rust/** files match reviewed5493 byte-for-byte. Locked/offline Linux x86_64 checks passed:1326 all-target tests,0 failed/ignored,3 doctests,fmt,strict all-target Clippy and both release binaries. The build finished at04:21:15 UTC, exit0. Main47,944,760 bytes SHA256 `a4f89c99a120eee9fd823634854c0814b3336f99b772894ac2a86d3ef376a441`; launcher14,069,768 bytes SHA256 `d9014ce2cdf73b980e27c66e40c3dd7067b534ef83ca51cbe7d8987837b6ba39`. Main embeds the actual fbc0cb3+patch label; launcher has no unused commit label. Do not relabel these binaries as builds of a later documentation commit.
+
+[Local redacted scan receipt](LOCAL-SCAN-RECEIPT.json), at5493 with exactly the approved3 exclusions: intended PR range21d0bc7..5493 (28 commits) and unpublished continuation15db189..5493 (3 commits) each exit0/0 findings. Ordinary all-local-refs scope reports850 scanned commits/35 historical matches; supplementary `--all --full-history -m` reports882 scanned commits/50 historical matches. The latter adds15 historical occurrences from broader diff coverage, not15 established new compromises.895 commit objects are reachable across local refs; scanner-reported diff counts are recorded separately. All matching secret fields are redacted; no raw hits or private watchlists are published. These older matches remain unaccepted; no additional exclusions or scanner weakening were made. GitHub latest-push/PR Actions results are still unavailable for unpublished code.
+
+The handoff contains exact committed source bytes, a bundle with public15db189 as its sole prerequisite, normal local commit patches, repository-relative source hashes, sanitized validation/scan receipts and both explicitly unaccepted Linux candidates. Source export is checked against raw Git blobs because archive attributes may otherwise normalize line endings. Publication remains STOPPED after the second cancelled tree call; PR#11 remains15db189, expected original tree8ef59f5 was unavailable on readback, and no remote commit/ref update occurred. Any local-conductor handoff requires coordination and must preserve later remote changes without force-push or changes to oldPR#9/develop.
+
+Still required: exact published-head four-target CI/artifacts, full distribution input/license/SPDX composition, V01/V02 supported Windows native lifecycle, V03 actual isolated signer/publisher evidence, V04 platform filesystem acceptance, remaining V05 historical/private-watchlist review and V06 publisher/advisory reachability, V07 selected target/provider/device/SSH/GUI, V08 installed-data/rollback/locking and explicit cutover approval. The blocked two-live-Hub reproduction was not retried. No merge/tag/release, registry publication, credential use or running-Go replacement occurred.

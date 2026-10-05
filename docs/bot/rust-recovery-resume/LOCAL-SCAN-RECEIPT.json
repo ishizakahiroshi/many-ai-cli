@@ -1,0 +1,77 @@
+{
+  "time_utc": "2026-10-05T04:19:12.805664+00:00",
+  "tool": "gitleaks8.24.3",
+  "redaction": "100 percent; unchanged tool whose synthetic calibration was previously verified",
+  "configuration_sha256": "95728bd8deb97e78551940fddf62305918198cbfd1d9b0e13ec235c1848eb1fb",
+  "ignore_sha256": "3caeb372397cc40f41863987bdf2ccfb55472147814691f66db06ed928894139",
+  "approved_new_exceptions": 3,
+  "unchanged_existing_exceptions": true,
+  "scopes": [
+    {
+      "scope": "pr-range",
+      "git_log_opts": "21d0bc7935a2c4696fb89ccff2e324157a528c2d..5493c0eea093fb146b257fbca419736eeea22d3e",
+      "source_head": "5493c0eea093fb146b257fbca419736eeea22d3e",
+      "exit": 0,
+      "findings": 0,
+      "rules": {},
+      "git_reachable_commits": 28,
+      "scanner_reported_commits": 28,
+      "all_secret_fields_redacted": true,
+      "redacted_report_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "scope": "continuation-range",
+      "git_log_opts": "15db189db643143191e8b8063165fc6f2f5d2b14..5493c0eea093fb146b257fbca419736eeea22d3e",
+      "source_head": "5493c0eea093fb146b257fbca419736eeea22d3e",
+      "exit": 0,
+      "findings": 0,
+      "rules": {},
+      "git_reachable_commits": 3,
+      "scanner_reported_commits": 3,
+      "all_secret_fields_redacted": true,
+      "redacted_report_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "scope": "all-local-refs",
+      "git_log_opts": "--all",
+      "source_head": "5493c0eea093fb146b257fbca419736eeea22d3e",
+      "exit": 7,
+      "findings": 35,
+      "rules": {
+        "generic-api-key": 6,
+        "curl-auth-header": 1,
+        "public-ipv4-literal": 21,
+        "private-key-block": 3,
+        "slack-legacy-bot-token": 2,
+        "gitlab-pat": 2
+      },
+      "git_reachable_commits": 895,
+      "scanner_reported_commits": 850,
+      "all_secret_fields_redacted": true,
+      "redacted_report_sha256": "053a201101c76b33cfc1abc5b8322981f4e1350b841b57ad6bdce21a0cd543d3"
+    },
+    {
+      "scope": "supplementary-merge-inclusive-all-local-refs",
+      "git_log_opts": "--all --full-history -m",
+      "source_head": "5493c0eea093fb146b257fbca419736eeea22d3e",
+      "exit": 7,
+      "findings": 50,
+      "rules": {
+        "generic-api-key": 6,
+        "curl-auth-header": 1,
+        "public-ipv4-literal": 33,
+        "private-key-block": 6,
+        "slack-legacy-bot-token": 2,
+        "gitlab-pat": 2
+      },
+      "git_reachable_commits": 895,
+      "scanner_reported_commits": 882,
+      "all_secret_fields_redacted": true,
+      "redacted_report_sha256": "855b0ec19112036652b116961e5d8a5caf8c3e6b4340b954d51b9d3364de97f1"
+    }
+  ],
+  "remote_ci": "Not run for unpublished commits; not a latest-push or PR Actions receipt",
+  "private_watchlists": "unavailable; not included",
+  "external_secret_upload": false,
+  "acceptance": "Intended local PR/continuation ranges have zero findings under exactly3 approved exceptions. Ordinary all-ref scope retains35 unaccepted historical matches; explicit merge-inclusive diff scope has50 matches (15 additional historical occurrences), all untriaged. Counts are scope-specific, not evidence of new compromise. Private watchlists remain unavailable; remote CI remains unrun."
+}

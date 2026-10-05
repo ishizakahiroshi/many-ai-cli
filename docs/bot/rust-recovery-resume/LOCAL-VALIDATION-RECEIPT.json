@@ -1,0 +1,413 @@
+{
+  "frozen_source_commit": "fbc0cb379079933951eb8b57a5bd7628e6c90242",
+  "frozen_tree": "fd2dd8740ddf5dc1f448411517f782fd586db80a",
+  "frozen_validation": {
+    "fmt_exit": 0,
+    "all_targets_exit": 101,
+    "test_execution_started": false,
+    "failure": "E0609 at rust/tests/session_engine_contracts.rs:1494: Reattachment has after_reattached, not after_registered.",
+    "later_checks": "Not run for the pristine frozen source."
+  },
+  "validated_source": {
+    "identity": "fbc0cb379079933951eb8b57a5bd7628e6c90242+patch.e5880ef644a1cf656139a33832802723869b269533740b65405a1339088ff910",
+    "patch_sha256": "e5880ef644a1cf656139a33832802723869b269533740b65405a1339088ff910",
+    "changed_paths": [
+      "rust/tests/session_engine_contracts.rs"
+    ],
+    "source_file_count": 1899,
+    "patch_status": "Isolated archive plus exact one-line patch; not a claim of build from a later Git commit."
+  },
+  "environment": {
+    "os": "Linux",
+    "target": "x86_64-unknown-linux-gnu",
+    "rustc": "1.90.0 (1159e78c4 2025-09-14)",
+    "cargo": "1.90.0 (840b83a10 2025-07-30)",
+    "clippy": "0.1.90 (1159e78c47 2025-09-14)",
+    "rustfmt": "1.8.0-stable (1159e78c47 2025-09-14)",
+    "cargo_locked": true,
+    "cargo_offline": true,
+    "cargo_build_jobs": 2,
+    "test_threads": 8,
+    "incremental": false,
+    "dev_debug": 0,
+    "test_debug": 0,
+    "dependency_inputs": "Existing pinned cache; no dependency installation or network download."
+  },
+  "commands": [
+    {
+      "name": "fmt",
+      "command": "cargo fmt --manifest-path rust/Cargo.toml -- --check",
+      "exit": 0,
+      "started_utc": "2026-10-05T04:10:00Z",
+      "finished_utc": "2026-10-05T04:10:03Z"
+    },
+    {
+      "name": "all-targets",
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets -- --test-threads=8",
+      "exit": 0,
+      "started_utc": "2026-10-05T04:10:03Z",
+      "finished_utc": "2026-10-05T04:12:26Z"
+    },
+    {
+      "name": "clippy",
+      "command": "cargo clippy --manifest-path rust/Cargo.toml --locked --offline --all-targets -- -D warnings",
+      "exit": 0,
+      "started_utc": "2026-10-05T04:12:26Z",
+      "finished_utc": "2026-10-05T04:13:18Z"
+    },
+    {
+      "name": "doc",
+      "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --doc",
+      "exit": 0,
+      "started_utc": "2026-10-05T04:13:18Z",
+      "finished_utc": "2026-10-05T04:13:22Z"
+    },
+    {
+      "name": "release-bins",
+      "command": "cargo build --manifest-path rust/Cargo.toml --locked --offline --release --bins",
+      "exit": 0,
+      "started_utc": "2026-10-05T04:13:22Z",
+      "finished_utc": "2026-10-05T04:21:15Z"
+    }
+  ],
+  "all_targets": {
+    "test_summaries": 32,
+    "passed": 1326,
+    "failed": 0,
+    "ignored": 0,
+    "targets": [
+      {
+        "target": "Running unittests src/lib.rs (<BUILD_TARGET>/debug/deps/many_ai_cli-a9dab99e5d4cfa28)",
+        "status": "ok",
+        "passed": 1019,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running unittests src/bin/many-ai-cli.rs (<BUILD_TARGET>/debug/deps/many_ai_cli-f1e9ef2796dc6e44)",
+        "status": "ok",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running unittests src/bin/many-ai-cli-launcher.rs (<BUILD_TARGET>/debug/deps/many_ai_cli_launcher-210db292f5601945)",
+        "status": "ok",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/approval_contracts.rs (<BUILD_TARGET>/debug/deps/approval_contracts-2ed6ca962be5d710)",
+        "status": "ok",
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/assets_contracts.rs (<BUILD_TARGET>/debug/deps/assets_contracts-fe253d5e2728b5b7)",
+        "status": "ok",
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/cli_contracts.rs (<BUILD_TARGET>/debug/deps/cli_contracts-93c2be7e93ae50f7)",
+        "status": "ok",
+        "passed": 9,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/config_contracts.rs (<BUILD_TARGET>/debug/deps/config_contracts-58d4a7b61b2b0d92)",
+        "status": "ok",
+        "passed": 26,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/copied_data_rollback.rs (<BUILD_TARGET>/debug/deps/copied_data_rollback-624ebd68ac9ddcda)",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/core_event_contracts.rs (<BUILD_TARGET>/debug/deps/core_event_contracts-872bca6d50b25133)",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/dependency_contracts.rs (<BUILD_TARGET>/debug/deps/dependency_contracts-fb5bed0c1bd5dc27)",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/handoff_contracts.rs (<BUILD_TARGET>/debug/deps/handoff_contracts-4ec3b4fb02b704c7)",
+        "status": "ok",
+        "passed": 12,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/headless_contracts.rs (<BUILD_TARGET>/debug/deps/headless_contracts-707721702bc15acd)",
+        "status": "ok",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/http_decode_contracts.rs (<BUILD_TARGET>/debug/deps/http_decode_contracts-45c9e4b99376e6eb)",
+        "status": "ok",
+        "passed": 5,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/journal_contracts.rs (<BUILD_TARGET>/debug/deps/journal_contracts-5e5f7299d377580b)",
+        "status": "ok",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/launcher_contracts.rs (<BUILD_TARGET>/debug/deps/launcher_contracts-a2651aa0a433e763)",
+        "status": "ok",
+        "passed": 24,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/launcher_program_contracts.rs (<BUILD_TARGET>/debug/deps/launcher_program_contracts-8d6b47ff82672674)",
+        "status": "ok",
+        "passed": 7,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/proto_decode.rs (<BUILD_TARGET>/debug/deps/proto_decode-e5b01edcf24a74eb)",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/proto_golden.rs (<BUILD_TARGET>/debug/deps/proto_golden-0ae817549d072a80)",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/provider_contracts.rs (<BUILD_TARGET>/debug/deps/provider_contracts-c739242cc8499d74)",
+        "status": "ok",
+        "passed": 8,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/recovery_core_board.rs (<BUILD_TARGET>/debug/deps/recovery_core_board-4a84978fc97b37a8)",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/runtime_ledger_contracts.rs (<BUILD_TARGET>/debug/deps/runtime_ledger_contracts-24aa1fa09435d4fb)",
+        "status": "ok",
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/session_engine_contracts.rs (<BUILD_TARGET>/debug/deps/session_engine_contracts-e2dd8b88996c3fd9)",
+        "status": "ok",
+        "passed": 51,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/shared_contracts.rs (<BUILD_TARGET>/debug/deps/shared_contracts-7d258d6b964a848f)",
+        "status": "ok",
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/storage_contracts.rs (<BUILD_TARGET>/debug/deps/storage_contracts-eadc24a56329d12d)",
+        "status": "ok",
+        "passed": 17,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/storage_legacy_ordering_contracts.rs (<BUILD_TARGET>/debug/deps/storage_legacy_ordering_contracts-27077ee8bceda90b)",
+        "status": "ok",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/subagent_contracts.rs (<BUILD_TARGET>/debug/deps/subagent_contracts-aad84cace60a0252)",
+        "status": "ok",
+        "passed": 22,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/terminal_contracts.rs (<BUILD_TARGET>/debug/deps/terminal_contracts-90a2b737d4bc6fce)",
+        "status": "ok",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/time_contracts.rs (<BUILD_TARGET>/debug/deps/time_contracts-406ed0b87f170985)",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/transcript_contracts.rs (<BUILD_TARGET>/debug/deps/transcript_contracts-06ffb1fb1a1e7482)",
+        "status": "ok",
+        "passed": 15,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/wrapper_contracts.rs (<BUILD_TARGET>/debug/deps/wrapper_contracts-3248853c39480200)",
+        "status": "ok",
+        "passed": 13,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/wrapper_startup_contracts.rs (<BUILD_TARGET>/debug/deps/wrapper_startup_contracts-867c4e61231ef9b9)",
+        "status": "ok",
+        "passed": 2,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      },
+      {
+        "target": "Running tests/yaml_compat_contracts.rs (<BUILD_TARGET>/debug/deps/yaml_compat_contracts-960327d721f9f539)",
+        "status": "ok",
+        "passed": 4,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered": 0
+      }
+    ]
+  },
+  "doctests": {
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0
+  },
+  "build_metadata": {
+    "MANY_AI_BUILD_COMMIT": "fbc0cb379079933951eb8b57a5bd7628e6c90242+patch.e5880ef644a1cf656139a33832802723869b269533740b65405a1339088ff910",
+    "MANY_AI_BUILD_VERSION": "dev-rust-candidate",
+    "MANY_AI_BUILD_TIME": "2026-10-05T04:09:00Z"
+  },
+  "input_sha256": {
+    "rust/Cargo.lock": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+    "web/bun.lock": "d4a04eddf3b01f44967c2fe00dde58681f6e435d5200b691bcdc238c44a0d89f",
+    "internal/launcher/ui/index.html": "9bac180bb7bf6d15d24bf677b38e65d2ab2a43cdff1a681283ca25eadebd9c44"
+  },
+  "assets": {
+    "count": 413,
+    "web_dist_input": "Copied existing generated bundle, validated against source by Rust build.rs; frontend was not freshly regenerated in this validation.",
+    "manifest": "embedded-web-assets.json"
+  },
+  "binaries": [
+    {
+      "name": "many-ai-cli",
+      "size_bytes": 47944760,
+      "sha256": "a4f89c99a120eee9fd823634854c0814b3336f99b772894ac2a86d3ef376a441",
+      "embedded_source_identity_found": true,
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "release"
+    },
+    {
+      "name": "many-ai-cli-launcher",
+      "size_bytes": 14069768,
+      "sha256": "d9014ce2cdf73b980e27c66e40c3dd7067b534ef83ca51cbe7d8987837b6ba39",
+      "embedded_source_identity_found": false,
+      "target": "x86_64-unknown-linux-gnu",
+      "profile": "release"
+    }
+  ],
+  "limits": [
+    "Native Linux only; not four-target CI.",
+    "No release/package publication, installation, running-Go replacement or cutover.",
+    "No actual provider/account, mobile/device, GUI/native Windows/macOS, SSH, real-data rollback or production acceptance.",
+    "Cargo/build caches were reused, but all reported tests, lint, doctests and release build commands executed freshly."
+  ]
+}
