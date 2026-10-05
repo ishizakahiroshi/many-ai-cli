@@ -10,7 +10,7 @@ last_reviewed: 2026-10-05
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-05(月) 19:21 UTC
+> 最終更新: 2026-10-05(月) 19:36 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. PR base: develop. Existing draft PR: #9. This continues existing #3; no replacement task number has been assigned.
 
@@ -231,3 +231,16 @@ This candidate corrects the original two fixtures to use that demonstrated compo
 The existing isolation function becomes crate-visible and is re-exported only for Windows unit tests; normal MainContext still calls the same implementation. That implementation creates its directories beneath the trial root, so it is not a side-effect-free accessor. The temporary diagnostic wrapper remains separate and will be removed with all diagnostic code in the immediately following dedicated cleanup commit. No production process-launch or RPC algorithm changes are made.
 
 The fixture correction and diagnostic removal will remain distinct commits. Their final combined candidate must receive independent exact-SHA review and fresh complete four-target CI, including all987 original Windows library tests and both binaries. Once that final head is published, no board-only or other push will interrupt it; it will be held until every target is terminal, allowing the full Intel-Mac build duration. Real-provider/device/installed-data acceptance and cutover remain pending. Full PR-range secret coverage remains separately unverified because of the pinned action's30-commit pagination defect.
+
+
+## 2026-10-05 19:33 UTC dedicated diagnostic cleanup and acceptance freeze
+
+Fixture-correction commit object `4f7ae983eb0f19b3c4bb841a37fab6e383fb584f` has parentbcd052f8 and tree `fd5c8a9e9f12bb7fe292728c48e57b73aa2c0fb6`, exactly matching independently reviewed locald5bc776. This following cleanup is a separate commit; the branch will advance once to the final cleanup head, so only that combined candidate starts acceptance CI. The final public head identity comes from immutable Git history and PR readback, rather than a self-referential SHA in this document.
+
+Removed: the temporary14-case file and tests.rs import; the InputSender diagnostic flush enum/method/arm; the diagnostic MainContext wrapper; CI diagnostic environment/sink/echo; both temporary Python sink tests; and the earlier fixture started/first-line/error/stderr/exit-status investigation files. The fixture still logs requests for its protocol assertions and uses Add-Content/ConvertFrom-Json. PowerShell's exit code is propagated directly; stderr inherits the production null handle instead of reopening an investigative log. No original Rust test is removed, skipped or ignored, and no original protocol/account/privacy condition or deadline is relaxed. The only removed Rust test is the explicitly temporary matrix. The permanent fixture reuses the existing trial-isolation implementation via its Windows-test-only re-export.
+
+The matching instrumentation entry is marked removed on2026-10-05, with its due field removed. Shared-file code was checked explicitly, not assumed deleted by purge. An exact-symbol scan finds no remaining diagnostic import/hook/env/sink in Rust source, the candidate driver or Python receipt tests. The two Python files are restored byte-for-byte to the d9f892a versions; packaging/receipt tests pass28/28. Historical JSON evidence and investigation records remain. Unrelated instrumentation entries are preserved.
+
+Fresh Rust fmt/Clippy/compilation and native acceptance are still pending for the resulting exact SHA. All987 original Windows library tests, integration tests, doctests, native binaries and all four terminal target results must be checked on that final head. It will remain frozen, including against board-only pushes, until every target finishes; approximately35 minutes for Intel macOS is allowed, not used as an early stopping point. Public checkpoint delivery, synthetic-test success, artifact production and final owner/device/cutover acceptance remain separate.
+
+At19:36 UTC, all four bcd052f8 diagnostic-run jobs are terminal: Linux and both macOS targets succeeded; Windows retained the expected985/3/0 failure. Intel completed rather than being cancelled on this run. Those successes do not replace verification of the forthcoming corrected cleanup head.
