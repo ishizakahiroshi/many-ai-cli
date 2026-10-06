@@ -33,6 +33,9 @@ impl SessionEngine {
         connection: WrapperConnectionId,
         now: Timestamp,
     ) -> Result<Registration, SessionError> {
+        // Like Go registration, resolve the initial branch before publishing the
+        // card, without holding the session-state or admission locks.
+        let branch = (self.options.branch_lookup)(request.message.cwd.clone()).await;
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
@@ -125,6 +128,7 @@ impl SessionEngine {
                 return Err(error);
             }
         };
+        session.snapshot.branch = branch;
         let snapshot = session.snapshot.clone();
         let registered = proto::Message {
             r#type: "registered".into(),
@@ -282,6 +286,7 @@ impl SessionEngine {
             pid: m.pid,
             db_id,
             git_root: None,
+            branch_refresh: branch::RefreshState::default(),
             transcript: TranscriptSessionIdentity {
                 provider: m.provider.clone(),
                 cwd: m.cwd.clone(),
@@ -341,6 +346,7 @@ impl SessionEngine {
         {
             return Err(SessionError::InvalidRequest("session dismissed".into()));
         }
+        let branch = (self.options.branch_lookup)(request.message.cwd.clone()).await;
         let _registration = self.registration.lock().await;
         let persistence_order = { lock(&self.state).persistence_lane.reserve() };
         persistence_order.wait_ordered().await;
@@ -521,6 +527,7 @@ impl SessionEngine {
             session.transcript.native_log_path = old.transcript.native_log_path;
             session.transcript_offset = old.transcript_offset;
             session.git_root = old.git_root;
+            session.branch_refresh = old.branch_refresh;
             session.workflow = old.workflow;
             session.subagents = old.subagents;
             session.observer_turn_started_at = old.observer_turn_started_at;
@@ -546,6 +553,10 @@ impl SessionEngine {
                 session.snapshot.last_output_at = reattached_at.clone();
             }
         }
+        session.snapshot.branch = branch;
+        // Go reattach restarts the two-second timer while retaining warm
+        // project/stats latches, including a same-ID replacement's saved state.
+        session.branch_refresh.checked_at = Some(now);
         session
             .input
             .observe_high_watermark(InputSeq(m.input_seq_high_watermark));

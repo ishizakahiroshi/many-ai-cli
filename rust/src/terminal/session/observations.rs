@@ -300,10 +300,12 @@ impl SessionEngine {
                 }));
                 effects.0.push(CoreEffect::Broadcast(s.update_message()));
             }
-            SessionObservation::Branch { branch, git_root } => {
-                s.snapshot.branch = branch;
-                s.git_root = git_root;
-                effects.0.push(CoreEffect::Broadcast(s.update_message()));
+            observation @ SessionObservation::Branch { .. } => {
+                if s.apply_branch_observation(&observation) {
+                    effects
+                        .0
+                        .push(CoreEffect::Broadcast(s.branch_update_message()));
+                }
             }
             SessionObservation::Model { model, effort } => {
                 if (!model.is_empty() && s.snapshot.model != model)

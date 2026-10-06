@@ -30,6 +30,7 @@ use std::{
 mod approvals;
 mod authorization;
 pub mod board_input;
+mod branch;
 pub mod completion;
 pub mod confirmations;
 mod input;
@@ -46,11 +47,14 @@ pub type LiveApprovalPolicy =
     Arc<dyn Fn(&str, &str, &proto::ApprovalSummary) -> bool + Send + Sync>;
 pub type EngineWarningHandler = Arc<dyn Fn(&str, &SessionError) + Send + Sync>;
 pub type DetectedModelRoute = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
+pub type BranchLookup = Arc<dyn Fn(String) -> CoreFuture<'static, String> + Send + Sync>;
 pub struct EngineOptions {
     pub hub_instance: String,
     pub token_statusbar: bool,
     /// Live cache/config route inference; never performs network IO.
     pub model_route: DetectedModelRoute,
+    /// Production binds the same bounded Git lookup used by periodic refresh.
+    pub branch_lookup: BranchLookup,
     pub submit_timing: SubmitTiming,
     pub idle_after: Duration,
     pub approval_phrases: BTreeMap<String, Vec<String>>,
@@ -67,6 +71,7 @@ impl Default for EngineOptions {
     fn default() -> Self {
         Self {
             hub_instance: String::new(),
+            branch_lookup: Arc::new(|_| Box::pin(async { String::new() })),
             token_statusbar: true,
             model_route: Arc::new(|provider, model| {
                 if model.trim().is_empty() {
@@ -143,6 +148,7 @@ struct Session {
     pid: i64,
     db_id: Option<DbSessionId>,
     git_root: Option<PathBuf>,
+    branch_refresh: branch::RefreshState,
     transcript: TranscriptSessionIdentity,
     transcript_offset: i64,
     approval: ApprovalState,

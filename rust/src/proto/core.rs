@@ -1790,6 +1790,9 @@ pub enum SessionObservation {
     Branch {
         branch: String,
         git_root: Option<std::path::PathBuf>,
+        changes: (i64, i64, i64),
+        /// None is an unresolved lookup; Some("") is a confirmed non-repository.
+        project_id: Option<String>,
     },
     Model {
         model: String,

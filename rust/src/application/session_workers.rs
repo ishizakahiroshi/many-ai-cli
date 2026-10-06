@@ -34,6 +34,7 @@ use std::{
     time::Duration,
 };
 
+mod branch_refresh;
 mod handoff_hooks;
 mod observations;
 #[cfg(test)]
@@ -75,6 +76,7 @@ pub struct SessionWorkers {
     owners: OnceLock<Owners>,
     started: std::sync::atomic::AtomicBool,
     this: Weak<SessionWorkers>,
+    branch_refresh: Arc<branch_refresh::Owner>,
     conductor_renderer: OnceLock<Arc<ConductorRenderer>>,
     active_routine_probe: OnceLock<Arc<ActiveRoutineProbe>>,
     routine_recorder: OnceLock<Arc<RoutineRecorder>>,
@@ -85,11 +87,15 @@ pub struct SessionWorkers {
 pub struct SessionWorkerGuard {
     cancel: HubShutdownCancellation,
     join: Option<tokio::task::JoinHandle<()>>,
+    branch_join: Option<tokio::task::JoinHandle<()>>,
 }
 impl Drop for SessionWorkerGuard {
     fn drop(&mut self) {
         self.cancel.cancel();
         if let Some(join) = self.join.take() {
+            join.abort();
+        }
+        if let Some(join) = self.branch_join.take() {
             join.abort();
         }
     }
@@ -98,6 +104,12 @@ impl SessionWorkerGuard {
     /// Stop the polling producer before draining the effect lane it feeds.
     pub async fn stop_and_join(mut self) {
         self.cancel.cancel();
+        // This task only admits periodic work. Already admitted refreshes are
+        // retained by the Hub effect lane and drained after producers stop.
+        if let Some(join) = self.branch_join.take() {
+            join.abort();
+            let _ = join.await;
+        }
         if let Some(mut join) = self.join.take()
             && tokio::time::timeout(Duration::from_secs(2), &mut join)
                 .await
@@ -117,6 +129,11 @@ impl SessionWorkers {
         warning: EventWarning,
     ) -> Arc<Self> {
         Arc::new_cyclic(|this| Self {
+            branch_refresh: branch_refresh::Owner::new(
+                files.branch_reader(),
+                this.clone(),
+                tasks.clone(),
+            ),
             config,
             boards: Arc::new(BoardStore::new(&paths)),
             handoff: HandoffStore::new(paths.clone()),
@@ -270,9 +287,15 @@ impl SessionWorkers {
         let join = tokio::spawn(async move {
             run(weak, events, task_cancel).await;
         });
+        let branch_refresh = self.branch_refresh.clone();
+        let branch_cancel = cancel.clone();
+        let branch_join = tokio::spawn(async move {
+            branch_refresh.run_timer(branch_cancel).await;
+        });
         Ok(SessionWorkerGuard {
             cancel,
             join: Some(join),
+            branch_join: Some(branch_join),
         })
     }
     async fn event(&self, event: CoreEvent) -> Result<(), SessionError> {

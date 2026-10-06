@@ -497,6 +497,13 @@ impl HubComposition {
         let model_warning = warning.clone();
         let core = Arc::new(SessionEngine::new(
             EngineOptions {
+                branch_lookup: {
+                    let source = files.branch_reader();
+                    Arc::new(move |cwd| {
+                        let source = source.clone();
+                        Box::pin(async move { source.branch(&cwd).await })
+                    })
+                },
                 model_route: Arc::new(move |provider, model| {
                     model_policy
                         .detected_model_route(provider, model)
