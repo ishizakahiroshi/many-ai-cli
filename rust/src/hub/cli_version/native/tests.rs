@@ -125,7 +125,26 @@ async fn owned_native_combined_output_null_stdin_exact_env_exit_and_cap() {
     ] {
         let f = fixture(mode);
         let output = executor(f.paths).execute(f.command).await.unwrap();
-        assert!(output.output.ends_with(suffix.as_bytes()));
+        let marker_at = |marker: &[u8]| {
+            output
+                .output
+                .windows(marker.len())
+                .position(|bytes| bytes == marker)
+        };
+        assert!(
+            output.output.ends_with(suffix.as_bytes()),
+            "synthetic suffix mismatch: mode={mode}, exit_code={}, start_failed={}, timed_out={}, output_len={}, stderr_first_at={:?}, stdout_second_at={:?}, exit_marker_at={:?}, panic_seen={}, assertion_seen={}, harness_failed={}",
+            output.exit_code,
+            output.start_failed,
+            output.timed_out,
+            output.output.len(),
+            marker_at(b"stderr-first\n"),
+            marker_at(b"stdout-second\n"),
+            marker_at(b"synthetic exit\n"),
+            marker_at(b"panicked at").is_some(),
+            marker_at(b"assertion").is_some(),
+            marker_at(b"test result: FAILED").is_some(),
+        );
         assert_eq!(output.exit_code, exit);
         assert!(!output.start_failed && !output.timed_out);
     }
