@@ -41,6 +41,31 @@
   ],
   "entries": [
     {
+      "id": "rust-git-turn-failure-test-diagnostic",
+      "status": "active",
+      "purpose": "Identify the still-unresolved Windows post-reconnect Git-turn snapshot500 from the same failed operation, after Trace2 removal.",
+      "addedIn": "pending",
+      "gate": "cfg(test) only. Per-FilesService bounded in-memory recorder is inactive until the one synthetic reconnect fixture explicitly begins it. It records only existing error paths; no Git tracing, extra commands, file writes, successful-call records, raw paths, argv, stderr, environment values or work text. Assertion context is emitted only if the existing reservation assertion fails.",
+      "files": [
+        "rust/src/files/snapshot_diagnostic.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/files/mod.rs",
+        "rust/src/files/git.rs",
+        "rust/src/files/git_turns.rs",
+        "rust/src/application/event_observer/tests.rs"
+      ],
+      "channels": [
+        "rust_git_turn_failure_test_diagnostic"
+      ],
+      "artifactNeedles": [
+        "rust_git_turn_failure_test_diagnostic"
+      ],
+      "removalCondition": "Mandatory removal before Rust acceptance and before release, even if cause remains unproven. Delete the dedicated module; manually remove the cfg(test) module/field/constructor registration, Git command and snapshot filesystem failure hooks, and fixture begin/take/assertion context and the temporary snapshot_failure_diagnostic_observes_actual_private_index_error_without_paths wiring test from all sharedFiles. Preserve all behavior assertions and production250ms/5s deadlines. The generic purge command removes the dedicated file only and cannot remove these shared Rust hooks automatically. Mark removed and prove fresh same-SHA native gates and three consecutive Windows quick successes after cleanup.",
+      "reason": "At41e4b8 quick attempt1, the existing reconnect regression failed with snapshot unavailable status500 while the same test passed in fullWindows. Current warnings discard typed command and cleanup causes; timeout, process failure and filesystem cleanup remain unseparated. This is temporary diagnosis, not an identified cause or repair. Recording occurs after failure and avoids Trace2 IO; possible observer effects still require diagnostic-free acceptance. Current instrumentation discovery scans Go/TypeScript and artifact-clean checks Go binaries; they do not prove Rust cfg(test) isolation or cleanup.",
+      "due": "2026-10-09"
+    },
+    {
       "id": "rust-windows-appserver-phase-test-diagnostic",
       "status": "removed",
       "purpose": "Locate the recurring synthetic Windows app-server timeout across child cmdlets, RPC transport and owned cleanup without raw content or environment values.",

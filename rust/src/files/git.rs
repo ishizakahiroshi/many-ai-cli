@@ -1,5 +1,7 @@
 //! Git commands preserve argv boundaries, bounded output and one operation budget.
 //! No network/process action is performed merely by constructing this service.
+#[cfg(test)]
+use super::snapshot_diagnostic;
 use super::{FilesService, Result, err, scope};
 use crate::proto::time::Timestamp;
 use crate::{
@@ -101,6 +103,8 @@ impl<'a> Git<'a> {
     ) -> std::result::Result<String, String> {
         let timeout = self.until.saturating_duration_since(Instant::now());
         if timeout.is_zero() {
+            #[cfg(test)]
+            snapshot_diagnostic::budget(self.service, args, Duration::ZERO);
             return Err("git command timed out".into());
         }
         let mut all = vec![
@@ -124,7 +128,31 @@ impl<'a> Git<'a> {
         };
         let out = crate::process::run_capped(&plan, &Cancellation::default())
             .await
-            .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
+            .map_err(|e| {
+                #[cfg(test)]
+                snapshot_diagnostic::process_io(
+                    self.service,
+                    args,
+                    &e,
+                    timeout,
+                    (self.until - timeout).elapsed(),
+                );
+                format!("git {}: {e}", args.join(" "))
+            })?;
+        #[cfg(test)]
+        if out.stdout_truncated
+            || out.stderr_truncated
+            || out.pipes_forced_closed
+            || !matches!(out.outcome, ExitOutcome::Exited { code: Some(0), .. })
+        {
+            snapshot_diagnostic::process(
+                self.service,
+                args,
+                &out,
+                timeout,
+                (self.until - timeout).elapsed(),
+            );
+        }
         let mut bytes = out.stdout;
         if combined {
             bytes.extend(&out.stderr);
