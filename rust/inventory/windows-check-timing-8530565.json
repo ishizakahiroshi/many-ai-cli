@@ -301,8 +301,8 @@
     ],
     "full_linux": "dropped_executor_future_kills_owned_descendant:executor completed before both helpers were ready"
   },
-  "pending": "Other full native jobs, failure diagnosis, independent review and final exact-head gates; completion is not established.",
-  "phase_evidence_limit": "phase_diagnostics and its sink were removed before853 as requested. Neither853 attempt retained per-RPC/per-cmdlet phase clocks; missing data cannot be reconstructed. Warm appserver returned the inner TimedOut result from the configured15s budget; the outer20s watchdog did not report Elapsed. Per-test/phase wall-clock times were not retained. requests.txt was readable. Picker outer20s expired before cancellation/reaping phase.",
+  "pending": "Failure diagnosis and the next candidate's native/device gates remain open. Formal review is paused at the owner's direction. The completed853 full-gate results are recorded below.",
+  "phase_evidence_limit": "phase_diagnostics and its sink were removed before853 as requested. Neither853 attempt retained per-RPC/per-cmdlet phase clocks; missing data cannot be reconstructed. Warm appserver returned the inner TimedOut result from the configured15s budget; the outer20s watchdog did not report Elapsed. Per-test/phase wall-clock times were not retained. requests.txt was readable. Picker outer20s expired before the cancellation phase.",
   "historical_a48_timing_scope": "About7.4s is a child-local interval after script timing begins, including Add-Content about2.58s and ConvertFrom-Json about4.76s; it is not an isolated PowerShell process-startup measurement. First initialize response about8.59s used a different parent clock origin.",
   "library_elapsed_seconds": {
     "cold": 59.61,

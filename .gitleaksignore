@@ -20,3 +20,6 @@ a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_o
 7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/inventory/recovery-current-20261005.json:generic-api-key:9026
 # Exact synthetic DNS-classification example; replaced by RFC5737 documentation address in 7c2d7d3.
 7b937e0edc646a5b35d1b3ddd33bf86c3e2f2c5b:rust/src/application/nvidia_nim/native.rs:public-ipv4-literal:218
+
+# Public JSON metadata identifier; false match spans a prose sentence and the next field.
+2be97163be9302563bc810c857760a52ddc90376:rust/inventory/windows-check-timing-8530565.json:generic-api-key:305
