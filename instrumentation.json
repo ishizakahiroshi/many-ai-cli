@@ -41,6 +41,55 @@
   ],
   "entries": [
     {
+      "id": "rust-windows-appserver-phase-test-diagnostic",
+      "status": "active",
+      "purpose": "Locate the recurring synthetic Windows app-server timeout across child cmdlets, RPC transport and owned cleanup without raw content or environment values.",
+      "addedIn": "pending",
+      "due": "2026-10-13",
+      "gate": "cfg(all(test, windows)); each original synthetic fixture scopes its own Tokio task-local recorder; bounded child trace stays inside its existing TempDir; only assertion failure text emits the sanitized summary",
+      "files": [
+        "rust/src/application/subscriptions/appserver/phase_diagnostics.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/application/subscriptions/appserver.rs",
+        "rust/src/application/subscriptions/appserver/tests.rs"
+      ],
+      "channels": [
+        "windows_appserver_phase_diagnostic"
+      ],
+      "artifactNeedles": [
+        "windows_appserver_phase_diagnostic ",
+        "rpc-phases.txt"
+      ],
+      "removalCondition": "Remove in a dedicated commit after classification and verification, or if the owner stops the unresolved investigation; always remove before an accepted final candidate or release.",
+      "reason": "Run37413102214 consumes at least one stdin line but returns the inner 15-second timeout in both original fixtures. Fixed child stages and per-invocation native counts distinguish cmdlet progress, response emission, bytes received and matching, with cleanup observed without changing its error precedence. The original assertions, 15s/20s deadlines, Windows PowerShell host, wrapper, environment and spawn options stay intact. No factor substitution or functional fix is included.",
+      "removalProcedure": "Preserve sanitized failure evidence, then delete phase_diagnostics.rs. Manually remove its appserver module declaration, every cfg-gated event/cleanup call, the diagnostic Started match arm, and restore the original let _ = child.wait().await statement. In tests.rs remove phases path, Record-Phase function and calls, synthetic script phase fields, ACTIVE scope, Trace construction, summary calls, tuple diagnostic member and appended assertion text. Restore the exact original fixture script and call structure while retaining all original assertions. --purge does not remove shared-file code. Verify no channel, sink needle, module reference or helper remains; mark this entry removed with the dedicated cleanup commit; rerun normal validation."
+    },
+    {
+      "id": "rust-relay-prepare-resolution-test-diagnostic",
+      "status": "active",
+      "purpose": "Classify prepare root-resolution failures before the fixed Go-compatible generic not_git mapping, without paths, argv, Git output, environment values, or arbitrary source-error text.",
+      "addedIn": "pending",
+      "due": "2026-10-13",
+      "gate": "Rust cfg(test) only; failure observations only for rev-parse --show-toplevel; no production sink",
+      "files": [
+        "rust/src/orchestration/relay/worktree_diagnostic.rs"
+      ],
+      "sharedFiles": [
+        "rust/src/orchestration/relay/worktree.rs",
+        "rust/src/orchestration/relay/trial_git.rs"
+      ],
+      "channels": [
+        "relay_prepare_resolution_diagnostic"
+      ],
+      "artifactNeedles": [
+        "relay_prepare_resolution_diagnostic operation="
+      ],
+      "removalCondition": "Remove in a dedicated commit once classified and verified, or when the owner stops the unresolved investigation; always remove before an accepted final candidate or release.",
+      "reason": "Run37413102214 ARM reports only generic not_git before cleanup. Preserve the returned error, three-second timeout, process ownership, metadata rejection policy, and assertions. Typed metadata payloads retain only the existing whitelisted labels, ErrorKind, and numeric OS code; fixture-local capture permits deterministic forwarding/redaction checks.",
+      "removalProcedure": "Delete worktree_diagnostic.rs and its module declaration, RelayGit probe field/initialization, Context and all diagnostic call sites, and the two forwarding tests; remove MetadataDiagnostic, diagnostic_metadata and its test, restoring the original String wrapper. Preserve the original metadata redaction tests. Remove the fixture panic diagnostic argument and Probe.last reference, while preserving its remove_root and not_git boolean context and unchanged failure predicate. Mark removed in the dedicated removal commit and validate. Purging the dedicated file does not remove shared-file hooks."
+    },
+    {
       "id": "rust-git-turn-snapshot-test-diagnostic",
       "status": "active",
       "purpose": "Classify the intermittent Windows warm-reconnect Git snapshot failure without paths, argv, Git output, environment values, or work text.",
