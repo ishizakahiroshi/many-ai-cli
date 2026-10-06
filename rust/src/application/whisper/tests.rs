@@ -71,6 +71,9 @@ struct Fixture {
 }
 impl Fixture {
     fn new(baked: bool) -> Self {
+        Self::with_runtime_payload(baked, Vec::new())
+    }
+    fn with_runtime_payload(baked: bool, runtime_payload: Vec<(String, Vec<u8>)>) -> Self {
         let root = tempfile::tempdir().unwrap();
         let runtime = root.path().join("runtime");
         let installed = root.path().join("installed");
@@ -95,7 +98,7 @@ impl Fixture {
             arch: "amd64".into(),
             io: io.clone(),
             warning: Arc::new(|_, _| {}),
-            runtime_payload: Vec::new(),
+            runtime_payload,
         })
         .unwrap();
         Self {
@@ -105,6 +108,45 @@ impl Fixture {
             io,
         }
     }
+}
+#[tokio::test]
+async fn prepared_runtime_is_copied_on_install_and_ensure_without_replacing_existing_files() {
+    let payload: Vec<_> = crate::asset_contract::WINDOWS_RUNTIME_NAMES
+        .iter()
+        .map(|name| {
+            (
+                (*name).to_owned(),
+                format!("synthetic runtime {name}").into_bytes(),
+            )
+        })
+        .collect();
+    let fixture = Fixture::with_runtime_payload(true, payload.clone());
+    fixture.manager.install("small").unwrap();
+    fixture.owner.drain_effects().await;
+    assert!(fixture.manager.status().unwrap().installed);
+    let bin = fixture.manager.base().join("bin");
+    for (name, bytes) in &payload {
+        assert_eq!(std::fs::read(bin.join(name)).unwrap(), *bytes);
+    }
+    std::fs::write(bin.join(&payload[0].0), b"existing runtime preserved").unwrap();
+    std::fs::remove_file(bin.join(&payload[1].0)).unwrap();
+    let config = fixture.manager.configuration().unwrap();
+    fixture
+        .manager
+        .ensure(&config, &Cancellation::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read(bin.join(&payload[0].0)).unwrap(),
+        b"existing runtime preserved"
+    );
+    assert_eq!(
+        std::fs::read(bin.join(&payload[1].0)).unwrap(),
+        payload[1].1
+    );
+    assert_eq!(fixture.io.starts.load(Ordering::SeqCst), 1);
+    fixture.manager.shutdown().await;
+    fixture.owner.drain_effects().await;
 }
 #[tokio::test]
 async fn install_owned_singleflight_publishes_config_then_start_reuses_same_process_and_uninstall_resets()

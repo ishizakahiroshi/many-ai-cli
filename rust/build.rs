@@ -59,6 +59,25 @@ fn main() {
         "pub static LAUNCHER_UI: &[u8] = include_bytes!({:?});\n",
         launcher.to_str().unwrap()
     ));
+    println!("cargo:rerun-if-env-changed=MANY_AI_REQUIRE_WINDOWS_RUNTIME");
+    let runtime_root = root.join("internal/whisperruntime/files/windows-amd64");
+    println!("cargo:rerun-if-changed={}", runtime_root.display());
+    output.push_str("pub static WINDOWS_RUNTIME: &[(&str, &[u8])] = &[\n");
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86_64")
+    {
+        let required = env::var("MANY_AI_REQUIRE_WINDOWS_RUNTIME").as_deref() == Ok("1");
+        for (name, path) in asset_contract::windows_runtime_files(&runtime_root, required)
+            .expect("validate prepared Windows runtime payload")
+        {
+            println!("cargo:rerun-if-changed={}", path.display());
+            output.push_str(&format!(
+                "    ({name:?}, include_bytes!({:?})),\n",
+                path.to_str().expect("UTF-8 runtime path")
+            ));
+        }
+    }
+    output.push_str("];\n");
     fs::write(
         PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("embedded_assets.rs"),
         output,

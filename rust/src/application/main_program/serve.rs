@@ -1056,10 +1056,9 @@ impl HubComposition {
                     paths: paths.clone(),
                 }),
                 warning: warning.clone(),
-                // Fixed Go internal/whisperruntime currently embeds only README and
-                // .gitkeep; neither is a runtime binary. Actual archive DLLs retain
-                // their manifest ownership, with no invented bundled payload.
-                runtime_payload: Vec::new(),
+                // Candidate Windows builds prepare the same verified VS Redist
+                // inputs as Go and retain their actual version/hash receipt.
+                runtime_payload: crate::assets::windows_runtime_payload(),
             },
         )
         .map_err(io::Error::other)?;

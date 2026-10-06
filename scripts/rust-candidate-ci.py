@@ -19,6 +19,7 @@ TARGETS = {
     "x86_64-apple-darwin": "macos-intel",
     "aarch64-apple-darwin": "macos-apple-silicon",
 }
+WINDOWS_RUNTIME_NAMES = ('vcomp140.dll', 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')
 
 def capture(args: list[str], cwd: Path = ROOT) -> str:
     return subprocess.check_output(args, cwd=cwd, text=True).strip()
@@ -76,6 +77,45 @@ def digest(path: Path) -> str:
             value.update(block)
     return value.hexdigest()
 
+def windows_runtime_receipt(path: Path, source: str, *, binary: Path | None = None) -> dict:
+    """Bind the VS-only signature/version observation to the bytes built/shipped."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('runtime receipt must be a regular file')
+    receipt = json.loads(path.read_text(encoding='utf-8'))
+    script = 'internal/whisperruntime/fetch_windows_runtime.ps1'
+    if (receipt.get('schema_version') != 1 or receipt.get('source_sha') != source
+            or receipt.get('target') != 'x86_64-pc-windows-msvc'
+            or receipt.get('acquisition') != 'visual-studio-redist'
+            or receipt.get('source_script') != script
+            or receipt.get('source_script_sha256') != digest(ROOT / script)):
+        raise ValueError('runtime receipt source/provenance mismatch')
+    entries = receipt.get('files')
+    if (not isinstance(entries, list) or len(entries) != 4
+            or not all(isinstance(entry, dict) for entry in entries)
+            or sorted(entry.get('name', '') for entry in entries) != sorted(WINDOWS_RUNTIME_NAMES)):
+        raise ValueError('runtime receipt requires exactly four distinct DLLs')
+    payload = ROOT / 'internal/whisperruntime/files/windows-amd64'
+    if payload.is_symlink():
+        raise ValueError('runtime payload directory must not be a symlink')
+    binary_bytes = binary.read_bytes() if binary is not None else None
+    for entry in entries:
+        dll = payload / entry['name']
+        if (entry.get('signature_status') != 'Valid' or entry.get('microsoft_signer') is not True
+                or entry.get('pe_machine') != '0x8664'
+                or not isinstance(entry.get('file_version'), str) or not entry['file_version'].strip()
+                or digest(dll) != entry.get('sha256') or dll.stat().st_size != entry.get('bytes')):
+            raise ValueError('runtime DLL verification/identity mismatch')
+        data = dll.read_bytes()
+        offset = int.from_bytes(data[0x3c:0x40], 'little') if len(data) >= 64 else len(data)
+        if data[:2] != b'MZ' or data[offset:offset + 6] != b'PE\0\0\x64\x86':
+            raise ValueError('runtime DLL must be x64 PE')
+        if binary_bytes is not None and data not in binary_bytes:
+            raise ValueError('verified runtime DLL bytes absent from main binary')
+    if binary is not None:
+        receipt['embedded_in'] = binary.name
+        receipt['embedded_bytes_verified'] = True
+    return receipt
+
 def host_from_verbose(version: str) -> str:
     return next((line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: ")), "")
 
@@ -123,6 +163,13 @@ def main() -> None:
     env["GOTELEMETRY"] = "off"
     run(["go", "mod", "download"], env)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
+    runtime_receipt = None
+    runtime_path = output / 'WINDOWS-RUNTIME.json'
+    if args.target == 'x86_64-pc-windows-msvc':
+        run(['pwsh', '-NoProfile', '-File', str(ROOT / 'rust/packaging/prepare_windows_runtime.ps1'),
+             '-ReceiptPath', str(runtime_path)], env)
+        runtime_receipt = windows_runtime_receipt(runtime_path, source)
+        env['MANY_AI_REQUIRE_WINDOWS_RUNTIME'] = '1'
     run([sys.executable, "-m", "unittest", "discover", "-s", "rust/packaging", "-p", "test_*.py"], env)
     run(["bun", "install", "--frozen-lockfile"], env, ROOT / "web")
     run(["bun", "run", "check"], env, ROOT / "web")
@@ -152,6 +199,11 @@ def main() -> None:
         if digest(destination) != checksum:
             raise SystemExit("candidate copy hash mismatch")
         binary_entries.append({"name": name, "bytes": destination.stat().st_size, "sha256": checksum})
+    if runtime_receipt is not None:
+        confirmed = windows_runtime_receipt(runtime_path, source, binary=output / 'many-ai-cli.exe')
+        if any(confirmed[key] != value for key, value in runtime_receipt.items()):
+            raise SystemExit('runtime inputs changed during native build')
+        runtime_receipt = confirmed
     web_entries = [{"path": path.relative_to(ROOT / "web" / "dist").as_posix(), "sha256": digest(path)}
                    for path in sorted((ROOT / "web" / "dist").rglob("*")) if path.is_file()]
     notice_entries = []
@@ -179,6 +231,7 @@ def main() -> None:
         "cargo_lock_sha256": digest(ROOT / "rust" / "Cargo.lock"),
         "binaries": binary_entries, "generated_web_asset_inputs": web_entries,
         "third_party_notices": notice_entries,
+        "windows_runtime": runtime_receipt,
         "validation_steps": STEPS, "packaging_input_exit_code": packaging_exit,
         "launcher_ui_input_sha256": digest(ROOT / "internal" / "launcher" / "ui" / "index.html"),
         "receipt_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",

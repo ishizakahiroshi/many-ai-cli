@@ -1,5 +1,23 @@
 # Third-party source notices for the Rust candidate
 
+## Microsoft Visual C++ Runtime (Windows x64)
+
+Windows candidates embed the four Microsoft VC++ runtime DLLs prepared by the
+existing Go Visual Studio Redist acquisition policy: `vcomp140.dll`,
+`msvcp140.dll`, `vcruntime140.dll`, and `vcruntime140_1.dll`.
+Copyright Microsoft Corporation. These are Microsoft redistributable
+components, not MIT-licensed Rust project code. The existing Go project's
+redistribution decision is inherited; this continuation makes no new licence
+eligibility decision and does not publish a release.
+
+The applicable source is the Visual Studio `VC/redist` distribution under
+[Microsoft's redistribution terms](https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution#visual-c-runtime-files).
+No System32 fallback is used by candidate CI. Actual FileVersion, SHA-256,
+signature and architecture observations are retained per file in
+`WINDOWS-RUNTIME.json` and `BUILD-RECEIPT.json.windows_runtime`; versions/hashes
+are observed per build, not pre-pinned. Non-Windows candidates embed none of
+these supplemental files.
+
 ## Go Unicode / regular-expression compatibility data
 
 The files under `src/approval/policy/go_regex/` contain Unicode15.0 data and
