@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "scope": "Local Linux validation of committed continuation source; not public/native four-target acceptance",
+  "local_code_sha": "f4d1e97116dc4472e11acab3930800afa42e1b5b",
+  "local_tree_sha": "1fd88965b36ab4ae43ada216be3e950a03c38e5a",
+  "public_baseline_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+  "go_oracle_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "source_manifest_sha256": "d16e8f8060f05754f2b960eea780a837078ef5b29634559d46ade07e487b553c",
+  "source_files": 1911,
+  "all_targets": {
+    "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets --no-fail-fast -- --test-threads=8",
+    "exit": 0,
+    "passed": 1394,
+    "failed": 0,
+    "ignored": 0,
+    "target_summaries": 32,
+    "library_passed": 1083
+  },
+  "clippy": {
+    "command": "cargo clippy --manifest-path rust/Cargo.toml --locked --offline --all-targets -- -D warnings",
+    "exit": 0
+  },
+  "doctests": {
+    "command": "cargo test --manifest-path rust/Cargo.toml --locked --offline --doc",
+    "exit": 0,
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0
+  },
+  "packaging_tests": {
+    "passed": 33,
+    "exit": 0,
+    "scope": "runtime receipt/packaging source unchanged since this run"
+  },
+  "formatter": "passed",
+  "frontend": "Bun1.3.14 locked install, check and build passed",
+  "toolchains": {
+    "rustc": "1.90.0",
+    "cargo": "1.90.0",
+    "go": "1.26.8",
+    "bun": "1.3.14",
+    "installation_scope": "owner-approved isolated cloud workspace; official archive hashes verified"
+  },
+  "red_evidence": [
+    {
+      "scope": "items1,2,3,5,6,7,9 library regressions",
+      "passed": 1060,
+      "failed": 19,
+      "ignored": 0,
+      "exit": 101
+    },
+    {
+      "scope": "item8 original three transaction regressions",
+      "passed": 0,
+      "failed": 3,
+      "ignored": 0,
+      "exit": 101
+    },
+    {
+      "scope": "item10 approval producer with real EffectDriver",
+      "passed": 4,
+      "failed": 4,
+      "ignored": 0,
+      "exit": 101
+    },
+    {
+      "scope": "item10 handoff hooks and real loopback wrapper",
+      "passed": 0,
+      "failed": 2,
+      "ignored": 0,
+      "exit": 101
+    }
+  ],
+  "intermediate_corrections": [
+    "First green library run had1078 passed and1 new-fixture construction failure: ZipWriter rejected identical archive member names. The fixture now uses different archive paths with the same flattened basename; collision/cleanup assertions are unchanged.",
+    "Independent review caught the latest-parent lookup placed in ordinary register instead of reattach. Corrected before final validation and added deterministic concurrent-parent admission regression."
+  ],
+  "pending": [
+    "Exact published-head four-target CI, native Windows Authenticode/runtime byte receipt, target artifacts and both binary hashes",
+    "Windows-only ACL/path regressions on native runner",
+    "Owner device/provider/installed-data acceptance, V03 signing/publisher isolation, V06 corrective-action decisions and cutover"
+  ],
+  "forbidden_changes_performed": false,
+  "source_manifest_scope": "Raw tested working-tree bytes. The 1,911-file set matches local_code_sha; all compiled Rust source bytes equal the committed blobs. Seven pre-existing PowerShell files have CRLF worktree bytes and LF committed blobs and normalize exactly. This manifest hash is not a Git tree or universal committed-blob byte hash."
+}
