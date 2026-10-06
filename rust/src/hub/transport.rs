@@ -101,24 +101,93 @@ async fn serve_inner(
     }
     let mut connections = tokio::task::JoinSet::new();
     loop {
-        tokio::select! {
-            _=cancel.cancelled()=>break,
-            Some(_)=connections.join_next(),if !connections.is_empty()=>{},
-            accepted=listener.accept()=>{
-                let(stream,peer)=accepted?;
-                let service=hyper_util::service::TowerToHyperService::new(router.clone().layer(axum::Extension(ConnectInfo(peer))));
-                connections.spawn(async move{
-                    let mut builder=hyper::server::conn::http1::Builder::new();
-                    builder.timer(hyper_util::rt::TokioTimer::new()).header_read_timeout(std::time::Duration::from_secs(10)).max_buf_size(1024*1024+4096);
-                    builder.serve_connection(hyper_util::rt::TokioIo::new(stream),service).with_upgrades().await
-                });
+        let accepting = accept_next(|| listener.accept(), &cancel);
+        tokio::pin!(accepting);
+        let accepted = loop {
+            tokio::select! {
+                Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                accepted = &mut accepting => break accepted?,
             }
-        }
+        };
+        let Some((stream, peer)) = accepted else {
+            break;
+        };
+        let service = hyper_util::service::TowerToHyperService::new(
+            router.clone().layer(axum::Extension(ConnectInfo(peer))),
+        );
+        connections.spawn(async move {
+            let mut builder = hyper::server::conn::http1::Builder::new();
+            builder
+                .timer(hyper_util::rt::TokioTimer::new())
+                .header_read_timeout(std::time::Duration::from_secs(10))
+                .max_buf_size(1024 * 1024 + 4096);
+            builder
+                .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+                .with_upgrades()
+                .await
+        });
     }
     // Go Run uses http.Server.Close, not an unbounded graceful-body drain.
     connections.abort_all();
     while connections.join_next().await.is_some() {}
     Ok(())
+}
+async fn accept_next<A, F, T>(mut accept: A, cancel: &Cancellation) -> io::Result<Option<T>>
+where
+    A: FnMut() -> F,
+    F: Future<Output = io::Result<T>>,
+{
+    let mut delay = std::time::Duration::ZERO;
+    loop {
+        let accepted = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Ok(None),
+            accepted = accept() => accepted,
+        };
+        match accepted {
+            Ok(connection) => return Ok(Some(connection)),
+            Err(error) if transient_accept_error(&error) => {
+                // Go http.Server.Serve starts at 5 ms, doubles up to one
+                // second, and resets after a successful accept. Keep this
+                // future pinned while draining completed connections so they
+                // cannot restart or bypass its backoff.
+                delay = if delay.is_zero() {
+                    std::time::Duration::from_millis(5)
+                } else {
+                    (delay * 2).min(std::time::Duration::from_secs(1))
+                };
+                tokio::select! {
+                    biased;
+                    _ = cancel.cancelled() => return Ok(None),
+                    _ = tokio::time::sleep(delay) => {},
+                }
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+fn transient_accept_error(error: &io::Error) -> bool {
+    if matches!(
+        error.kind(),
+        io::ErrorKind::Interrupted
+            | io::ErrorKind::WouldBlock
+            | io::ErrorKind::TimedOut
+            | io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::ConnectionReset
+    ) {
+        return true;
+    }
+    // Descriptor exhaustion is an uncategorized io::Error on Unix. Check the
+    // platform codes rather than retrying every Other/Uncategorized error.
+    #[cfg(unix)]
+    if matches!(error.raw_os_error(), Some(libc::EMFILE | libc::ENFILE)) {
+        return true;
+    }
+    #[cfg(windows)]
+    if error.raw_os_error() == Some(windows_sys::Win32::Networking::WinSock::WSAEMFILE) {
+        return true;
+    }
+    false
 }
 async fn handle(
     State(state): State<TransportState>,
@@ -549,6 +618,183 @@ mod tests {
         proto::core::{CoreEffects, CoreFuture},
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    #[tokio::test(start_paused = true)]
+    async fn transient_accept_failures_retry_without_losing_the_next_connection() {
+        let mut errors = vec![
+            io::Error::from(io::ErrorKind::Interrupted),
+            io::Error::from(io::ErrorKind::WouldBlock),
+            io::Error::from(io::ErrorKind::TimedOut),
+            io::Error::from(io::ErrorKind::ConnectionAborted),
+            io::Error::from(io::ErrorKind::ConnectionReset),
+        ];
+        #[cfg(unix)]
+        errors.extend(
+            [
+                libc::EINTR,
+                libc::EAGAIN,
+                libc::EWOULDBLOCK,
+                libc::ETIMEDOUT,
+                libc::ECONNABORTED,
+                libc::ECONNRESET,
+                libc::EMFILE,
+                libc::ENFILE,
+            ]
+            .map(io::Error::from_raw_os_error),
+        );
+        #[cfg(windows)]
+        {
+            use windows_sys::Win32::Networking::WinSock::*;
+            errors.extend(
+                [
+                    WSAEINTR,
+                    WSAEWOULDBLOCK,
+                    WSAETIMEDOUT,
+                    WSAECONNABORTED,
+                    WSAECONNRESET,
+                    WSAEMFILE,
+                ]
+                .map(io::Error::from_raw_os_error),
+            );
+        }
+        for error in errors {
+            let kind = error.kind();
+            let code = error.raw_os_error();
+            let mut outcomes = [Err(error), Ok(42)].into_iter();
+            let start = tokio::time::Instant::now();
+            let accepted = accept_next(
+                || std::future::ready(outcomes.next().expect("unexpected additional accept")),
+                &Cancellation::default(),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("transient {kind:?}/{code:?} stopped the Hub: {error}"));
+            assert_eq!(accepted, Some(42));
+            assert!(outcomes.next().is_none());
+            assert_eq!(start.elapsed(), std::time::Duration::from_millis(5));
+        }
+    }
+    #[tokio::test(start_paused = true)]
+    async fn accept_backoff_is_bounded_and_resets_after_success() {
+        let mut attempts = Vec::new();
+        let start = tokio::time::Instant::now();
+        let accepted = accept_next(
+            || {
+                attempts.push(start.elapsed());
+                std::future::ready(if attempts.len() <= 11 {
+                    Err(io::Error::from(io::ErrorKind::Interrupted))
+                } else {
+                    Ok(7)
+                })
+            },
+            &Cancellation::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(accepted, Some(7));
+        let delays: Vec<_> = attempts
+            .windows(2)
+            .map(|pair| (pair[1] - pair[0]).as_millis())
+            .collect();
+        assert_eq!(delays, [5, 10, 20, 40, 80, 160, 320, 640, 1000, 1000, 1000]);
+        let mut outcomes = [Err(io::Error::from(io::ErrorKind::Interrupted)), Ok(8)].into_iter();
+        let start = tokio::time::Instant::now();
+        assert_eq!(
+            accept_next(
+                || std::future::ready(outcomes.next().unwrap()),
+                &Cancellation::default()
+            )
+            .await
+            .unwrap(),
+            Some(8)
+        );
+        assert_eq!(start.elapsed(), std::time::Duration::from_millis(5));
+    }
+    #[tokio::test(start_paused = true)]
+    async fn fatal_accept_errors_stop_without_retry_or_delay() {
+        for kind in [
+            io::ErrorKind::PermissionDenied,
+            io::ErrorKind::InvalidInput,
+            io::ErrorKind::NotConnected,
+            io::ErrorKind::Other,
+        ] {
+            let start = tokio::time::Instant::now();
+            let mut attempts = 0;
+            let error = accept_next(
+                || {
+                    attempts += 1;
+                    std::future::ready(Err::<(), _>(io::Error::new(kind, "synthetic fatal accept")))
+                },
+                &Cancellation::default(),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.kind(), kind);
+            assert_eq!(error.to_string(), "synthetic fatal accept");
+            assert_eq!(attempts, 1);
+            assert_eq!(start.elapsed(), std::time::Duration::ZERO);
+        }
+    }
+    #[tokio::test(start_paused = true)]
+    async fn fatal_accept_os_error_preserves_its_code_without_retry() {
+        #[cfg(unix)]
+        let code = libc::EBADF;
+        #[cfg(windows)]
+        let code = windows_sys::Win32::Networking::WinSock::WSAENOTSOCK;
+        let mut attempts = 0;
+        let start = tokio::time::Instant::now();
+        let error = accept_next(
+            || {
+                attempts += 1;
+                std::future::ready(Err::<(), _>(io::Error::from_raw_os_error(code)))
+            },
+            &Cancellation::default(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(code));
+        assert_eq!(attempts, 1);
+        assert_eq!(start.elapsed(), std::time::Duration::ZERO);
+    }
+    #[tokio::test(start_paused = true)]
+    async fn cancellation_interrupts_accept_backoff_before_another_attempt() {
+        let cancel = Cancellation::default();
+        let start = tokio::time::Instant::now();
+        let mut attempts = 0;
+        let accepting = accept_next(
+            || {
+                attempts += 1;
+                std::future::ready(Err::<(), _>(io::Error::from(io::ErrorKind::Interrupted)))
+            },
+            &cancel,
+        );
+        let cancelling = async {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            cancel.cancel();
+        };
+        let (accepted, ()) = tokio::join!(accepting, cancelling);
+        assert_eq!(accepted.unwrap(), None);
+        assert_eq!(attempts, 1);
+        assert_eq!(start.elapsed(), std::time::Duration::from_millis(1));
+    }
+    #[tokio::test(start_paused = true)]
+    async fn cancelled_accept_does_not_consume_a_ready_connection() {
+        let cancel = Cancellation::default();
+        cancel.cancel();
+        assert_eq!(
+            accept_next(|| std::future::ready(Ok(42)), &cancel)
+                .await
+                .unwrap(),
+            None
+        );
+        let cancel = Cancellation::default();
+        let pending = accept_next(std::future::pending::<io::Result<()>>, &cancel);
+        let cancelling = async {
+            tokio::task::yield_now().await;
+            cancel.cancel();
+        };
+        let (accepted, ()) = tokio::join!(pending, cancelling);
+        assert_eq!(accepted.unwrap(), None);
+    }
+
     #[tokio::test]
     async fn managed_voice_failure_returns_before_incomplete_audio_upload() {
         struct FailingManaged;
