@@ -1,0 +1,578 @@
+{
+  "schema_version": 1,
+  "scope": "Native Windows partial confirmation; wall time includes setup and upload. The warm failure is not a passing performance result and does not establish cache causation. All tests and assertions were retained.",
+  "measurements": [
+    {
+      "label": "cold",
+      "measured_source_sha": "853056507777b95d7acfb9364fa33529046285c6",
+      "run_id": 37431744003,
+      "attempt": 1,
+      "job_id": 112163955655,
+      "conclusion": "success",
+      "started_at": "2026-10-06T07:46:15Z",
+      "completed_at": "2026-10-06T07:56:58Z",
+      "elapsed_seconds_including_setup_upload": 643,
+      "cache_hit": false,
+      "matched_cache_identity": "none",
+      "artifact_id": 11398240703,
+      "artifact_name": "rust-windows-check-853056507777b95d7acfb9364fa33529046285c6-37431744003-attempt-1",
+      "artifact_sha256": "73de46bfae0f18896b9c21d4697de2dae38cb0cc0642f3857936c0d5bf9ef9f3",
+      "artifact_size_bytes": 168672,
+      "groups": [
+        {
+          "id": "all-targets",
+          "status": "passed",
+          "exit_code": 0,
+          "step": 16,
+          "counts": {
+            "passed": 1317,
+            "failed": 0,
+            "ignored": 0
+          }
+        },
+        {
+          "id": "doctests",
+          "status": "passed",
+          "exit_code": 0,
+          "step": 17,
+          "counts": {
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0
+          }
+        }
+      ],
+      "command_timings": [
+        {
+          "program": "rustc",
+          "operation": "--version --verbose",
+          "elapsed_seconds": 0.625,
+          "exit_code": 0
+        },
+        {
+          "program": "go",
+          "operation": "version",
+          "elapsed_seconds": 0.047,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "--version",
+          "elapsed_seconds": 0.0,
+          "exit_code": 0
+        },
+        {
+          "program": "go",
+          "operation": "mod download",
+          "elapsed_seconds": 17.468,
+          "exit_code": 0
+        },
+        {
+          "program": "pwsh",
+          "operation": "-NoProfile -File rust/packaging/prepare_windows_runtime.ps1 -ReceiptPath .rust-candidate-artifacts/windows-check/WINDOWS-RUNTIME.json",
+          "elapsed_seconds": 3.016,
+          "exit_code": 0
+        },
+        {
+          "program": "python.exe",
+          "operation": "-m unittest discover -s rust/packaging -p test_*.py",
+          "elapsed_seconds": 8.125,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "install --frozen-lockfile",
+          "elapsed_seconds": 5.109,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "run check",
+          "elapsed_seconds": 6.891,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "run build",
+          "elapsed_seconds": 0.562,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "fmt --manifest-path rust/Cargo.toml -- --check",
+          "elapsed_seconds": 4.016,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "clippy --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets -- -D warnings",
+          "elapsed_seconds": 191.031,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --no-fail-fast -- --format=pretty --color=never --list",
+          "elapsed_seconds": 216.86,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --no-fail-fast -- --format=pretty --color=never --list --ignored",
+          "elapsed_seconds": 0.984,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --doc --no-fail-fast -- --format=pretty --color=never --list",
+          "elapsed_seconds": 4.609,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --doc --no-fail-fast -- --format=pretty --color=never --list --ignored",
+          "elapsed_seconds": 4.516,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --no-fail-fast -- --format=pretty --color=never --test-threads=8",
+          "elapsed_seconds": 121.5,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --doc --no-fail-fast -- --format=pretty --color=never --test-threads=8",
+          "elapsed_seconds": 4.641,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "label": "warm",
+      "measured_source_sha": "853056507777b95d7acfb9364fa33529046285c6",
+      "run_id": 37431744003,
+      "attempt": 2,
+      "job_id": 112168105842,
+      "conclusion": "failure",
+      "started_at": "2026-10-06T07:58:25Z",
+      "completed_at": "2026-10-06T08:05:33Z",
+      "elapsed_seconds_including_setup_upload": 428,
+      "cache_hit": true,
+      "matched_cache_identity": "rust-win-check-v1-dots-rust-recovery-resume-3-windows2022-20260927.320.1-x64-rust190-devdebug0-testdebug0-inc0-52a1adb32f5c6fddb47f29cc14965c4ea149dc5fe7fa1def21ae00b95208461f-853056507777b95d7acfb9364fa33529046285c6",
+      "artifact_id": 11397753268,
+      "artifact_name": "rust-windows-check-853056507777b95d7acfb9364fa33529046285c6-37431744003-attempt-2",
+      "artifact_sha256": "d9c0d0de2d99f78d4a9067cb40ed20f00675d8dafc5c77433a747d51e750a5dc",
+      "artifact_size_bytes": 164103,
+      "groups": [
+        {
+          "id": "all-targets",
+          "status": "failed",
+          "exit_code": 101,
+          "step": 16,
+          "counts": {
+            "passed": 1314,
+            "failed": 3,
+            "ignored": 0
+          }
+        },
+        {
+          "id": "doctests",
+          "status": "passed",
+          "exit_code": 0,
+          "step": 17,
+          "counts": {
+            "passed": 3,
+            "failed": 0,
+            "ignored": 0
+          }
+        }
+      ],
+      "command_timings": [
+        {
+          "program": "rustc",
+          "operation": "--version --verbose",
+          "elapsed_seconds": 0.609,
+          "exit_code": 0
+        },
+        {
+          "program": "go",
+          "operation": "version",
+          "elapsed_seconds": 0.032,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "--version",
+          "elapsed_seconds": 0.0,
+          "exit_code": 0
+        },
+        {
+          "program": "go",
+          "operation": "mod download",
+          "elapsed_seconds": 12.687,
+          "exit_code": 0
+        },
+        {
+          "program": "pwsh",
+          "operation": "-NoProfile -File rust/packaging/prepare_windows_runtime.ps1 -ReceiptPath .rust-candidate-artifacts/windows-check/WINDOWS-RUNTIME.json",
+          "elapsed_seconds": 2.781,
+          "exit_code": 0
+        },
+        {
+          "program": "python.exe",
+          "operation": "-m unittest discover -s rust/packaging -p test_*.py",
+          "elapsed_seconds": 12.422,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "install --frozen-lockfile",
+          "elapsed_seconds": 12.985,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "run check",
+          "elapsed_seconds": 5.359,
+          "exit_code": 0
+        },
+        {
+          "program": "bun",
+          "operation": "run build",
+          "elapsed_seconds": 1.922,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "fmt --manifest-path rust/Cargo.toml -- --check",
+          "elapsed_seconds": 4.016,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "clippy --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets -- -D warnings",
+          "elapsed_seconds": 45.937,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --no-fail-fast -- --format=pretty --color=never --list",
+          "elapsed_seconds": 101.625,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --no-fail-fast -- --format=pretty --color=never --list --ignored",
+          "elapsed_seconds": 0.625,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --doc --no-fail-fast -- --format=pretty --color=never --list",
+          "elapsed_seconds": 3.75,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --doc --no-fail-fast -- --format=pretty --color=never --list --ignored",
+          "elapsed_seconds": 3.719,
+          "exit_code": 0
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --no-fail-fast -- --format=pretty --color=never --test-threads=8",
+          "elapsed_seconds": 134.25,
+          "exit_code": 101
+        },
+        {
+          "program": "cargo",
+          "operation": "test --locked --manifest-path rust/Cargo.toml --target x86_64-pc-windows-msvc --doc --no-fail-fast -- --format=pretty --color=never --test-threads=8",
+          "elapsed_seconds": 3.25,
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "known_failures": {
+    "warm": [
+      "application::host_actions::tests::synthetic_picker_captures_native_output_and_owner_cancellation_reaps:20-second wrapper timeout",
+      "application::subscriptions::appserver::tests::api_key_account_stops_before_rate_limit_request:inner TimedOut instead of account rejection",
+      "application::subscriptions::appserver::tests::native_interactive_rpc_waits_each_response_and_reaps_child:inner TimedOut"
+    ],
+    "full_linux": "dropped_executor_future_kills_owned_descendant:executor completed before both helpers were ready"
+  },
+  "pending": "Other full native jobs, failure diagnosis, independent review and final exact-head gates; completion is not established.",
+  "phase_evidence_limit": "phase_diagnostics and its sink were removed before853 as requested. Neither853 attempt retained per-RPC/per-cmdlet phase clocks; missing data cannot be reconstructed. Warm appserver returned the inner TimedOut result from the configured15s budget; the outer20s watchdog did not report Elapsed. Per-test/phase wall-clock times were not retained. requests.txt was readable. Picker outer20s expired before cancellation/reaping phase.",
+  "historical_a48_timing_scope": "About7.4s is a child-local interval after script timing begins, including Add-Content about2.58s and ConvertFrom-Json about4.76s; it is not an isolated PowerShell process-startup measurement. First initialize response about8.59s used a different parent clock origin.",
+  "library_elapsed_seconds": {
+    "cold": 59.61,
+    "warm": 72.6
+  },
+  "stability_gate": "Three consecutive successful Windows confirmation workflow attempts at one exact SHA are required before reporting the requested Windows stability gate. Any failure remains recorded; no ignore or timeout-as-success is allowed. This is not device/provider/signing/rollback acceptance.",
+  "full_gate_853": {
+    "run_id": 37431751034,
+    "run_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37431751034",
+    "attempt": 1,
+    "conclusion": "failure",
+    "targets": [
+      {
+        "target": "x86_64-unknown-linux-gnu",
+        "job_id": 112163977567,
+        "artifact_id": 11397975267,
+        "artifact_name": "rust-candidate-x86_64-unknown-linux-gnu-853056507777b95d7acfb9364fa33529046285c6-37431751034-attempt-1",
+        "artifact_sha256": "sha256:f1696adcec43f3e600666bf39abf7965a9b68e66cc4715f9e6fee0c1aaea58a3",
+        "artifact_size_bytes": 46329,
+        "zip_digest_and_crc_verified": true,
+        "test_logs": [
+          {
+            "name": "08-cargo-test.log",
+            "sha256": "79fc5eca4a54096284654a34aefe997479dafccc3bdceccc3718a341b9a44215",
+            "scope": "all-targets",
+            "summary_count": 33,
+            "first_summary": [
+              1109,
+              1,
+              0
+            ],
+            "totals": [
+              1420,
+              1,
+              0
+            ]
+          }
+        ],
+        "release_binaries_available": false,
+        "binaries": [],
+        "recorded_cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+      },
+      {
+        "target": "aarch64-apple-darwin",
+        "job_id": 112163977454,
+        "artifact_id": 11397761878,
+        "artifact_name": "rust-candidate-aarch64-apple-darwin-853056507777b95d7acfb9364fa33529046285c6-37431751034-attempt-1",
+        "artifact_sha256": "sha256:ee47151d558b651411549ffcf92e6bf83b52db244d652974899ecbe31766d96a",
+        "artifact_size_bytes": 19360558,
+        "zip_digest_and_crc_verified": true,
+        "test_logs": [
+          {
+            "name": "08-cargo-test.log",
+            "sha256": "49bdceb87f3818f3d9c70ff0cc709f3e2dc0417bf76d0a711a15f4ca6be474fd",
+            "scope": "all-targets",
+            "summary_count": 33,
+            "first_summary": [
+              1111,
+              0,
+              0
+            ],
+            "totals": [
+              1421,
+              0,
+              0
+            ]
+          },
+          {
+            "name": "09-cargo-test.log",
+            "sha256": "0c60570c8f0ea8005b1c6df5b70e9321893747eb1f72b600e912a227d6fdfd54",
+            "scope": "doctests",
+            "summary_count": 1,
+            "first_summary": [
+              3,
+              0,
+              0
+            ],
+            "totals": [
+              3,
+              0,
+              0
+            ]
+          }
+        ],
+        "release_binaries_available": true,
+        "binaries": [
+          {
+            "name": "many-ai-cli",
+            "bytes": 40568816,
+            "sha256": "8d1cd15775724a72205c81c8d9e859c377f8a038b009f68d9a6f6a0b72302408",
+            "downloaded_bytes_rehashed": true,
+            "temporary_sink_needles_absent": true
+          },
+          {
+            "name": "many-ai-cli-launcher",
+            "bytes": 10110080,
+            "sha256": "e98ad3365d1421e9ac8796569b101672b75a2c376db9cf68422c0bbdeaee2106",
+            "downloaded_bytes_rehashed": true,
+            "temporary_sink_needles_absent": true
+          }
+        ],
+        "recorded_cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+      },
+      {
+        "target": "x86_64-pc-windows-msvc",
+        "job_id": 112163977446,
+        "artifact_id": 11398169111,
+        "artifact_name": "rust-candidate-x86_64-pc-windows-msvc-853056507777b95d7acfb9364fa33529046285c6-37431751034-attempt-1",
+        "artifact_sha256": "sha256:23d00127b3cdcff4319dbd8f6f4415cf528bf2bf68d0d57ac28d32cc8a6bea91",
+        "artifact_size_bytes": 19603078,
+        "zip_digest_and_crc_verified": true,
+        "test_logs": [
+          {
+            "name": "09-cargo-test.log",
+            "sha256": "74f1c57d241d3c4397654487c457604c8cc95d9c90b4a67d3b3dd22ad779e355",
+            "scope": "all-targets",
+            "summary_count": 33,
+            "first_summary": [
+              1033,
+              0,
+              0
+            ],
+            "totals": [
+              1317,
+              0,
+              0
+            ]
+          },
+          {
+            "name": "10-cargo-test.log",
+            "sha256": "237862d024a13b5a14f3b26bd59110be02e562b4b30df26496ed0f74f02edfff",
+            "scope": "doctests",
+            "summary_count": 1,
+            "first_summary": [
+              3,
+              0,
+              0
+            ],
+            "totals": [
+              3,
+              0,
+              0
+            ]
+          }
+        ],
+        "release_binaries_available": true,
+        "binaries": [
+          {
+            "name": "many-ai-cli.exe",
+            "bytes": 44270080,
+            "sha256": "38e715b9fc5e17a52d260a5da5bb2befa88d2860608ca05473469ed67537f6ba",
+            "downloaded_bytes_rehashed": true,
+            "temporary_sink_needles_absent": true
+          },
+          {
+            "name": "many-ai-cli-launcher.exe",
+            "bytes": 10371584,
+            "sha256": "16a1657e12e1be26741faacebb63e94d05d926e215136c1fbb741a854ae5b684",
+            "downloaded_bytes_rehashed": true,
+            "temporary_sink_needles_absent": true
+          }
+        ],
+        "recorded_cargo_lock_sha256": "90d6d2ebdf259ae214308ded77ac4156fffec2697a62fca16f1a60f06307d2ed"
+      },
+      {
+        "target": "x86_64-apple-darwin",
+        "job_id": 112163977196,
+        "artifact_id": 11398064499,
+        "artifact_name": "rust-candidate-x86_64-apple-darwin-853056507777b95d7acfb9364fa33529046285c6-37431751034-attempt-1",
+        "artifact_sha256": "sha256:159a5321dc42ddbe07118fe712ac5dbef79264012bf774e3862391ce6478e861",
+        "artifact_size_bytes": 19950836,
+        "zip_digest_and_crc_verified": true,
+        "test_logs": [
+          {
+            "name": "08-cargo-test.log",
+            "sha256": "da5563ea377e9b96b8336c2b4530e9c5508a9715d868ad0b713ee87f4e860a22",
+            "scope": "all-targets",
+            "summary_count": 33,
+            "first_summary": [
+              1111,
+              0,
+              0
+            ],
+            "totals": [
+              1421,
+              0,
+              0
+            ]
+          },
+          {
+            "name": "09-cargo-test.log",
+            "sha256": "c3b86bdc6213e1a6eba0c62f5bcb35666c9bb467bd4486e780cf8149ce9a5282",
+            "scope": "doctests",
+            "summary_count": 1,
+            "first_summary": [
+              3,
+              0,
+              0
+            ],
+            "totals": [
+              3,
+              0,
+              0
+            ]
+          }
+        ],
+        "release_binaries_available": true,
+        "binaries": [
+          {
+            "name": "many-ai-cli",
+            "bytes": 43514360,
+            "sha256": "e9ba11ff86645785b04a30bb84984759444222df87669e51491af940aaf6b21f",
+            "downloaded_bytes_rehashed": true,
+            "temporary_sink_needles_absent": true
+          },
+          {
+            "name": "many-ai-cli-launcher",
+            "bytes": 11261536,
+            "sha256": "99320b8a8c5a2d7de984b2671c5d83c68fc55ed59bdb8c537edd1aef9a557800",
+            "downloaded_bytes_rehashed": true,
+            "temporary_sink_needles_absent": true
+          }
+        ],
+        "recorded_cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12"
+      }
+    ],
+    "limitation": "Linux failed1420/1/0 and stopped before doctest/release/collector. Windows passed1317 plus3docs; both Macs1421 plus3docs. The six available binaries were rehashed. Common Git SHA does not erase Windows rawCRLF Cargo.lock hash difference."
+  },
+  "scoped_scan_results": [
+    {
+      "id": 37431743918,
+      "name": "secret-scan",
+      "head_sha": "853056507777b95d7acfb9364fa33529046285c6",
+      "tree": "28aec53ec862939cfce9761719e1035d61bf5605",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "html_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37431743918",
+      "job_id": 112163955077,
+      "commits_scanned": 8,
+      "range": "b47066f24cda971de9fcee6729cfa5c17ffd5e59^..853056507777b95d7acfb9364fa33529046285c6",
+      "result": "no leaks found"
+    },
+    {
+      "id": 37431750922,
+      "name": "secret-scan",
+      "head_sha": "853056507777b95d7acfb9364fa33529046285c6",
+      "tree": "28aec53ec862939cfce9761719e1035d61bf5605",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 1,
+      "html_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37431750922",
+      "job_id": 112163976413,
+      "commits_scanned": 30,
+      "range": "6b0fb8e198750245ef8b4b475fbac9070db0ac3e^..401eff2b83712ca657b31b0baf63d9dadd38171e",
+      "result": "no leaks found",
+      "limit": "First30 PR commits only; earlier history findings remain unwaived."
+    }
+  ],
+  "validate_result": {
+    "id": 37431750942,
+    "name": "Validate",
+    "head_sha": "853056507777b95d7acfb9364fa33529046285c6",
+    "tree": "28aec53ec862939cfce9761719e1035d61bf5605",
+    "event": "pull_request",
+    "status": "completed",
+    "conclusion": "success",
+    "run_attempt": 1,
+    "html_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37431750942"
+  }
+}
