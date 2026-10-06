@@ -257,18 +257,16 @@ pub fn secret_denied(path: &Path, paths: &RuntimePaths) -> bool {
         .unwrap_or_default()
         .to_string_lossy()
         .to_lowercase();
-    let ext = path
-        .extension()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_lowercase();
+    // Go filepath.Ext includes a leading dot: .pem and .key are extensions
+    // too. Path::extension deliberately treats those names as extensionless.
+    let ext = base.rsplit_once('.').map_or("", |(_, extension)| extension);
     let parent = path
         .parent()
         .and_then(|p| p.file_name())
         .unwrap_or_default()
         .to_string_lossy()
         .to_lowercase();
-    matches!(ext.as_str(), "pem" | "key")
+    matches!(ext, "pem" | "key")
         || matches!(
             base.as_str(),
             "any-ai-cli.db"

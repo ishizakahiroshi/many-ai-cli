@@ -716,3 +716,54 @@ fn attachment_history_uses_injected_journal_once() {
     assert_eq!(events[0].0["filename"], "fixture.txt");
     assert!(!events[0].0.contains_key("data"));
 }
+
+#[test]
+fn leading_dot_secret_extensions_are_denied_outside_roots_before_mentions() {
+    let (dir, service, scope) = setup();
+    for name in [".pem", ".key", ".PEM", ".KeY", "..pem", "fixture.key"] {
+        let outside = dir.path().join(name);
+        fs::write(&outside, b"synthetic key material").unwrap();
+        let workspace = Workspace(vec![(
+            String::new(),
+            outside.to_string_lossy().into_owned(),
+        )]);
+        assert!(scope::secret_denied(&outside, &scope.paths), "{name}");
+        for remote in [false, true] {
+            for route in ["/api/files-content", "/api/files-download"] {
+                let response = response(service.read_handle(
+                    &read_request(route, &outside),
+                    &scope,
+                    None,
+                    remote,
+                    &workspace,
+                ));
+                assert_eq!(response.status, 403, "{name}: {route}, remote={remote}");
+            }
+        }
+        let inside = scope.cwd.join(name);
+        fs::write(&inside, b"synthetic project fixture").unwrap();
+        assert!(
+            scope
+                .read_grant(
+                    &read_request("/api/files-content", &inside),
+                    None,
+                    true,
+                    &workspace
+                )
+                .is_ok()
+        );
+    }
+    for name in [
+        "pem",
+        "key",
+        ".pem.txt",
+        ".key.backup",
+        "fixture.pem.",
+        "folder.pem/ordinary.txt",
+    ] {
+        assert!(
+            !scope::secret_denied(&dir.path().join(name), &scope.paths),
+            "{name}"
+        );
+    }
+}
