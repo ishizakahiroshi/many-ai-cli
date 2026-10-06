@@ -8,8 +8,6 @@ mod mutation;
 pub mod safe_fs;
 pub mod scope;
 #[cfg(test)]
-pub(crate) mod snapshot_diagnostic;
-#[cfg(test)]
 mod tests;
 mod time;
 use crate::{
@@ -36,8 +34,6 @@ pub struct FilesService {
     pub(crate) expire_next_git_resolution: std::sync::atomic::AtomicBool,
     #[cfg(test)]
     pub(crate) expired_git_resolutions: std::sync::atomic::AtomicUsize,
-    #[cfg(test)]
-    pub(crate) snapshot_diagnostic: std::sync::Mutex<snapshot_diagnostic::Recorder>,
     history: Option<std::sync::Arc<dyn PersistenceEffectSink>>,
 }
 impl FilesService {
@@ -52,8 +48,6 @@ impl FilesService {
             expire_next_git_resolution: Default::default(),
             #[cfg(test)]
             expired_git_resolutions: Default::default(),
-            #[cfg(test)]
-            snapshot_diagnostic: Default::default(),
             history: None,
         }
     }

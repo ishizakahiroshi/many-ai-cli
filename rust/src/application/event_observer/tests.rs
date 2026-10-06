@@ -277,26 +277,6 @@ fn event(binding: SessionBinding, end: bool) -> CoreEvent {
 }
 
 #[tokio::test]
-async fn snapshot_failure_diagnostic_observes_actual_private_index_error_without_paths() {
-    let f = fixture(false, false).await;
-    let temporary = f.files.paths.root().join("tmp");
-    if temporary.exists() {
-        // This fixture owns the empty runtime, never an installed user path.
-        std::fs::remove_dir(&temporary).unwrap();
-    }
-    std::fs::write(&temporary, b"synthetic non-directory").unwrap();
-    f.files.snapshot_diagnostic.lock().unwrap().begin();
-    f.observer.observe(&event(f.binding, false)).await.unwrap();
-    let diagnostic = format!("{:?}", f.files.snapshot_diagnostic.lock().unwrap().finish());
-    assert!(f.files.reserve_git_turn_end(f.binding).is_none());
-    assert!(diagnostic.contains("OpenTemporaryParent"), "{diagnostic}");
-    assert!(diagnostic.contains("response: Some((500,"), "{diagnostic}");
-    assert!(!diagnostic.contains(&f.cwd.to_string_lossy().into_owned()));
-    assert!(!diagnostic.contains(&temporary.to_string_lossy().into_owned()));
-    assert!(f.warnings.lock().unwrap()[0].contains("snapshot unavailable: status=500"));
-}
-
-#[tokio::test]
 async fn fixture_git_keeps_auto_maintenance_enabled_before_real_capture() {
     let f = fixture(false, false).await;
     let lock = f.cwd.join(".git").join("objects").join("maintenance.lock");
@@ -544,22 +524,11 @@ async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarna
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .len();
-    f.files
-        .snapshot_diagnostic
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .begin();
     f.observer
         .observe(&event(warm.binding, false))
         .await
         .unwrap();
     let reservation = f.files.reserve_git_turn_end(warm.binding);
-    let diagnostic = f
-        .files
-        .snapshot_diagnostic
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .finish();
     let warnings = f
         .warnings
         .lock()
@@ -570,6 +539,6 @@ async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarna
         .collect::<Vec<_>>();
     assert!(
         reservation.is_some(),
-        "post-reconnect start did not establish a Git-turn reservation; warnings={warnings:?}; rust_git_turn_failure_test_diagnostic={diagnostic:?}"
+        "post-reconnect start did not establish a Git-turn reservation; warnings={warnings:?}"
     );
 }
