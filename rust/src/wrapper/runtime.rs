@@ -168,7 +168,7 @@ where
             .and_then(|n| n.to_str())
             .ok_or_else(|| io::Error::other("wrapper log path has no filename"))?;
         let opened = (|| {
-            let directory = crate::files::safe_fs::Dir::open_or_create_private(parent)?;
+            let directory = crate::files::safe_fs::Dir::open_or_create_private_components(parent)?;
             directory.replace(name, &[], 0o600)?;
             directory.open_file(name, true)
         })();

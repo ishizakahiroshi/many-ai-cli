@@ -566,7 +566,7 @@ impl CliUpdates {
             crate::orchestration::child_launch::safe_token(&id)
         );
         match (self.dependencies.log_directory)()
-            .and_then(|path| Dir::open_or_create_private(&path))
+            .and_then(|path| Dir::open_or_create_private_components(&path))
             .and_then(|dir| {
                 dir.replace(&name, payload.as_bytes(), 0o600)?;
                 Ok(Arc::new(dir))

@@ -10,7 +10,7 @@ pub(super) struct OwnerLease {
 }
 impl OwnerLease {
     pub(super) fn acquire(directory: &Path, name: &str) -> io::Result<Self> {
-        let directory = Dir::open_or_create_private(directory)?;
+        let directory = Dir::open_or_create_private_components(directory)?;
         let file = directory.open_lock(name)?;
         file.try_lock().map_err(|error| match error {
             std::fs::TryLockError::WouldBlock => io::Error::new(
@@ -55,5 +55,24 @@ mod tests {
         assert!(root.path().join("synthetic-owner.lock").is_file());
         drop(first);
         let _second = OwnerLease::acquire(root.path(), "synthetic-owner.lock").unwrap();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod permission_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn database_owner_preserves_existing_directory_permissions() {
+        let root = tempfile::tempdir().unwrap();
+        let cwd = root.path().join("synthetic-cwd");
+        std::fs::create_dir(&cwd).unwrap();
+        std::fs::set_permissions(&cwd, std::fs::Permissions::from_mode(0o751)).unwrap();
+        let _lease = OwnerLease::acquire(&cwd, "synthetic-database-owner.lock").unwrap();
+        assert_eq!(
+            std::fs::metadata(&cwd).unwrap().permissions().mode() & 0o777,
+            0o751
+        );
     }
 }

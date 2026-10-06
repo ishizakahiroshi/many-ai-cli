@@ -13,7 +13,7 @@ pub fn open_append(path: &Path) -> io::Result<fs::File> {
         .file_name()
         .and_then(|s| s.to_str())
         .ok_or_else(|| io::Error::other("append destination has no UTF-8 filename"))?;
-    crate::files::safe_fs::Dir::open_or_create_private(parent)?.open_append(name)
+    crate::files::safe_fs::Dir::open_or_create_private_components(parent)?.open_append(name)
 }
 pub fn ensure_private_dir(path: &Path) -> io::Result<()> {
     crate::files::safe_fs::Dir::open_or_create_private(path).map(|_| ())

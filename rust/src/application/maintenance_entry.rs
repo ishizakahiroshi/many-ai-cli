@@ -9,7 +9,7 @@ pub fn stop_command(context: &MainContext) -> io::Result<maintenance_cli::stop::
     } else {
         PathBuf::from(&cfg.hub.log_dir)
     };
-    let logger = Dir::open_or_create_private(&directory)
+    let logger = Dir::open_or_create_private_components(&directory)
         .and_then(|dir| crate::logging::RollingLog::new(Arc::new(dir), "hub.log"))
         .ok()
         .map(Arc::new);

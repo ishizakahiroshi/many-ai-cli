@@ -14,7 +14,7 @@ impl HubLogger {
         Ok(Arc::new(Self {
             // Fixed Go falls back to stderr when safe file logging is not
             // available. Never follow an alias or replace an obstructing file.
-            file: Dir::open_or_create_private(directory)
+            file: Dir::open_or_create_private_components(directory)
                 .ok()
                 .and_then(|dir| RollingLog::new(Arc::new(dir), "hub.log").ok()),
             config,
@@ -158,5 +158,42 @@ mod tests {
         }
         assert_eq!(failed.attempts, 2);
         assert_eq!(healthy, messages.concat());
+    }
+}
+
+#[cfg(all(test, unix))]
+mod directory_permission_tests {
+    use super::*;
+    use crate::config::{Resource, RuntimePaths};
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn hub_logs_preserve_existing_cwd_and_configured_directory_permissions() {
+        let root = tempfile::tempdir().unwrap();
+        let cwd = root.path().join("synthetic-cwd");
+        let configured = root.path().join("configured-logs");
+        for directory in [&cwd, &configured] {
+            std::fs::create_dir(directory).unwrap();
+            std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o751)).unwrap();
+        }
+        for setting in [Path::new(""), configured.as_path()] {
+            let paths = RuntimePaths::production(&root.path().join("synthetic-home"))
+                .unwrap()
+                .with_log_dir_at(setting, &cwd)
+                .unwrap();
+            let directory = paths.resource(Resource::Logs);
+            let config = LogConfig {
+                enabled: true,
+                ..Default::default()
+            };
+            let logger = HubLogger::new(&directory, config, false).unwrap();
+            logger.write("INFO", "synthetic permission test", "");
+            logger.close().unwrap();
+            assert_eq!(
+                std::fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+                0o751
+            );
+            assert!(directory.join("hub.log").is_file());
+        }
     }
 }

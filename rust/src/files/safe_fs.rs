@@ -881,11 +881,18 @@ mod platform {
 pub use platform::Dir;
 
 impl Dir {
-    /// Walk from the absolute filesystem root through directory capabilities.
-    /// New components are private from creation; only the requested final
-    /// directory is restricted if it already existed. Existing ancestors (for
-    /// example the user's home or a volume root) keep their original policy.
+    /// Open and explicitly repair the final directory's private permissions.
+    /// Use for owned configuration roots whose existing policy must be private.
     pub fn open_or_create_private(path: &Path) -> io::Result<Self> {
+        let directory = Self::open_or_create_private_components(path)?;
+        directory.restrict_private()?;
+        Ok(directory)
+    }
+
+    /// Walk from the absolute root through held directory capabilities, creating
+    /// missing components privately. Like Go's MkdirAll, existing directories
+    /// keep their permissions, including a configured log destination or cwd.
+    pub fn open_or_create_private_components(path: &Path) -> io::Result<Self> {
         let path = crate::config::paths::native_system_path(path);
         let path = path.as_ref();
         if !path.is_absolute() {
@@ -929,7 +936,6 @@ impl Dir {
         for name in names {
             directory = directory.child_dir(&name, true)?;
         }
-        directory.restrict_private()?;
         Ok(directory)
     }
 }
@@ -1008,5 +1014,140 @@ mod lock_file_tests {
         let mut bytes = vec![];
         second.read_to_end(&mut bytes).unwrap();
         assert_eq!(bytes, b"owned lock fixture");
+    }
+}
+
+#[cfg(test)]
+mod creation_only_directory_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn private_append_preserves_existing_directory_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let logs = root.path().join("existing-logs");
+        std::fs::create_dir(&logs).unwrap();
+        std::fs::set_permissions(&logs, std::fs::Permissions::from_mode(0o751)).unwrap();
+        let mut file = crate::config::private_io::open_append(&logs.join("fixture.log")).unwrap();
+        file.write_all(b"synthetic log").unwrap();
+        assert_eq!(
+            std::fs::metadata(&logs).unwrap().permissions().mode() & 0o777,
+            0o751
+        );
+        assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_append_creates_private_components_without_changing_existing_ancestors() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let existing = root.path().join("existing");
+        std::fs::create_dir(&existing).unwrap();
+        std::fs::set_permissions(&existing, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let logs = existing.join("new-parent/new-logs");
+        let file = crate::config::private_io::open_append(&logs.join("fixture.log")).unwrap();
+        assert_eq!(
+            std::fs::metadata(&existing).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        for path in [existing.join("new-parent"), logs] {
+            assert_eq!(
+                std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                0o700
+            );
+        }
+        assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_append_preserves_held_inode_and_refuses_replacement_symlink() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let logs = root.path().join("logs");
+        let moved = root.path().join("moved");
+        let foreign = root.path().join("foreign");
+        std::fs::create_dir(&foreign).unwrap();
+        let mut file = crate::config::private_io::open_append(&logs.join("fixture.log")).unwrap();
+        std::fs::rename(&logs, &moved).unwrap();
+        symlink(&foreign, &logs).unwrap();
+        file.write_all(b"held synthetic log").unwrap();
+        assert_eq!(
+            std::fs::read(moved.join("fixture.log")).unwrap(),
+            b"held synthetic log"
+        );
+        assert!(!foreign.join("fixture.log").exists());
+        assert!(crate::config::private_io::open_append(&logs.join("other.log")).is_err());
+        assert!(!foreign.join("other.log").exists());
+    }
+
+    #[cfg(windows)]
+    fn directory_dacl(path: &Path) -> Vec<u16> {
+        use std::{os::windows::ffi::OsStrExt, ptr};
+        use windows_sys::Win32::{
+            Foundation::LocalFree,
+            Security::{Authorization::*, DACL_SECURITY_INFORMATION},
+        };
+        let path: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+        let mut descriptor = ptr::null_mut();
+        // SAFETY: a synthetic directory path and output pointers outlive each call.
+        let status = unsafe {
+            GetNamedSecurityInfoW(
+                path.as_ptr(),
+                SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut descriptor,
+            )
+        };
+        assert_eq!(status, 0);
+        let mut sddl = ptr::null_mut();
+        let mut length = 0;
+        let converted = unsafe {
+            ConvertSecurityDescriptorToStringSecurityDescriptorW(
+                descriptor,
+                SDDL_REVISION_1,
+                DACL_SECURITY_INFORMATION,
+                &mut sddl,
+                &mut length,
+            )
+        };
+        unsafe {
+            LocalFree(descriptor);
+        }
+        assert_ne!(converted, 0);
+        // SAFETY: successful conversion returns length UTF-16 code units.
+        let value = unsafe { std::slice::from_raw_parts(sddl, length as usize).to_vec() };
+        unsafe {
+            LocalFree(sddl.cast());
+        }
+        value
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn private_append_preserves_existing_windows_directory_acl() {
+        let root = tempfile::tempdir().unwrap();
+        let logs = root.path().join("existing-logs");
+        std::fs::create_dir(&logs).unwrap();
+        let before = directory_dacl(&logs);
+        let mut file = crate::config::private_io::open_append(&logs.join("fixture.log")).unwrap();
+        file.write_all(b"synthetic log").unwrap();
+        assert_eq!(directory_dacl(&logs), before);
+        assert_eq!(
+            std::fs::read(logs.join("fixture.log")).unwrap(),
+            b"synthetic log"
+        );
+        let nested = logs.join("new-parent/new-logs");
+        let _file = crate::config::private_io::open_append(&nested.join("fixture.log")).unwrap();
+        assert_eq!(directory_dacl(&logs), before);
+        for path in [logs.join("new-parent"), nested] {
+            assert!(String::from_utf16_lossy(&directory_dacl(&path)).contains("D:P"));
+        }
     }
 }

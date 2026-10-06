@@ -330,9 +330,12 @@ impl HubComposition {
             crate::approval::token::OneTapManager::new()
                 .map_err(|_| io::Error::other("one-tap signing randomness unavailable"))?,
         );
-        let audit_log = Dir::open_or_create_private(paths.resource(Resource::Logs).as_path())
-            .and_then(|dir| crate::logging::RollingLog::new(Arc::new(dir), "auto-approval.jsonl"))
-            .ok();
+        let audit_log =
+            Dir::open_or_create_private_components(paths.resource(Resource::Logs).as_path())
+                .and_then(|dir| {
+                    crate::logging::RollingLog::new(Arc::new(dir), "auto-approval.jsonl")
+                })
+                .ok();
         let audit_config = context.config.clone();
         let approval_rules = crate::application::approval_rules::ApprovalRules::new(
             context.config.clone(),

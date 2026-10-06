@@ -18,7 +18,7 @@ pub(super) fn open(path: &Path) -> StorageResult<Dir> {
             })?
             .join(path)
     };
-    Dir::open_or_create_private(&path).map_err(|_| {
+    Dir::open_or_create_private_components(&path).map_err(|_| {
         error(
             StorageErrorKind::Open,
             "database directory could not be held privately",
@@ -64,6 +64,25 @@ mod tests {
         assert_eq!(
             std::fs::read(outside.join(DATABASE)).unwrap(),
             b"outside synthetic"
+        );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod permission_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn database_parent_preserves_existing_working_directory_permissions() {
+        let root = tempfile::tempdir().unwrap();
+        let cwd = root.path().join("synthetic-cwd");
+        std::fs::create_dir(&cwd).unwrap();
+        std::fs::set_permissions(&cwd, std::fs::Permissions::from_mode(0o751)).unwrap();
+        let held = open(&cwd).unwrap();
+        assert_eq!(
+            held.own_metadata().unwrap().permissions().mode() & 0o777,
+            0o751
         );
     }
 }

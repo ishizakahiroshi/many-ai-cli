@@ -428,7 +428,7 @@ fn prepare_resolved(
         chrono::Local::now().format("%Y%m%d-%H%M%S%.3f")
     );
     let log = || {
-        Dir::open_or_create_private(&options.paths.resource(Resource::Logs))?
+        Dir::open_or_create_private_components(&options.paths.resource(Resource::Logs))?
             .child_dir("spawn", true)?
             .open_append(&filename)
     };
