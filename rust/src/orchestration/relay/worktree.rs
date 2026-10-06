@@ -841,7 +841,9 @@ esac
         hooks
     }
     async fn fixture() -> Fixture {
-        let root = tempfile::tempdir().unwrap();
+        fixture_in(tempfile::tempdir().unwrap()).await
+    }
+    async fn fixture_in(root: tempfile::TempDir) -> Fixture {
         let runtime = root.path().join("trial");
         fs::create_dir(&runtime).unwrap();
         let paths = RuntimePaths::trial(&runtime, 49661, &root.path().join("installed")).unwrap();
@@ -980,19 +982,41 @@ esac
     #[tokio::test]
     #[cfg(unix)]
     async fn prepare_preserves_existing_git_info_and_worktree_parent_modes() {
+        assert_prepare_preserves_existing_directory_modes(fixture().await).await;
+    }
+    #[cfg(unix)]
+    async fn assert_prepare_preserves_existing_directory_modes(f: Fixture) {
         use std::os::unix::fs::PermissionsExt;
-        let f = fixture().await;
+        // Git reports the physical top-level path. Normalize this owned fixture
+        // so macOS temporary-directory aliases cannot skip the exclude branch.
+        let repo = f.repo.canonicalize().unwrap();
         let cancel = TaskCancellation::default();
         let cfg = OrchestrationConfig::default();
-        let info = f.repo.join(".git/info");
-        let parent = RelayGit::root(&f.repo, &cfg).join("r-permissions");
+        let info = repo.join(".git/info");
+        let root = RelayGit::root(&repo, &cfg);
+        let top = f
+            .git
+            .run(
+                &repo,
+                &["rev-parse", "--show-toplevel"],
+                Duration::from_secs(3),
+                &cancel,
+            )
+            .await
+            .unwrap();
+        assert!(
+            root.strip_prefix(top.trim())
+                .is_ok_and(|relative| !relative.as_os_str().is_empty()),
+            "the permissions fixture must enter prepare's exclude branch"
+        );
+        let parent = root.join("r-permissions");
         fs::create_dir_all(&parent).unwrap();
         for path in [&info, &parent] {
             fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
         }
         let (worktree, _, _) = f
             .git
-            .prepare(&f.repo, "r-permissions", &cfg, &cancel)
+            .prepare(&repo, "r-permissions", &cfg, &cancel)
             .await
             .unwrap();
         assert!(worktree.is_dir());
@@ -1009,6 +1033,48 @@ esac
                 .unwrap()
                 .contains("/.many-ai-cli/worktrees/")
         );
+    }
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn prepare_permissions_fixture_handles_verified_system_temp_alias_spellings() {
+        let alias = Path::new("/tmp");
+        let physical = Path::new("/private/tmp");
+        let target = fs::read_link(alias).unwrap();
+        assert!(
+            target == physical || target == Path::new("private/tmp"),
+            "the native control requires the existing macOS system temporary alias"
+        );
+        assert_eq!(alias.canonicalize().unwrap(), physical);
+        for (base, lexical_prefix_matches) in [(alias, false), (physical, true)] {
+            let root = tempfile::Builder::new()
+                .prefix("many-ai-cli-permissions-")
+                .tempdir_in(base)
+                .unwrap();
+            let f = fixture_in(root).await;
+            let top = f
+                .git
+                .run(
+                    &f.repo,
+                    &["rev-parse", "--show-toplevel"],
+                    Duration::from_secs(3),
+                    &TaskCancellation::default(),
+                )
+                .await
+                .unwrap();
+            assert!(
+                Path::new(top.trim()) == f.repo.canonicalize().unwrap(),
+                "Git must report the physical repository path for this native control"
+            );
+            let raw_root = RelayGit::root(&f.repo, &OrchestrationConfig::default());
+            assert_eq!(
+                raw_root
+                    .strip_prefix(top.trim())
+                    .is_ok_and(|relative| !relative.as_os_str().is_empty()),
+                lexical_prefix_matches,
+                "only the physical spelling should enter the unnormalized exclude guard"
+            );
+            assert_prepare_preserves_existing_directory_modes(f).await;
+        }
     }
     #[tokio::test]
     async fn worktree_reuse_rejects_wrong_branch_without_repair() {
