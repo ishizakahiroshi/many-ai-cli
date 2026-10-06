@@ -1,5 +1,8 @@
 //! Private rolling log owner. Application audit and Hub diagnostics share this
 //! storage component; callers supply the live log configuration explicitly.
+mod diagnostic;
+pub(crate) use diagnostic::write_diagnostic;
+
 use crate::{
     config::LogConfig,
     files::safe_fs::{self, Dir},
@@ -61,8 +64,8 @@ impl RollingLog {
             return Err(io::Error::other("log write exceeds maximum file size"));
         }
         if state.file.is_none() {
-            // Lumberjack's background mill ignores backup cleanup failures;
-            // they must not suppress writes to an otherwise usable active log.
+            // Every maintenance failure is diagnosed, but must not suppress
+            // writes to an otherwise usable active log (Lumberjack parity).
             let _ = self.cleanup(config);
             let size = match self.directory.metadata(&self.name) {
                 Ok(metadata) => metadata.len(),
@@ -124,6 +127,7 @@ impl RollingLog {
         }
         state.file = Some(self.directory.open_append(&self.name)?);
         state.size = 0;
+        // Cleanup reports each failure and still attempts the remaining files.
         let _ = self.cleanup(config);
         Ok(())
     }
@@ -150,28 +154,33 @@ impl RollingLog {
             {
                 continue;
             }
-            self.directory.metadata(&name)?;
             files.push((name.clone(), plain.to_owned()));
         }
         files.sort_by(|a, b| b.1.cmp(&a.1));
         Ok(files)
     }
     fn cleanup(&self, config: &LogConfig) -> io::Result<()> {
+        self.cleanup_with_diagnostics(config, &mut write_diagnostic)
+    }
+    fn cleanup_with_diagnostics(
+        &self,
+        config: &LogConfig,
+        diagnostic: &mut impl FnMut(&'static str),
+    ) -> io::Result<()> {
         if config.max_backups <= 0 && !config.compress {
             return Ok(());
         }
-        let mut preserved = BTreeSet::new();
-        for (name, plain) in self.backups()? {
-            preserved.insert(plain);
-            if config.max_backups > 0 && preserved.len() > config.max_backups as usize {
-                self.directory.remove_file(&name)?;
-                continue;
-            }
-            if config.compress && !name.ends_with(".gz") {
-                self.compress(&name)?;
-            }
-        }
-        Ok(())
+        let backups = self.backups().inspect_err(|_| {
+            diagnostic("Rolling log backup listing failed\n");
+        })?;
+        cleanup_backups(
+            config,
+            backups,
+            |name| self.directory.metadata(name).map(|_| ()),
+            |name| self.directory.remove_file(name),
+            |name| self.compress(name),
+            diagnostic,
+        )
     }
     fn compress(&self, name: &str) -> io::Result<()> {
         let target = format!("{name}.gz");
@@ -202,6 +211,53 @@ impl RollingLog {
         }
         result
     }
+}
+fn cleanup_backups(
+    config: &LogConfig,
+    backups: Vec<(String, String)>,
+    mut inspect: impl FnMut(&str) -> io::Result<()>,
+    mut remove: impl FnMut(&str) -> io::Result<()>,
+    mut compress: impl FnMut(&str) -> io::Result<()>,
+    diagnostic: &mut impl FnMut(&'static str),
+) -> io::Result<()> {
+    let mut first_error = None;
+    let mut failed = |error, message| {
+        // Never include backup names, paths, or raw OS errors in diagnostics.
+        diagnostic(message);
+        if first_error.is_none() {
+            first_error = Some(error);
+        }
+    };
+    let mut preserved = BTreeSet::new();
+    let mut removals = Vec::new();
+    let mut compressions = Vec::new();
+    for (name, plain) in backups {
+        // The directory capability rejects directories, aliases and other
+        // non-regular entries. Skip them before counting retained backups.
+        if let Err(error) = inspect(&name) {
+            failed(error, "Rolling log backup inspection failed\n");
+            continue;
+        }
+        preserved.insert(plain);
+        if config.max_backups > 0 && preserved.len() > config.max_backups as usize {
+            removals.push(name);
+        } else if config.compress && !name.ends_with(".gz") {
+            compressions.push(name);
+        }
+    }
+    // Lumberjack attempts every removal and then every compression, returning
+    // the first error only after the rest of the maintenance work has run.
+    for name in removals {
+        if let Err(error) = remove(&name) {
+            failed(error, "Rolling log backup removal failed\n");
+        }
+    }
+    for name in compressions {
+        if let Err(error) = compress(&name) {
+            failed(error, "Rolling log backup compression failed\n");
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }
 #[cfg(test)]
 mod tests;

@@ -1424,7 +1424,11 @@ impl ServiceRouter {
                         request,
                         &self.config,
                         &self.paths,
-                        |detail| eprintln!("Hub preference media: {detail}"),
+                        |detail| {
+                            crate::logging::write_diagnostic(&format!(
+                                "Hub preference media: {detail}\n"
+                            ));
+                        },
                     )
                     .expect("recognized media path")
                 }

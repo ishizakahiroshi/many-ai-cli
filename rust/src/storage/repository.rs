@@ -655,7 +655,9 @@ fn insert_message(
         .is_err()
     {
         // Match baseline soft-failure visibility without logging SQL or contents.
-        eprintln!("sessionstore: search index update failed; message saved");
+        crate::logging::write_diagnostic(
+            "sessionstore: search index update failed; message saved\n",
+        );
     }
     Ok(())
 }

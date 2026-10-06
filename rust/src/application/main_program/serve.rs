@@ -1510,7 +1510,7 @@ impl HubComposition {
         self.logger
             .write("INFO", "MANY-AI-CLI stopped", &format!("pid={pid}"));
         if self.logger.close().is_err() {
-            eprintln!("Hub diagnostic log close unavailable");
+            crate::logging::write_diagnostic("Hub diagnostic log close unavailable\n");
         }
         result?;
         remove?;

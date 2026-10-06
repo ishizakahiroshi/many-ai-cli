@@ -107,6 +107,11 @@ fn backup_cleanup_failure_after_rotation_does_not_drop_the_triggering_line() {
     log.write_at(&config, &first, now).unwrap();
     let obstruction = root.path().join("hub-2026-10-05T01-02-03.004.log");
     std::fs::create_dir(&obstruction).unwrap();
+    // This backup's own compressed destination is also obstructed. The plain
+    // bytes below must survive its compression failure even after unrelated
+    // backup inspection failures no longer stop the rest of maintenance.
+    let compression_obstruction = root.path().join("hub-2026-10-05T02-03-04.005.log.gz");
+    std::fs::create_dir(&compression_obstruction).unwrap();
     assert!(log.cleanup(&config).is_err());
     log.write_at(&config, b"bc", now).unwrap();
     log.write_at(&config, b"de", now).unwrap();
@@ -144,4 +149,161 @@ fn active_log_open_and_rotation_failures_are_still_reported() {
     assert!(log.write_at(&config, b"bc", now).is_err());
     assert_eq!(directory.read("hub.log", 1024 * 1024).unwrap(), first);
     assert!(obstruction.is_dir());
+}
+
+#[test]
+fn backup_directory_failure_does_not_block_retention_or_compression() {
+    for compress in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open_or_create_private(root.path()).unwrap());
+        let log = RollingLog::new(directory.clone(), "hub.log").unwrap();
+        let config = LogConfig {
+            max_backups: 1,
+            compress,
+            ..Default::default()
+        };
+        // The obstruction sorts first but must not consume a retention slot.
+        let obstruction = root.path().join("hub-2099-10-05T01-02-03.004.log");
+        std::fs::create_dir(&obstruction).unwrap();
+        std::fs::write(obstruction.join("sentinel"), b"untouched").unwrap();
+        let newest = "hub-2026-10-05T03-02-03.004.log";
+        let oldest = "hub-2026-10-05T02-02-03.004.log";
+        directory
+            .create_new(newest, b"retained bytes", 0o600)
+            .unwrap();
+        directory
+            .create_new(oldest, b"expired bytes", 0o600)
+            .unwrap();
+        let mut diagnostics = Vec::new();
+        assert!(
+            log.cleanup_with_diagnostics(&config, &mut |message| diagnostics.push(message))
+                .is_err()
+        );
+        assert!(!root.path().join(oldest).exists());
+        let restored = if compress {
+            assert!(!root.path().join(newest).exists());
+            let mut bytes = Vec::new();
+            flate2::read::GzDecoder::new(
+                directory.open_file(&format!("{newest}.gz"), false).unwrap(),
+            )
+            .read_to_end(&mut bytes)
+            .unwrap();
+            bytes
+        } else {
+            directory.read(newest, 128).unwrap()
+        };
+        assert_eq!(restored, b"retained bytes");
+        assert_eq!(
+            std::fs::read(obstruction.join("sentinel")).unwrap(),
+            b"untouched"
+        );
+        assert_eq!(diagnostics, ["Rolling log backup inspection failed\n"]);
+        log.write(&config, b"active line\n").unwrap();
+        log.close().unwrap();
+        assert_eq!(directory.read("hub.log", 128).unwrap(), b"active line\n");
+    }
+}
+
+#[test]
+fn backup_compression_failure_does_not_block_later_compression() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = Arc::new(Dir::open_or_create_private(root.path()).unwrap());
+    let log = RollingLog::new(directory.clone(), "hub.log").unwrap();
+    let config = LogConfig {
+        max_backups: 0,
+        compress: true,
+        ..Default::default()
+    };
+    let first = "hub-2026-10-05T03-02-03.004.log";
+    let second = "hub-2026-10-05T02-02-03.004.log";
+    directory
+        .create_new(first, b"blocked compression", 0o600)
+        .unwrap();
+    directory
+        .create_new(second, b"later compression", 0o600)
+        .unwrap();
+    let obstruction = root.path().join(format!("{first}.gz"));
+    std::fs::create_dir(&obstruction).unwrap();
+    std::fs::write(obstruction.join("sentinel"), b"untouched").unwrap();
+    let mut diagnostics = Vec::new();
+    assert!(
+        log.cleanup_with_diagnostics(&config, &mut |message| diagnostics.push(message))
+            .is_err()
+    );
+    assert_eq!(directory.read(first, 128).unwrap(), b"blocked compression");
+    assert!(!root.path().join(second).exists());
+    let mut restored = Vec::new();
+    flate2::read::GzDecoder::new(directory.open_file(&format!("{second}.gz"), false).unwrap())
+        .read_to_end(&mut restored)
+        .unwrap();
+    assert_eq!(restored, b"later compression");
+    assert_eq!(
+        std::fs::read(obstruction.join("sentinel")).unwrap(),
+        b"untouched"
+    );
+    assert_eq!(
+        diagnostics,
+        [
+            "Rolling log backup inspection failed\n",
+            "Rolling log backup compression failed\n"
+        ]
+    );
+    assert!(
+        directory
+            .entries()
+            .unwrap()
+            .iter()
+            .all(|name| !name.starts_with(".many-ai-cli-"))
+    );
+}
+
+#[test]
+fn backup_removal_failure_continues_and_preserves_the_first_error() {
+    let config = LogConfig {
+        max_backups: 1,
+        compress: true,
+        ..Default::default()
+    };
+    let backups = ["newest.log", "expired-first.log", "expired-second.log"]
+        .map(|name| (name.to_owned(), name.to_owned()))
+        .to_vec();
+    let mut removed = Vec::new();
+    let mut compressed = Vec::new();
+    let mut diagnostics = Vec::new();
+    let error = cleanup_backups(
+        &config,
+        backups,
+        |_| Ok(()),
+        |name| {
+            removed.push(name.to_owned());
+            if name == "expired-first.log" {
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "synthetic remove failure",
+                ))
+            } else {
+                Ok(())
+            }
+        },
+        |name| {
+            compressed.push(name.to_owned());
+            Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "synthetic compression failure",
+            ))
+        },
+        &mut |message| diagnostics.push(message),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+    assert_eq!(error.to_string(), "synthetic remove failure");
+    assert_eq!(removed, ["expired-first.log", "expired-second.log"]);
+    assert_eq!(compressed, ["newest.log"]);
+    assert_eq!(
+        diagnostics,
+        [
+            "Rolling log backup removal failed\n",
+            "Rolling log backup compression failed\n"
+        ]
+    );
 }
