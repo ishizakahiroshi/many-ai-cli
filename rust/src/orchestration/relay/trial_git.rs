@@ -18,6 +18,56 @@ fn invalid() -> io::Error {
         "trial Git metadata is outside its selected root or uses an unsupported alias/configuration",
     )
 }
+fn metadata_entry_label(name: &str) -> &'static str {
+    match name {
+        ".git" => ".git",
+        "HEAD" => "HEAD",
+        "index" => "index",
+        "index.lock" => "index.lock",
+        "config" => "config",
+        "config.worktree" => "config.worktree",
+        "commondir" => "commondir",
+        "gitdir" => "gitdir",
+        "alternates" => "alternates",
+        "maintenance.lock" => "maintenance.lock",
+        "packed-refs" => "packed-refs",
+        _ if name.ends_with(".lock") => "other lock entry",
+        _ => "other metadata entry",
+    }
+}
+fn metadata_io_error(
+    operation: &'static str,
+    dir: &Dir,
+    name: Option<&str>,
+    error: io::Error,
+) -> io::Error {
+    let directory = match dir.path().file_name().and_then(|name| name.to_str()) {
+        Some(".git") => ".git",
+        Some("objects") => "objects",
+        Some("info") => "info",
+        Some("pack") => "pack",
+        Some("refs") => "refs",
+        Some("logs") => "logs",
+        Some("worktrees") => "worktrees",
+        _ => "other metadata directory",
+    };
+    let entry = name.map(metadata_entry_label).unwrap_or("directory");
+    let kind = error.kind();
+    let os_code = error
+        .raw_os_error()
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "none".into());
+    // Never format the source error, path, or an unrecognized entry name:
+    // any of them may contain a repository name, branch, or private content.
+    // ErrorKind still drives optional/stale-pointer decisions; the numeric OS
+    // code remains visible even though io::Error cannot attach text to an OS error.
+    io::Error::new(
+        kind,
+        format!(
+            "trial Git metadata {operation} failed: directory={directory}; entry={entry}; kind={kind:?}; os_code={os_code}"
+        ),
+    )
+}
 fn checked(paths: &RuntimePaths, path: &Path) -> io::Result<PathBuf> {
     let path = super::worktree::clean(path.to_owned());
     crate::profile::subscriptions::check_path(paths, &path)?;
@@ -121,7 +171,9 @@ fn target(paths: &RuntimePaths, base: &Path, raw: &str) -> io::Result<PathBuf> {
     Ok(resolved)
 }
 fn bounded(dir: &Dir, name: &str, cap: usize) -> io::Result<Vec<u8>> {
-    let bytes = dir.read(name, cap + 1)?;
+    let bytes = dir
+        .read(name, cap + 1)
+        .map_err(|error| metadata_io_error("read file", dir, Some(name), error))?;
     if bytes.len() > cap {
         return Err(invalid());
     }
@@ -170,7 +222,20 @@ fn scan(
     if depth > 64 {
         return Err(invalid());
     }
-    for name in dir.entries()? {
+    let names = dir
+        .entries()
+        .map_err(|error| metadata_io_error("list directory", dir, None, error))?;
+    scan_entries(paths, dir, names, depth, count, allow_stale_worktree)
+}
+fn scan_entries(
+    paths: &RuntimePaths,
+    dir: &Dir,
+    names: Vec<String>,
+    depth: usize,
+    count: &mut usize,
+    allow_stale_worktree: bool,
+) -> io::Result<()> {
+    for name in names {
         *count += 1;
         if *count > 100_000 {
             return Err(invalid());
@@ -180,13 +245,16 @@ fn scan(
             continue;
         }
         // open_file is no-follow/nonblocking and requires a regular held inode.
-        dir.open_file(&name, false)?;
+        dir.open_file(&name, false)
+            .map_err(|error| metadata_io_error("open file", dir, Some(&name), error))?;
         if name == "commondir" || name == "gitdir" {
             let bytes = bounded(dir, &name, 4096)?;
             let raw = std::str::from_utf8(&bytes).map_err(|_| invalid())?;
             let path = target(paths, dir.path(), raw)?;
             if name == "commondir" {
-                Dir::open(&path)?;
+                Dir::open(&path).map_err(|error| {
+                    metadata_io_error("open pointer directory", dir, Some(&name), error)
+                })?;
             } else {
                 validate_gitdir_pointer(paths, dir, raw, allow_stale_worktree)?;
             }
@@ -352,6 +420,134 @@ pub(super) fn configure(paths: &RuntimePaths, plan: &mut ProcessPlan) -> io::Res
         Some(git_env_path(paths.root())?),
     );
     Ok(vec![directory, hooks])
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+    use std::fs;
+
+    fn fixture() -> (tempfile::TempDir, RuntimePaths, Dir) {
+        let root = tempfile::tempdir().unwrap();
+        let trial = root.path().join("trial");
+        let objects = trial.join(".git/objects");
+        fs::create_dir_all(&objects).unwrap();
+        let paths = RuntimePaths::trial(&trial, 49664, &root.path().join("installed")).unwrap();
+        let directory = Dir::open(&objects).unwrap();
+        (root, paths, directory)
+    }
+
+    #[test]
+    fn metadata_diagnostic_redacts_unknown_names_paths_and_source_error_text() {
+        let (root, _, directory) = fixture();
+        let private = directory
+            .child_dir("synthetic-private-project", true)
+            .unwrap();
+        for (name, label) in [
+            ("maintenance.lock", "maintenance.lock"),
+            ("synthetic-private-branch.lock", "other lock entry"),
+            ("synthetic-private-branch", "other metadata entry"),
+        ] {
+            let error = metadata_io_error(
+                "open file",
+                &private,
+                Some(name),
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("private content at {}", root.path().display()),
+                ),
+            );
+            assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+            for diagnostic in [error.to_string(), format!("{error:?}")] {
+                assert!(diagnostic.contains("open file"));
+                assert!(diagnostic.contains("directory=other metadata directory"));
+                assert!(diagnostic.contains(&format!("entry={label}")));
+                assert!(diagnostic.contains("os_code=none"));
+                assert!(!diagnostic.contains("synthetic-private"));
+                assert!(!diagnostic.contains("private content"));
+                assert!(!diagnostic.contains(root.path().to_str().unwrap()));
+            }
+        }
+    }
+
+    #[test]
+    fn metadata_diagnostic_preserves_error_kind_and_reports_numeric_os_code() {
+        let (_root, _paths, directory) = fixture();
+        let original = io::Error::from_raw_os_error(2);
+        let kind = original.kind();
+        let error = metadata_io_error("open file", &directory, Some("maintenance.lock"), original);
+        assert_eq!(error.kind(), kind);
+        let diagnostic = error.to_string();
+        assert!(diagnostic.contains("directory=objects"));
+        assert!(diagnostic.contains("entry=maintenance.lock"));
+        assert!(diagnostic.contains("os_code=2"));
+    }
+
+    #[test]
+    fn vanished_metadata_entry_still_stops_scan_with_or_without_stale_worktree_allowance() {
+        for name in ["maintenance.lock", "synthetic-private-branch.lock"] {
+            let (root, paths, directory) = fixture();
+            fs::write(directory.path().join(name), b"synthetic lock").unwrap();
+            fs::write(directory.path().join("z-later-entry"), b"later").unwrap();
+            let snapshot = directory.entries().unwrap();
+            assert_eq!(snapshot.first().unwrap(), name);
+            fs::remove_file(directory.path().join(name)).unwrap();
+            let original = directory.open_file(name, false).unwrap_err();
+            let os_code = original.raw_os_error().unwrap();
+            for allow_stale_worktree in [false, true] {
+                let mut count = 0;
+                let error = scan_entries(
+                    &paths,
+                    &directory,
+                    snapshot.clone(),
+                    0,
+                    &mut count,
+                    allow_stale_worktree,
+                )
+                .unwrap_err();
+                assert_eq!(error.kind(), io::ErrorKind::NotFound);
+                assert_eq!(count, 1, "a vanished entry must stop the scan immediately");
+                let diagnostic = error.to_string();
+                assert!(diagnostic.contains("open file"));
+                assert!(diagnostic.contains(&format!("entry={}", metadata_entry_label(name))));
+                assert!(diagnostic.contains(&format!("os_code={os_code}")));
+                assert!(!diagnostic.contains("synthetic-private"));
+                assert!(!diagnostic.contains(root.path().to_str().unwrap()));
+            }
+        }
+    }
+
+    #[test]
+    fn contextual_read_failure_keeps_existing_optional_missing_behavior() {
+        let (_root, _paths, directory) = fixture();
+        let error = bounded(&directory, "config", 1024).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert!(error.to_string().contains("read file"));
+        assert!(error.to_string().contains("entry=config"));
+        assert!(optional(&directory, "config", 1024).unwrap().is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn contextual_scan_keeps_rejecting_symlink_entries_without_disclosing_target() {
+        let (root, paths, directory) = fixture();
+        let outside = root.path().join("synthetic-private-target");
+        fs::write(&outside, b"private contents").unwrap();
+        std::os::unix::fs::symlink(&outside, directory.path().join("synthetic-private-alias"))
+            .unwrap();
+        let original = directory
+            .open_file("synthetic-private-alias", false)
+            .unwrap_err();
+        let mut count = 0;
+        let error = scan(&paths, &directory, 0, &mut count, false).unwrap_err();
+        assert_eq!(error.kind(), original.kind());
+        let diagnostic = error.to_string();
+        assert!(diagnostic.contains("entry=other metadata entry"));
+        assert!(diagnostic.contains(&format!("os_code={}", original.raw_os_error().unwrap())));
+        assert!(!diagnostic.contains("synthetic-private"));
+        assert!(!diagnostic.contains(root.path().to_str().unwrap()));
+        assert_eq!(fs::read(outside).unwrap(), b"private contents");
+    }
 }
 
 #[cfg(all(test, windows))]
