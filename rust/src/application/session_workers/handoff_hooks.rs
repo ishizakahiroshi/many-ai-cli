@@ -24,7 +24,7 @@ impl SessionWorkers {
         {
             (self.warning)("handoff note record append", &error);
         }
-        self.apply(CoreEffects(vec![CoreEffect::Broadcast(proto::Message {
+        self.apply(self.core()?.broadcast_ui(proto::Message {
             r#type: "handoff_note".into(),
             session_id: binding.session.0,
             note_ok: exists,
@@ -34,7 +34,7 @@ impl SessionWorkers {
                 String::new()
             },
             ..Default::default()
-        })]))
+        }))
         .await
     }
 }

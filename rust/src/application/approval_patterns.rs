@@ -327,16 +327,17 @@ impl ApprovalPatterns {
         } else {
             self.reload();
         }
-        let publication =
-            crate::proto::core::CoreEffects(vec![crate::proto::core::CoreEffect::Broadcast(
-                crate::proto::Message {
-                    r#type: "approval_patterns_updated".into(),
-                    providers: changed.into_iter().map(|(p, _)| p).collect(),
-                    ..Default::default()
-                },
-            )]);
-        // The actual socket/effect owner reports delivery failure; no standalone
-        // browser publisher or shadow detector state is introduced.
+        let Some(core) = self.core.upgrade() else {
+            (self.warning)("approval pattern update delivery failed");
+            return;
+        };
+        // SessionCore queues updates behind each UI's initial snapshot and
+        // expands live delivery before the transport effect owner sees it.
+        let publication = core.broadcast_ui(crate::proto::Message {
+            r#type: "approval_patterns_updated".into(),
+            providers: changed.into_iter().map(|(p, _)| p).collect(),
+            ..Default::default()
+        });
         if effects.apply(publication).await.is_err() {
             (self.warning)("approval pattern update delivery failed");
         }
