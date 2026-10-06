@@ -1,12 +1,12 @@
 # Windows whisper runtime supply and build receipts
 
-> 最終更新: 2026-10-05(月) 23:18:44 UTC
+> 最終更新: 2026-10-06(火) 01:47:03 UTC
 
 Baseline reviewed: `4dc961ce600d12aa0911e5a9620e50411ab13d9f`. The owner corrected the original fixed-version/fixed-hash prerequisite: Go deliberately chooses the installed Visual Studio Redist version. This continuation therefore uses the same VS-only acquisition/validation policy and records actual input identities per build. The earlier missing-pin STOP is superseded. No new redistribution-eligibility judgment is made; the existing Go project's Visual Studio redistribution decision is inherited as instructed.
 
 ## Source and verification contract
 
-The four x64 files are `vcomp140.dll`, `msvcp140.dll`, `vcruntime140.dll` and `vcruntime140_1.dll`. The existing [Go preparation script](https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/internal/whisperruntime/fetch_windows_runtime.ps1) selects `vswhere -latest`, the highest installed `VC/Redist/MSVC` directory, then x64 CRT/OpenMP files. It checks a Valid Authenticode signature whose signer is Microsoft Corporation and PE machine `0x8664`.
+The four x64 files are `vcomp140.dll`, `msvcp140.dll`, `vcruntime140.dll` and `vcruntime140_1.dll`. The existing [Go preparation script](https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/internal/whisperruntime/fetch_windows_runtime.ps1) selects `vswhere -latest`, the highest installed `VC/Redist/MSVC` directory, then x64 CRT/OpenMP files. It checks a Valid Authenticode signature whose signer Subject matches the case-insensitive substring/regular-expression text `Microsoft Corporation` (not an exact publisher-name or pinned-certificate comparison) and PE machine `0x8664`.
 
 `rust/packaging/prepare_windows_runtime.ps1` invokes that script with its VS-only default and exposes no System32/alternate-source option. It rechecks the four resulting regular files, records their actual FileVersion, byte size, SHA-256, signature result and x64 machine, and binds the receipt to source HEAD plus the acquisition-script hash. No version or DLL hash is pre-pinned. VS servicing may legitimately change those observations on a later build.
 

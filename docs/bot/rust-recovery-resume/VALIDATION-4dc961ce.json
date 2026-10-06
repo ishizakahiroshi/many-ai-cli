@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "status": "four-target-ci-artifacts-and-complete-pr-commit-scan-union-verified",
   "repository": "ishizakahiroshi/many-ai-cli",
   "pull_request": 11,
@@ -1407,11 +1407,20 @@
       ],
       "total_unique_commits": 38
     },
-    "unchanged_scan_input_blobs": {
-      ".gitleaksignore": "57dbb08f9ab45992ce28dbb404106004e8f8231f",
-      ".gitleaks.toml": "18f0a2c309b27164426c0d78726ccaffffafba46",
-      ".github/workflows/secret-scan.yml": "b073164e611fbeba70f3bcaaaae9c7bbe00d8045"
-    }
+    "unchanged_scan_inputs": [
+      {
+        "git_blob_oid": "57dbb08f9ab45992ce28dbb404106004e8f8231f",
+        "repository_path": ".gitleaksignore"
+      },
+      {
+        "git_blob_oid": "18f0a2c309b27164426c0d78726ccaffffafba46",
+        "repository_path": ".gitleaks.toml"
+      },
+      {
+        "git_blob_oid": "b073164e611fbeba70f3bcaaaae9c7bbe00d8045",
+        "repository_path": ".github/workflows/secret-scan.yml"
+      }
+    ]
   },
   "limitations": [
     "PR action alone scans only first 30 commits. Complete 38-commit coverage is established by the recorded union with seven push-scan executions; this does not accept unrelated historical findings or an unavailable private watchlist.",
@@ -1482,5 +1491,6 @@
       "go mod verify"
     ],
     "independent_log_review": true
-  }
+  },
+  "format_revision_note": "Scan-input identities are separate git_blob_oid/repository_path fields. This is a non-secret Git identity representation change; it does not erase the historical finding in commit2ef6d3c."
 }

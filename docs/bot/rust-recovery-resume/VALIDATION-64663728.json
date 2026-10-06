@@ -1,0 +1,742 @@
+{
+  "schema_version": 1,
+  "source_sha": "646637281c1b9f90c43434f364da2c03d4ba2203",
+  "source_tree": "858df2d6d6a25f34fdd26391b989b0b04f6f1412",
+  "local_equivalent_sha": "99968b4804200d93b1892365252e04533e10315e",
+  "recorded_utc": "2026-10-06T01:47:03.807373+00:00",
+  "run_id": 37396286864,
+  "run_number": 24,
+  "attempt": 1,
+  "targets": [
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "job_id": 112052923260,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/job/112052923260",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1082,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1393,
+        "failed": 1,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "doctests": {
+        "status": "not reached"
+      },
+      "strict_clippy": "passed",
+      "packaging_python_tests": 33,
+      "artifact": {
+        "id": 11382564476,
+        "name": "rust-candidate-x86_64-unknown-linux-gnu-646637281c1b9f90c43434f364da2c03d4ba2203",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/artifacts/11382564476",
+        "bytes": 45626,
+        "sha256": "d56c84cb243281078e86d14075fb5d77f9dcf89c688f9e571b979bf4fea91e63",
+        "zip_crc_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "binaries": [],
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "/opt/hostedtoolcache/Python/3.12.14/x64/bin/python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-unknown-linux-gnu",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101
+        }
+      ]
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "job_id": 112052922848,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/job/112052922848",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1015,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1298,
+        "failed": 2,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "doctests": {
+        "status": "not reached"
+      },
+      "strict_clippy": "passed",
+      "packaging_python_tests": 33,
+      "artifact": {
+        "id": 11383710232,
+        "name": "rust-candidate-x86_64-pc-windows-msvc-646637281c1b9f90c43434f364da2c03d4ba2203",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/artifacts/11383710232",
+        "bytes": 46113,
+        "sha256": "f4673f6feda63a68e4719a6b92cd899469950a2d09a7b5591e41bec70783e543",
+        "zip_crc_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "binaries": [],
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "pwsh",
+            "-NoProfile",
+            "-File",
+            "D:\\a\\many-ai-cli\\many-ai-cli\\rust\\packaging\\prepare_windows_runtime.ps1",
+            "-ReceiptPath",
+            "D:\\a\\many-ai-cli\\many-ai-cli\\.rust-candidate-artifacts\\windows-x64\\WINDOWS-RUNTIME.json"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "C:\\hostedtoolcache\\windows\\Python\\3.12.10\\x64\\python.exe",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-pc-windows-msvc",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 101
+        }
+      ],
+      "runtime_preparation": {
+        "schema_version": 1,
+        "source_sha": "646637281c1b9f90c43434f364da2c03d4ba2203",
+        "target": "x86_64-pc-windows-msvc",
+        "acquisition": "visual-studio-redist",
+        "selection": "Latest installed VC/Redist/MSVC x64 CRT/OpenMP; existing Go script; no System32",
+        "source_script": "internal/whisperruntime/fetch_windows_runtime.ps1",
+        "source_script_sha256": "3d6f059ab1b87c481888c6eca755b2fc23aea92aa5a52896f3ffac5ec1ce1642",
+        "version_policy": "Observed per build; not a fixed version or hash",
+        "licence_basis": "Existing Go Visual Studio VC/redist redistribution decision; Microsoft components, not MIT-licensed project code",
+        "licence_url": "https://learn.microsoft.com/en-us/visualstudio/releases/2022/redistribution#visual-c-runtime-files",
+        "files": [
+          {
+            "name": "vcomp140.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 193152,
+            "sha256": "55aba23cdcd6484fbb06f4155b8ca75adfce7a881f10afd0c49457165e677164",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          },
+          {
+            "name": "msvcp140.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 557728,
+            "sha256": "0f885b509a685d2bbfa652fed26b5fb31d88fbdab0a978c641d1c7b8aa460aa9",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          },
+          {
+            "name": "vcruntime140.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 124544,
+            "sha256": "d5e4d9a3e835fa679450145d6a7d94e36573a509317111904d9b3712c30d9066",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          },
+          {
+            "name": "vcruntime140_1.dll",
+            "file_version": "14.44.35211.0",
+            "bytes": 49792,
+            "sha256": "1f2d41c4aa5db0bc33ebf7b66d72943a817d7ce6cbe880502a9403823633093f",
+            "signature_status": "Valid",
+            "microsoft_signer": true,
+            "pe_machine": "0x8664"
+          }
+        ]
+      },
+      "release_embedding_verified": false
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "job_id": 112052923183,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/job/112052923183",
+      "conclusion": "success",
+      "library": {
+        "passed": 1083,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1393,
+        "failed": 0,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "strict_clippy": "passed",
+      "packaging_python_tests": 33,
+      "artifact": {
+        "id": 11384405491,
+        "name": "rust-candidate-aarch64-apple-darwin-646637281c1b9f90c43434f364da2c03d4ba2203",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/artifacts/11384405491",
+        "bytes": 19353938,
+        "sha256": "4ffc73877259d079455a575ad1542b82030e0d069f6c4a5fddfdeebf008199ad",
+        "zip_crc_verified": true,
+        "kind": "two-binary candidate"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 40589488,
+          "sha256": "d66f03082b8c17c3a7d4c91ef3a18e2df2c601396954feabc870823bbe08ef07",
+          "zip_bytes_independently_verified": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 10114944,
+          "sha256": "fe0956e82417b067090351fce0d426458240c659434b867228e0ff28e6ae6a9d",
+          "zip_bytes_independently_verified": true
+        }
+      ],
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--doc"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "aarch64-apple-darwin",
+            "--release",
+            "--bins",
+            "--message-format=json"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "aarch64-apple-darwin"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/rust/packaging/collect_inputs.py",
+            "--lockfile",
+            "rust/Cargo.lock",
+            "--metadata",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/cargo-metadata.json",
+            "--build-messages",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/cargo-build.jsonl",
+            "--cargo-home",
+            "/Users/runner/.cargo",
+            "--target",
+            "aarch64-apple-darwin",
+            "--source-revision",
+            "646637281c1b9f90c43434f364da2c03d4ba2203",
+            "--output",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-apple-silicon/packaging-inputs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+      "packaging_input_exit_code": 0
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "job_id": 112052923121,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/job/112052923121",
+      "conclusion": "success",
+      "library": {
+        "passed": 1083,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1393,
+        "failed": 0,
+        "ignored": 0,
+        "summaries": 33
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "strict_clippy": "passed",
+      "packaging_python_tests": 33,
+      "artifact": {
+        "id": 11384373829,
+        "name": "rust-candidate-x86_64-apple-darwin-646637281c1b9f90c43434f364da2c03d4ba2203",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864/artifacts/11384373829",
+        "bytes": 19919839,
+        "sha256": "fd3eeaca5864b997845157efe3a0adae895df55444b6e83a526900aeded27e40",
+        "zip_crc_verified": true,
+        "kind": "two-binary candidate"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 43396208,
+          "sha256": "b98e742ef557fdeda68ae3a8deafd7b60a048cde5f81b696457aecca3ea48b0e",
+          "zip_bytes_independently_verified": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 11256152,
+          "sha256": "c49ef589dfe8d0d6308b995f490a231e37885db25c4589bd6f8c21878079eaa8",
+          "zip_bytes_independently_verified": true
+        }
+      ],
+      "commands": [
+        {
+          "command": [
+            "go",
+            "mod",
+            "download"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "rust/packaging",
+            "-p",
+            "test_*.py"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "install",
+            "--frozen-lockfile"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "bun",
+            "run",
+            "build"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "fmt",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--",
+            "--check"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "clippy",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--all-targets",
+            "--no-fail-fast",
+            "--",
+            "--test-threads=8"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "test",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--doc"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--target",
+            "x86_64-apple-darwin",
+            "--release",
+            "--bins",
+            "--message-format=json"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "cargo",
+            "metadata",
+            "--locked",
+            "--manifest-path",
+            "rust/Cargo.toml",
+            "--format-version",
+            "1",
+            "--filter-platform",
+            "x86_64-apple-darwin"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/rust/packaging/collect_inputs.py",
+            "--lockfile",
+            "rust/Cargo.lock",
+            "--metadata",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/cargo-metadata.json",
+            "--build-messages",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/cargo-build.jsonl",
+            "--cargo-home",
+            "/Users/runner/.cargo",
+            "--target",
+            "x86_64-apple-darwin",
+            "--source-revision",
+            "646637281c1b9f90c43434f364da2c03d4ba2203",
+            "--output",
+            "/Users/runner/work/many-ai-cli/many-ai-cli/.rust-candidate-artifacts/macos-intel/packaging-inputs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+      "packaging_input_exit_code": 0
+    }
+  ],
+  "validate": {
+    "run_id": 37396287180,
+    "successful_jobs": 11,
+    "expected_skipped_job": "release-token-scopes"
+  },
+  "secret_scan": {
+    "pull_request_run": 37396286845,
+    "pull_request_commits_scanned": 30,
+    "pull_request_conclusion": "success",
+    "push_run": 37396280688,
+    "push_job": 112052902343,
+    "push_commits_scanned": 15,
+    "push_conclusion": "failure",
+    "findings": 1,
+    "finding_classification": "Independently confirmed non-secret Git blob identity; failed scan remains failed",
+    "fingerprint": "2ef6d3c8aa366bf86162cbf205598030f6750961:docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json:generic-api-key:1413",
+    "history_coverage": "Prior38-commit union plus15 new push commits covers53; do not claim all findings cleared",
+    "exclusions_changed": false
+  },
+  "acceptance": "Unaccepted candidate; future successor results must identify a new exact source SHA. Device/provider/installed-data and cutover acceptance remain separate."
+}

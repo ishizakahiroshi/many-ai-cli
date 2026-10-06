@@ -1,6 +1,6 @@
 # Native Windows spawn and ConPTY standard handles
 
-> 最終更新: 2026-10-06(火) 00:25:49 UTC
+> 最終更新: 2026-10-06(火) 01:47:03 UTC
 
 ## Evidence and correction
 
@@ -14,10 +14,10 @@ The correction explicitly sets the flag and null stdin/stdout/stderr. It retains
 
 ## Native acceptance boundary
 
-The [native integration regression](../../../rust/tests/native_windows_spawn.rs) uses the real built Hub, its HTTP spawn route, actual wrapper and copied `cmd.exe` provider in a synthetic trial root. It requires a live wrapper and running Hub snapshot after a one-second no-input interval, stdout and stderr markers over PTY, matching `hello` input/output, then UI completion and persisted provider exit zero after `quit`. It also checks wrapper exit and authenticated Hub shutdown/reaping. Failure cleanup closes and reaps only the owned fixture Job before propagating the assertion. No PTY/wrapper mock, ignored test or timeout-as-success is acceptable.
+The [native integration regression](../../../rust/tests/native_windows_spawn.rs) uses the real built Hub, its HTTP spawn route, actual wrapper and copied `cmd.exe` provider in a synthetic trial root. It requires a live wrapper and an explicit standby/idle-activity snapshot after a three-second no-input interval, stdout and stderr markers over PTY, matching `hello` input/output, then UI completion and persisted provider exit zero after `quit`. It also checks wrapper exit and authenticated Hub shutdown/reaping. Failure cleanup closes and reaps only the owned fixture Job before propagating the assertion. No PTY/wrapper mock, ignored test or timeout-as-success is acceptable.
 
 The current wire contract requires two independent observations: the UI receives `session_end` with completed state, while the wrapper's actual exit code is recorded in the session JSONL. The UI message omits `exit_code`; an absent JSON field or a deserializer's default zero is not itself proof of provider success. The regression must check the persisted wrapper exit code as zero as well as the UI terminal state.
 
 Rust 1.90 formatting passed. A temporary Linux host-check copy of the same test body, with only its Windows crate gate removed, passed `cargo test --no-run` and strict Clippy. That copy was never executed and was removed; the committed target retains `#![cfg(windows)]`. This checks shared API/type correctness without claiming native ConPTY behavior.
 
-At this documentation checkpoint, Windows-native compilation/execution and the final exact-SHA four-target CI/artifacts remain pending. The earlier Linux 1,394-test result covers the separately recorded 1–10 source; it does not validate ConPTY. AuthenticationExpired on wrong-token sockets and ordinary disconnect warning policy are outside this correction.
+At64663728 the Windows test compiled and ran, but stopped on its incorrect initial running-state expectation before checking PTY markers or input. The A2 successor corrects initial standby and requires positive idle-activity evidence after the no-input interval; the ConPTY effect remains unverified until that successor actually completes the native round-trip. Final exact-SHA four-target CI/artifacts remain pending. The earlier Linux 1,394-test result covers the separately recorded 1–10 source; it does not validate ConPTY. AuthenticationExpired on wrong-token sockets and ordinary disconnect warning policy are outside this correction.

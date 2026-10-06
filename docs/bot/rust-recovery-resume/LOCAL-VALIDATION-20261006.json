@@ -81,5 +81,50 @@
     "Owner device/provider/installed-data acceptance, V03 signing/publisher isolation, V06 corrective-action decisions and cutover"
   ],
   "forbidden_changes_performed": false,
-  "source_manifest_scope": "Raw tested working-tree bytes. The 1,911-file set matches local_code_sha; all compiled Rust source bytes equal the committed blobs. Seven pre-existing PowerShell files have CRLF worktree bytes and LF committed blobs and normalize exactly. This manifest hash is not a Git tree or universal committed-blob byte hash."
+  "source_manifest_scope": "Raw tested working-tree bytes. The 1,911-file set matches local_code_sha; all compiled Rust source bytes equal the committed blobs. Seven pre-existing PowerShell files have CRLF worktree bytes and LF committed blobs and normalize exactly. This manifest hash is not a Git tree or universal committed-blob byte hash.",
+  "red_evidence_scope": "The recorded red runs executed tests on staged source with new regression tests and compatibility seams. They are not a claim that the current tests compile or execute on an untouched4dc checkout. Compilation failures when backporting a new test/API alone are not runtime behavior evidence.",
+  "subsequent_native_ci": {
+    "head_sha": "646637281c1b9f90c43434f364da2c03d4ba2203",
+    "run_id": 37396286864,
+    "relationship": "Different execution from the local1394/0 run above; preserve both observed outcomes. Item11 is a later Windows-only test. Native failures are not overwritten by local success.",
+    "linux": {
+      "library_passed": 1082,
+      "library_failed": 1,
+      "all_targets_passed": 1393,
+      "all_targets_failed": 1,
+      "ignored": 0,
+      "failure": "Existing worktree post-commit head ENOENT; exact cause unproven",
+      "doctests": "not reached",
+      "release_binaries": "not reached"
+    },
+    "windows": {
+      "library_passed": 1015,
+      "library_failed": 1,
+      "all_targets_passed": 1298,
+      "all_targets_failed": 2,
+      "ignored": 0,
+      "failures": [
+        "Raw WSAEINTR accept retry",
+        "Native fixture initial-state expectation before PTY round-trip"
+      ],
+      "doctests": "not reached",
+      "release_binaries": "not reached"
+    },
+    "macos_arm": {
+      "library_passed": 1083,
+      "all_targets_passed": 1393,
+      "failed": 0,
+      "ignored": 0,
+      "doctests": 3,
+      "release_binaries": 2
+    },
+    "macos_intel": {
+      "library_passed": 1083,
+      "all_targets_passed": 1393,
+      "failed": 0,
+      "ignored": 0,
+      "doctests": 3,
+      "release_binaries": 2
+    }
+  }
 }

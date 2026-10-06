@@ -10,9 +10,11 @@ last_reviewed: 2026-10-06
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-06(火) 00:25:49 UTC
+> 最終更新: 2026-10-06(火) 01:55:15 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. Existing task #3 continues on `dots/rust-recovery-resume-3` toward develop in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11). Old Draft PR #9 remains preserved. Recovery delivery and acknowledgment are complete: the supplied `7c2d7d3` source/instructions and authoritative R/V supplement were read in this continuation. Earlier delivery-pending entries below are historical.
+
+Current candidate: `646637281c1b9f90c43434f364da2c03d4ba2203` is published, with two native targets successful and two failed. The reviewed A/B successor is local `3726d55af931857a4b8122f135626bbc4a86639d`, with Linux1414/0, strict Clippy and3 doctests passed; exact published-head native verification remains pending. See the [latest native results and follow-up](#2026-10-06-64663728-native-results-and-authorized-ab-follow-up).
 
 Latest completed four-target tested/reviewed baseline: `4dc961ce600d12aa0911e5a9620e50411ab13d9f`. The baseline receipts below retain that immutable identity; the new runtime/repair continuation requires its own final SHA and CI. The final Windows fixture correction and separate diagnostic cleanup are complete. [Four-target Rust CI](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189) succeeded: Windows library 987 / all-targets 1266; Linux library 1047 / all-targets 1354; macOS Intel and Apple Silicon each library 1047 / all-targets 1353. Each target has zero failed/ignored tests and three passing doctests, fmt, strict all-target Clippy and both release binaries. The Apple Silicon success is a fresh attempt-2 execution; the other three successful target executions are retained from attempt 1. See [validation and scan receipts](VALIDATION-4dc961ce.json) and [artifact identities](ARTIFACTS-4dc961ce.md).
 
@@ -275,3 +277,30 @@ These local identities are not a GitHub publication receipt. The next action is 
 Before publication, the owner supplied a real isolated Windows reproduction for item 11. The reviewed 1–10 work was preserved as local checkpoint `d4695c87b0190468d8783f3edcc4dc300395e835`. The additional nine-line ConPTY correction explicitly supplies null standard handles with `STARTF_USESTDHANDLES`, matching pinned Go and Microsoft guidance; redirected parent handles otherwise can reach the provider despite disabled inheritance. Suspended Job containment and reaping remain unchanged.
 
 The real Windows-only integration test now exercises the built Hub, HTTP spawn, actual wrapper and copied cmd.exe provider: waiting, stdout/stderr PTY delivery, UI hello round-trip, quit, UI completion, persisted actual provider exit zero, and owned process cleanup. The UI's omitted exit_code is not used as success evidence. [Source finding, regression and limits](CONPTY-SPAWN-20261006.md) records the owner's reproduction separately from Linux compile-only checks. Native Windows execution and final four-target results/artifacts remain pending on the eventual public SHA. This item joins the same single final append/frozen-head policy; no intermediate push has occurred.
+
+
+## 2026-10-06 64663728 native results and authorized A/B follow-up
+
+Published head `646637281c1b9f90c43434f364da2c03d4ba2203` has the exact tree `858df2d6d6a25f34fdd26391b989b0b04f6f1412` reviewed locally as `99968b4804200d93b1892365252e04533e10315e`. Its15 commits were appended normally to the Draft PR. Publication succeeded after the owner-authorized retry; it did not establish test or product acceptance.
+
+Rust run[37396286864](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286864), attempt1, is fully terminal. Linux: library1082/1 and all-targets1393/1; the existing post-commit worktree head test reported ENOENT. Windows: library1015/1 and all-targets1298/2; raw WSAEINTR was missed, and the new native fixture incorrectly required initial running rather than Go-compatible standby. Doctests and release binaries were not reached on either failed target. Both macOS targets passed library1083 and all-targets1393, plus3 separate doctests, and produced both release binaries. Zero tests were ignored. These are distinct from the earlier local1394/0 observation and the older4dc aggregates.
+
+Windows VS-only preparation did verify four actual x64 runtime inputs, all FileVersion14.44.35211.0, with per-file SHA256 and Valid Authenticode status. The Subject check is a case-insensitive substring match for Microsoft Corporation. Final release-byte retention remains unverified because the Windows test failures prevented the release build. The native ACL/path and other Whisper regressions passed individually; the real ConPTY input/quit path did not execute beyond its premature fixture assertion.
+
+Validate[37396287180](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396287180) passed11 jobs with the expected release-token-scopes skip. PR scan[37396286845](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396286845) still covers the first30 commits. Push scan[37396280688](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37396280688) scanned all15 additions and failed on the independently confirmed non-secret workflow Git blob identity in `VALIDATION-4dc961ce.json:1413`, introduced by `2ef6d3c8aa366bf86162cbf205598030f6750961`. The receipt now separates path and Git object identity fields. This representation change is intended to avoid a new false positive; the next scan must verify that. It does not erase the historical finding. The old38-commit union plus this15-commit scan covers53 commits, with that known finding still recorded. No exclusion, scanner setting or history rewrite is authorized or performed.
+
+The owner authorized one combined A/B successor after both macOS jobs finished. A1/B1–B5 corrections and A2's stronger state/idle evidence are being validated locally. A3 remains a specific source-backed maintenance-lock hypothesis, not a demonstrated cause: unchanged local source passed30 exact runs,20 eight-thread module runs and800 parallel exact runs with Git2.52.0; CI used Git2.55.0. Git TRACE2 confirms detached maintenance, but no failing path was captured. The sandbox denied ptrace before test execution; no security setting was changed. Sanitized operation/category/OS-code context is added while inspection remains fail-closed; no ENOENT suppression or maintenance disablement is introduced. Exact successor commands/results and native results remain separate from these646 receipts.
+
+### Explicitly deferred C items: record only
+
+- Leading-dot Path::extension cases remain in maintenance.rs and other unaudited callers; the earlier scoped denial fix is not global parity.
+- Windows reserved device names such as NUL remain outside the backslash/colon component fix.
+- BUILD-RECEIPT receipt_scope wording remains unchanged; specific DLL checks must not be generalized to all linked assets.
+- autocrlf/worktree versus Git-blob byte differences remain explicit in hash comparisons; no EOL policy change is made here.
+- Python validates the helper's signature assertions and byte identities; it does not independently repeat Authenticode verification.
+- MANY_AI_REQUIRE_WINDOWS_RUNTIME still recognizes the exact string1 only; no environment-option semantics change is made.
+- The native spawn fixture still leaves approval_pattern_sources enabled, as requested for record-only tracking.
+- The approval core-drop test does not distinguish the old and corrected broadcast implementations by itself; it is not counted as a behavioral red discriminator.
+
+
+The A/B implementation is now preserved in local code checkpoint `3726d55af931857a4b8122f135626bbc4a86639d` (tree `7f8657f81debc8a36e822e8f1bbfc60414d2adcc`). Final Linux validation after the callback-type cleanup passed1414 all-target tests, including1103 library tests, with0 failed/0 ignored, strict all-target Clippy and3 doctests. [Successor local receipt](LOCAL-VALIDATION-SUCCESSOR-20261006.json) identifies actual runtime-red stages and final commands; [646 native evidence](VALIDATION-64663728.json) records every target, both available macOS binaries, the diagnostic-only failed-target artifacts, DLL preparation and scan limits. New Windows/native acceptance remains pending until this successor is published and tested. B4 rollback is process-level; crash recovery and interference by arbitrary external writers are not established by these tests.

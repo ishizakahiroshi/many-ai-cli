@@ -1,12 +1,14 @@
 # Ten requested Rust review corrections
 
-> 最終更新: 2026-10-06(火) 00:16:06 UTC
+> 最終更新: 2026-10-06(火) 01:47:03 UTC
 
 Local code checkpoint: `f4d1e97116dc4472e11acab3930800afa42e1b5b`. This is not the published code SHA. Public baseline is `4dc961ce600d12aa0911e5a9620e50411ab13d9f`; the final publication/read-back and native CI must identify their own exact SHA. [Local validation](LOCAL-VALIDATION-20261006.json) binds the 1,394-test Linux all-target pass, strict Clippy and 3 doctests to the unchanged compiled Rust source bytes. The manifest covers raw worktree bytes; seven pre-existing PowerShell files normalize exactly from CRLF worktree content to LF Git blobs. All old assertions remain; no skip, ignore or timeout-as-success was introduced.
 
+The “failed before the fix” entries below refer to the saved, actually executed **staged regression sources with test compatibility seams**, not to an untouched4dc checkout. The logs show runtime totals1060/19,0/3,4/4 and0/2 with no Rust E-code compilation error. Adding current tests to an older source that lacks their helper API can instead fail compilation; that outcome proves only compilation incompatibility and is not behavioral red evidence. Exact source/command scopes are retained in the local receipt. The historical entry-guard archive cancellation test did not prove cancellation during copying or between renames; B5 supplies those separate cases.
+
 | Item | Correction and boundary | Regression evidence |
 |---|---|---|
-| 1 | Retry Go-classified temporary accept failures with 5 ms exponential delay capped at 1 s; keep the accept/backoff future pinned while connection tasks finish. Fatal errors retain their code; cancellation interrupts waiting. | Injected temporary/fatal errors, capped/reset backoff, cancellation. Three new cases failed before the fix. No real descriptor exhaustion was induced. |
+| 1 | Retry transient accept failures with Go-style backoff with 5 ms exponential delay capped at 1 s; keep the accept/backoff future pinned while connection tasks finish. Fatal errors retain their code; cancellation interrupts waiting. | Injected temporary/fatal errors, capped/reset backoff, cancellation. Three new cases failed before the fix. No real descriptor exhaustion was induced. |
 | 2 | Match Go lumberjack's best-effort backup cleanup at initial open and after rotation. Active file open/rename errors remain errors. | Two new cleanup-failure cases failed before the fix; triggering and reopened writes now survive. Fixtures obstruct backup metadata deterministically rather than claiming to trigger OS compression/deletion failures. |
 | 3 | Apply restrictive directory permissions only at creation for log/cwd and derived DB parents. Preserve the explicit configuration-root repair API and its assertions. | Existing log/cwd/DB-parent permission cases failed before the fix; fresh private components and prior config repair assertions pass. Native Windows DACL preservation/protection tests remain for CI. Only temporary fixtures were modified. |
 | 4 | Reject backslash, colon and NUL in Windows developer-asset components before file access; preserve Unix legal-name behavior. | Native Windows escape/ADS cases use only synthetic filesystem targets; abstract drive forms are validation-only. This is the requested component boundary, not a claim of complete filepath.Localize parity including reserved device names. |
@@ -24,3 +26,6 @@ The fixed Go source has related malformed-Unicode slicing and direct archive-wri
 The Windows runtime preparation from the prior group is preserved: VS-only signed x64 inputs, observed per-build FileVersion/SHA-256, no fixed-version requirement or System32 CI path. [Runtime policy](WINDOWS-RUNTIME-SUPPLY-GATE.md), [4dc baseline artifacts](ARTIFACTS-4dc961ce.md), and [V06 assessment](dependency-review/V06-SQLITE-CARGO.md) retain their distinct scopes. V03 remains documentation-only; release.yml, dependency pins and scanner exclusions are unchanged.
 
 All changed code and tests were read by a separate reviewer. Final exact-public-SHA review binding, four-target CI/artifacts and owner device acceptance remain separate from this local checkpoint. Publication is a normal append to the existing Draft PR; no merge/tag/release or Go cutover.
+
+
+The later64663728 CI result supersedes any suggestion of native completion: Linux1393/1 and Windows1298/2 failed, while both macOS targets1393/0 plus3 doctests each passed. Initial Windows session registration is correctly standby in Go and Rust; the newly added fixture expected running too early and did not reach the requested ConPTY round-trip. The A/B successor remains unaccepted until its own native logs are read.

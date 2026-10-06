@@ -10875,7 +10875,7 @@
   "review_scope": {
     "independent": "Final fixture/cleanup continuation diff and four-target artifacts at 4dc961ce reviewed; no blocker in that scope.",
     "owner_reported": "All 444 .rs files under rust/src reviewed by 11 separate-product AI reviews; zero high-severity findings; nine lower-severity fixes requested.",
-    "pending_changes": "The nine requested fixes are queued after this documentation/evidence task and are not implemented or revalidated by this snapshot."
+    "pending_changes": "The nine review fixes and additions10/11 were published at64663728. The A/B successor is implemented in local code3726d55af931857a4b8122f135626bbc4a86639d; its Linux1414/0 aggregate, strict Clippy and3 doctests pass. Exact published native results remain pending. A3 adds safe diagnostic context only; the prior ENOENT cause is unproven. Source-reference hashes elsewhere remain bound to4dc961ce."
   },
   "known_implementation_gaps": [
     {
