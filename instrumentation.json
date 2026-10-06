@@ -67,10 +67,9 @@
     },
     {
       "id": "rust-relay-prepare-resolution-test-diagnostic",
-      "status": "active",
+      "status": "removed",
       "purpose": "Classify prepare root-resolution failures before the fixed Go-compatible generic not_git mapping, without paths, argv, Git output, environment values, or arbitrary source-error text.",
       "addedIn": "pending",
-      "due": "2026-10-13",
       "gate": "Rust cfg(test) only; failure observations only for rev-parse --show-toplevel; no production sink",
       "files": [
         "rust/src/orchestration/relay/worktree_diagnostic.rs"
@@ -87,7 +86,9 @@
       ],
       "removalCondition": "Remove in a dedicated commit once classified and verified, or when the owner stops the unresolved investigation; always remove before an accepted final candidate or release.",
       "reason": "Run37413102214 ARM reports only generic not_git before cleanup. Run37419149510 observes objects/maintenance.lock ENOENT beside the other missing-worktree fixture, so each fixture now binds its own safe diagnostic to its panic; adjacency is not definitive attribution. Preserve the returned error, three-second timeout, process ownership, metadata rejection policy, and assertions. Typed metadata payloads retain only the existing whitelisted labels, ErrorKind, and numeric OS code; fixture-local capture permits deterministic forwarding/redaction checks.",
-      "removalProcedure": "Delete worktree_diagnostic.rs and its module declaration, RelayGit probe field/initialization, Context and all diagnostic call sites, and the two forwarding tests; remove MetadataDiagnostic, diagnostic_metadata and its test, restoring the original String wrapper. Preserve the original metadata redaction tests. Remove both missing-worktree fixture panic diagnostic arguments and Probe.last references, while preserving their not_git and applicable remove_root boolean context and unchanged failure predicates. Mark removed in the dedicated removal commit and validate. Purging the dedicated file does not remove shared-file hooks."
+      "removalProcedure": "Delete worktree_diagnostic.rs and its module declaration, RelayGit probe field/initialization, Context and all diagnostic call sites, and the two forwarding tests; remove MetadataDiagnostic, diagnostic_metadata and its test, restoring the original String wrapper. Preserve the original metadata redaction tests. Remove both missing-worktree fixture panic diagnostic arguments and Probe.last references, while preserving their not_git and applicable remove_root boolean context and unchanged failure predicates. Mark removed in the dedicated removal commit and validate. Purging the dedicated file does not remove shared-file hooks.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
     },
     {
       "id": "rust-git-turn-snapshot-test-diagnostic",

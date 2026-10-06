@@ -15,17 +15,11 @@ use std::{
     time::Duration,
 };
 
-#[cfg(test)]
-#[path = "worktree_diagnostic.rs"]
-mod diagnostic;
-
 #[derive(Clone)]
 pub struct RelayGit {
     paths: RuntimePaths,
     git: WorktreeGit,
     cwd: PathBuf,
-    #[cfg(test)]
-    diagnostic: diagnostic::Probe,
 }
 #[derive(Debug)]
 pub struct GitError {
@@ -34,13 +28,7 @@ pub struct GitError {
 }
 impl RelayGit {
     pub fn new(paths: RuntimePaths, git: WorktreeGit, cwd: PathBuf) -> Self {
-        Self {
-            paths,
-            git,
-            cwd,
-            #[cfg(test)]
-            diagnostic: diagnostic::Probe::default(),
-        }
+        Self { paths, git, cwd }
     }
     pub fn root(cwd: &Path, cfg: &OrchestrationConfig) -> PathBuf {
         let configured = cfg.worktree_dir_root.trim();
@@ -65,16 +53,7 @@ impl RelayGit {
         timeout: Duration,
         cancel: &TaskCancellation,
     ) -> Result<String, String> {
-        #[cfg(test)]
-        let diagnostic = diagnostic::Context {
-            enabled: args == ["rev-parse", "--show-toplevel"],
-            started: std::time::Instant::now(),
-            timeout,
-        };
-        self.check(cwd).inspect_err(|_| {
-            #[cfg(test)]
-            self.diagnostic.boundary(diagnostic);
-        })?;
+        self.check(cwd)?;
         let allow_stale_worktree = args.first() == Some(&"worktree")
             && args
                 .get(1)
@@ -85,37 +64,15 @@ impl RelayGit {
             args.first() == Some(&"init"),
             allow_stale_worktree,
         )
-        .map_err(|error| {
-            #[cfg(test)]
-            self.diagnostic
-                .io(diagnostic, diagnostic::IoStage::Metadata, &error);
-            error.to_string()
-        })?;
+        .map_err(|error| error.to_string())?;
         let args = args.iter().map(OsString::from).collect::<Vec<_>>();
         let mut plan = self.git.command_plan(&self.cwd, cwd, &args, timeout);
-        let _policy = super::trial_git::configure(&self.paths, &mut plan).map_err(|error| {
-            #[cfg(test)]
-            self.diagnostic
-                .io(diagnostic, diagnostic::IoStage::Policy, &error);
-            error.to_string()
-        })?;
+        let _policy = super::trial_git::configure(&self.paths, &mut plan)
+            .map_err(|error| error.to_string())?;
         plan.output_cap = 16 * 1024 * 1024;
         let output = process::run_capped(&plan, cancel.token())
             .await
-            .map_err(|error| {
-                #[cfg(test)]
-                self.diagnostic
-                    .io(diagnostic, diagnostic::IoStage::ProcessIo, &error);
-                error.to_string()
-            })?;
-        #[cfg(test)]
-        if output.stdout_truncated
-            || output.stderr_truncated
-            || output.pipes_forced_closed
-            || !matches!(&output.outcome, ExitOutcome::Exited { code: Some(0), .. })
-        {
-            self.diagnostic.output(diagnostic, &output);
-        }
+            .map_err(|e| e.to_string())?;
         if output.stdout_truncated || output.stderr_truncated || output.pipes_forced_closed {
             return Err("git output was incomplete".into());
         }
@@ -872,85 +829,6 @@ esac
         symlink(root.path().join("missing"), &link).unwrap();
         assert!(cleanup_directory_missing(&link).is_err());
     }
-    #[tokio::test]
-    async fn prepare_metadata_diagnostic_survives_generic_not_git_mapping() {
-        let root = tempfile::tempdir().unwrap();
-        let trial = root.path().join("trial");
-        let repo = trial.join("synthetic-private-repository");
-        fs::create_dir_all(repo.join(".git")).unwrap();
-        fs::write(
-            repo.join(".git/commondir"),
-            "synthetic-private-missing-directory",
-        )
-        .unwrap();
-        let paths = RuntimePaths::trial(&trial, 49661, &root.path().join("installed")).unwrap();
-        let git = RelayGit::new(
-            paths,
-            WorktreeGit::new(root.path().join("must-not-launch"), BTreeMap::new()),
-            trial,
-        );
-        let cfg = OrchestrationConfig::default();
-        let error = git
-            .prepare(&repo, "diagnostic", &cfg, &TaskCancellation::default())
-            .await
-            .unwrap_err();
-        assert!(error.not_git);
-        assert_eq!(
-            error.detail,
-            "parent cwd is not a git repository; pick same-tree mode or start the relay inside a repository"
-        );
-        let line = git
-            .diagnostic
-            .last()
-            .expect("original metadata failure captured");
-        for expected in [
-            "operation=resolve_root",
-            "budget_ms=3000",
-            "stage=Metadata",
-            "open pointer directory",
-            "entry=commondir",
-            "kind=NotFound",
-            "os_code=",
-        ] {
-            assert!(line.contains(expected), "{line}");
-        }
-        assert!(!line.contains("synthetic-private"));
-        assert!(!line.contains(root.path().to_str().unwrap()));
-        assert!(!RelayGit::root(&repo, &cfg).exists());
-    }
-    #[tokio::test]
-    async fn prepare_process_io_diagnostic_survives_generic_not_git_mapping() {
-        let root = tempfile::tempdir().unwrap();
-        let git = RelayGit::new(
-            RuntimePaths::production(root.path()).unwrap(),
-            WorktreeGit::new(
-                root.path().join("synthetic-private-missing-executable"),
-                BTreeMap::new(),
-            ),
-            root.path().to_owned(),
-        );
-        let error = git
-            .prepare(
-                root.path(),
-                "diagnostic",
-                &OrchestrationConfig::default(),
-                &TaskCancellation::default(),
-            )
-            .await
-            .unwrap_err();
-        assert!(error.not_git);
-        assert_eq!(
-            error.detail,
-            "parent cwd is not a git repository; pick same-tree mode or start the relay inside a repository"
-        );
-        let line = git
-            .diagnostic
-            .last()
-            .expect("original process failure captured");
-        assert!(line.contains("stage=ProcessIo kind=NotFound"), "{line}");
-        assert!(!line.contains("synthetic-private"));
-        assert!(!line.contains(root.path().to_str().unwrap()));
-    }
     struct Fixture {
         _root: tempfile::TempDir,
         paths: RuntimePaths,
@@ -1365,13 +1243,7 @@ esac
             .git
             .prepare(&f.repo, "r11-missing", &cfg, &cancel)
             .await
-            .unwrap_or_else(|error| {
-                panic!(
-                    "prepare failed: not_git={}; diagnostic={:?}",
-                    error.not_git,
-                    f.git.diagnostic.last().as_deref(),
-                )
-            });
+            .unwrap_or_else(|error| panic!("prepare failed: not_git={}", error.not_git));
         let kept = f.git.head(&path, &cancel).await.unwrap();
         fs::remove_dir_all(&path).unwrap();
         f.git.validate_cleanup(&f.repo, &path, &cfg).unwrap();
@@ -1419,9 +1291,8 @@ esac
                 .await
                 .unwrap_or_else(|error| {
                     panic!(
-                        "prepare failed: remove_root={remove_root}; not_git={}; diagnostic={:?}",
+                        "prepare failed: remove_root={remove_root}; not_git={}",
                         error.not_git,
-                        f.git.diagnostic.last().as_deref(),
                     )
                 });
             let kept = f.git.head(&path, &cancel).await.unwrap();

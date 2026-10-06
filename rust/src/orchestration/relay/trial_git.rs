@@ -35,24 +35,6 @@ fn metadata_entry_label(name: &str) -> &'static str {
         _ => "other metadata entry",
     }
 }
-#[cfg(test)]
-#[derive(Debug)]
-struct MetadataDiagnostic(String);
-#[cfg(test)]
-impl std::fmt::Display for MetadataDiagnostic {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
-#[cfg(test)]
-impl std::error::Error for MetadataDiagnostic {}
-#[cfg(test)]
-pub(super) fn diagnostic_metadata(error: &io::Error) -> Option<&str> {
-    error
-        .get_ref()?
-        .downcast_ref::<MetadataDiagnostic>()
-        .map(|diagnostic| diagnostic.0.as_str())
-}
 fn metadata_io_error(
     operation: &'static str,
     dir: &Dir,
@@ -79,12 +61,12 @@ fn metadata_io_error(
     // any of them may contain a repository name, branch, or private content.
     // ErrorKind still drives optional/stale-pointer decisions; the numeric OS
     // code remains visible even though io::Error cannot attach text to an OS error.
-    let message = format!(
-        "trial Git metadata {operation} failed: directory={directory}; entry={entry}; kind={kind:?}; os_code={os_code}"
-    );
-    #[cfg(test)]
-    let message = MetadataDiagnostic(message);
-    io::Error::new(kind, message)
+    io::Error::new(
+        kind,
+        format!(
+            "trial Git metadata {operation} failed: directory={directory}; entry={entry}; kind={kind:?}; os_code={os_code}"
+        ),
+    )
 }
 fn checked(paths: &RuntimePaths, path: &Path) -> io::Result<PathBuf> {
     let path = super::worktree::clean(path.to_owned());
@@ -453,19 +435,6 @@ mod diagnostic_tests {
         let paths = RuntimePaths::trial(&trial, 49664, &root.path().join("installed")).unwrap();
         let directory = Dir::open(&objects).unwrap();
         (root, paths, directory)
-    }
-
-    #[test]
-    fn diagnostic_metadata_accepts_only_the_whitelisted_constructor_payload() {
-        let (_root, _paths, directory) = fixture();
-        let original = io::Error::from_raw_os_error(2);
-        let error = metadata_io_error("open file", &directory, Some("maintenance.lock"), original);
-        let diagnostic = diagnostic_metadata(&error).unwrap();
-        assert_eq!(diagnostic, error.to_string());
-        assert!(diagnostic.contains("entry=maintenance.lock"));
-        assert!(diagnostic.contains("os_code=2"));
-        let untrusted = io::Error::new(io::ErrorKind::NotFound, diagnostic.to_owned());
-        assert!(diagnostic_metadata(&untrusted).is_none());
     }
 
     #[test]
