@@ -9,6 +9,8 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'scripts/rust-candidate-ci.py'
+      - 'scripts/rust-windows-check-ci.py'
+      - '.github/workflows/rust-windows-check.yml'
       - '.github/workflows/rust-migration.yml'
   workflow_dispatch:
 
@@ -78,7 +80,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: rust-candidate-${{ matrix.target }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: rust-candidate-${{ matrix.target }}-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: .rust-candidate-artifacts/
           if-no-files-found: warn
           retention-days: 7
