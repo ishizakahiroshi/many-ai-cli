@@ -91,10 +91,9 @@
     },
     {
       "id": "rust-git-turn-snapshot-test-diagnostic",
-      "status": "active",
+      "status": "removed",
       "purpose": "Classify the intermittent Windows warm-reconnect Git snapshot failure without paths, argv, Git output, environment values, or work text.",
       "addedIn": "pending",
-      "due": "2026-10-13",
       "gate": "Rust cfg(test) only; no runtime gate or production sink",
       "files": [],
       "sharedFiles": [
@@ -109,7 +108,9 @@
       ],
       "removalCondition": "Remove in a dedicated commit once classified and verified, or when the owner stops the unresolved investigation; always remove before an accepted final candidate or release.",
       "reason": "Run37402281172 reports only HTTP500 after warm reconnect. Fixed test-only stages and numeric outcomes preserve budgets, assertions and HTTP/public error strings. The non-panicking stderr sink adds only a fixed warm_reconnect/other case label, never a raw thread name.",
-      "removalProcedure": "After preserving sanitized evidence, manually remove snapshot_test_diagnostic, snapshot_test_io_failure and every diagnostic state/call site from both sharedFiles; --purge only marks this entry removed and does not remove shared-file code. Verify no channel or sink needle remains in Rust source, set removedIn to the dedicated removal commit, and rerun validation."
+      "removalProcedure": "After preserving sanitized evidence, manually remove snapshot_test_diagnostic, snapshot_test_io_failure and every diagnostic state/call site from both sharedFiles; --purge only marks this entry removed and does not remove shared-file code. Verify no channel or sink needle remains in Rust source, set removedIn to the dedicated removal commit, and rerun validation.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
     },
     {
       "id": "rust-cli-version-process-test-diagnostic",

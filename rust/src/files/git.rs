@@ -66,21 +66,6 @@ pub(super) struct Git<'a> {
     service: &'a FilesService,
     until: Instant,
 }
-#[cfg(test)]
-fn snapshot_test_diagnostic(fields: std::fmt::Arguments<'_>) {
-    let thread = std::thread::current();
-    let case = if thread.name()
-        == Some(
-            "application::event_observer::tests::end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation",
-        ) {
-        "warm_reconnect"
-    } else {
-        "other"
-    };
-    crate::logging::write_diagnostic(&format!(
-        "git_turn_snapshot_diagnostic case={case} {fields}\n"
-    ));
-}
 impl<'a> Git<'a> {
     fn new(service: &'a FilesService, seconds: u64) -> Self {
         Self {
@@ -114,24 +99,8 @@ impl<'a> Git<'a> {
         env: BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
         combined: bool,
     ) -> std::result::Result<String, String> {
-        #[cfg(test)]
-        let diagnostic_started = Instant::now();
-        #[cfg(test)]
-        let diagnostic_operation = match args {
-            ["rev-parse", "--show-toplevel"] => "resolve",
-            ["rev-parse", "--verify", "HEAD^{tree}"] => "head_tree",
-            ["read-tree", "HEAD"] => "read_head",
-            ["read-tree", "--empty"] => "read_empty",
-            ["add", "-A", "--", "."] => "stage_worktree",
-            ["write-tree"] => "write_tree",
-            _ => "other",
-        };
         let timeout = self.until.saturating_duration_since(Instant::now());
         if timeout.is_zero() {
-            #[cfg(test)]
-            snapshot_test_diagnostic(format_args!(
-                "operation={diagnostic_operation} stage=budget_exhausted"
-            ));
             return Err("git command timed out".into());
         }
         let mut all = vec![
@@ -155,32 +124,12 @@ impl<'a> Git<'a> {
         };
         let out = crate::process::run_capped(&plan, &Cancellation::default())
             .await
-            .map_err(|e| {
-                #[cfg(test)]
-                snapshot_test_diagnostic(format_args!(
-                    "operation={diagnostic_operation} stage=process_io io_kind={:?} os_code={:?} budget_ms={} elapsed_ms={}",
-                    e.kind(),
-                    e.raw_os_error(),
-                    timeout.as_millis(),
-                    diagnostic_started.elapsed().as_millis()
-                ));
-                format!("git {}: {e}", args.join(" "))
-            })?;
+            .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
         let mut bytes = out.stdout;
         if combined {
             bytes.extend(&out.stderr);
         }
         if out.stdout_truncated || out.stderr_truncated || out.pipes_forced_closed {
-            #[cfg(test)]
-            snapshot_test_diagnostic(format_args!(
-                "operation={diagnostic_operation} stage=output outcome={:?} stdout_truncated={} stderr_truncated={} pipes_forced_closed={} budget_ms={} elapsed_ms={}",
-                out.outcome,
-                out.stdout_truncated,
-                out.stderr_truncated,
-                out.pipes_forced_closed,
-                timeout.as_millis(),
-                diagnostic_started.elapsed().as_millis()
-            ));
             return Err("git command output exceeded limit or pipes failed to close".into());
         }
         match out.outcome {
@@ -188,13 +137,6 @@ impl<'a> Git<'a> {
                 Ok(String::from_utf8_lossy(&bytes).into_owned())
             }
             _ => {
-                #[cfg(test)]
-                snapshot_test_diagnostic(format_args!(
-                    "operation={diagnostic_operation} stage=exit outcome={:?} budget_ms={} elapsed_ms={}",
-                    out.outcome,
-                    timeout.as_millis(),
-                    diagnostic_started.elapsed().as_millis()
-                ));
                 let output = if combined { bytes } else { out.stderr };
                 Err(format!(
                     "git {}: {}",

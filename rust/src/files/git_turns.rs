@@ -485,46 +485,24 @@ fn git_index_path(dir: &super::super::safe_fs::Dir, name: &str) -> std::io::Resu
     Ok(dir.path().join(name))
 }
 
-#[cfg(test)]
-fn snapshot_test_io_failure(stage: &str, error: &std::io::Error) {
-    snapshot_test_diagnostic(format_args!(
-        "stage={stage} io_kind={:?} os_code={:?}",
-        error.kind(),
-        error.raw_os_error()
-    ));
-}
-
 impl Git<'_> {
     pub(super) async fn worktree_tree(&self, root: &Path) -> Result<String> {
-        let base = super::super::safe_fs::Dir::open(self.service.paths.root()).map_err(|e| {
-            #[cfg(test)]
-            snapshot_test_io_failure("open_runtime", &e);
-            super::super::io_error(e, "snapshot_failed")
-        })?;
-        let temporary = base.child_dir("tmp", true).map_err(|e| {
-            #[cfg(test)]
-            snapshot_test_io_failure("open_temporary_parent", &e);
-            super::super::io_error(e, "snapshot_failed")
-        })?;
+        let base = super::super::safe_fs::Dir::open(self.service.paths.root())
+            .map_err(|e| super::super::io_error(e, "snapshot_failed"))?;
+        let temporary = base
+            .child_dir("tmp", true)
+            .map_err(|e| super::super::io_error(e, "snapshot_failed"))?;
         let name = format!(
             "many-ai-cli-git-turn-{}",
-            crate::process::random_token().map_err(|e| {
-                #[cfg(test)]
-                snapshot_test_io_failure("random_temporary_name", &e);
-                super::super::io_error(e, "snapshot_failed")
-            })?
+            crate::process::random_token()
+                .map_err(|e| super::super::io_error(e, "snapshot_failed"))?
         );
-        let dir = temporary.child_dir(&name, true).map_err(|e| {
-            #[cfg(test)]
-            snapshot_test_io_failure("open_temporary_index", &e);
-            super::super::io_error(e, "snapshot_failed")
-        })?;
+        let dir = temporary
+            .child_dir(&name, true)
+            .map_err(|e| super::super::io_error(e, "snapshot_failed"))?;
         let result = async {
-            let index = git_index_path(&dir, "index").map_err(|_error| {
-                #[cfg(test)]
-                snapshot_test_io_failure("index_spelling", &_error);
-                "Git cannot represent the private index path".to_owned()
-            })?;
+            let index = git_index_path(&dir, "index")
+                .map_err(|_| "Git cannot represent the private index path".to_owned())?;
             let env = BTreeMap::from([("GIT_INDEX_FILE".into(), Some(index.as_os_str().into()))]);
             let head = self
                 .run(root, &["rev-parse", "--verify", "HEAD^{tree}"])
@@ -546,8 +524,6 @@ impl Git<'_> {
             let out = self.env(root, &["write-tree"], env, false).await?;
             let tree = out.trim();
             if !valid_revision(tree) {
-                #[cfg(test)]
-                snapshot_test_diagnostic(format_args!("stage=invalid_tree_id"));
                 return Err("git write-tree returned an invalid object id".into());
             }
             Ok(tree.to_owned())
@@ -556,8 +532,6 @@ impl Git<'_> {
         drop(dir);
         let cleanup = temporary.remove_tree(&name);
         if let Err(e) = cleanup {
-            #[cfg(test)]
-            snapshot_test_io_failure("remove_temporary_index", &e);
             return Err(super::super::io_error(e, "snapshot_cleanup_failed"));
         }
         result.map_err(command_error)
