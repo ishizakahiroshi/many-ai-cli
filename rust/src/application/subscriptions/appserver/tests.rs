@@ -152,14 +152,21 @@ exit /b %ERRORLEVEL%
         .as_ref()
         .map(|_| "Ok".to_owned())
         .unwrap_or_else(|error| format!("Err({:?})", error.kind()));
-    let requests = std::fs::read_to_string(log).unwrap_or_else(|error| {
+    let requests = std::fs::read_to_string(log);
+    let diagnostic = phase_diagnostics::summary(requests.as_deref().ok(), &phases, &trace);
+    let case = match kind {
+        "chatgpt" => "chatgpt",
+        "apiKey" => "api_key",
+        _ => "other",
+    };
+    crate::logging::write_diagnostic(&format!("case={case} {diagnostic}\n"));
+    let requests = requests.unwrap_or_else(|error| {
         panic!(
             "synthetic app-server request log unavailable; usage result={result_summary}; log read kind={:?}; {}",
             error.kind(),
-            phase_diagnostics::summary(None, &phases, &trace)
+            diagnostic
         )
     });
-    let diagnostic = phase_diagnostics::summary(Some(&requests), &phases, &trace);
     (result, requests, outer_timeout, diagnostic)
 }
 #[cfg(windows)]
