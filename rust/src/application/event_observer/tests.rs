@@ -115,6 +115,10 @@ impl GitTurnCompletionCallbacks for Callbacks {
         })
     }
 }
+// Admission is a harness readiness wait, before any fixture Git budget starts.
+// A scenario keeps its own capture/callback concurrency while owning this slot.
+static REAL_GIT_FIXTURE_GATE: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+
 struct Fixture {
     _root: tempfile::TempDir,
     cwd: PathBuf,
@@ -125,6 +129,8 @@ struct Fixture {
     warnings: Arc<Mutex<Vec<String>>>,
     owner: HubTaskOwner,
     binding: SessionBinding,
+    // Fields drop in declaration order; release admission after fixture teardown.
+    _git_fixture: tokio::sync::SemaphorePermit<'static>,
 }
 async fn git(files: &FilesService, cwd: &std::path::Path, args: &[&str]) -> process::ProcessOutput {
     let plan = ProcessPlan {
@@ -147,6 +153,11 @@ async fn git(files: &FilesService, cwd: &std::path::Path, args: &[&str]) -> proc
     result
 }
 async fn fixture(handoff_enabled: bool, summary: bool) -> Fixture {
+    let git_fixture =
+        tokio::time::timeout(Duration::from_secs(180), REAL_GIT_FIXTURE_GATE.acquire())
+            .await
+            .expect("real Git fixture admission exceeded the harness readiness bound")
+            .expect("real Git fixture admission semaphore closed");
     let root = tempfile::tempdir().unwrap();
     let cwd = root.path().join("synthetic-project");
     let runtime = root.path().join("runtime");
@@ -265,6 +276,7 @@ async fn fixture(handoff_enabled: bool, summary: bool) -> Fixture {
         warnings,
         owner,
         binding: registration.binding,
+        _git_fixture: git_fixture,
     }
 }
 fn event(binding: SessionBinding, end: bool) -> CoreEvent {
