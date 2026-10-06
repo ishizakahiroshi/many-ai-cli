@@ -1,5 +1,7 @@
 # Windows confirmation workflow
 
+> 最終更新: 2026-10-06(火) 10:25:08 UTC
+
 This separate native Windows lane provides earlier feedback. Its green result is partial validation. The existing four-target candidate workflow continues to run for qualifying pull-request updates and retains its full release build, license and SBOM work. Final acceptance still requires the same source SHA to pass all four targets, Validate and both relevant secret scans, followed by the owner's device acceptance.
 
 ## Entry and scope
@@ -18,8 +20,18 @@ Every attempt recomputes source identity, tool versions, generated assets, runti
 
 Measure cold and warm attempts using Actions job `started_at`→`completed_at`, including setup and upload, and record queue delay separately if relevant. A warm claim requires the actual matched cache key; an attempted restore alone is insufficient. The workflow's first-step interval is supplemental and excludes final upload/job overhead.
 
-## Manual invocation and timing limit
+## Verified invocation and measured timing
 
-[GitHub's dispatch event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch) describes default-branch registration and API/CLI dispatch to another ref after a workflow has run. Actual branch dispatch must still be verified for this repository. At preparation time it has not been exercised, and the available connector has no dispatch operation. No default-branch edit or credential setup is included. Automatic branch push is the supported first-run fallback; an existing job can be rerun at its original SHA to measure a warm attempt. A rerun retains the original choice and cannot be represented as a newly selected focused suite.
+[GitHub's dispatch event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch) requires the workflow file on the default branch for dispatch, while the run can target a supplied branch or tag. Automatic push on `dots/rust-recovery-resume-3` and same-SHA job reruns have now been exercised in the runs below. Selectable `workflow_dispatch` and the four focused choices (`appserver`, `relay`, `git-turn`, `conpty`) remain unverified in actual CI; the available connector has no dispatch operation. A rerun retains the original `all-tests` choice and is not evidence of a newly selected focused suite or a dispatch with repeat=3. No default-branch edit or credential setup is included.
 
-The previous `a48a7e8` Windows full gate spent approximately 541 seconds on optimized release build and 831 seconds collecting distribution/license/SBOM inputs. Its remaining driver work was about 8.8 minutes before setup, queue and cache differences. This supports trying the shorter lane but does not establish a ten-minute result. Cold and warm wall times are pending the first published workflow's actual runs and will be recorded with source SHA, run/attempt and cache evidence in PROGRESS.md or its linked receipt. No timing measurement or manual-dispatch success is claimed by source review.
+The previous `a48a7e8` Windows full gate spent approximately 541 seconds on optimized release build and 831 seconds collecting distribution/license/SBOM inputs. Its remaining driver work was about 8.8 minutes before setup, queue and cache differences. Actual confirmation job wall times, including setup and upload, are now measured:
+
+| Source / run | Attempt / job | Cache evidence | Job wall time | Result |
+|---|---|---|---|---|
+| `853056507777b95d7acfb9364fa33529046285c6` / [37431744003](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37431744003) | 1 / 112163955655 | Cold: no matching cache | 10m43s | Success |
+| Same `8530565` run | 2 / 112168105842 | Warm: exact cache identity restored | 7m08s | Failure: two appserver tests and picker initial output/completion |
+| `fd62456359f5220297a7f7ef3fd1b16d59bc53d3` / [37443075884](https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37443075884) | 1 / 112201251744 | Compatible cache restored from `2be97163`; not cold | 7m24s | Success |
+| Same `fd62456` run | 2 / 112204741721 | Exact `fd62456` cache identity restored | 7m18s | Success |
+| Same `fd62456` run | 3 / 112208638210 | Exact `fd62456` cache identity restored | 7m14s | Success |
+
+The [853 timing receipt](../../../rust/inventory/windows-check-timing-8530565.json) retains its cold success and warm failure separately. The three `fd62456` attempts each passed all-target 1,320/0/0 (library 1,036 included), three separate doctests, 47 Python checks, fmt and strict Clippy. These three successes establish that SHA's requested confirmation gate; they do not erase the earlier failures or identify their cause. Ten minutes is a target, not a cold-run guarantee, and the failed 7m08s attempt is not a passing benchmark. Later cleanup source needs its own validation; actual selectable dispatch and device acceptance remain separate gates. See the dated checkpoint in [PROGRESS.md](PROGRESS.md).
