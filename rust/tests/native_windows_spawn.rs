@@ -331,7 +331,8 @@ async fn roundtrip(fixture: &Fixture, hub_pid: u32, output: &mut Vec<u8>) {
         let frame = ui.next(deadline).await;
         if frame["type"] == "session_update" && frame["provider"] == PROVIDER {
             assert_eq!(frame["label"], LABEL);
-            assert_eq!(frame["state"], "running");
+            // Go registers a new wrapper as output-idle, before PTY activity.
+            assert_eq!(frame["state"], "standby");
             break frame;
         }
     };
@@ -358,21 +359,52 @@ async fn roundtrip(fixture: &Fixture, hub_pid: u32, output: &mut Vec<u8>) {
     let wrapper_pid = start["pid"].as_i64().unwrap();
     assert!(wrapper_pid > 0 && wrapper_pid != i64::from(hub_pid));
 
-    // Require positive liveness/state evidence after a real no-input interval.
+    // Go's idleAfter is 3s; its 200ms tick derives standby from output-idle
+    // activity when no approval is pending. Wait for that positive snapshot
+    // evidence, allowing the tick to run after the real no-input interval.
     // A missing event or an elapsed receive deadline never counts as success.
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let deadline = Instant::now() + STEP;
+    let waiting = loop {
+        assert!(
+            pid_alive(wrapper_pid),
+            "wrapper exited instead of waiting for input"
+        );
+        let snapshot = tokio::time::timeout_at(deadline, fixture.snapshot())
+            .await
+            .expect("waiting provider did not settle to standby");
+        let waiting = snapshot["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["id"] == session)
+            .expect("waiting provider session missing from actual Hub snapshot");
+        if waiting["state"] == "standby" {
+            break waiting.clone();
+        }
+        assert_eq!(waiting["state"], "running", "idle transition: {waiting}");
+        assert_eq!(
+            waiting["activity"],
+            json!({
+                "output_idle":false, "workflow_active":true,
+                "awaiting_user":false, "awaiting_approval":false
+            }),
+            "activity before idle tick: {waiting}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    };
+    assert_eq!(
+        waiting["activity"],
+        json!({
+            "output_idle":true, "workflow_active":false,
+            "awaiting_user":false, "awaiting_approval":false
+        }),
+        "actual no-input standby snapshot: {waiting}"
+    );
     assert!(
         pid_alive(wrapper_pid),
-        "wrapper exited instead of waiting for input"
+        "wrapper exited after its no-input standby snapshot"
     );
-    let waiting = fixture.snapshot().await;
-    let waiting = waiting["sessions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|entry| entry["id"] == session)
-        .expect("waiting provider session missing from actual Hub snapshot");
-    assert_eq!(waiting["state"], "running");
 
     ui.send(json!({"type":"pty_input", "session_id":session, "text":"hello\r"}))
         .await;

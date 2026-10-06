@@ -184,8 +184,14 @@ fn transient_accept_error(error: &io::Error) -> bool {
         return true;
     }
     #[cfg(windows)]
-    if error.raw_os_error() == Some(windows_sys::Win32::Networking::WinSock::WSAEMFILE) {
-        return true;
+    {
+        use windows_sys::Win32::Networking::WinSock::{WSAEINTR, WSAEMFILE};
+        // Rust 1.90 leaves these Winsock errors uncategorized. Match the
+        // interrupted-accept contract by raw code instead of broadening the
+        // retry set to every unclassified Windows failure.
+        if matches!(error.raw_os_error(), Some(WSAEINTR | WSAEMFILE)) {
+            return true;
+        }
     }
     false
 }
@@ -671,6 +677,23 @@ mod tests {
             assert!(outcomes.next().is_none());
             assert_eq!(start.elapsed(), std::time::Duration::from_millis(5));
         }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn windows_interrupted_accept_is_transient_without_retrying_other_raw_errors() {
+        use windows_sys::Win32::Networking::WinSock::{WSAEFAULT, WSAEINTR, WSAEMFILE};
+        // Rust 1.90 does not classify WSAEINTR as ErrorKind::Interrupted.
+        // Keep the raw Winsock contract independent of that mapping.
+        assert_eq!(WSAEINTR, 10004);
+        assert!(transient_accept_error(&io::Error::from_raw_os_error(
+            WSAEINTR
+        )));
+        assert!(transient_accept_error(&io::Error::from_raw_os_error(
+            WSAEMFILE
+        )));
+        assert!(!transient_accept_error(&io::Error::from_raw_os_error(
+            WSAEFAULT
+        )));
     }
     #[tokio::test(start_paused = true)]
     async fn accept_backoff_is_bounded_and_resets_after_success() {
