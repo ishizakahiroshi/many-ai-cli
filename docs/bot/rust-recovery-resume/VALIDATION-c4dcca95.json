@@ -1,0 +1,419 @@
+{
+  "schema_version": 1,
+  "source_sha": "c4dcca95e0f466082163eecc9e77fbfbd7f3ca32",
+  "source_tree": "bd3fd868331344d29344a326f03c7d2e85f3ff1f",
+  "recorded_utc": "2026-10-06T04:11:58.951801+00:00",
+  "run_id": 37405328488,
+  "run_number": 26,
+  "attempt": 1,
+  "conclusion": "failure",
+  "targets": [
+    {
+      "target": "x86_64-unknown-linux-gnu",
+      "job_id": 112081501486,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/job/112081501486",
+      "conclusion": "success",
+      "library": {
+        "passed": 1103,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1414,
+        "failed": 0,
+        "ignored": 0
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11386677516,
+        "name": "rust-candidate-x86_64-unknown-linux-gnu-c4dcca95e0f466082163eecc9e77fbfbd7f3ca32",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/artifacts/11386677516",
+        "bytes": 21070178,
+        "sha256": "e89a98fb378a9fd0508baa666a83c2e1c7be324a7a1bbc37514d4a1065d28d0e",
+        "zip_crc_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "native-build-only-unaccepted"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 48360472,
+          "sha256": "be6e1ee3c3471b817de141278471b2dee6e8571008f5569e5afc9b3c2aac4d3c",
+          "decompressed_bytes_verified": true,
+          "temporary_diagnostic_sink_needles_absent": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 14035024,
+          "sha256": "fd60e90088ce0dabefbf73902e682672d06b32e3b0a2562135071a64cda9fb62",
+          "decompressed_bytes_verified": true,
+          "temporary_diagnostic_sink_needles_absent": true
+        }
+      ]
+    },
+    {
+      "target": "aarch64-apple-darwin",
+      "job_id": 112081501633,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/job/112081501633",
+      "conclusion": "success",
+      "library": {
+        "passed": 1104,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1414,
+        "failed": 0,
+        "ignored": 0
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11386737671,
+        "name": "rust-candidate-aarch64-apple-darwin-c4dcca95e0f466082163eecc9e77fbfbd7f3ca32",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/artifacts/11386737671",
+        "bytes": 19357334,
+        "sha256": "66bb0a8e550e8751617c99505136a95e5f3da11e6db932a4deab14d401bc3bd1",
+        "zip_crc_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "native-build-only-unaccepted"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 40562880,
+          "sha256": "b9f225cc9a5d89038398c7f3f3e730b65b59e307a0df0a906fb2ce9ac0a7a66a",
+          "decompressed_bytes_verified": true,
+          "temporary_diagnostic_sink_needles_absent": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 10109920,
+          "sha256": "94bb1fd9100d16650d80b7dee18573be4a1581c32751c36cbc095ffd5a2d13cd",
+          "decompressed_bytes_verified": true,
+          "temporary_diagnostic_sink_needles_absent": true
+        }
+      ]
+    },
+    {
+      "target": "x86_64-apple-darwin",
+      "job_id": 112081501640,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/job/112081501640",
+      "conclusion": "success",
+      "library": {
+        "passed": 1104,
+        "failed": 0,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1414,
+        "failed": 0,
+        "ignored": 0
+      },
+      "doctests": {
+        "passed": 3,
+        "failed": 0,
+        "ignored": 0
+      },
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11387843278,
+        "name": "rust-candidate-x86_64-apple-darwin-c4dcca95e0f466082163eecc9e77fbfbd7f3ca32",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/artifacts/11387843278",
+        "bytes": 19947061,
+        "sha256": "ff288e76f7d227167af64ba3664aab9be742208a7da2418b13fa6c18253ef8ac",
+        "zip_crc_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "native-build-only-unaccepted"
+      },
+      "binaries": [
+        {
+          "name": "many-ai-cli",
+          "bytes": 43496528,
+          "sha256": "74d42cf8c2202c88341ae1cee54f8d200aea99836067ab0941c7ace2c418d632",
+          "decompressed_bytes_verified": true,
+          "temporary_diagnostic_sink_needles_absent": true
+        },
+        {
+          "name": "many-ai-cli-launcher",
+          "bytes": 11262568,
+          "sha256": "b90c2c29856d3bf0b163093e0c4c5ac16f5d9ee705b53d68b9bdca15dc5212e4",
+          "decompressed_bytes_verified": true,
+          "temporary_diagnostic_sink_needles_absent": true
+        }
+      ]
+    },
+    {
+      "target": "x86_64-pc-windows-msvc",
+      "job_id": 112081501659,
+      "job_url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/job/112081501659",
+      "conclusion": "failure",
+      "library": {
+        "passed": 1029,
+        "failed": 1,
+        "ignored": 0
+      },
+      "all_targets": {
+        "passed": 1313,
+        "failed": 1,
+        "ignored": 0
+      },
+      "doctests": {
+        "status": "not reached"
+      },
+      "fmt": "passed",
+      "strict_clippy": "passed",
+      "artifact": {
+        "id": 11387686413,
+        "name": "rust-candidate-x86_64-pc-windows-msvc-c4dcca95e0f466082163eecc9e77fbfbd7f3ca32",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37405328488/artifacts/11387686413",
+        "bytes": 45944,
+        "sha256": "367f2b2aa50a853e0c8584f9fe5d06dcbe583c15f7defc601c0d426db6e2044d",
+        "zip_crc_verified": true,
+        "source_head_receipt_verified": true,
+        "kind": "diagnostic-only"
+      },
+      "binaries": [],
+      "failure": {
+        "test": "application::event_observer::tests::end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation",
+        "assertion": "post-reconnect start did not establish a Git-turn reservation",
+        "snapshot_status": 500,
+        "diagnostic": "git_turn_snapshot_diagnostic case=warm_reconnect operation=write_tree stage=exit outcome=TimedOut budget_ms=208 elapsed_ms=270",
+        "immediate_cause": "write-tree exhausted the shared resolution+snapshot command budget",
+        "underlying_delay": "unproven",
+        "release_build": "not reached",
+        "windows_runtime_release_embedding": "unverified; no release binary"
+      }
+    }
+  ],
+  "native_contracts": {
+    "windows_a1_transient_accept": "passed",
+    "windows_a2_real_spawn_conpty_roundtrip_exit0": "passed",
+    "both_macos_alias_permission_controls": "passed",
+    "linux_previous_suffix_assertion": "passed; failure cause remains unobserved"
+  },
+  "validate": {
+    "run_id": 37405328477,
+    "run_number": 339,
+    "attempt": 1,
+    "conclusion": "success",
+    "jobs_passed": 11,
+    "expected_skip": "release-token-scopes"
+  },
+  "pr_merge_checkout": {
+    "sha": "b05d476c664cee1bfd24dcd669a8b789654db5fb",
+    "note": "Validate and PR scan use the merge checkout; Rust artifacts bind actual candidate head."
+  },
+  "secret_scans": [
+    {
+      "event": "push",
+      "run_id": 37405323008,
+      "run_number": 428,
+      "attempt": 1,
+      "job_id": 112081484520,
+      "conclusion": "success",
+      "commits_scanned": 3,
+      "result": "no leaks found",
+      "range": "a2f50f66e9d5ae4cb97e84425fac9f7f2d7ed36c^..c4dcca95e0f466082163eecc9e77fbfbd7f3ca32"
+    },
+    {
+      "event": "pull_request",
+      "run_id": 37405328489,
+      "run_number": 429,
+      "attempt": 1,
+      "job_id": 112081501263,
+      "conclusion": "success",
+      "commits_scanned": 30,
+      "result": "no leaks found",
+      "range": "6b0fb8e198750245ef8b4b475fbac9070db0ac3e^..401eff2b83712ca657b31b0baf63d9dadd38171e"
+    }
+  ],
+  "history_scan_scope": "62 PR commits have coverage through prior38 union + prior15 push + next6 push + current3 push. PR action alone remains first30. Historical2ef6d3c publicGitblob finding remains recorded/unwaived; current green scans do not erase that result. No exclusions/scanner changes.",
+  "fixed_go_oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "fixed_go_sources": [
+    {
+      "path": "internal/hub/git_common.go",
+      "git_blob_oid": "888dd6ddb60d7b59318056490203eabfe48e4192",
+      "sha256": "d5a9a079072ea0638eb57bf87f415b3200b19c1fd2673100c5871e2d0ab397ea",
+      "current_bytes_equal_fixed_oracle": true
+    },
+    {
+      "path": "internal/hub/git_turns.go",
+      "git_blob_oid": "690a0cca9f7620a22f7f935e6c7e3393316fc7b5",
+      "sha256": "2e88c6002b970fdfd8f51aef384e6677fa92db328978041568fd79c64a8c9729",
+      "current_bytes_equal_fixed_oracle": true
+    }
+  ],
+  "go_budget_observation": "resolveGitRoot creates its own5s context; capture start/end then creates a fresh5s snapshot context, and end diff retains a separate5s context. Rust reused resolution budget for snapshot.",
+  "deferred_parity": "Go retains/reuses a session-private index; Rust currently recreates it. Cache ownership/reset/dismissal/shutdown cleanup needs a separate scoped change and is not implemented here.",
+  "acceptance": "Not accepted: Windows failed and no Windows release binary exists; current temporary diagnostics require later dedicated removal. Device/product acceptance remains separate.",
+  "approved_budget_successor": {
+    "local_code_sha": "05757ef0355c9c38cc6188b932c20dff7ba4c070",
+    "local_code_tree": "dead8307bfa64c419c8e15d89c84dac1b6f9a262",
+    "source_base": "c4dcca95e0f466082163eecc9e77fbfbd7f3ca32",
+    "source_files": [
+      {
+        "path": "rust/src/files/mod.rs",
+        "sha256": "9f41fc357a77f7df7cd97eff241059f13132a14adb581be3a7e06e6b9267c7ec",
+        "git_blob_oid": "f1c88494529a036a79730e10ff589760a1848dbe"
+      },
+      {
+        "path": "rust/src/files/git.rs",
+        "sha256": "02b9571c9e507342d68a3ab4b724face09d803b78f29df3a0161bef9ac4dc52c",
+        "git_blob_oid": "8087d0d95e20844ae5a9e7e117606088ce160c89"
+      },
+      {
+        "path": "rust/src/files/git_turns.rs",
+        "sha256": "75a84599397a676b6a2fd0a8fbd2fe8acdc7da98e8cd1d36fddc13c3003a98e8",
+        "git_blob_oid": "0c062c0aa3a70ddc53ab7ee122e129a77ce7c241"
+      },
+      {
+        "path": "rust/src/application/event_observer/tests.rs",
+        "sha256": "eaf8f0c820636319022ad441001551ceda49d10c25b3c7e18371140afa7684d0",
+        "git_blob_oid": "cd309cafa5172ada4eb50d48b579064438d38d54"
+      }
+    ],
+    "verification_scope": "Local working-source commands preceded commit creation; final tested Rust bytes match this code checkpoint. Embedded build metadata and native binaries are not represented as this new SHA. Exact-SHA native verification remains pending.",
+    "checks": [
+      {
+        "scope": "actualGit regression on old shared caller plus new test-only seam",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "rust/Cargo.toml",
+          "--lib",
+          "materialization_has_an_independent_resolution_budget",
+          "--",
+          "--test-threads=8"
+        ],
+        "exit_code": 101,
+        "log_name": "git-budget-red.log",
+        "log_sha256": "7aecfae836565a8831e55a77c083d01f11e2ca4686bbf3b57272e472de722e6d",
+        "summaries": 1,
+        "counts": {
+          "passed": 0,
+          "failed": 2,
+          "ignored": 0
+        }
+      },
+      {
+        "scope": "same actualGit regressions with fresh snapshot owner",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "rust/Cargo.toml",
+          "--lib",
+          "materialization_has_an_independent_resolution_budget",
+          "--",
+          "--test-threads=8"
+        ],
+        "exit_code": 0,
+        "log_name": "git-budget-green.log",
+        "log_sha256": "e6365382b6d754ca8bcdd36bbdd9488cd8d4ef7cb1560e89ec1f3dcf1b9e2c0e",
+        "summaries": 1,
+        "counts": {
+          "passed": 2,
+          "failed": 0,
+          "ignored": 0
+        }
+      },
+      {
+        "scope": "Linux all-targets",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "rust/Cargo.toml",
+          "--all-targets",
+          "--no-fail-fast",
+          "--",
+          "--test-threads=8"
+        ],
+        "exit_code": 0,
+        "log_name": "git-budget-all-targets.log",
+        "log_sha256": "a64af4a3b98621f6cee2ade8297056c180de95ba2485e3a7272682df89e40499",
+        "summaries": 33,
+        "counts": {
+          "passed": 1416,
+          "failed": 0,
+          "ignored": 0
+        }
+      },
+      {
+        "scope": "Linux strict all-target Clippy",
+        "command": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "rust/Cargo.toml",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit_code": 0,
+        "log_name": "git-budget-clippy.log",
+        "log_sha256": "f42c76c61928ff707372ace3f53075c086bb26518a9ff6dbc64cb513edcd8afb"
+      },
+      {
+        "scope": "Linux doctests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "rust/Cargo.toml",
+          "--doc"
+        ],
+        "exit_code": 0,
+        "log_name": "git-budget-doctests.log",
+        "log_sha256": "ba259e90f4f90f608695c340fc50ff2508ea9f1f05d80f9abbea7ed3a48dc438",
+        "summaries": 1,
+        "counts": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        }
+      }
+    ],
+    "fmt": "passed",
+    "instrumentation_registry_check": "passed",
+    "macos_alias_controls": "retained unchanged from c4; new native run pending",
+    "original_reconnect_test": "byte-identical and passed in the Linux aggregate",
+    "per_phase_seconds": 5,
+    "root_plus_snapshot_budget_seconds_before_after": [
+      5,
+      10
+    ],
+    "end_including_diff_budget_seconds_before_after": [
+      10,
+      15
+    ],
+    "gate_callback_time": "outside those cumulative command budgets",
+    "temporary_diagnostics": "retained through first native verification, then dedicated cleanup required before final acceptance",
+    "index_reuse": "deferred, no implementation change"
+  }
+}
