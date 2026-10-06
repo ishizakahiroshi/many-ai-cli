@@ -26,13 +26,12 @@ async fn synthetic_picker_captures_native_output_and_owner_cancellation_reaps() 
     let owner = HubTaskOwner::new(tokio::runtime::Handle::current());
     #[cfg(windows)]
     let (executable, args) = (
-        PathBuf::from(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"),
-        vec![
-            "-NoProfile".into(),
-            "-NonInteractive".into(),
-            "-Command".into(),
-            "[Console]::WriteLine('synthetic-owned-path')".into(),
-        ],
+        // Fixed stdout uses cmd.exe's built-in echo, avoiding PowerShell startup.
+        // Production picker scripts still use PowerShell; this does not test them.
+        PathBuf::from(std::env::var_os("SystemRoot").expect("Windows system directory"))
+            .join("System32")
+            .join("cmd.exe"),
+        vec!["/D".into(), "/C".into(), "echo synthetic-owned-path".into()],
     );
     #[cfg(unix)]
     let (executable, args) = (
@@ -63,23 +62,51 @@ async fn synthetic_picker_captures_native_output_and_owner_cancellation_reaps() 
     .unwrap()
     .unwrap();
     assert_eq!(selected, "synthetic-owned-path");
+    let started = root.path().join("picker-started.txt");
+    let release = root.path().join("picker-release.txt");
+    let marker = root.path().join("picker-completed.txt");
+    let failure = root.path().join("picker-failure.txt");
     let mut waiting = plan;
-    #[cfg(windows)]
-    {
-        waiting.args = vec![
-            "-NoProfile".into(),
-            "-NonInteractive".into(),
-            "-Command".into(),
-            "Start-Sleep -Seconds 60".into(),
-        ];
-    }
-    #[cfg(unix)]
-    {
-        waiting.args = vec!["-c".into(), "sleep 60".into()];
-    }
+    // Exercise the real owned-process path with a child that explicitly
+    // acknowledges readiness and stays alive until the owner cancels it.
+    waiting.executable = std::env::current_exe().unwrap();
+    waiting.args = vec![
+        "--exact".into(),
+        "application::host_actions::tests::detached_fixture_child".into(),
+    ];
+    waiting.env.extend([
+        ("MANY_AI_HOST_ACTIONS_CHILD_RUN".into(), Some("1".into())),
+        (
+            "MANY_AI_HOST_ACTIONS_CHILD_STARTED".into(),
+            Some(started.as_os_str().to_owned()),
+        ),
+        (
+            "MANY_AI_HOST_ACTIONS_CHILD_RELEASE".into(),
+            Some(release.as_os_str().to_owned()),
+        ),
+        (
+            "MANY_AI_HOST_ACTIONS_CHILD_MARKER".into(),
+            Some(marker.as_os_str().to_owned()),
+        ),
+        (
+            "MANY_AI_HOST_ACTIONS_CHILD_FAILURE".into(),
+            Some(failure.as_os_str().to_owned()),
+        ),
+    ]);
     let handle = owner.handle();
     let wait = tokio::spawn(async move { pick_owned(waiting, &handle).await });
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // This wait is harness setup, outside the unchanged cancellation deadline.
+    wait_for_child_receipt(&started, &failure, "picker readiness").await;
+    let pid: i64 = std::fs::read_to_string(&started).unwrap().parse().unwrap();
+    assert!(crate::process::pid_alive(pid), "picker child was not alive");
+    assert!(
+        !wait.is_finished(),
+        "picker ended before owner cancellation"
+    );
+    assert!(
+        !failure.exists(),
+        "picker fixture failed before cancellation"
+    );
     owner.stop_requests();
     owner.stop_effects().unwrap();
     owner.cancel_effects().unwrap();
@@ -89,6 +116,15 @@ async fn synthetic_picker_captures_native_output_and_owner_cancellation_reaps() 
             .unwrap()
             .unwrap()
             .is_err()
+    );
+    assert!(
+        !crate::process::pid_alive(pid),
+        "owned picker child survived cancellation"
+    );
+    assert!(!marker.exists(), "picker fixture completed without release");
+    assert!(
+        !failure.exists(),
+        "picker fixture timed out instead of being reaped"
     );
 }
 #[test]
@@ -168,9 +204,14 @@ fn detached_fixture_child() {
     let marker = std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_MARKER").unwrap();
     let failure = std::env::var_os("MANY_AI_HOST_ACTIONS_CHILD_FAILURE").unwrap();
     let result = (|| -> io::Result<()> {
-        write_child_receipt(Path::new(&started), b"started")?;
+        write_child_receipt(
+            Path::new(&started),
+            std::process::id().to_string().as_bytes(),
+        )?;
         let release = Path::new(&release);
-        let deadline = std::time::Instant::now() + Duration::from_secs(60);
+        // Harness fail-safe only: allow the parent's readiness wait and its
+        // unchanged cancellation deadline to finish before self-reporting failure.
+        let deadline = std::time::Instant::now() + Duration::from_secs(120);
         while !release.exists() {
             if std::time::Instant::now() >= deadline {
                 return Err(io::Error::new(
@@ -198,7 +239,8 @@ fn write_child_receipt(path: &Path, contents: &[u8]) -> io::Result<()> {
 }
 
 async fn wait_for_child_receipt(marker: &Path, failure: &Path, phase: &str) {
-    tokio::time::timeout(Duration::from_secs(20), async {
+    // Receipt waits are harness scheduling bounds, not product timing budgets.
+    tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             if marker.exists() {
                 break;
