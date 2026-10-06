@@ -1,6 +1,13 @@
 # V03: release dependency persistence and immutable artifact transfer
 
-> 最終更新: 2026-10-05(月) 03:19:03 UTC
+> 最終更新: 2026-10-05(月) 23:20:30 UTC
+
+
+## Current continuation scope
+
+At `4dc961ce600d12aa0911e5a9620e50411ab13d9f`, all four native candidate builds and both binary hashes per target are verified; see [artifact identities](../ARTIFACTS-4dc961ce.md). This strengthens build-input evidence, but does not demonstrate a separate signer/publisher environment or real signature identity. V03 remains required and pending for those gates. The current owner request authorizes documentation only for V03: `.github/workflows/release.yml`, signing and credentials are unchanged. The [SQLite/Cargo assessment](../dependency-review/V06-SQLITE-CARGO.md) adds explicit toolchain prerequisites and does not change release authority.
+
+
 
 Review date: 2026-10-05 UTC. Result: **source/workflow evaluation complete; production isolation and signed native artifact acceptance remain pending.** No release, real signing, credential access, network request, dependency installation, source edit or Git mutation was performed.
 
