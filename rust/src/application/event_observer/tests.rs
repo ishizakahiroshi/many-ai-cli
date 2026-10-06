@@ -361,6 +361,72 @@ async fn unbound_observer_fails_closed_and_snapshot_failure_is_best_effort() {
 }
 
 #[tokio::test]
+async fn start_capture_materialization_has_an_independent_resolution_budget() {
+    let f = fixture(false, false).await;
+    f.files
+        .expire_next_git_resolution
+        .store(true, Ordering::SeqCst);
+    f.observer.observe(&event(f.binding, false)).await.unwrap();
+    assert_eq!(f.files.expired_git_resolutions.load(Ordering::SeqCst), 1);
+    assert!(!f.files.expire_next_git_resolution.load(Ordering::SeqCst));
+    let reservation = f.files.reserve_git_turn_end(f.binding);
+    assert!(
+        reservation.is_some(),
+        "actual start snapshot reused the completed resolver's expired budget"
+    );
+    assert!(f.warnings.lock().unwrap().is_empty());
+    drop(reservation);
+    assert_eq!(
+        std::fs::read_dir(f.files.paths.root().join("tmp"))
+            .unwrap()
+            .count(),
+        0
+    );
+    assert!(f.core.is_current(f.binding));
+}
+
+#[tokio::test]
+async fn end_capture_materialization_has_an_independent_resolution_budget() {
+    let f = fixture(false, false).await;
+    f.observer.observe(&event(f.binding, false)).await.unwrap();
+    let reservation = f.files.reserve_git_turn_end(f.binding);
+    assert!(reservation.is_some(), "initial actual Git baseline missing");
+    drop(reservation);
+    std::fs::write(f.cwd.join("task.txt"), "after\n").unwrap();
+    f.files
+        .expire_next_git_resolution
+        .store(true, Ordering::SeqCst);
+    f.observer.observe(&event(f.binding, true)).await.unwrap();
+    f.owner.drain_effects().await;
+    assert_eq!(f.files.expired_git_resolutions.load(Ordering::SeqCst), 1);
+    assert!(!f.files.expire_next_git_resolution.load(Ordering::SeqCst));
+    let messages = f.callbacks.sink.messages.lock().unwrap();
+    assert_eq!(
+        messages.len(),
+        1,
+        "actual end snapshot reused the completed resolver's expired budget"
+    );
+    assert_eq!(messages[0].turn, 1);
+    assert_eq!(messages[0].files_changed, 1);
+    assert_eq!(messages[0].added, 1);
+    assert_eq!(messages[0].removed, 1);
+    drop(messages);
+    assert_eq!(
+        *f.callbacks.trace.lock().unwrap(),
+        vec!["callback-after-broadcast"]
+    );
+    assert!(f.warnings.lock().unwrap().is_empty());
+    assert!(f.files.reserve_git_turn_end(f.binding).is_none());
+    assert_eq!(
+        std::fs::read_dir(f.files.paths.root().join("tmp"))
+            .unwrap()
+            .count(),
+        0
+    );
+    assert!(f.core.is_current(f.binding));
+}
+
+#[tokio::test]
 async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation() {
     let f = fixture(false, false).await;
     f.observer.observe(&event(f.binding, false)).await.unwrap();

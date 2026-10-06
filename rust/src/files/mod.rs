@@ -29,6 +29,10 @@ pub struct FilesService {
     /// Explicit per-command environment overlays, useful for isolated Git runners.
     pub git_environment: std::collections::BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>>,
     pub turns: std::sync::Mutex<GitTurnState>,
+    #[cfg(test)]
+    pub(crate) expire_next_git_resolution: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    pub(crate) expired_git_resolutions: std::sync::atomic::AtomicUsize,
     history: Option<std::sync::Arc<dyn PersistenceEffectSink>>,
 }
 impl FilesService {
@@ -39,6 +43,10 @@ impl FilesService {
             git_executable: resolve_git(),
             git_environment: Default::default(),
             turns: std::sync::Mutex::new(GitTurnState::default()),
+            #[cfg(test)]
+            expire_next_git_resolution: Default::default(),
+            #[cfg(test)]
+            expired_git_resolutions: Default::default(),
             history: None,
         }
     }

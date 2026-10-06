@@ -151,7 +151,12 @@ impl FilesService {
         let git = Git::new(self, 5);
         let capture = async {
             let (root, _) = git.resolve(core, binding.session.0).await?;
-            let tree = git.worktree_tree(&root).await?;
+            #[cfg(test)]
+            let mut git = git;
+            #[cfg(test)]
+            git.expire_completed_resolution_for_test();
+            // Fixed Go gives resolution and materialization separate five-second budgets.
+            let tree = Git::new(self, 5).worktree_tree(&root).await?;
             Ok::<_, Response>((root, tree))
         }
         .await;

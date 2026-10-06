@@ -88,6 +88,22 @@ impl<'a> Git<'a> {
             until: Instant::now() + Duration::from_secs(seconds),
         }
     }
+    /// Expire only the owner whose resolution already succeeded. A fresh
+    /// materialization owner retains its real deadline and runs actual Git.
+    #[cfg(test)]
+    fn expire_completed_resolution_for_test(&mut self) {
+        use std::sync::atomic::Ordering;
+        if self
+            .service
+            .expire_next_git_resolution
+            .swap(false, Ordering::SeqCst)
+        {
+            self.until = Instant::now();
+            self.service
+                .expired_git_resolutions
+                .fetch_add(1, Ordering::SeqCst);
+        }
+    }
     async fn run(&self, cwd: &Path, args: &[&str]) -> std::result::Result<String, String> {
         self.env(cwd, args, BTreeMap::new(), false).await
     }
