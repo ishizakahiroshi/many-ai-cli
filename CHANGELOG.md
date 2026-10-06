@@ -142,6 +142,13 @@ Release artifacts are published at
   Unrelated settings saves preserve the shared list, and concurrent template
   edits require an explicit conflict resolution instead of silently overwriting
   the other device's changes.
+- **AI explanations outside approval prompts are now asked to stay plain text
+  too.** The approval rules many-ai-cli writes for each CLI (now version 25)
+  already told it not to use tables, horizontal rules or leading bullets in the
+  preamble of an approval prompt, because the dashboard shows Markdown symbols
+  as-is. The same now
+  applies to ordinary explanations outside the markers: no bold, headings,
+  leading symbols or tables (`internal/wrapper/approval_rules.go`).
 
 ### Fixed
 - **The Settings icon stays at the bottom while Settings is open.** The same
