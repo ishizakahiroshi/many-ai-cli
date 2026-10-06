@@ -966,6 +966,13 @@ esac
         fixture_in(tempfile::tempdir().unwrap()).await
     }
     async fn fixture_in(root: tempfile::TempDir) -> Fixture {
+        fixture_in_with_maintenance_trace(root, None).await
+    }
+    async fn fixture_in_with_maintenance_trace(
+        root: tempfile::TempDir,
+        trace: Option<PathBuf>,
+    ) -> Fixture {
+        let trace_maintenance = trace.is_some();
         let runtime = root.path().join("trial");
         fs::create_dir(&runtime).unwrap();
         let paths = RuntimePaths::trial(&runtime, 49661, &root.path().join("installed")).unwrap();
@@ -973,7 +980,7 @@ esac
         fs::create_dir(&home).unwrap();
         let empty = runtime.join("empty-git-config");
         fs::write(&empty, "").unwrap();
-        let env: BTreeMap<OsString, Option<OsString>> = BTreeMap::from([
+        let mut env: BTreeMap<OsString, Option<OsString>> = BTreeMap::from([
             ("HOME".into(), Some(home.clone().into_os_string())),
             ("USERPROFILE".into(), Some(home.into_os_string())),
             ("GIT_CONFIG_NOSYSTEM".into(), Some("1".into())),
@@ -988,6 +995,12 @@ esac
             ("GIT_OBJECT_DIRECTORY".into(), None),
             ("GIT_ALTERNATE_OBJECT_DIRECTORIES".into(), None),
         ]);
+        if let Some(trace) = trace {
+            env.insert(
+                "GIT_TRACE2_EVENT".into(),
+                Some(crate::config::paths::equivalent_root_prefix(&trace).into_os_string()),
+            );
+        }
         let git = RelayGit::new(
             paths.clone(),
             WorktreeGit::new("git".into(), env),
@@ -1001,6 +1014,8 @@ esac
             &["config", "user.name", "Synthetic Relay Fixture"],
             &["config", "user.email", "relay@example.invalid"],
             &["config", "commit.gpgsign", "false"],
+            // Fixture-owned maintenance must finish before the next strict scan.
+            &["config", "maintenance.autoDetach", "false"],
             &[
                 "config",
                 "core.hooksPath",
@@ -1010,6 +1025,18 @@ esac
             git.run(&repo, args, Duration::from_secs(10), &cancel)
                 .await
                 .unwrap();
+            if trace_maintenance && args.first() == Some(&"init") {
+                // The regression starts from explicit detachment, so only the
+                // fixture's later override can select foreground maintenance.
+                git.run(
+                    &repo,
+                    &["config", "maintenance.autoDetach", "true"],
+                    Duration::from_secs(10),
+                    &cancel,
+                )
+                .await
+                .unwrap();
+            }
         }
         fs::write(repo.join("plan.md"), "# Synthetic plan\n").unwrap();
         git.run(&repo, &["add", "plan.md"], Duration::from_secs(10), &cancel)
@@ -1029,6 +1056,75 @@ esac
             repo,
             git,
         }
+    }
+    #[tokio::test]
+    async fn fixture_git_keeps_auto_maintenance_enabled_and_waits_for_completion() {
+        let root = tempfile::tempdir().unwrap();
+        let trace = root.path().join("trial").join("maintenance-trace.json");
+        let f = fixture_in_with_maintenance_trace(root, Some(trace.clone())).await;
+        let trace = fs::read_to_string(trace).expect("read synthetic Git Trace2 events");
+        let mut detach_flags = Vec::new();
+        // The RED control may still have a detached writer. Inspect complete
+        // records: commit's required child_start was written before it returned.
+        // Only the selected booleans can reach assertion output, never raw JSON.
+        for line in trace
+            .split_inclusive('\n')
+            .filter(|line| line.ends_with('\n'))
+        {
+            let event: serde_json::Value =
+                serde_json::from_str(line).expect("synthetic Git Trace2 JSON");
+            if event["event"].as_str() != Some("child_start") {
+                continue;
+            }
+            let Some(argv) = event["argv"].as_array() else {
+                continue;
+            };
+            if argv.windows(3).any(|args| {
+                args[0].as_str() == Some("maintenance")
+                    && args[1].as_str() == Some("run")
+                    && args[2].as_str() == Some("--auto")
+            }) {
+                detach_flags.push((
+                    argv.iter().any(|arg| arg.as_str() == Some("--detach")),
+                    argv.iter().any(|arg| arg.as_str() == Some("--no-detach")),
+                ));
+            }
+        }
+        assert_eq!(
+            detach_flags,
+            vec![(false, true)],
+            "actual auto-maintenance must remain enabled and run without detaching"
+        );
+        assert!(
+            trace.ends_with('\n'),
+            "completed foreground trace must be complete"
+        );
+        let lock = f.repo.join(".git").join("objects").join("maintenance.lock");
+        assert!(
+            matches!(fs::symlink_metadata(lock), Err(error) if error.kind() == io::ErrorKind::NotFound),
+            "owned automatic maintenance must release its lock before fixture commit returns"
+        );
+        // The same strict inspection used by both missing-worktree regressions
+        // must remain usable immediately after the real fixture commit.
+        assert!(valid_revision(
+            &f.git
+                .head(&f.repo, &TaskCancellation::default())
+                .await
+                .unwrap()
+        ));
+        assert_eq!(
+            f.git
+                .run(
+                    &f.repo,
+                    &["config", "--local", "--get", "maintenance.autoDetach"],
+                    Duration::from_secs(10),
+                    &TaskCancellation::default(),
+                )
+                .await
+                .unwrap()
+                .trim(),
+            "false",
+        );
     }
     #[tokio::test]
     async fn shared_worktree_keeps_parent_unchanged_and_cleanup_retains_result_branch() {
@@ -1269,7 +1365,13 @@ esac
             .git
             .prepare(&f.repo, "r11-missing", &cfg, &cancel)
             .await
-            .unwrap();
+            .unwrap_or_else(|error| {
+                panic!(
+                    "prepare failed: not_git={}; diagnostic={:?}",
+                    error.not_git,
+                    f.git.diagnostic.last().as_deref(),
+                )
+            });
         let kept = f.git.head(&path, &cancel).await.unwrap();
         fs::remove_dir_all(&path).unwrap();
         f.git.validate_cleanup(&f.repo, &path, &cfg).unwrap();
