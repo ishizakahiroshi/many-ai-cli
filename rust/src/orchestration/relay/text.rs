@@ -132,7 +132,6 @@ pub fn parse_verdict(
         kind: simple_lower(first),
         ..Verdict::default()
     };
-    let lower_raw = simple_lower(raw);
     match verdict.kind.as_str() {
         "pass" => {}
         "findings" => {
@@ -161,22 +160,20 @@ pub fn parse_verdict(
             }
         }
         "blocked" => {
-            if let Some(index) = lower_raw.find("reason=") {
-                verdict.reason = byte_tail(raw, index + 7).trim().to_owned();
+            if let Some(marker) = lower_match(raw, "reason=") {
+                verdict.reason = raw[marker.end..].trim().to_owned();
             }
             return Ok(verdict);
         }
         _ => return Err(VerdictError::Missing),
     }
     verdict.file = default_file.to_string_lossy().into_owned();
-    if let Some(index) = lower_raw.find("file=") {
-        let mut file = byte_tail(raw, index + 5).trim().to_owned();
+    if let Some(marker) = lower_match(raw, "file=") {
+        let mut file = raw[marker.end..].trim().to_owned();
         // file= may precede the counts and its path may itself contain spaces.
         for stop in [" must=", " should="] {
-            if let Some(index) = simple_lower(&file).find(stop) {
-                file = String::from_utf8_lossy(&file.as_bytes()[..index])
-                    .trim()
-                    .to_owned();
+            if let Some(marker) = lower_match(&file, stop) {
+                file = file[..marker.start].trim().to_owned();
             }
         }
         let file = file.trim_matches(['`', '"', '\'']);
@@ -199,9 +196,29 @@ pub fn parse_verdict(
     Ok(verdict)
 }
 
-// Go searches the lowercased string but slices original bytes. Usually indices
-// match; lossy conversion preserves the source's JSON-visible replacement rune
-// if a preceding Unicode lowercase mapping changed the byte length.
+// Simple lowercase maps one scalar to one scalar, but their UTF-8 byte widths
+// may differ. Translate both marker boundaries before slicing the original text,
+// including a length-changing character within a marker (for example FİLE=).
+fn lower_match(value: &str, marker: &str) -> Option<std::ops::Range<usize>> {
+    let lower = simple_lower(value);
+    let start = lower.find(marker)?;
+    let end = start + marker.len();
+    let mut boundaries = lower
+        .char_indices()
+        .map(|(index, _)| index)
+        .chain(std::iter::once(lower.len()))
+        .zip(
+            value
+                .char_indices()
+                .map(|(index, _)| index)
+                .chain(std::iter::once(value.len())),
+        );
+    let (_, original_start) = boundaries.find(|(index, _)| *index == start)?;
+    let (_, original_end) = boundaries.find(|(index, _)| *index == end)?;
+    Some(original_start..original_end)
+}
+
+// Short IDs retain the fixed Go byte-tail behavior for a non-ASCII suffix.
 fn byte_tail(value: &str, index: usize) -> String {
     String::from_utf8_lossy(value.as_bytes().get(index..).unwrap_or_default()).into_owned()
 }
@@ -869,6 +886,49 @@ mod tests {
             ),
             Err(VerdictError::Missing)
         );
+    }
+
+    #[test]
+    fn verdict_markers_preserve_original_offsets_after_unicode_lowercase() {
+        let board = Path::new("board");
+        let default = board.join("review.md");
+        let long_name = format!("{}.md", "Ⱥ".repeat(16));
+        for (text, file) in [
+            (
+                "verdict: pass Ⱥ FILE=review.md".to_owned(),
+                "review.md".to_owned(),
+            ),
+            (
+                "verdict: pass K FİLE=レビュー.md".to_owned(),
+                "レビュー.md".to_owned(),
+            ),
+            (
+                "verdict: findings FILE=Ⱥ.md MUST=0 SHOULD=2".to_owned(),
+                "Ⱥ.md".to_owned(),
+            ),
+            (
+                "verdict: findings FILE=İ.md SHOULD=2 MUST=0".to_owned(),
+                "İ.md".to_owned(),
+            ),
+            (
+                format!("verdict: findings FILE={long_name} MUST=0"),
+                long_name,
+            ),
+        ] {
+            let got = parse_verdict(&text, 1, board, &default, |_| true).unwrap();
+            assert_eq!(Path::new(&got.file), board.join(file), "{text}");
+        }
+        for prefix in ["Ⱥ", "K", "İ"] {
+            let got = parse_verdict(
+                &format!("verdict: blocked {prefix} REASON=理由 Ⱥ file=keep this"),
+                1,
+                board,
+                &default,
+                |_| panic!("blocked does not stat"),
+            )
+            .unwrap();
+            assert_eq!(got.reason, "理由 Ⱥ file=keep this");
+        }
     }
 
     #[test]
