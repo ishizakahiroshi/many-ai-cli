@@ -212,7 +212,7 @@ fn now() -> String {
 }
 impl WhisperManager {
     pub fn new(deps: WhisperDependencies) -> Result<Arc<Self>, WhisperError> {
-        let root = Arc::new(Dir::open_or_create_private(deps.paths.root())?);
+        let root = Arc::new(Dir::open_or_create_private_components(deps.paths.root())?);
         for (name, _) in &deps.runtime_payload {
             crate::files::safe_fs::basename(name)?;
         }

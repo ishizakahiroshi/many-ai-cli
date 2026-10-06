@@ -599,6 +599,44 @@ fn broad_home_and_unsupported_provider_trust_are_rejected_without_writes() {
 }
 #[cfg(unix)]
 #[test]
+fn codex_trust_preserves_existing_parent_modes_and_creates_missing_parent_privately() {
+    use std::os::unix::fs::PermissionsExt;
+    for existing_config in [false, true] {
+        let f = fixture(|_| {}, LocalModelSnapshot::default());
+        let cwd = f.paths.root().join("project");
+        std::fs::create_dir(&cwd).unwrap();
+        let home = f.home.join(".codex");
+        std::fs::create_dir(&home).unwrap();
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o750)).unwrap();
+        if existing_config {
+            std::fs::write(home.join("config.toml"), "# synthetic settings\n").unwrap();
+        }
+        assert!(f.policy.trust.grant("codex", &[], &cwd).unwrap().written);
+        assert_eq!(
+            std::fs::metadata(&home).unwrap().permissions().mode() & 0o777,
+            0o750
+        );
+        assert!(
+            std::fs::read_to_string(home.join("config.toml"))
+                .unwrap()
+                .contains("trust_level = \"trusted\"")
+        );
+    }
+    let f = fixture(|_| {}, LocalModelSnapshot::default());
+    let cwd = f.paths.root().join("project");
+    std::fs::create_dir(&cwd).unwrap();
+    assert!(f.policy.trust.grant("codex", &[], &cwd).unwrap().written);
+    assert_eq!(
+        std::fs::metadata(f.home.join(".codex"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777,
+        0o700
+    );
+}
+#[cfg(unix)]
+#[test]
 fn claude_trust_preserves_config_symlink_and_existing_mode_within_owned_trial() {
     use std::os::unix::fs::PermissionsExt;
     let f = fixture(|_| {}, LocalModelSnapshot::default());

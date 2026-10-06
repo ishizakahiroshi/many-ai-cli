@@ -711,7 +711,7 @@ pub fn prepare_launch_prompt(
     launch_prompt_arg_usable(through_shell, &directory).map_err(|reason| {
         io::Error::other(format!("cannot pass the instruction at launch: {reason}"))
     })?;
-    let dir = Dir::open_or_create_private(&directory)?;
+    let dir = Dir::open_or_create_private_components(&directory)?;
     let mut random = [0u8; 16];
     getrandom::fill(&mut random)
         .map_err(|_| io::Error::other("launch prompt random source failed"))?;

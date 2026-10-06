@@ -219,8 +219,8 @@ impl IssueCli {
         }
     }
     fn fallback(&self, markdown: &str, reason: &str) -> io::Result<io::Error> {
-        let dir =
-            Dir::open_or_create_private(self.deps.paths.root())?.child_dir("reports", true)?;
+        let dir = Dir::open_or_create_private_components(self.deps.paths.root())?
+            .child_dir("reports", true)?;
         let name = format!(
             "report_{}.md",
             chrono::Local::now().format("%Y%m%d_%H%M%S.%9f")

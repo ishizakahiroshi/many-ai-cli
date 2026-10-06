@@ -40,7 +40,7 @@ impl ProviderAssets {
             return Ok(dir.clone());
         }
         let dir = Arc::new(if create {
-            Dir::open_or_create_private(&self.path)?
+            Dir::open_or_create_private_components(&self.path)?
         } else {
             Dir::open(&self.path)?
         });

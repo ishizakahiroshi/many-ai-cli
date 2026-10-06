@@ -326,7 +326,7 @@ impl HandoffHttp {
             if body.trim().is_empty() {
                 return Err("memo_empty");
             }
-            let directory = Dir::open_or_create_private(path.parent().unwrap())
+            let directory = Dir::open_or_create_private_components(path.parent().unwrap())
                 .map_err(|_| "memo_save_failed")?;
             let mut file = directory
                 .open_write_or_create(path.file_name().unwrap().to_str().unwrap(), 0o600)

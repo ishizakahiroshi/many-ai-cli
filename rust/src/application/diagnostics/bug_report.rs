@@ -313,8 +313,8 @@ impl BugReport {
         })
     }
     fn save(&self, text: &str) -> io::Result<String> {
-        let root =
-            Dir::open_or_create_private(self.deps.paths.root())?.child_dir("reports", true)?;
+        let root = Dir::open_or_create_private_components(self.deps.paths.root())?
+            .child_dir("reports", true)?;
         let name = format!(
             "report_{}.md",
             chrono::Local::now().format("%Y%m%d_%H%M%S.%9f")

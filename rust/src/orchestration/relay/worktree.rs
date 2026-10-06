@@ -137,7 +137,7 @@ impl RelayGit {
             return Ok((path, branch, String::new()));
         }
         let base = self.head(parent, cancel).await.map_err(error)?;
-        Dir::open_or_create_private(path.parent().expect("relay parent"))
+        Dir::open_or_create_private_components(path.parent().expect("relay parent"))
             .map_err(|e| error(e.to_string()))?;
         if let Ok(relative) = root.strip_prefix(top.trim())
             && !relative.as_os_str().is_empty()
@@ -216,7 +216,7 @@ impl RelayGit {
         if self.check(&common).is_err() {
             return;
         }
-        let Ok(dir) = Dir::open_or_create_private(&common.join("info")) else {
+        let Ok(dir) = Dir::open_or_create_private_components(&common.join("info")) else {
             return;
         };
         let prior = dir.read("exclude", 1024 * 1024).unwrap_or_default();
@@ -976,6 +976,39 @@ esac
         assert_eq!(f.git.head(&path, &cancel).await.unwrap(), result);
         assert_eq!(f.git.head(&f.repo, &cancel).await.unwrap(), initial);
         assert!(f.paths.relative_to_selected_root(&path).is_ok());
+    }
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn prepare_preserves_existing_git_info_and_worktree_parent_modes() {
+        use std::os::unix::fs::PermissionsExt;
+        let f = fixture().await;
+        let cancel = TaskCancellation::default();
+        let cfg = OrchestrationConfig::default();
+        let info = f.repo.join(".git/info");
+        let parent = RelayGit::root(&f.repo, &cfg).join("r-permissions");
+        fs::create_dir_all(&parent).unwrap();
+        for path in [&info, &parent] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let (worktree, _, _) = f
+            .git
+            .prepare(&f.repo, "r-permissions", &cfg, &cancel)
+            .await
+            .unwrap();
+        assert!(worktree.is_dir());
+        for path in [&info, &parent] {
+            assert_eq!(
+                fs::metadata(path).unwrap().permissions().mode() & 0o777,
+                0o755,
+                "existing directory mode changed: {}",
+                path.display()
+            );
+        }
+        assert!(
+            fs::read_to_string(info.join("exclude"))
+                .unwrap()
+                .contains("/.many-ai-cli/worktrees/")
+        );
     }
     #[tokio::test]
     async fn worktree_reuse_rejects_wrong_branch_without_repair() {

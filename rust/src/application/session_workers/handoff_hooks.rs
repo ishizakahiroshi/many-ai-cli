@@ -92,7 +92,7 @@ impl HandoffHttpHooks for SessionWorkers {
                 .handoff
                 .note_path_for(id.0)
                 .map_err(|_| "note_path_unavailable")?;
-            if crate::files::safe_fs::Dir::open_or_create_private(
+            if crate::files::safe_fs::Dir::open_or_create_private_components(
                 path.parent().ok_or("note_path_unavailable")?,
             )
             .is_err()

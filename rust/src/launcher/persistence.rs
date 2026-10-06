@@ -13,7 +13,7 @@ pub struct LauncherStore {
 }
 impl LauncherStore {
     pub fn open(paths: RuntimePaths) -> io::Result<Self> {
-        let dir = Dir::open_or_create_private(paths.root())?;
+        let dir = Dir::open_or_create_private_components(paths.root())?;
         Ok(Self {
             dir: Arc::new(dir),
             paths,

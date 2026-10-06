@@ -206,7 +206,7 @@ fn prompt(paths: &RuntimePaths, body: &str) -> io::Result<Option<PromptFile>> {
     if body.trim().is_empty() {
         return Ok(None);
     }
-    let dir = Dir::open_or_create_private(&paths.resource(Resource::Temporary))?;
+    let dir = Dir::open_or_create_private_components(&paths.resource(Resource::Temporary))?;
     sweep_prompts(&dir);
     let name = format!("prompt-{}.md", &random_token()?[..32]);
     dir.create_new(&name, body.as_bytes(), 0o600)?;

@@ -637,6 +637,45 @@ fn private_append_rejects_links_fifo_and_survives_parent_replacement() {
 
 #[cfg(unix)]
 #[test]
+fn private_component_creation_preserves_existing_modes_and_rejects_links() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let root = tempfile::tempdir().unwrap();
+    let existing = root.path().join("existing");
+    fs::create_dir(&existing).unwrap();
+    fs::set_permissions(&existing, fs::Permissions::from_mode(0o2755)).unwrap();
+    let held = safe_fs::Dir::open_or_create_private_components(&existing).unwrap();
+    assert_eq!(
+        held.own_metadata().unwrap().permissions().mode() & 0o7777,
+        0o2755
+    );
+    let missing = existing.join("new").join("leaf");
+    safe_fs::Dir::open_or_create_private_components(&missing).unwrap();
+    assert_eq!(
+        fs::metadata(&existing).unwrap().permissions().mode() & 0o7777,
+        0o2755
+    );
+    for created in [existing.join("new"), missing] {
+        assert_eq!(
+            fs::metadata(created).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    let foreign = root.path().join("foreign");
+    fs::create_dir(&foreign).unwrap();
+    fs::set_permissions(&foreign, fs::Permissions::from_mode(0o755)).unwrap();
+    let alias = existing.join("alias");
+    symlink(&foreign, &alias).unwrap();
+    assert!(safe_fs::Dir::open_or_create_private_components(&alias).is_err());
+    assert!(safe_fs::Dir::open_or_create_private_components(&alias.join("new")).is_err());
+    assert_eq!(
+        fs::metadata(&foreign).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert!(!foreign.join("new").exists());
+}
+
+#[cfg(unix)]
+#[test]
 fn private_directory_creation_restricts_only_final_and_never_follows_replacement() {
     use std::os::unix::fs::{PermissionsExt, symlink};
     let root = tempfile::tempdir().unwrap();

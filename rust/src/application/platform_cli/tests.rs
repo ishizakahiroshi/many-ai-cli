@@ -391,6 +391,30 @@ async fn native_unix_locations_and_purge_need_no_windows_environment_or_powershe
     assert!(!executable.exists());
 }
 
+#[cfg(unix)]
+#[test]
+fn native_setup_preserves_existing_desktop_and_application_directory_modes() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let native = native::NativePlatformIo {
+        actor: crate::application::diagnostics::NativeDiagnosticIo {
+            paths: RuntimePaths::production(temp.path()).unwrap(),
+            cwd: temp.path().into(),
+            environment: vec![],
+        },
+    };
+    for relative in ["Desktop", ".local/share/applications"] {
+        let path = temp.path().join(relative);
+        std::fs::create_dir_all(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        native.prepare_directory(&path).unwrap();
+        assert_eq!(
+            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+    }
+}
+
 #[cfg(windows)]
 fn fixture_junction(source: &Path, target: &Path) -> io::Result<()> {
     use std::{

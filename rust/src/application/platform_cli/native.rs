@@ -26,7 +26,7 @@ impl NativePlatformIo {
     fn directory(&self, path: &Path, create: bool) -> io::Result<Dir> {
         if !self.actor.paths.is_trial() {
             return if create {
-                Dir::open_or_create_private(path)
+                Dir::open_or_create_private_components(path)
             } else {
                 Dir::open(path)
             };

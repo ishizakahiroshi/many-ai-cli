@@ -244,7 +244,7 @@ impl HandoffStore {
         let path = self.rendered_path_for(id)?;
         // Hold the same directory for both the source and the replacement. A
         // concurrent root rename cannot redirect either operation elsewhere.
-        let directory = Dir::open_or_create_private(&self.directory())?;
+        let directory = Dir::open_or_create_private_components(&self.directory())?;
         let records = match directory.open_file(&format!("s{id}.jsonl"), false) {
             Ok(file) => read_records(file)?,
             Err(e) if e.kind() == io::ErrorKind::NotFound => vec![],

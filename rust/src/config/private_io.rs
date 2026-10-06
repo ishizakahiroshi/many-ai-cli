@@ -28,11 +28,34 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| io::Error::other("destination has no UTF-8 filename"))?;
-    crate::files::safe_fs::Dir::open_or_create_private(parent)?.replace(name, bytes, 0o600)
+    crate::files::safe_fs::Dir::open_or_create_private_components(parent)?
+        .replace(name, bytes, 0o600)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_preserves_existing_parent_and_explicit_repair_remains_available() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("existing");
+        fs::create_dir(&directory).unwrap();
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o750)).unwrap();
+        let path = directory.join("synthetic.json");
+        write_atomic(&path, b"one").unwrap();
+        write_atomic(&path, b"two").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"two");
+        assert_eq!(
+            fs::metadata(&directory).unwrap().permissions().mode() & 0o777,
+            0o750
+        );
+        ensure_private_dir(&directory).unwrap();
+        assert_eq!(
+            fs::metadata(directory).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
     #[test]
     fn private_atomic_replace_and_failure_preserve_data() {
         let t = tempfile::tempdir().unwrap();

@@ -439,7 +439,7 @@ impl HubComposition {
             .set_observation_temporary(&native_temporary)
             .map_err(session_error)?;
         let routine_store = Arc::new(crate::routine::store::RoutineStore::open(Arc::new(
-            Dir::open_or_create_private(paths.root())?,
+            Dir::open_or_create_private_components(paths.root())?,
         )));
         if !routine_store.ready() {
             logger.write(
@@ -722,9 +722,9 @@ impl HubComposition {
             })),
         );
         routine_callbacks.bind(&routines).map_err(session_error)?;
-        let memos = Arc::new(MemoManager::open(Arc::new(Dir::open_or_create_private(
-            paths.root(),
-        )?)));
+        let memos = Arc::new(MemoManager::open(Arc::new(
+            Dir::open_or_create_private_components(paths.root())?,
+        )));
         let workspace = Arc::new(workspace::Workspace {
             memos: memos.clone(),
             handoff: HandoffStore::new(paths.clone()),

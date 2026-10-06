@@ -43,8 +43,9 @@ impl BoardStore {
     ) -> Result<PathBuf, ChildLaunchError> {
         let path = self.path(orchestration);
         if self.trial {
-            let directory = Dir::open_or_create_private(path.parent().expect("board has a parent"))
-                .map_err(ChildLaunchError::board)?;
+            let directory =
+                Dir::open_or_create_private_components(path.parent().expect("board has a parent"))
+                    .map_err(ChildLaunchError::board)?;
             match directory.open_file("board.md", false) {
                 Ok(_) => return Ok(path),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {}

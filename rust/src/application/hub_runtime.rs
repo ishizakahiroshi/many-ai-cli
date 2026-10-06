@@ -61,7 +61,7 @@ pub struct RuntimeLedger {
 impl RuntimeLedger {
     pub fn open(paths: &RuntimePaths) -> io::Result<Self> {
         Ok(Self {
-            dir: Arc::new(Dir::open_or_create_private(paths.root())?),
+            dir: Arc::new(Dir::open_or_create_private_components(paths.root())?),
             trial_port: paths.is_trial().then(|| paths.port()),
         })
     }

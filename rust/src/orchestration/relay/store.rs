@@ -43,7 +43,7 @@ impl RelayStore {
         persisted.version = 1;
         let data = serde_json::to_vec_pretty(&persisted).map_err(io::Error::other)?;
         if self.paths.is_trial() {
-            Dir::open_or_create_private(&path)?.replace("relay.json", &data, 0o600)
+            Dir::open_or_create_private_components(&path)?.replace("relay.json", &data, 0o600)
         } else {
             crate::config::private_io::write_atomic(&path.join("relay.json"), &data)
                 .map_err(io::Error::other)

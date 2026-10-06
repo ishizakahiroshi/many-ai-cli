@@ -158,7 +158,7 @@ impl CodexStopHooks {
         if parent.exists() {
             Dir::open(parent)
         } else {
-            Dir::open_or_create_private(parent)
+            Dir::open_or_create_private_components(parent)
         }
     }
     pub fn injected(&self) -> io::Result<bool> {

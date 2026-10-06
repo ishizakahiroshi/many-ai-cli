@@ -88,7 +88,7 @@ pub(super) fn grant(path: &Path, plan: &Plan) -> io::Result<FolderTrustResult> {
         return Ok(result(&plan.write_key, level));
     }
     let target = path.canonicalize().unwrap_or_else(|_| path.into());
-    let directory = Dir::open_or_create_private(target.parent().ok_or_else(invalid)?)?;
+    let directory = Dir::open_or_create_private_components(target.parent().ok_or_else(invalid)?)?;
     let name = target
         .file_name()
         .and_then(|s| s.to_str())
