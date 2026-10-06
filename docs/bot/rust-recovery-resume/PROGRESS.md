@@ -10,7 +10,7 @@ last_reviewed: 2026-10-06
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-06(火) 07:21:39 UTC
+> 最終更新: 2026-10-06(火) 07:37:05 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. Existing task #3 continues on `dots/rust-recovery-resume-3` toward develop in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11). Old Draft PR #9 remains preserved. Recovery delivery and acknowledgment are complete: the supplied `7c2d7d3` source/instructions and authoritative R/V supplement were read in this continuation. Earlier delivery-pending entries below are historical.
 
@@ -415,3 +415,15 @@ Successful Windows diagnostics at a48a7e8 still leave the intermittent app-serve
 - C8: The opening wording in PROGRESS.md (review reference line17) is stronger than the body; it is preserved for this record-only item rather than rewritten in this batch.
 - C9: Stale wording in CONPTY-SPAWN.md (review reference line23), REVIEW-FIXES-20261006.md (review reference line31), and the inventory remains deferred; Windows logs from 9a214ce onward contain successful ConPTY round trips.
 - C10: Production eprintln! calls remain in usage_relay.rs and the wrapper paths; their scope is recorded without cleanup in this batch.
+
+## 2026-10-06 Windows-first confirmation and M1 checkpoint
+
+Local code checkpoint `3f258692f72ecb5b8ae2f1bee95dd5272142c43b`, tree `ddd25c113140144fd7db75acd5ea98ce028052a2`, combines the four dedicated probe-removal commits, M1 permission preservation (`bc4bc96d77247de49c8fecb4658f5360d7593976`), the M2–M4 records (`8954de09f82f01cce2ffbd2e1cd6532c5310eb3a`) and D1/D2. The public head read at 07:32 UTC remains `a48a7e8ac07a53f8fdce9b0b26ecde738fb37e0d`, open Draft. Publication will append these logical commits once as a batch; its public SHA and CI read-back are separate from this local identity.
+
+M1 now routes the two caller-owned Codex/Git files through a permission-preserving append API. Existing private-log append still repairs its private mode. Both actual-caller regressions compiled and failed before the change on existing 0600 versus required 0644, then the same two tests passed after the fix. New files remain private; held-inode, atomic append and link/nonregular rejection tests remain enforced. This changes source and synthetic fixtures only, not installed user files.
+
+[Local commands and receipts](WINDOWS-CHECK-LOCAL-VALIDATION.json) preserve both aggregate attempts. The first Linux all-target run had 1,420 passed / 1 failed / 0 ignored: the unchanged CLI-version descendant cancellation test completed before both helpers became ready. The exact isolated rerun passed, and the unchanged second aggregate passed 1,421 / 0 / 0 (library 1,110 included). The cause remains unidentified; the second pass does not erase the first failure. Strict all-target Clippy, three separate doctests, fmt, packaging Python checks and the existing instrumentation check passed. Separate reviewers read every changed line and verified the actual M1 RED/GREEN and proposal/committed bytes. Native Windows/macOS checks for this checkpoint are still pending.
+
+[The Windows confirmation lane](WINDOWS-CHECK.md) uses fixed suite/repeat choices, preparation, fmt, strict all-target Clippy, selected tests and full doctests, with isolated debug/dependency caches. Existing full-target automatic PR checks and manual entry remain; their optimized binaries/license/SBOM scope is intact. Validate, secret-scan, exclusions and release.yml are unchanged. Cold and warm job wall times, including setup/upload, are not yet measured. They will be recorded with the source SHA, run/attempt and actual matched cache evidence after publication; ten minutes is a target, not a claimed result. Actual selectable branch dispatch is unverified with the available connector; automatic branch push is the first-run fallback, and same-SHA job reruns preserve the original choice.
+
+[Published a48a7e8 evidence](VALIDATION-a48a7e8a.json) records the completed prior four-target run, eight downloaded/rehashed binaries, VS runtime bytes, Validate and scoped scans. Linux and both macOS all-target counts were 1,421, Windows 1,321; their library counts were respectively 1,110 / 1,111 / 1,111 / 1,037 and are included, not added. Each target's three doctests are separate. These prior native results do not validate this cleanup/M1/workflow checkpoint. A quick-check green is also insufficient: same-SHA four-target, Validate and secret-scan gates plus the owner's device acceptance remain required.

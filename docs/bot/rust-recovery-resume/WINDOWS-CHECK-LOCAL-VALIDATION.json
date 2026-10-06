@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "code_checkpoint": "3f258692f72ecb5b8ae2f1bee95dd5272142c43b",
+  "code_tree": "ddd25c113140144fd7db75acd5ea98ce028052a2",
+  "compiled_rust_src_tree": "fd07d1f8cad5d813e5bbfeab22ceb81f02dfebaf",
+  "recorded_utc": "2026-10-06T07:36:54.245440+00:00",
+  "environment": "Linux cloud; Rust1.90.0, Go1.26.8, Bun1.3.14; locked offline Cargo inputs",
+  "source_scope": "All compiled Rust source matches this committed checkpoint. First aggregate and M1 RED/GREEN ran before the commits were created; the four GREEN Rust files were byte-compared with the independently reviewed proposal. Documentation-only receipt files do not change compiled source. Native Windows/macOS validation is pending.",
+  "checks": [
+    {
+      "label": "M1 tests before implementation",
+      "log_basename": "m1-red.log",
+      "log_sha256": "bfb09a27aca5ad02b860ce0f2cc9d25ed95f74d0031d83914d29fe82d07a9259",
+      "exit_code": 101,
+      "summaries": 1,
+      "passed_failed_ignored": [
+        0,
+        2,
+        0
+      ],
+      "library_summary": null
+    },
+    {
+      "label": "M1 unchanged tests after implementation",
+      "log_basename": "m1-green.log",
+      "log_sha256": "f3b65ca11ed8b438a51b71d69e0ed7b86b531ac155a7e3f79b8481377c9bdcf2",
+      "exit_code": 0,
+      "summaries": 1,
+      "passed_failed_ignored": [
+        2,
+        0,
+        0
+      ],
+      "library_summary": null
+    },
+    {
+      "label": "First combined aggregate",
+      "log_basename": "windows-check-m1-all-targets.log",
+      "log_sha256": "0aa457b760c2dda418039dbfb59e8a8af9ed2717e6eb6388a1946432e58bbb55",
+      "exit_code": 101,
+      "summaries": 33,
+      "passed_failed_ignored": [
+        1420,
+        1,
+        0
+      ],
+      "library_summary": [
+        1109,
+        1,
+        0
+      ]
+    },
+    {
+      "label": "Exact isolated rerun",
+      "log_basename": "windows-check-m1-cli-rerun.log",
+      "log_sha256": "229aa3c949acc6989e5b286f3d764659dd9a656190a718a8fc8bbc4ceddba25e",
+      "exit_code": 0,
+      "summaries": 1,
+      "passed_failed_ignored": [
+        1,
+        0,
+        0
+      ],
+      "library_summary": null
+    },
+    {
+      "label": "Second combined aggregate",
+      "log_basename": "windows-check-m1-all-targets-rerun.log",
+      "log_sha256": "8ec39af74c04e86aa943ce7be72f2b499af4893c35655cf0f7a1f708cc1de4fd",
+      "exit_code": 0,
+      "summaries": 33,
+      "passed_failed_ignored": [
+        1421,
+        0,
+        0
+      ],
+      "library_summary": [
+        1110,
+        0,
+        0
+      ]
+    }
+  ],
+  "final_checks": [
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.325,
+      "log_basename": "windows-check-final-clippy.log",
+      "log_sha256": "f694a9e074374d315f58b8a63ce849858b1b8708cf56b3d194218605bd2a9d6e"
+    },
+    {
+      "name": "doctests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 3.295,
+      "log_basename": "windows-check-final-doctests.log",
+      "log_sha256": "b1cfc227704162757834ef187a99e00c458b42e7b14de7aeb80b7888ff7a6a17"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.978,
+      "log_basename": "windows-check-final-fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "instrumentation",
+      "command": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.107,
+      "log_basename": "windows-check-final-instrumentation.log",
+      "log_sha256": "c54bcee9779815b0f31c1c2c70c5873510614865da2b36dd2d884bd9fa11734d"
+    },
+    {
+      "name": "python",
+      "command": [
+        "python3",
+        "-B",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "rust/packaging",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.454,
+      "log_basename": "windows-check-final-python.log",
+      "log_sha256": "1c09507eead2254c6369cfad016a66597399a62b8b85b3e44cd5f518d042fcb7"
+    }
+  ],
+  "commands": {
+    "m1_red_and_green": "cargo test --manifest-path rust/Cargo.toml --locked --offline --lib append_keeps_existing_file_mode_and_creates_private_file -- --nocapture",
+    "aggregate": "cargo test --manifest-path rust/Cargo.toml --locked --offline --all-targets --no-fail-fast -- --test-threads=8",
+    "isolated_rerun": "cargo test --manifest-path rust/Cargo.toml --locked --offline --lib hub::cli_version::native::tests::dropped_executor_future_kills_owned_descendant -- --exact --nocapture"
+  },
+  "failure_scope": "First aggregate had1420 passed/1 failed/0 ignored: unchanged dropped_executor_future_kills_owned_descendant completed before both helpers became ready. Exact isolated rerun and unchanged second aggregate passed. Cause is unidentified; the later pass does not erase the failure or establish absence of intermittence.",
+  "m1_discriminator": "Both new actual-caller tests compiled and failed only on existing mode0600 versus0644 before the fix; identical assertions passed after it. New mode0600, existing inode/bytes and repeat-call idempotency are retained. Original private-log repair remains.",
+  "review": "Separate non-author read all M1 and M2\u2013M4 changes and exact proposed bytes, verified actual RED/GREEN, and separately approved Windows workflow/driver/tests/docs after source-gate and receipt-context corrections. Native execution is not implied.",
+  "pending": [
+    "Exact published-head four-target CI, Validate and both scoped scans",
+    "Windows quick-check cold/warm job wall times and actual cache-match evidence",
+    "Selectable branch dispatch capability; automatic push fallback is implemented",
+    "Owner device/browser/provider/signing/rollback acceptance; no release/merge/cutover"
+  ]
+}
