@@ -24,11 +24,17 @@ impl Drop for Cleanup {
 }
 // Temporary names live under the same held directory capability as the final
 // files, so a rename of its path cannot redirect extraction or publication.
+#[cfg(test)]
+type PublicationObserver = Box<dyn FnMut(&str)>;
+
 struct Extraction {
     directory: Arc<Dir>,
     staged: Vec<(String, String)>,
     published: Vec<String>,
+    backups: Vec<(String, String)>,
     committed: bool,
+    #[cfg(test)]
+    after_publication: Option<PublicationObserver>,
 }
 impl Extraction {
     fn new(directory: Arc<Dir>) -> Self {
@@ -36,7 +42,10 @@ impl Extraction {
             directory,
             staged: Vec::new(),
             published: Vec::new(),
+            backups: Vec::new(),
             committed: false,
+            #[cfg(test)]
+            after_publication: None,
         }
     }
 
@@ -62,9 +71,24 @@ impl Extraction {
         binary: &manifest::Binary,
         cancel: &Cancellation,
     ) -> Result<(), WhisperError> {
-        // The executable is the manager's installed/readiness marker. Publish it
-        // only after every dependency is complete and in place; nothing fallible
-        // follows its final rename. Existing files are never replaced.
+        // The executable is the manager's installed/readiness marker. A present
+        // server is not a repair candidate. Like Go, repair a missing server by
+        // replacing stale dependencies, but keep their old inodes until commit.
+        for name in binary.server_names {
+            match self.directory.open_file(name, false) {
+                Ok(_) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        "Whisper server already exists",
+                    )
+                    .into());
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        // Publish the server only after every dependency is in place. Its final
+        // rename commits the installation; later backup cleanup is best-effort.
         self.staged.sort_by_key(|(name, _)| {
             binary
                 .server_names
@@ -73,8 +97,35 @@ impl Extraction {
         });
         for (name, temporary) in &self.staged {
             check_cancelled(cancel)?;
+            if !binary
+                .server_names
+                .iter()
+                .any(|server| name.eq_ignore_ascii_case(server))
+            {
+                match self.directory.open_file(name, false) {
+                    Ok(existing) => {
+                        // Validation never follows a symlink/reparse point or
+                        // accepts a nonregular entry. Close before renaming on
+                        // Windows, where open_file intentionally denies delete sharing.
+                        drop(existing);
+                        let backup =
+                            format!(".whisper-backup-{}.tmp", crate::process::random_token()?);
+                        // Exclusive rename reserves the backup without replacing
+                        // any existing entry. Register it only after success.
+                        self.directory.rename_to(name, &self.directory, &backup)?;
+                        self.backups.push((name.clone(), backup));
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error.into()),
+                }
+            }
+            check_cancelled(cancel)?;
             self.directory.rename_to(temporary, &self.directory, name)?;
             self.published.push(name.clone());
+            #[cfg(test)]
+            if let Some(after_publication) = self.after_publication.as_mut() {
+                after_publication(name);
+            }
         }
         self.committed = true;
         Ok(())
@@ -85,6 +136,15 @@ impl Drop for Extraction {
         if !self.committed {
             for name in self.published.iter().rev() {
                 let _ = self.directory.remove_file(name);
+            }
+            for (name, backup) in self.backups.iter().rev() {
+                // Never delete the only old copy if restoration is obstructed
+                // by another writer or an OS error. Leave that backup intact.
+                let _ = self.directory.rename_to(backup, &self.directory, name);
+            }
+        } else {
+            for (_, backup) in &self.backups {
+                let _ = self.directory.remove_file(backup);
             }
         }
         for (_, temporary) in &self.staged {
@@ -190,8 +250,41 @@ pub fn extract(
     binary: &manifest::Binary,
     cancel: &Cancellation,
 ) -> Result<(), WhisperError> {
-    check_cancelled(cancel)?;
+    extract_to(file, Extraction::new(directory), binary, cancel)
+}
+
+// The test fixture observes the actual copy/publication path. Its callback and
+// storage do not exist in non-test builds.
+#[cfg(test)]
+pub(super) fn test_extract_after_publication(
+    file: File,
+    directory: Arc<Dir>,
+    binary: &manifest::Binary,
+    cancel: &Cancellation,
+    after_publication: impl FnMut(&str) + 'static,
+) -> Result<(), WhisperError> {
     let mut extraction = Extraction::new(directory);
+    extraction.after_publication = Some(Box::new(after_publication));
+    extract_to(file, extraction, binary, cancel)
+}
+
+#[cfg(test)]
+pub(super) fn test_copy_with_reader(
+    reader: &mut dyn Read,
+    directory: Arc<Dir>,
+    size: u64,
+    cancel: &Cancellation,
+) -> Result<(), WhisperError> {
+    Extraction::new(directory).copy(reader, "whisper-server.exe", size, &mut 0, cancel)
+}
+
+fn extract_to(
+    file: File,
+    mut extraction: Extraction,
+    binary: &manifest::Binary,
+    cancel: &Cancellation,
+) -> Result<(), WhisperError> {
+    check_cancelled(cancel)?;
     let mut found = BTreeSet::new();
     let mut total = 0;
     match binary.archive {

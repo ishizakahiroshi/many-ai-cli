@@ -500,31 +500,30 @@ fn archive_cancellation_never_publishes_even_empty_selected_files() {
 }
 
 #[test]
-fn archive_publication_preserves_existing_files_and_rolls_back_new_files() {
+fn archive_publication_preserves_existing_executable_and_rolls_back_new_files() {
     for kind in ["zip", "tar.gz"] {
-        for existing in ["whisper-server.exe", "second.dll"] {
-            let root = tempfile::tempdir().unwrap();
-            let directory = Arc::new(Dir::open(root.path()).unwrap());
-            directory
-                .create_new(existing, b"existing bytes", 0o600)
-                .unwrap();
-            assert!(
-                archive::extract(
-                    synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
-                    directory.clone(),
-                    &synthetic_whisper_manifest(kind),
-                    &Cancellation::default(),
-                )
-                .is_err(),
-                "{kind} {existing}",
-            );
-            assert_eq!(
-                directory.entries().unwrap(),
-                [existing],
-                "{kind} {existing}"
-            );
-            assert_eq!(directory.read(existing, 64).unwrap(), b"existing bytes");
-        }
+        let existing = "whisper-server.exe";
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        directory
+            .create_new(existing, b"existing bytes", 0o600)
+            .unwrap();
+        assert!(
+            archive::extract(
+                synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err(),
+            "{kind} {existing}",
+        );
+        assert_eq!(
+            directory.entries().unwrap(),
+            [existing],
+            "{kind} {existing}"
+        );
+        assert_eq!(directory.read(existing, 64).unwrap(), b"existing bytes");
         let root = tempfile::tempdir().unwrap();
         let directory = Arc::new(Dir::open(root.path()).unwrap());
         let existing = directory.child_dir("second.dll", true).unwrap();
@@ -617,5 +616,282 @@ fn archive_truncation_never_publishes_partial_installations() {
             "{kind}",
         );
         assert!(directory.entries().unwrap().is_empty(), "{kind}");
+    }
+}
+
+#[test]
+fn archive_recovers_missing_executable_by_replacing_old_dependencies() {
+    // Fixed Go extraction overwrites DLLs when reinstalling a missing server.
+    // An existing dependency must no longer turn this recovery into a collision.
+    for kind in ["zip", "tar.gz"] {
+        for existing_names in [&["second.dll"][..], &["first.dll", "second.dll"][..]] {
+            let root = tempfile::tempdir().unwrap();
+            let directory = Arc::new(Dir::open(root.path()).unwrap());
+            for name in existing_names {
+                directory
+                    .create_new(name, b"old dependency", 0o600)
+                    .unwrap();
+            }
+            directory
+                .create_new("unrelated", b"preserve", 0o600)
+                .unwrap();
+            archive::extract(
+                synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .unwrap();
+            assert_eq!(
+                directory.entries().unwrap(),
+                ["first.dll", "second.dll", "unrelated", "whisper-server.exe"],
+                "{kind}",
+            );
+            for (name, bytes) in SYNTHETIC_WHISPER_FILES {
+                let leaf = name.rsplit('/').next().unwrap();
+                assert_eq!(directory.read(leaf, 128).unwrap(), *bytes, "{kind} {leaf}");
+            }
+            assert_eq!(directory.read("unrelated", 32).unwrap(), b"preserve");
+        }
+    }
+}
+
+#[test]
+fn archive_failed_recovery_restores_old_dependencies() {
+    for kind in ["zip", "tar.gz"] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        directory
+            .create_new("first.dll", b"old dependency", 0o600)
+            .unwrap();
+        let blocker = directory.child_dir("second.dll", true).unwrap();
+        blocker
+            .create_new("preserve", b"existing child", 0o600)
+            .unwrap();
+        assert!(
+            archive::extract(
+                synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err(),
+            "{kind}"
+        );
+        assert_eq!(
+            directory.entries().unwrap(),
+            ["first.dll", "second.dll"],
+            "{kind}"
+        );
+        assert_eq!(directory.read("first.dll", 64).unwrap(), b"old dependency");
+        assert_eq!(blocker.read("preserve", 64).unwrap(), b"existing child");
+    }
+}
+
+#[test]
+fn archive_cancellation_during_copy_removes_partial_staging_and_preserves_old_files() {
+    struct CancelDuringRead {
+        source: std::io::Cursor<Vec<u8>>,
+        directory: Arc<Dir>,
+        cancellation: Cancellation,
+        reads: usize,
+    }
+    impl std::io::Read for CancelDuringRead {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            self.reads += 1;
+            if self.reads == 2 {
+                // The first chunk is already written, so this is beyond the
+                // entry guard and strictly inside an unfinished copy.
+                let staged: Vec<_> = self
+                    .directory
+                    .entries()
+                    .unwrap()
+                    .into_iter()
+                    .filter(|name| name.starts_with(".whisper-extract-"))
+                    .collect();
+                assert_eq!(staged.len(), 1);
+                let written = self.directory.metadata(&staged[0]).unwrap().len();
+                assert!(written > 0 && written < self.source.get_ref().len() as u64);
+                assert!(
+                    self.directory
+                        .open_file("whisper-server.exe", false)
+                        .is_err()
+                );
+                self.cancellation.cancel();
+            }
+            std::io::Read::read(&mut self.source, buffer)
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let directory = Arc::new(Dir::open(root.path()).unwrap());
+    directory
+        .create_new("first.dll", b"old dependency", 0o600)
+        .unwrap();
+    directory
+        .create_new("unrelated", b"preserve", 0o600)
+        .unwrap();
+    let cancellation = Cancellation::default();
+    let size = 3 * 64 * 1024;
+    let mut reader = CancelDuringRead {
+        source: std::io::Cursor::new(vec![b'x'; size]),
+        directory: directory.clone(),
+        cancellation: cancellation.clone(),
+        reads: 0,
+    };
+    let error =
+        archive::test_copy_with_reader(&mut reader, directory.clone(), size as u64, &cancellation)
+            .unwrap_err();
+    assert_eq!(error.code, "cancelled");
+    assert_eq!(error.status, 499);
+    assert_eq!(reader.reads, 2);
+    assert_eq!(directory.entries().unwrap(), ["first.dll", "unrelated"]);
+    assert_eq!(directory.read("first.dll", 64).unwrap(), b"old dependency");
+    assert_eq!(directory.read("unrelated", 32).unwrap(), b"preserve");
+}
+
+#[test]
+fn archive_cancellation_between_renames_rolls_back_new_and_replaced_dependencies() {
+    for kind in ["zip", "tar.gz"] {
+        for recover in [false, true] {
+            for stop_after in ["first.dll", "second.dll"] {
+                let root = tempfile::tempdir().unwrap();
+                let directory = Arc::new(Dir::open(root.path()).unwrap());
+                directory
+                    .create_new("unrelated", b"preserve", 0o600)
+                    .unwrap();
+                if recover {
+                    for name in ["first.dll", "second.dll"] {
+                        directory
+                            .create_new(name, b"old dependency", 0o600)
+                            .unwrap();
+                    }
+                }
+                let cancellation = Cancellation::default();
+                let cancel_after_rename = cancellation.clone();
+                let observed = Arc::new(AtomicUsize::new(0));
+                let observed_in_callback = observed.clone();
+                let held = directory.clone();
+                let error = archive::test_extract_after_publication(
+                    synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                    directory.clone(),
+                    &synthetic_whisper_manifest(kind),
+                    &cancellation,
+                    move |name| {
+                        observed_in_callback.fetch_add(1, Ordering::SeqCst);
+                        assert!(held.open_file("whisper-server.exe", false).is_err());
+                        let (_, expected) = SYNTHETIC_WHISPER_FILES
+                            .iter()
+                            .find(|(path, _)| path.rsplit('/').next() == Some(name))
+                            .unwrap();
+                        assert_eq!(held.read(name, 128).unwrap(), *expected);
+                        if name == stop_after {
+                            cancel_after_rename.cancel();
+                        }
+                    },
+                )
+                .unwrap_err();
+                assert_eq!(error.code, "cancelled", "{kind} {recover} {stop_after}");
+                assert_eq!(error.status, 499);
+                assert_eq!(
+                    observed.load(Ordering::SeqCst),
+                    if stop_after == "first.dll" { 1 } else { 2 }
+                );
+                assert!(cancellation.is_cancelled());
+                if recover {
+                    assert_eq!(
+                        directory.entries().unwrap(),
+                        ["first.dll", "second.dll", "unrelated"]
+                    );
+                    for name in ["first.dll", "second.dll"] {
+                        assert_eq!(directory.read(name, 64).unwrap(), b"old dependency");
+                    }
+                } else {
+                    assert_eq!(directory.entries().unwrap(), ["unrelated"]);
+                }
+                assert_eq!(directory.read("unrelated", 32).unwrap(), b"preserve");
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn archive_recovery_rejects_symlink_dependencies_without_touching_target() {
+    for kind in ["zip", "tar.gz"] {
+        let root = tempfile::tempdir().unwrap();
+        let parent = Dir::open(root.path()).unwrap();
+        let directory = Arc::new(parent.child_dir("out", true).unwrap());
+        parent
+            .create_new("outside", b"outside bytes", 0o600)
+            .unwrap();
+        directory
+            .create_new("first.dll", b"old dependency", 0o600)
+            .unwrap();
+        std::os::unix::fs::symlink("../outside", root.path().join("out/second.dll")).unwrap();
+        assert!(
+            archive::extract(
+                synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err(),
+            "{kind}"
+        );
+        assert_eq!(directory.entries().unwrap(), ["first.dll", "second.dll"]);
+        assert_eq!(directory.read("first.dll", 64).unwrap(), b"old dependency");
+        assert_eq!(parent.read("outside", 64).unwrap(), b"outside bytes");
+        assert_eq!(
+            std::fs::read_link(root.path().join("out/second.dll")).unwrap(),
+            PathBuf::from("../outside")
+        );
+    }
+}
+
+#[test]
+fn archive_obstructed_rollback_retains_the_old_backup() {
+    for kind in ["zip", "tar.gz"] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        directory
+            .create_new("first.dll", b"old dependency", 0o600)
+            .unwrap();
+        let cancellation = Cancellation::default();
+        let cancel_after_rename = cancellation.clone();
+        let held = directory.clone();
+        let error = archive::test_extract_after_publication(
+            synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+            directory.clone(),
+            &synthetic_whisper_manifest(kind),
+            &cancellation,
+            move |name| {
+                assert_eq!(name, "first.dll");
+                assert_eq!(held.read(name, 128).unwrap(), SYNTHETIC_WHISPER_FILES[1].1);
+                // Simulate another writer obstructing rollback after publication.
+                // Restoration must never delete the only retained old bytes.
+                held.remove_file(name).unwrap();
+                held.child_dir(name, true).unwrap();
+                cancel_after_rename.cancel();
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code, "cancelled", "{kind}");
+        let entries = directory.entries().unwrap();
+        let backups: Vec<_> = entries
+            .iter()
+            .filter(|name| name.starts_with(".whisper-backup-"))
+            .collect();
+        assert_eq!(backups.len(), 1, "{kind}");
+        assert_eq!(directory.read(backups[0], 64).unwrap(), b"old dependency");
+        assert_eq!(entries.len(), 2, "{kind}");
+        assert!(entries.iter().any(|name| name == "first.dll"));
+        assert!(
+            directory
+                .child_dir("first.dll", false)
+                .unwrap()
+                .entries()
+                .unwrap()
+                .is_empty()
+        );
     }
 }
