@@ -22,6 +22,89 @@ impl Drop for Cleanup {
             .remove_file(&format!("{}.download", self.name));
     }
 }
+// Temporary names live under the same held directory capability as the final
+// files, so a rename of its path cannot redirect extraction or publication.
+struct Extraction {
+    directory: Arc<Dir>,
+    staged: Vec<(String, String)>,
+    published: Vec<String>,
+    committed: bool,
+}
+impl Extraction {
+    fn new(directory: Arc<Dir>) -> Self {
+        Self {
+            directory,
+            staged: Vec::new(),
+            published: Vec::new(),
+            committed: false,
+        }
+    }
+
+    fn copy(
+        &mut self,
+        reader: &mut dyn Read,
+        name: &str,
+        size: u64,
+        total: &mut u64,
+        cancel: &Cancellation,
+    ) -> Result<(), WhisperError> {
+        check_cancelled(cancel)?;
+        let temporary = format!(".whisper-extract-{}.tmp", crate::process::random_token()?);
+        // Reserve exclusively before registering cleanup: a collision must never
+        // make this attempt overwrite or remove somebody else's file.
+        self.directory.create_new(&temporary, &[], 0o700)?;
+        self.staged.push((name.to_owned(), temporary.clone()));
+        copy(reader, &self.directory, &temporary, size, total, cancel)
+    }
+
+    fn publish(
+        &mut self,
+        binary: &manifest::Binary,
+        cancel: &Cancellation,
+    ) -> Result<(), WhisperError> {
+        // The executable is the manager's installed/readiness marker. Publish it
+        // only after every dependency is complete and in place; nothing fallible
+        // follows its final rename. Existing files are never replaced.
+        self.staged.sort_by_key(|(name, _)| {
+            binary
+                .server_names
+                .iter()
+                .any(|server| name.eq_ignore_ascii_case(server))
+        });
+        for (name, temporary) in &self.staged {
+            check_cancelled(cancel)?;
+            self.directory.rename_to(temporary, &self.directory, name)?;
+            self.published.push(name.clone());
+        }
+        self.committed = true;
+        Ok(())
+    }
+}
+impl Drop for Extraction {
+    fn drop(&mut self) {
+        if !self.committed {
+            for name in self.published.iter().rev() {
+                let _ = self.directory.remove_file(name);
+            }
+        }
+        for (_, temporary) in &self.staged {
+            let _ = self.directory.remove_file(temporary);
+        }
+    }
+}
+
+fn check_cancelled(cancel: &Cancellation) -> Result<(), WhisperError> {
+    if cancel.is_cancelled() {
+        Err(WhisperError::new(
+            499,
+            "cancelled",
+            "Whisper extraction cancelled",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 const CAP: u64 = 256 * 1024 * 1024;
 const MEMBERS: usize = 1024;
 #[cfg(test)]
@@ -77,18 +160,11 @@ fn copy(
                 "Whisper archive extraction bound exceeded",
             )
         })?;
-    let mut output = dir.open_write_or_create(name, 0o700)?;
-    output.set_len(0)?;
+    let mut output = dir.open_file(name, true)?;
     let mut remaining = size;
     let mut buffer = [0u8; 64 * 1024];
     while remaining > 0 {
-        if cancel.is_cancelled() {
-            return Err(WhisperError::new(
-                499,
-                "cancelled",
-                "Whisper extraction cancelled",
-            ));
-        }
+        check_cancelled(cancel)?;
         let limit = buffer.len().min(remaining as usize);
         let count = reader.read(&mut buffer[..limit])?;
         if count == 0 {
@@ -114,6 +190,8 @@ pub fn extract(
     binary: &manifest::Binary,
     cancel: &Cancellation,
 ) -> Result<(), WhisperError> {
+    check_cancelled(cancel)?;
+    let mut extraction = Extraction::new(directory);
     let mut found = BTreeSet::new();
     let mut total = 0;
     match binary.archive {
@@ -129,6 +207,7 @@ pub fn extract(
                 ));
             }
             for index in 0..archive.len() {
+                check_cancelled(cancel)?;
                 let mut entry = archive.by_index(index).map_err(|_| {
                     WhisperError::new(500, "whisper_install_failed", "invalid Whisper ZIP entry")
                 })?;
@@ -155,7 +234,7 @@ pub fn extract(
                         ));
                     }
                     let size = entry.size();
-                    copy(&mut entry, &directory, &name, size, &mut total, cancel)?;
+                    extraction.copy(&mut entry, &name, size, &mut total, cancel)?;
                 }
             }
         }
@@ -163,13 +242,7 @@ pub fn extract(
             let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(file));
             let mut declared = 0u64;
             for (index, item) in archive.entries()?.enumerate() {
-                if cancel.is_cancelled() {
-                    return Err(WhisperError::new(
-                        499,
-                        "cancelled",
-                        "Whisper extraction cancelled",
-                    ));
-                }
+                check_cancelled(cancel)?;
                 if index >= MEMBERS {
                     return Err(WhisperError::new(
                         500,
@@ -209,8 +282,28 @@ pub fn extract(
                         ));
                     }
                     let size = entry.size();
-                    copy(&mut entry, &directory, &name, size, &mut total, cancel)?;
+                    extraction.copy(&mut entry, &name, size, &mut total, cancel)?;
                 }
+            }
+            // tar stops at its end marker before gzip necessarily validates its
+            // CRC/trailer. Drain the remaining decoded bytes before publishing,
+            // with cancellation and a bound on any data after the tar members.
+            let mut decoder = archive.into_inner();
+            let mut remaining = CAP;
+            let mut buffer = [0u8; 64 * 1024];
+            loop {
+                check_cancelled(cancel)?;
+                let count = decoder.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                remaining = remaining.checked_sub(count as u64).ok_or_else(|| {
+                    WhisperError::new(
+                        500,
+                        "whisper_install_failed",
+                        "Whisper archive extraction bound exceeded",
+                    )
+                })?;
             }
         }
         _ => {
@@ -230,5 +323,5 @@ pub fn extract(
             ));
         }
     }
-    Ok(())
+    extraction.publish(binary, cancel)
 }

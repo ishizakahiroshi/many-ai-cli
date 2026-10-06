@@ -353,3 +353,269 @@ async fn native_readiness_observes_owned_loopback_and_cancel_without_starting_pr
     cancel.cancel();
     assert!(io.ready(port, &cancel).await.is_err());
 }
+
+// All archive fixtures are inert bytes: no runtime, model, or provider executes.
+fn synthetic_whisper_archive(kind: &str, entries: &[(&str, &[u8])]) -> std::fs::File {
+    use std::io::{Seek, Write};
+    let file = tempfile::tempfile().unwrap();
+    let mut file = match kind {
+        "zip" => {
+            let mut archive = zip::ZipWriter::new(file);
+            for (name, bytes) in entries {
+                archive
+                    .start_file(
+                        *name,
+                        zip::write::SimpleFileOptions::default()
+                            .compression_method(zip::CompressionMethod::Stored),
+                    )
+                    .unwrap();
+                archive.write_all(bytes).unwrap();
+            }
+            archive.finish().unwrap()
+        }
+        "tar.gz" => {
+            let encoder = flate2::write::GzEncoder::new(file, flate2::Compression::default());
+            let mut archive = tar::Builder::new(encoder);
+            for (name, bytes) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(bytes.len() as u64);
+                header.set_mode(0o700);
+                header.set_cksum();
+                archive.append_data(&mut header, *name, *bytes).unwrap();
+            }
+            archive.into_inner().unwrap().finish().unwrap()
+        }
+        _ => panic!("unsupported fixture format"),
+    };
+    file.rewind().unwrap();
+    file
+}
+
+fn synthetic_whisper_manifest(kind: &'static str) -> manifest::Binary {
+    manifest::Binary {
+        archive: kind,
+        keep: &["whisper-server.exe", "first.dll", "second.dll"],
+        ..manifest::WINDOWS
+    }
+}
+
+const SYNTHETIC_WHISPER_FILES: &[(&str, &[u8])] = &[
+    ("release/whisper-server.exe", b"synthetic server"),
+    ("release/first.dll", b"synthetic first dependency"),
+    ("release/second.dll", b"synthetic second dependency"),
+];
+
+#[test]
+fn archive_missing_or_duplicate_members_never_publish_partial_installations() {
+    for kind in ["zip", "tar.gz"] {
+        for entries in [
+            SYNTHETIC_WHISPER_FILES[..2].to_vec(),
+            [
+                SYNTHETIC_WHISPER_FILES,
+                &[("other/whisper-server.exe", SYNTHETIC_WHISPER_FILES[0].1)],
+            ]
+            .concat(),
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let directory = Arc::new(Dir::open(root.path()).unwrap());
+            directory
+                .create_new("unrelated", b"preserve", 0o600)
+                .unwrap();
+            assert!(
+                archive::extract(
+                    synthetic_whisper_archive(kind, &entries),
+                    directory.clone(),
+                    &synthetic_whisper_manifest(kind),
+                    &Cancellation::default(),
+                )
+                .is_err(),
+                "{kind}",
+            );
+            assert_eq!(directory.entries().unwrap(), ["unrelated"], "{kind}");
+            assert_eq!(directory.read("unrelated", 32).unwrap(), b"preserve");
+        }
+    }
+}
+
+#[test]
+fn archive_integrity_errors_never_publish_partial_installations() {
+    use std::io::{Read, Seek, Write};
+    for kind in ["zip", "tar.gz"] {
+        let mut file = synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES);
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).unwrap();
+        let position = if kind == "zip" {
+            let payload = b"synthetic second dependency";
+            bytes
+                .windows(payload.len())
+                .position(|window| window == payload)
+                .unwrap()
+        } else {
+            // The gzip CRC is after tar's end-of-archive blocks. Reading only tar
+            // entries would miss this failure after all selected files copied.
+            bytes.len() - 8
+        };
+        bytes[position] ^= 1;
+        file.rewind().unwrap();
+        file.write_all(&bytes).unwrap();
+        file.rewind().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        assert!(
+            archive::extract(
+                file,
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err(),
+            "{kind}",
+        );
+        assert!(directory.entries().unwrap().is_empty(), "{kind}");
+    }
+}
+
+#[test]
+fn archive_cancellation_never_publishes_even_empty_selected_files() {
+    for kind in ["zip", "tar.gz"] {
+        for payload in [&b"synthetic server"[..], &b""[..]] {
+            let root = tempfile::tempdir().unwrap();
+            let directory = Arc::new(Dir::open(root.path()).unwrap());
+            let cancellation = Cancellation::default();
+            cancellation.cancel();
+            let binary = manifest::Binary {
+                keep: &["whisper-server.exe"],
+                ..synthetic_whisper_manifest(kind)
+            };
+            let result = archive::extract(
+                synthetic_whisper_archive(kind, &[("whisper-server.exe", payload)]),
+                directory.clone(),
+                &binary,
+                &cancellation,
+            );
+            assert!(result.is_err(), "{kind}");
+            assert!(directory.entries().unwrap().is_empty(), "{kind}");
+        }
+    }
+}
+
+#[test]
+fn archive_publication_preserves_existing_files_and_rolls_back_new_files() {
+    for kind in ["zip", "tar.gz"] {
+        for existing in ["whisper-server.exe", "second.dll"] {
+            let root = tempfile::tempdir().unwrap();
+            let directory = Arc::new(Dir::open(root.path()).unwrap());
+            directory
+                .create_new(existing, b"existing bytes", 0o600)
+                .unwrap();
+            assert!(
+                archive::extract(
+                    synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                    directory.clone(),
+                    &synthetic_whisper_manifest(kind),
+                    &Cancellation::default(),
+                )
+                .is_err(),
+                "{kind} {existing}",
+            );
+            assert_eq!(
+                directory.entries().unwrap(),
+                [existing],
+                "{kind} {existing}"
+            );
+            assert_eq!(directory.read(existing, 64).unwrap(), b"existing bytes");
+        }
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        let existing = directory.child_dir("second.dll", true).unwrap();
+        existing
+            .create_new("preserve", b"existing child", 0o600)
+            .unwrap();
+        assert!(
+            archive::extract(
+                synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err(),
+            "{kind}",
+        );
+        assert_eq!(directory.entries().unwrap(), ["second.dll"], "{kind}");
+        assert_eq!(existing.read("preserve", 64).unwrap(), b"existing child");
+    }
+}
+
+#[test]
+fn archive_success_publishes_complete_files_without_staging_residue() {
+    for kind in ["zip", "tar.gz"] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        archive::extract(
+            synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+            directory.clone(),
+            &synthetic_whisper_manifest(kind),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            directory.entries().unwrap(),
+            ["first.dll", "second.dll", "whisper-server.exe"],
+            "{kind}",
+        );
+        for (name, bytes) in SYNTHETIC_WHISPER_FILES {
+            let leaf = name.rsplit('/').next().unwrap();
+            assert_eq!(directory.read(leaf, 128).unwrap(), *bytes, "{kind} {leaf}");
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn archive_publication_stays_with_the_held_directory_after_rename() {
+    for kind in ["zip", "tar.gz"] {
+        let root = tempfile::tempdir().unwrap();
+        let parent = Dir::open(root.path()).unwrap();
+        let directory = Arc::new(parent.child_dir("out", true).unwrap());
+        std::fs::rename(root.path().join("out"), root.path().join("moved")).unwrap();
+        let replacement = parent.child_dir("out", true).unwrap();
+        replacement
+            .create_new("preserve", b"replacement", 0o600)
+            .unwrap();
+        archive::extract(
+            synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES),
+            directory,
+            &synthetic_whisper_manifest(kind),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(replacement.entries().unwrap(), ["preserve"]);
+        let moved = parent.child_dir("moved", false).unwrap();
+        assert_eq!(
+            moved.entries().unwrap(),
+            ["first.dll", "second.dll", "whisper-server.exe"],
+            "{kind}",
+        );
+    }
+}
+
+#[test]
+fn archive_truncation_never_publishes_partial_installations() {
+    for kind in ["zip", "tar.gz"] {
+        let file = synthetic_whisper_archive(kind, SYNTHETIC_WHISPER_FILES);
+        file.set_len(file.metadata().unwrap().len() - 8).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let directory = Arc::new(Dir::open(root.path()).unwrap());
+        assert!(
+            archive::extract(
+                file,
+                directory.clone(),
+                &synthetic_whisper_manifest(kind),
+                &Cancellation::default(),
+            )
+            .is_err(),
+            "{kind}",
+        );
+        assert!(directory.entries().unwrap().is_empty(), "{kind}");
+    }
+}
