@@ -1,0 +1,3214 @@
+{
+  "title": "G1 same-class observation and session_update payload audit",
+  "summary": {
+    "scope": "Report-only baseline producer/payload audit for existing G1; no new issue numbering and no non-G1 repairs.",
+    "counts": {
+      "session_observation_variants": 10,
+      "variants_with_production_enum_constructor": 5,
+      "variants_without_production_enum_constructor": 5,
+      "dormant_variants_with_direct_alternative_production_path": 4,
+      "top_level_actual_go_fields": 48,
+      "nested_fields": 33,
+      "go_message_schema_fields": 154,
+      "broad_proto_fields_not_emitted_by_go_session_update": 106,
+      "top_level_statuses": {
+        "populated": 35,
+        "excluded_g1": 6,
+        "never_populated": 1,
+        "shared_constant": 1,
+        "populated_trigger_gap": 1,
+        "absent_from_session_update": 1,
+        "populated_conditional_gap": 1,
+        "populated_packet_difference": 2
+      }
+    },
+    "primary_non_g1_findings": [
+      "effort: snapshot has real producers, every Rust session_update shape omits it; Go model detection emits it.",
+      "subscription_name: Rust DTO/emitter exists, snapshot name has no non-test assignment, so name is never filled."
+    ],
+    "conditional_or_lower_impact_findings": [
+      "transcript_grew_at: populated, but transcript growth alone emits no session_update and Rust source signal differs.",
+      "route: populated after model changes, but native explicit-model registration omits Go fallback inference.",
+      "first_message/last_message: populated and sent by confirmed input; lower-impact model-update packet-shape difference only, because the UI preserves absent summaries."
+    ],
+    "only_dormant_enum_variant_without_alternative_found": "Branch (existing G1, owned separately)",
+    "limits": [
+      "Static source/caller inspection only; no runtime reachability claim, builds, tests, provider interaction, source/document edits inside checkout, Git/Cargo operations or formal review of the concurrent G1 change.",
+      "Source snapshot binds pristine pre-G1 public bec576-equivalent tree; owner confirmed no edits before capture.",
+      "All 48 fields exist in Rust DTO schema. Identified gaps concern population, publication or payload shape.",
+      "Ordinary omitempty omissions, shared defaults, bounded provider support and superseded historical Relays findings are not counted as new implementation gaps.",
+      "Branch, project_id, git_checked, git_files, git_added and git_deleted are inventoried but repair/acceptance is owned by G1 implementation.",
+      "Startup performance is excluded; no blanket implementation-complete or acceptance claim."
+    ],
+    "source_manifest_sha256": "6198530c82381c1bb1f12c200ec12dbb90270e198af3f56b617bb1e7164bf83b"
+  },
+  "observations": {
+    "metadata": {
+      "audit": "G1 same-class missing producer audit; SessionObservation half",
+      "public_baseline": "bec576445a7b74505ddcd95c68f7ad2aca41ff94",
+      "local_baseline": "87fa9b735c7fa99b8776b8a58bb278290078d94b",
+      "tree": "206643f0bdf248ea0d8df05997edbfb16c2dbe08",
+      "captured_utc": "2026-10-06T13:50:32Z",
+      "owner_confirmed_no_source_edits_before_snapshot": true,
+      "index_generated_commit": "5d423dd306761b41bda8fb45be770213afffd9bf",
+      "index_dirty": true,
+      "index_status": "stale; source authoritative",
+      "evidence": "static source/caller trace only; no builds/tests/providers/Git changes/production edits",
+      "enum_definition": "rust/src/proto/core.rs:1782-1810",
+      "variant_count": 10,
+      "production_enum_constructors": 5,
+      "dormant_enum_variants": 5,
+      "dormant_variants_with_alternative_production_paths": 4,
+      "baseline_missing_producer_without_alternative": [
+        "Branch"
+      ],
+      "read_only_scope": "All source evidence refers to the captured baseline, not concurrent G1 changes.",
+      "source_tree": "206643f0bdf248ea0d8df05997edbfb16c2dbe08"
+    },
+    "variants": [
+      {
+        "variant": "Messages",
+        "status": "Enum constructor test-only; behavior source-wired through direct input path",
+        "production_constructor": [],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:286-301"
+        ],
+        "test_constructor": [
+          "rust/tests/session_engine_contracts.rs:1226"
+        ],
+        "go_producer": [
+          "internal/hub/input_gate.go:60-124"
+        ],
+        "rust_alternative": [
+          "rust/src/hub/websocket.rs:470-479",
+          "rust/src/terminal/session/input.rs:315-373",
+          "rust/src/terminal/session/input.rs:393-403",
+          "rust/src/terminal/session.rs:616-623"
+        ],
+        "impact": "Not a missing first/last-message producer. Confirmed UI input updates snapshot.first_message/last_message and summary_update sends them. The dormant enum handler instead calls update_message, which lacks first/last fields; that handler is not the normal producer. Numeric-only last-message and /clear rules are implemented directly.",
+        "limits": "Does not assert every native-terminal input is observed; Go handleInput is likewise the UI pty_input path. No new dynamic test executed.",
+        "occurrence_counts": {
+          "production_constructor": 0,
+          "test_constructor": 1,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "Branch",
+        "status": "Absent baseline producer; G1-owned missing production wiring",
+        "production_constructor": [],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:303-306"
+        ],
+        "test_constructor": [],
+        "go_producer": [
+          "internal/hub/branch_refresh.go:31-92",
+          "internal/hub/branch_refresh.go:111-177"
+        ],
+        "rust_alternative": [
+          "rust/src/terminal/session/lifecycle.rs:235-284",
+          "rust/src/terminal/session/lifecycle.rs:523",
+          "rust/src/terminal/session.rs:547-556"
+        ],
+        "impact": "Fresh sessions initialize git_root=None and branch/project_id default empty. Only this unused handler assigns branch/git_root; reattach merely copies old values. No baseline branch refresher or project_id computation was found. Go refreshes branch, change counts and stable project identity. Owner is implementing G1 separately; this report is baseline evidence.",
+        "limits": "No post-G1 code review or acceptance claim. git_root is not itself a session_update JSON field.",
+        "occurrence_counts": {
+          "production_constructor": 0,
+          "test_constructor": 0,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "Model",
+        "status": "Enum constructor test-only; behavior source-wired through registration/output detection",
+        "production_constructor": [],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:308-320"
+        ],
+        "test_constructor": [
+          "rust/src/terminal/session/output_model_tests.rs:230"
+        ],
+        "go_producer": [
+          "internal/hub/wrapper_loop.go:1084-1086",
+          "internal/hub/model_detect.go:164-204"
+        ],
+        "rust_alternative": [
+          "rust/src/hub/websocket.rs:568-575",
+          "rust/src/terminal/session/lifecycle.rs:247-251",
+          "rust/src/terminal/session/observations.rs:18-23",
+          "rust/src/terminal/session/observations.rs:48-67",
+          "rust/src/terminal/session/observations.rs:188-214",
+          "rust/src/terminal/session/observations.rs:748-771"
+        ],
+        "impact": "Model and effort do have production state producers. Do not label both absent from an enum-constructor search. Separate payload audit identifies effort omitted from session_update and a conditional initial-route gap.",
+        "limits": "Registration, initial banner and output-change source paths are traced; this is not provider execution or complete detection-format parity proof.",
+        "occurrence_counts": {
+          "production_constructor": 0,
+          "test_constructor": 1,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "Transcript",
+        "status": "Source-wired enum producer; supplemental growth-publication/source divergence",
+        "production_constructor": [
+          "rust/src/application/session_workers.rs:485-500"
+        ],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:322-345"
+        ],
+        "test_constructor": [
+          "rust/tests/session_engine_contracts.rs:1230",
+          "rust/src/application/agent_history/tests.rs:199"
+        ],
+        "go_producer": [
+          "internal/hub/agent_chat_handler.go:314-325",
+          "internal/hub/agent_chat_handler.go:410-420",
+          "internal/hub/transcript_stall.go:144-154",
+          "internal/hub/transcript_stall.go:165-199"
+        ],
+        "rust_alternative": [
+          "rust/src/application/main_program/serve.rs:1356",
+          "rust/src/application/session_workers.rs:257-276",
+          "rust/src/application/session_workers.rs:384-401",
+          "rust/src/application/session_workers.rs:448-527",
+          "rust/src/application/session_workers.rs:582-615"
+        ],
+        "impact": "Production polling parses provider transcript and publishes path/agent-session-id/safe-offset/grew_at observation. Consumer changes native path, marker source and growth clock, then only notifies TranscriptChanged. Go separately stats transcript bytes plus subagent mtime and immediately broadcasts growth. Rust activity_update can later carry the clock, so this field is populated, not globally absent.",
+        "limits": "Do not infer runtime provider coverage merely because enum producer exists. Parser/page/poll state remains bounded and failure paths can skip an iteration.",
+        "occurrence_counts": {
+          "production_constructor": 1,
+          "test_constructor": 2,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "Workflow",
+        "status": "Source-wired enum producer",
+        "production_constructor": [
+          "rust/src/application/session_workers/observations.rs:357-374"
+        ],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:347-360"
+        ],
+        "test_constructor": [
+          "rust/src/terminal/session/observer_tests.rs:244",
+          "rust/src/terminal/session/observer_tests.rs:253",
+          "rust/src/terminal/session/observer_tests.rs:508",
+          "rust/src/terminal/session/observer_tests.rs:543"
+        ],
+        "go_producer": [
+          "internal/hub/wrapper_loop.go:1000-1004",
+          "internal/hub/workflow_scan.go:443-446",
+          "internal/hub/workflow_scan.go:556",
+          "internal/hub/workflow_journal.go:825",
+          "internal/hub/workflow_task_detail.go:497"
+        ],
+        "rust_alternative": [
+          "rust/src/application/main_program/serve.rs:1356",
+          "rust/src/application/session_workers.rs:598-613",
+          "rust/src/terminal/session/observations.rs:71-80",
+          "rust/src/application/session_workers/observations.rs:202-219",
+          "rust/src/application/session_workers/observations.rs:272-363"
+        ],
+        "impact": "Claude output queues VT work; periodic collector composes VT/journal/task-detail progress and applies turn-guarded observations. Consumer retains workflow and emits workflow_progress plus CoreEvent::WorkflowChanged. No missing-constructor finding.",
+        "limits": "Claude-only VT gating is explicit in Go and Rust, not a newly found unsupported-provider omission. This does not prove every parser branch or timer behavior.",
+        "occurrence_counts": {
+          "production_constructor": 1,
+          "test_constructor": 4,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "Subagents",
+        "status": "Source-wired enum producer",
+        "production_constructor": [
+          "rust/src/application/session_workers/observations.rs:255-269"
+        ],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:362-375"
+        ],
+        "test_constructor": [
+          "rust/src/terminal/session/observer_tests.rs:273",
+          "rust/src/terminal/session/observer_tests.rs:290",
+          "rust/src/terminal/session/observer_tests.rs:446",
+          "rust/src/terminal/session/observer_tests.rs:461"
+        ],
+        "go_producer": [
+          "internal/hub/input_gate.go:112-121",
+          "internal/hub/subagent_tree.go:67-69",
+          "internal/hub/subagent_tree.go:268-279",
+          "internal/hub/subagent_tree.go:298",
+          "internal/hub/subagent_tree.go:349",
+          "internal/hub/subagent_tree.go:469"
+        ],
+        "rust_alternative": [
+          "rust/src/terminal/session/input.rs:349-355",
+          "rust/src/application/session_workers.rs:598-613",
+          "rust/src/application/session_workers/observations.rs:182-200",
+          "rust/src/application/session_workers/observations/native.rs:68-101",
+          "rust/src/application/session_workers/observations/native.rs:129-219"
+        ],
+        "impact": "Confirmed-turn GitTurnCapture or Reattached events arm native polling. Registry adapter selects Claude/Codex/Grok parser, changed tree produces turn-guarded observation; consumer retains nonempty tree and emits subagent_tree. No missing-constructor finding.",
+        "limits": "Adapter-key dispatch is intentionally bounded by the registry and implemented readers; presence is not proof of all native data shapes. Config-disabled/terminal/no-path/no-change paths correctly produce none.",
+        "occurrence_counts": {
+          "production_constructor": 1,
+          "test_constructor": 4,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "Done",
+        "status": "Enum constructor absent; behavior source-wired through direct completion paths",
+        "production_constructor": [],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:377-380"
+        ],
+        "test_constructor": [],
+        "go_producer": [
+          "internal/hub/wrapper_loop.go:1104-1112",
+          "internal/hub/approval_native.go:131-162",
+          "internal/hub/done_summary.go:38-68",
+          "internal/hub/done_summary.go:188-225",
+          "internal/hub/done_summary.go:251-266"
+        ],
+        "rust_alternative": [
+          "rust/src/hub/websocket.rs:568-575",
+          "rust/src/terminal/session/observations.rs:71-80",
+          "rust/src/terminal/session/completion.rs:650-697",
+          "rust/src/terminal/session/completion.rs:408-464",
+          "rust/src/application/session_workers.rs:528-554",
+          "rust/src/application/session_workers.rs:760-768",
+          "rust/src/terminal/session/completion.rs:723-775"
+        ],
+        "impact": "Output DONE markers call publish_completion directly; native Codex completion takes the routine or Git-gated path; standby fallback is Git-gated. publish_completion retains done and emits done_summary and events. No missing-completion producer finding.",
+        "limits": "No SessionObservation::Done constructor anywhere in baseline source/tests, but direct publication is sufficient source evidence against a blanket feature-absence claim. Work predicates and provider behavior not newly executed.",
+        "occurrence_counts": {
+          "production_constructor": 0,
+          "test_constructor": 0,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "status": "Enum constructor test-only; behavior source-wired through direct VT observation",
+        "production_constructor": [],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:273-281",
+          "rust/src/terminal/session/observations.rs:382-383"
+        ],
+        "test_constructor": [
+          "rust/tests/session_engine_contracts.rs:1237",
+          "rust/src/terminal/session/observer_tests.rs:360",
+          "rust/src/terminal/session/observer_tests.rs:384",
+          "rust/src/terminal/session/observer_tests.rs:425"
+        ],
+        "go_producer": [
+          "internal/hub/wrapper_loop.go:989-998",
+          "internal/hub/wrapper_loop.go:1073-1074",
+          "internal/hub/cross_session_message.go:66-107"
+        ],
+        "rust_alternative": [
+          "rust/src/hub/websocket.rs:568-575",
+          "rust/src/terminal/session/observations.rs:31-47",
+          "rust/src/terminal/session/observations.rs:179-184",
+          "rust/src/terminal/session/observations.rs:595-653"
+        ],
+        "impact": "Claude orchestration output detects receiver-side header and directly records masked sender/text on conductor, deduplicated and capped at 50, then emits session_update. The enum has no production constructor despite feature being wired.",
+        "limits": "Bodies are not copied; bounded header observation matches Go design. Do not describe test constructors as production.",
+        "occurrence_counts": {
+          "production_constructor": 0,
+          "test_constructor": 4,
+          "consumer": 2
+        }
+      },
+      {
+        "variant": "Relays",
+        "status": "Source-wired enum producer; historical missing-owner documentation superseded",
+        "production_constructor": [
+          "rust/src/application/relay_program.rs:958-993"
+        ],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:385-387"
+        ],
+        "test_constructor": [],
+        "go_producer": [
+          "internal/hub/relay.go:1733-1763"
+        ],
+        "rust_alternative": [
+          "rust/src/application/main_program/serve.rs:1401-1407",
+          "rust/src/application/relay_program.rs:995-1000",
+          "rust/src/application/relay_program.rs:1041"
+        ],
+        "impact": "Relay transition/finish save builds sorted parent statuses from attached relay metadata and applies Relays, then sends returned effects. Consumer replaces snapshot.relays and emits session_update. No current missing-constructor finding.",
+        "limits": "BEHAVIOR-MATRIX.md:27-41 preserves old missing-Relays finding under explicitly superseded history; lines 9-11 record source closure. Audit does not re-accept full relay lifecycle or external providers.",
+        "occurrence_counts": {
+          "production_constructor": 1,
+          "test_constructor": 0,
+          "consumer": 1
+        }
+      },
+      {
+        "variant": "BoardNotifyPending",
+        "status": "Source-wired enum producer",
+        "production_constructor": [
+          "rust/src/application/orchestration_program.rs:582-595"
+        ],
+        "consumer": [
+          "rust/src/terminal/session/observations.rs:389-391"
+        ],
+        "test_constructor": [
+          "rust/tests/session_engine_contracts.rs:1236"
+        ],
+        "go_producer": [
+          "internal/hub/orchestration.go:2684-2696",
+          "internal/hub/orchestration.go:2736",
+          "internal/hub/orchestration.go:2754-2764"
+        ],
+        "rust_alternative": [
+          "rust/src/application/main_program/serve.rs:1394-1399",
+          "rust/src/application/orchestration_program.rs:597-647",
+          "rust/src/application/orchestration_program.rs:649-668",
+          "rust/src/application/orchestration_program.rs:775",
+          "rust/src/application/orchestration_program.rs:808"
+        ],
+        "impact": "Queue/progress/flush paths call pending_flag, which compares current value, constructs observation and applies effects. Consumer stores flag and emits session_update. No missing-constructor finding.",
+        "limits": "State-dependent publication is intentional; enum existence alone would not establish this, but call sites and normal Hub owner startup are present.",
+        "occurrence_counts": {
+          "production_constructor": 1,
+          "test_constructor": 1,
+          "consumer": 1
+        }
+      }
+    ],
+    "occurrences": [
+      {
+        "variant": "Transcript",
+        "path": "rust/src/application/agent_history/tests.rs",
+        "line": 199,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Transcript {"
+      },
+      {
+        "variant": "BoardNotifyPending",
+        "path": "rust/src/application/orchestration_program.rs",
+        "line": 592,
+        "classification": "production_constructor",
+        "text": "SessionObservation::BoardNotifyPending(pending),"
+      },
+      {
+        "variant": "Relays",
+        "path": "rust/src/application/relay_program.rs",
+        "line": 980,
+        "classification": "production_constructor",
+        "text": "SessionObservation::Relays("
+      },
+      {
+        "variant": "Subagents",
+        "path": "rust/src/application/session_workers/observations.rs",
+        "line": 264,
+        "classification": "production_constructor",
+        "text": "SessionObservation::Subagents(tree),"
+      },
+      {
+        "variant": "Workflow",
+        "path": "rust/src/application/session_workers/observations.rs",
+        "line": 363,
+        "classification": "production_constructor",
+        "text": "SessionObservation::Workflow(progress.clone()),"
+      },
+      {
+        "variant": "Transcript",
+        "path": "rust/src/application/session_workers.rs",
+        "line": 488,
+        "classification": "production_constructor",
+        "text": "SessionObservation::Transcript {"
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 273,
+        "classification": "consumer",
+        "text": "if let SessionObservation::CrossSessionMessage(message) = &observation {"
+      },
+      {
+        "variant": "Messages",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 286,
+        "classification": "consumer",
+        "text": "SessionObservation::Messages { first, last } => {"
+      },
+      {
+        "variant": "Branch",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 303,
+        "classification": "consumer",
+        "text": "SessionObservation::Branch { branch, git_root } => {"
+      },
+      {
+        "variant": "Model",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 308,
+        "classification": "consumer",
+        "text": "SessionObservation::Model { model, effort } => {"
+      },
+      {
+        "variant": "Transcript",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 322,
+        "classification": "consumer",
+        "text": "SessionObservation::Transcript {"
+      },
+      {
+        "variant": "Workflow",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 347,
+        "classification": "consumer",
+        "text": "SessionObservation::Workflow(progress) => {"
+      },
+      {
+        "variant": "Subagents",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 362,
+        "classification": "consumer",
+        "text": "SessionObservation::Subagents(tree) => {"
+      },
+      {
+        "variant": "Done",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 377,
+        "classification": "consumer",
+        "text": "SessionObservation::Done(summary) => {"
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 382,
+        "classification": "consumer",
+        "text": "SessionObservation::CrossSessionMessage(_) => {"
+      },
+      {
+        "variant": "Relays",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 385,
+        "classification": "consumer",
+        "text": "SessionObservation::Relays(relays) => {"
+      },
+      {
+        "variant": "BoardNotifyPending",
+        "path": "rust/src/terminal/session/observations.rs",
+        "line": 389,
+        "classification": "consumer",
+        "text": "SessionObservation::BoardNotifyPending(pending) => {"
+      },
+      {
+        "variant": "Workflow",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 244,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Workflow(proto::WorkflowProgress::default()),"
+      },
+      {
+        "variant": "Workflow",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 253,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Workflow(proto::WorkflowProgress::default()),"
+      },
+      {
+        "variant": "Subagents",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 273,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Subagents(proto::SubagentTree {"
+      },
+      {
+        "variant": "Subagents",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 290,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Subagents(proto::SubagentTree {"
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 360,
+        "classification": "test_constructor",
+        "text": "SessionObservation::CrossSessionMessage(proto::CrossSessionMessage {"
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 384,
+        "classification": "test_constructor",
+        "text": "SessionObservation::CrossSessionMessage(proto::CrossSessionMessage {"
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 425,
+        "classification": "test_constructor",
+        "text": "SessionObservation::CrossSessionMessage(proto::CrossSessionMessage {"
+      },
+      {
+        "variant": "Subagents",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 446,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Subagents(proto::SubagentTree {"
+      },
+      {
+        "variant": "Subagents",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 461,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Subagents(proto::SubagentTree::default()),"
+      },
+      {
+        "variant": "Workflow",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 508,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Workflow(original.clone()),"
+      },
+      {
+        "variant": "Workflow",
+        "path": "rust/src/terminal/session/observer_tests.rs",
+        "line": 543,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Workflow(original),"
+      },
+      {
+        "variant": "Model",
+        "path": "rust/src/terminal/session/output_model_tests.rs",
+        "line": 230,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Model {"
+      },
+      {
+        "variant": "Messages",
+        "path": "rust/tests/session_engine_contracts.rs",
+        "line": 1226,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Messages {"
+      },
+      {
+        "variant": "Transcript",
+        "path": "rust/tests/session_engine_contracts.rs",
+        "line": 1230,
+        "classification": "test_constructor",
+        "text": "SessionObservation::Transcript {"
+      },
+      {
+        "variant": "BoardNotifyPending",
+        "path": "rust/tests/session_engine_contracts.rs",
+        "line": 1236,
+        "classification": "test_constructor",
+        "text": "SessionObservation::BoardNotifyPending(true),"
+      },
+      {
+        "variant": "CrossSessionMessage",
+        "path": "rust/tests/session_engine_contracts.rs",
+        "line": 1237,
+        "classification": "test_constructor",
+        "text": "SessionObservation::CrossSessionMessage(proto::CrossSessionMessage {"
+      }
+    ]
+  },
+  "session_update": {
+    "title": "Go session_update field audit versus Rust production producers",
+    "identity": {
+      "source_baseline_public": "bec576445a7b74505ddcd95c68f7ad2aca41ff94",
+      "source_baseline_local": "87fa9b735c7fa99b8776b8a58bb278290078d94b",
+      "tree": "206643f0bdf248ea0d8df05997edbfb16c2dbe08",
+      "identity_basis": "Owner confirmed pristine source at 2026-10-06 13:50 UTC snapshot; no independent Git operation in this audit.",
+      "omitnix_generated_commit": "5d423dd306761b41bda8fb45be770213afffd9bf",
+      "omitnix_dirty": true,
+      "index_caution": "Stale context only; current source snapshot is authoritative.",
+      "source_tree": "206643f0bdf248ea0d8df05997edbfb16c2dbe08"
+    },
+    "method": "Read-only static source and call-path inspection. No source/docs/Git/Cargo edits, tests, builds, providers or product runtime execution. The underlying audit collected evidence without modifying the checkout. All relative source refs bind snapshot root. Populated means a non-test production source path exists, not runtime acceptance. Branch/change-count/project_id changes belong exclusively to G1 owner and are not reviewed here.",
+    "counts": {
+      "top_level_actual_go_fields": 48,
+      "nested_fields": 33,
+      "go_message_schema_fields": 154,
+      "broad_proto_fields_not_emitted_by_go_session_update": 106,
+      "top_level_statuses": {
+        "populated": 35,
+        "excluded_g1": 6,
+        "never_populated": 1,
+        "shared_constant": 1,
+        "populated_trigger_gap": 1,
+        "absent_from_session_update": 1,
+        "populated_conditional_gap": 1,
+        "populated_packet_difference": 2
+      }
+    },
+    "primary_findings": [
+      "effort: snapshot has real producers, every Rust session_update shape omits it; Go model detection emits it.",
+      "subscription_name: Rust DTO/emitter exists, snapshot name has no non-test assignment, so name is never filled."
+    ],
+    "supplemental_findings": [
+      "transcript_grew_at: populated, but transcript growth alone emits no session_update and Rust source signal differs.",
+      "route: populated after model changes, but native explicit-model registration omits Go fallback inference.",
+      "first_message/last_message: populated and sent by confirmed input; lower-impact model-update packet-shape difference only, because the UI preserves absent summaries."
+    ],
+    "input_integrity": "15 central source files were rehashed against snapshot manifest.json and matched; no source/test execution was performed.",
+    "go_emitter_shapes": [
+      {
+        "id": "common_full",
+        "source": "internal/hub/orchestration.go:3354-3390",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "project_id",
+          "label",
+          "launch_label",
+          "model",
+          "execution_mode",
+          "permission_mode",
+          "route",
+          "state",
+          "output_idle",
+          "workflow_active",
+          "awaiting_user",
+          "awaiting_approval",
+          "activity",
+          "approval_source_epoch",
+          "last_output_at",
+          "started_at",
+          "parent_session_id",
+          "handoff_from",
+          "role",
+          "auto",
+          "depth",
+          "orchestration_id",
+          "board_path",
+          "worktree_branch",
+          "board_notify_pending",
+          "relays",
+          "cross_session_messages",
+          "subscription_id",
+          "subscription_name",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "ProjectID",
+          "Label",
+          "LaunchLabel",
+          "Model",
+          "ExecutionMode",
+          "PermissionMode",
+          "Route",
+          "State",
+          "OutputIdle",
+          "WorkflowActive",
+          "AwaitingUser",
+          "AwaitingApproval",
+          "Activity",
+          "ApprovalSourceEpoch",
+          "LastOutputAt",
+          "StartedAt",
+          "ParentSessionID",
+          "HandoffFrom",
+          "Role",
+          "Auto",
+          "Depth",
+          "OrchestrationID",
+          "BoardPath",
+          "WorktreeBranch",
+          "BoardNotifyPending",
+          "Relays",
+          "CrossSessionMessages",
+          "SubscriptionID",
+          "SubscriptionName"
+        ]
+      },
+      {
+        "id": "model_detection",
+        "source": "internal/hub/model_detect.go:187-202",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "effort",
+          "route",
+          "state",
+          "last_output_at",
+          "first_message",
+          "last_message",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Effort",
+          "Route",
+          "State",
+          "LastOutputAt",
+          "FirstMessage",
+          "LastMessage"
+        ]
+      },
+      {
+        "id": "transcript_growth",
+        "source": "internal/hub/transcript_stall.go:189-197",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "route",
+          "state",
+          "output_idle",
+          "workflow_active",
+          "awaiting_user",
+          "awaiting_approval",
+          "activity",
+          "last_output_at",
+          "transcript_grew_at",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "OutputIdle",
+          "WorkflowActive",
+          "AwaitingUser",
+          "AwaitingApproval",
+          "Activity",
+          "LastOutputAt",
+          "TranscriptGrewAt"
+        ]
+      },
+      {
+        "id": "metadata_patch",
+        "source": "internal/hub/session_meta.go:204-204",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "state",
+          "session_meta",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "State",
+          "SessionMeta"
+        ]
+      },
+      {
+        "id": "input_clear",
+        "source": "internal/hub/input_gate.go:77-77",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "route",
+          "state",
+          "last_output_at",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "LastOutputAt"
+        ]
+      },
+      {
+        "id": "input_confirmed",
+        "source": "internal/hub/input_gate.go:106-106",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "route",
+          "state",
+          "last_output_at",
+          "first_message",
+          "last_message",
+          "session_meta",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "LastOutputAt",
+          "FirstMessage",
+          "LastMessage",
+          "SessionMeta"
+        ]
+      },
+      {
+        "id": "mark_running",
+        "source": "internal/hub/idle_state.go:54-54",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "route",
+          "state",
+          "output_idle",
+          "workflow_active",
+          "awaiting_user",
+          "awaiting_approval",
+          "activity",
+          "last_output_at",
+          "transcript_grew_at",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "OutputIdle",
+          "WorkflowActive",
+          "AwaitingUser",
+          "AwaitingApproval",
+          "Activity",
+          "LastOutputAt",
+          "TranscriptGrewAt"
+        ]
+      },
+      {
+        "id": "evaluate_idle",
+        "source": "internal/hub/idle_state.go:141-141",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "route",
+          "state",
+          "output_idle",
+          "workflow_active",
+          "awaiting_user",
+          "awaiting_approval",
+          "activity",
+          "last_output_at",
+          "transcript_grew_at",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "OutputIdle",
+          "WorkflowActive",
+          "AwaitingUser",
+          "AwaitingApproval",
+          "Activity",
+          "LastOutputAt",
+          "TranscriptGrewAt"
+        ]
+      },
+      {
+        "id": "branch_git_project_refresh",
+        "source": "internal/hub/branch_refresh.go:153-173",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "project_id",
+          "label",
+          "model",
+          "route",
+          "state",
+          "last_output_at",
+          "started_at",
+          "first_message",
+          "last_message",
+          "git_checked",
+          "git_files",
+          "git_added",
+          "git_deleted",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "ProjectID",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "LastOutputAt",
+          "StartedAt",
+          "FirstMessage",
+          "LastMessage",
+          "GitChecked",
+          "GitFiles",
+          "GitAdded",
+          "GitDeleted"
+        ]
+      },
+      {
+        "id": "history_reset",
+        "source": "internal/hub/server.go:2448-2448",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "label",
+          "model",
+          "route",
+          "state",
+          "last_output_at",
+          "started_at",
+          "token_statusbar"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "Label",
+          "Model",
+          "Route",
+          "State",
+          "LastOutputAt",
+          "StartedAt"
+        ]
+      },
+      {
+        "id": "registration",
+        "source": "internal/hub/wrapper_loop.go:339-344",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "project_id",
+          "label",
+          "launch_label",
+          "model",
+          "execution_mode",
+          "permission_mode",
+          "route",
+          "state",
+          "output_idle",
+          "workflow_active",
+          "awaiting_user",
+          "awaiting_approval",
+          "activity",
+          "approval_source_epoch",
+          "last_output_at",
+          "started_at",
+          "parent_session_id",
+          "handoff_from",
+          "role",
+          "auto",
+          "depth",
+          "orchestration_id",
+          "board_path",
+          "worktree_branch",
+          "board_notify_pending",
+          "relays",
+          "cross_session_messages",
+          "subscription_id",
+          "subscription_name",
+          "token_statusbar",
+          "shell",
+          "log_path",
+          "jsonl_path"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "ProjectID",
+          "Label",
+          "LaunchLabel",
+          "Model",
+          "ExecutionMode",
+          "PermissionMode",
+          "Route",
+          "State",
+          "OutputIdle",
+          "WorkflowActive",
+          "AwaitingUser",
+          "AwaitingApproval",
+          "Activity",
+          "ApprovalSourceEpoch",
+          "LastOutputAt",
+          "StartedAt",
+          "ParentSessionID",
+          "HandoffFrom",
+          "Role",
+          "Auto",
+          "Depth",
+          "OrchestrationID",
+          "BoardPath",
+          "WorktreeBranch",
+          "BoardNotifyPending",
+          "Relays",
+          "CrossSessionMessages",
+          "SubscriptionID",
+          "SubscriptionName",
+          "Shell",
+          "LogPath",
+          "JSONLPath"
+        ]
+      },
+      {
+        "id": "reattach",
+        "source": "internal/hub/wrapper_loop.go:846-860",
+        "fields": [
+          "type",
+          "session_id",
+          "provider",
+          "display_name",
+          "cwd",
+          "branch",
+          "project_id",
+          "label",
+          "launch_label",
+          "model",
+          "execution_mode",
+          "permission_mode",
+          "route",
+          "state",
+          "output_idle",
+          "workflow_active",
+          "awaiting_user",
+          "awaiting_approval",
+          "activity",
+          "approval_source_epoch",
+          "last_output_at",
+          "started_at",
+          "parent_session_id",
+          "handoff_from",
+          "role",
+          "auto",
+          "depth",
+          "orchestration_id",
+          "board_path",
+          "worktree_branch",
+          "board_notify_pending",
+          "relays",
+          "cross_session_messages",
+          "subscription_id",
+          "subscription_name",
+          "token_statusbar",
+          "shell",
+          "log_path",
+          "jsonl_path"
+        ],
+        "go_fields": [
+          "Type",
+          "SessionID",
+          "Provider",
+          "Display",
+          "CWD",
+          "Branch",
+          "ProjectID",
+          "Label",
+          "LaunchLabel",
+          "Model",
+          "ExecutionMode",
+          "PermissionMode",
+          "Route",
+          "State",
+          "OutputIdle",
+          "WorkflowActive",
+          "AwaitingUser",
+          "AwaitingApproval",
+          "Activity",
+          "ApprovalSourceEpoch",
+          "LastOutputAt",
+          "StartedAt",
+          "ParentSessionID",
+          "HandoffFrom",
+          "Role",
+          "Auto",
+          "Depth",
+          "OrchestrationID",
+          "BoardPath",
+          "WorktreeBranch",
+          "BoardNotifyPending",
+          "Relays",
+          "CrossSessionMessages",
+          "SubscriptionID",
+          "SubscriptionName",
+          "Shell",
+          "LogPath",
+          "JSONLPath"
+        ]
+      }
+    ],
+    "field_rows": [
+      {
+        "field": "type",
+        "go_field": "Type",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:22",
+        "go_omit_empty": false,
+        "go_producer": "All emitter sites in the emitter-shape appendix",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:13",
+        "rust_producer_and_emitter": "rust/src/terminal/session.rs:550,591,638",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries session_update discriminator; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "role",
+        "go_field": "Role",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:23",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:19",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "session_id",
+        "go_field": "SessionID",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:24",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:25",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:59-113 allocates → rust/src/terminal/session.rs:551,592,639",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries canonical session identity; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "provider",
+        "go_field": "Provider",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:25",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:31",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries provider; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "display_name",
+        "go_field": "Display",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:30",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:43",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries display name; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "cwd",
+        "go_field": "CWD",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:31",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:49",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries working directory; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "branch",
+        "go_field": "Branch",
+        "status": "excluded_g1",
+        "go_schema": "internal/proto/messages.go:32",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/branch_refresh.go:148-173; internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:55",
+        "rust_producer_and_emitter": "rust/src/terminal/session.rs:555; rust/src/terminal/session/observations.rs:303-306",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Owned G1 Branch work; inventoried only. No assessment of owner change.",
+        "note": ""
+      },
+      {
+        "field": "project_id",
+        "go_field": "ProjectID",
+        "status": "excluded_g1",
+        "go_schema": "internal/proto/messages.go:33",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/branch_refresh.go:153-173; internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "branch_git_project_refresh",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:61",
+        "rust_producer_and_emitter": "rust/src/terminal/session.rs:556",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Owned G1 project_id work; inventoried only. No assessment of owner change.",
+        "note": ""
+      },
+      {
+        "field": "shell",
+        "go_field": "Shell",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:42",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:341-344,857-860",
+        "go_emitters": [
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:85",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:145-148,559-562 assigns announce.shell",
+        "consumer": "web/src/app/ws-client.ts:639,677-678",
+        "impact": "Registration and reattachment announcements attach this field.",
+        "note": ""
+      },
+      {
+        "field": "state",
+        "go_field": "State",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:44",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/idle_state.go:54,141",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:97",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586; rust/src/terminal/session/observations.rs:152-161,557-582",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries compatibility display state; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "output_idle",
+        "go_field": "OutputIdle",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:48",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/idle_state.go:54,141; internal/hub/approval_record.go:193-216; internal/hub/orchestration.go:3369-3373",
+        "go_emitters": [
+          "common_full",
+          "transcript_growth",
+          "mark_running",
+          "evaluate_idle",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:103",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:564-568,608-612",
+        "consumer": "web/src/app/ws-client.ts:662-671",
+        "impact": "Activity axes produced; top-level false values intentionally omitted, nested activity carries false.",
+        "note": ""
+      },
+      {
+        "field": "workflow_active",
+        "go_field": "WorkflowActive",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:49",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/idle_state.go:54,141; internal/hub/approval_record.go:193-216; internal/hub/orchestration.go:3369-3373",
+        "go_emitters": [
+          "common_full",
+          "transcript_growth",
+          "mark_running",
+          "evaluate_idle",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:109",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:564-568,608-612",
+        "consumer": "web/src/app/ws-client.ts:662-671",
+        "impact": "Activity axes produced; top-level false values intentionally omitted, nested activity carries false.",
+        "note": ""
+      },
+      {
+        "field": "awaiting_user",
+        "go_field": "AwaitingUser",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:50",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/idle_state.go:54,141; internal/hub/approval_record.go:193-216; internal/hub/orchestration.go:3369-3373",
+        "go_emitters": [
+          "common_full",
+          "transcript_growth",
+          "mark_running",
+          "evaluate_idle",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:115",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:564-568,608-612",
+        "consumer": "web/src/app/ws-client.ts:662-671",
+        "impact": "Activity axes produced; top-level false values intentionally omitted, nested activity carries false.",
+        "note": ""
+      },
+      {
+        "field": "awaiting_approval",
+        "go_field": "AwaitingApproval",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:51",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/idle_state.go:54,141; internal/hub/approval_record.go:193-216; internal/hub/orchestration.go:3369-3373",
+        "go_emitters": [
+          "common_full",
+          "transcript_growth",
+          "mark_running",
+          "evaluate_idle",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:121",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:564-568,608-612",
+        "consumer": "web/src/app/ws-client.ts:662-671",
+        "impact": "Activity axes produced; top-level false values intentionally omitted, nested activity carries false.",
+        "note": ""
+      },
+      {
+        "field": "activity",
+        "go_field": "Activity",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:53",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/orchestration.go:3373; internal/hub/idle_state.go:54,141",
+        "go_emitters": [
+          "common_full",
+          "transcript_growth",
+          "mark_running",
+          "evaluate_idle",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:123",
+        "rust_producer_and_emitter": "rust/src/terminal/session.rs:568,612; rust/src/terminal/session/observations.rs:152-161,567-582",
+        "consumer": "web/src/app/ws-client.ts:662-667",
+        "impact": "Atomic four-axis object includes false transitions.",
+        "note": ""
+      },
+      {
+        "field": "subscription_id",
+        "go_field": "SubscriptionID",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:82",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/subscription.go:28-42 → internal/hub/wrapper_loop.go:165,245 → internal/hub/orchestration.go:3388",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:181",
+        "rust_producer_and_emitter": "rust/src/wrapper/entry.rs:136-139 → rust/src/terminal/session/lifecycle.rs:259 → rust/src/terminal/session.rs:583",
+        "consumer": "web/src/app/ws-client.ts:696-700",
+        "impact": "Profile ID is populated and emitted.",
+        "note": "Go normalizes/validates reported ID; Rust initialize copies it. Invalid manual/mixed-version input behavior is a separate validation difference, not a missing producer."
+      },
+      {
+        "field": "subscription_name",
+        "go_field": "SubscriptionName",
+        "status": "never_populated",
+        "go_schema": "internal/proto/messages.go:85",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/subscription.go:28-42 resolves configured name → internal/hub/wrapper_loop.go:165,246 and :736 → internal/hub/orchestration.go:3389",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:187",
+        "rust_producer_and_emitter": "rust/src/proto/core.rs:326-330 declares snapshot field; rust/src/terminal/session/lifecycle.rs:235-272 leaves it Default; rust/src/terminal/session.rs:584 copies it into Message; complete rust/src search finds no assignment",
+        "consumer": "web/src/app/ws-client.ts:701 → web/src/app/settings.ts:3025-3029",
+        "impact": "Profile label remains empty, so serialized subscription_name is omitted and UI falls back to opaque ID.",
+        "note": "All current non-test subscription_profile_name source references are DTO declaration and emitter. No documented intentional exclusion found."
+      },
+      {
+        "field": "log_path",
+        "go_field": "LogPath",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:100",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:341-344,857-860",
+        "go_emitters": [
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:235",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:145-148,559-562 assigns announce.log_path",
+        "consumer": "web/src/app/ws-client.ts:639,677-678",
+        "impact": "Registration and reattachment announcements attach this field.",
+        "note": ""
+      },
+      {
+        "field": "jsonl_path",
+        "go_field": "JSONLPath",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:101",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:341-344,857-860",
+        "go_emitters": [
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:241",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:145-148,559-562 assigns announce.jsonl_path",
+        "consumer": "web/src/app/ws-client.ts:639,677-678",
+        "impact": "Registration and reattachment announcements attach this field.",
+        "note": ""
+      },
+      {
+        "field": "approval_source_epoch",
+        "go_field": "ApprovalSourceEpoch",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:120",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/orchestration.go:3374 calls ensureApprovalSourceEpochLocked",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:277",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:297 initializes ApprovalState; rust/src/terminal/session/input.rs:336 advances user boundary; rust/src/terminal/session.rs:569 reads epoch",
+        "consumer": "Wire compatibility metadata; shared session_update UI branch does not consume this field directly.",
+        "impact": "Approval generation is emitted; no missing producer found.",
+        "note": ""
+      },
+      {
+        "field": "token_statusbar",
+        "go_field": "TokenStatusbar",
+        "status": "shared_constant",
+        "go_schema": "internal/proto/messages.go:128",
+        "go_omit_empty": false,
+        "go_producer": "internal/proto/messages.go:128 has no omitempty; all session_update constructors leave default false",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "metadata_patch",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:279",
+        "rust_producer_and_emitter": "rust/src/proto/generated.rs:278-279 has no skip_serializing_if; session_update constructors use Default",
+        "consumer": "Registered ACK wrapper option is outside session_update.",
+        "impact": "Both serialize token_statusbar:false incidentally on session_update; true is meaningful in registered ACK, not this payload.",
+        "note": "This is an intentional/shared wire-shape property, not a never-populated business field."
+      },
+      {
+        "field": "last_output_at",
+        "go_field": "LastOutputAt",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:178",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/idle_state.go:54,141; internal/hub/orchestration.go:3375",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:345",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:68-70 updates output clock → rust/src/terminal/session.rs:570,601",
+        "consumer": "web/src/app/ws-client.ts:672",
+        "impact": "Carries last PTY output time.",
+        "note": ""
+      },
+      {
+        "field": "transcript_grew_at",
+        "go_field": "TranscriptGrewAt",
+        "status": "populated_trigger_gap",
+        "go_schema": "internal/proto/messages.go:189",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/transcript_stall.go:165-199 updates on initial observation, file growth or child-directory mtime and immediately broadcasts; internal/hub/idle_state.go:54,141",
+        "go_emitters": [
+          "transcript_growth",
+          "mark_running",
+          "evaluate_idle"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:351",
+        "rust_producer_and_emitter": "rust/src/application/session_workers.rs:485-500 produces only on path/safe-offset change → rust/src/terminal/session/observations.rs:322-345 stores and Notify only → rust/src/terminal/session.rs:613 emits through activity_update",
+        "consumer": "web/src/app/ws-client.ts:673 → web/src/app/session-list.ts:615",
+        "impact": "Fresh growth time can remain absent/stale in an already-connected UI while activity stays unchanged. Source signal differs from Go file-size/subagent-mtime observation.",
+        "note": "Not never populated. Idle/output state changes can later emit it (rust/src/terminal/session/observations.rs:160-161,581-582). TranscriptChanged consumer at rust/src/application/session_workers.rs:306-313 only writes handoff information. Snapshot reconnect can also expose it."
+      },
+      {
+        "field": "started_at",
+        "go_field": "StartedAt",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:192",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:357",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries session start timestamp; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "label",
+        "go_field": "Label",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:197",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/session_meta.go:174-204",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:363",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586; rust/src/terminal/session/observations.rs:503-523; rust/src/terminal/session.rs:627-628",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries editable label; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "launch_label",
+        "go_field": "LaunchLabel",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:203",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:369",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries immutable launch label; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "session_meta",
+        "go_field": "SessionMeta",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:207",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/session_meta.go:174-205; internal/hub/input_gate.go:106",
+        "go_emitters": [
+          "metadata_patch",
+          "input_confirmed"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:371",
+        "rust_producer_and_emitter": "rust/src/hub/session_routes/metadata.rs:80-113 → rust/src/terminal/session/observations.rs:503-534 → rust/src/terminal/session.rs:625-646; rust/src/terminal/session/input.rs:340-342,372",
+        "consumer": "web/src/app/ws-client.ts:618-637",
+        "impact": "Editable card metadata and derived title are sent in a nested object so clearing values survives serialization.",
+        "note": ""
+      },
+      {
+        "field": "model",
+        "go_field": "Model",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:210",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/model_detect.go:164-204",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:377",
+        "rust_producer_and_emitter": "rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586; rust/src/terminal/session/observations.rs:18-23,48-63,191-214,748-772",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries declared or detected model; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "effort",
+        "go_field": "Effort",
+        "status": "absent_from_session_update",
+        "go_schema": "internal/proto/messages.go:215",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/model_detect.go:178-201 sets and emits ses.Effort",
+        "go_emitters": [
+          "model_detection"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:383",
+        "rust_producer_and_emitter": "rust/src/wrapper/entry.rs:119; rust/src/terminal/session/lifecycle.rs:248; rust/src/terminal/session/observations.rs:764-771 populate snapshot then update_message; rust/src/terminal/session.rs:547-647 never assigns Message.effort",
+        "consumer": "web/src/app/ws-client.ts:680 → web/src/app/token-statusbar.ts:1224-1230",
+        "impact": "Live model/banner effort updates do not reach connected session cards via session_update.",
+        "note": "Snapshot effort and usage_stat.effort_level are separate paths and may show a value after reconnect/from usage cache; this is not total effort-feature absence."
+      },
+      {
+        "field": "execution_mode",
+        "go_field": "ExecutionMode",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:220",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:389",
+        "rust_producer_and_emitter": "rust/src/wrapper/entry.rs:120-121 → rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries declared execution mode; no missing Rust field producer found.",
+        "note": "Field is emitted by both implementations; shared session_update UI branch has no execution_mode assignment. This is a shared consumer behavior, not a Rust producer gap."
+      },
+      {
+        "field": "permission_mode",
+        "go_field": "PermissionMode",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:238",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:401",
+        "rust_producer_and_emitter": "rust/src/wrapper/entry.rs:120-121 → rust/src/terminal/session/lifecycle.rs:235-272 → rust/src/terminal/session.rs:547-586",
+        "consumer": "web/src/app/ws-client.ts:598-706 (shared UI); rust/src/terminal/session.rs:448-464 → rust/src/hub/sockets.rs:523-529 (delivery)",
+        "impact": "Carries declared launch permission mode; no missing Rust field producer found.",
+        "note": ""
+      },
+      {
+        "field": "route",
+        "go_field": "Route",
+        "status": "populated_conditional_gap",
+        "go_schema": "internal/proto/messages.go:242",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:150-153 derives empty registration route via internal/hub/server.go:534-541 and internal/hub/env_preset.go:193-216 (nonempty Claude/Codex model gives anthropic/openai unless local-model rules apply); internal/hub/model_detect.go:165-175; internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390",
+        "go_emitters": [
+          "common_full",
+          "model_detection",
+          "transcript_growth",
+          "input_clear",
+          "input_confirmed",
+          "mark_running",
+          "evaluate_idle",
+          "branch_git_project_refresh",
+          "history_reset",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:407",
+        "rust_producer_and_emitter": "rust/src/wrapper/entry.rs:107-143 omits route; rust/src/terminal/session/lifecycle.rs:208,251 copies m.route; rust/src/terminal/session/observations.rs:760 assigns only on detected model change → rust/src/terminal/session.rs:562,599",
+        "consumer": "web/src/app/ws-client.ts:684",
+        "impact": "Explicit-model launches can retain blank route until a model-changing output; route is not globally never populated.",
+        "note": "The socket passes the decoded register message unchanged at rust/src/hub/websocket.rs:266-274; banner detection is gated on empty model at rust/src/terminal/session/observations.rs:48-63. This is a static reachable path, not runtime reproduction."
+      },
+      {
+        "field": "parent_session_id",
+        "go_field": "ParentSessionID",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:245",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:413",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "handoff_from",
+        "go_field": "HandoffFrom",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:251",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:419",
+        "rust_producer_and_emitter": "rust/src/application/ordinary_spawn.rs:465 → rust/src/terminal/session/lifecycle.rs:263 → rust/src/terminal/session.rs:573; warm preserve rust/src/terminal/session/lifecycle.rs:869",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "auto",
+        "go_field": "Auto",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:252",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:425",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "depth",
+        "go_field": "Depth",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:253",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:431",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "orchestration_id",
+        "go_field": "OrchestrationID",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:254",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:437",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579; rust/src/terminal/session/relay.rs:50-60; rust/src/application/relay_program.rs:772-796",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "board_path",
+        "go_field": "BoardPath",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:255",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:443",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579; rust/src/terminal/session/relay.rs:50-60; rust/src/application/relay_program.rs:772-796",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "worktree_branch",
+        "go_field": "WorktreeBranch",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:256",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/wrapper_loop.go:198-252 → internal/hub/orchestration.go:3353-3390; internal/hub/orchestration.go:3330-3334",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:449",
+        "rust_producer_and_emitter": "rust/src/orchestration/child_launch.rs:631-642 → rust/src/terminal/session/lifecycle.rs:262-269 → rust/src/terminal/session.rs:572-579",
+        "consumer": "web/src/app/ws-client.ts:685-692",
+        "impact": "Server-owned orchestration/derivation metadata is supplied to the session and emitted.",
+        "note": ""
+      },
+      {
+        "field": "board_notify_pending",
+        "go_field": "BoardNotifyPending",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:257",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/orchestration.go:2754-2764 → 3385",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:455",
+        "rust_producer_and_emitter": "rust/src/application/orchestration_program.rs:592 → rust/src/terminal/session/observations.rs:389-391 → rust/src/terminal/session.rs:580",
+        "consumer": "web/src/app/ws-client.ts:693",
+        "impact": "Board notification flag has a live producer. Both protocols omit top-level false; that shared clear behavior is not newly a Rust omission.",
+        "note": ""
+      },
+      {
+        "field": "relays",
+        "go_field": "Relays",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:260",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/relay.go:476-500,1736-1763 → internal/hub/orchestration.go:3386,3395-3404",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:461",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581",
+        "consumer": "web/src/app/ws-client.ts:694",
+        "impact": "Relay snapshots have current production construction and application; historical unsupported entry is superseded.",
+        "note": ""
+      },
+      {
+        "field": "cross_session_messages",
+        "go_field": "CrossSessionMessages",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:265",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/cross_session_message.go:66-107 → internal/hub/orchestration.go:3387",
+        "go_emitters": [
+          "common_full",
+          "registration",
+          "reattach"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:467",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:31-44,179-183,595-653 → rust/src/terminal/session.rs:582",
+        "consumer": "web/src/app/ws-client.ts:695",
+        "impact": "Direct PTY producer constructs masked receiver-side headers, bounded to 50.",
+        "note": ""
+      },
+      {
+        "field": "first_message",
+        "go_field": "FirstMessage",
+        "status": "populated_packet_difference",
+        "go_schema": "internal/proto/messages.go:332",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/input_gate.go:90-106; internal/hub/model_detect.go:200-201; internal/hub/branch_refresh.go:167-168",
+        "go_emitters": [
+          "model_detection",
+          "input_confirmed",
+          "branch_git_project_refresh"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:515",
+        "rust_producer_and_emitter": "rust/src/terminal/session/input.rs:338-346,369-373 → rust/src/terminal/session.rs:616-623; model output uses rust/src/terminal/session/observations.rs:771 → rust/src/terminal/session.rs:547-586 (omits first_message)",
+        "consumer": "web/src/app/ws-client.ts:675-676",
+        "impact": "Confirmed Hub input sends summaries. Go model-detection updates also carry summaries; Rust model-detection update does not. The UI preserves summaries when these fields are absent, so this is a lower-impact packet-shape difference, not proof of a visible regression or a missing current summary producer.",
+        "note": "Do not treat absent Messages observation constructors as absence of the direct input producer. Messages consumer rust/src/terminal/session/observations.rs:286-301 also broadcasts broad update_message without summaries, but reachability is separate from live input."
+      },
+      {
+        "field": "last_message",
+        "go_field": "LastMessage",
+        "status": "populated_packet_difference",
+        "go_schema": "internal/proto/messages.go:335",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/input_gate.go:90-106; internal/hub/model_detect.go:200-201; internal/hub/branch_refresh.go:167-168",
+        "go_emitters": [
+          "model_detection",
+          "input_confirmed",
+          "branch_git_project_refresh"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:521",
+        "rust_producer_and_emitter": "rust/src/terminal/session/input.rs:338-346,369-373 → rust/src/terminal/session.rs:616-623; model output uses rust/src/terminal/session/observations.rs:771 → rust/src/terminal/session.rs:547-586 (omits last_message)",
+        "consumer": "web/src/app/ws-client.ts:675-676",
+        "impact": "Confirmed Hub input sends summaries. Go model-detection updates also carry summaries; Rust model-detection update does not. The UI preserves summaries when these fields are absent, so this is a lower-impact packet-shape difference, not proof of a visible regression or a missing current summary producer.",
+        "note": "Do not treat absent Messages observation constructors as absence of the direct input producer. Messages consumer rust/src/terminal/session/observations.rs:286-301 also broadcasts broad update_message without summaries, but reachability is separate from live input."
+      },
+      {
+        "field": "git_checked",
+        "go_field": "GitChecked",
+        "status": "excluded_g1",
+        "go_schema": "internal/proto/messages.go:364",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/branch_refresh.go:148-173",
+        "go_emitters": [
+          "branch_git_project_refresh"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:557",
+        "rust_producer_and_emitter": "Go-compatible Message DTO exists; baseline session_update constructors at rust/src/terminal/session.rs:547-647 do not assign these fields",
+        "consumer": "web/src/app/ws-client.ts:702-707",
+        "impact": "Owned G1 change-count work; inventoried only. No assessment of owner change.",
+        "note": ""
+      },
+      {
+        "field": "git_files",
+        "go_field": "GitFiles",
+        "status": "excluded_g1",
+        "go_schema": "internal/proto/messages.go:365",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/branch_refresh.go:148-173",
+        "go_emitters": [
+          "branch_git_project_refresh"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:563",
+        "rust_producer_and_emitter": "Go-compatible Message DTO exists; baseline session_update constructors at rust/src/terminal/session.rs:547-647 do not assign these fields",
+        "consumer": "web/src/app/ws-client.ts:702-707",
+        "impact": "Owned G1 change-count work; inventoried only. No assessment of owner change.",
+        "note": ""
+      },
+      {
+        "field": "git_added",
+        "go_field": "GitAdded",
+        "status": "excluded_g1",
+        "go_schema": "internal/proto/messages.go:366",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/branch_refresh.go:148-173",
+        "go_emitters": [
+          "branch_git_project_refresh"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:569",
+        "rust_producer_and_emitter": "Go-compatible Message DTO exists; baseline session_update constructors at rust/src/terminal/session.rs:547-647 do not assign these fields",
+        "consumer": "web/src/app/ws-client.ts:702-707",
+        "impact": "Owned G1 change-count work; inventoried only. No assessment of owner change.",
+        "note": ""
+      },
+      {
+        "field": "git_deleted",
+        "go_field": "GitDeleted",
+        "status": "excluded_g1",
+        "go_schema": "internal/proto/messages.go:367",
+        "go_omit_empty": true,
+        "go_producer": "internal/hub/branch_refresh.go:148-173",
+        "go_emitters": [
+          "branch_git_project_refresh"
+        ],
+        "rust_dto": "rust/src/proto/generated.rs:575",
+        "rust_producer_and_emitter": "Go-compatible Message DTO exists; baseline session_update constructors at rust/src/terminal/session.rs:547-647 do not assign these fields",
+        "consumer": "web/src/app/ws-client.ts:702-707",
+        "impact": "Owned G1 change-count work; inventoried only. No assessment of owner change.",
+        "note": ""
+      }
+    ],
+    "nested_field_rows": [
+      {
+        "field": "activity.output_idle",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:477",
+        "go_producer": "internal/hub/approval_record.go:213-216; internal/hub/idle_state.go:54,141; internal/hub/orchestration.go:3369-3373",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:568,612",
+        "consumer": "web/src/app/ws-client.ts:662-667",
+        "impact": "Atomic activity axis; false is retained in nested object.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "activity.workflow_active",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:478",
+        "go_producer": "internal/hub/approval_record.go:213-216; internal/hub/idle_state.go:54,141; internal/hub/orchestration.go:3369-3373",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:568,612",
+        "consumer": "web/src/app/ws-client.ts:662-667",
+        "impact": "Atomic activity axis; false is retained in nested object.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "activity.awaiting_user",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:479",
+        "go_producer": "internal/hub/approval_record.go:213-216; internal/hub/idle_state.go:54,141; internal/hub/orchestration.go:3369-3373",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:568,612",
+        "consumer": "web/src/app/ws-client.ts:662-667",
+        "impact": "Atomic activity axis; false is retained in nested object.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "activity.awaiting_approval",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:480",
+        "go_producer": "internal/hub/approval_record.go:213-216; internal/hub/idle_state.go:54,141; internal/hub/orchestration.go:3369-3373",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:152-161,567-582,740-743 → rust/src/terminal/session.rs:568,612",
+        "consumer": "web/src/app/ws-client.ts:662-667",
+        "impact": "Atomic activity axis; false is retained in nested object.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "session_meta.label",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:587",
+        "go_producer": "internal/hub/session_meta.go:174-205; internal/hub/input_gate.go:90-106",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:503-523,546-553 → rust/src/terminal/session.rs:627-632",
+        "consumer": "web/src/app/ws-client.ts:618-623",
+        "impact": "Card metadata; empty/false retained so edits clear values.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "session_meta.pinned",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:588",
+        "go_producer": "internal/hub/session_meta.go:174-205; internal/hub/input_gate.go:90-106",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:503-523,546-553 → rust/src/terminal/session.rs:627-632",
+        "consumer": "web/src/app/ws-client.ts:618-623",
+        "impact": "Card metadata; empty/false retained so edits clear values.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "session_meta.color",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:589",
+        "go_producer": "internal/hub/session_meta.go:174-205; internal/hub/input_gate.go:90-106",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:503-523,546-553 → rust/src/terminal/session.rs:627-632",
+        "consumer": "web/src/app/ws-client.ts:618-623",
+        "impact": "Card metadata; empty/false retained so edits clear values.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "session_meta.note",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:590",
+        "go_producer": "internal/hub/session_meta.go:174-205; internal/hub/input_gate.go:90-106",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:503-523,546-553 → rust/src/terminal/session.rs:627-632",
+        "consumer": "web/src/app/ws-client.ts:618-623",
+        "impact": "Card metadata; empty/false retained so edits clear values.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "session_meta.auto_title",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:591",
+        "go_producer": "internal/hub/session_meta.go:174-205; internal/hub/input_gate.go:90-106",
+        "rust_producer_and_emitter": "rust/src/terminal/session/input.rs:340-342 → rust/src/terminal/session.rs:632; rust/src/terminal/session/lifecycle.rs:246 restores persisted title",
+        "consumer": "web/src/app/ws-client.ts:618-623",
+        "impact": "Card metadata; empty/false retained so edits clear values.",
+        "go_omit_empty": false
+      },
+      {
+        "field": "relays[].orchestration_id",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:646",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].plan_path",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:647",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].mode",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:648",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].state",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:649",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].reason",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:650",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].completed_cs",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:651",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].round",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:652",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].max_rounds",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:653",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].final_seen",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:654",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].implementation_session_id",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:655",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].strong_session_id",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:660",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].active_implementer",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:661",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].escalate_after",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:662",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].review_session_id",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:663",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].review_path",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:664",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].worktree_path",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:665",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].branch",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:666",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].base_commit",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:667",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "relays[].updated_at",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:668",
+        "go_producer": "internal/hub/relay.go:476-500 → :1736-1763 → internal/hub/orchestration.go:3386",
+        "rust_producer_and_emitter": "rust/src/orchestration/relay.rs:275-296 → rust/src/application/relay_program.rs:928-991 → rust/src/terminal/session/observations.rs:385-387 → rust/src/terminal/session.rs:581; nondefault sources rust/src/application/relay_program.rs:654-680, rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383 and rust/src/orchestration/relay.rs:235-250",
+        "consumer": "web/src/app/ws-client.ts:694 (stores whole relay object)",
+        "impact": "Live relay status member; omitted when zero/empty, same as Go.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "cross_session_messages[].at",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:449",
+        "go_producer": "internal/hub/cross_session_message.go:93-107 → internal/hub/orchestration.go:3387",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:633-648 → rust/src/terminal/session.rs:582",
+        "consumer": "web/src/app/ws-client.ts:695 (stores whole array)",
+        "impact": "Masked cross-session header metadata; production PTY path exists.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "cross_session_messages[].receiver_session_id",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:450",
+        "go_producer": "internal/hub/cross_session_message.go:93-107 → internal/hub/orchestration.go:3387",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:633-648 → rust/src/terminal/session.rs:582",
+        "consumer": "web/src/app/ws-client.ts:695 (stores whole array)",
+        "impact": "Masked cross-session header metadata; production PTY path exists.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "cross_session_messages[].receiver_role",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:451",
+        "go_producer": "internal/hub/cross_session_message.go:93-107 → internal/hub/orchestration.go:3387",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:633-648 → rust/src/terminal/session.rs:582",
+        "consumer": "web/src/app/ws-client.ts:695 (stores whole array)",
+        "impact": "Masked cross-session header metadata; production PTY path exists.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "cross_session_messages[].sender",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:452",
+        "go_producer": "internal/hub/cross_session_message.go:93-107 → internal/hub/orchestration.go:3387",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:633-648 → rust/src/terminal/session.rs:582",
+        "consumer": "web/src/app/ws-client.ts:695 (stores whole array)",
+        "impact": "Masked cross-session header metadata; production PTY path exists.",
+        "go_omit_empty": true
+      },
+      {
+        "field": "cross_session_messages[].text",
+        "status": "populated",
+        "go_schema": "internal/proto/messages.go:453",
+        "go_producer": "internal/hub/cross_session_message.go:93-107 → internal/hub/orchestration.go:3387",
+        "rust_producer_and_emitter": "rust/src/terminal/session/observations.rs:633-648 → rust/src/terminal/session.rs:582",
+        "consumer": "web/src/app/ws-client.ts:695 (stores whole array)",
+        "impact": "Masked cross-session header metadata; production PTY path exists.",
+        "go_omit_empty": true
+      }
+    ],
+    "broad_proto_exclusions": [
+      {
+        "field": "provider_revision",
+        "go_schema": "internal/proto/messages.go:29",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "pid",
+        "go_schema": "internal/proto/messages.go:34",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "input_seq",
+        "go_schema": "internal/proto/messages.go:37",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "input_seq_high_watermark",
+        "go_schema": "internal/proto/messages.go:41",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "version",
+        "go_schema": "internal/proto/messages.go:43",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "workflow_progress",
+        "go_schema": "internal/proto/messages.go:54",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "subagent_tree",
+        "go_schema": "internal/proto/messages.go:61",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "exit_code",
+        "go_schema": "internal/proto/messages.go:62",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "signal",
+        "go_schema": "internal/proto/messages.go:66",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "token",
+        "go_schema": "internal/proto/messages.go:67",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "home_dir",
+        "go_schema": "internal/proto/messages.go:68",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_home",
+        "go_schema": "internal/proto/messages.go:69",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "claude_dir",
+        "go_schema": "internal/proto/messages.go:70",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "grok_home",
+        "go_schema": "internal/proto/messages.go:73",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "agent_session_id",
+        "go_schema": "internal/proto/messages.go:76",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "usage_probe",
+        "go_schema": "internal/proto/messages.go:88",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "subscription_login",
+        "go_schema": "internal/proto/messages.go:92",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "data",
+        "go_schema": "internal/proto/messages.go:93",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "text",
+        "go_schema": "internal/proto/messages.go:94",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "messages",
+        "go_schema": "internal/proto/messages.go:95",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "cols",
+        "go_schema": "internal/proto/messages.go:96",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "rows",
+        "go_schema": "internal/proto/messages.go:97",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "replay_b64",
+        "go_schema": "internal/proto/messages.go:102",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "reason",
+        "go_schema": "internal/proto/messages.go:103",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "pty_bytes",
+        "go_schema": "internal/proto/messages.go:111",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "replay",
+        "go_schema": "internal/proto/messages.go:118",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "replay_epoch",
+        "go_schema": "internal/proto/messages.go:119",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_sig",
+        "go_schema": "internal/proto/messages.go:139",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_source",
+        "go_schema": "internal/proto/messages.go:140",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_summary",
+        "go_schema": "internal/proto/messages.go:141",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_candidate_key",
+        "go_schema": "internal/proto/messages.go:145",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_candidate_shape",
+        "go_schema": "internal/proto/messages.go:154",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_consumed",
+        "go_schema": "internal/proto/messages.go:155",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_consumed_epoch",
+        "go_schema": "internal/proto/messages.go:156",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "done_summary",
+        "go_schema": "internal/proto/messages.go:159",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "sent_text",
+        "go_schema": "internal/proto/messages.go:160",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "detected_at",
+        "go_schema": "internal/proto/messages.go:161",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_state",
+        "go_schema": "internal/proto/messages.go:169",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "approval_snapshot",
+        "go_schema": "internal/proto/messages.go:174",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "permission_preset",
+        "go_schema": "internal/proto/messages.go:221",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "spawn_confirmation_id",
+        "go_schema": "internal/proto/messages.go:273",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "initial_prompt",
+        "go_schema": "internal/proto/messages.go:274",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "spawn_requested_at_ms",
+        "go_schema": "internal/proto/messages.go:278",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "remember_permission",
+        "go_schema": "internal/proto/messages.go:287",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "spawn_child_approval",
+        "go_schema": "internal/proto/messages.go:298",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "trust_grant_providers",
+        "go_schema": "internal/proto/messages.go:306",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "spawn_child_session_id",
+        "go_schema": "internal/proto/messages.go:321",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "inject",
+        "go_schema": "internal/proto/messages.go:344",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "image_data",
+        "go_schema": "internal/proto/messages.go:347",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "filename",
+        "go_schema": "internal/proto/messages.go:348",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "providers",
+        "go_schema": "internal/proto/messages.go:354",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "ui_active_session_id",
+        "go_schema": "internal/proto/messages.go:359",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "commit_subject",
+        "go_schema": "internal/proto/messages.go:372",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "commit_body",
+        "go_schema": "internal/proto/messages.go:373",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "cost_usd",
+        "go_schema": "internal/proto/messages.go:378",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "cost_known",
+        "go_schema": "internal/proto/messages.go:379",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "tokens_in",
+        "go_schema": "internal/proto/messages.go:380",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "tokens_out",
+        "go_schema": "internal/proto/messages.go:381",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "tokens_cache",
+        "go_schema": "internal/proto/messages.go:382",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "tokens_total",
+        "go_schema": "internal/proto/messages.go:383",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "ctx_window",
+        "go_schema": "internal/proto/messages.go:384",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "ctx_used_pct",
+        "go_schema": "internal/proto/messages.go:385",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "usage_model",
+        "go_schema": "internal/proto/messages.go:386",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "usage_started_at",
+        "go_schema": "internal/proto/messages.go:387",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "rl_5h_pct",
+        "go_schema": "internal/proto/messages.go:391",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "rl_5h_reset",
+        "go_schema": "internal/proto/messages.go:392",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "rl_7d_pct",
+        "go_schema": "internal/proto/messages.go:393",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "rl_7d_reset",
+        "go_schema": "internal/proto/messages.go:394",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "claude_rate_limits_present",
+        "go_schema": "internal/proto/messages.go:395",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "claude_5h_field_present",
+        "go_schema": "internal/proto/messages.go:396",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "claude_5h_present",
+        "go_schema": "internal/proto/messages.go:397",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "claude_7d_field_present",
+        "go_schema": "internal/proto/messages.go:398",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "claude_7d_present",
+        "go_schema": "internal/proto/messages.go:399",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_rate_limits_present",
+        "go_schema": "internal/proto/messages.go:400",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_primary_present",
+        "go_schema": "internal/proto/messages.go:401",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_primary_used_pct",
+        "go_schema": "internal/proto/messages.go:402",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_primary_window_minutes",
+        "go_schema": "internal/proto/messages.go:403",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_primary_reset",
+        "go_schema": "internal/proto/messages.go:404",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_secondary_used_pct",
+        "go_schema": "internal/proto/messages.go:405",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_secondary_present",
+        "go_schema": "internal/proto/messages.go:406",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_secondary_window_minutes",
+        "go_schema": "internal/proto/messages.go:407",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_secondary_reset",
+        "go_schema": "internal/proto/messages.go:408",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_credits_present",
+        "go_schema": "internal/proto/messages.go:409",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_has_credits",
+        "go_schema": "internal/proto/messages.go:410",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_credits_unlimited",
+        "go_schema": "internal/proto/messages.go:411",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_credits_balance",
+        "go_schema": "internal/proto/messages.go:412",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "codex_plan_type",
+        "go_schema": "internal/proto/messages.go:413",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "usage_observed_at",
+        "go_schema": "internal/proto/messages.go:414",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "lines_added",
+        "go_schema": "internal/proto/messages.go:415",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "lines_removed",
+        "go_schema": "internal/proto/messages.go:416",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "effort_level",
+        "go_schema": "internal/proto/messages.go:417",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "thinking",
+        "go_schema": "internal/proto/messages.go:418",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "exceeds_200k",
+        "go_schema": "internal/proto/messages.go:419",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "duration_ms",
+        "go_schema": "internal/proto/messages.go:420",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "api_duration_ms",
+        "go_schema": "internal/proto/messages.go:421",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "output_style",
+        "go_schema": "internal/proto/messages.go:422",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "vim_mode",
+        "go_schema": "internal/proto/messages.go:423",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "agent_name",
+        "go_schema": "internal/proto/messages.go:424",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "repo_host",
+        "go_schema": "internal/proto/messages.go:425",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "repo_owner",
+        "go_schema": "internal/proto/messages.go:426",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "repo_name",
+        "go_schema": "internal/proto/messages.go:427",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "remaining_pct",
+        "go_schema": "internal/proto/messages.go:428",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "reasoning_output_tokens",
+        "go_schema": "internal/proto/messages.go:429",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "note_ok",
+        "go_schema": "internal/proto/messages.go:435",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "note_path",
+        "go_schema": "internal/proto/messages.go:436",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      },
+      {
+        "field": "binary_stale",
+        "go_schema": "internal/proto/messages.go:442",
+        "classification": "broad_proto_only_for_this_audit",
+        "note": "Not assigned by any production Go session_update emitter or announcement extension; not a session_update parity gap."
+      }
+    ],
+    "documentation_reconciliation": [
+      {
+        "source": "docs/bot/rust-recovery-resume/BEHAVIOR-MATRIX.md:27-41",
+        "finding": "Historical absent Relays producer is explicitly superseded. Current rust/src/application/relay_program.rs:978-991 proves an application producer and effect application; do not list Relays as unsupported."
+      },
+      {
+        "source": "docs/bot/rust-migration/PROGRESS.md:488",
+        "finding": "Historical claim about preserving wrapper model/effort/execution fields refers to state/launch preservation, not complete session_update emission; actual effort serializer omission remains independently evidenced."
+      },
+      {
+        "source": "docs/bot/rust-recovery-resume/BEHAVIOR-MATRIX.md:153",
+        "finding": "Docs correctly retain WS/native acceptance limits; not evidence of runtime success."
+      },
+      {
+        "source": "docs/bot search of effort/subscription_name/subscription_profile_name/transcript_grew_at",
+        "finding": "No explicit deliberate exclusion for the primary gaps found. Do not infer intent from a missing field or broad DTO existence."
+      }
+    ],
+    "independent_nested_crosscheck": "A separate source cross-check confirmed all 19 relay and 5 cross-message member producers; no nested omission found. Relay nondefault sources: rust/src/application/relay_program.rs:654-680; rust/src/application/relay_program/transitions.rs:88,137-138,190,267,383; rust/src/orchestration/relay.rs:235-250; real lifecycle set_child caller rust/src/application/relay_program/lifecycle.rs:925. Cross direct producer rust/src/terminal/session/observations.rs:31-47,179-184,633-643.",
+    "shared_delivery_path": "Hub rust/src/hub/websocket.rs:266-280 returns registered effects; rust/src/terminal/session.rs:448-464 expands broadcast to exact UI effects; rust/src/hub/sockets.rs:523-529 sends through sockets. Shared web UI web/src/app/ws-client.ts:598-706 consumes updates. This audits static reachability only.",
+    "shared_semantics": "All top-level fields except type/token_statusbar use omitempty/serde equivalents; bool false and zero/empty values can therefore be absent without proving producer absence. Nested activity/session_meta preserve false/empty values. Broad Message contains many other frame families, which are explicitly excluded below."
+  },
+  "publication_note": "Sanitized retained pre-fix baseline audit; current G1 implementation and final validation are recorded separately in PROGRESS.md and BEHAVIOR-MATRIX.md."
+}

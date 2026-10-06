@@ -1,0 +1,121 @@
+{
+  "oracle": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "checkout_head": "87fa9b735c7fa99b8776b8a58bb278290078d94b",
+  "source_match": {
+    "paths": [
+      "internal/hub",
+      "internal/proto"
+    ],
+    "git_diff_exit": 0
+  },
+  "report_path": "G1-GO-BRANCH-CONTRACT.md",
+  "execution": {
+    "tests_run": false,
+    "builds_run": false,
+    "windows_run": false,
+    "checkout_modified": false
+  },
+  "constants": {
+    "state_tick_ms": 200,
+    "refresh_after_ms": 2000,
+    "helper_timeout_ms": 250,
+    "workers": 4
+  },
+  "commands": {
+    "branch": [
+      [
+        "rev-parse",
+        "--abbrev-ref",
+        "HEAD"
+      ],
+      [
+        "rev-parse",
+        "--short",
+        "HEAD"
+      ]
+    ],
+    "stats": [
+      [
+        "status",
+        "--porcelain"
+      ],
+      [
+        "diff",
+        "--numstat",
+        "HEAD"
+      ]
+    ],
+    "project_root": [
+      [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir"
+      ],
+      [
+        "rev-parse",
+        "--git-common-dir"
+      ]
+    ]
+  },
+  "command_prefix": [
+    "git",
+    "-C",
+    "<cwd>"
+  ],
+  "timeout_scope": "Independent deadline per helper; commands within helper share it",
+  "environment": "Inherited; no sanitization, config override, command cwd, or shell",
+  "critical_quirks": [
+    "Diff failure preserves status file count",
+    "Git exit error and executable-not-found resolve empty unless timed out",
+    "Warm reattach preserves project latch unconditionally",
+    "Results apply by ID plus exact cwd, not generation",
+    "Terminal sessions refresh",
+    "Fresh register first tick; reattach first ~2-second period",
+    "Queue trims cwd but apply compares raw stored cwd exactly"
+  ],
+  "payload_fields": [
+    "type",
+    "session_id",
+    "provider",
+    "display",
+    "cwd",
+    "branch",
+    "project_id",
+    "label",
+    "model",
+    "route",
+    "state",
+    "last_output_at",
+    "started_at",
+    "first_message",
+    "last_message",
+    "git_checked",
+    "git_files",
+    "git_added",
+    "git_deleted"
+  ],
+  "go_tests": [
+    {
+      "file": "internal/hub/project_id_test.go",
+      "tests": [
+        "TestGitProjectRootReturnsRepositoryRoot",
+        "TestGitProjectRootFromSubdirectory",
+        "TestGitProjectRootFromWorktree",
+        "TestGitProjectRootOutsideRepository",
+        "TestGitProjectRootWithMissingOrEmptyPath"
+      ]
+    },
+    {
+      "file": "internal/hub/project_id_latch_test.go",
+      "tests": [
+        "TestRefreshBranchKeepsRetryingUnresolvedProjectRoot",
+        "TestRefreshBranchLatchesResolvedEmptyProjectRoot",
+        "TestQueueBranchRefreshesQueuesRequestForBusyCWD",
+        "TestBranchRefreshDrainsPendingRequests"
+      ]
+    }
+  ],
+  "public_source_baseline": "bec576445a7b74505ddcd95c68f7ad2aca41ff94",
+  "source_tree": "206643f0bdf248ea0d8df05997edbfb16c2dbe08",
+  "publication_note": "Fixed-Go source contract only; no certification of the later Rust implementation or its native execution."
+}
