@@ -21,6 +21,60 @@ fn official_usage_requires_chatgpt_valid_window_and_preserves_zero_presence() {
     assert_eq!(duplicate.primary.unwrap().window_minutes, 300);
 }
 #[cfg(windows)]
+#[test]
+fn native_rpc_fixture_child() {
+    use std::io::{BufRead, Write};
+    let executable = std::env::current_exe().unwrap();
+    // The ordinary library test is a no-op. Only the owned copied executable
+    // launched by codex.cmd may enter the blocking synthetic RPC loop.
+    if executable.file_name() != Some(std::ffi::OsStr::new("rpc-fixture.exe")) {
+        return;
+    }
+    let kind = std::env::var("MANY_AI_SYNTHETIC_APPSERVER").unwrap_or_default();
+    assert!(matches!(kind.as_str(), "chatgpt" | "apiKey"));
+    let root = executable.parent().unwrap();
+    let result = (|| -> std::io::Result<()> {
+        let input = std::io::stdin();
+        let mut output = std::io::stdout().lock();
+        // Terse libtest output has no per-test name prefix. This newline also
+        // terminates any startup banner before the first JSON response.
+        writeln!(output)?;
+        output.flush()?;
+        for line in input.lock().lines() {
+            let line = line?;
+            let mut log = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(root.join("requests.txt"))?;
+            writeln!(log, "{line}")?;
+            let request: serde_json::Value = serde_json::from_str(&line)
+                .map_err(|_| std::io::Error::other("invalid synthetic RPC request"))?;
+            let response = match request.get("method").and_then(serde_json::Value::as_str) {
+                Some("initialize") => Some(serde_json::json!({"id":0,"result":{}})),
+                Some("account/read") => Some(serde_json::json!({"id":1,"result":{"account":{
+                    "type":kind,"planType":"plus","email":"synthetic-only@example.com"
+                }}})),
+                Some("account/rateLimits/read") => Some(serde_json::json!({"id":2,"result":{
+                    "rateLimits":{"primary":{"usedPercent":0,"windowDurationMins":300}}
+                }})),
+                // initialized is a notification and receives no response.
+                _ => None,
+            };
+            if let Some(response) = response {
+                serde_json::to_writer(&mut output, &response)
+                    .map_err(|_| std::io::Error::other("synthetic RPC response write failed"))?;
+                writeln!(output)?;
+                output.flush()?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = result {
+        panic!("native synthetic RPC helper failed: {:?}", error.kind());
+    }
+}
+
+#[cfg(windows)]
 async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, bool) {
     use crate::config::RuntimePaths;
     let root = tempfile::tempdir().unwrap();
@@ -29,31 +83,17 @@ async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, 
     let profile = root.path().join("profile");
     std::fs::create_dir(&profile).unwrap();
     let log = root.path().join("requests.txt");
-    let script = root.path().join("rpc.ps1");
-    let ps = format!(
-        r#"$ErrorActionPreference = 'Stop'
-$log = '{}'
-while ($null -ne ($line = [Console]::ReadLine())) {{
- Add-Content -LiteralPath $log -Value $line
- $r = $line | ConvertFrom-Json
- switch ($r.method) {{
-  'initialize' {{ [Console]::WriteLine('{{"id":0,"result":{{}}}}') }}
-  'initialized' {{ }}
-  'account/read' {{ [Console]::WriteLine('{{"id":1,"result":{{"account":{{"type":"{}","planType":"plus","email":"synthetic-only@example.com"}}}}}}') }}
-  'account/rateLimits/read' {{ [Console]::WriteLine('{{"id":2,"result":{{"rateLimits":{{"primary":{{"usedPercent":0,"windowDurationMins":300}}}}}}}}') }}
- }}
-}}
-"#,
-        log.display().to_string().replace("'", "''"),
-        kind
-    );
-    std::fs::write(&script, ps).unwrap();
+    // Keep the .cmd dispatch boundary, but execute an owned copy of this native
+    // test helper instead of making RPC timing depend on PowerShell startup.
+    let helper = root.path().join("rpc-fixture.exe");
+    std::fs::copy(std::env::current_exe().unwrap(), &helper).unwrap();
+    assert!(matches!(kind, "chatgpt" | "apiKey"));
     let cmd = format!(
         r#"@echo off
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "{}"
+set "MANY_AI_SYNTHETIC_APPSERVER={kind}"
+"%~dp0rpc-fixture.exe" --exact application::subscriptions::appserver::tests::native_rpc_fixture_child --nocapture --quiet --test-threads=1
 exit /b %ERRORLEVEL%
-"#,
-        script.display()
+"#
     );
     let cmd = cmd.replace("\r\n", "\n").replace('\n', "\r\n");
     std::fs::write(root.path().join("codex.cmd"), cmd).unwrap();
