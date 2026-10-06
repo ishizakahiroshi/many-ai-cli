@@ -53,8 +53,6 @@ impl SubscriptionUsageCli for NativeSubscriptionCli {
         cancel: &'a TaskCancellation,
     ) -> CoreFuture<'a, io::Result<CodexUsage>> {
         Box::pin(async move {
-            #[cfg(all(test, windows))]
-            phase_diagnostics::event(phase_diagnostics::Stage::CallEntered, -1, 0);
             if cancel.token().is_cancelled() {
                 return Err(io::Error::new(
                     io::ErrorKind::Interrupted,
@@ -90,14 +88,10 @@ impl SubscriptionUsageCli for NativeSubscriptionCli {
             let operation = async {
                 let mut buffer = vec![];
                 rpc(&input,&mut events,&mut buffer,0,"initialize",Some(serde_json::json!({"clientInfo":{"name":"many_ai_cli","title":"many-ai-cli","version":"1"}}))).await?;
-                #[cfg(all(test, windows))]
-                phase_diagnostics::event(phase_diagnostics::Stage::NotificationRequested, -1, 0);
                 input
                     .write(b"{\"method\":\"initialized\",\"params\":{}}\n".to_vec())
                     .await
                     .map_err(|_| unavailable())?;
-                #[cfg(all(test, windows))]
-                phase_diagnostics::event(phase_diagnostics::Stage::NotificationAcknowledged, -1, 0);
                 let account = rpc(
                     &input,
                     &mut events,
@@ -120,13 +114,8 @@ impl SubscriptionUsageCli for NativeSubscriptionCli {
                 parse_usage(&account, &limits)
             };
             let result = tokio::select! {result=tokio::time::timeout(Duration::from_secs(15),operation)=>result.unwrap_or_else(|_|Err(io::Error::new(io::ErrorKind::TimedOut,"codex subscription usage unavailable"))),_=cancel.token().cancelled()=>Err(io::Error::new(io::ErrorKind::Interrupted,"codex subscription usage unavailable"))};
-            #[cfg(all(test, windows))]
-            phase_diagnostics::event(phase_diagnostics::Stage::CleanupStarted, -1, 0);
             child.close();
-            let cleanup_result = child.wait().await;
-            #[cfg(all(test, windows))]
-            phase_diagnostics::cleanup(&cleanup_result);
-            drop(cleanup_result);
+            let _ = child.wait().await;
             result
         })
     }
@@ -148,26 +137,16 @@ async fn rpc(
     }
     let mut encoded = serde_json::to_vec(&message).map_err(|_| unavailable())?;
     encoded.push(b'\n');
-    #[cfg(all(test, windows))]
-    phase_diagnostics::event(phase_diagnostics::Stage::WriteRequested, id, encoded.len());
     input.write(encoded).await.map_err(|_| unavailable())?;
-    #[cfg(all(test, windows))]
-    phase_diagnostics::event(phase_diagnostics::Stage::WriteAcknowledged, id, 0);
     loop {
         while let Some(end) = buffer.iter().position(|byte| *byte == b'\n') {
             if end >= 4 * 1024 * 1024 {
                 return Err(unavailable());
             }
             let line: Vec<u8> = buffer.drain(..=end).collect();
-            #[cfg(all(test, windows))]
-            phase_diagnostics::event(phase_diagnostics::Stage::ResponseLine, id, line.len());
             let members = match crate::proto::wire::decode_go_json_members(&line) {
                 Ok(Some(members)) => members,
-                _ => {
-                    #[cfg(all(test, windows))]
-                    phase_diagnostics::event(phase_diagnostics::Stage::InvalidJson, id, 0);
-                    continue;
-                }
+                _ => continue,
             };
             let mut reply_id = None;
             let mut invalid_id = false;
@@ -185,12 +164,8 @@ async fn rpc(
                 }
             }
             if invalid_id || reply_id != Some(id) {
-                #[cfg(all(test, windows))]
-                phase_diagnostics::event(phase_diagnostics::Stage::UnmatchedId, id, 0);
                 continue;
             }
-            #[cfg(all(test, windows))]
-            phase_diagnostics::event(phase_diagnostics::Stage::MatchingResponseId, id, 0);
             if crate::proto::wire::last_go_raw_field(&members, "error").is_some() {
                 return Err(unavailable());
             }
@@ -205,15 +180,7 @@ async fn rpc(
             Ok(ProcessEvent::Output {
                 stream: OutputStream::Stdout,
                 bytes,
-            }) => {
-                #[cfg(all(test, windows))]
-                phase_diagnostics::event(phase_diagnostics::Stage::StdoutBytes, id, bytes.len());
-                buffer.extend(bytes);
-            }
-            #[cfg(all(test, windows))]
-            Ok(ProcessEvent::Started { .. }) => {
-                phase_diagnostics::event(phase_diagnostics::Stage::ProcessStarted, id, 0);
-            }
+            }) => buffer.extend(bytes),
             Ok(_) => {}
             Err(_) => return Err(unavailable()),
         }
@@ -400,7 +367,5 @@ pub fn parse_usage(account: &[u8], limits: &[u8]) -> io::Result<CodexUsage> {
     })
 }
 
-#[cfg(all(test, windows))]
-mod phase_diagnostics;
 #[cfg(test)]
 mod tests;

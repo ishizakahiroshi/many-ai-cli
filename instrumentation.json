@@ -42,10 +42,9 @@
   "entries": [
     {
       "id": "rust-windows-appserver-phase-test-diagnostic",
-      "status": "active",
+      "status": "removed",
       "purpose": "Locate the recurring synthetic Windows app-server timeout across child cmdlets, RPC transport and owned cleanup without raw content or environment values.",
       "addedIn": "pending",
-      "due": "2026-10-13",
       "gate": "cfg(all(test, windows)); each original synthetic fixture scopes its own Tokio task-local recorder; bounded child trace stays inside its existing TempDir; after the timed call returns, the existing non-panicking logging::write_diagnostic sink emits one sanitized summary for every fixture outcome with an allowlisted chatgpt/api_key/other label; assertion context retains the same summary",
       "files": [
         "rust/src/application/subscriptions/appserver/phase_diagnostics.rs"
@@ -63,7 +62,9 @@
       ],
       "removalCondition": "Remove in a dedicated commit after classification and verification, or if the owner stops the unresolved investigation; always remove before an accepted final candidate or release.",
       "reason": "Run37413102214 consumes at least one stdin line but returns the inner 15-second timeout in both original fixtures. Fixed child stages and per-invocation native counts distinguish cmdlet progress, response emission, bytes received and matching, with cleanup observed without changing its error precedence. The original assertions, 15s/20s deadlines, Windows PowerShell host, wrapper, environment and spawn options stay intact. No factor substitution or functional fix is included.",
-      "removalProcedure": "Preserve sanitized failure evidence, then delete phase_diagnostics.rs. Manually remove its appserver module declaration, every cfg-gated event/cleanup call, the diagnostic Started match arm, and restore the original let _ = child.wait().await statement. In tests.rs remove phases path, Record-Phase function and calls, synthetic script phase fields, ACTIVE scope, Trace construction, summary calls, allowlisted case mapping and write_diagnostic emission, tuple diagnostic member and appended assertion text. Restore the original request-log read and panic ordering while preserving its failure condition. Restore the exact original fixture script and call structure while retaining all original assertions. --purge does not remove shared-file code. Verify no channel, sink needle, module reference or helper remains; mark this entry removed with the dedicated cleanup commit; rerun normal validation."
+      "removalProcedure": "Preserve sanitized failure evidence, then delete phase_diagnostics.rs. Manually remove its appserver module declaration, every cfg-gated event/cleanup call, the diagnostic Started match arm, and restore the original let _ = child.wait().await statement. In tests.rs remove phases path, Record-Phase function and calls, synthetic script phase fields, ACTIVE scope, Trace construction, summary calls, allowlisted case mapping and write_diagnostic emission, tuple diagnostic member and appended assertion text. Restore the original request-log read and panic ordering while preserving its failure condition. Restore the exact original fixture script and call structure while retaining all original assertions. --purge does not remove shared-file code. Verify no channel, sink needle, module reference or helper remains; mark this entry removed with the dedicated cleanup commit; rerun normal validation.",
+      "removedIn": "unreleased",
+      "removedOn": "2026-10-06"
     },
     {
       "id": "rust-relay-prepare-resolution-test-diagnostic",

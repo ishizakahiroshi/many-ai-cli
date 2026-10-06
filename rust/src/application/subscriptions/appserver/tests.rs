@@ -21,7 +21,7 @@ fn official_usage_requires_chatgpt_valid_window_and_preserves_zero_presence() {
     assert_eq!(duplicate.primary.unwrap().window_minutes, 300);
 }
 #[cfg(windows)]
-async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, bool, String) {
+async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, bool) {
     use crate::config::RuntimePaths;
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
@@ -30,46 +30,21 @@ async fn synthetic_account(kind: &str) -> (std::io::Result<CodexUsage>, String, 
     std::fs::create_dir(&profile).unwrap();
     let log = root.path().join("requests.txt");
     let script = root.path().join("rpc.ps1");
-    let phases = root.path().join("rpc-phases.txt");
     let ps = format!(
         r#"$ErrorActionPreference = 'Stop'
 $log = '{}'
-$phaseLog = '{}'
-$iteration = 0
-$script:phaseCount = 0
-function Record-Phase([int]$stage) {{
- try {{
-  if ($script:phaseCount -ge 64) {{ return }}
-  $script:phaseCount++
-  $elapsed = [long](([Diagnostics.Stopwatch]::GetTimestamp() - $phaseStart) * 1000 / [Diagnostics.Stopwatch]::Frequency)
-  [IO.File]::AppendAllText($phaseLog, ('{{0}} {{1}} {{2}}' -f $stage, $iteration, $elapsed) + [Environment]::NewLine)
- }} catch {{ }}
-}}
-$phaseStart = 0
-try {{ $phaseStart = [Diagnostics.Stopwatch]::GetTimestamp() }} catch {{ }}
-Record-Phase 0
-Record-Phase 1
 while ($null -ne ($line = [Console]::ReadLine())) {{
- $iteration++
- Record-Phase 2
- Record-Phase 3
  Add-Content -LiteralPath $log -Value $line
- Record-Phase 4
- Record-Phase 5
  $r = $line | ConvertFrom-Json
- Record-Phase 6
  switch ($r.method) {{
-  'initialize' {{ Record-Phase 7; [Console]::WriteLine('{{"id":0,"result":{{}}}}'); Record-Phase 8 }}
+  'initialize' {{ [Console]::WriteLine('{{"id":0,"result":{{}}}}') }}
   'initialized' {{ }}
-  'account/read' {{ Record-Phase 7; [Console]::WriteLine('{{"id":1,"result":{{"account":{{"type":"{}","planType":"plus","email":"synthetic-only@example.com"}}}}}}'); Record-Phase 8 }}
-  'account/rateLimits/read' {{ Record-Phase 7; [Console]::WriteLine('{{"id":2,"result":{{"rateLimits":{{"primary":{{"usedPercent":0,"windowDurationMins":300}}}}}}}}'); Record-Phase 8 }}
+  'account/read' {{ [Console]::WriteLine('{{"id":1,"result":{{"account":{{"type":"{}","planType":"plus","email":"synthetic-only@example.com"}}}}}}') }}
+  'account/rateLimits/read' {{ [Console]::WriteLine('{{"id":2,"result":{{"rateLimits":{{"primary":{{"usedPercent":0,"windowDurationMins":300}}}}}}}}') }}
  }}
- Record-Phase 1
 }}
-Record-Phase 9
 "#,
         log.display().to_string().replace("'", "''"),
-        phases.display().to_string().replace("'", "''"),
         kind
     );
     std::fs::write(&script, ps).unwrap();
@@ -132,13 +107,9 @@ exit /b %ERRORLEVEL%
     )
     .unwrap();
     let cli = NativeSubscriptionCli::new(paths, root.path().into(), environment);
-    let trace = phase_diagnostics::Trace::new();
     let outcome = tokio::time::timeout(
         Duration::from_secs(20),
-        phase_diagnostics::ACTIVE.scope(
-            trace.clone(),
-            cli.codex_usage(&profile, &TaskCancellation::default()),
-        ),
+        cli.codex_usage(&profile, &TaskCancellation::default()),
     )
     .await;
     let outer_timeout = outcome.is_err();
@@ -152,34 +123,22 @@ exit /b %ERRORLEVEL%
         .as_ref()
         .map(|_| "Ok".to_owned())
         .unwrap_or_else(|error| format!("Err({:?})", error.kind()));
-    let requests = std::fs::read_to_string(log);
-    let diagnostic = phase_diagnostics::summary(requests.as_deref().ok(), &phases, &trace);
-    let case = match kind {
-        "chatgpt" => "chatgpt",
-        "apiKey" => "api_key",
-        _ => "other",
-    };
-    crate::logging::write_diagnostic(&format!("case={case} {diagnostic}\n"));
-    let requests = requests.unwrap_or_else(|error| {
+    let requests = std::fs::read_to_string(log).unwrap_or_else(|error| {
         panic!(
-            "synthetic app-server request log unavailable; usage result={result_summary}; log read kind={:?}; {}",
-            error.kind(),
-            diagnostic
+            "synthetic app-server request log unavailable; usage result={result_summary}; log read kind={:?}",
+            error.kind()
         )
     });
-    (result, requests, outer_timeout, diagnostic)
+    (result, requests, outer_timeout)
 }
 #[cfg(windows)]
 #[tokio::test]
 async fn native_interactive_rpc_waits_each_response_and_reaps_child() {
-    let (result, requests, outer_timeout, diagnostic) = synthetic_account("chatgpt").await;
-    assert!(
-        !outer_timeout,
-        "synthetic app-server outer timeout elapsed; {diagnostic}"
-    );
+    let (result, requests, outer_timeout) = synthetic_account("chatgpt").await;
+    assert!(!outer_timeout, "synthetic app-server outer timeout elapsed");
     assert!(
         result.is_ok(),
-        "native app-server RPC failed: {:?}; {diagnostic}",
+        "native app-server RPC failed: {:?}",
         result.as_ref().err().map(std::io::Error::kind)
     );
     let methods = requests
@@ -209,15 +168,15 @@ async fn native_interactive_rpc_waits_each_response_and_reaps_child() {
 #[cfg(windows)]
 #[tokio::test]
 async fn api_key_account_stops_before_rate_limit_request() {
-    let (result, requests, outer_timeout, diagnostic) = synthetic_account("apiKey").await;
+    let (result, requests, outer_timeout) = synthetic_account("apiKey").await;
     assert!(
         !outer_timeout,
-        "API key synthetic app-server outer timeout elapsed; {diagnostic}"
+        "API key synthetic app-server outer timeout elapsed"
     );
     assert_eq!(
         result.as_ref().err().map(std::io::Error::kind),
         Some(std::io::ErrorKind::Other),
-        "API key account must fail with account rejection, not a timeout; {diagnostic}"
+        "API key account must fail with account rejection, not a timeout"
     );
     let methods = requests
         .lines()
