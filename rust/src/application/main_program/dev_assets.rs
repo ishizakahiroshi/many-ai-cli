@@ -29,6 +29,16 @@ impl DevAssets {
         }
     }
     fn path(&self, name: &str) -> io::Result<PathBuf> {
+        // Go http.Dir localizes the cleaned slash path before joining its root.
+        // Windows separators, volume names and alternate streams are not URL
+        // components; Unix keeps these characters as ordinary filename bytes.
+        #[cfg(windows)]
+        if name.contains(['\\', ':', '\0']) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid or unsafe asset path",
+            ));
+        }
         let path = self.root.join(name);
         Ok(path)
     }
@@ -341,5 +351,96 @@ mod tests {
         std::fs::write(&path, b"second").unwrap();
         request.headers.clear();
         assert_eq!(owner.static_response(&request).body, b"second");
+    }
+}
+
+#[cfg(test)]
+mod native_path_tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn unconfined_windows_assets_reject_backslash_and_colon_components() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("web/dist/nested")).unwrap();
+        std::fs::write(
+            root.path().join("web/outside.js"),
+            b"outside synthetic asset",
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("web/dist/app.js"),
+            b"inside synthetic asset",
+        )
+        .unwrap();
+        let owner = DevAssets::new(root.path(), false);
+        // Abstract drive/root forms are validation-only: even a failing old
+        // implementation must never open a path outside the synthetic fixture.
+        for name in [
+            r"\outside.js",
+            r"C:\outside.js",
+            r"C:outside.js",
+            r"nested/C:outside.js",
+        ] {
+            assert_eq!(
+                owner.path(name).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput,
+                "{name}"
+            );
+        }
+        for path in [
+            r"/..\outside.js",
+            r"/nested/..\..\outside.js",
+            "/app.js:synthetic-stream",
+        ] {
+            let request = Request {
+                method: "GET".into(),
+                path: path.into(),
+                ..Default::default()
+            };
+            assert_eq!(
+                owner.response(&request).unwrap_err().kind(),
+                io::ErrorKind::InvalidInput,
+                "{path}"
+            );
+            let response = owner.static_response(&request);
+            assert_eq!(response.status, 500, "{path}");
+            assert!(
+                !String::from_utf8_lossy(&response.body).contains("synthetic asset"),
+                "{path}"
+            );
+        }
+        let ordinary = Request {
+            method: "GET".into(),
+            path: "/app.js".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            owner.static_response(&ordinary).body,
+            b"inside synthetic asset"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unconfined_unix_assets_keep_native_colon_and_backslash_filenames() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("web/dist")).unwrap();
+        let owner = DevAssets::new(root.path(), false);
+        for name in ["app:module.js", r"app\module.js"] {
+            std::fs::write(
+                root.path().join("web/dist").join(name),
+                b"native synthetic asset",
+            )
+            .unwrap();
+            let request = Request {
+                method: "GET".into(),
+                path: format!("/{name}"),
+                ..Default::default()
+            };
+            let response = owner.static_response(&request);
+            assert_eq!(response.status, 200, "{name}");
+            assert_eq!(response.body, b"native synthetic asset", "{name}");
+        }
     }
 }
