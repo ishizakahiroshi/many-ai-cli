@@ -1,5 +1,9 @@
 use crate::{config::LogConfig, files::safe_fs::Dir, logging::RollingLog, storage::mask_secrets};
-use std::{io, path::Path, sync::Arc};
+use std::{
+    io::{self, Write},
+    path::Path,
+    sync::Arc,
+};
 pub struct HubLogger {
     file: Option<RollingLog>,
     config: LogConfig,
@@ -18,6 +22,9 @@ impl HubLogger {
         }))
     }
     pub fn write(&self, level: &str, message: &str, detail: &str) {
+        self.write_with_stderr(level, message, detail, &mut io::stderr().lock());
+    }
+    fn write_with_stderr(&self, level: &str, message: &str, detail: &str, stderr: &mut impl Write) {
         if level == "DEBUG" && !self.debug {
             return;
         }
@@ -35,13 +42,18 @@ impl HubLogger {
                 .as_ref()
                 .is_some_and(|file| file.write(&self.config, line.as_bytes()).is_err())
         {
-            eprintln!("Hub diagnostic log write unavailable");
+            write_stderr(stderr, b"Hub diagnostic log write unavailable\n");
         }
-        eprint!("{line}");
+        write_stderr(stderr, line.as_bytes());
     }
     pub fn close(&self) -> io::Result<()> {
         self.file.as_ref().map_or(Ok(()), RollingLog::close)
     }
+}
+pub(super) fn write_stderr(stderr: &mut impl Write, bytes: &[u8]) {
+    // The auto-started Unix Hub may outlive the terminal that supplied stderr.
+    // Go's slog/fmt diagnostics ignore these write failures as well.
+    let _ = stderr.write_all(bytes);
 }
 #[cfg(test)]
 mod tests {
@@ -79,5 +91,72 @@ mod tests {
         logger.write("INFO", "synthetic fallback", "");
         logger.close().unwrap();
         assert_eq!(std::fs::read(path).unwrap(), b"synthetic obstruction");
+    }
+    struct FailedStderr {
+        attempts: usize,
+    }
+    impl Write for FailedStderr {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            self.attempts += 1;
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    #[test]
+    fn closed_stderr_does_not_panic_or_suppress_persistent_diagnostics() {
+        let root = tempfile::tempdir().unwrap();
+        let logger = HubLogger::new(
+            root.path(),
+            LogConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap();
+        let mut stderr = FailedStderr { attempts: 0 };
+        logger.write_with_stderr("DEBUG", "hidden", "", &mut stderr);
+        assert_eq!(stderr.attempts, 0);
+        logger.write_with_stderr("INFO", "survives terminal close", "synthetic", &mut stderr);
+        logger.close().unwrap();
+        assert_eq!(stderr.attempts, 1);
+        let contents = std::fs::read_to_string(root.path().join("hub.log")).unwrap();
+        assert!(contents.contains("survives terminal close"));
+        assert!(!contents.contains("hidden"));
+    }
+    #[test]
+    fn failed_file_and_stderr_sinks_do_not_panic() {
+        let root = tempfile::tempdir().unwrap();
+        let logger = HubLogger::new(
+            root.path(),
+            LogConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            false,
+        )
+        .unwrap();
+        std::fs::create_dir(root.path().join("hub.log")).unwrap();
+        let mut stderr = FailedStderr { attempts: 0 };
+        logger.write_with_stderr("INFO", "synthetic sink failure", "", &mut stderr);
+        assert_eq!(stderr.attempts, 2);
+        assert!(root.path().join("hub.log").is_dir());
+    }
+    #[test]
+    fn bootstrap_diagnostics_ignore_broken_pipe_and_preserve_healthy_output() {
+        let messages: [&[u8]; 2] = [
+            b"Hub binary changed; automatic restart deferred\n",
+            b"Hub stale restart did not finish; retaining current endpoint\n",
+        ];
+        let mut failed = FailedStderr { attempts: 0 };
+        let mut healthy = Vec::new();
+        for message in messages {
+            write_stderr(&mut failed, message);
+            write_stderr(&mut healthy, message);
+        }
+        assert_eq!(failed.attempts, 2);
+        assert_eq!(healthy, messages.concat());
     }
 }

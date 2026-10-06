@@ -1,5 +1,5 @@
 //! Authenticated loopback discovery and owned Hub startup for provider aliases.
-use super::{MainContext, context::environment_value};
+use super::{MainContext, context::environment_value, logger::write_stderr};
 use crate::{
     application::hub_runtime::{RuntimeLedger, probe_hub_info},
     config::ConfigStore,
@@ -190,7 +190,10 @@ async fn restart_stale(
         return Ok(false);
     }
     if info["active_sessions"].as_i64().unwrap_or(0) > 0 || !config.hub.stale_binary_auto_restart {
-        eprintln!("Hub binary changed; automatic restart deferred");
+        write_stderr(
+            &mut io::stderr().lock(),
+            b"Hub binary changed; automatic restart deferred\n",
+        );
         return Ok(false);
     }
     if client
@@ -214,6 +217,9 @@ async fn restart_stale(
         }
         tokio::select! { _ = cancel.cancelled() => {}, _ = tokio::time::sleep(Duration::from_millis(100)) => {} }
     }
-    eprintln!("Hub stale restart did not finish; retaining current endpoint");
+    write_stderr(
+        &mut io::stderr().lock(),
+        b"Hub stale restart did not finish; retaining current endpoint\n",
+    );
     Ok(false)
 }

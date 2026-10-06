@@ -61,7 +61,9 @@ impl RollingLog {
             return Err(io::Error::other("log write exceeds maximum file size"));
         }
         if state.file.is_none() {
-            self.cleanup(config)?;
+            // Lumberjack's background mill ignores backup cleanup failures;
+            // they must not suppress writes to an otherwise usable active log.
+            let _ = self.cleanup(config);
             let size = match self.directory.metadata(&self.name) {
                 Ok(metadata) => metadata.len(),
                 Err(error) if error.kind() == io::ErrorKind::NotFound => 0,
@@ -122,7 +124,8 @@ impl RollingLog {
         }
         state.file = Some(self.directory.open_append(&self.name)?);
         state.size = 0;
-        self.cleanup(config)
+        let _ = self.cleanup(config);
+        Ok(())
     }
     fn parts(&self) -> (&str, &str) {
         match self.name.rfind('.') {
