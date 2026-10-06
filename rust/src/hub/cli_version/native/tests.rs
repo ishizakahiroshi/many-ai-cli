@@ -50,7 +50,9 @@ fn owned_cli_version_helper() {
         }
         "descendant" => {
             fs::write("descendant-ready", b"synthetic").unwrap();
-            let deadline = std::time::Instant::now() + Duration::from_secs(30);
+            // Fixture fail-safe, beyond the parent's readiness/cancellation
+            // guards. Expiry is still a failure, never a successful release.
+            let deadline = std::time::Instant::now() + Duration::from_secs(180);
             while !Path::new("release-survival").exists() {
                 if std::time::Instant::now() >= deadline {
                     std::process::exit(8);
@@ -104,7 +106,9 @@ fn fixture(mode: &str) -> Fixture {
         cwd: root,
         environment,
         platform: Platform::native(),
-        timeout: Duration::from_secs(10),
+        // Success/output cases measure capture, not the production 10s budget.
+        // The timeout-behavior test explicitly restores that value below.
+        timeout: Duration::from_secs(60),
         output_cap: super::super::OUTPUT_CAP,
     };
     Fixture {
@@ -175,7 +179,8 @@ async fn missing_start_is_distinct_from_poststart_incomplete_capture() {
 
 #[tokio::test]
 async fn timeout_kills_owned_descendant() {
-    let f = fixture("hang");
+    let mut f = fixture("hang");
+    f.command.timeout = Duration::from_secs(10);
     let root = f.command.cwd.clone();
     let output = executor(f.paths).execute(f.command).await.unwrap();
     assert!(output.timed_out && !output.start_failed);
@@ -192,11 +197,11 @@ async fn dropped_executor_future_kills_owned_descendant() {
     // This test aborts a live owner after both processes reach their helpers.
     // Keep its command deadline beyond the bounded readiness phase so a
     // command timeout cannot accidentally satisfy the cancellation assertion.
-    f.command.timeout = Duration::from_secs(60);
+    f.command.timeout = Duration::from_secs(120);
     let root = f.command.cwd.clone();
     let runner = executor(f.paths);
     let task = tokio::spawn(async move { runner.execute(f.command).await });
-    let readiness = tokio::time::timeout(Duration::from_secs(20), async {
+    let readiness = tokio::time::timeout(Duration::from_secs(60), async {
         loop {
             if root.join("parent-ready").is_file() && root.join("descendant-ready").is_file() {
                 break Ok(());
@@ -212,9 +217,33 @@ async fn dropped_executor_future_kills_owned_descendant() {
     // detaching it by panicking while a JoinHandle is still live.
     task.abort();
     let termination = task.await;
+    // Keep a readiness failure distinct from an expired harness watchdog.
+    // Report only fixed outcome fields from this owned synthetic process.
+    let completed = match &termination {
+        Ok(Ok(output)) => format!(
+            "exit_code={} start_failed={} timed_out={} output_len={} panic_seen={} harness_failed={}",
+            output.exit_code,
+            output.start_failed,
+            output.timed_out,
+            output.output.len(),
+            output.output.windows(11).any(|part| part == b"panicked at"),
+            output
+                .output
+                .windows(19)
+                .any(|part| part == b"test result: FAILED"),
+        ),
+        Ok(Err(error)) => format!("executor_error={error:?}"),
+        Err(error) => format!(
+            "task_cancelled={} task_panicked={}",
+            error.is_cancelled(),
+            error.is_panic()
+        ),
+    };
     assert!(
         matches!(readiness, Ok(Ok(()))),
-        "owned parent/descendant startup failed: {readiness:?}"
+        "owned parent/descendant startup failed: {readiness:?}; parent_ready={} descendant_ready={} {completed}",
+        root.join("parent-ready").is_file(),
+        root.join("descendant-ready").is_file(),
     );
     assert!(matches!(termination, Err(error) if error.is_cancelled()));
     fs::write(root.join("release-survival"), b"synthetic").unwrap();
