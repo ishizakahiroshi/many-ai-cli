@@ -107,7 +107,7 @@ pub(super) fn grant(path: &Path, plan: &Plan) -> io::Result<FolderTrustResult> {
             "\n"
         }
     );
-    let mut file = directory.open_append(name)?;
+    let mut file = directory.open_append_preserving_permissions(name)?;
     let before = file.seek(std::io::SeekFrom::End(0))?;
     if let Err(error) = file.write_all(block.as_bytes()) {
         let _ = file.set_len(before);

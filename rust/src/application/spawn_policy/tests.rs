@@ -599,6 +599,49 @@ fn broad_home_and_unsupported_provider_trust_are_rejected_without_writes() {
 }
 #[cfg(unix)]
 #[test]
+fn codex_trust_append_keeps_existing_file_mode_and_creates_private_file() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    for existing in [false, true] {
+        let f = fixture(|_| {}, LocalModelSnapshot::default());
+        let cwd = visible_native_path(f.paths.root()).join("project");
+        std::fs::create_dir(&cwd).unwrap();
+        let home = f.home.join(".codex");
+        std::fs::create_dir(&home).unwrap();
+        let path = home.join("config.toml");
+        let original = "# synthetic settings\nmodel = 'synthetic-model'\n";
+        let prior = if existing {
+            std::fs::write(&path, original).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+            Some(std::fs::metadata(&path).unwrap())
+        } else {
+            None
+        };
+        let result = f.policy.trust.grant("codex", &[], &cwd).unwrap();
+        assert!(result.written);
+        let after = std::fs::read_to_string(&path).unwrap();
+        if existing {
+            assert!(after.starts_with(original));
+        }
+        assert!(after.contains("trust_level = \"trusted\""));
+        let metadata = std::fs::metadata(&path).unwrap();
+        assert_eq!(
+            metadata.permissions().mode() & 0o777,
+            if existing { 0o644 } else { 0o600 },
+            "Codex append changed the existing config file mode"
+        );
+        if let Some(prior) = prior {
+            assert_eq!((metadata.dev(), metadata.ino()), (prior.dev(), prior.ino()));
+        }
+        assert!(!f.policy.trust.grant("codex", &[], &cwd).unwrap().written);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), after);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            if existing { 0o644 } else { 0o600 }
+        );
+    }
+}
+#[cfg(unix)]
+#[test]
 fn codex_trust_preserves_existing_parent_modes_and_creates_missing_parent_privately() {
     use std::os::unix::fs::PermissionsExt;
     for existing_config in [false, true] {

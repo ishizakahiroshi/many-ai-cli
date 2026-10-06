@@ -211,6 +211,14 @@ mod platform {
         /// Open a private log for kernel-atomic append. The handle stays bound
         /// to this directory inode across rename; no seek-then-write window exists.
         pub fn open_append(&self, name: &str) -> io::Result<File> {
+            self.append(name, true)
+        }
+        /// Append to a caller-owned file without changing existing permissions.
+        /// The creation mode is private; O_CREAT preserves any existing mode.
+        pub fn open_append_preserving_permissions(&self, name: &str) -> io::Result<File> {
+            self.append(name, false)
+        }
+        fn append(&self, name: &str, restrict_existing: bool) -> io::Result<File> {
             basename(name)?;
             let name = c(name)?;
             // SAFETY: openat resolves one validated component beneath our held
@@ -235,10 +243,10 @@ mod platform {
                     "not a regular file",
                 ));
             }
-            // Existing logs must also be private. Change the opened inode,
-            // never a path that a concurrent rename could replace.
+            // Repair only owned private logs. Caller-owned configuration and
+            // Git metadata keep the permissions on the inode opened by openat.
             // SAFETY: file owns this descriptor and 0600 is a valid mode.
-            if unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
+            if restrict_existing && unsafe { libc::fchmod(file.as_raw_fd(), 0o600) } != 0 {
                 return Err(io::Error::last_os_error());
             }
             Ok(file)
@@ -698,6 +706,14 @@ mod platform {
         /// Append-only access keeps concurrent writers at EOF in the kernel.
         /// Every ancestor is held without delete sharing by this Dir.
         pub fn open_append(&self, name: &str) -> io::Result<File> {
+            self.append(name, true)
+        }
+        /// Apply the protected creation ACL only to a newly created file.
+        /// Existing caller-owned permissions are not repaired or replaced.
+        pub fn open_append_preserving_permissions(&self, name: &str) -> io::Result<File> {
+            self.append(name, false)
+        }
+        fn append(&self, name: &str, restrict_existing: bool) -> io::Result<File> {
             use windows_sys::Win32::Storage::FileSystem::{
                 FILE_APPEND_DATA, FILE_READ_ATTRIBUTES, OPEN_ALWAYS, READ_CONTROL, SYNCHRONIZE,
                 WRITE_DAC,
@@ -714,9 +730,12 @@ mod platform {
                     path.as_ptr(),
                     FILE_APPEND_DATA
                         | FILE_READ_ATTRIBUTES
-                        | READ_CONTROL
-                        | WRITE_DAC
-                        | SYNCHRONIZE,
+                        | SYNCHRONIZE
+                        | if restrict_existing {
+                            READ_CONTROL | WRITE_DAC
+                        } else {
+                            0
+                        },
                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                     &attributes,
                     OPEN_ALWAYS,
@@ -737,7 +756,9 @@ mod platform {
                     "not a plain file",
                 ));
             }
-            security.restrict_file(&file)?;
+            if restrict_existing {
+                security.restrict_file(&file)?;
+            }
             Ok(file)
         }
         /// All contenders open the same lock file with compatible access and
@@ -1149,5 +1170,80 @@ mod creation_only_directory_tests {
         for path in [logs.join("new-parent"), nested] {
             assert!(String::from_utf16_lossy(&directory_dacl(&path)).contains("D:P"));
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod preserving_append_tests {
+    use super::*;
+    use std::{
+        io::{Seek, SeekFrom},
+        os::unix::fs::{MetadataExt, PermissionsExt, symlink},
+    };
+
+    #[test]
+    fn preserving_append_uses_existing_inode_and_kernel_append_offset() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = Dir::open(root.path()).unwrap();
+        for mode in [0o600, 0o644, 0o660] {
+            let name = format!("synthetic-{mode:o}");
+            let path = root.path().join(&name);
+            std::fs::write(&path, b"prefix").unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+            let prior = std::fs::metadata(&path).unwrap();
+            let mut first = dir.open_append_preserving_permissions(&name).unwrap();
+            let mut second = dir.open_append_preserving_permissions(&name).unwrap();
+            first.seek(SeekFrom::Start(0)).unwrap();
+            second.write_all(b" second").unwrap();
+            first.write_all(b" first").unwrap();
+            let after = first.metadata().unwrap();
+            assert_eq!(after.permissions().mode() & 0o777, mode);
+            assert_eq!((after.dev(), after.ino()), (prior.dev(), prior.ino()));
+            assert_eq!(std::fs::read(path).unwrap(), b"prefix second first");
+        }
+    }
+
+    #[test]
+    fn preserving_append_rejects_links_fifo_and_stays_under_held_parent() {
+        let root = tempfile::tempdir().unwrap();
+        let owned = root.path().join("owned");
+        let moved = root.path().join("moved");
+        let foreign = root.path().join("foreign");
+        std::fs::create_dir(&owned).unwrap();
+        std::fs::create_dir(&foreign).unwrap();
+        let dir = Dir::open(&owned).unwrap();
+        let sentinel = foreign.join("sentinel");
+        std::fs::write(&sentinel, b"unchanged").unwrap();
+        std::fs::set_permissions(&sentinel, std::fs::Permissions::from_mode(0o644)).unwrap();
+        symlink(&sentinel, owned.join("linked")).unwrap();
+        assert!(dir.open_append_preserving_permissions("linked").is_err());
+        symlink(foreign.join("missing"), owned.join("dangling")).unwrap();
+        assert!(dir.open_append_preserving_permissions("dangling").is_err());
+        assert!(!foreign.join("missing").exists());
+        let fifo = std::ffi::CString::new(owned.join("pipe").to_str().unwrap()).unwrap();
+        // SAFETY: this FIFO is created only inside the owned synthetic fixture.
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        assert!(dir.open_append_preserving_permissions("pipe").is_err());
+        std::fs::create_dir(owned.join("directory")).unwrap();
+        assert!(dir.open_append_preserving_permissions("directory").is_err());
+        assert!(dir.open_append_preserving_permissions("../escape").is_err());
+        std::fs::rename(&owned, &moved).unwrap();
+        symlink(&foreign, &owned).unwrap();
+        let mut file = dir.open_append_preserving_permissions("created").unwrap();
+        assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+        std::fs::rename(moved.join("created"), moved.join("held")).unwrap();
+        symlink(&sentinel, moved.join("created")).unwrap();
+        assert!(dir.open_append_preserving_permissions("created").is_err());
+        file.write_all(b"held synthetic inode").unwrap();
+        assert_eq!(
+            std::fs::read(moved.join("held")).unwrap(),
+            b"held synthetic inode"
+        );
+        assert!(!foreign.join("created").exists());
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"unchanged");
+        assert_eq!(
+            std::fs::metadata(&sentinel).unwrap().permissions().mode() & 0o777,
+            0o644
+        );
     }
 }

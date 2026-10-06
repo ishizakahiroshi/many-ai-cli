@@ -226,7 +226,7 @@ impl RelayGit {
         {
             return;
         }
-        let Ok(mut file) = dir.open_append("exclude") else {
+        let Ok(mut file) = dir.open_append_preserving_permissions("exclude") else {
             return;
         };
         let prefix = if !prior.is_empty() && prior.last() != Some(&b'\n') {
@@ -1074,6 +1074,50 @@ esac
         assert_eq!(f.git.head(&path, &cancel).await.unwrap(), result);
         assert_eq!(f.git.head(&f.repo, &cancel).await.unwrap(), initial);
         assert!(f.paths.relative_to_selected_root(&path).is_ok());
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exclude_append_keeps_existing_file_mode_and_creates_private_file() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        for existing in [false, true] {
+            let f = fixture().await;
+            let repo = f.repo.canonicalize().unwrap();
+            let path = repo.join(".git/info/exclude");
+            let original = "# synthetic exclusion without trailing newline";
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, original).unwrap();
+            let prior = if existing {
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+                Some(fs::metadata(&path).unwrap())
+            } else {
+                fs::remove_file(&path).unwrap();
+                None
+            };
+            let entry = "/synthetic-worktrees/";
+            let cancel = TaskCancellation::default();
+            f.git.exclude(&repo, entry, &cancel).await;
+            let expected = if existing {
+                format!("{original}\n{entry}\n")
+            } else {
+                format!("{entry}\n")
+            };
+            assert_eq!(fs::read_to_string(&path).unwrap(), expected);
+            let metadata = fs::metadata(&path).unwrap();
+            assert_eq!(
+                metadata.permissions().mode() & 0o777,
+                if existing { 0o644 } else { 0o600 },
+                "Git exclude append changed the existing file mode"
+            );
+            if let Some(prior) = prior {
+                assert_eq!((metadata.dev(), metadata.ino()), (prior.dev(), prior.ino()));
+            }
+            f.git.exclude(&repo, entry, &cancel).await;
+            assert_eq!(fs::read_to_string(&path).unwrap(), expected);
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                if existing { 0o644 } else { 0o600 }
+            );
+        }
     }
     #[tokio::test]
     #[cfg(unix)]
