@@ -10,7 +10,7 @@ last_reviewed: 2026-10-06
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-06(火) 00:16:06 UTC
+> 最終更新: 2026-10-06(火) 00:25:49 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. Existing task #3 continues on `dots/rust-recovery-resume-3` toward develop in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11). Old Draft PR #9 remains preserved. Recovery delivery and acknowledgment are complete: the supplied `7c2d7d3` source/instructions and authoritative R/V supplement were read in this continuation. Earlier delivery-pending entries below are historical.
 
@@ -268,3 +268,10 @@ At19:36 UTC, all four bcd052f8 diagnostic-run jobs are terminal: Linux and both 
 All ten requested corrections are implemented in local `f4d1e97116dc4472e11acab3930800afa42e1b5b` (tree `1fd88965b36ab4ae43ada216be3e950a03c38e5a`), with separate logical commits. The independent reviewer read all changes; its parent/admission finding was corrected and covered by a deterministic regression. [Fix-by-fix evidence](REVIEW-FIXES-20261006.md) and [local receipt](LOCAL-VALIDATION-20261006.json) distinguish red failures, the corrected new ZIP fixture, and final results. Linux all-targets: 1394 passed/0 failed/0 ignored; strict all-target Clippy, fmt and 3 doctests passed. Packaging tests 33/33 and locked frontend checks/build also passed within their recorded scope. Compiled Rust source bytes match the frozen test manifest and committed blobs. The manifest records raw worktree bytes; seven pre-existing PowerShell files differ only by CRLF/LF and normalize exactly.
 
 These local identities are not a GitHub publication receipt. The next action is one normal append of the complete reviewed chain, remote/PR read-back, and no further push for at least 35 minutes and until every native target is terminal. Final Windows DLL FileVersion/SHA256/embedding, native ACL/path tests and all four target artifacts must be read from that exact public SHA. Earlier 4dc artifacts remain historical baseline evidence; they are not relabelled as this candidate. User device/provider/installed-data and cutover gates, V03 signer/publisher isolation and V06 corrective-action decisions remain pending.
+
+
+## 2026-10-06 additional native Windows spawn correction
+
+Before publication, the owner supplied a real isolated Windows reproduction for item 11. The reviewed 1–10 work was preserved as local checkpoint `d4695c87b0190468d8783f3edcc4dc300395e835`. The additional nine-line ConPTY correction explicitly supplies null standard handles with `STARTF_USESTDHANDLES`, matching pinned Go and Microsoft guidance; redirected parent handles otherwise can reach the provider despite disabled inheritance. Suspended Job containment and reaping remain unchanged.
+
+The real Windows-only integration test now exercises the built Hub, HTTP spawn, actual wrapper and copied cmd.exe provider: waiting, stdout/stderr PTY delivery, UI hello round-trip, quit, UI completion, persisted actual provider exit zero, and owned process cleanup. The UI's omitted exit_code is not used as success evidence. [Source finding, regression and limits](CONPTY-SPAWN-20261006.md) records the owner's reproduction separately from Linux compile-only checks. Native Windows execution and final four-target results/artifacts remain pending on the eventual public SHA. This item joins the same single final append/frozen-head policy; no intermediate push has occurred.

@@ -355,6 +355,15 @@ fn spawn_with_job(
     let mut attributes = Attributes::new(raw_console)?;
     let mut startup: STARTUPINFOEXW = unsafe { mem::zeroed() };
     startup.StartupInfo.cb = mem::size_of::<STARTUPINFOEXW>() as u32;
+    // Explicit null standard handles let ConPTY supply all three. Without
+    // STARTF_USESTDHANDLES, Windows can duplicate the wrapper's redirected
+    // NUL/log handles into the provider even with bInheritHandles=FALSE.
+    // This also matches go-pty v0.2.3 used by the fixed Go oracle.
+    // https://github.com/microsoft/terminal/discussions/15814
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = ptr::null_mut();
+    startup.StartupInfo.hStdOutput = ptr::null_mut();
+    startup.StartupInfo.hStdError = ptr::null_mut();
     startup.lpAttributeList = attributes.as_mut();
     let mut info: PROCESS_INFORMATION = unsafe { mem::zeroed() };
     let ok = unsafe {
