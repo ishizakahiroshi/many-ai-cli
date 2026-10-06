@@ -165,17 +165,16 @@ fn child(path: &Path) -> serde_json::Value {
     let mut malformed = false;
     for line in text.lines().take(EVENT_LIMIT) {
         let fields = line.split_whitespace().collect::<Vec<_>>();
-        if let [stage, iteration, elapsed] = fields.as_slice() {
-            if let (Ok(stage), Ok(iteration), Ok(elapsed)) = (
+        if let [stage, iteration, elapsed] = fields.as_slice()
+            && let (Ok(stage), Ok(iteration), Ok(elapsed)) = (
                 stage.parse::<u8>(),
                 iteration.parse::<u64>(),
                 elapsed.parse::<u64>(),
-            ) {
-                if stage <= 9 {
-                    events.push((stage, iteration, elapsed));
-                    continue;
-                }
-            }
+            )
+            && stage <= 9
+        {
+            events.push((stage, iteration, elapsed));
+            continue;
         }
         malformed = true;
     }
