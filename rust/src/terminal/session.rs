@@ -220,15 +220,18 @@ fn history(
     id: LiveSessionId,
     now: Timestamp,
     kind: &str,
-    mut values: JsonObject,
+    values: JsonObject,
 ) -> Result<CoreEffect, SessionError> {
-    values.insert("ts".into(), timestamp(now)?.into());
+    Ok(history_at(id, timestamp(now)?, kind, values))
+}
+fn history_at(id: LiveSessionId, at: String, kind: &str, mut values: JsonObject) -> CoreEffect {
+    values.insert("ts".into(), at.into());
     values.insert("type".into(), kind.into());
     values.insert("session_id".into(), id.0.into());
-    Ok(CoreEffect::Persist(PersistenceEffect::Event {
+    CoreEffect::Persist(PersistenceEffect::Event {
         session: id,
         event: HistoryEvent(values),
-    }))
+    })
 }
 fn object(value: serde_json::Value) -> JsonObject {
     value.as_object().cloned().expect("internal history object")

@@ -364,9 +364,13 @@ impl SessionEngine {
         if replay.len() > replay::REPLAY_LIMIT {
             replay.drain(..replay.len() - replay::REPLAY_LIMIT);
         }
+        // Validate the Hub clock before acquiring a lease or rebinding the
+        // journal. A valid wrapper timestamp does not validate this later clock
+        // used by cold replay and the reattach history event.
+        let reattached_at = timestamp(now)?;
         let (started, started_text) = match proto::time::parse_rfc3339(&m.started_at) {
             Ok(t) => (t, m.started_at.clone()),
-            Err(_) => (now, timestamp(now)?),
+            Err(_) => (now, reattached_at.clone()),
         };
         let (binding, lease) = {
             let mut state = lock(&self.state);
@@ -463,6 +467,24 @@ impl SessionEngine {
             self.journal.close_writer(binding.session);
             return Err(SessionError::InvalidRequest("session dismissed".into()));
         }
+        // The private pending lease blocks provider updates and cannot be
+        // consumed elsewhere. Still handle admission errors before taking the
+        // retained session; everything after this point is infallible.
+        let parent = state
+            .sessions
+            .get(&binding.session)
+            .map_or(session.snapshot.parent_session_id, |old| {
+                old.snapshot.parent_session_id
+            });
+        if let Err(error) = state
+            .admission
+            .register_spawn(&lease, binding.session, parent)
+        {
+            state.admission.end_provider_spawn(&lease);
+            return Err(SessionError::InvalidRequest(format!(
+                "reattach reservation failed: {error:?}"
+            )));
+        }
         let mut effects = CoreEffects::default();
         let mut gap = replay.clone();
         if let Some(mut old) = state.sessions.remove(&binding.session) {
@@ -521,18 +543,12 @@ impl SessionEngine {
             session.snapshot.activity.workflow_active = !replay.is_empty();
             if !replay.is_empty() {
                 session.last_output = Some(now);
-                session.snapshot.last_output_at = timestamp(now)?;
+                session.snapshot.last_output_at = reattached_at.clone();
             }
         }
         session
             .input
             .observe_high_watermark(InputSeq(m.input_seq_high_watermark));
-        state
-            .admission
-            .register_spawn(&lease, binding.session, session.snapshot.parent_session_id)
-            .map_err(|e| {
-                SessionError::InvalidRequest(format!("reattach reservation failed: {e:?}"))
-            })?;
         let snapshot = session.snapshot.clone();
         let reattached = proto::Message {
             r#type: "reattach_ack".into(),
@@ -557,7 +573,7 @@ impl SessionEngine {
         }
         effects.0.push(CoreEffect::Broadcast(session.replay_done()));
         if !m.usage_probe {
-            effects.0.push(history(binding.session,now,"session_reattach",object(serde_json::json!({"old_session_id":requested.0,"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"renumbered":binding.session!=requested})))?);
+            effects.0.push(history_at(binding.session,reattached_at,"session_reattach",object(serde_json::json!({"old_session_id":requested.0,"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"renumbered":binding.session!=requested}))));
         }
         effects
             .0

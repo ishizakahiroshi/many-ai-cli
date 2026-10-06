@@ -5,6 +5,8 @@ use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 mod approval_actions;
 #[path = "session_engine/marker_suppression.rs"]
 mod marker_suppression;
+#[path = "session_engine/reattach_transaction.rs"]
+mod reattach_transaction;
 #[path = "session_engine/startup_registration.rs"]
 mod startup_registration;
 use many_ai_cli::{
