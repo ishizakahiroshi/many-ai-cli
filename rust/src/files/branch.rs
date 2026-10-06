@@ -297,7 +297,48 @@ fn lexical_clean(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{collections::BTreeMap, fs};
+    use std::{collections::BTreeMap, fmt::Debug, fs, future::Future};
+
+    // Go's project_id.go documents cold Git exceeding 250ms, and
+    // branch_refresh.go retries on later cycles. Wait for fixture observations
+    // to converge without changing any production lookup's 250ms budget.
+    async fn observe_git<T, F, Fut>(
+        description: &str,
+        expected: &T,
+        mut read: F,
+        retry: impl Fn(&T) -> bool,
+    ) -> T
+    where
+        T: Debug + PartialEq,
+        F: FnMut() -> Fut,
+        Fut: Future<Output = T>,
+    {
+        let started = Instant::now();
+        let mut attempts = 0;
+        let mut last = None;
+        tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                attempts += 1;
+                let actual = read().await;
+                if &actual == expected {
+                    return actual;
+                }
+                assert!(
+                    retry(&actual),
+                    "{description}: expected {expected:?}, got {actual:?} on attempt {attempts}"
+                );
+                last = Some(actual);
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "{description} did not converge after {attempts} attempts in {:?}: expected {expected:?}, last observation {last:?}",
+                started.elapsed()
+            )
+        })
+    }
 
     struct Fixture {
         owned: tempfile::TempDir,
@@ -404,6 +445,38 @@ mod tests {
                 .await;
         }
 
+        async fn observed_branch(&self, cwd: &str, expected: &str) -> String {
+            observe_git(
+                "branch",
+                &expected.to_owned(),
+                || self.service.branch(cwd),
+                String::is_empty,
+            )
+            .await
+        }
+
+        async fn observed_project(&self, cwd: &str, expected: &str) -> Option<String> {
+            observe_git(
+                "project",
+                &Some(expected.to_owned()),
+                || self.service.project(cwd),
+                Option::is_none,
+            )
+            .await
+        }
+
+        async fn observed_changes(&self, cwd: &str, expected: (i64, i64, i64)) -> (i64, i64, i64) {
+            observe_git(
+                "changes",
+                &expected,
+                || self.service.changes(cwd),
+                // status failure returns all zeroes; diff failure preserves
+                // the successful status count but returns no line counts.
+                |actual| *actual == (0, 0, 0) || *actual == (expected.0, 0, 0),
+            )
+            .await
+        }
+
         fn cwd(&self) -> &str {
             self.root.to_str().unwrap()
         }
@@ -449,14 +522,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            fixture.service.project(fixture.cwd()).await,
+            fixture.observed_project(fixture.cwd(), &expected).await,
             Some(expected.clone())
         );
 
         let subdir = fixture.root.join("inside").join("deep");
         fs::create_dir_all(&subdir).unwrap();
         assert_eq!(
-            fixture.service.project(subdir.to_str().unwrap()).await,
+            fixture
+                .observed_project(subdir.to_str().unwrap(), &expected)
+                .await,
             Some(expected.clone())
         );
 
@@ -468,11 +543,15 @@ mod tests {
             )
             .await;
         assert_eq!(
-            fixture.service.project(worktree.to_str().unwrap()).await,
+            fixture
+                .observed_project(worktree.to_str().unwrap(), &expected)
+                .await,
             Some(expected)
         );
         assert_eq!(
-            fixture.service.branch(worktree.to_str().unwrap()).await,
+            fixture
+                .observed_branch(worktree.to_str().unwrap(), "side")
+                .await,
             "side"
         );
 
@@ -487,15 +566,22 @@ mod tests {
                 )
                 .await,
         ));
+        let bare_expected = bare_expected.to_string_lossy().into_owned();
         assert_eq!(
-            fixture.service.project(bare.to_str().unwrap()).await,
-            Some(bare_expected.to_string_lossy().into_owned())
+            fixture
+                .observed_project(bare.to_str().unwrap(), &bare_expected)
+                .await,
+            Some(bare_expected)
         );
 
         let outside = fixture.owned.path().join("nonrepo");
         fs::create_dir(&outside).unwrap();
+        // Establish nonrepo with a definitive project answer. Empty branch
+        // and statistics values alone are not readiness evidence.
         assert_eq!(
-            fixture.service.project(outside.to_str().unwrap()).await,
+            fixture
+                .observed_project(outside.to_str().unwrap(), "")
+                .await,
             Some(String::new())
         );
         assert_eq!(fixture.service.branch(outside.to_str().unwrap()).await, "");
@@ -505,7 +591,9 @@ mod tests {
         );
         let missing = fixture.owned.path().join("missing-target");
         assert_eq!(
-            fixture.service.project(missing.to_str().unwrap()).await,
+            fixture
+                .observed_project(missing.to_str().unwrap(), "")
+                .await,
             Some(String::new())
         );
     }
@@ -516,31 +604,44 @@ mod tests {
         fixture.init().await;
         fs::write(fixture.root.join("text.txt"), "one\ntwo\n").unwrap();
         assert_eq!(fixture.service.branch(fixture.cwd()).await, "");
-        assert_eq!(fixture.service.changes(fixture.cwd()).await, (1, 0, 0));
+        assert_eq!(
+            fixture.observed_changes(fixture.cwd(), (1, 0, 0)).await,
+            (1, 0, 0)
+        );
         fs::write(fixture.root.join("binary.dat"), b"\0old\0").unwrap();
         fixture.commit().await;
-        assert_eq!(fixture.service.branch(fixture.cwd()).await, "synthetic");
+        assert_eq!(
+            fixture.observed_branch(fixture.cwd(), "synthetic").await,
+            "synthetic"
+        );
         assert_eq!(fixture.service.changes(fixture.cwd()).await, (0, 0, 0));
 
         fixture
             .git(&fixture.root, &["checkout", "-b", "changed"])
             .await;
-        assert_eq!(fixture.service.branch(fixture.cwd()).await, "changed");
+        assert_eq!(
+            fixture.observed_branch(fixture.cwd(), "changed").await,
+            "changed"
+        );
         fixture
             .git(&fixture.root, &["checkout", "--detach", "HEAD"])
             .await;
         let short = fixture
             .git(&fixture.root, &["rev-parse", "--short", "HEAD"])
             .await;
+        let detached = format!("detached:{short}");
         assert_eq!(
-            fixture.service.branch(fixture.cwd()).await,
-            format!("detached:{short}")
+            fixture.observed_branch(fixture.cwd(), &detached).await,
+            detached
         );
 
         fs::write(fixture.root.join("text.txt"), "one\nthree\nfour\n").unwrap();
         fs::write(fixture.root.join("binary.dat"), b"\0new\0").unwrap();
         fs::write(fixture.root.join("untracked.txt"), "not counted as added\n").unwrap();
-        assert_eq!(fixture.service.changes(fixture.cwd()).await, (3, 2, 1));
+        assert_eq!(
+            fixture.observed_changes(fixture.cwd(), (3, 2, 1)).await,
+            (3, 2, 1)
+        );
     }
 
     #[tokio::test]
