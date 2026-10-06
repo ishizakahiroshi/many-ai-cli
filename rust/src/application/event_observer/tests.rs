@@ -146,7 +146,16 @@ async fn git(files: &FilesService, cwd: &std::path::Path, args: &[&str]) {
     );
 }
 async fn fixture(handoff_enabled: bool, summary: bool) -> Fixture {
-    let root = tempfile::tempdir().unwrap();
+    fixture_in_with_maintenance_trace(tempfile::tempdir().unwrap(), handoff_enabled, summary, None)
+        .await
+}
+async fn fixture_in_with_maintenance_trace(
+    root: tempfile::TempDir,
+    handoff_enabled: bool,
+    summary: bool,
+    trace: Option<PathBuf>,
+) -> Fixture {
+    let trace_maintenance = trace.is_some();
     let cwd = root.path().join("synthetic-project");
     let runtime = root.path().join("runtime");
     std::fs::create_dir(&cwd).unwrap();
@@ -179,7 +188,20 @@ async fn fixture(handoff_enabled: bool, summary: bool) -> Fixture {
         ("GIT_DIR".into(), None),
         ("GIT_WORK_TREE".into(), None),
     ]);
+    if let Some(trace) = trace {
+        files.git_environment.insert(
+            "GIT_TRACE2_EVENT".into(),
+            Some(crate::config::paths::equivalent_root_prefix(&trace).into_os_string()),
+        );
+    }
     git(&files, &cwd, &["init", "-b", "synthetic"]).await;
+    if trace_maintenance {
+        // Explicit detachment makes the regression independent of ambient
+        // defaults: only the fixture's later override may select foreground work.
+        git(&files, &cwd, &["config", "maintenance.autoDetach", "true"]).await;
+    }
+    // Synchronize only fixture-owned automatic maintenance with the first capture.
+    git(&files, &cwd, &["config", "maintenance.autoDetach", "false"]).await;
     std::fs::write(cwd.join("task.txt"), "before\n").unwrap();
     git(&files, &cwd, &["add", "task.txt"]).await;
     git(&files, &cwd, &["commit", "-m", "Synthetic baseline"]).await;
@@ -271,6 +293,190 @@ fn event(binding: SessionBinding, end: bool) -> CoreEvent {
         started_at: now.clone(),
         ended_at: end.then_some(now),
     }
+}
+
+// Keep recurrence context local to the owned synthetic Git trace. Only fixed
+// command categories and numeric exit/duration fields may reach a panic; never
+// include Trace2 argv, environment, SID, path, or arbitrary event strings.
+fn git_trace_summary(path: &std::path::Path) -> String {
+    use std::io::Read;
+
+    const MAX_BYTES: u64 = 1024 * 1024;
+    const MAX_COMMANDS: usize = 32;
+    let Ok(file) = std::fs::File::open(path) else {
+        return "trace unavailable".into();
+    };
+    let mut bytes = Vec::new();
+    if file.take(MAX_BYTES + 1).read_to_end(&mut bytes).is_err() {
+        return "trace unreadable".into();
+    }
+    if bytes.len() as u64 > MAX_BYTES {
+        return "trace exceeds diagnostic limit".into();
+    }
+    let trace = String::from_utf8_lossy(&bytes);
+    let mut malformed = 0usize;
+    let mut recent = Vec::new();
+    for line in trace
+        .split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
+    {
+        let Ok(event) = serde_json::from_str::<serde_json::Value>(line) else {
+            malformed += 1;
+            continue;
+        };
+        let Some(sid) = event["sid"].as_str() else {
+            continue;
+        };
+        match event["event"].as_str() {
+            Some("cmd_name") => {
+                let category = match event["name"].as_str() {
+                    Some("init") => "init",
+                    Some("config") => "config",
+                    Some("add") => "add",
+                    Some("commit") => "commit",
+                    Some("maintenance") => "maintenance",
+                    Some("rev-parse") => "rev-parse",
+                    Some("read-tree") => "read-tree",
+                    Some("write-tree") => "write-tree",
+                    Some("diff") => "diff",
+                    Some("status") => "status",
+                    Some("ls-files") => "ls-files",
+                    _ => "other",
+                };
+                recent.push((sid.to_owned(), category, None::<i64>, None::<f64>));
+                if recent.len() > MAX_COMMANDS {
+                    recent.remove(0);
+                }
+            }
+            Some("exit") => {
+                if let Some(row) = recent.iter_mut().rfind(|row| row.0 == sid) {
+                    row.2 = event["code"].as_i64();
+                    row.3 = event["t_abs"].as_f64();
+                }
+            }
+            _ => {}
+        }
+    }
+    let commands = recent
+        .into_iter()
+        .map(|(_, category, exit, seconds)| (category, exit, seconds))
+        .collect::<Vec<_>>();
+    format!(
+        "complete={}; malformed={malformed}; recent_commands(category, exit, seconds)={commands:?}",
+        trace.ends_with('\n'),
+    )
+}
+
+#[test]
+fn git_trace_summary_omits_unlisted_fields_and_bounds_context() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("synthetic-trace.json");
+    let private = "synthetic-private-argv-env-path-sid";
+    let mut recorded = [
+        serde_json::json!({
+            "event": "cmd_name", "sid": private, "name": private,
+            "argv": [private], "env": {"private": private}, "path": private,
+        }),
+        serde_json::json!({
+            "event": "exit", "sid": private, "code": 23, "t_abs": 1.25,
+            "argv": [private], "path": private,
+        }),
+        serde_json::json!({
+            "event": "cmd_name", "sid": "unfinished", "name": "write-tree",
+        }),
+    ]
+    .into_iter()
+    .map(|event| format!("{event}\n"))
+    .collect::<String>();
+    recorded.push_str("malformed complete record\n");
+    recorded.push_str(private);
+    std::fs::write(&path, recorded).unwrap();
+    let summary = git_trace_summary(&path);
+    assert!(!summary.contains(private));
+    assert_eq!(
+        summary,
+        "complete=false; malformed=1; recent_commands(category, exit, seconds)=[(\"other\", Some(23), Some(1.25)), (\"write-tree\", None, None)]"
+    );
+
+    let mut recorded = String::new();
+    for number in 0..40 {
+        let sid = format!("synthetic-{number}");
+        for event in [
+            serde_json::json!({"event": "cmd_name", "sid": sid, "name": "write-tree"}),
+            serde_json::json!({"event": "exit", "sid": sid, "code": number, "t_abs": 0.5}),
+        ] {
+            recorded.push_str(&format!("{event}\n"));
+        }
+    }
+    std::fs::write(&path, recorded).unwrap();
+    let summary = git_trace_summary(&path);
+    assert_eq!(summary.matches("(\"write-tree\",").count(), 32);
+    assert!(summary.contains("(\"write-tree\", Some(8), Some(0.5))"));
+    assert!(summary.contains("(\"write-tree\", Some(39), Some(0.5))"));
+    assert!(!summary.contains("(\"write-tree\", Some(0),"));
+    assert!(!summary.contains("synthetic-"));
+
+    std::fs::write(&path, vec![b' '; 1024 * 1024 + 1]).unwrap();
+    assert_eq!(git_trace_summary(&path), "trace exceeds diagnostic limit");
+}
+
+#[tokio::test]
+async fn fixture_git_keeps_auto_maintenance_enabled_and_waits_for_completion() {
+    let root = tempfile::tempdir().unwrap();
+    let trace = root.path().join("maintenance-trace.json");
+    let f = fixture_in_with_maintenance_trace(root, false, false, Some(trace.clone())).await;
+    let recorded = std::fs::read_to_string(&trace).expect("read synthetic Git Trace2 events");
+    let mut detach_flags = Vec::new();
+    // The RED control may still have a detached writer. Read complete records:
+    // commit's required child_start precedes its return. Only booleans are shown.
+    for line in recorded
+        .split_inclusive('\n')
+        .filter(|line| line.ends_with('\n'))
+    {
+        let event: serde_json::Value =
+            serde_json::from_str(line).expect("synthetic Git Trace2 JSON");
+        if event["event"].as_str() != Some("child_start") {
+            continue;
+        }
+        let Some(argv) = event["argv"].as_array() else {
+            continue;
+        };
+        if argv.windows(3).any(|args| {
+            args[0].as_str() == Some("maintenance")
+                && args[1].as_str() == Some("run")
+                && args[2].as_str() == Some("--auto")
+        }) {
+            detach_flags.push((
+                argv.iter().any(|arg| arg.as_str() == Some("--detach")),
+                argv.iter().any(|arg| arg.as_str() == Some("--no-detach")),
+            ));
+        }
+    }
+    assert_eq!(
+        detach_flags,
+        vec![(false, true)],
+        "actual auto-maintenance must remain enabled and run without detaching"
+    );
+    assert!(
+        recorded.ends_with('\n'),
+        "completed foreground trace must be complete"
+    );
+    let lock = f.cwd.join(".git").join("objects").join("maintenance.lock");
+    assert!(
+        matches!(std::fs::symlink_metadata(lock), Err(error) if error.kind() == std::io::ErrorKind::NotFound),
+        "owned automatic maintenance must release its lock before fixture commit returns"
+    );
+    // Exercise the actual snapshot owner immediately, with its unchanged
+    // five-second resolution/materialization budgets and no retry or mock Git.
+    f.observer.observe(&event(f.binding, false)).await.unwrap();
+    let reservation = f.files.reserve_git_turn_end(f.binding);
+    assert!(
+        reservation.is_some(),
+        "initial real snapshot did not establish a reservation; git_trace={}",
+        git_trace_summary(&trace),
+    );
+    assert!(f.warnings.lock().unwrap().is_empty());
+    drop(reservation);
 }
 
 #[tokio::test]
@@ -428,7 +634,9 @@ async fn end_capture_materialization_has_an_independent_resolution_budget() {
 
 #[tokio::test]
 async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation() {
-    let f = fixture(false, false).await;
+    let root = tempfile::tempdir().unwrap();
+    let trace = root.path().join("reconnect-git-trace.json");
+    let f = fixture_in_with_maintenance_trace(root, false, false, Some(trace.clone())).await;
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     let reservation = f.files.reserve_git_turn_end(f.binding).unwrap();
     assert!(f.files.reserve_git_turn_end(f.binding).is_none());
@@ -493,6 +701,7 @@ async fn end_reservation_release_and_warm_reconnect_preserve_the_capture_incarna
         .collect::<Vec<_>>();
     assert!(
         reservation.is_some(),
-        "post-reconnect start did not establish a Git-turn reservation; warnings={warnings:?}"
+        "post-reconnect start did not establish a Git-turn reservation; warnings={warnings:?}; git_trace={}",
+        git_trace_summary(&trace),
     );
 }
