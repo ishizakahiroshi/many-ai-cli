@@ -1,6 +1,7 @@
 //! Frozen Go Files/Git/attachment service call chains. Authentication and Origin
 //! guards run in Hub before this service; this module applies file scope policy.
 mod attachments;
+pub mod branch;
 mod content;
 mod git;
 mod mutation;
