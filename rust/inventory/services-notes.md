@@ -3,6 +3,8 @@
 Baseline: `21d0bc7935a2c4696fb89ccff2e324157a528c2d`.
 Prepared 2026-10-03. This is source inventory and an interface proposal, not implementation, an API freeze, test execution, or release acceptance.
 
+Current Rust implementation status is recorded separately at 4dc961ce in `recovery-current-20261005.json` and `../src/hub/route_coverage.json` under `current_source_coverage`. All 155 registration rows and49 dynamic-operation rows have source owners/main bindings; the null implementation/fixture fields in the fixed-Go `services.json` below remain historical contract-index fields, not current missing-Rust totals. Synthetic/native CI and product acceptance stay separate.
+
 ## Coverage and how to use the JSON
 
 `services.json` inventories all 155 `mux.Handle` / `mux.HandleFunc` registrations in `internal/hub/server.go:1477-1642`, including 14 static registrations and the WebSocket endpoint. It adds 49 dynamic suffix/operation entries, 298 handler/security/helper source references and contract expressions, 307 JSON-tagged Go struct declarations, 333 Web source endpoint lines, 720 named baseline test references, and the source census of 1,923 Hub function signatures. The exact numbers are also machine-readable in `counts`.

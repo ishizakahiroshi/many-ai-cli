@@ -1,4 +1,2441 @@
 {
+  "documentation_schema_version": 2,
+  "current_source_coverage": {
+    "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "authority": "Authoritative current source-binding view; top-level routes/dynamic_operations and earlier receipt fields are historical compatibility data.",
+    "source_index": "rust/inventory/recovery-current-20261005.json",
+    "counts": {
+      "http_registrations": 155,
+      "http_source_bound": 155,
+      "http_source_binding_missing": 0,
+      "dynamic_operation_rows": 49,
+      "dynamic_source_bound": 49,
+      "dynamic_source_binding_missing": 0,
+      "cli_entries": 32,
+      "cli_source_dispatch_present": 32,
+      "native_browser_device_product_accepted": 0
+    },
+    "status_vocabulary": {
+      "source_implemented_bound_unaccepted": "Owner, registration/dispatch and main composition present; no exhaustive behavior or product-acceptance claim.",
+      "source_dispatch_bound_unaccepted": "Dynamic operation handler and main owner present; no exhaustive method/configuration or product-acceptance claim."
+    },
+    "routes": [
+      {
+        "path": "/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/0"
+      },
+      {
+        "path": "/app-entry.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/1"
+      },
+      {
+        "path": "/app.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/2"
+      },
+      {
+        "path": "/app/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/3"
+      },
+      {
+        "path": "/debug/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/4"
+      },
+      {
+        "path": "/styles.css",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/5"
+      },
+      {
+        "path": "/styles/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/6"
+      },
+      {
+        "path": "/icon.svg",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/7"
+      },
+      {
+        "path": "/icons/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/8"
+      },
+      {
+        "path": "/manifest.webmanifest",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/9"
+      },
+      {
+        "path": "/sw.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/10"
+      },
+      {
+        "path": "/whisper-recorder-worklet.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/11"
+      },
+      {
+        "path": "/i18n.js",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/12"
+      },
+      {
+        "path": "/i18n/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/13"
+      },
+      {
+        "path": "/vendor/",
+        "rust_owner": "rust/src/hub/assets.rs",
+        "main_binding": "with_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/14"
+      },
+      {
+        "path": "/approval-patterns/",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "main_binding": "with_approval_patterns",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/15"
+      },
+      {
+        "path": "/ws",
+        "rust_owner": "rust/src/hub/websocket.rs",
+        "main_binding": "WebSocketService::new",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/16"
+      },
+      {
+        "path": "/api/info",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/17"
+      },
+      {
+        "path": "/api/jev/evaluate",
+        "rust_owner": "rust/src/hub/jev_routes.rs",
+        "main_binding": "with_jev",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/18"
+      },
+      {
+        "path": "/api/providers",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "main_binding": "with_provider_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/19"
+      },
+      {
+        "path": "/api/providers/",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "main_binding": "with_provider_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/20"
+      },
+      {
+        "path": "/api/provider-distributions/",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "main_binding": "with_provider_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/21"
+      },
+      {
+        "path": "/api/provider-icons/",
+        "rust_owner": "rust/src/hub/icon_routes.rs",
+        "main_binding": "with_provider_assets",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/22"
+      },
+      {
+        "path": "/api/bug-report/preview",
+        "rust_owner": "rust/src/hub/diagnostic_routes.rs",
+        "main_binding": "with_diagnostics",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/23"
+      },
+      {
+        "path": "/api/bug-report/finalize",
+        "rust_owner": "rust/src/hub/diagnostic_routes.rs",
+        "main_binding": "with_diagnostics",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/24"
+      },
+      {
+        "path": "/api/doctor",
+        "rust_owner": "rust/src/hub/diagnostic_routes.rs",
+        "main_binding": "with_diagnostics",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/25"
+      },
+      {
+        "path": "/api/mobile-connect",
+        "rust_owner": "rust/src/hub/mobile_routes.rs",
+        "main_binding": "with_mobile",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/26"
+      },
+      {
+        "path": "/api/mobile-connect/tailscale",
+        "rust_owner": "rust/src/hub/mobile_routes.rs",
+        "main_binding": "with_mobile",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/27"
+      },
+      {
+        "path": "/api/mobile-connect/tailscale/serve",
+        "rust_owner": "rust/src/hub/mobile_routes.rs",
+        "main_binding": "with_mobile",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/28"
+      },
+      {
+        "path": "/api/auth/revoke-all",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/29"
+      },
+      {
+        "path": "/api/auth/status",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/30"
+      },
+      {
+        "path": "/api/auth/login",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/31"
+      },
+      {
+        "path": "/api/auth/logout",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/32"
+      },
+      {
+        "path": "/api/auth/set-pin",
+        "rust_owner": "rust/src/hub/auth.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/33"
+      },
+      {
+        "path": "/api/net-hint",
+        "rust_owner": "rust/src/hub/runtime_routes.rs",
+        "main_binding": "with_runtime_observations",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/34"
+      },
+      {
+        "path": "/api/avatar",
+        "rust_owner": "rust/src/hub/preference_media.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/35"
+      },
+      {
+        "path": "/api/spawn",
+        "rust_owner": "rust/src/hub/spawn_routes.rs",
+        "main_binding": "with_spawn",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/36"
+      },
+      {
+        "path": "/api/spawn-grid",
+        "rust_owner": "rust/src/hub/grid_spawn_routes.rs",
+        "main_binding": "with_grid",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/37"
+      },
+      {
+        "path": "/api/session/",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/38"
+      },
+      {
+        "path": "/api/sessions/",
+        "rust_owner": "rust/src/hub/child_routes.rs",
+        "main_binding": "with_children",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/39"
+      },
+      {
+        "path": "/api/pick-directory",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/40"
+      },
+      {
+        "path": "/api/path-exists",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/41"
+      },
+      {
+        "path": "/api/list-subdirs",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/42"
+      },
+      {
+        "path": "/api/pick-file",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/43"
+      },
+      {
+        "path": "/api/open-default-file",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/44"
+      },
+      {
+        "path": "/api/open-folder",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/45"
+      },
+      {
+        "path": "/api/open-terminal",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/46"
+      },
+      {
+        "path": "/api/terminal-app",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/47"
+      },
+      {
+        "path": "/api/kill-all",
+        "rust_owner": "rust/src/hub/lifecycle.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/48"
+      },
+      {
+        "path": "/api/shutdown",
+        "rust_owner": "rust/src/hub/lifecycle.rs",
+        "main_binding": "with_shutdown",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/49"
+      },
+      {
+        "path": "/api/log-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/50"
+      },
+      {
+        "path": "/api/session-chat",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/51"
+      },
+      {
+        "path": "/api/session-log",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/52"
+      },
+      {
+        "path": "/api/agent-log",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/53"
+      },
+      {
+        "path": "/api/agent-log/open",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/54"
+      },
+      {
+        "path": "/api/agent-chat",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/55"
+      },
+      {
+        "path": "/api/grok-history",
+        "rust_owner": "rust/src/hub/agent_history_routes.rs",
+        "main_binding": "with_agent_history",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/56"
+      },
+      {
+        "path": "/api/session-search",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/57"
+      },
+      {
+        "path": "/api/session-history",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/58"
+      },
+      {
+        "path": "/api/approval-history",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/59"
+      },
+      {
+        "path": "/api/session-store/reset",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/60"
+      },
+      {
+        "path": "/api/session-store/prune-transcript-noise",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/61"
+      },
+      {
+        "path": "/api/logs/purge",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/62"
+      },
+      {
+        "path": "/api/logs/legacy-notice",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/63"
+      },
+      {
+        "path": "/api/attachments/purge",
+        "rust_owner": "rust/src/hub/session_routes.rs",
+        "main_binding": "with_session_routes",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/64"
+      },
+      {
+        "path": "/api/open-dir",
+        "rust_owner": "rust/src/hub/host_routes.rs",
+        "main_binding": "with_host",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/65"
+      },
+      {
+        "path": "/api/idle-timeout",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/66"
+      },
+      {
+        "path": "/api/terminal-color",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/67"
+      },
+      {
+        "path": "/api/handoff-intent-mode",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/68"
+      },
+      {
+        "path": "/api/handoff",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "main_binding": "with_handoff",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/69"
+      },
+      {
+        "path": "/api/handoff/",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "main_binding": "with_handoff",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/70"
+      },
+      {
+        "path": "/api/reconnect-grace",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/71"
+      },
+      {
+        "path": "/api/input-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/72"
+      },
+      {
+        "path": "/api/orchestration-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/73"
+      },
+      {
+        "path": "/api/subscriptions",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/74"
+      },
+      {
+        "path": "/api/subscriptions/",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/75"
+      },
+      {
+        "path": "/api/subscription-usage",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/76"
+      },
+      {
+        "path": "/api/subscription-usage/refresh",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/77"
+      },
+      {
+        "path": "/api/subscription-usage/probe",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "main_binding": "with_subscriptions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/78"
+      },
+      {
+        "path": "/api/notify-config",
+        "rust_owner": "rust/src/hub/settings.rs",
+        "main_binding": "with_settings_published",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/79"
+      },
+      {
+        "path": "/api/notify-test",
+        "rust_owner": "rust/src/hub/notify_routes.rs",
+        "main_binding": "with_notifications",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/80"
+      },
+      {
+        "path": "/api/notify-generate-topic",
+        "rust_owner": "rust/src/hub/notify_routes.rs",
+        "main_binding": "with_notifications",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/81"
+      },
+      {
+        "path": "/api/nvidia-nim",
+        "rust_owner": "rust/src/hub/nvidia_routes.rs",
+        "main_binding": "with_nvidia",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/82"
+      },
+      {
+        "path": "/api/nvidia-nim/key",
+        "rust_owner": "rust/src/hub/nvidia_routes.rs",
+        "main_binding": "with_nvidia",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/83"
+      },
+      {
+        "path": "/api/nvidia-nim/test",
+        "rust_owner": "rust/src/hub/nvidia_routes.rs",
+        "main_binding": "with_nvidia",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/84"
+      },
+      {
+        "path": "/api/encoding-check",
+        "rust_owner": "rust/src/hub/runtime_routes.rs",
+        "main_binding": "with_runtime_observations",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/85"
+      },
+      {
+        "path": "/api/approval/status",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/86"
+      },
+      {
+        "path": "/api/approval/enable",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/87"
+      },
+      {
+        "path": "/api/approval/disable",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/88"
+      },
+      {
+        "path": "/api/approval/dismiss",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/89"
+      },
+      {
+        "path": "/api/approval/batch",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/90"
+      },
+      {
+        "path": "/api/approval-action/",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "main_binding": "with_approval_actions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/91"
+      },
+      {
+        "path": "/api/attach",
+        "rust_owner": "rust/src/files/attachments.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/92"
+      },
+      {
+        "path": "/api/slash-cmd-sources",
+        "rust_owner": "rust/src/hub/slash_routes.rs",
+        "main_binding": "with_slash_commands",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/93"
+      },
+      {
+        "path": "/api/slash-commands",
+        "rust_owner": "rust/src/hub/slash_routes.rs",
+        "main_binding": "with_slash_commands",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/94"
+      },
+      {
+        "path": "/api/usage-link-defaults",
+        "rust_owner": "rust/src/application/link_defaults.rs",
+        "main_binding": "with_link_defaults",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/95"
+      },
+      {
+        "path": "/api/install-link-defaults",
+        "rust_owner": "rust/src/application/link_defaults.rs",
+        "main_binding": "with_link_defaults",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/96"
+      },
+      {
+        "path": "/api/cli-versions",
+        "rust_owner": "rust/src/hub/cli_version.rs",
+        "main_binding": "with_cli_versions",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/97"
+      },
+      {
+        "path": "/api/cli-updates",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "main_binding": "with_cli_updates",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/98"
+      },
+      {
+        "path": "/api/cli-updates/",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "main_binding": "with_cli_updates",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/99"
+      },
+      {
+        "path": "/api/cli-update-eligibility",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "main_binding": "with_cli_updates",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/100"
+      },
+      {
+        "path": "/api/models",
+        "rust_owner": "rust/src/application/main_program/model_catalog.rs",
+        "main_binding": "with_models",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/101"
+      },
+      {
+        "path": "/api/approval-patterns",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "main_binding": "with_approval_patterns",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/102"
+      },
+      {
+        "path": "/api/approval-patterns/",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "main_binding": "with_approval_patterns",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/103"
+      },
+      {
+        "path": "/api/files-list",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/104"
+      },
+      {
+        "path": "/api/files-content",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/105"
+      },
+      {
+        "path": "/api/files-asset",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/106"
+      },
+      {
+        "path": "/api/files-download",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/107"
+      },
+      {
+        "path": "/api/files-roots",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/108"
+      },
+      {
+        "path": "/api/files-move",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/109"
+      },
+      {
+        "path": "/api/files-rename",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/110"
+      },
+      {
+        "path": "/api/files-mkdir",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/111"
+      },
+      {
+        "path": "/api/files-create",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/112"
+      },
+      {
+        "path": "/api/files-save",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/113"
+      },
+      {
+        "path": "/api/files-delete-dir",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/114"
+      },
+      {
+        "path": "/api/git-log",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/115"
+      },
+      {
+        "path": "/api/git-show",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/116"
+      },
+      {
+        "path": "/api/git-refs",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/117"
+      },
+      {
+        "path": "/api/git-status",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/118"
+      },
+      {
+        "path": "/api/git-diff",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/119"
+      },
+      {
+        "path": "/api/git-turns",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/120"
+      },
+      {
+        "path": "/api/git-turn-diff",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/121"
+      },
+      {
+        "path": "/api/git-commit-all",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/122"
+      },
+      {
+        "path": "/api/git-commit-message",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/123"
+      },
+      {
+        "path": "/api/git-fetch",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/124"
+      },
+      {
+        "path": "/api/git-pull",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/125"
+      },
+      {
+        "path": "/api/git-push",
+        "rust_owner": "rust/src/files/mod.rs",
+        "main_binding": "with_files",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/126"
+      },
+      {
+        "path": "/api/user-prefs/notify-sound-custom",
+        "rust_owner": "rust/src/hub/preference_media.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/127"
+      },
+      {
+        "path": "/api/user-prefs/avatar",
+        "rust_owner": "rust/src/hub/preference_media.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/128"
+      },
+      {
+        "path": "/api/user-prefs",
+        "rust_owner": "rust/src/hub/preferences.rs",
+        "main_binding": "ServiceRouter shared ConfigStore/RuntimePaths",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/129"
+      },
+      {
+        "path": "/api/routines",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/130"
+      },
+      {
+        "path": "/api/routines/",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/131"
+      },
+      {
+        "path": "/api/routine-runs",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/132"
+      },
+      {
+        "path": "/api/routine-runs/",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "main_binding": "with_routines",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/133"
+      },
+      {
+        "path": "/api/memos",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/134"
+      },
+      {
+        "path": "/api/memos/",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/135"
+      },
+      {
+        "path": "/api/memo-images",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/136"
+      },
+      {
+        "path": "/api/memo-images/",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "main_binding": "with_memos",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/137"
+      },
+      {
+        "path": "/api/auto-approval/status",
+        "rust_owner": "rust/src/hub/auto_approval.rs",
+        "main_binding": "with_auto_approval",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/138"
+      },
+      {
+        "path": "/api/auto-approval/simulate",
+        "rust_owner": "rust/src/hub/auto_approval.rs",
+        "main_binding": "with_auto_approval",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/139"
+      },
+      {
+        "path": "/api/push/status",
+        "rust_owner": "rust/src/hub/push_routes.rs",
+        "main_binding": "with_push",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/140"
+      },
+      {
+        "path": "/api/push/vapid-public-key",
+        "rust_owner": "rust/src/hub/push_routes.rs",
+        "main_binding": "with_push",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/141"
+      },
+      {
+        "path": "/api/push/subscriptions",
+        "rust_owner": "rust/src/hub/push_routes.rs",
+        "main_binding": "with_push",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/142"
+      },
+      {
+        "path": "/api/voice/transcribe",
+        "rust_owner": "rust/src/hub/voice_routes.rs",
+        "main_binding": "with_voice",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/143"
+      },
+      {
+        "path": "/api/whisper/status",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/144"
+      },
+      {
+        "path": "/api/whisper/install",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/145"
+      },
+      {
+        "path": "/api/whisper/uninstall",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/146"
+      },
+      {
+        "path": "/api/whisper/start",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/147"
+      },
+      {
+        "path": "/api/whisper/stop",
+        "rust_owner": "rust/src/hub/whisper_routes.rs",
+        "main_binding": "with_whisper",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/148"
+      },
+      {
+        "path": "/api/session-usage",
+        "rust_owner": "rust/src/hub/usage_routes.rs",
+        "main_binding": "with_session_usage",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/149"
+      },
+      {
+        "path": "/api/servers",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/150"
+      },
+      {
+        "path": "/api/servers/connect",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/151"
+      },
+      {
+        "path": "/api/servers/connect/status",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/152"
+      },
+      {
+        "path": "/api/servers/disconnect",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/153"
+      },
+      {
+        "path": "/api/profiles/fetch",
+        "rust_owner": "rust/src/hub/server_routes.rs",
+        "main_binding": "with_servers",
+        "state": "source_implemented_bound_unaccepted",
+        "source_index_json_pointer": "/http/154"
+      }
+    ],
+    "dynamic_operations": [
+      {
+        "pattern": "/approval-patterns/{provider}[.official|.custom].json",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleApprovalPatternAsset",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 49
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/validate",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderValidate",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderDetail",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}",
+        "methods": [
+          "PATCH"
+        ],
+        "source_handler": "handleProviderPatch",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}",
+        "methods": [
+          "DELETE"
+        ],
+        "source_handler": "handleProviderDelete",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/history",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderHistory",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/history/{revision}/diff",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderHistoryDiff",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/reset",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderReset",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/restore",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderRestore",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/backups",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderBackups",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/backups/{backup}/verify",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderBackupVerify",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/backups/{backup}/restore",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderBackupRestore",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/providers/{id}/recovery",
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "source_handler": "handleProviderRecovery",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/provider_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/provider_routes.rs",
+            "line": 250
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1202
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-distributions/status",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderDistributionStatus",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-distributions/diff",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleProviderDistributionDiff",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-distributions/check",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderDistributionCheck",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "expected_unavailable_contract": "Fixed Go ships no trusted catalog signing keys; composed check/accept explicitly return503 distribution_keys_unconfigured. This is not a missing route or successful catalog download/signature acceptance."
+      },
+      {
+        "pattern": "/api/provider-distributions/accept",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderDistributionAccept",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "expected_unavailable_contract": "Fixed Go ships no trusted catalog signing keys; composed check/accept explicitly return503 distribution_keys_unconfigured. This is not a missing route or successful catalog download/signature acceptance."
+      },
+      {
+        "pattern": "/api/provider-distributions/rollback",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleProviderDistributionRollback",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/distribution_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/distribution_routes.rs",
+            "line": 29
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/provider-icons/{id}",
+        "methods": [
+          "GET",
+          "PUT",
+          "DELETE"
+        ],
+        "source_handler": "handleProviderIcon",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/icon_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/icon_routes.rs",
+            "line": 14
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_provider_assets",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1131
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/session/{id}/meta",
+        "methods": [
+          "PATCH"
+        ],
+        "source_handler": "handleSessionMeta",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/session_routes/metadata.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/session_routes/metadata.rs",
+            "line": 55
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_session_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1201
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/meta",
+        "methods": [
+          "PATCH"
+        ],
+        "source_handler": "handleSessionMeta",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/session_routes/metadata.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/session_routes/metadata.rs",
+            "line": 55
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_session_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1201
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/spawn-child",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSpawnChild",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_routes.rs",
+            "line": 109
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_children",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1159
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/spawn-confirm",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSpawnConfirmation",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/confirmations.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/confirmations.rs",
+            "line": 58
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_confirmations",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1156
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/send-child",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSendChild",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/inject",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSessionInject",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/children",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleSessionChildren",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/child_control.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/child_control.rs",
+            "line": 72
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleRelayGet",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayStart",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay-stop",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayStop",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay-resume",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayResume",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/sessions/{id}/relay-cleanup",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRelayCleanup",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/relay_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/relay_routes.rs",
+            "line": 34
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately.",
+        "executed_regression": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial; passed in four-target4dc961ce library suites"
+      },
+      {
+        "pattern": "/api/handoff/{id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleHandoffItem",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/handoff_routes.rs",
+            "line": 110
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_handoff",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1251
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/handoff/{id}/note",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleHandoffNoteRequest",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/handoff_routes.rs",
+            "line": 110
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_handoff",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1251
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/handoff/{id}/manual-note",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleHandoffManualNoteSave",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/handoff_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/handoff_routes.rs",
+            "line": 110
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_handoff",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1251
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/update",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionUpdate",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/remove",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionRemove",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/test",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionTest",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/subscriptions/login",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleSubscriptionLogin",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/subscription_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/subscription_routes.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_subscriptions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1221
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-action/{action_token}",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleOneTapApproval",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_actions.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_actions.rs",
+            "line": 25
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_actions",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1257
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/cli-updates/{job_id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleCLIUpdateJobStatus",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/update_routes.rs",
+            "line": 49
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_cli_updates",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1227
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/cli-updates/{job_id}/{provider_id}/log",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleCLIUpdateJobLog",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/update_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/update_routes.rs",
+            "line": 49
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_cli_updates",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1227
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-patterns/profile",
+        "methods": [
+          "GET",
+          "POST"
+        ],
+        "source_handler": "handleApprovalProfile",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 67
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-patterns/copy-official",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleApprovalCopyOfficial",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 67
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/approval-patterns/{provider}[/{ignored_suffix}]",
+        "methods": [
+          "PUT"
+        ],
+        "source_handler": "handleApprovalPatternsItem",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/approval_pattern_routes.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/approval_pattern_routes.rs",
+            "line": 67
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_approval_patterns",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1109
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/routines/{id}",
+        "methods": [
+          "GET",
+          "PUT",
+          "DELETE"
+        ],
+        "source_handler": "handleRoutines",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/routines.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_routines",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1176
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/routines/{id}/runs",
+        "methods": [
+          "POST"
+        ],
+        "source_handler": "handleRoutines",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/routines.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_routines",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1176
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/routine-runs/{id}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleRoutineRuns",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/hub/routines.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/hub/routines.rs",
+            "line": 37
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_routines",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1176
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/memos/{id}",
+        "methods": [
+          "PATCH",
+          "DELETE"
+        ],
+        "source_handler": "handleMemos",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/routine/memo.rs",
+            "line": 273
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_memos",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1181
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      },
+      {
+        "pattern": "/api/memo-images/{basename}",
+        "methods": [
+          "GET"
+        ],
+        "source_handler": "handleMemoImages",
+        "state": "source_dispatch_bound_unaccepted",
+        "rust_owner": "rust/src/routine/memo.rs",
+        "dispatch_refs": [
+          {
+            "file": "rust/src/routine/memo.rs",
+            "line": 410
+          }
+        ],
+        "main_binding": {
+          "constructor_or_builder": "with_memos",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1181
+            }
+          ]
+        },
+        "product_accepted": false,
+        "limit": "Source dispatch/composition only; method/configuration/native behavior acceptance is tracked separately."
+      }
+    ],
+    "validation_receipt": "docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json",
+    "artifacts": "docs/bot/rust-recovery-resume/ARTIFACTS-4dc961ce.md",
+    "remaining_known_implementation_gap": {
+      "id": "windows-whisper-bundled-runtime",
+      "state": "missing_in_4dc_baseline_continuation_implements_dynamic_vs_receipt",
+      "gate_receipt": "docs/bot/rust-recovery-resume/WINDOWS-RUNTIME-SUPPLY-GATE.md",
+      "source_refs": [
+        {
+          "file": "rust/src/application/main_program/serve.rs",
+          "line": 1062
+        }
+      ],
+      "detail": "At recorded source4dc961ce the composed Whisper owner had no supplemental embedded runtime DLL bytes. The corrected continuation policy uses the existing Go VS-only acquisition and validation, records actual FileVersion/SHA256 per build, and wires embedded payloads to serve. No pre-pinned DLL version/hash is required. Final native payload evidence and product acceptance remain separate."
+    },
+    "acceptance_limit": "Green native synthetic CI, source binding and zero placeholder macros do not accept all behavior, supported OS versions, providers, devices, signed packaging, installed data or cutover."
+  },
+  "historical_fields_scope": {
+    "fields": [
+      "baseline_go_sha",
+      "note",
+      "routes",
+      "dynamic_operations",
+      "verification_receipt",
+      "owned_runtime_addition",
+      "persisted_launch_addition"
+    ],
+    "source_url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/rust/src/hub/route_coverage.json",
+    "original_sha256": "3cd2a8398baba80b4f9d8a3245369a8166e532fd2c71225c48a1388d4c234d78",
+    "route_status_counts": {
+      "partial": 71,
+      "unresolved": 84,
+      "implemented": 0
+    },
+    "dynamic_status_counts": {
+      "partial": 10,
+      "unresolved": 39,
+      "implemented": 0
+    },
+    "interpretation": "Preserved earlier checkpoint evidence, not current unresolved implementation totals. Existing legacy enum/schema is retained for its test consumer."
+  },
   "baseline_go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
   "note": "Implementation coverage only. No route is accepted by inventory presence. Native/browser/remote/provider acceptance remains pending.",
   "routes": [

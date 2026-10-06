@@ -1,28 +1,118 @@
 {
-  "schema_version": 2,
-  "generated_at_utc": "2026-10-05T00:41:40.220627+00:00",
+  "schema_version": 3,
+  "generated_at_utc": "2026-10-05T22:58:18.390908+00:00",
   "scope": "Current DERIVED recovery source snapshot; read-only source audit, not acceptance",
   "baseline_go_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
   "pinned_go_checkpoint": 951,
   "historical_inventory_preserved": {
     "path": "rust/src/hub/route_coverage.json",
-    "sha256": "3cd2a8398baba80b4f9d8a3245369a8166e532fd2c71225c48a1388d4c234d78"
+    "immutable_url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/rust/src/hub/route_coverage.json",
+    "sha256": "3cd2a8398baba80b4f9d8a3245369a8166e532fd2c71225c48a1388d4c234d78",
+    "scope": "Original top-level legacy rows and receipts are retained unchanged; current_source_coverage is an additive current-state overlay."
   },
   "counts": {
     "http_registrations": 155,
     "ws_inventory_rows": 49,
     "ws_non_message_literal_rows": 3,
     "cli_inventory_rows": 32,
-    "native_browser_device_accepted": 0
+    "native_browser_device_accepted": 0,
+    "source_binding_missing": 0,
+    "cli_dispatch_missing": 0,
+    "rust_source_files": 444
   },
   "verification": {
-    "latest_full_receipt": "resume-integrated-fiftysixth.log",
-    "tests_passed": 1151,
-    "failed": 0,
-    "ignored": 0,
-    "summary_count": 31,
-    "exit_code": 0,
-    "scope_limit": "Local Windows all-target synthetic receipt; source binding and these tests do not establish production/native/browser/device acceptance."
+    "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "receipt": "docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json",
+    "artifacts": "docs/bot/rust-recovery-resume/ARTIFACTS-4dc961ce.md",
+    "ci_run": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189",
+    "status": "four_target_native_synthetic_ci_passed",
+    "targets": [
+      {
+        "label": "Linux",
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111947918023,
+        "execution_attempt": 1,
+        "library_tests": {
+          "passed": 1047,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1354,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        }
+      },
+      {
+        "label": "Windows",
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111947918548,
+        "execution_attempt": 1,
+        "library_tests": {
+          "passed": 987,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1266,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        }
+      },
+      {
+        "label": "Intel",
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111947918509,
+        "execution_attempt": 1,
+        "library_tests": {
+          "passed": 1047,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1353,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        }
+      },
+      {
+        "label": "Arm",
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111965372489,
+        "execution_attempt": 2,
+        "library_tests": {
+          "passed": 1047,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1353,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        }
+      }
+    ],
+    "scope_limit": "Per-target library is a subset of all-targets; doctests are separate. Do not sum different targets or historical scopes. Build/test/artifact evidence does not establish complete production/browser/device/provider/installed-data or cutover acceptance."
   },
   "http": [
     {
@@ -39,11 +129,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 119
+          "line": 120
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1285
+          "line": 1313
         }
       ],
       "dispatch_owner_present": true,
@@ -53,7 +143,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -87,7 +177,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -129,7 +219,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -163,7 +253,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -197,7 +287,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -231,7 +321,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -265,7 +355,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -299,7 +389,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -333,7 +423,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -367,7 +457,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -401,7 +491,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -435,7 +525,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -469,7 +559,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -503,7 +593,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -541,7 +631,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1181
+            "line": 1264
           }
         ]
       },
@@ -605,7 +695,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1035
+            "line": 1109
           }
         ]
       },
@@ -631,11 +721,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 121
+          "line": 122
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1287
+          "line": 1315
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -643,7 +733,7 @@
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 677
+          "line": 734
         },
         {
           "file": "rust/src/wrapper/transport.rs",
@@ -657,7 +747,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1248
+            "line": 1334
           }
         ]
       },
@@ -695,23 +785,23 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 107
+          "line": 108
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1159
+          "line": 1184
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1174
+          "line": 1199
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1183
+          "line": 1208
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1190
+          "line": 1215
         }
       ],
       "dispatch_owner_present": true,
@@ -721,7 +811,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -757,7 +847,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1150
+            "line": 1233
           }
         ]
       },
@@ -791,27 +881,27 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1403
+          "line": 1431
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1404
+          "line": 1432
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1580
+          "line": 1609
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1638
+          "line": 1667
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1639
+          "line": 1668
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1644
+          "line": 1673
         }
       ],
       "dispatch_owner_present": true,
@@ -821,7 +911,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1119
+            "line": 1202
           }
         ]
       },
@@ -851,31 +941,31 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1403
+          "line": 1431
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1404
+          "line": 1432
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1580
+          "line": 1609
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1638
+          "line": 1667
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1639
+          "line": 1668
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1644
+          "line": 1673
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1645
+          "line": 1674
         }
       ],
       "dispatch_owner_present": true,
@@ -885,7 +975,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1119
+            "line": 1202
           }
         ]
       },
@@ -937,7 +1027,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1057
+            "line": 1131
           }
         ]
       },
@@ -989,7 +1079,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1057
+            "line": 1131
           }
         ]
       },
@@ -1029,7 +1119,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1041
+            "line": 1115
           }
         ]
       },
@@ -1069,7 +1159,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1041
+            "line": 1115
           }
         ]
       },
@@ -1109,7 +1199,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1041
+            "line": 1115
           }
         ]
       },
@@ -1165,7 +1255,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1044
+            "line": 1118
           }
         ]
       },
@@ -1217,7 +1307,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1044
+            "line": 1118
           }
         ]
       },
@@ -1261,7 +1351,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1044
+            "line": 1118
           }
         ]
       },
@@ -1287,11 +1377,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1482
+          "line": 1510
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1745
+          "line": 1775
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -1305,7 +1395,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -1331,19 +1421,19 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 157
+          "line": 161
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1315
+          "line": 1343
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1472
+          "line": 1500
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1741
+          "line": 1771
         }
       ],
       "dispatch_owner_present": true,
@@ -1353,7 +1443,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -1379,19 +1469,19 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 157
+          "line": 161
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1315
+          "line": 1343
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1473
+          "line": 1501
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1742
+          "line": 1772
         }
       ],
       "dispatch_owner_present": true,
@@ -1401,7 +1491,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -1427,19 +1517,19 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 157
+          "line": 161
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1315
+          "line": 1343
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1480
+          "line": 1508
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1743
+          "line": 1773
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -1453,7 +1543,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -1479,11 +1569,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1481
+          "line": 1509
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1744
+          "line": 1774
         }
       ],
       "dispatch_owner_present": true,
@@ -1493,7 +1583,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -1519,11 +1609,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1357
+          "line": 1385
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1656
+          "line": 1685
         },
         {
           "file": "rust/src/launcher/network.rs",
@@ -1537,7 +1627,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1148
+            "line": 1231
           }
         ]
       },
@@ -1563,7 +1653,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/preference_media.rs",
-          "line": 19
+          "line": 16
         },
         {
           "file": "rust/src/hub/session_routes/info.rs",
@@ -1577,7 +1667,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -1603,27 +1693,27 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 650
+          "line": 659
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 703
+          "line": 727
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1557
+          "line": 1585
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1558
+          "line": 1586
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1680
+          "line": 1709
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1681
+          "line": 1710
         }
       ],
       "dispatch_owner_present": true,
@@ -1633,7 +1723,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1175
+            "line": 1258
           }
         ]
       },
@@ -1659,15 +1749,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 650
+          "line": 659
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1558
+          "line": 1586
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1681
+          "line": 1710
         }
       ],
       "dispatch_owner_present": true,
@@ -1677,7 +1767,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1020
+            "line": 1094
           }
         ]
       },
@@ -1717,7 +1807,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -1781,7 +1871,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1085
+            "line": 1159
           }
         ]
       },
@@ -1791,7 +1881,49 @@
         "browser_device": "pending",
         "accepted": false
       },
-      "branch_limit": "Prefix/suffix and optional configuration branches require source-specific fixtures; lexical evidence does not prove every branch."
+      "branch_limit": "Prefix/suffix and optional configuration branches require source-specific fixtures; lexical evidence does not prove every branch.",
+      "additional_composed_owners": [
+        {
+          "rust_owner": "rust/src/hub/relay_routes.rs",
+          "constructor_or_builder": "with_relay",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1167
+            }
+          ]
+        },
+        {
+          "rust_owner": "rust/src/hub/child_control.rs",
+          "constructor_or_builder": "with_child_controls",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1170
+            }
+          ]
+        },
+        {
+          "rust_owner": "rust/src/hub/confirmations.rs",
+          "constructor_or_builder": "with_confirmations",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1156
+            }
+          ]
+        },
+        {
+          "rust_owner": "rust/src/hub/session_routes.rs",
+          "constructor_or_builder": "with_session_routes",
+          "refs": [
+            {
+              "file": "rust/src/application/main_program/serve.rs",
+              "line": 1201
+            }
+          ]
+        }
+      ]
     },
     {
       "path": "/api/pick-directory",
@@ -1829,7 +1961,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -1873,7 +2005,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -1913,7 +2045,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -1957,7 +2089,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -2001,7 +2133,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -2045,7 +2177,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -2085,7 +2217,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -2141,7 +2273,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -2167,15 +2299,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 630
+          "line": 639
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1539
+          "line": 1567
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1628
+          "line": 1657
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -2193,7 +2325,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2219,15 +2351,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 758
+          "line": 782
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1560
+          "line": 1588
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1685
+          "line": 1714
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -2243,7 +2375,7 @@
         },
         {
           "file": "rust/src/application/main_program/bootstrap.rs",
-          "line": 190
+          "line": 197
         }
       ],
       "dispatch_owner_present": true,
@@ -2253,7 +2385,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1081
+            "line": 1155
           }
         ]
       },
@@ -2291,7 +2423,7 @@
         },
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1110
+          "line": 1187
         }
       ],
       "dispatch_owner_present": true,
@@ -2301,7 +2433,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -2341,7 +2473,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2385,7 +2517,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2437,7 +2569,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1032
+            "line": 1106
           }
         ]
       },
@@ -2481,7 +2613,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1032
+            "line": 1106
           }
         ]
       },
@@ -2521,7 +2653,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1032
+            "line": 1106
           }
         ]
       },
@@ -2561,7 +2693,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1032
+            "line": 1106
           }
         ]
       },
@@ -2601,7 +2733,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2641,7 +2773,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2681,7 +2813,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2725,7 +2857,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2769,7 +2901,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2795,7 +2927,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1651
+          "line": 1680
         },
         {
           "file": "rust/src/hub/session_routes.rs",
@@ -2817,7 +2949,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2843,7 +2975,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1652
+          "line": 1681
         },
         {
           "file": "rust/src/hub/session_routes.rs",
@@ -2869,7 +3001,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2909,7 +3041,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1118
+            "line": 1201
           }
         ]
       },
@@ -2961,7 +3093,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1073
+            "line": 1147
           }
         ]
       },
@@ -2987,7 +3119,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1682
+          "line": 1711
         },
         {
           "file": "rust/src/hub/settings.rs",
@@ -3003,7 +3135,7 @@
         },
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1106
+          "line": 1183
         }
       ],
       "dispatch_owner_present": true,
@@ -3013,7 +3145,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3057,7 +3189,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3101,7 +3233,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3153,7 +3285,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1168
+            "line": 1251
           }
         ]
       },
@@ -3189,7 +3321,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1168
+            "line": 1251
           }
         ]
       },
@@ -3233,7 +3365,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3293,7 +3425,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3331,7 +3463,7 @@
         },
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1113
+          "line": 1190
         }
       ],
       "dispatch_owner_present": true,
@@ -3341,7 +3473,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3401,7 +3533,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1138
+            "line": 1221
           }
         ]
       },
@@ -3445,7 +3577,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1138
+            "line": 1221
           }
         ]
       },
@@ -3505,7 +3637,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1138
+            "line": 1221
           }
         ]
       },
@@ -3549,7 +3681,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1138
+            "line": 1221
           }
         ]
       },
@@ -3589,7 +3721,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1138
+            "line": 1221
           }
         ]
       },
@@ -3615,7 +3747,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1683
+          "line": 1712
         },
         {
           "file": "rust/src/hub/settings.rs",
@@ -3637,7 +3769,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1105
+            "line": 1182
           }
         ]
       },
@@ -3663,15 +3795,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 742
+          "line": 766
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1559
+          "line": 1587
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1684
+          "line": 1713
         }
       ],
       "dispatch_owner_present": true,
@@ -3681,11 +3813,11 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 420
+            "line": 468
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1164
+            "line": 1247
           }
         ]
       },
@@ -3711,11 +3843,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1500
+          "line": 1528
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1746
+          "line": 1776
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -3733,11 +3865,11 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 420
+            "line": 468
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1164
+            "line": 1247
           }
         ]
       },
@@ -3801,7 +3933,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1045
+            "line": 1119
           }
         ]
       },
@@ -3849,7 +3981,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1045
+            "line": 1119
           }
         ]
       },
@@ -3893,7 +4025,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1045
+            "line": 1119
           }
         ]
       },
@@ -3919,11 +4051,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1365
+          "line": 1393
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1657
+          "line": 1686
         }
       ],
       "dispatch_owner_present": true,
@@ -3933,7 +4065,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1148
+            "line": 1231
           }
         ]
       },
@@ -3973,7 +4105,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1174
+            "line": 1257
           }
         ]
       },
@@ -4013,7 +4145,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1174
+            "line": 1257
           }
         ]
       },
@@ -4053,7 +4185,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1174
+            "line": 1257
           }
         ]
       },
@@ -4093,7 +4225,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1174
+            "line": 1257
           }
         ]
       },
@@ -4119,15 +4251,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1012
+          "line": 1036
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1563
+          "line": 1591
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1702
+          "line": 1731
         }
       ],
       "dispatch_owner_present": true,
@@ -4137,7 +4269,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1174
+            "line": 1257
           }
         ]
       },
@@ -4171,11 +4303,11 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 149
+          "line": 153
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1304
+          "line": 1332
         }
       ],
       "dispatch_owner_present": true,
@@ -4185,7 +4317,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1174
+            "line": 1257
           }
         ]
       },
@@ -4241,7 +4373,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -4277,7 +4409,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1072
+            "line": 1146
           }
         ]
       },
@@ -4317,7 +4449,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1072
+            "line": 1146
           }
         ]
       },
@@ -4343,15 +4475,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 864
+          "line": 888
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1555
+          "line": 1583
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1655
+          "line": 1684
         }
       ],
       "dispatch_owner_present": true,
@@ -4361,7 +4493,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1149
+            "line": 1232
           }
         ]
       },
@@ -4387,19 +4519,19 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 864
+          "line": 888
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 870
+          "line": 894
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1555
+          "line": 1583
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1655
+          "line": 1684
         }
       ],
       "dispatch_owner_present": true,
@@ -4409,7 +4541,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1149
+            "line": 1232
           }
         ]
       },
@@ -4445,7 +4577,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1147
+            "line": 1230
           }
         ]
       },
@@ -4493,7 +4625,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1144
+            "line": 1227
           }
         ]
       },
@@ -4533,7 +4665,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1144
+            "line": 1227
           }
         ]
       },
@@ -4573,7 +4705,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1144
+            "line": 1227
           }
         ]
       },
@@ -4599,15 +4731,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 913
+          "line": 937
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1541
+          "line": 1569
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1679
+          "line": 1708
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -4621,7 +4753,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1056
+            "line": 1130
           }
         ]
       },
@@ -4685,7 +4817,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1035
+            "line": 1109
           }
         ]
       },
@@ -4739,7 +4871,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1615
+          "line": 1644
         }
       ],
       "dispatch_owner_present": true,
@@ -4749,7 +4881,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1035
+            "line": 1109
           }
         ]
       },
@@ -4787,7 +4919,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1723
+          "line": 1753
         }
       ],
       "dispatch_owner_present": true,
@@ -4797,7 +4929,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -4843,7 +4975,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1724
+          "line": 1754
         }
       ],
       "dispatch_owner_present": true,
@@ -4853,7 +4985,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -4891,7 +5023,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1725
+          "line": 1755
         }
       ],
       "dispatch_owner_present": true,
@@ -4901,7 +5033,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -4943,7 +5075,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1726
+          "line": 1756
         }
       ],
       "dispatch_owner_present": true,
@@ -4953,7 +5085,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -4991,7 +5123,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1727
+          "line": 1757
         }
       ],
       "dispatch_owner_present": true,
@@ -5001,7 +5133,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5045,7 +5177,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5089,7 +5221,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5133,7 +5265,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5177,7 +5309,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5229,7 +5361,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5273,7 +5405,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5311,7 +5443,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1728
+          "line": 1758
         }
       ],
       "dispatch_owner_present": true,
@@ -5321,7 +5453,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5359,7 +5491,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1729
+          "line": 1759
         }
       ],
       "dispatch_owner_present": true,
@@ -5369,7 +5501,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5403,7 +5535,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1730
+          "line": 1760
         }
       ],
       "dispatch_owner_present": true,
@@ -5413,7 +5545,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5447,7 +5579,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1731
+          "line": 1761
         }
       ],
       "dispatch_owner_present": true,
@@ -5457,7 +5589,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5491,7 +5623,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1732
+          "line": 1762
         }
       ],
       "dispatch_owner_present": true,
@@ -5501,7 +5633,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5535,7 +5667,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1733
+          "line": 1763
         }
       ],
       "dispatch_owner_present": true,
@@ -5545,7 +5677,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5579,7 +5711,7 @@
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1734
+          "line": 1764
         }
       ],
       "dispatch_owner_present": true,
@@ -5589,7 +5721,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5649,7 +5781,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5701,7 +5833,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5749,7 +5881,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5797,7 +5929,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5845,7 +5977,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1117
+            "line": 1194
           }
         ]
       },
@@ -5871,7 +6003,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/preference_media.rs",
-          "line": 21
+          "line": 18
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -5885,7 +6017,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -5911,7 +6043,7 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/preference_media.rs",
-          "line": 20
+          "line": 17
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -5925,7 +6057,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -5955,11 +6087,11 @@
         },
         {
           "file": "rust/src/hub/preference_media.rs",
-          "line": 20
+          "line": 17
         },
         {
           "file": "rust/src/hub/preference_media.rs",
-          "line": 21
+          "line": 18
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -5971,7 +6103,7 @@
         },
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1113
+          "line": 1190
         }
       ],
       "dispatch_owner_present": true,
@@ -5981,7 +6113,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1010
+            "line": 1084
           }
         ]
       },
@@ -6007,15 +6139,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1572
+          "line": 1601
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1573
+          "line": 1602
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1712
+          "line": 1742
         },
         {
           "file": "rust/src/hub/routines.rs",
@@ -6045,7 +6177,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1099
+            "line": 1176
           }
         ]
       },
@@ -6071,11 +6203,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1573
+          "line": 1602
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1712
+          "line": 1742
         },
         {
           "file": "rust/src/hub/routines.rs",
@@ -6097,7 +6229,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1099
+            "line": 1176
           }
         ]
       },
@@ -6123,15 +6255,15 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1572
+          "line": 1601
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1574
+          "line": 1603
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1715
+          "line": 1745
         },
         {
           "file": "rust/src/hub/routines.rs",
@@ -6149,7 +6281,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1099
+            "line": 1176
           }
         ]
       },
@@ -6175,11 +6307,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1574
+          "line": 1603
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1715
+          "line": 1745
         },
         {
           "file": "rust/src/hub/routines.rs",
@@ -6193,7 +6325,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1099
+            "line": 1176
           }
         ]
       },
@@ -6219,11 +6351,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1429
+          "line": 1457
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1716
+          "line": 1746
         },
         {
           "file": "rust/src/routine/memo.rs",
@@ -6237,7 +6369,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1104
+            "line": 1181
           }
         ]
       },
@@ -6263,11 +6395,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1429
+          "line": 1457
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1716
+          "line": 1746
         }
       ],
       "dispatch_owner_present": true,
@@ -6277,7 +6409,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1104
+            "line": 1181
           }
         ]
       },
@@ -6303,11 +6435,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1462
+          "line": 1490
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1719
+          "line": 1749
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -6325,7 +6457,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1104
+            "line": 1181
           }
         ]
       },
@@ -6351,11 +6483,11 @@
       "rust_route_literal_refs": [
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1462
+          "line": 1490
         },
         {
           "file": "rust/src/hub/router.rs",
-          "line": 1719
+          "line": 1749
         },
         {
           "file": "rust/src/hub/transport.rs",
@@ -6369,7 +6501,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1104
+            "line": 1181
           }
         ]
       },
@@ -6405,7 +6537,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1165
+            "line": 1248
           }
         ]
       },
@@ -6441,7 +6573,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1165
+            "line": 1248
           }
         ]
       },
@@ -6485,15 +6617,15 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 419
+            "line": 467
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1152
+            "line": 1235
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1155
+            "line": 1238
           }
         ]
       },
@@ -6533,15 +6665,15 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 419
+            "line": 467
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1152
+            "line": 1235
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1155
+            "line": 1238
           }
         ]
       },
@@ -6577,15 +6709,15 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 419
+            "line": 467
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1152
+            "line": 1235
           },
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1155
+            "line": 1238
           }
         ]
       },
@@ -6629,7 +6761,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1049
+            "line": 1123
           }
         ]
       },
@@ -6665,7 +6797,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1046
+            "line": 1120
           }
         ]
       },
@@ -6709,7 +6841,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1046
+            "line": 1120
           }
         ]
       },
@@ -6749,7 +6881,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1046
+            "line": 1120
           }
         ]
       },
@@ -6789,7 +6921,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1046
+            "line": 1120
           }
         ]
       },
@@ -6829,7 +6961,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1046
+            "line": 1120
           }
         ]
       },
@@ -6869,7 +7001,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1141
+            "line": 1224
           }
         ]
       },
@@ -6933,7 +7065,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1053
+            "line": 1127
           }
         ]
       },
@@ -6985,7 +7117,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1053
+            "line": 1127
           }
         ]
       },
@@ -7025,7 +7157,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1053
+            "line": 1127
           }
         ]
       },
@@ -7065,7 +7197,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1053
+            "line": 1127
           }
         ]
       },
@@ -7105,7 +7237,7 @@
         "refs": [
           {
             "file": "rust/src/application/main_program/serve.rs",
-            "line": 1053
+            "line": 1127
           }
         ]
       },
@@ -7129,13 +7261,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 206
+          "line": 231
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7151,21 +7283,21 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 206
+          "line": 231
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 212
+          "line": 237
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 220
+          "line": 245
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7181,13 +7313,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 431
+          "line": 488
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7203,17 +7335,17 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 405
+          "line": 462
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 413
+          "line": 470
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7229,13 +7361,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 428
+          "line": 485
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7251,13 +7383,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 429
+          "line": 486
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7273,13 +7405,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 430
+          "line": 487
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7295,13 +7427,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 435
+          "line": 492
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7317,17 +7449,17 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 411
+          "line": 468
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 436
+          "line": 493
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7343,13 +7475,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 437
+          "line": 494
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7365,25 +7497,25 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 511
+          "line": 568
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 736
+          "line": 793
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 738
+          "line": 795
         },
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 739
+          "line": 796
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7399,13 +7531,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 519
+          "line": 576
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7421,13 +7553,13 @@
       "rust_consumer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 523
+          "line": 580
         }
       ],
       "main_binding_refs": [
         {
           "file": "rust/src/application/main_program/serve.rs",
-          "line": 1248
+          "line": 1334
         }
       ],
       "state": "source_consumer_bound_unaccepted",
@@ -7441,7 +7573,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/application/session_workers.rs",
-          "line": 522
+          "line": 520
         }
       ],
       "go_literal_refs": [
@@ -7488,12 +7620,12 @@
       ],
       "go_literal_refs": [
         {
-          "file": "internal/hub/approval_patterns_custom.go",
-          "line": 121
-        },
-        {
           "file": "internal/hub/approval_patterns_sync.go",
           "line": 102
+        },
+        {
+          "file": "internal/hub/approval_patterns_custom.go",
+          "line": 121
         }
       ],
       "state": "source_producer_present_unaccepted",
@@ -7688,6 +7820,10 @@
         {
           "file": "rust/src/terminal/session/completion.rs",
           "line": 765
+        },
+        {
+          "file": "rust/src/terminal/session/completion.rs",
+          "line": 901
         }
       ],
       "go_literal_refs": [
@@ -7770,7 +7906,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/terminal/session/input.rs",
-          "line": 695
+          "line": 713
         }
       ],
       "go_literal_refs": [
@@ -7791,15 +7927,15 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/wrapper/entry.rs",
-          "line": 447
+          "line": 444
         },
         {
           "file": "rust/src/wrapper/entry.rs",
-          "line": 471
+          "line": 468
         },
         {
           "file": "rust/src/wrapper/entry.rs",
-          "line": 487
+          "line": 484
         },
         {
           "file": "rust/src/wrapper/runtime.rs",
@@ -7815,7 +7951,7 @@
         },
         {
           "file": "rust/src/terminal/session/lifecycle.rs",
-          "line": 519
+          "line": 549
         },
         {
           "file": "rust/src/terminal/session/observations.rs",
@@ -7824,12 +7960,12 @@
       ],
       "go_literal_refs": [
         {
-          "file": "internal/hub/input_gate.go",
-          "line": 132
-        },
-        {
           "file": "internal/hub/ui_broadcast.go",
           "line": 89
+        },
+        {
+          "file": "internal/hub/input_gate.go",
+          "line": 132
         },
         {
           "file": "internal/hub/wrapper_loop.go",
@@ -7898,7 +8034,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/terminal/session/lifecycle.rs",
-          "line": 508
+          "line": 538
         }
       ],
       "go_literal_refs": [
@@ -7919,7 +8055,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/hub/websocket.rs",
-          "line": 590
+          "line": 647
         }
       ],
       "go_literal_refs": [
@@ -7960,7 +8096,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/terminal/session.rs",
-          "line": 645
+          "line": 649
         }
       ],
       "go_literal_refs": [
@@ -8026,7 +8162,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/terminal/session/lifecycle.rs",
-          "line": 684
+          "line": 776
         }
       ],
       "go_literal_refs": [
@@ -8047,11 +8183,11 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/wrapper/entry.rs",
-          "line": 415
+          "line": 412
         },
         {
           "file": "rust/src/wrapper/entry.rs",
-          "line": 495
+          "line": 492
         },
         {
           "file": "rust/src/wrapper/runtime.rs",
@@ -8067,7 +8203,7 @@
         },
         {
           "file": "rust/src/terminal/session/lifecycle.rs",
-          "line": 615
+          "line": 645
         }
       ],
       "go_literal_refs": [
@@ -8109,7 +8245,7 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/terminal/session/lifecycle.rs",
-          "line": 718
+          "line": 810
         }
       ],
       "go_literal_refs": [
@@ -8134,21 +8270,21 @@
       "rust_producer_refs": [
         {
           "file": "rust/src/terminal/session.rs",
-          "line": 543
+          "line": 547
         },
         {
           "file": "rust/src/terminal/session.rs",
-          "line": 584
+          "line": 588
         },
         {
           "file": "rust/src/terminal/session.rs",
-          "line": 631
+          "line": 635
         }
       ],
       "go_literal_refs": [
         {
-          "file": "internal/hub/branch_refresh.go",
-          "line": 154
+          "file": "internal/hub/transcript_stall.go",
+          "line": 190
         },
         {
           "file": "internal/hub/idle_state.go",
@@ -8171,8 +8307,8 @@
           "line": 188
         },
         {
-          "file": "internal/hub/orchestration.go",
-          "line": 3355
+          "file": "internal/hub/session_meta.go",
+          "line": 204
         },
         {
           "file": "internal/hub/server.go",
@@ -8258,12 +8394,12 @@
       ],
       "go_literal_refs": [
         {
-          "file": "internal/hub/subagent_tree.go",
-          "line": 469
-        },
-        {
           "file": "internal/hub/ui_broadcast.go",
           "line": 271
+        },
+        {
+          "file": "internal/hub/subagent_tree.go",
+          "line": 469
         }
       ],
       "state": "source_producer_present_unaccepted",
@@ -8353,14 +8489,6 @@
       ],
       "go_literal_refs": [
         {
-          "file": "internal/hub/workflow_journal.go",
-          "line": 825
-        },
-        {
-          "file": "internal/hub/workflow_journal.go",
-          "line": 853
-        },
-        {
           "file": "internal/hub/workflow_scan.go",
           "line": 556
         },
@@ -8371,6 +8499,14 @@
         {
           "file": "internal/hub/workflow_task_detail.go",
           "line": 497
+        },
+        {
+          "file": "internal/hub/workflow_journal.go",
+          "line": 825
+        },
+        {
+          "file": "internal/hub/workflow_journal.go",
+          "line": 853
         }
       ],
       "state": "source_producer_present_unaccepted",
@@ -8927,7 +9063,7 @@
   "unresolved_or_compatibility_limits": [
     "Native/browser/device/provider/GUI acceptance remains pending for every route; no production installation, notification, account, quota or destructive uninstall acceptance performed.",
     "Instruction rule owner is composed in main with recover/bind before listening and fresh-token cleanup after draining; product vendor-file acceptance remains pending.",
-    "Windows uninstall directory-capability/root ConfigStore handle-release fixes and Unix platform source ports have local synthetic integration tests; actual uninstall/GUI and other-OS acceptance remain pending.",
+    "Windows uninstall directory-capability/root ConfigStore handle-release fixes and Unix platform source ports have synthetic native CI evidence at4dc961ce; actual installed uninstall/GUI acceptance remains pending.",
     "Trial deliberately rejects real host GUI dispatch, external approval-pattern fetch, arbitrary external PID termination, real push delivery, and vendor artifact aliases outside held selected root.",
     "PID-only recovery compatibility cannot prove a recovered process identity against PID reuse; trial refuses actual recovered PID kills.",
     "Codex/Grok native subagent readers have synthetic fixtures; broad independent native Go corpora for those readers remain pending.",
@@ -8935,7 +9071,8 @@
     "HTTP prefix registration rows do not enumerate every method/suffix branch; original inventory retains49 dynamic suffix entries separately.",
     "Historical WS lexical inventory contains dir/file/text DTO discriminator false positives; all49 original rows retained with three marked non-message.",
     "Historical outgoing session_dismiss literal is an internal relay handleDismiss request, not a Go WebSocket emission; canonical Rust UI request consumer and session_removed response remain present.",
-    "Parent owns final full-suite/clippy receipts and archive/provenance closure; static binding evidence cannot replace these receipts."
+    "Exact4dc961ce four-target CI and binary identities are recorded in the validation/artifact receipts; complete distribution provenance, signed packaging and product acceptance remain separate.",
+    "Historical route partial/unresolved counts are not current source-disconnection counts. Use route_coverage.json current_source_coverage for source bindings and preserve its separate acceptance limits."
   ],
   "source_hashes": [
     {
@@ -9024,7 +9161,7 @@
     },
     {
       "path": "rust/src/application/main_program.rs",
-      "sha256": "b4553c3df8fb23a0dd5375385b2cd83a27796235faf620c54a8a9db91ceea9a4"
+      "sha256": "52228885b17cb44b30b87a5c40f9f5da018a85ef3d1794cea22e4d8033296155"
     },
     {
       "path": "rust/src/application/mobile_connect.rs",
@@ -9032,7 +9169,7 @@
     },
     {
       "path": "rust/src/application/mod.rs",
-      "sha256": "8156b7fffb6631ea6fab54609be7bbf114458b3e6590822f3ff5331abcb9a5b3"
+      "sha256": "8d1a5e667a67e147c86dea1ddd4675ee68ff3d6cc5ef01aa230f056f71aba177"
     },
     {
       "path": "rust/src/application/nvidia_nim.rs",
@@ -9044,7 +9181,7 @@
     },
     {
       "path": "rust/src/application/orchestration_program.rs",
-      "sha256": "8e477438627dd470c63290ebbd6b8d98d53c29c63d4530143d3325cb2ab24d5a"
+      "sha256": "8db628eb2e4d870aa91df401aef220e7f852091953cf7f0491fa2a9b85842ae8"
     },
     {
       "path": "rust/src/application/ordinary_spawn.rs",
@@ -9084,7 +9221,7 @@
     },
     {
       "path": "rust/src/application/session_workers.rs",
-      "sha256": "5e85f52cf3243bebdd9e6573a261eefae65cda99a3437f3d666287d50f17ba54"
+      "sha256": "b28ab1d8b0f91f26961422304076607923103a8a7134167b5d95defa9badf1aa"
     },
     {
       "path": "rust/src/application/slash_commands.rs",
@@ -9180,7 +9317,7 @@
     },
     {
       "path": "rust/src/config/paths.rs",
-      "sha256": "4d5b64a881e81bc1dd482211877ff0b6658f45649b1b0ad3580b5b6ba93c3f6a"
+      "sha256": "9b04c70141bda3d2ddf3896f4ca3ed656ac0eca53a7ef598ee96e342ec944cdc"
     },
     {
       "path": "rust/src/config/private_io.rs",
@@ -9312,7 +9449,7 @@
     },
     {
       "path": "rust/src/hub/distribution_routes.rs",
-      "sha256": "01f87ee3f9c612b5840872abe98d05ab1cd4f4555eb3056395869288bde973ff"
+      "sha256": "71bc8332a083916c0df2e686194ea2883218711b7d142878fda397e255275993"
     },
     {
       "path": "rust/src/hub/grid_spawn_routes.rs",
@@ -9340,7 +9477,7 @@
     },
     {
       "path": "rust/src/hub/lifecycle.rs",
-      "sha256": "72a6e0d84cf5f16f4f16023abc119ef9b772b568de61d26999cc4f7c2a9f2f8a"
+      "sha256": "cfa6817e3a694ecec82648fae9bb2ecd271ed0fc53000e5f90e9d7234a23fc4c"
     },
     {
       "path": "rust/src/hub/mobile_routes.rs",
@@ -9348,7 +9485,7 @@
     },
     {
       "path": "rust/src/hub/mod.rs",
-      "sha256": "c8e5a971c797b5b262b3141236479d465978a5f4b649930c1490000328e537ea"
+      "sha256": "e656e9ccb094dfd1bddfe45a1206fa3d418650a4493e98dbc1e6576b9a3e3b41"
     },
     {
       "path": "rust/src/hub/network.rs",
@@ -9376,7 +9513,7 @@
     },
     {
       "path": "rust/src/hub/preference_media.rs",
-      "sha256": "517978c667a3aeb6d97e6e1be0066515442fbe95a8d263d089ce324d03d2ac0b"
+      "sha256": "aeb4a640cd29cfae566a635d0dcb582036ba1017c4b520741ab2d00326342b08"
     },
     {
       "path": "rust/src/hub/provider_routes.rs",
@@ -9392,7 +9529,7 @@
     },
     {
       "path": "rust/src/hub/router.rs",
-      "sha256": "2f13279125e5849a5dce087490fec5e9f1cd4f069850832aa5504f08c68ca148"
+      "sha256": "1860eb0d46da79654957ff07821baedd108ea62b5f1117fdbbc96c641e80e2ef"
     },
     {
       "path": "rust/src/hub/routines.rs",
@@ -9460,7 +9597,7 @@
     },
     {
       "path": "rust/src/hub/websocket.rs",
-      "sha256": "e889d5bcb2620ffd80661e1d0e60ebfb747bfa1cf22e8dde076e9994b19163d3"
+      "sha256": "aae7d9141b97eb3c842255e264a7dedcd8ea8cc2c48fd89f9c01ae688deb6c78"
     },
     {
       "path": "rust/src/hub/whisper_routes.rs",
@@ -9468,7 +9605,7 @@
     },
     {
       "path": "rust/src/hub/ws_transport_tests.rs",
-      "sha256": "f2b4319607865dbfb7953c29860ea38ee10a643957587177576c6c1e9b192ecf"
+      "sha256": "19a16d52b36098d5fe5da5dfd7b7174693161ef9c117f90658a53ffdac1696c5"
     },
     {
       "path": "rust/src/launcher/active.rs",
@@ -9484,7 +9621,7 @@
     },
     {
       "path": "rust/src/launcher/delivery.rs",
-      "sha256": "c08a5daf5c0ba25207e8a737fc0f8cdc266d4776ebb2fcf37e70f410c1eb3ba2"
+      "sha256": "0d1444293aa6957ed7b73c1c59990c90630304ec85212ba4c92f842b525379a6"
     },
     {
       "path": "rust/src/launcher/exchange.rs",
@@ -9496,7 +9633,7 @@
     },
     {
       "path": "rust/src/launcher/mod.rs",
-      "sha256": "50623903a73715eece9dd7f0ae2f964c7503d9bff8f098ae5a955a5441048fe2"
+      "sha256": "cc25acdaad928f2f8ee34c3971db094e00c9fc655236f8c3afb77d35bd187db3"
     },
     {
       "path": "rust/src/launcher/network.rs",
@@ -9516,7 +9653,7 @@
     },
     {
       "path": "rust/src/launcher/ui.rs",
-      "sha256": "86990c360adcc49b393a6c7d375c2eafec3052a2941068f9ab79a70e8c2eb5a3"
+      "sha256": "41a95b5d12825e47cd6a71397d6c27cc0ec35a82063cd37b74fc280fca1fac34"
     },
     {
       "path": "rust/src/logging/mod.rs",
@@ -9528,15 +9665,15 @@
     },
     {
       "path": "rust/src/notify/mod.rs",
-      "sha256": "dcb62de31cffdef150000b3a6a7e93355ebb880cf871b2c782fdef96a55ca02a"
+      "sha256": "715448bb87b4aeae07bccd492213dd41f564f6299ba6ea6fe4a9b84b533b0371"
     },
     {
       "path": "rust/src/notify/tests.rs",
-      "sha256": "dc415d6cdf8246e687339e1e1d11695897e91a81d2a2008a1208948cbc55c32a"
+      "sha256": "23ca10ca11f506c800de5f8a9573fb69014ba02e17e3dd7970082a1145d12ff8"
     },
     {
       "path": "rust/src/orchestration/child_launch.rs",
-      "sha256": "26199b2dee90e1f81744229386c9ed2582b8354aea9b43b49ffd7d679389c50d"
+      "sha256": "a2cbc00835c92ec20287fa1e0b10b8eb26f1cdbacda84c727b2a395d3b81c2e9"
     },
     {
       "path": "rust/src/orchestration/child_options.rs",
@@ -9556,11 +9693,11 @@
     },
     {
       "path": "rust/src/orchestration/initial_prompt.rs",
-      "sha256": "a9fb05ebcb0729765e895279a68054eb04c8d493ed4b58c5589b4bf1edf37c21"
+      "sha256": "05bca617a8211205313f94514a2c4676c0a90813f35173900fef599413c1434a"
     },
     {
       "path": "rust/src/orchestration/mod.rs",
-      "sha256": "cc824f1645c22e5094079a05ea907fce409e7ff7fa9c4aa1005bd4e0432bb525"
+      "sha256": "91bc33b59b47a91ca12e08f8249dba5714151768dcc703748f4c2b1cdc4ee2e1"
     },
     {
       "path": "rust/src/orchestration/normal_worktree.rs",
@@ -9576,7 +9713,7 @@
     },
     {
       "path": "rust/src/process/mod.rs",
-      "sha256": "3c19d68f986f832cbba37edb9ac48115a3573bf3a037e1682290512f767592e1"
+      "sha256": "34be06278e6ec287a5948cc26a4e9b7ac124c5c5d1df76b011dd159da70bc1c0"
     },
     {
       "path": "rust/src/process/pty.rs",
@@ -9644,7 +9781,7 @@
     },
     {
       "path": "rust/src/proto/core.rs",
-      "sha256": "1149fb9d13addfffe1784daa522183d55d05a6ba8d275584ee087c22670c7f7e"
+      "sha256": "2a38f671e1c93c625e98289791d29585323dd6cc1332b522e0d7c66b8f4674f6"
     },
     {
       "path": "rust/src/proto/generated.rs",
@@ -9732,11 +9869,11 @@
     },
     {
       "path": "rust/src/storage/mod.rs",
-      "sha256": "a5e5de7ea5296729510e4d37f1bc08d3016ae7f2438ce1344fe31e8453e3d34b"
+      "sha256": "514bb3c2d60e5e046af464bdace709750559b526e3313d81c684c5a31fbd96a9"
     },
     {
       "path": "rust/src/storage/repository.rs",
-      "sha256": "15a6cc6075a9a4766303cbf25e85d2e552eb54850777eb43af0fed80bd0f5f42"
+      "sha256": "5a94ec7cc38b30f86b9794019403670d7f131b4acaeccd54c2848a18ab97b225"
     },
     {
       "path": "rust/src/storage/schema.rs",
@@ -9748,7 +9885,7 @@
     },
     {
       "path": "rust/src/storage/writer.rs",
-      "sha256": "c571ca019c1d670f8fbf263466f37ca1f2efb64096e87a72b709f9df30f69d9c"
+      "sha256": "54d8886e867030f0633eab34b7dda79c60362bb306a6db9099eb633e62eb60fe"
     },
     {
       "path": "rust/src/terminal/events.rs",
@@ -9760,7 +9897,7 @@
     },
     {
       "path": "rust/src/terminal/journal.rs",
-      "sha256": "12db7c1c1663667a8a77c80f8185992264207724a711f4aff208200f2db9e413"
+      "sha256": "a88de0ccd4ae1e34f112fa73d4f94e508efeee9a0c9cb0a336be5a04e2d333e7"
     },
     {
       "path": "rust/src/terminal/mod.rs",
@@ -9772,7 +9909,7 @@
     },
     {
       "path": "rust/src/terminal/session.rs",
-      "sha256": "9170800f56f4732be0e5bc69cc0ca1bf1413c08936079d2067d750a008bc7e5d"
+      "sha256": "4a3eeb9030a9446e4866017136f872245575f7f59e20723fb71fdef106792942"
     },
     {
       "path": "rust/src/terminal/vt.rs",
@@ -9800,11 +9937,11 @@
     },
     {
       "path": "rust/src/wrapper/approval_injection.rs",
-      "sha256": "e4fa2bcb574dee462edea0128b091238d74e5fc96633954c1aab0fd20acb8220"
+      "sha256": "ae93e9cbd48e34a9440fc128be7401f6c54ee694c3cd63cee60f238e5f472ebd"
     },
     {
       "path": "rust/src/wrapper/entry.rs",
-      "sha256": "ce20d285340c467e367c24c01ed2bb229e033fa15da5efc03faed97969e5b08c"
+      "sha256": "fb362919b9b252ec7ec43ade01666d005f19d0536e2bb157e7a9c6f6c220d655"
     },
     {
       "path": "rust/src/wrapper/hooks.rs",
@@ -9844,7 +9981,7 @@
     },
     {
       "path": "rust/src/wrapper/approval_injection/tests.rs",
-      "sha256": "87921304848f5eed3737be2ad2e1ee1058e1ddf17dad9316827d1e187671ab04"
+      "sha256": "003ae2e57f1461f145ad4613d7808839cf5c5372131f87df97a63cb4a513410c"
     },
     {
       "path": "rust/src/wrapper/hooks/codex.rs",
@@ -9868,7 +10005,7 @@
     },
     {
       "path": "rust/src/terminal/session/completion.rs",
-      "sha256": "8a8b6fb7e496e7855904a049a4bdcf779b66d215178871cd26478d88a2739a4b"
+      "sha256": "68a558da7a49a0b1e394422db7637622435bf18324db38c3c8a2cdad3c08f2ea"
     },
     {
       "path": "rust/src/terminal/session/confirmations.rs",
@@ -9876,7 +10013,7 @@
     },
     {
       "path": "rust/src/terminal/session/input.rs",
-      "sha256": "e59ffef8f11ce4f135827db853b3f23e7b021a681dd47d9f9f3a8748858fe394"
+      "sha256": "270346befd56e50c6c1eb08beb2bc31705aea664cba806b6fe7f3633a7223873"
     },
     {
       "path": "rust/src/terminal/session/lane.rs",
@@ -9884,7 +10021,7 @@
     },
     {
       "path": "rust/src/terminal/session/lifecycle.rs",
-      "sha256": "4c503bf0466b8a3617d621462e65a5ee0394558ca88c1bd3be17e17bf60ef1c9"
+      "sha256": "86ea09d47efe249fc5e08c49de4a6a62bdd22da62b486fd2f18823ddae08c61a"
     },
     {
       "path": "rust/src/terminal/session/observations.rs",
@@ -9892,7 +10029,7 @@
     },
     {
       "path": "rust/src/terminal/session/observer_tests.rs",
-      "sha256": "611cc1a3aecc24880fc12348ba99b8640a7ef5a9bb7a26fa27d2b3b5a410b69d"
+      "sha256": "deaf3487f2e586f8ce5c108f6dffb302153228f2efec842ec1cdc5d8691a925a"
     },
     {
       "path": "rust/src/terminal/session/output_model_tests.rs",
@@ -9900,7 +10037,7 @@
     },
     {
       "path": "rust/src/terminal/session/spawning.rs",
-      "sha256": "2d16831c2e253d65d5fa2ea1daa2cbd1682967eafc47c5a4cfc8e2d9348d361d"
+      "sha256": "2669ce5ced6a42ad1787d2c24d7285cf83733db017b1544d077bb23538e9de93"
     },
     {
       "path": "rust/src/terminal/session/ui.rs",
@@ -9912,11 +10049,11 @@
     },
     {
       "path": "rust/src/terminal/session/completion/tests.rs",
-      "sha256": "15882a54c22c837468b07c0c6c6b2043068f4f72c0657c929678fa723c714640"
+      "sha256": "944ce307f9cde5d259f4bbb32465b734c8b6513fc50910bec59dac075c91b78f"
     },
     {
       "path": "rust/src/terminal/session/confirmations/tests.rs",
-      "sha256": "cf9c274f01ff1bd5fdb45f5b304a3767676a98ef274bb473cf1807484e91aaa0"
+      "sha256": "8161a77d0acac9612bf97c58260b3a6d28d4511bc14cd47583a633cb66009c21"
     },
     {
       "path": "rust/src/proto/time/clock.rs",
@@ -9960,7 +10097,7 @@
     },
     {
       "path": "rust/src/orchestration/child_launch/board.rs",
-      "sha256": "769abd5ea3613d651989490de2cd481f797f78dfe2f333b1fad1da1ad54a4a1b"
+      "sha256": "ac0a1e0a7bbdc53b68523ea92ed3ccd4010b5abe9d357425afa3b795499f012c"
     },
     {
       "path": "rust/src/orchestration/child_launch/prompt.rs",
@@ -9980,11 +10117,11 @@
     },
     {
       "path": "rust/src/orchestration/initial_prompt/tests.rs",
-      "sha256": "db159f6df2d102799ad1657c0191f04cb2b278dffbdb3900ef78b741162e2e45"
+      "sha256": "1f78d9c394d5236fec6302aa5fd4bda9e6d4543cdb42003ae237d5b5a6c38571"
     },
     {
       "path": "rust/src/orchestration/normal_worktree/tests.rs",
-      "sha256": "d6bbe30dc1b417b9fa8736b33c4afa29ff2702169c3d13e5c4d2581c52df46a4"
+      "sha256": "f226e83e32e17fdd9fc867b9aa665bab73149d49a9982772f431852ae574527b"
     },
     {
       "path": "rust/src/orchestration/subagent/claude.rs",
@@ -10020,7 +10157,7 @@
     },
     {
       "path": "rust/src/hub/distribution_routes/tests.rs",
-      "sha256": "000362ab2a7e7321ae21fa4be3643df7c5c0c24878be79526090416a3d0f3415"
+      "sha256": "a0e5f36171d78cf2c0e951a72c00213830390cfeccec0cdbacf81e9ca91d7ec5"
     },
     {
       "path": "rust/src/hub/handoff_routes/tests.rs",
@@ -10044,11 +10181,11 @@
     },
     {
       "path": "rust/src/hub/preferences/tests.rs",
-      "sha256": "2d0a486624ca3210b07f6d500992d1982da489c619716ba0ae34bb75fe24e69c"
+      "sha256": "ee51db7ecd2a2b87d477927491988f89c9b666d7a5b5239f27bb884714d968c9"
     },
     {
       "path": "rust/src/hub/preference_media/tests.rs",
-      "sha256": "0b2033dffa8146d9c9c29453b9659c288b12f9c1180c3fc9af6702cc16393d6a"
+      "sha256": "72f548a3c8305a794fa08644cb362f63bc8278aacab351a7c6816845a7b68202"
     },
     {
       "path": "rust/src/hub/provider_routes/tests.rs",
@@ -10188,7 +10325,7 @@
     },
     {
       "path": "rust/src/application/event_observer/tests.rs",
-      "sha256": "f0b938154b6dab186fcf7f82ff0afc814765778a5ebb7f0a461ba940aff24770"
+      "sha256": "bb96a8de81704af798bdcd6c29e4eee955fb5104ac24777f8eb3db6ccaaad9ae"
     },
     {
       "path": "rust/src/application/grid_spawn/tests.rs",
@@ -10196,7 +10333,7 @@
     },
     {
       "path": "rust/src/application/host_actions/tests.rs",
-      "sha256": "d90f425111ed3d5d332d0f7b95d46af1608f10c6e150ba24735d7893ae85878e"
+      "sha256": "c40c52070af194b643ce807f47cfb4c9c7508ca9ed20c833a2955e7eaf239ea9"
     },
     {
       "path": "rust/src/application/instruction_rules/native.rs",
@@ -10232,7 +10369,7 @@
     },
     {
       "path": "rust/src/application/main_program/bootstrap.rs",
-      "sha256": "aac400edc1133c5d37117a2dfa7b61038def52aada4c67cac6663bc5f01cba8e"
+      "sha256": "5bf1dd552d595e16323b32d4dba4046ac84b0a655c4fec69dc5e57b30cfdbda8"
     },
     {
       "path": "rust/src/application/main_program/confirmations.rs",
@@ -10240,7 +10377,7 @@
     },
     {
       "path": "rust/src/application/main_program/context.rs",
-      "sha256": "1dc2719d4da88b6a47db60bb69a7019f7d21da35dd169d091543fedcd1bca50e"
+      "sha256": "cef1de1f4bc0a67f3ad7300f666d70e6922f0cc85c8060c4d25563efbd35313f"
     },
     {
       "path": "rust/src/application/main_program/dev_assets.rs",
@@ -10260,11 +10397,11 @@
     },
     {
       "path": "rust/src/application/main_program/instruction_observer.rs",
-      "sha256": "628f10831d8c980c9e03316cfd4897182094c7d5ef13875017709af2a43c2795"
+      "sha256": "cc710d0e7d6ac748e1e4a21879692c07a18abd62b4b2e361b0fe180d2da33a55"
     },
     {
       "path": "rust/src/application/main_program/logger.rs",
-      "sha256": "18b25b2af974fc1ddd489a276cbdb82d0954dd9c09e9cf21dff2c7cbdf3faa36"
+      "sha256": "a5e2e55fb6e485904ffcba90070614c88fdd0a8adef83cfcef457217255d15ea"
     },
     {
       "path": "rust/src/application/main_program/model_cache.rs",
@@ -10280,7 +10417,7 @@
     },
     {
       "path": "rust/src/application/main_program/serve.rs",
-      "sha256": "cc051695eaeaab98d6daec25227c762a660f517d56ef01dcebf7f99a367524a6"
+      "sha256": "9444d775e34dec750647533baa665ccded431f9b11432cde2ddd7116e2c31259"
     },
     {
       "path": "rust/src/application/main_program/subscriptions.rs",
@@ -10288,7 +10425,7 @@
     },
     {
       "path": "rust/src/application/main_program/tests.rs",
-      "sha256": "85a170fa7d3d69ca7db5c92ce5082c8eb28ebe3dbafbe196de6fb85420b94080"
+      "sha256": "6521d6f9e55a918e316f7a31ee463187518e73b7bcec80394e63293f03815263"
     },
     {
       "path": "rust/src/application/main_program/workspace.rs",
@@ -10320,15 +10457,15 @@
     },
     {
       "path": "rust/src/application/orchestration_program/lifecycle.rs",
-      "sha256": "6d48d104c5b6d2bbd4f49783518751e15b69609839fdf176f3e1156848f0cddd"
+      "sha256": "99ec15746875de2cfc4f7beeb2dad7476518fef8c4e052e0b2a1de8f46325764"
     },
     {
       "path": "rust/src/application/orchestration_program/progress.rs",
-      "sha256": "332cbcafa4711738f515876872d335cff8f5d753f6cbb3a578024d3cbdf87b8f"
+      "sha256": "0ff3eedc2130bbd86be03b31729d61b6ec7f02d42a94deadd5caa1e9dcf1bd2f"
     },
     {
       "path": "rust/src/application/orchestration_program/tests.rs",
-      "sha256": "1670b71ea7871aa80b4d1e6950f661ddf39a57fd3ee1dbb298b6d976f0e3b5dc"
+      "sha256": "c339f4b00d307137ee8057900adf51a54ead50e90d5f08938d1ef020acde6512"
     },
     {
       "path": "rust/src/application/ordinary_spawn/request.rs",
@@ -10344,11 +10481,11 @@
     },
     {
       "path": "rust/src/application/platform_cli/native.rs",
-      "sha256": "1ca274dc03e8c70dc90dddab47651adf4af9bb2c1dd00e2eeca2183792148e59"
+      "sha256": "03d4186b28421c8a8a4535f75f53ad23b0e4887cf94dc9680dc9da477988343b"
     },
     {
       "path": "rust/src/application/platform_cli/tests.rs",
-      "sha256": "c31564a78eb189f7b6f9e947c636563953faaeb86c224ce0d510bb3be72e0c06"
+      "sha256": "da0138c16b802c51cf93f676d2b56f8e96b790f92743c5620091d7f7c178fc6c"
     },
     {
       "path": "rust/src/application/push/crypto.rs",
@@ -10524,7 +10661,7 @@
     },
     {
       "path": "rust/src/application/whisper/native.rs",
-      "sha256": "ca5ad65fa191481abd8cac58498dafd1663a06c403746bfb594fe7765d044609"
+      "sha256": "b2d54dc7e1af349508dddfc293055c238c956ce37fbb2c492d870a62112de193"
     },
     {
       "path": "rust/src/application/whisper/tests.rs",
@@ -10544,7 +10681,7 @@
     },
     {
       "path": "rust/src/application/subscriptions/appserver/tests.rs",
-      "sha256": "5c29ab630177ad31ff48a81dbe726962cc76c7f2a7e6b5bccd114c654b987b28"
+      "sha256": "e2e8cda79fd9e2afd3963072cf0e9c4a1bafd436c0ebf1f65fd0312b15c30a35"
     },
     {
       "path": "rust/src/application/subscriptions/cli/tests.rs",
@@ -10596,7 +10733,7 @@
     },
     {
       "path": "rust/src/application/session_observations/subagents/mod.rs",
-      "sha256": "ded6331f61261719d90c7044f1d80b75837cb4ce92ee48e9423f52fe0084c43d"
+      "sha256": "a3b8672b6b77dfce5a4380d6600083c9447c0c0e335c3f60f4c6c7da719a1866"
     },
     {
       "path": "rust/src/application/session_observations/subagents/claude/decode.rs",
@@ -10628,7 +10765,7 @@
     },
     {
       "path": "rust/src/application/main_program/instruction_observer/tests.rs",
-      "sha256": "76224ec85b0ee171fdc080dd6f5607594ec46ec7b9f591d4c12f712e8365932d"
+      "sha256": "829168996fdb8446349c5cd5a8e0c6000ac377807f9c913ffc414acacc6ff15e"
     },
     {
       "path": "rust/src/application/main_program/model_catalog/native.rs",
@@ -10645,6 +10782,113 @@
     {
       "path": "rust/src/application/diagnostics/bug_report/tests.rs",
       "sha256": "3522c798b90b80cffc46ab05c314e7bf308ee78c4e5f559c487e9c01aff44d00"
+    },
+    {
+      "path": "rust/src/application/main_program/ownership.rs",
+      "sha256": "0bf1e0c58c71a16a13fd886fa8fbadb39e7d550a3037c89dde9a295a41225710"
+    },
+    {
+      "path": "rust/src/application/relay_program.rs",
+      "sha256": "79b48b3db28b628cf438c1d07936ac8f6a02218002cdfa1283d96340a61219ad"
+    },
+    {
+      "path": "rust/src/application/relay_program/lifecycle.rs",
+      "sha256": "df6a349fcd9fe80b64f1187c1ad8db2648256cdf3e968dc5245484bbc03cf785"
+    },
+    {
+      "path": "rust/src/application/relay_program/tests.rs",
+      "sha256": "d1b6ecf5b958674d9ccbe7920c6f1c4deee6d8982a245e7dd598dd9364ee1c57"
+    },
+    {
+      "path": "rust/src/application/relay_program/transitions.rs",
+      "sha256": "cd77d9e6e745181e225ed6fadb8c9866c60e8818ca118bb9fdb749ed1c6fc1ac"
+    },
+    {
+      "path": "rust/src/application/session_workers/recovery_core_prompt_tests.rs",
+      "sha256": "c455d7e706fa77ddd923372701c9c3469bdd85142fc03aee7af5eb18338b932c"
+    },
+    {
+      "path": "rust/src/hub/relay_routes.rs",
+      "sha256": "008938c70828eadcf2ae940638a2b1a0efde7b964d065d63e648afdc6e5ce9e8"
+    },
+    {
+      "path": "rust/src/launcher/ui_deadlines.rs",
+      "sha256": "5da7db0ab03ff26fd632e7e04007e903bb17382068e11e3355e89dcddb1ee510"
+    },
+    {
+      "path": "rust/src/orchestration/relay.rs",
+      "sha256": "2c54cfb1f802099291aef3ea1237dfe215fff431f4ecebe21cbbdbc40fca564c"
+    },
+    {
+      "path": "rust/src/orchestration/relay/store.rs",
+      "sha256": "f5cfb332a05d4bcee10f8877b0ace208baa4bdd3c41ec64928447e934279589f"
+    },
+    {
+      "path": "rust/src/orchestration/relay/text.rs",
+      "sha256": "df1f9017c9c0a2d3f982c66b0b5a67ecae38ed34c525500877ed880f63dd3450"
+    },
+    {
+      "path": "rust/src/orchestration/relay/trial_git.rs",
+      "sha256": "8c907a708ce403cb9e55d5aee198c8251c0ba54cd5eaa1e72a1269dca3579dba"
+    },
+    {
+      "path": "rust/src/orchestration/relay/wire.rs",
+      "sha256": "cc969daec5ae727b0e0406fa666563d2c3de6fc84e841844cb9d92be56bab5e4"
+    },
+    {
+      "path": "rust/src/orchestration/relay/worktree.rs",
+      "sha256": "cd5d75cf5915fe5bc2a8b2ad448ed078d69a60c27b9e96ac3e79f156e92bd806"
+    },
+    {
+      "path": "rust/src/terminal/session/relay.rs",
+      "sha256": "48e1e30526a3c22305d30bd7a3373138e939252edb32d7ccb208da0c9ac08cfb"
+    },
+    {
+      "path": "rust/src/wrapper/entry/command.rs",
+      "sha256": "a051a8d20b76ca0a0c252a464291dbc6c2e57442071cbc622a31afae73cdf186"
+    },
+    {
+      "path": "rust/src/wrapper/entry/command/tests.rs",
+      "sha256": "c1b140f66dac0ba8cfe6a83648fe18f37525263d10d8330ab36f2ded93a3ce8f"
+    }
+  ],
+  "source_identity": {
+    "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "tree_sha": "999ebd19270bda47e61cb377034a07f6830aa2a7",
+    "scope": "Rust source and reference positions at this immutable code revision; later documentation is not part of its build identity"
+  },
+  "historical_verification": {
+    "latest_full_receipt": "resume-integrated-fiftysixth.log",
+    "tests_passed": 1151,
+    "failed": 0,
+    "ignored": 0,
+    "summary_count": 31,
+    "exit_code": 0,
+    "scope_limit": "Local Windows all-target synthetic receipt; source binding and these tests do not establish production/native/browser/device acceptance. Historical snapshot only; not a receipt for4dc961ce."
+  },
+  "placeholder_macro_scan": {
+    "scope": "All rust/src/**/*.rs, including test modules",
+    "todo_invocations": 0,
+    "unimplemented_invocations": 0,
+    "limit": "Absence of these macros is not proof that every behavior is complete."
+  },
+  "review_scope": {
+    "independent": "Final fixture/cleanup continuation diff and four-target artifacts at 4dc961ce reviewed; no blocker in that scope.",
+    "owner_reported": "All 444 .rs files under rust/src reviewed by 11 separate-product AI reviews; zero high-severity findings; nine lower-severity fixes requested.",
+    "pending_changes": "The nine requested fixes are queued after this documentation/evidence task and are not implemented or revalidated by this snapshot."
+  },
+  "known_implementation_gaps": [
+    {
+      "id": "windows-whisper-bundled-runtime",
+      "state": "missing_in_4dc_baseline_continuation_implements_dynamic_vs_receipt",
+      "gate_receipt": "docs/bot/rust-recovery-resume/WINDOWS-RUNTIME-SUPPLY-GATE.md",
+      "source_refs": [
+        {
+          "file": "rust/src/application/main_program/serve.rs",
+          "line": 1062
+        }
+      ],
+      "detail": "At recorded source4dc961ce the composed Whisper owner had no supplemental embedded runtime DLL bytes. The corrected continuation policy uses the existing Go VS-only acquisition and validation, records actual FileVersion/SHA256 per build, and wires embedded payloads to serve. No pre-pinned DLL version/hash is required. Final native payload evidence and product acceptance remain separate."
     }
   ]
 }

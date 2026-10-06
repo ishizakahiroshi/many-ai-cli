@@ -1,14 +1,19 @@
 # #3 many-ai-cli rust: progress
 
-> 最終更新: 2026-10-03(土) 16:19:11
+> 最終更新: 2026-10-05(月) 23:17:48 UTC
 
 Task label: #3 many-ai-cli rust. This is a coordination label, not GitHub issue/PR number 3. Continue replies only in the thread where the operator starts this task; do not mix #1/#2 tasks. The operator starts dots from Slack or ChatGPT Web. This repository file and implementation diff are the reviewable progress sources.
 
 Baseline Go SHA: 21d0bc7935a2c4696fb89ccff2e324157a528c2d.
 Instruction/implementation branch: feat/rust-migration.
 PR base: develop.
-Current state: local recovery implementation and source integration are being validated in a separate derived checkout. The recovered checkpoint is preserved. Draft PR #9 still describes its published source; newer local implementation is not implicitly part of that PR.
-Rust implementation: the latest completed local all-target recovery receipt passed 1151 tests with zero failures and zero ignored tests, including signal-error handling; matching strict Clippy passed. Current source inventory maps all 155 HTTP registrations, 49 historical lexical WS rows and 32 CLI entries to concrete owners. Final matching build, isolated binary/browser checks, clean four-target CI and production acceptance remain separate gates. The following checkpoint tables and earlier receipt sections are historical and do not describe the newer local source.
+Current state: the recovered continuation is published in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11) on `dots/rust-recovery-resume-3`; delivery and acknowledgment are complete. Tested/reviewed code is `4dc961ce600d12aa0911e5a9620e50411ab13d9f`. The [current progress](../rust-recovery-resume/PROGRESS.md), [behavior matrix](../rust-recovery-resume/BEHAVIOR-MATRIX.md), [validation receipt](../rust-recovery-resume/VALIDATION-4dc961ce.json) and [artifact record](../rust-recovery-resume/ARTIFACTS-4dc961ce.md) supersede the current-state claims in this older ledger.
+
+All 155 HTTP registrations and 32 CLI entries have current source bindings. Four-target CI passed: Windows 987 library / 1266 all-targets; Linux 1047 / 1354; both macOS architectures 1047 / 1353, all with zero failed/ignored tests and three separate doctests. Source composition and synthetic/native CI remain distinct from complete behavior, device, installed-data, signed packaging and cutover acceptance. The known empty Windows Whisper runtime payload remains a packaging implementation gap pending the continuation's verified VS-only build/embedding receipt. No production release or Go replacement is authorized.
+
+## Historical checkpoint tables and receipt scopes
+
+Everything below preserves the earlier checkpoints at their own source and evidence scopes. The 27/128, 57/98, 63/92 and 71/84 partial/unresolved route counts are historical, not present source-composition totals. The delivery/capability and acceptance tables below must not be read as the current continuation status.
 
 | Stage | Owner | State | Evidence / next action |
 |---|---|---|---|
@@ -533,7 +538,7 @@ uninstall directory/root-handle ownership. No native provider/account/quota,
 notification, live installation, destructive uninstall or release acceptance is
 claimed.
 
-The current all-target receipt passed 1149 tests. A coherent closed-writer
+At this earlier local recovery checkpoint, the all-target receipt was reported as 1149 passed tests. This paragraph did not bind an exact source SHA, OS, command exit or named log; it is not the later 1151 Windows receipt, the 1253 Linux working-source aggregate or the final 987 Windows library count. A coherent closed-writer
 DB/WAL/SHM/config backup was modified with Rust, restored, read and continued by
 the hash-verified fixed Go store, then re-read with Rust. This is synthetic copy
 recovery evidence rather than real-data or live Hub rollback acceptance.
