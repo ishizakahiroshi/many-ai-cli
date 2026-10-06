@@ -1,0 +1,1486 @@
+{
+  "schema_version": 1,
+  "status": "four-target-ci-artifacts-and-complete-pr-commit-scan-union-verified",
+  "repository": "ishizakahiroshi/many-ai-cli",
+  "pull_request": 11,
+  "pr_url": "https://github.com/ishizakahiroshi/many-ai-cli/pull/11",
+  "branch": "dots/rust-recovery-resume-3",
+  "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+  "tree_sha": "999ebd19270bda47e61cb377034a07f6830aa2a7",
+  "investigation_baseline_sha": "d9f892a7df4af9caa11c3e56d4a92c5e1fa0c5d2",
+  "go_oracle_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+  "fix_sha": "4f7ae983eb0f19b3c4bb841a37fab6e383fb584f",
+  "cleanup_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+  "rust": {
+    "run_id": 37364997189,
+    "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189",
+    "latest_attempt": 2,
+    "conclusion": "success",
+    "attempts": [
+      {
+        "attempt": 1,
+        "arm": {
+          "job_id": 111947918423,
+          "conclusion": "cancelled",
+          "runner_id": 0,
+          "steps": 0,
+          "annotation_reported_by_owner": "The job was not acquired by Runner of type hosted even after multiple attempts"
+        },
+        "other_three_targets": "success"
+      },
+      {
+        "attempt": 2,
+        "arm": {
+          "job_id": 111965372489,
+          "conclusion": "success",
+          "fresh_execution": true
+        },
+        "other_three_targets": "retained successes from attempt 1; not rerun"
+      }
+    ],
+    "targets": [
+      {
+        "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111947918023,
+        "hashes": {
+          "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+          "target": "x86_64-unknown-linux-gnu",
+          "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+          "binaries": [
+            {
+              "name": "many-ai-cli",
+              "bytes": 48239488,
+              "sha256": "69c5ec56db6c3b5b934b3692920af098aaded79637897f0a9e88ac3a2070b9d0"
+            },
+            {
+              "name": "many-ai-cli-launcher",
+              "bytes": 14040392,
+              "sha256": "8a6397b15e1516ca66a680dcfa4d73f640af9a31bb1ae30e37bfb4f311b900be"
+            }
+          ]
+        },
+        "artifact": {
+          "id": 11368467629,
+          "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189/artifacts/11368467629",
+          "bytes": 21025194,
+          "sha256": "db08a64cc19d5c37cde37d8828a7e5a0ab89a031b26ffe16b259c1634cfc306b",
+          "downloaded_and_binary_hashes_verified": true,
+          "independent_reviewer_verified": true,
+          "expires_at": "2026-10-12T19:58:13Z"
+        },
+        "label": "Linux",
+        "library_tests": {
+          "passed": 1047,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1354,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "validation_steps": [
+          {
+            "step_number": 1,
+            "description": "Go module download",
+            "exit_code": 0
+          },
+          {
+            "step_number": 2,
+            "description": "Python packaging unittest discovery",
+            "exit_code": 0
+          },
+          {
+            "step_number": 3,
+            "description": "Frozen web dependency install",
+            "exit_code": 0
+          },
+          {
+            "step_number": 4,
+            "description": "Web check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 5,
+            "description": "Web build",
+            "exit_code": 0
+          },
+          {
+            "step_number": 6,
+            "description": "Cargo formatting check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 7,
+            "description": "Strict all-target Clippy",
+            "exit_code": 0
+          },
+          {
+            "step_number": 8,
+            "description": "Cargo all-target tests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 9,
+            "description": "Cargo doctests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 10,
+            "description": "Release build of both binaries",
+            "exit_code": 0
+          },
+          {
+            "step_number": 11,
+            "description": "Locked Cargo metadata",
+            "exit_code": 0
+          },
+          {
+            "step_number": 12,
+            "description": "Packaging license/SBOM input collection",
+            "exit_code": 0
+          }
+        ],
+        "rust_version": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+        "packaging_input_exit_code": 0,
+        "binary_artifact_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
+        "binary_acceptance_pending": [
+          "binary-entrypoint-and-asset-retention",
+          "full-application-behavior",
+          "native-device-remote-acceptance",
+          "signed-channel-packaging",
+          "rollback-rehearsal",
+          "user-cutover-approval"
+        ],
+        "validation_command_details": "Exact commands are in the linked artifact BUILD-RECEIPT.json; runner-specific filesystem paths omitted here.",
+        "execution_attempt": 1,
+        "started_at": "2026-10-05T19:46:26Z",
+        "completed_at": "2026-10-05T19:58:22Z"
+      },
+      {
+        "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111947918548,
+        "hashes": {
+          "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+          "target": "x86_64-pc-windows-msvc",
+          "cargo_lock_sha256": "90d6d2ebdf259ae214308ded77ac4156fffec2697a62fca16f1a60f06307d2ed",
+          "binaries": [
+            {
+              "name": "many-ai-cli.exe",
+              "bytes": 43334656,
+              "sha256": "47656ff16d5230b2d61a33b31855fc0ed8e074db60bbe656ba83e3a1b9b08c57"
+            },
+            {
+              "name": "many-ai-cli-launcher.exe",
+              "bytes": 10388992,
+              "sha256": "715009ee0006e5c0b2007e8845fa52d213faa68cf427e821f326958a80393665"
+            }
+          ]
+        },
+        "artifact": {
+          "id": 11369690033,
+          "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189/artifacts/11369690033",
+          "bytes": 19196549,
+          "sha256": "2f40d41fd319a38f11461355c0aa2e891e2298939f067887ffec55830e5eed31",
+          "downloaded_and_binary_hashes_verified": true,
+          "independent_reviewer_verified": true,
+          "expires_at": "2026-10-12T20:18:05Z"
+        },
+        "label": "Windows",
+        "library_tests": {
+          "passed": 987,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1266,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "validation_steps": [
+          {
+            "step_number": 1,
+            "description": "Go module download",
+            "exit_code": 0
+          },
+          {
+            "step_number": 2,
+            "description": "Python packaging unittest discovery",
+            "exit_code": 0
+          },
+          {
+            "step_number": 3,
+            "description": "Frozen web dependency install",
+            "exit_code": 0
+          },
+          {
+            "step_number": 4,
+            "description": "Web check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 5,
+            "description": "Web build",
+            "exit_code": 0
+          },
+          {
+            "step_number": 6,
+            "description": "Cargo formatting check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 7,
+            "description": "Strict all-target Clippy",
+            "exit_code": 0
+          },
+          {
+            "step_number": 8,
+            "description": "Cargo all-target tests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 9,
+            "description": "Cargo doctests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 10,
+            "description": "Release build of both binaries",
+            "exit_code": 0
+          },
+          {
+            "step_number": 11,
+            "description": "Locked Cargo metadata",
+            "exit_code": 0
+          },
+          {
+            "step_number": 12,
+            "description": "Packaging license/SBOM input collection",
+            "exit_code": 0
+          }
+        ],
+        "rust_version": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+        "packaging_input_exit_code": 0,
+        "binary_artifact_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
+        "binary_acceptance_pending": [
+          "binary-entrypoint-and-asset-retention",
+          "full-application-behavior",
+          "native-device-remote-acceptance",
+          "signed-channel-packaging",
+          "rollback-rehearsal",
+          "user-cutover-approval"
+        ],
+        "validation_command_details": "Exact commands are in the linked artifact BUILD-RECEIPT.json; runner-specific filesystem paths omitted here.",
+        "execution_attempt": 1,
+        "started_at": "2026-10-05T19:51:45Z",
+        "completed_at": "2026-10-05T20:18:14Z"
+      },
+      {
+        "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111947918509,
+        "hashes": {
+          "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+          "target": "x86_64-apple-darwin",
+          "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+          "binaries": [
+            {
+              "name": "many-ai-cli",
+              "bytes": 43368064,
+              "sha256": "83475c1dff9169dd26065cebd50af7764e15558e86f62309589fc00c22bb32e7"
+            },
+            {
+              "name": "many-ai-cli-launcher",
+              "bytes": 11269800,
+              "sha256": "4c9b27162bdbbc6b6c5a9530c9949716b3ad72519a488b68b3119cac30c8a265"
+            }
+          ]
+        },
+        "artifact": {
+          "id": 11369281987,
+          "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189/artifacts/11369281987",
+          "bytes": 19892356,
+          "sha256": "3a5cfbeac01cded26ca0fe1c8ab4388196e29838b954a1b004ed16eba230b98b",
+          "downloaded_and_binary_hashes_verified": true,
+          "independent_reviewer_verified": true,
+          "expires_at": "2026-10-12T20:27:11Z"
+        },
+        "label": "Intel",
+        "library_tests": {
+          "passed": 1047,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1353,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "validation_steps": [
+          {
+            "step_number": 1,
+            "description": "Go module download",
+            "exit_code": 0
+          },
+          {
+            "step_number": 2,
+            "description": "Python packaging unittest discovery",
+            "exit_code": 0
+          },
+          {
+            "step_number": 3,
+            "description": "Frozen web dependency install",
+            "exit_code": 0
+          },
+          {
+            "step_number": 4,
+            "description": "Web check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 5,
+            "description": "Web build",
+            "exit_code": 0
+          },
+          {
+            "step_number": 6,
+            "description": "Cargo formatting check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 7,
+            "description": "Strict all-target Clippy",
+            "exit_code": 0
+          },
+          {
+            "step_number": 8,
+            "description": "Cargo all-target tests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 9,
+            "description": "Cargo doctests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 10,
+            "description": "Release build of both binaries",
+            "exit_code": 0
+          },
+          {
+            "step_number": 11,
+            "description": "Locked Cargo metadata",
+            "exit_code": 0
+          },
+          {
+            "step_number": 12,
+            "description": "Packaging license/SBOM input collection",
+            "exit_code": 0
+          }
+        ],
+        "rust_version": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+        "packaging_input_exit_code": 0,
+        "binary_artifact_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
+        "binary_acceptance_pending": [
+          "binary-entrypoint-and-asset-retention",
+          "full-application-behavior",
+          "native-device-remote-acceptance",
+          "signed-channel-packaging",
+          "rollback-rehearsal",
+          "user-cutover-approval"
+        ],
+        "validation_command_details": "Exact commands are in the linked artifact BUILD-RECEIPT.json; runner-specific filesystem paths omitted here.",
+        "execution_attempt": 1,
+        "started_at": "2026-10-05T19:52:27Z",
+        "completed_at": "2026-10-05T20:27:30Z"
+      },
+      {
+        "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "job_id": 111965372489,
+        "hashes": {
+          "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+          "target": "aarch64-apple-darwin",
+          "cargo_lock_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+          "binaries": [
+            {
+              "name": "many-ai-cli",
+              "bytes": 40594368,
+              "sha256": "47697f6a3c6743cc7529b139a99e7ddaf89ab62e080cfc6913be856605d77b32"
+            },
+            {
+              "name": "many-ai-cli-launcher",
+              "bytes": 10124896,
+              "sha256": "b74427844d53869950dd719973d7de41c092d74df9b952d6f7e1843f654139e8"
+            }
+          ]
+        },
+        "artifact": {
+          "id": 11370592750,
+          "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997189/artifacts/11370592750",
+          "bytes": 19364384,
+          "sha256": "2e38292afb2e115ffaa17a091b2f574617444a2b08ad9a6e91595ca1c3977abd",
+          "downloaded_and_binary_hashes_verified": true,
+          "independent_reviewer_verified": true,
+          "expires_at": "2026-10-12T20:54:22Z"
+        },
+        "label": "Arm",
+        "library_tests": {
+          "passed": 1047,
+          "failed": 0,
+          "ignored": 0
+        },
+        "all_targets_tests": {
+          "passed": 1353,
+          "failed": 0,
+          "ignored": 0
+        },
+        "doctests": {
+          "passed": 3,
+          "failed": 0,
+          "ignored": 0
+        },
+        "source_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "validation_steps": [
+          {
+            "step_number": 1,
+            "description": "Go module download",
+            "exit_code": 0
+          },
+          {
+            "step_number": 2,
+            "description": "Python packaging unittest discovery",
+            "exit_code": 0
+          },
+          {
+            "step_number": 3,
+            "description": "Frozen web dependency install",
+            "exit_code": 0
+          },
+          {
+            "step_number": 4,
+            "description": "Web check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 5,
+            "description": "Web build",
+            "exit_code": 0
+          },
+          {
+            "step_number": 6,
+            "description": "Cargo formatting check",
+            "exit_code": 0
+          },
+          {
+            "step_number": 7,
+            "description": "Strict all-target Clippy",
+            "exit_code": 0
+          },
+          {
+            "step_number": 8,
+            "description": "Cargo all-target tests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 9,
+            "description": "Cargo doctests",
+            "exit_code": 0
+          },
+          {
+            "step_number": 10,
+            "description": "Release build of both binaries",
+            "exit_code": 0
+          },
+          {
+            "step_number": 11,
+            "description": "Locked Cargo metadata",
+            "exit_code": 0
+          },
+          {
+            "step_number": 12,
+            "description": "Packaging license/SBOM input collection",
+            "exit_code": 0
+          }
+        ],
+        "rust_version": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+        "packaging_input_exit_code": 0,
+        "binary_artifact_scope": "native validation/build plus input hashes; linked runtime asset retention is not yet verified",
+        "binary_acceptance_pending": [
+          "binary-entrypoint-and-asset-retention",
+          "full-application-behavior",
+          "native-device-remote-acceptance",
+          "signed-channel-packaging",
+          "rollback-rehearsal",
+          "user-cutover-approval"
+        ],
+        "validation_command_details": "Exact commands are in the linked artifact BUILD-RECEIPT.json; runner-specific filesystem paths omitted here.",
+        "execution_attempt": 2,
+        "started_at": "2026-10-05T20:31:45Z",
+        "completed_at": "2026-10-05T20:54:34Z"
+      }
+    ],
+    "job_attempt_records": [
+      {
+        "id": 111947918023,
+        "name": "Rust (x86_64-unknown-linux-gnu)",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T19:46:26Z",
+        "completed_at": "2026-10-05T19:58:22Z",
+        "runner_id": 1000009810
+      },
+      {
+        "id": 111947918423,
+        "name": "Rust (aarch64-apple-darwin)",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-10-05T19:41:12Z",
+        "completed_at": "2026-10-05T19:56:14Z",
+        "runner_id": 0
+      },
+      {
+        "id": 111947918509,
+        "name": "Rust (x86_64-apple-darwin)",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T19:52:27Z",
+        "completed_at": "2026-10-05T20:27:30Z",
+        "runner_id": 1000009836
+      },
+      {
+        "id": 111947918548,
+        "name": "Rust (x86_64-pc-windows-msvc)",
+        "run_attempt": 1,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T19:51:45Z",
+        "completed_at": "2026-10-05T20:18:14Z",
+        "runner_id": 1000009828
+      },
+      {
+        "id": 111965372489,
+        "name": "Rust (aarch64-apple-darwin)",
+        "run_attempt": 2,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T20:31:45Z",
+        "completed_at": "2026-10-05T20:54:34Z",
+        "runner_id": 1000009846
+      },
+      {
+        "id": 111965373269,
+        "name": "Rust (x86_64-pc-windows-msvc)",
+        "run_attempt": 2,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T19:51:45Z",
+        "completed_at": "2026-10-05T20:18:14Z",
+        "runner_id": 1000009828
+      },
+      {
+        "id": 111965374162,
+        "name": "Rust (x86_64-unknown-linux-gnu)",
+        "run_attempt": 2,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T19:46:26Z",
+        "completed_at": "2026-10-05T19:58:22Z",
+        "runner_id": 1000009810
+      },
+      {
+        "id": 111965417412,
+        "name": "Rust (x86_64-apple-darwin)",
+        "run_attempt": 2,
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-05T19:52:27Z",
+        "completed_at": "2026-10-05T20:27:30Z",
+        "runner_id": 1000009836
+      }
+    ],
+    "run_number": 23
+  },
+  "requested_workflows": [
+    {
+      "id": 37364988766,
+      "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364988766",
+      "event": "push",
+      "head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+      "latest_attempt": 2,
+      "status": "completed",
+      "conclusion": "success",
+      "attempts": [
+        {
+          "run_attempt": 1,
+          "workflow_conclusion": "failure",
+          "jobs": [
+            {
+              "id": 111947891108,
+              "name": "gitleaks",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T19:41:07Z",
+              "completed_at": "2026-10-05T19:56:08Z",
+              "runner_id": 0,
+              "run_attempt": 1,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            }
+          ]
+        },
+        {
+          "run_attempt": 2,
+          "workflow_conclusion": "success",
+          "jobs": [
+            {
+              "id": 111971378058,
+              "name": "gitleaks",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T20:58:57Z",
+              "completed_at": "2026-10-05T20:59:10Z",
+              "runner_id": 1000009868,
+              "run_attempt": 2,
+              "step_count": 5,
+              "execution": "Executed in this attempt"
+            }
+          ]
+        }
+      ],
+      "checkout_evidence": {
+        "workflow_head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "actual_checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f"
+      }
+    },
+    {
+      "id": 37364997114,
+      "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997114",
+      "event": "pull_request",
+      "head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+      "latest_attempt": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "attempts": [
+        {
+          "run_attempt": 1,
+          "workflow_conclusion": "failure",
+          "jobs": [
+            {
+              "id": 111947917617,
+              "name": "gitleaks",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T19:41:12Z",
+              "completed_at": "2026-10-05T19:56:13Z",
+              "runner_id": 0,
+              "run_attempt": 1,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            }
+          ]
+        },
+        {
+          "run_attempt": 2,
+          "workflow_conclusion": "failure",
+          "jobs": [
+            {
+              "id": 111971523337,
+              "name": "gitleaks",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T20:49:16Z",
+              "completed_at": "2026-10-05T21:04:18Z",
+              "runner_id": 0,
+              "run_attempt": 2,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            }
+          ]
+        },
+        {
+          "run_attempt": 3,
+          "workflow_conclusion": "success",
+          "jobs": [
+            {
+              "id": 111980321827,
+              "name": "gitleaks",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T21:15:31Z",
+              "completed_at": "2026-10-05T21:15:44Z",
+              "runner_id": 1000009889,
+              "run_attempt": 3,
+              "step_count": 5,
+              "execution": "Executed in this attempt"
+            }
+          ]
+        }
+      ],
+      "checkout_evidence": {
+        "workflow_head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "verified_attempt": 3,
+        "actual_checkout_sha": "296ffb5063c0f6018733651ac208f4bb2986b12b"
+      }
+    },
+    {
+      "id": 37364997040,
+      "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37364997040",
+      "event": "pull_request",
+      "head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+      "latest_attempt": 3,
+      "status": "completed",
+      "conclusion": "success",
+      "attempts": [
+        {
+          "run_attempt": 1,
+          "workflow_conclusion": "failure",
+          "jobs": [
+            {
+              "id": 111947918807,
+              "name": "staticcheck",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:46:26Z",
+              "completed_at": "2026-10-05T19:47:19Z",
+              "runner_id": 1000009818,
+              "run_attempt": 1,
+              "step_count": 12,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947918964,
+              "name": "third-party",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:45Z",
+              "completed_at": "2026-10-05T19:52:28Z",
+              "runner_id": 1000009829,
+              "run_attempt": 1,
+              "step_count": 7,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919031,
+              "name": "gosec",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:48Z",
+              "completed_at": "2026-10-05T19:53:25Z",
+              "runner_id": 1000009833,
+              "run_attempt": 1,
+              "step_count": 12,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919128,
+              "name": "web-package-manager-consistency",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:30Z",
+              "completed_at": "2026-10-05T19:51:42Z",
+              "runner_id": 1000009835,
+              "run_attempt": 1,
+              "step_count": 8,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919144,
+              "name": "go-mod-tidy",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:46:42Z",
+              "completed_at": "2026-10-05T19:46:55Z",
+              "runner_id": 1000009815,
+              "run_attempt": 1,
+              "step_count": 8,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919145,
+              "name": "Go (macos-latest)",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:44:52Z",
+              "completed_at": "2026-10-05T19:46:26Z",
+              "runner_id": 1000009802,
+              "run_attempt": 1,
+              "step_count": 15,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919146,
+              "name": "web-check",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:41:52Z",
+              "completed_at": "2026-10-05T19:42:21Z",
+              "runner_id": 1000009796,
+              "run_attempt": 1,
+              "step_count": 14,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919228,
+              "name": "govulncheck",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:51Z",
+              "completed_at": "2026-10-05T19:52:35Z",
+              "runner_id": 1000009831,
+              "run_attempt": 1,
+              "step_count": 12,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919263,
+              "name": "Go (windows-latest)",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T19:41:12Z",
+              "completed_at": "2026-10-05T19:56:14Z",
+              "runner_id": 0,
+              "run_attempt": 1,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            },
+            {
+              "id": 111947919305,
+              "name": "instrumentation",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:29Z",
+              "completed_at": "2026-10-05T19:51:38Z",
+              "runner_id": 1000009832,
+              "run_attempt": 1,
+              "step_count": 15,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111947919344,
+              "name": "Go (ubuntu-latest)",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T19:41:12Z",
+              "completed_at": "2026-10-05T19:56:15Z",
+              "runner_id": 0,
+              "run_attempt": 1,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            },
+            {
+              "id": 111947920499,
+              "name": "release-token-scopes",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-05T19:41:12Z",
+              "completed_at": "2026-10-05T19:41:12Z",
+              "runner_id": null,
+              "run_attempt": 1,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "Skipped by existing pull_request workflow condition; timestamp interval is not an execution",
+              "timestamp_caveat": "Raw metadata can report completed_at before started_at for retained skipped rows"
+            }
+          ]
+        },
+        {
+          "run_attempt": 2,
+          "workflow_conclusion": "failure",
+          "jobs": [
+            {
+              "id": 111971719305,
+              "name": "Go (ubuntu-latest)",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T20:49:51Z",
+              "completed_at": "2026-10-05T21:04:53Z",
+              "runner_id": 0,
+              "run_attempt": 2,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            },
+            {
+              "id": 111971719626,
+              "name": "Go (windows-latest)",
+              "status": "completed",
+              "conclusion": "cancelled",
+              "started_at": "2026-10-05T20:49:52Z",
+              "completed_at": "2026-10-05T21:04:53Z",
+              "runner_id": 0,
+              "run_attempt": 2,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "No runner acquired; no checkout or test/scan execution"
+            },
+            {
+              "id": 111971720434,
+              "name": "gosec",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:48Z",
+              "completed_at": "2026-10-05T19:53:25Z",
+              "runner_id": 1000009833,
+              "run_attempt": 2,
+              "step_count": 12,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971721002,
+              "name": "third-party",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:45Z",
+              "completed_at": "2026-10-05T19:52:28Z",
+              "runner_id": 1000009829,
+              "run_attempt": 2,
+              "step_count": 7,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971721177,
+              "name": "release-token-scopes",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-05T20:49:52Z",
+              "completed_at": "2026-10-05T19:41:12Z",
+              "runner_id": null,
+              "run_attempt": 2,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "Skipped by existing pull_request workflow condition; timestamp interval is not an execution",
+              "timestamp_caveat": "Raw metadata can report completed_at before started_at for retained skipped rows"
+            },
+            {
+              "id": 111971756289,
+              "name": "govulncheck",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:51Z",
+              "completed_at": "2026-10-05T19:52:35Z",
+              "runner_id": 1000009831,
+              "run_attempt": 2,
+              "step_count": 12,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971758715,
+              "name": "Go (macos-latest)",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:44:52Z",
+              "completed_at": "2026-10-05T19:46:26Z",
+              "runner_id": 1000009802,
+              "run_attempt": 2,
+              "step_count": 15,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971762101,
+              "name": "web-package-manager-consistency",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:30Z",
+              "completed_at": "2026-10-05T19:51:42Z",
+              "runner_id": 1000009835,
+              "run_attempt": 2,
+              "step_count": 8,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971764744,
+              "name": "instrumentation",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:29Z",
+              "completed_at": "2026-10-05T19:51:38Z",
+              "runner_id": 1000009832,
+              "run_attempt": 2,
+              "step_count": 15,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971768392,
+              "name": "web-check",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:41:52Z",
+              "completed_at": "2026-10-05T19:42:21Z",
+              "runner_id": 1000009796,
+              "run_attempt": 2,
+              "step_count": 14,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971773070,
+              "name": "staticcheck",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:46:26Z",
+              "completed_at": "2026-10-05T19:47:19Z",
+              "runner_id": 1000009818,
+              "run_attempt": 2,
+              "step_count": 12,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111971774703,
+              "name": "go-mod-tidy",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:46:42Z",
+              "completed_at": "2026-10-05T19:46:55Z",
+              "runner_id": 1000009815,
+              "run_attempt": 2,
+              "step_count": 8,
+              "execution": "Retained attempt-1 result; no new execution"
+            }
+          ]
+        },
+        {
+          "run_attempt": 3,
+          "workflow_conclusion": "success",
+          "jobs": [
+            {
+              "id": 111980419707,
+              "name": "Go (windows-latest)",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T21:15:41Z",
+              "completed_at": "2026-10-05T21:19:56Z",
+              "runner_id": 1000009890,
+              "run_attempt": 3,
+              "step_count": 15,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111980420119,
+              "name": "Go (ubuntu-latest)",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T21:25:42Z",
+              "completed_at": "2026-10-05T21:27:35Z",
+              "runner_id": 1000009902,
+              "run_attempt": 3,
+              "step_count": 15,
+              "execution": "Executed in this attempt"
+            },
+            {
+              "id": 111980420973,
+              "name": "release-token-scopes",
+              "status": "completed",
+              "conclusion": "skipped",
+              "started_at": "2026-10-05T21:15:37Z",
+              "completed_at": "2026-10-05T19:41:12Z",
+              "runner_id": null,
+              "run_attempt": 3,
+              "step_count": 0,
+              "checkout_sha": null,
+              "execution": "Skipped by existing pull_request workflow condition; timestamp interval is not an execution",
+              "timestamp_caveat": "Raw metadata can report completed_at before started_at for retained skipped rows"
+            },
+            {
+              "id": 111980422481,
+              "name": "staticcheck",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:46:26Z",
+              "completed_at": "2026-10-05T19:47:19Z",
+              "runner_id": 1000009818,
+              "run_attempt": 3,
+              "step_count": 12,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980455649,
+              "name": "instrumentation",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:29Z",
+              "completed_at": "2026-10-05T19:51:38Z",
+              "runner_id": 1000009832,
+              "run_attempt": 3,
+              "step_count": 15,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980460858,
+              "name": "govulncheck",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:51Z",
+              "completed_at": "2026-10-05T19:52:35Z",
+              "runner_id": 1000009831,
+              "run_attempt": 3,
+              "step_count": 12,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980464407,
+              "name": "third-party",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:45Z",
+              "completed_at": "2026-10-05T19:52:28Z",
+              "runner_id": 1000009829,
+              "run_attempt": 3,
+              "step_count": 7,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980468802,
+              "name": "web-check",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:41:52Z",
+              "completed_at": "2026-10-05T19:42:21Z",
+              "runner_id": 1000009796,
+              "run_attempt": 3,
+              "step_count": 14,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980469928,
+              "name": "gosec",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:48Z",
+              "completed_at": "2026-10-05T19:53:25Z",
+              "runner_id": 1000009833,
+              "run_attempt": 3,
+              "step_count": 12,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980474998,
+              "name": "go-mod-tidy",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:46:42Z",
+              "completed_at": "2026-10-05T19:46:55Z",
+              "runner_id": 1000009815,
+              "run_attempt": 3,
+              "step_count": 8,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980478497,
+              "name": "Go (macos-latest)",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:44:52Z",
+              "completed_at": "2026-10-05T19:46:26Z",
+              "runner_id": 1000009802,
+              "run_attempt": 3,
+              "step_count": 15,
+              "execution": "Retained attempt-1 result; no new execution"
+            },
+            {
+              "id": 111980480390,
+              "name": "web-package-manager-consistency",
+              "status": "completed",
+              "conclusion": "success",
+              "started_at": "2026-10-05T19:51:30Z",
+              "completed_at": "2026-10-05T19:51:42Z",
+              "runner_id": 1000009835,
+              "run_attempt": 3,
+              "step_count": 8,
+              "execution": "Retained attempt-1 result; no new execution"
+            }
+          ]
+        }
+      ],
+      "checkout_evidence": {
+        "workflow_head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+        "verified_retained_staticcheck_job": 111947918807,
+        "verified_retained_go_macos_job": 111947919145,
+        "verified_windows_attempt3_job": 111980419707,
+        "verified_ubuntu_attempt3_job": 111980420119,
+        "verified_checkout_sha": "296ffb5063c0f6018733651ac208f4bb2986b12b",
+        "note": "Distinct PR synthetic merge checkout; tracked tree identical to head. Cancelled zero-step jobs have no checkout."
+      }
+    }
+  ],
+  "cargo_lock_bytes": {
+    "committed_lf_sha256": "0466139df475d43177199440af0e9aa2455b26aabe55927cacb2d365f8cd0a12",
+    "windows_crlf_sha256": "90d6d2ebdf259ae214308ded77ac4156fffec2697a62fca16f1a60f06307d2ed",
+    "verified_relation": "Windows hash exactly equals the committed LF Cargo.lock with LF converted to CRLF; 3094 lines. Raw bytes differ; dependency text is unchanged."
+  },
+  "investigation": {
+    "observed": "Minimal synthetic environment under Windows PowerShell 5 stalled in cmdlet initialization after stdin was read. Captured-environment and actual trial-isolation environment diagnostic controls both passed first_initialize_transport. The full original RPC/account tests passed later at the final candidate.",
+    "unknown": "The individual missing environment variable and internal PowerShell cause were not identified. This does not establish universal production transport correctness.",
+    "fix": "Fixture uses captured production-shaped environment with synthetic home/path/cache overrides and the existing trial-isolation function; env_clear, legacy PowerShell host, two-stage launch and existing deadlines are preserved.",
+    "assertions": "All original tests retained. API-key negative test requires ErrorKind::Other and exact three-method sequence; timeout is not treated as success.",
+    "production_change_scope": "Comments and internal visibility only; no changed production process/RPC behavior."
+  },
+  "review": {
+    "source_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "independent_source_review": "All changed lines reviewed; no blocker. Published tree matched reviewed local cleanup tree across 1904 entries.",
+    "independent_ci_artifact_review": "All four target logs and artifacts checked at exact source/review SHA; both binaries per artifact independently rehashed.",
+    "owner_reported_external_review": "Owner reported a different-product AI reviewed all final-candidate changed lines with no blocker and independently confirmed Windows 987 passed, zero failed/ignored, both original tests ok.",
+    "owner_final_acceptance": "Owner independently confirmed workflow results and full PR commit-union scan coverage. Windows device and broader migration acceptance remain separate."
+  },
+  "retained_diagnostic_evidence": [
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-STDIO-9be3d983.json",
+      "sha256": "51702af32a1942c6fc9fa2f25a42668bad6b935f9d3ea85717842efcbba21c62",
+      "bytes": 17036,
+      "disposition": "retain as sanitized audit evidence; no executable hooks or runtime references",
+      "url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/docs/bot/rust-recovery-resume/WINDOWS-STDIO-9be3d983.json"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-STDIO-e19c9884.json",
+      "sha256": "a5fa4a448636c733a2175b5a4dccc4539c1a269ff7af14fd40137e3f6d9ff983",
+      "bytes": 13903,
+      "disposition": "retain as sanitized audit evidence; no executable hooks or runtime references",
+      "url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/docs/bot/rust-recovery-resume/WINDOWS-STDIO-e19c9884.json"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-STDIO-bcd052f8.json",
+      "sha256": "6914d89daad946314bcaafd6b84f938a1ad2b6fcdf6344a3bb907183e3554ac3",
+      "bytes": 29041,
+      "disposition": "retain as sanitized audit evidence; no executable hooks or runtime references",
+      "url": "https://github.com/ishizakahiroshi/many-ai-cli/blob/4dc961ce600d12aa0911e5a9620e50411ab13d9f/docs/bot/rust-recovery-resume/WINDOWS-STDIO-bcd052f8.json"
+    }
+  ],
+  "diagnostic_cleanup": {
+    "temporary_test_and_hooks": "removed",
+    "instrumentation_entry": "removed status, no due field; unrelated instrumentation entries preserved",
+    "no_further_push": true
+  },
+  "secret_scan_scope": {
+    "full_pr_history_verified": true,
+    "requested_pr_range": "21d0bc7935a2c4696fb89ccff2e324157a528c2d..4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "known_action_limitation": "Final PR retry executed only first 30 of 38 PR commits. Green workflow status does not establish full PR coverage.",
+    "push_attempt_2": {
+      "job_id": 111971378058,
+      "checkout_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+      "gitleaks_version": "8.24.3",
+      "log_opts": "--no-merges --first-parent 4f7ae983eb0f19b3c4bb841a37fab6e383fb584f^..4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+      "commits_scanned": 2,
+      "redacted_result_lines": [
+        "2 commits scanned.",
+        "no leaks found"
+      ],
+      "scope_correction": "Actual push event covered both final fix and cleanup commits; it did not use the earlier anticipated -1 fallback.",
+      "independent_log_review": true
+    },
+    "approved_three_fingerprints_present": true,
+    "exclusions_changed_during_windows_investigation": false,
+    "pr_attempt_3": {
+      "job_id": 111980321827,
+      "associated_head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+      "checkout_sha": "296ffb5063c0f6018733651ac208f4bb2986b12b",
+      "gitleaks_version": "8.24.3",
+      "log_opts": "--no-merges --first-parent 6b0fb8e198750245ef8b4b475fbac9070db0ac3e^..401eff2b83712ca657b31b0baf63d9dadd38171e",
+      "commits_scanned": 30,
+      "redacted_result_lines": [
+        "30 commits scanned.",
+        "no leaks found"
+      ],
+      "independent_log_review": true
+    },
+    "pr_commit_count": 38,
+    "three_approved_fingerprints_note": "The three specifically approved fingerprints are present among eight existing non-comment ignore entries; this is not approval of every historical finding or a claim that only three exclusions exist.",
+    "historical_finding_acceptance": "No new exclusion or relaxation. The three specifically approved fingerprints do not constitute blanket acceptance of other historical findings.",
+    "verification_method": "Union of independently verified executed commit ranges; not a single 38-commit invocation",
+    "intervening_push_scans": [
+      {
+        "run_id": 37329310401,
+        "run_number": 410,
+        "attempt": 1,
+        "head_sha": "13426e390cca8b080c07fda10f21e6a2f49e1aa5",
+        "job_id": 111828024209,
+        "log_opts": "-1",
+        "commits_scanned": 1,
+        "conclusion": "success",
+        "result": "no leaks found",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37329310401"
+      },
+      {
+        "run_id": 37342458728,
+        "run_number": 412,
+        "attempt": 1,
+        "head_sha": "d9f892a7df4af9caa11c3e56d4a92c5e1fa0c5d2",
+        "job_id": 111872667020,
+        "log_opts": "-1",
+        "commits_scanned": 1,
+        "conclusion": "success",
+        "result": "no leaks found",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37342458728"
+      },
+      {
+        "run_id": 37351610625,
+        "run_number": 414,
+        "attempt": 1,
+        "head_sha": "9be3d98337a804cbe05989a0ed836f4b62e0858b",
+        "job_id": 111903555955,
+        "log_opts": "-1",
+        "commits_scanned": 1,
+        "conclusion": "success",
+        "result": "no leaks found",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37351610625"
+      },
+      {
+        "run_id": 37355012106,
+        "run_number": 416,
+        "attempt": 1,
+        "head_sha": "e19c98846f14e5fbc37cc27ddd0a5bfc9fe45de7",
+        "job_id": 111915098663,
+        "log_opts": "-1",
+        "commits_scanned": 1,
+        "conclusion": "success",
+        "result": "no leaks found",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37355012106"
+      },
+      {
+        "run_id": 37359220787,
+        "run_number": 418,
+        "attempt": 1,
+        "head_sha": "e819f8c6710e63bddfa037d6d0949e1c7837ea29",
+        "job_id": 111929305645,
+        "log_opts": "-1",
+        "commits_scanned": 1,
+        "conclusion": "success",
+        "result": "no leaks found",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37359220787"
+      },
+      {
+        "run_id": 37360279624,
+        "run_number": 420,
+        "attempt": 1,
+        "head_sha": "bcd052f8e0cde0323102f7832aff78946a69e195",
+        "job_id": 111932865576,
+        "log_opts": "-1",
+        "commits_scanned": 1,
+        "conclusion": "success",
+        "result": "no leaks found",
+        "url": "https://github.com/ishizakahiroshi/many-ai-cli/actions/runs/37360279624"
+      }
+    ],
+    "previously_uncovered_six_commits": [
+      "13426e390cca8b080c07fda10f21e6a2f49e1aa5",
+      "d9f892a7df4af9caa11c3e56d4a92c5e1fa0c5d2",
+      "9be3d98337a804cbe05989a0ed836f4b62e0858b",
+      "e19c98846f14e5fbc37cc27ddd0a5bfc9fe45de7",
+      "e819f8c6710e63bddfa037d6d0949e1c7837ea29",
+      "bcd052f8e0cde0323102f7832aff78946a69e195"
+    ],
+    "uncovered_commits": [],
+    "coverage_partition": {
+      "pr_attempt3_ordinals": [
+        1,
+        30
+      ],
+      "single_commit_push_ordinals": [
+        31,
+        36
+      ],
+      "final_push_attempt2_ordinals": [
+        37,
+        38
+      ],
+      "total_unique_commits": 38
+    },
+    "unchanged_scan_input_blobs": {
+      ".gitleaksignore": "57dbb08f9ab45992ce28dbb404106004e8f8231f",
+      ".gitleaks.toml": "18f0a2c309b27164426c0d78726ccaffffafba46",
+      ".github/workflows/secret-scan.yml": "b073164e611fbeba70f3bcaaaae9c7bbe00d8045"
+    }
+  },
+  "limitations": [
+    "PR action alone scans only first 30 commits. Complete 38-commit coverage is established by the recorded union with seven push-scan executions; this does not accept unrelated historical findings or an unavailable private watchlist.",
+    "The broader migration R/V acceptance contracts and real-provider, device, installed-data, asset retention, signed packaging and rollback acceptance are not established by this Windows-fixture repair.",
+    "PR remains Draft; no merge, tag, release or Go cutover.",
+    "Artifact BUILD-RECEIPT pending fields are retained and are not erased by green native CI."
+  ],
+  "observed_at_utc": "2026-10-05T22:55:24.612794+00:00",
+  "pr_readback": {
+    "state": "open",
+    "draft": true,
+    "merged": false,
+    "head_sha": "4dc961ce600d12aa0911e5a9620e50411ab13d9f",
+    "base_sha": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+    "synthetic_merge_sha": "296ffb5063c0f6018733651ac208f4bb2986b12b",
+    "checked_at_utc": "2026-10-05T21:30:00Z"
+  },
+  "pr_synthetic_merge": {
+    "sha": "296ffb5063c0f6018733651ac208f4bb2986b12b",
+    "tree_sha": "999ebd19270bda47e61cb377034a07f6830aa2a7",
+    "parents": [
+      "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+      "4dc961ce600d12aa0911e5a9620e50411ab13d9f"
+    ],
+    "relation": "Distinct commit SHA, identical tracked source tree to final PR head. Verified via GitHub Git commit API."
+  },
+  "validate_windows_attempt3": {
+    "job_id": 111980419707,
+    "checkout_sha": "296ffb5063c0f6018733651ac208f4bb2986b12b",
+    "conclusion": "success",
+    "go_test_packages_ok": 28,
+    "go_packages_without_tests": 29,
+    "commands_passed": [
+      "frontend build",
+      "go build ./...",
+      "go test ./...",
+      "go vet ./...",
+      "go mod verify"
+    ],
+    "independent_log_review": true
+  },
+  "infrastructure_context": {
+    "official_incident_url": "https://www.githubstatus.com/incidents/3q1yb5m7ltvb",
+    "incident_started_at_utc": "2026-10-05T19:11:58Z",
+    "latest_verified_update_utc": "2026-10-05T21:09:00Z",
+    "checked_at_utc": "2026-10-05T21:26:00Z",
+    "status": "Actions major outage; investigation ongoing",
+    "summary": "GitHub reports hosted-runner assignment and workflow-start failures/delays. This is consistent with the observed zero-runner cancellations, but it does not independently establish the cause of each job."
+  },
+  "completion": {
+    "requested_workflow_latest_conclusions_all_success": true,
+    "full_pr_range_secret_scan_verified": true,
+    "migration_accepted": false,
+    "owner_final_recheck_pending": false,
+    "owner_scope": "Owner independently confirmed these workflow results and PR commit-union coverage; broader migration/device/cutover acceptance is separate."
+  },
+  "validate_ubuntu_attempt3": {
+    "job_id": 111980420119,
+    "checkout_sha": "296ffb5063c0f6018733651ac208f4bb2986b12b",
+    "conclusion": "success",
+    "go_test_packages_ok": 28,
+    "go_packages_without_tests": 29,
+    "commands_passed": [
+      "frontend build",
+      "go build ./...",
+      "go test ./...",
+      "go vet ./...",
+      "go mod verify"
+    ],
+    "independent_log_review": true
+  }
+}
