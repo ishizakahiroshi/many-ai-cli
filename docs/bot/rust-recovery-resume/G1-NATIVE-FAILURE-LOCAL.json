@@ -1,0 +1,193 @@
+{
+  "kind": "local G1 observation harness and temporary failure-diagnosis validation",
+  "checked_utc": "2026-10-06T15:21:47.189952+00:00",
+  "base_public_head": "41e4b8ec336b80dd3735759113714ef02a42dcea",
+  "base_local_equivalent": "bae3bc747acc141167575cc2b162a5d9fb06281f",
+  "local_code_sha": "48940dd78ed441e2fdd4521ff1878a38703050f8",
+  "local_code_tree": "ff456eee53e17b06a47975994ec62ab0b1c7e583",
+  "rust_source_tree": "a0893ec210e5da170c24f8a75bfa286148018590",
+  "rust_version": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "platform": "local Linux x86_64",
+  "commands": [
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--doc"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "all_targets": {
+    "passed": 1452,
+    "failed": 0,
+    "ignored": 0,
+    "summary_count": 34,
+    "library_included": {
+      "passed": 1140,
+      "failed": 0,
+      "ignored": 0
+    }
+  },
+  "doctests_separate": {
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0
+  },
+  "logs": [
+    {
+      "log": "g1-next-all-targets.log",
+      "bytes": 162649,
+      "sha256": "796f174f9b54b03a76b0c5a41774217044cd4493e0ee5cca07dce2590e4f4583",
+      "test_summary_count": 34,
+      "counts": [
+        1452,
+        0,
+        0
+      ]
+    },
+    {
+      "log": "g1-next-clippy.log",
+      "bytes": 150,
+      "sha256": "77370948d12fbcc39c08da0a44354dd3ef25c0de22f907a47e60ca3595f62448",
+      "test_summary_count": 0,
+      "counts": null
+    },
+    {
+      "log": "g1-next-doctests.log",
+      "bytes": 405,
+      "sha256": "f6e714eac7397ab5a5d5d5fdd2a20871fed6287cb5e2f3455c7cb23df34f65cc",
+      "test_summary_count": 1,
+      "counts": [
+        3,
+        0,
+        0
+      ]
+    },
+    {
+      "log": "g1-next-fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "test_summary_count": 0,
+      "counts": null
+    },
+    {
+      "log": "g1-next-instrumentation.log",
+      "bytes": 713,
+      "sha256": "6a2f37a0988363c83966c9f5ae61978798c54c803954516a811f2c2220361cea",
+      "test_summary_count": 0,
+      "counts": null
+    },
+    {
+      "log": "g1-next-branch-tests.log",
+      "bytes": 1400,
+      "sha256": "40c0a939683d1f0e71d9f2816d999cceea6cd51f43f78f98d86fe43bfdc90d7e",
+      "test_summary_count": 1,
+      "counts": [
+        10,
+        0,
+        0
+      ]
+    },
+    {
+      "log": "g1-next-diagnostic-tests.log",
+      "bytes": 638,
+      "sha256": "bda6763b7f80811bd0acdcb793f0ce666e4f2cd62fcd8601d692e23cc054bd48",
+      "test_summary_count": 1,
+      "counts": [
+        3,
+        0,
+        0
+      ]
+    },
+    {
+      "log": "g1-next-event-tests.log",
+      "bytes": 1129,
+      "sha256": "a28f49cd2cbe21a35d6f9d4207fc61230c5de281df01fda9ebb55948763d59a1",
+      "test_summary_count": 1,
+      "counts": [
+        7,
+        0,
+        0
+      ]
+    },
+    {
+      "log": "g1-next-diagnostic-wiring.log",
+      "bytes": 431,
+      "sha256": "b5771b27b85d296e1f378935daecbc0763e33849780a8eb6644f0341baf26867",
+      "test_summary_count": 1,
+      "counts": [
+        1,
+        0,
+        0
+      ]
+    }
+  ],
+  "harness_tests": [
+    "project_roots_cover_repository_subdirectory_worktree_bare_and_nonrepo",
+    "branches_and_stats_cover_unborn_detached_switch_text_binary_and_untracked"
+  ],
+  "harness_rule": "30s outer convergence bound; each product lookup still250ms; only documented unresolved/fallback outputs may retry; wrong definitive values fail",
+  "production_branch_prefix_sha256": "cfc27c03910b7270fc31819a490d02bd8ca2210d152977d0f4d2756bcddbbc2d",
+  "temporary_diagnostic": "cfg(test), inactive fixture-owned bounded failure-only recorder; three metadata tests plus one actual owned-private-index500 wiring test",
+  "unchanged_product_rules": [
+    "Git helper250ms",
+    "Git-turn5s stages",
+    "refresh200ms tick and2s period",
+    "four executing workers",
+    "original return values/cleanup precedence",
+    "original reconnect reservation assertion"
+  ],
+  "formal_independent_review": "Not run while CI red; implementation verification only",
+  "native_windows_and_macos": "Pending for next published source; Linux does not establish Windows cause",
+  "acceptance": "Temporary diagnostics must be removed and resulting finalSHA obtain full gates and three consecutive Windows quick successes",
+  "packaging_tests": "Not rerun locally in this batch; packaging inputs unchanged. NativeCI retains its47 checks."
+}

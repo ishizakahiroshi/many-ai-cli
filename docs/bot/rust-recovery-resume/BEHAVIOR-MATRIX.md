@@ -1,6 +1,6 @@
 # Recovered Rust #3: remaining behavior and acceptance matrix
 
-> 最終更新: 2026-10-06(火) 14:20:46 UTC
+> 最終更新: 2026-10-06(火) 15:11 UTC
 
 Status: **G1 branch-refresh implementation and validation are in progress; migration-wide implementation completeness is not established.** The new producer/payload audit binds public baseline `bec576445a7b74505ddcd95c68f7ad2aca41ff94`, equivalent local checkpoint `87fa9b735c7fa99b8776b8a58bb278290078d94b`, tree `206643f0bdf248ea0d8df05997edbfb16c2dbe08`. Existing source bindings, executed synthetic/native CI and owner acceptance retain their own source identities. Historical receipts below do not validate the current G1 edits.
 
@@ -8,7 +8,7 @@ Status: **G1 branch-refresh implementation and validation are in progress; migra
 
 The baseline had a `SessionObservation::Branch` consumer and protocol fields, but no production constructor or alternative feature producer. Registration counts, concrete route dispatch and the absence of placeholder macros did not establish this behavior. The current G1 implements the actual branch/change-count/`project_id` producer using the [fixed-Go contract](G1-GO-BRANCH-CONTRACT.md). **This G1 is the 2026-10-06 branch-refresh request; the earlier G1 label in the historical sections below refers to the already implemented relay routes.**
 
-Local code checkpoint `097082c367aa9eef9cc549efbfb52054374b25d4` passes Linux all-target1,448/0/0 (library1,136 included),3 separate doctests, strict Clippy,fmt,47 packaging checks and instrumentation. The26 new checks cover10 lookup,6 queue,9 core-state and1 real normal-Hub/Git/WebSocket regression; the final native test fails against the verified bec576 Linux binary and passes with the implementation. [Source-bound local evidence](G1-LOCAL-VALIDATION.json) retains the exact scopes. Publication, same-head native CI/artifacts, actual Windows Git execution and independent final review remain pending. The baseline source audit itself ran no tests and did not review this implementation; predecessor runs are not transferred.
+Local code checkpoint `097082c367aa9eef9cc549efbfb52054374b25d4` passes Linux all-target1,448/0/0 (library1,136 included),3 separate doctests, strict Clippy,fmt,47 packaging checks and instrumentation. The26 new checks cover10 lookup,6 queue,9 core-state and1 real normal-Hub/Git/WebSocket regression; the final native test fails against the verified bec576 Linux binary and passes with the implementation. [Source-bound local evidence](G1-LOCAL-VALIDATION.json) retains the exact scopes. Published head `41e4b8ec336b80dd3735759113714ef02a42dcea` has actual Windows normal-Hub/Git/WebSocket execution passing in both full and quick CI. Full Windows failed one immediate backend worktree assertion; quick attempt1 failed the pre-existing reconnect snapshot regression. Acceptance remains blocked, and independent final review is deferred while CI is red. See the latest [PROGRESS](PROGRESS.md) entry for exact counts, unchanged product budgets, the bounded harness correction and temporary failure-only diagnostic requiring removal. The baseline source audit itself ran no tests and did not review this implementation; predecessor runs are not transferred.
 
 | Required Go behavior | Current G1 scope / acceptance boundary |
 |---|---|
