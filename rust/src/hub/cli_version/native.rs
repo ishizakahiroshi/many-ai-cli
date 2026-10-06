@@ -172,18 +172,6 @@ impl CliVersionExecutor for NativeCliVersionExecutor {
             while let Ok(_) | Err(broadcast::error::TryRecvError::Lagged(_)) = events.try_recv() {
                 started = true;
             }
-            #[cfg(test)]
-            if let Err(error) = &output {
-                let thread = std::thread::current();
-                let suffix_case = thread.name()
-                    == Some(
-                        "hub::cli_version::native::tests::owned_native_combined_output_null_stdin_exact_env_exit_and_cap",
-                    );
-                crate::logging::write_diagnostic(&format!(
-                    "cli_version_process_diagnostic suffix_case={suffix_case} started={started} io_kind={:?}\n",
-                    error.kind()
-                ));
-            }
             let output = match output {
                 Ok(output) => output,
                 Err(_) if !started => {
