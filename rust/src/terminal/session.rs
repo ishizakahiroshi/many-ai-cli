@@ -47,12 +47,15 @@ pub type LiveApprovalPolicy =
     Arc<dyn Fn(&str, &str, &proto::ApprovalSummary) -> bool + Send + Sync>;
 pub type EngineWarningHandler = Arc<dyn Fn(&str, &SessionError) + Send + Sync>;
 pub type DetectedModelRoute = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
+pub type SubscriptionName = Arc<dyn Fn(&str, &str) -> String + Send + Sync>;
 pub type BranchLookup = Arc<dyn Fn(String) -> CoreFuture<'static, String> + Send + Sync>;
 pub struct EngineOptions {
     pub hub_instance: String,
     pub token_statusbar: bool,
     /// Live cache/config route inference; never performs network IO.
     pub model_route: DetectedModelRoute,
+    /// Current display label for an exact provider key and normalized profile ID.
+    pub subscription_name: SubscriptionName,
     /// Production binds the same bounded Git lookup used by periodic refresh.
     pub branch_lookup: BranchLookup,
     pub submit_timing: SubmitTiming,
@@ -71,6 +74,7 @@ impl Default for EngineOptions {
     fn default() -> Self {
         Self {
             hub_instance: String::new(),
+            subscription_name: Arc::new(|_, _| String::new()),
             branch_lookup: Arc::new(|_| Box::pin(async { String::new() })),
             token_statusbar: true,
             model_route: Arc::new(|provider, model| {
@@ -627,6 +631,13 @@ impl Session {
             m.session_meta = Some(self.wire_card_meta());
         }
         m
+    }
+    fn model_update(&self) -> proto::Message {
+        // Go applyDetectedModel includes effort and message summaries; generic
+        // registration, reattach, and activity updates deliberately omit effort.
+        let mut message = self.summary_update(false);
+        message.effort = self.snapshot.effort.clone();
+        message
     }
     fn wire_card_meta(&self) -> proto::SessionMeta {
         let s = &self.snapshot;

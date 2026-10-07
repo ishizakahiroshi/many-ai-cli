@@ -497,6 +497,28 @@ impl HubComposition {
         let model_warning = warning.clone();
         let core = Arc::new(SessionEngine::new(
             EngineOptions {
+                subscription_name: {
+                    let config = context.config.clone();
+                    let warning = warning.clone();
+                    Arc::new(move |provider, id| match config.snapshot() {
+                        Ok(snapshot) => crate::config::find_subscription(
+                            &snapshot.config.subscriptions,
+                            provider,
+                            id,
+                        )
+                        .map(|profile| profile.name.trim().to_owned())
+                        .unwrap_or_default(),
+                        Err(_) => {
+                            warning(
+                                "subscription display name",
+                                &SessionError::InvalidRequest(
+                                    "subscription configuration unavailable".into(),
+                                ),
+                            );
+                            String::new()
+                        }
+                    })
+                },
                 branch_lookup: {
                     let source = files.branch_reader();
                     Arc::new(move |cwd| {

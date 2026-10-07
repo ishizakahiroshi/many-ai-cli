@@ -770,7 +770,7 @@ impl Session {
         if changed {
             self.model_revision = self.model_revision.wrapping_add(1);
             self.initial_model_scan_done = true;
-            effects.0.push(CoreEffect::Broadcast(self.update_message()));
+            effects.0.push(CoreEffect::Broadcast(self.model_update()));
         }
     }
 }

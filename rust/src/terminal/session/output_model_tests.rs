@@ -32,6 +32,14 @@ async fn fixture(
     provider: &str,
     model: &str,
 ) -> (tempfile::TempDir, SessionEngine, SessionBinding, Timestamp) {
+    let (root, engine, registration, at) = fixture_with_effort(provider, model, "medium").await;
+    (root, engine, registration.binding, at)
+}
+async fn fixture_with_effort(
+    provider: &str,
+    model: &str,
+    effort: &str,
+) -> (tempfile::TempDir, SessionEngine, Registration, Timestamp) {
     let root = tempfile::tempdir().unwrap();
     let runtime = root.path().join("trial");
     std::fs::create_dir(&runtime).unwrap();
@@ -48,13 +56,19 @@ async fn fixture(
         CoreEventBus::new(16).unwrap(),
     );
     let at = Timestamp::from_unix(1791158400, 0).unwrap();
-    let binding = engine
+    let ui = UiBinding {
+        connection: UiConnectionId(1),
+        auth_epoch: AuthEpoch(0),
+    };
+    engine.attach_ui(ui, None, None).unwrap();
+    assert!(engine.finish_ui_priming(ui).unwrap().0.is_empty());
+    let registration = engine
         .register(
             RegisterRequest {
                 message: proto::Message {
                     provider: provider.into(),
                     model: model.into(),
-                    effort: "medium".into(),
+                    effort: effort.into(),
                     cwd: runtime.to_string_lossy().into_owned(),
                     pid: 9,
                     cols: 120,
@@ -67,9 +81,8 @@ async fn fixture(
             at,
         )
         .await
-        .unwrap()
-        .binding;
-    (root, engine, binding, at)
+        .unwrap();
+    (root, engine, registration, at)
 }
 fn output(
     engine: &SessionEngine,
@@ -88,6 +101,167 @@ fn output(
         )
         .unwrap()
 }
+
+fn ui_session_updates(effects: &CoreEffects) -> Vec<serde_json::Value> {
+    effects
+        .0
+        .iter()
+        .filter_map(|effect| match effect {
+            CoreEffect::SendUi { message, .. } | CoreEffect::SendUiBestEffort { message, .. }
+                if message.r#type == "session_update" =>
+            {
+                Some(serde_json::from_slice(&serde_json::to_vec(message).unwrap()).unwrap())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn detected_initial_model_emits_go_effort_update_to_live_ui() {
+    let (_root, engine, binding, at) = fixture("claude", "").await;
+    engine
+        .apply_observation(
+            binding,
+            SessionObservation::Messages {
+                first: "first synthetic request".into(),
+                last: "latest synthetic request".into(),
+            },
+            at,
+        )
+        .unwrap();
+    let updates = ui_session_updates(&output(
+        &engine,
+        binding,
+        b"Claude Code v3.0\r\nOpus 5 with high effort\r\n".to_vec(),
+        at,
+    ));
+    assert_eq!(updates.len(), 2, "activity then detected-model update");
+    assert!(updates[0].get("effort").is_none());
+    // Go d8fbf859 model_detect.go:188-202 has a deliberately narrower shape
+    // than orchestration.go:sessionUpdateMessage and includes message summaries.
+    assert_eq!(
+        updates[1],
+        serde_json::json!({
+            "type": "session_update",
+            "token_statusbar": false,
+            "session_id": binding.session.0,
+            "provider": "claude",
+            "cwd": engine.snapshot(binding.session).unwrap().cwd,
+            "model": "Opus 5",
+            "effort": "high",
+            "route": "claude:Opus 5",
+            "state": "running",
+            "last_output_at": timestamp(at).unwrap(),
+            "first_message": "first synthetic request",
+            "last_message": "latest synthetic request",
+        })
+    );
+}
+
+#[tokio::test]
+async fn detected_effort_only_and_model_changes_emit_preserved_effort() {
+    let (_root, engine, binding, at) = fixture("claude", "Opus 5").await;
+    output(&engine, binding, b"ready\r\n".to_vec(), at);
+    let updates = ui_session_updates(&output(
+        &engine,
+        binding,
+        b"Set model to Opus 5 with high effort\r\n".to_vec(),
+        at,
+    ));
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0]["model"], "Opus 5");
+    assert_eq!(updates[0]["effort"], "high");
+    assert!(
+        updates[0].get("route").is_none(),
+        "unchanged model keeps route"
+    );
+
+    let updates = ui_session_updates(&output(
+        &engine,
+        binding,
+        b"Set model to Sonnet 5\r\n".to_vec(),
+        at,
+    ));
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0]["model"], "Sonnet 5");
+    assert_eq!(
+        updates[0]["effort"], "high",
+        "blank detection preserves effort"
+    );
+    assert_eq!(updates[0]["route"], "claude:Sonnet 5");
+
+    for line in [
+        b"Set model to Sonnet 5\r\n".as_slice(),
+        b"Set model to Sonnet 5 with high effort\r\n".as_slice(),
+    ] {
+        assert!(ui_session_updates(&output(&engine, binding, line.to_vec(), at)).is_empty());
+    }
+}
+
+#[tokio::test]
+async fn detected_model_without_effort_omits_effort_on_the_wire() {
+    let (_root, engine, registration, at) = fixture_with_effort("claude", "", "").await;
+    let updates = ui_session_updates(&output(
+        &engine,
+        registration.binding,
+        b"Claude Code v3.0\r\nOpus 5\r\n".to_vec(),
+        at,
+    ));
+    let model_update = updates.last().unwrap();
+    assert_eq!(model_update["model"], "Opus 5");
+    assert!(model_update.get("effort").is_none());
+}
+
+#[tokio::test]
+async fn launch_effort_stays_in_snapshot_and_out_of_generic_announcements() {
+    let (_root, engine, registration, at) = fixture_with_effort("claude", "Opus 5", "medium").await;
+    let binding = registration.binding;
+    let registered_snapshot = registration.snapshot;
+    let updates = ui_session_updates(&registration.after_registered);
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0]["model"], "Opus 5");
+    assert!(updates[0].get("effort").is_none());
+    // Retained persistence effects reserve the ordered lane used by reattach.
+    drop(registration.after_registered);
+
+    let reconnecting_ui = UiBinding {
+        connection: UiConnectionId(2),
+        auth_epoch: AuthEpoch(0),
+    };
+    let priming = engine.attach_ui(reconnecting_ui, None, None).unwrap();
+    let snapshot: serde_json::Value =
+        serde_json::from_slice(&serde_json::to_vec(&priming.sessions).unwrap()).unwrap();
+    assert_eq!(snapshot[0]["effort"], "medium");
+    engine.detach_ui(reconnecting_ui);
+
+    let reattached = engine
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: binding.session.0,
+                    provider: "claude".into(),
+                    model: "Opus 5".into(),
+                    effort: "medium".into(),
+                    cwd: registered_snapshot.cwd,
+                    started_at: registered_snapshot.started_at,
+                    pid: 9,
+                    cols: 120,
+                    rows: 30,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(2),
+            at,
+        )
+        .await
+        .unwrap();
+    let updates = ui_session_updates(&reattached.after_reattached);
+    assert_eq!(updates.len(), 1);
+    assert!(updates[0].get("effort").is_none());
+}
+
 #[tokio::test]
 async fn explicit_model_banner_cannot_overwrite_and_changes_preserve_blank_effort() {
     let (_root, engine, binding, at) = fixture("claude", "configured").await;

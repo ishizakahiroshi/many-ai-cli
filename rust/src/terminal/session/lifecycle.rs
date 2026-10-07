@@ -150,7 +150,7 @@ impl SessionEngine {
         announce.jsonl_path = snapshot.jsonl_path.clone();
         effects.0.push(CoreEffect::Broadcast(announce));
         if !session.usage_probe {
-            effects.0.push(history(binding.session,now,"session_start",object(serde_json::json!({"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"parent_session_id":metadata.parent.0,"role":metadata.role,"auto":metadata.auto,"orchestration_id":metadata.orchestration.0,"board_path":metadata.board_path,"subscription_profile_id":m.subscription_id})))?);
+            effects.0.push(history(binding.session,now,"session_start",object(serde_json::json!({"provider":m.provider,"cwd":m.cwd,"branch":session.snapshot.branch,"label":m.label,"model":m.model,"shell":m.shell,"pid":m.pid,"parent_session_id":metadata.parent.0,"role":metadata.role,"auto":metadata.auto,"orchestration_id":metadata.orchestration.0,"board_path":metadata.board_path,"subscription_profile_id":session.snapshot.subscription_profile_id})))?);
         }
         effects
             .0
@@ -202,6 +202,17 @@ impl SessionEngine {
         let paths =
             self.journal
                 .paths_for_timestamp(binding.session, &m.provider, &m.cwd, started_text)?;
+        // Fixed Go resolves the wrapper's actual profile ID and current display
+        // name before initial or reattach publication. Missing profiles retain
+        // their validated ID; invalid IDs never reach storage or the UI.
+        let subscription_id = crate::config::normalize_subscription_id(&m.subscription_id);
+        let (subscription_id, subscription_name) =
+            if crate::config::validate_subscription_id(&subscription_id).is_ok() {
+                let name = (self.options.subscription_name)(&m.provider, &subscription_id);
+                (subscription_id, name)
+            } else {
+                (String::new(), String::new())
+            };
         let start = SessionStart {
             live_session_id: binding.session,
             provider: m.provider.clone(),
@@ -218,7 +229,7 @@ impl SessionEngine {
             started_at: started_text.into(),
             log_path: paths.raw.to_string_lossy().into_owned(),
             jsonl_path: paths.jsonl.to_string_lossy().into_owned(),
-            subscription_id: m.subscription_id.clone(),
+            subscription_id: subscription_id.clone(),
             parent_session_id: metadata.parent,
             role: metadata.role.clone(),
             auto: metadata.auto,
@@ -263,7 +274,8 @@ impl SessionEngine {
             },
             state: if append { "running" } else { "standby" }.into(),
             started_at: started_text.into(),
-            subscription_profile_id: m.subscription_id.clone(),
+            subscription_profile_id: subscription_id,
+            subscription_profile_name: subscription_name,
             log_path: paths.raw.to_string_lossy().into_owned(),
             jsonl_path: paths.jsonl.to_string_lossy().into_owned(),
             parent_session_id: metadata.parent,
