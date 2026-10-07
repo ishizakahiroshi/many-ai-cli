@@ -1,10 +1,12 @@
-# V01 native Windows headless oracle
+# V01 private Go attachment-failure variant
 
-> 最終更新: 2026-10-07(水) 06:59:46 UTC
+> 最終更新: 2026-10-07(水) 07:48:37 UTC
 
-The native Rust supervisor in `rust/tests/headless_windows_contracts.rs` runs this
-fixture. It builds an overlay-added test against unchanged Go production sources
-from `d8fbf8598c3effd4e2f837e43ad6f0488c461de3`, using Go 1.26.8 windows/amd64.
+The native Rust library-test supervisor in
+`rust/src/orchestration/headless/windows_contracts.rs` runs this fixture. It first verifies
+original Go production bytes from `d8fbf8598c3effd4e2f837e43ad6f0488c461de3`,
+then builds an explicitly fault-injected variant only in a private copy, using
+Go 1.26.8 windows/amd64. Repository Go files and the fixed oracle are untouched.
 The helper is excluded from ordinary builds/tests by the explicit
 `windows && many_ai_v01_oracle` constraint. No provider, account, user data, host
 Job adjustment, or process-name termination is used.
@@ -19,7 +21,23 @@ private build tree. No replacement refs, lazy fetch, hooks, filters, textconv,
 working-tree newline normalization or global Git changes are used. This avoids
 Windows checkout CRLF conversion while pinning the bytes actually compiled.
 The overlay helper is embedded in the Rust test executable and hashed in its
-receipt. CI never regenerates the fixed source pin from its candidate.
+receipt. CI never regenerates the fixed source pin from its candidate. After
+verifying all 57 originals, the private variant changes exactly one call in
+`internal/headless/proc_windows.go`:
+
+```diff
+-windows.AssignProcessToJobObject(job, proc)
++v01FaultAssignProcessToJobObject(job, proc)
+```
+
+The supervisor records `assignment_variant` with `original_path`,
+`original_sha256`, `variant_sha256`, `replacement_count=1`, `replace_from`,
+`replace_to`, and its private-overlay scope. Its receipts explicitly retain
+`natural_windows_attachment_failure_proven=false` and
+`unchanged_go_failure_proven=false`.
+No other production Go behavior is edited. The original `Run` body, its timeout,
+cancellation, fallback direct-process kill, reader wait, and result logic remain
+the actual comparison implementation.
 
 For a reviewed source-pin regeneration, start from a clean checkout of the exact
 Go SHA and run this Python at the Rust repository root; pass the fixed checkout
@@ -66,10 +84,11 @@ Path("rust/tests/fixtures/core/headless/v01_windows_oracle_sources.json").write_
     json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 ```
 
-The supervisor generates an overlay JSON with one `Replace` entry: the absolute
-virtual `internal/headless/v01_windows_oracle_test.go` path in the private Go
-tree maps to the private copy of the compile-time embedded helper. After source
-verification, its build command in that private module is:
+The supervisor generates a private build overlay containing the added
+`internal/headless/v01_windows_oracle_test.go` helper and the one-call variant of
+`internal/headless/proc_windows.go`. The helper bytes come from the compiled Rust
+test. After original-source verification and variant recording, its build command
+in the private module is:
 
 ```text
 go test -c -mod=readonly -buildvcs=false -tags=many_ai_v01_oracle -overlay=<private overlay.json> -o <private headless-v01.exe> ./internal/headless
@@ -83,21 +102,32 @@ which owns its kill-on-close Job and retained process handles. Do not run it
 without that guard.
 
 The helper entry is `-test.run=^TestV01WindowsOracle$ -test.v`. Its environment is
-`MANY_AI_V01_ROOT`, `MANY_AI_V01_FIXTURE` (the native Rust test executable),
+`MANY_AI_V01_ROOT`, `MANY_AI_V01_FIXTURE` (the native Rust library-test executable),
+`MANY_AI_V01_FIXTURE_TEST=orchestration::headless::windows_contracts::native_headless_fixture`,
 `MANY_AI_V01_CASE=cancel|deadline`, and `MANY_AI_V01_TIMEOUT_MS=5000`. It waits for
 the stdin admission byte `G` after private Job assignment. Both fixture processes
 must be alive and both native output streams observed before `go-ready.json` is
-published. Readiness allows20s in the cancel case; in the deadline case it must
-precede the actual5s product timeout. The cancel case waits for `cancel-run`;
-the deadline case uses actual
-unchanged `Run` timeout logic.
+published. Readiness allows 20s in the cancel case; in the deadline case it must
+precede the actual 5s product timeout. The cancel case waits for `cancel-run`;
+the deadline case uses actual unchanged `Run` timeout logic.
 
-`go-ready.json` records a real diagnostic second `attachProcessJob` call on the
-same live direct child, including native error 5, retained identities, and the
-measured private Job UI restriction. The helper does not observe the original
-call's discarded `jobErr`; its initial failure is a source-based inference under
-the same verified Job policy. This is explicitly recorded as
-`original_run_attach_error_directly_observed=false`.
+`v01FaultAssignProcessToJobObject` duplicates the supplied owned Job handle with
+only `JOB_OBJECT_QUERY`. It then calls actual native `AssignProcessToJobObject`
+with that reduced handle and returns its error unchanged. The omitted
+`JOB_OBJECT_ASSIGN_PROCESS` right deliberately causes native access denial; no
+mock error is returned. The original Go attachment function still owns its full
+Job/process handles and performs their original cleanup. The fault helper closes
+only its duplicate. It does not change Job policy, process security, or global
+permissions.
+
+`go-ready.json` and `go-result.json` record `native_attachment_error=5`,
+`attachment_calls=1`, `native_assignment_calls=1`,
+`original_run_attach_error_directly_observed=true`, and
+`attachment_fault_injected=true`. The directly observed call is the first call
+made by `Run` in this private variant; there is no second diagnostic attachment.
+The separate native-call counter prevents a duplicate-handle setup failure from
+being mistaken for an assignment failure. Both receipts explicitly label the
+variant `private_go_attachment_fault_variant`.
 
 After direct-child exit, the supervisor requests fresh grandchild writes through
 both inherited pipes. Go callbacks acknowledge them in `go-stdout-retained` and
@@ -111,17 +141,26 @@ is captured at actual return, so subsequent harness work cannot mask early retur
 That release is harness cleanup, not successful Go descendant cleanup. The test
 returns normally; the supervisor verifies process exit and an empty owned Job.
 
-A host Job incompatible with the private UI-limited Job is an explicit setup
-failure. No breakaway, policy change, skipped test, or synthetic error substitutes
-for this native receipt. Rust failed-before-resume prevention and successful-Job
-descendant cleanup are separate assertions; neither alone is the Go compound
-reproduction.
+The outer Job is an ordinary owned kill-on-close Job. The former UI-restriction
+assumption was disproved by native execution and is not used. Any containment
+setup failure remains a failed test; no breakaway, host-policy adjustment or skip
+substitutes for a receipt. The deliberate reduced-handle fault, real native API
+error, Go private-variant behavior, Rust injected-error cleanup, and successful-Job
+descendant cleanup are distinct evidence.
+
+These tests establish behavior after an attachment failure is deliberately
+induced. They do not prove that unchanged Go or an ordinary Windows environment
+naturally produces that failure. Rust's fault-injection path must be compiled
+only under its test configuration; release builds retain the production
+attachment path. The parent records the exact checks of that exclusion and the
+unchanged production path in the migration progress record.
 
 Retained Windows process handles keep their process objects and IDs alive
-through the diagnostic probe; see [Microsoft on PID lifetime](https://devblogs.microsoft.com/oldnewthing/20110107-00/?p=11803).
+through observation and cleanup; see [Microsoft on PID lifetime](https://devblogs.microsoft.com/oldnewthing/20110107-00/?p=11803).
 Termination uses the retained supervisor handles.
 
-Native API references: [nested Jobs](https://learn.microsoft.com/en-us/windows/win32/procthread/nested-jobs),
+Native API references: [Job access rights](https://learn.microsoft.com/en-us/windows/win32/procthread/job-object-security-and-access-rights),
+[DuplicateHandle access selection](https://learn.microsoft.com/en-us/windows/win32/api/handleapi/nf-handleapi-duplicatehandle),
 [attachment requirements](https://learn.microsoft.com/en-us/windows/win32/api/jobapi2/nf-jobapi2-assignprocesstojobobject),
 [asynchronous process termination](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess),
 and [Go build overlays](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies).

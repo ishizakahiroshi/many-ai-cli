@@ -1,5 +1,8 @@
 //! Source: internal/headless/{adapter,runner,prompt}.go at 21d0bc7.
 //! Process containment and bounded pipe ownership are exclusively shared process APIs.
+#[cfg(all(test, windows))]
+mod windows_contracts;
+
 use super::headless_formats::{Event, Parser, parser_for};
 use crate::{
     config::{HeadlessDef, Resource, RuntimePaths, normalize_headless_prompt_via, private_io},

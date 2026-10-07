@@ -1,10 +1,11 @@
 //! V01 native headless ownership. These fixtures execute real Windows children,
 //! inherit both native pipes, and retain process HANDLEs before cancellation.
-//! A private UI-restricted Job induces an actual nested Job assignment denial;
-//! no production spawn hook or process-wide environment mutation is involved.
-#![cfg(windows)]
+//! A test-only scoped assignment hook supplies a reduced-rights Job handle to
+//! the native API. This proves failure handling, not a naturally occurring
+//! Windows assignment failure. Release builds do not compile this module.
+#![cfg(all(test, windows))]
 
-use many_ai_cli::{
+use crate::{
     orchestration::headless::{Spec, run},
     process::{Cancellation, ExitOutcome, ProcessPlan, SpawnOptions, run_capped_with_options},
 };
@@ -25,13 +26,13 @@ use std::{
     time::{Duration, Instant},
 };
 use windows_sys::Win32::{
-    Foundation::{ERROR_ACCESS_DENIED, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
+    Foundation::{DuplicateHandle, ERROR_ACCESS_DENIED, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     System::{
         JobObjects::*,
         SystemInformation::OSVERSIONINFOW,
         Threading::{
-            GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-            PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+            GetCurrentProcess, GetProcessId, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
         },
     },
 };
@@ -44,11 +45,15 @@ const POLL: Duration = Duration::from_millis(10);
 const ROOT: &str = "MANY_AI_V01_ROOT";
 const ROLE: &str = "MANY_AI_V01_ROLE";
 const CASE: &str = "MANY_AI_V01_CASE";
+const FIXTURE_TEST: &str = "orchestration::headless::windows_contracts::native_headless_fixture";
+// JOB_OBJECT_QUERY is declared in Win32 SystemServices; no extra dependency
+// feature is needed for its documented access-mask value.
+const JOB_OBJECT_QUERY_ACCESS: u32 = 0x0004;
 
 struct Job(OwnedHandle);
 
 impl Job {
-    fn new(restrict_ui: bool) -> io::Result<Self> {
+    fn new() -> io::Result<Self> {
         // SAFETY: all successful native handles become owned immediately.
         let raw = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
         if raw.is_null() {
@@ -58,15 +63,6 @@ impl Job {
         let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
         job.set(JobObjectExtendedLimitInformation, &limits)?;
-        if restrict_ui {
-            // Only the synthetic tree loses clipboard-read permission. Microsoft
-            // documents that UI-limited Jobs cannot form a nested hierarchy:
-            // https://learn.microsoft.com/windows/win32/procthread/nested-jobs
-            let limits = JOBOBJECT_BASIC_UI_RESTRICTIONS {
-                UIRestrictionsClass: JOB_OBJECT_UILIMIT_READCLIPBOARD,
-            };
-            job.set(JobObjectBasicUIRestrictions, &limits)?;
-        }
         Ok(job)
     }
 
@@ -140,11 +136,10 @@ struct Tree {
 }
 
 impl Tree {
-    fn start(mut command: Command, restrict_ui: bool) -> Self {
-        let job = Job::new(restrict_ui).expect("create private fixture Job");
+    fn start(mut command: Command) -> Self {
+        let job = Job::new().expect("create private fixture Job");
         let child = command
             .stdin(Stdio::piped())
-            .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .spawn()
             .expect("start owned fixture runner");
@@ -152,7 +147,7 @@ impl Tree {
         let inherited_job = in_job(tree.child.as_raw_handle(), std::ptr::null_mut());
         tree.job.assign(tree.child.as_raw_handle()).unwrap_or_else(|error| {
             panic!(
-                "V01 fixture setup failed: private Job assignment; restricted_ui={restrict_ui}, inherited_job={inherited_job}, error={error}. Host Job restrictions are not bypassed."
+                "V01 fixture setup failed: private Job assignment; inherited_job={inherited_job}, error={error}. Host Job restrictions are not bypassed."
             )
         });
         assert!(tree.job.contains(tree.child.as_raw_handle()));
@@ -247,6 +242,15 @@ struct Process {
     handle: OwnedHandle,
 }
 
+fn duplicate_owned_handle(handle: HANDLE, access: u32) -> io::Result<OwnedHandle> {
+    let mut duplicate = std::ptr::null_mut();
+    let current = unsafe { GetCurrentProcess() };
+    if unsafe { DuplicateHandle(current, handle, current, &mut duplicate, access, 0, 0) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(unsafe { OwnedHandle::from_raw_handle(duplicate) })
+}
+
 impl Process {
     fn exited(&self) -> bool {
         match unsafe { WaitForSingleObject(self.handle.as_raw_handle(), 0) } {
@@ -300,7 +304,8 @@ fn environment(root: &Path, role: &str, case: &str) -> BTreeMap<OsString, Option
 fn fixture_command(root: &Path, role: &str, case: &str) -> Command {
     let mut command = Command::new(std::env::current_exe().unwrap());
     command
-        .args(["--exact", "native_headless_fixture", "--nocapture"])
+        .args(["--exact", FIXTURE_TEST, "--nocapture"])
+        .stdout(Stdio::null())
         .current_dir(root)
         .env_clear();
     for (key, value) in environment(root, role, case) {
@@ -373,16 +378,16 @@ fn native_headless_fixture() {
         }
         "grandchild" => {
             publish(&root, "grandchild.pid", std::process::id().to_string());
-            writeln!(io::stdout(), "V01_STDOUT_READY").unwrap();
-            writeln!(io::stderr(), "V01_STDERR_READY").unwrap();
+            writeln!(io::stdout().lock(), "V01_STDOUT_READY").unwrap();
+            writeln!(io::stderr().lock(), "V01_STDERR_READY").unwrap();
             io::stdout().flush().unwrap();
             io::stderr().flush().unwrap();
             publish(&root, "grandchild-ready", b"both native pipes written");
             while !root.join("probe-retained-pipes").exists() {
                 thread::sleep(POLL);
             }
-            writeln!(io::stdout(), "V01_STDOUT_RETAINED").unwrap();
-            writeln!(io::stderr(), "V01_STDERR_RETAINED").unwrap();
+            writeln!(io::stdout().lock(), "V01_STDOUT_RETAINED").unwrap();
+            writeln!(io::stderr().lock(), "V01_STDERR_RETAINED").unwrap();
             io::stdout().flush().unwrap();
             io::stderr().flush().unwrap();
             publish(
@@ -404,7 +409,7 @@ async fn rust_runner(root: &Path, case: &str) -> Value {
     let spec = Spec {
         process: ProcessPlan {
             executable: std::env::current_exe().unwrap(),
-            args: ["--exact", "native_headless_fixture", "--nocapture"]
+            args: ["--exact", FIXTURE_TEST, "--nocapture"]
                 .map(Into::into)
                 .to_vec(),
             cwd: root.to_owned(),
@@ -427,21 +432,77 @@ async fn rust_runner(root: &Path, case: &str) -> Value {
     let start = Instant::now();
     let cancel = Cancellation::default();
     if case == "failed-attach" {
-        // This explicit native probe is distinct from the product's subsequent
-        // call. The unchanged headless error path is asserted separately below.
-        let probe = Job::new(false).unwrap();
-        let error = probe.assign(unsafe { GetCurrentProcess() }).unwrap_err();
-        assert_eq!(error.raw_os_error(), Some(ERROR_ACCESS_DENIED as i32));
-        let error = run(spec, &cancel, |_| {}).await.unwrap_err();
+        #[derive(Default)]
+        struct Observation {
+            calls: u32,
+            error: Option<i32>,
+            child: Option<Process>,
+        }
+        let observed = Arc::new(Mutex::new(Observation::default()));
+        let recorded = observed.clone();
+        let assignment: crate::process::windows_job::testing::Assignment =
+            Arc::new(move |job, child| {
+                // DuplicateHandle reduces only this temporary test handle's
+                // rights. It changes no process/Job DACL or host policy.
+                let query_job = duplicate_owned_handle(job, JOB_OBJECT_QUERY_ACCESS)?;
+                let query_child = duplicate_owned_handle(
+                    child,
+                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                )?;
+                let pid = unsafe { GetProcessId(child) };
+                assert_ne!(pid, 0);
+                assert_eq!(
+                    unsafe { WaitForSingleObject(query_child.as_raw_handle(), 0) },
+                    WAIT_TIMEOUT
+                );
+                let result = unsafe { AssignProcessToJobObject(query_job.as_raw_handle(), child) };
+                let error = io::Error::last_os_error();
+                assert_eq!(
+                    result, 0,
+                    "query-only Job handle unexpectedly permitted assignment"
+                );
+                assert_eq!(error.raw_os_error(), Some(ERROR_ACCESS_DENIED as i32));
+                let mut evidence = recorded.lock().unwrap();
+                evidence.calls += 1;
+                assert_eq!(
+                    evidence.calls, 1,
+                    "only the actual headless assignment may be injected"
+                );
+                evidence.error = error.raw_os_error();
+                evidence.child = Some(Process {
+                    pid,
+                    handle: query_child,
+                });
+                Err(error)
+            });
+        let error = crate::process::windows_job::testing::with_job_assignment(
+            assignment,
+            run(spec, &cancel, |_| {}),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
         assert!(error.to_string().contains("os error 5"));
         assert!(start.elapsed() < RETURN_BOUND);
         assert!(!root.join("direct.pid").exists());
         assert!(!root.join("grandchild.pid").exists());
+        let mut evidence = observed.lock().unwrap();
+        assert_eq!(evidence.calls, 1);
+        assert_eq!(evidence.error, Some(ERROR_ACCESS_DENIED as i32));
+        let child = evidence
+            .child
+            .take()
+            .expect("actual assigned child handle retained");
+        child.wait(RETURN_BOUND);
         return json!({
             "case":case, "run_return_ms":start.elapsed().as_millis(),
-            "native_attach_probe_error":ERROR_ACCESS_DENIED,
+            "native_attachment_error":ERROR_ACCESS_DENIED, "attachment_calls":evidence.calls,
+            "native_assignment_calls":evidence.calls,
+            "original_run_attach_error_directly_observed":true, "attachment_fault_injected":true,
+            "injection_scope":"cfg(all(test, windows)); scoped real native assignment",
+            "natural_windows_attachment_failure_proven":false,
             "headless_error_kind":"PermissionDenied", "provider_executed":false,
+            "owned_child_pid":child.pid, "owned_child_handle_signaled":true,
         });
     }
     let bytes = Arc::new(Mutex::new(Vec::new()));
@@ -543,16 +604,13 @@ fn windows_version() -> Value {
 fn emit_receipt(report: Value) {
     // Raw stdout keeps the bounded permanent regression receipt in ordinary
     // successful CI logs, independently of libtest's print-macro capture.
-    writeln!(io::stdout(), "V01_EVIDENCE {}", report).unwrap();
+    writeln!(io::stdout().lock(), "V01_EVIDENCE {}", report).unwrap();
 }
 
 fn rust_case(case: &str) {
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path();
-    let mut tree = Tree::start(
-        fixture_command(root, "rust-runner", case),
-        case == "failed-attach",
-    );
+    let mut tree = Tree::start(fixture_command(root, "rust-runner", case));
     let processes = if case == "failed-attach" {
         None
     } else {
@@ -621,9 +679,10 @@ struct OracleManifest {
 }
 
 fn oracle_manifest() -> OracleManifest {
-    let manifest: OracleManifest = serde_json::from_str(include_str!(
-        "fixtures/core/headless/v01_windows_oracle_sources.json"
-    ))
+    let manifest: OracleManifest = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/core/headless/v01_windows_oracle_sources.json"
+    )))
     .unwrap();
     assert_eq!(manifest.schema, 1);
     assert_eq!(
@@ -850,6 +909,7 @@ struct BuiltOracle {
     manifest: OracleManifest,
     input_commit: String,
     helper_sha256: String,
+    assignment_variant: Value,
 }
 
 fn build_oracle(root: &Path) -> BuiltOracle {
@@ -899,15 +959,37 @@ fn build_oracle(root: &Path) -> BuiltOracle {
     assert!(!source.join(&manifest.overlay_test).exists());
     // These are the helper bytes compiled into this Rust test binary, not a
     // later working-tree read. Only the fixed production inputs come from Git.
-    let helper_bytes = include_bytes!("fixtures/core/headless/v01_windows_oracle_test.go");
+    let helper_bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/core/headless/v01_windows_oracle_test.go"
+    ));
     let helper_sha256 = sha256(helper_bytes);
     let helper = root.join("v01_windows_oracle_test.go");
     fs::write(&helper, helper_bytes).unwrap();
+    let original_path = "internal/headless/proc_windows.go";
+    let original = fs::read(source.join(original_path)).unwrap();
+    let original_sha256 = sha256(&original);
+    assert_eq!(original_sha256, manifest.files[original_path]);
+    let original = String::from_utf8(original).unwrap();
+    let replace_from = "windows.AssignProcessToJobObject(job, proc)";
+    let replace_to = "v01FaultAssignProcessToJobObject(job, proc)";
+    assert_eq!(original.matches(replace_from).count(), 1);
+    let variant = original.replacen(replace_from, replace_to, 1);
+    let variant_sha256 = sha256(variant.as_bytes());
+    let variant_path = root.join("proc_windows_v01.go");
+    fs::write(&variant_path, variant.as_bytes()).unwrap();
+    let assignment_variant = json!({
+        "original_path":original_path, "original_sha256":original_sha256,
+        "variant_sha256":variant_sha256, "replacement_count":1,
+        "replace_from":replace_from, "replace_to":replace_to,
+        "scope":"private comparison overlay only; repository and fixed oracle unchanged",
+    });
     let overlay = root.join("overlay.json");
     fs::write(
         &overlay,
         serde_json::to_vec(&json!({"Replace":{
-            source.join(&manifest.overlay_test).to_str().unwrap(): helper.to_str().unwrap()
+            source.join(&manifest.overlay_test).to_str().unwrap(): helper.to_str().unwrap(),
+            source.join(original_path).to_str().unwrap(): variant_path.to_str().unwrap()
         }}))
         .unwrap(),
     )
@@ -966,6 +1048,7 @@ fn build_oracle(root: &Path) -> BuiltOracle {
         manifest,
         input_commit,
         helper_sha256,
+        assignment_variant,
     }
 }
 
@@ -986,28 +1069,25 @@ fn go_case(oracle: &BuiltOracle, root: &Path, case: &str) {
         }
     }
     command
+        .stdout(Stdio::inherit())
         .env("MANY_AI_V01_FIXTURE", std::env::current_exe().unwrap())
+        .env("MANY_AI_V01_FIXTURE_TEST", FIXTURE_TEST)
         .env(
             "MANY_AI_V01_TIMEOUT_MS",
             RUN_TIMEOUT.as_millis().to_string(),
         );
-    let mut tree = Tree::start(command, true);
+    let mut tree = Tree::start(command);
     tree.await_file(root, "go-ready.json", STEP);
     let ready: Value =
         serde_json::from_slice(&fs::read(root.join("go-ready.json")).unwrap()).unwrap();
     assert_eq!(ready["go_source_sha"], manifest.go_source_sha);
     assert_eq!(ready["go_version"], "go1.26.8");
     assert_eq!(ready["case"], case);
-    assert_eq!(ready["native_attach_probe_error"], ERROR_ACCESS_DENIED);
-    assert_eq!(
-        ready["probe_scope"],
-        "diagnostic_second_attach_on_live_run_child"
-    );
-    assert_eq!(ready["original_run_attach_error_directly_observed"], false);
-    assert_eq!(
-        ready["current_job_ui_restrictions"],
-        JOB_OBJECT_UILIMIT_READCLIPBOARD
-    );
+    assert_eq!(ready["native_attachment_error"], ERROR_ACCESS_DENIED);
+    assert_eq!(ready["attachment_calls"], 1);
+    assert_eq!(ready["native_assignment_calls"], 1);
+    assert_eq!(ready["original_run_attach_error_directly_observed"], true);
+    assert_eq!(ready["attachment_fault_injected"], true);
     assert_eq!(
         ready["deadline_ms"],
         if case == "deadline" {
@@ -1072,6 +1152,11 @@ fn go_case(oracle: &BuiltOracle, root: &Path, case: &str) {
     assert_eq!(result["go_source_sha"], manifest.go_source_sha);
     assert_eq!(result["go_version"], "go1.26.8");
     assert_eq!(result["case"], case);
+    assert_eq!(result["native_attachment_error"], ERROR_ACCESS_DENIED);
+    assert_eq!(result["attachment_calls"], 1);
+    assert_eq!(result["native_assignment_calls"], 1);
+    assert_eq!(result["original_run_attach_error_directly_observed"], true);
+    assert_eq!(result["attachment_fault_injected"], true);
     assert_eq!(result["state"], "error");
     assert_eq!(result["timed_out"], case == "deadline");
     assert_eq!(result["canceled"], case == "cancel");
@@ -1087,6 +1172,8 @@ fn go_case(oracle: &BuiltOracle, root: &Path, case: &str) {
         "case":format!("go-{case}-failed-attachment-retained-pipes"),
         "go_source_sha":manifest.go_source_sha, "go_version":manifest.go_version,
         "verified_input_source_commit":oracle.input_commit, "overlay_helper_sha256":oracle.helper_sha256,
+        "assignment_variant":oracle.assignment_variant,
+        "natural_windows_attachment_failure_proven":false, "unchanged_go_failure_proven":false,
         "os":windows_version(), "ready":ready, "result":result,
         "direct_handle_signaled_before_probe":true, "grandchild_alive_after_direct_exit":true,
         "stdout_retained_probe_received":true, "stderr_retained_probe_received":true,

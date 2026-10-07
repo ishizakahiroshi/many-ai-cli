@@ -1,7 +1,8 @@
 //go:build windows && many_ai_v01_oracle
 
-// This test is added to the fixed Go headless package with go's build overlay.
-// Production sources are neither replaced nor changed. The Rust supervisor
+// This test belongs only to a privately materialized fault variant of the fixed
+// Go headless package. Its one changed assignment call invokes the hook below.
+// Repository Go sources and the fixed oracle are untouched. The Rust supervisor
 // owns the private Job and every termination handle used by this fixture.
 package headless
 
@@ -12,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -28,6 +28,32 @@ import (
 
 const v01GoSource = "d8fbf8598c3effd4e2f837e43ad6f0488c461de3"
 
+var v01AttachmentCalls atomic.Uint32
+var v01NativeAssignmentCalls atomic.Uint32
+var v01AttachmentError atomic.Uint32
+
+// v01FaultAssignProcessToJobObject is substituted for exactly one call in the
+// private proc_windows.go copy. The missing JOB_OBJECT_ASSIGN_PROCESS right is
+// deliberate fault injection; AssignProcessToJobObject itself is the real API.
+// The original attachProcessJob retains and cleans up its full-access handles.
+func v01FaultAssignProcessToJobObject(job, process windows.Handle) error {
+	v01AttachmentCalls.Add(1)
+	const jobObjectQuery = 0x0004 // JOB_OBJECT_QUERY; no assignment access.
+	var queryJob windows.Handle
+	if err := windows.DuplicateHandle(windows.CurrentProcess(), job,
+		windows.CurrentProcess(), &queryJob, jobObjectQuery, false, 0); err != nil {
+		return err
+	}
+	defer windows.CloseHandle(queryJob)
+	v01NativeAssignmentCalls.Add(1)
+	err := windows.AssignProcessToJobObject(queryJob, process)
+	var nativeErr syscall.Errno
+	if errors.As(err, &nativeErr) {
+		v01AttachmentError.Store(uint32(nativeErr))
+	}
+	return err
+}
+
 type v01RunReply struct {
 	result         Result
 	err            error
@@ -35,9 +61,9 @@ type v01RunReply struct {
 	cleanupStarted bool
 }
 
-// TestV01WindowsOracle calls the real fixed-source Run. A diagnostic second
-// attachProcessJob call observes a native error on that same live direct child;
-// it does not expose the jobErr discarded by Run's original attachment call.
+// TestV01WindowsOracle runs the unchanged Run body in the private fault variant.
+// Its actual first attachment call records a native failure through the hook;
+// this does not demonstrate natural failure in unmodified Go or Windows.
 func TestV01WindowsOracle(t *testing.T) {
 	root := os.Getenv("MANY_AI_V01_ROOT")
 	if root == "" {
@@ -58,6 +84,10 @@ func TestV01WindowsOracle(t *testing.T) {
 	}
 	if info, err := os.Stat(fixture); err != nil || !info.Mode().IsRegular() {
 		t.Fatal("V01 provider executable does not exist")
+	}
+	fixtureTest := os.Getenv("MANY_AI_V01_FIXTURE_TEST")
+	if fixtureTest != "orchestration::headless::windows_contracts::native_headless_fixture" {
+		t.Fatal("V01 provider test must be the fixed native Rust library fixture")
 	}
 	caseName := os.Getenv("MANY_AI_V01_CASE")
 	if caseName != "cancel" && caseName != "deadline" {
@@ -84,9 +114,8 @@ func TestV01WindowsOracle(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("private-Job admission was not received within its setup bound")
 	}
-	ui, err := v01CurrentJobUI()
-	if err != nil || ui != windows.JOB_OBJECT_UILIMIT_READCLIPBOARD {
-		t.Fatalf("V01 setup requires the measured private UI-limited Job: flags=%d, error=%v", ui, err)
+	if v01AttachmentCalls.Load() != 0 || v01NativeAssignmentCalls.Load() != 0 {
+		t.Fatal("V01 fault variant must start with no attachment attempts")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -110,15 +139,15 @@ func TestV01WindowsOracle(t *testing.T) {
 			stderrReady.Store(true)
 		}
 		if strings.Contains(line, "V01_STDOUT_RETAINED") && stdoutRetained.CompareAndSwap(false, true) {
-			reportCallbackError(v01Publish(root, "go-stdout-retained", []byte("observed by fixed Go Run callback\n")))
+			reportCallbackError(v01Publish(root, "go-stdout-retained", []byte("observed by private Go fault-variant Run callback\n")))
 		}
 		if strings.Contains(line, "V01_STDERR_RETAINED") && stderrRetained.CompareAndSwap(false, true) {
-			reportCallbackError(v01Publish(root, "go-stderr-retained", []byte("observed by fixed Go Run callback\n")))
+			reportCallbackError(v01Publish(root, "go-stderr-retained", []byte("observed by private Go fault-variant Run callback\n")))
 		}
 	}
 	spec := Spec{
 		Exe:       fixture,
-		Argv:      []string{"--exact", "native_headless_fixture", "--nocapture"},
+		Argv:      []string{"--exact", fixtureTest, "--nocapture"},
 		PromptVia: "arg",
 		Format:    "text",
 		CWD:       root,
@@ -135,7 +164,7 @@ func TestV01WindowsOracle(t *testing.T) {
 		cleanupStarted := v01Exists(root, "harness-cleanup")
 		// Expose actual return before any handle waits or final receipt work.
 		// Their latency must never look like Run still being blocked.
-		reportCallbackError(v01Publish(root, "go-run-returned", []byte("actual fixed Go Run returned\n")))
+		reportCallbackError(v01Publish(root, "go-run-returned", []byte("actual private Go fault-variant Run returned\n")))
 		replies <- v01RunReply{result: result, err: err, elapsed: elapsed, cleanupStarted: cleanupStarted}
 	}()
 
@@ -172,42 +201,26 @@ func TestV01WindowsOracle(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// attachProcessJob opens the process by PID itself. Retained handles and
-	// private Job membership establish the identities before this diagnostic
-	// retry. This is real native error evidence, not injected failure behavior.
-	process, err := os.FindProcess(int(directPID))
-	if err != nil {
-		t.Fatalf("find retained direct fixture: %v", err)
-	}
-	defer process.Release()
-	probeJob, probeErr := attachProcessJob(&exec.Cmd{Process: process})
-	if probeJob != 0 {
-		closeProcessJob(probeJob)
-	}
-	var nativeErr syscall.Errno
-	if probeJob != 0 || !errors.As(probeErr, &nativeErr) || nativeErr != windows.ERROR_ACCESS_DENIED {
-		t.Fatalf("native second attach must fail with access denied: job=%d, error=%v", probeJob, probeErr)
-	}
+	// Run starts its reader callbacks only after the first attachment attempt.
+	// Therefore both READY callbacks also establish that the actual injected
+	// native assignment has returned, without a second diagnostic attempt.
+	v01RequireNativeFault(t)
 	if v01ProcessExited(t, direct) || v01ProcessExited(t, grandchild) {
 		t.Fatal("compound fixture exited before its native attachment failure was recorded")
 	}
-	measuredUI, err := v01CurrentJobUI()
-	if err != nil || measuredUI != ui {
-		t.Fatalf("private Job policy changed during the diagnostic: flags=%d, error=%v", measuredUI, err)
-	}
 	readyElapsed := time.Since(started)
 	if readyElapsed >= readyBound {
-		t.Fatal("native attachment probe did not complete before the readiness deadline")
+		t.Fatal("native attachment failure was not recorded before the readiness deadline")
 	}
 	ready := map[string]any{
 		"schema": 1, "go_source_sha": v01GoSource, "go_version": runtime.Version(), "case": caseName,
 		"direct_pid": directPID, "grandchild_pid": grandchildPID,
-		"native_attach_probe_error": uint32(nativeErr), "native_attach_probe_error_message": probeErr.Error(),
-		"probe_scope": "diagnostic_second_attach_on_live_run_child",
-		"original_run_attach_error_directly_observed": false,
+		"variant":                 "private_go_attachment_fault_variant",
+		"native_attachment_error": v01AttachmentError.Load(), "attachment_calls": v01AttachmentCalls.Load(),
+		"native_assignment_calls":                     v01NativeAssignmentCalls.Load(),
+		"original_run_attach_error_directly_observed": true, "attachment_fault_injected": true,
 		"stdout_ready": stdoutReady.Load(), "stderr_ready": stderrReady.Load(),
 		"run_start_elapsed_ms": readyElapsed.Milliseconds(), "deadline_ms": spec.Timeout.Milliseconds(),
-		"current_job_ui_restrictions": measuredUI,
 	}
 	v01PublishJSON(t, root, "go-ready.json", ready)
 
@@ -246,8 +259,13 @@ func TestV01WindowsOracle(t *testing.T) {
 	// process object signals; retain the identities and bound that final wait.
 	directExited := v01WaitProcessExited(t, direct)
 	grandchildExited := v01WaitProcessExited(t, grandchild)
+	v01RequireNativeFault(t)
 	result := map[string]any{
 		"schema": 1, "go_source_sha": v01GoSource, "go_version": runtime.Version(), "case": caseName,
+		"variant":                 "private_go_attachment_fault_variant",
+		"native_attachment_error": v01AttachmentError.Load(), "attachment_calls": v01AttachmentCalls.Load(),
+		"native_assignment_calls":                     v01NativeAssignmentCalls.Load(),
+		"original_run_attach_error_directly_observed": true, "attachment_fault_injected": true,
 		"state": reply.result.State, "exit_code": reply.result.ExitCode,
 		"timed_out": reply.result.TimedOut, "canceled": reply.result.Canceled,
 		"run_return_ms":            reply.elapsed.Milliseconds(),
@@ -279,11 +297,13 @@ func TestV01WindowsOracle(t *testing.T) {
 	// Return normally so the supervisor verifies actual test-process teardown.
 }
 
-func v01CurrentJobUI() (uint32, error) {
-	var limits windows.JOBOBJECT_BASIC_UI_RESTRICTIONS
-	err := windows.QueryInformationJobObject(0, windows.JobObjectBasicUIRestrictions,
-		uintptr(unsafe.Pointer(&limits)), uint32(unsafe.Sizeof(limits)), nil)
-	return limits.UIRestrictionsClass, err
+func v01RequireNativeFault(t *testing.T) {
+	t.Helper()
+	if v01AttachmentCalls.Load() != 1 || v01NativeAssignmentCalls.Load() != 1 ||
+		v01AttachmentError.Load() != uint32(windows.ERROR_ACCESS_DENIED) {
+		t.Fatalf("private fault variant requires one actual native access-denied assignment: hook_calls=%d, native_calls=%d, error=%d",
+			v01AttachmentCalls.Load(), v01NativeAssignmentCalls.Load(), v01AttachmentError.Load())
+	}
 }
 
 func v01VerifyCurrentJobMembers(pids ...uint32) error {

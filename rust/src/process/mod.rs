@@ -293,7 +293,18 @@ impl ManagedProcess {
         let cancel = Cancellation::default();
         let (events, receiver) = broadcast::channel(event_capacity.max(1));
         let task_cancel = cancel.clone();
+        #[cfg(all(test, windows))]
+        let test_assignment = windows_job::testing::current();
         let task = tokio::spawn(async move {
+            #[cfg(all(test, windows))]
+            if let Some(assignment) = test_assignment {
+                return windows_job::testing::with_job_assignment(
+                    assignment,
+                    run_observed(&plan, &task_cancel, Some(events), options, None, None),
+                )
+                .await
+                .map_err(ProcessFailure::from);
+            }
             run_observed(&plan, &task_cancel, Some(events), options, None, None)
                 .await
                 .map_err(ProcessFailure::from)
@@ -678,6 +689,9 @@ fn terminate_group(pid: u32) {
 }
 #[cfg(windows)]
 pub(crate) mod windows_job {
+    #[cfg(test)]
+    pub(crate) mod testing;
+
     use std::mem::size_of;
     use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
     use std::{io, mem};
@@ -723,6 +737,10 @@ pub(crate) mod windows_job {
         }
         pub(crate) fn assign(&self, process: HANDLE) -> io::Result<()> {
             // Caller retains its suspended process until assignment succeeds.
+            #[cfg(test)]
+            if let Some(assignment) = testing::current() {
+                return assignment(self.as_raw_handle(), process);
+            }
             if unsafe { AssignProcessToJobObject(self.as_raw_handle(), process) } == 0 {
                 return Err(io::Error::last_os_error());
             }
