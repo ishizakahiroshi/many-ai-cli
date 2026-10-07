@@ -228,13 +228,13 @@
     "old_history": "Four approved metadata fingerprints do not accept other findings or prove fullPR history coverage"
   },
   "remaining": [
-    "Resolve paused publication with owner and reconcile remote state before further writes",
+    "Verify single normal branch append and final tree/source readback",
     "Fresh final-head four-target, Validate and scans",
     "Three consecutive final-head Windows quick successes",
     "Independent final review only after CI green",
     "Owner device/installed-data acceptance remains separate"
   ],
-  "publication": {
+  "prior_publication_pause": {
     "state": "paused; no new published code or final-head CI receipt",
     "last_confirmed_branch_commit": "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf",
     "created_remote_objects": [
@@ -246,5 +246,18 @@
     "preflight": "PR metadata eventually retained; no completion timestamp, Draft, head4debe28b",
     "tree3": "No successful response retained; remote execution outcome must be reconciled before any further mutation",
     "further_retry_started": false
+  },
+  "publication_preparation": {
+    "state": "Five equivalent commit objects created; this receipt precedes branch update/readback",
+    "prepared_remote_commits": [
+      "46bec95b211e14eba76b11cfe9c4a3767ceb4185",
+      "532748a9f01a139c5e1e4195c0c542fb10cd6c6f",
+      "8aaef4ca4d61ab49c463b2973f504e0222467b37",
+      "98cecc3b807a4436e3459b2d8273960476012412",
+      "e3c5b1747a2eeb101497c68b9d72ed6d5bb0acc7"
+    ],
+    "all_five_original_trees_preserved": true,
+    "owner_recovery_package_verification": "Owner reports ZIP, manifest, bundle/commit/tree/parent, restored3, exact4exceptions and actualGo-regenerated rules/golden byte equality",
+    "extra_commit_scope": "Only current PROGRESS/BEHAVIOR-MATRIX and receipt metadata; source/tests/configuration unchanged"
   }
 }

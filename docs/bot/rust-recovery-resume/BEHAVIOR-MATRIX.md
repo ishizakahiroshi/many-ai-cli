@@ -1,8 +1,8 @@
 # Recovered Rust #3: remaining behavior and acceptance matrix
 
-> 最終更新: 2026-10-07(水) 00:42:58 UTC
+> 最終更新: 2026-10-07(水) 01:48:53 UTC
 
-Status: **recovered G1 cleanup/isolation plus approval-rules25 pass local Linux validation; final-head native acceptance and independent final review remain pending.** Tested code is `f34fdd5156430be07a6f392ef4191f0db69f35a1`; local checkpoint `1c54387d393d302fdd6425453866a7c1d0b2d62f` adds the four expressly approved scan exceptions and record-key rename. The last confirmed public branch head is `4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf`; publication is paused after the bounded retry orchestration timed out. [Current local evidence](ORACLE-V25-LOCAL-VALIDATION.json) and [publication mappings](PROGRESS.md#restored-changes-and-publication-mapping) distinguish local code, candidate commit objects and branch publication. Migration-wide completeness is not established.
+Status: **recovered G1 cleanup/isolation plus approval-rules25 pass local Linux validation; final-head native acceptance and independent final review remain pending.** Tested code is `f34fdd5156430be07a6f392ef4191f0db69f35a1`; local checkpoint `1c54387d393d302fdd6425453866a7c1d0b2d62f` adds the four expressly approved scan exceptions and record-key rename. The original five checkpoint trees are preserved in the prepared remote chain through `e3c5b1747a2eeb101497c68b9d72ed6d5bb0acc7`; this receipt precedes the single branch update/readback. The prior publication pause is historical. [Current local evidence](ORACLE-V25-LOCAL-VALIDATION.json) and [publication mappings](PROGRESS.md#restored-changes-and-publication-mapping) distinguish local code, candidate commit objects and branch publication. Migration-wide completeness is not established.
 
 ## 2026-10-07 combined checkpoint: rules25 and restored test boundaries
 
@@ -232,7 +232,7 @@ These are validation obligations, not eight newly demonstrated code defects. V01
 
 ## Integration-owner next actions
 
-1. Preserve the combined local checkpoint and recovery bundle while publication is paused. Resolve the stopped publication with the owner and reconcile remote state before further writes; after an eventual normal append, verify the source mappings in PROGRESS and hold the final head for four-target CI, Validate, scans/artifacts and three consecutive Windows quick successes. Local validation is complete at its recorded identity; independent final review starts only after CI is green.
+1. Verify the single normal branch append and its source mappings in PROGRESS, then hold the final head for four-target CI, Validate, scans/artifacts and three consecutive Windows quick successes. Local validation is complete at its recorded identity; independent final review starts only after CI is green.
 2. Keep the additional effort, subscription-name, route, transcript-growth and summary-packet findings visible with the exact distinctions above. This documentation does not claim or authorize their repair.
 3. Retain the historical relay/notification/router G1–G4 closures and composed-HTTP regression evidence at 4dc961ce. Maintain separate source, local test, native CI, artifact and owner-acceptance records; preserve prior failures and count scopes.
 4. Continue the already documented runtime, V03/V06 and selected K/A/R/V gates using their exact later receipts in PROGRESS. Old scan unions or native successes do not cover new commits. V03 remains documentation-only. Workflows and scanner rules are unchanged; only the four specifically approved historical metadata fingerprints are appended to `.gitleaksignore`, with no acceptance of other findings.

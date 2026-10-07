@@ -10,11 +10,11 @@ last_reviewed: 2026-10-06
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-07(水) 00:42:58 UTC
+> 最終更新: 2026-10-07(水) 01:48:53 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. Existing task #3 continues on `dots/rust-recovery-resume-3` toward develop in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11). Old Draft PR #9 remains preserved. Recovery delivery and acknowledgment are complete: the supplied `7c2d7d3` source/instructions and authoritative R/V supplement were read in this continuation. Earlier delivery-pending entries below are historical.
 
-Current continuation: **the recovered G1 cleanup/isolation and approval-rules25 combined checkpoint passes local Linux validation; final-head native acceptance is pending.** Tested code is `f34fdd5156430be07a6f392ef4191f0db69f35a1`; the local checkpoint including the four approved scan exceptions and record-key rename is `1c54387d393d302fdd6425453866a7c1d0b2d62f`. [Source-bound local evidence](ORACLE-V25-LOCAL-VALIDATION.json) records **1,449 all-target tests / 0 failed / 0 ignored, including 1,137 library tests**, three separate doctests, 47 packaging checks, fmt, strict Clippy and instrumentation, all passing. The last confirmed public branch head is `4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf`; publication is paused after the timed-out retry orchestration; candidate commit objects are not branch publication. Final-SHA four-target CI, Validate, scans, artifacts and three consecutive Windows quick successes have not run for this combined checkpoint. Independent final review remains deferred until CI is green.
+Current continuation: **the recovered G1 cleanup/isolation and approval-rules25 combined checkpoint passes local Linux validation; final-head native acceptance is pending.** Tested code is `f34fdd5156430be07a6f392ef4191f0db69f35a1`; the local checkpoint including the four approved scan exceptions and record-key rename is `1c54387d393d302fdd6425453866a7c1d0b2d62f`. [Source-bound local evidence](ORACLE-V25-LOCAL-VALIDATION.json) records **1,449 all-target tests / 0 failed / 0 ignored, including 1,137 library tests**, three separate doctests, 47 packaging checks, fmt, strict Clippy and instrumentation, all passing. The five checkpoint-equivalent remote commits are prepared through `e3c5b1747a2eeb101497c68b9d72ed6d5bb0acc7`; this dated receipt precedes the single branch update and its readback; candidate commit objects are not branch publication. Final-SHA four-target CI, Validate, scans, artifacts and three consecutive Windows quick successes have not run for this combined checkpoint. Independent final review remains deferred until CI is green.
 
 The current candidate Go oracle advances from `21d0bc7935a2c4696fb89ccff2e324157a528c2d` to its sole direct child `d8fbf8598c3effd4e2f837e43ad6f0488c461de3`, whose only changes are approval rules25 and CHANGELOG. Version25 extends the plain-prose rule to explanations outside approval markers, matching the dashboard's lack of Markdown rendering. Actual pinned Go1.26.8 regenerated the 98-case corpus and exact central rules bytes; historical independent fixture pins retain their original identities. The latest dated entry records the decision, restoration limits, commit mappings and remaining gates.
 
@@ -582,14 +582,14 @@ The paired launcher delivery `ORACLE` and current candidate-CI receipt pin advan
 
 ### Restored changes and publication mapping
 
-These are source-commit mappings, not a self-reference to the eventual documentation/final head. The first two remote objects have been created. The last confirmed branch head is `4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf`; neither object is confirmed on the branch. Publication is paused. No new published code SHA or final-head CI is claimed.
+These are source-commit mappings, not a self-reference to the eventual documentation/final head. All five corresponding remote commit objects are created with the exact local trees. This preparation receipt precedes the single branch update/readback. The earlier pause below is historical; no final-head native result is claimed.
 
 | Change present in the combined checkpoint | Reconstructed local commit | Corresponding remote commit object |
 |---|---|---|
 | Remove the entire temporary diagnostic module, all shared hooks/registration/assertion suffixes and four temporary tests | `e6399f078fd23dd4b3603511dfe03c6095ef67d8` | `46bec95b211e14eba76b11cfe9c4a3767ceb4185` |
 | Isolate the seven real-Git event-observer fixtures before setup | `d179f2c48eb512d639e77e291c3cc075b51dda9c` | `532748a9f01a139c5e1e4195c0c542fb10cd6c6f` |
-| Import rules25 and regenerate actual-Go fixtures/provenance | `f34fdd5156430be07a6f392ef4191f0db69f35a1` | Not created/confirmed; local commit retained |
-| Rename recorded `api_head_sha` to `reported_commit` and append exactly four approved scan exceptions with reasons | `1c54387d393d302fdd6425453866a7c1d0b2d62f` | Not created/confirmed; local commit retained |
+| Import rules25 and regenerate actual-Go fixtures/provenance | `f34fdd5156430be07a6f392ef4191f0db69f35a1` | `8aaef4ca4d61ab49c463b2973f504e0222467b37` |
+| Rename recorded `api_head_sha` to `reported_commit` and append exactly four approved scan exceptions with reasons | `1c54387d393d302fdd6425453866a7c1d0b2d62f` | `98cecc3b807a4436e3459b2d8273960476012412` |
 
 The fixture gate allows one of the seven scenarios to enter at a time, with a **180 s admission limit before fixture setup**. Actual Git/snapshot **5 s budgets**, assertions, branch-helper **250 ms** budgets and within-scenario callback/next-input concurrency are retained. The historical 4debe28 Windows reconnect failure reached Git add with 2,212 ms remaining and 2,909 ms elapsed; quick confirmation reached it with 26 ms remaining and 363 ms elapsed. These observations locate the recorded budget exhaustion; they do not establish why Git was slow or prove contention as the root cause. Isolation is a test-harness change and still requires fresh native confirmation after diagnostic removal.
 
@@ -599,7 +599,7 @@ The owner's approval is limited to the four exact `4debe28b29ebeeb425bd3f2bcdc6b
 
 [The local receipt](ORACLE-V25-LOCAL-VALIDATION.json) binds tested source `f34fdd5156430be07a6f392ef4191f0db69f35a1`, tree `d930d789010aa1b31a2d41f22350125737193be2`, and the later exception/record checkpoint `1c54387d393d302fdd6425453866a7c1d0b2d62f`, tree `dfe6da9fecdd07bfa70717088aaf0f3c65fa7c3c`. Linux all-targets **1,449/0/0**, including library **1,137**, separate doctests **3/0/0**, **47 packaging tests**, fmt, strict all-target Clippy and instrumentation all passed with recorded commands, exits and log hashes. These local receipts do not inherit earlier native successes or replace lost logs.
 
-Remaining: resolve the stopped publication with the owner before any further write, reconcile the branch/tree state and verify eventual published source mappings; keep that final head fixed while four-target CI, Validate, scans/artifact identity and **three consecutive Windows quick successes** finish; begin independent final review only after CI is green. No final-head native or quick success is claimed here. G1's other payload audit findings remain report-only. Owner approval-button continuation, existing-Go-database compatibility, rollback and the other K/A/R/V device/installed-data gates remain open. No develop/main push, merge, release or Go cutover is authorized.
+Remaining: perform the owner-authorized single normal append and verify its branch/tree readback; keep that final head fixed while four-target CI, Validate, scans/artifact identity and **three consecutive Windows quick successes** finish; begin independent final review only after CI is green. No final-head native or quick success is claimed here. G1's other payload audit findings remain report-only. Owner approval-button continuation, existing-Go-database compatibility, rollback and the other K/A/R/V device/installed-data gates remain open. No develop/main push, merge, release or Go cutover is authorized.
 
 ### Publication pause and recovery package
 
@@ -608,3 +608,19 @@ The original tree3 request began at2026-10-06 23:39:17 UTC and did not produce a
 The explicitly bounded retry orchestration began at2026-10-07 00:28:09.779 UTC and stopped at00:36:40.001 UTC. Its PR preflight metadata eventually became available and reports Draft PR11 at4debe28b, but no completion timestamp is retained. No retry tree result, commit3 result or branch-update result is retained. Missing results do not establish whether an outstanding remote operation executed; the publication outcome must be reconciled before any further mutation. No additional retry or alternate publication route has been started. The local source, tests, approved exceptions and current documentation are preserved for recovery.
 
 These source commits are local checkpoints, not a successful publication receipt. The final documentation-only checkpoint and complete bundle identity are recorded in the delivered recovery manifest to avoid a self-referential commit hash in this file. The bundle contains all five local commits and no uncommitted source patch.
+
+### 2026-10-07 split-object publication preparation
+
+The owner independently verified the recovery ZIP, manifest, both bundles, all five commit/tree/parent identities, the three restored changes, the four exceptions, and byte parity after regenerating rules25 from the fixed Go oracle. The original five local trees are preserved exactly by the following prepared remote chain; commit metadata/parent identities account for the different commit SHAs. These are created commit objects until the branch update is separately verified.
+
+| Recovery bundle commit | Prepared remote commit | Identical full tree |
+|---|---|---|
+| `e6399f078fd23dd4b3603511dfe03c6095ef67d8` | `46bec95b211e14eba76b11cfe9c4a3767ceb4185` | `520d6964997a8257630356e34d91898c06b6e4aa` |
+| `d179f2c48eb512d639e77e291c3cc075b51dda9c` | `532748a9f01a139c5e1e4195c0c542fb10cd6c6f` | `75a57d9073bcac347d8bfc142980ca0cbd74bb72` |
+| `f34fdd5156430be07a6f392ef4191f0db69f35a1` | `8aaef4ca4d61ab49c463b2973f504e0222467b37` | `d930d789010aa1b31a2d41f22350125737193be2` |
+| `1c54387d393d302fdd6425453866a7c1d0b2d62f` | `98cecc3b807a4436e3459b2d8273960476012412` | `dfe6da9fecdd07bfa70717088aaf0f3c65fa7c3c` |
+| `56ecc8cad44f7a122cc66bff3a83793465d11a59` | `e3c5b1747a2eeb101497c68b9d72ed6d5bb0acc7` | `23afc34a2003316b14ec47da36c37a5ecc06f648` |
+
+The split method uploads one blob per operation and constructs compact trees from blob identities. The871,106-byte golden blob returned the expected identity in11.6 seconds; its15-entry tree request was2,072 characters and returned the expected full tree in7.6 seconds. This successful alternative does not establish the cause of the prior stalled operation. The four-exception file preserves all1,969 prior bytes; a fresh public-blob read independently confirmed that prefix before the identical authorized upload succeeded. All additions remain within the approved four-fingerprint scope.
+
+This additional commit changes only the current board/matrix and receipt metadata. It does not change any Rust/Go code, fixture, scanner, workflow, lockfile or test result in the verified five-commit prefix. The final branch readback, CI URLs/results, artifact hashes and independent review are separate receipts, so their future results are not anticipated here. Hold the eventual final head fixed for at least35 minutes and all native jobs; Windows stability still requires three consecutive quick successes at that same head.
