@@ -2,7 +2,7 @@
 
 > 最終更新: 2026-10-07(水) 07:16:27 UTC
 
-Status: **display-field checkpoint3077609a passed the Windows intermediate gate and independent review; V01 native headless fixtures are prepared at local98176e0 but have not executed on Windows.** The previous Linux startup-cancellation timeout is recorded/deferred; no four-target/Go-replacement acceptance is claimed. [Current progress and local proof](PROGRESS.md#v01-current-checkpoint).
+Status: **V01 head3d7b417e failed the first Windows gate.** Full Windows stopped at strict Clippy; quick CI continued and ran the native tests, yielding three successful Rust lifecycle receipts but failed native-denial/Go-compound setup. V01 remains unaccepted. [Actual first-attempt evidence](V01-FIRST-NATIVE.json).
 
 ## Historical 2026-10-07 preparation: rules25 and restored test boundaries
 
@@ -249,3 +249,13 @@ Local code `e6314803201b220ae1088072786616fcaf30c352` passes1,463 all-target Lin
 ## V01 native headless verification in preparation
 
 Local98176e0 adds permanent Windows-only fixtures and a tagged fixed-Go overlay driver; production code is unchanged. The57-source/embed pin, raw committed-blob materialization, native Job/owned HANDLE assertions and Go blocked-return versus Rust prevention boundaries are documented in [the fixture contract](../../../rust/tests/fixtures/core/headless/V01-WINDOWS.md). Go Windows compilation and Linux checks pass; Windows setup/execution is pending. Four Rust behavior cases, one two-case Go compound test and one self-fixture entry must not be presented as already executed native evidence. V01 remains mandatory pending until its exact native receipt and independent review.
+
+
+### V01 first Windows execution at3d7b417e
+
+The prepared fixture's claim of denial from an outer UI-restricted Job was disproved by actual native assignment success. Full Windows did not run tests after Clippy failed; the quick driver did, preserving a failed final result. Only successful-Job cancellation, deadline and direct-exit behavior has native receipts. Failed-before-resume prevention and unchanged-Go failed-Job plus retained-grandchild behavior remain unproved. A deliberately induced native API error would be separately labeled fault injection, not evidence that the runner naturally rejects the original call. See [the failed-attempt receipt](V01-FIRST-NATIVE.json).
+
+
+### V01 approved native-error input successor
+
+Local7deacef moves the six fixtures into Windows library tests and uses a compiler-guarded task-local Job-assignment callback. It passes a query-only duplicate of an owned Job handle to the actual native API, leaving production cleanup and deadlines intact. The Go comparison overlays one assignment call in a private copy and records original/variant hashes while retaining all57 original pins. This is deliberate failure injection; it can prove failure handling but cannot establish that unchanged Go or a real installation naturally reaches that failure. Non-test source bytes and release-artifact absence of testing markers are separate checks. The successor's native results remain pending.

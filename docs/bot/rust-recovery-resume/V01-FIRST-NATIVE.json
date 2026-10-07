@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "source_revision": "3d7b417eb410a2072729bf6706339a29f57ae95d",
+  "source_tree": "ae7db5c9f7157316cbf1d56f001fbc173a5ce45b",
+  "status": "unaccepted; first native attempt failed",
+  "quick": {
+    "run": 37586964673,
+    "attempt": 1,
+    "job": 112679228245,
+    "artifact": 11466624406,
+    "artifact_sha256": "2de0a95d38cf9cd05f76a324f3134da702baf0d0b5e8277b4a289eb31389b335",
+    "clippy_exit": 101,
+    "tests_exit": 101,
+    "all_target_counts": {
+      "passed": 1362,
+      "failed": 2,
+      "ignored": 0,
+      "included_library_passed": 1063
+    },
+    "separate_doctests_passed": 3,
+    "v01_counts": {
+      "passed": 4,
+      "failed": 2,
+      "ignored": 0,
+      "dispatcher_included": true
+    },
+    "actual_stdout_member": "repeat-1-all-targets.txt",
+    "actual_stdout_sha256": "6d02c6af4475eb82a92588601bf787fd6534e98a2c7ec34e453d1a3659a8d916",
+    "validation_steps_member": "VALIDATION-STEPS.json",
+    "all_targets_started_utc": "2026-10-07T07:27:13.1264044Z",
+    "driver_behavior": "Clippy check=False records failure and continues tests; final workflow remains failure",
+    "test_results": [
+      {
+        "name": "native_headless_fixture",
+        "results": [
+          "ok"
+        ]
+      },
+      {
+        "name": "headless_failed_native_job_attachment_prevents_provider_execution",
+        "results": [
+          "FAILED"
+        ]
+      },
+      {
+        "name": "headless_cancellation_reaps_native_grandchild_retaining_both_pipes",
+        "results": [
+          "ok"
+        ]
+      },
+      {
+        "name": "headless_deadline_reaps_native_grandchild_retaining_both_pipes",
+        "results": [
+          "ok"
+        ]
+      },
+      {
+        "name": "headless_direct_exit_bounds_drain_and_reaps_native_grandchild",
+        "results": [
+          "ok"
+        ]
+      },
+      {
+        "name": "fixed_go_failed_job_attachment_retains_grandchild_pipes_until_owned_harness_cleanup",
+        "results": [
+          "FAILED"
+        ]
+      }
+    ],
+    "observed_native_cases": [
+      {
+        "case": "cancel",
+        "os": {
+          "build": 20348,
+          "major": 10,
+          "minor": 0
+        },
+        "ready_ms": 44,
+        "run_return_ms": 46,
+        "after_trigger_ms": 1,
+        "after_deadline_ms": 0,
+        "pipe_drain_ms": 250,
+        "pipes_forced_closed": false,
+        "both_owned_handles_signaled": true,
+        "runtime_and_runner_exited": true,
+        "owned_job_empty_before_harness_cleanup": true
+      },
+      {
+        "case": "normal",
+        "os": {
+          "build": 20348,
+          "major": 10,
+          "minor": 0
+        },
+        "ready_ms": 30,
+        "run_return_ms": 290,
+        "after_trigger_ms": 259,
+        "after_deadline_ms": 0,
+        "pipe_drain_ms": 250,
+        "pipes_forced_closed": true,
+        "both_owned_handles_signaled": true,
+        "runtime_and_runner_exited": true,
+        "owned_job_empty_before_harness_cleanup": true
+      },
+      {
+        "case": "deadline",
+        "os": {
+          "build": 20348,
+          "major": 10,
+          "minor": 0
+        },
+        "ready_ms": 44,
+        "run_return_ms": 5011,
+        "after_trigger_ms": 4967,
+        "after_deadline_ms": 11,
+        "pipe_drain_ms": 250,
+        "pipes_forced_closed": false,
+        "both_owned_handles_signaled": true,
+        "runtime_and_runner_exited": true,
+        "owned_job_empty_before_harness_cleanup": true
+      }
+    ]
+  },
+  "full_windows": {
+    "run": 37586971811,
+    "job": 112679252476,
+    "artifact": 11467586220,
+    "clippy_exit": 101,
+    "validation_steps": 8,
+    "native_tests_executed": false,
+    "release_binaries_produced": false
+  },
+  "failure": {
+    "lint": "Five clippy::explicit_write errors at original source lines376,377,384,385,546",
+    "native_setup": "The failed-attachment probe AssignProcessToJobObject returned Ok(()), disproving the assumed denial from an outer READCLIPBOARD-restricted Job",
+    "go": "Runner exited before go-ready.json; no original or second-call attachment error, retained-pipe compound result, runtime source identity or helper receipt observed"
+  },
+  "evidence_limits": [
+    "Only three Rust lifecycle evidence records exist; the dispatcher is not a fourth lifecycle case.",
+    "Successful cancellation, deadline and direct-exit cases use successful Job attachment.",
+    "Failed-before-resume prevention and the unchanged-Go failed-attachment/retained-grandchild scenario are unproved at this revision.",
+    "A future deliberate native-error input must be labeled injected; it cannot establish spontaneous hosted-runner failure."
+  ]
+}
