@@ -226,7 +226,6 @@ impl SessionEngine {
             orchestration_id: metadata.orchestration.clone(),
             board_path: metadata.board_path.clone(),
             worktree_branch: metadata.worktree_branch.clone(),
-            ..Default::default()
         };
         let (paths, db_id, card) = self.journal.attach_session(
             binding,
