@@ -264,3 +264,6 @@ Local7deacef moves the six fixtures into Windows library tests and uses a compil
 ### V01 measured atd6ca5824; callback gate remains open
 
 Both native Windows jobs verify all six cases and records under the explicitly approved injected Job-handle failure. The full candidate fails a separate callback assertion after effect drain; quick attempt1 passes. Full Windows distribution binaries were not built. Linux/ARM pass; Intel's owned-inode exclusion test fails and is deferred with its run/name in PROGRESS. The next assertion-only change exposes existing sanitized warnings and drain counters on failure, preserving behavior and deadlines. No root cause or complete Windows gate is claimed.
+
+
+The proposed V01-load explanation for d6ca5824's callback failure is excluded for that invocation: verified Rust1.90 FIFO/no-shuffle scheduling admits at most105+8=113 tests at the failure, whereas first V01 is entry760 of1,069. No V01 test body or private Go build had started. The complete parent-name inventory excludes child-output miscounting. No shared gate was added; the actual cause remains unknown. See [the source-pinned scheduling proof](V01-SCHEDULING-d6ca5824.json).

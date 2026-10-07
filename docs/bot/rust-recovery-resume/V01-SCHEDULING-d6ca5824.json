@@ -1,0 +1,807 @@
+{
+  "schema": 1,
+  "source_head": "d6ca5824cb778e5477cab66946138a719c95b1a0",
+  "full_run_id": 37592062167,
+  "full_job_id": 112695669472,
+  "full_artifact_id": 11469293591,
+  "quick_run_id": 37592055746,
+  "quick_job_id": 112695648712,
+  "quick_artifact_id": 11468404616,
+  "conclusion": "V01 had not been admitted before the event-observer failure. Its native process work and Go preparation could not have overlapped that failure in this invocation. Actual failure root cause remains unidentified.",
+  "counts": {
+    "failure_result_timestamp": "2026-10-07T08:19:08.1498323Z",
+    "completed_result_lines_through_failure": 105,
+    "completed_unique_names": 105,
+    "unknown_result_lines": [],
+    "duplicates": [],
+    "first_v01_index_1_based": 760,
+    "first_v01_name": "orchestration::headless::windows_contracts::fixed_go_failed_job_attachment_retains_grandchild_pipes_until_owned_harness_cleanup",
+    "completed_plus_8": 113,
+    "gap": 647,
+    "library_discovery_count": 1069,
+    "discovery_sorted": true,
+    "v01_discovery_indices": [
+      {
+        "index_1_based": 760,
+        "name": "orchestration::headless::windows_contracts::fixed_go_failed_job_attachment_retains_grandchild_pipes_until_owned_harness_cleanup"
+      },
+      {
+        "index_1_based": 761,
+        "name": "orchestration::headless::windows_contracts::headless_cancellation_reaps_native_grandchild_retaining_both_pipes"
+      },
+      {
+        "index_1_based": 762,
+        "name": "orchestration::headless::windows_contracts::headless_deadline_reaps_native_grandchild_retaining_both_pipes"
+      },
+      {
+        "index_1_based": 763,
+        "name": "orchestration::headless::windows_contracts::headless_direct_exit_bounds_drain_and_reaps_native_grandchild"
+      },
+      {
+        "index_1_based": 764,
+        "name": "orchestration::headless::windows_contracts::headless_failed_native_job_attachment_prevents_provider_execution"
+      },
+      {
+        "index_1_based": 765,
+        "name": "orchestration::headless::windows_contracts::native_headless_fixture"
+      }
+    ],
+    "last_completed_names": [
+      {
+        "timestamp": "2026-10-07T08:19:00.8918182Z",
+        "name": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:01.1917785Z",
+        "name": "application::main_program::tests::actual_owned_loopback_composition_serves_info_and_removes_its_runtime_ledger_after_drain",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:01.2588087Z",
+        "name": "application::main_program::tests::hub_originated_wrapper_skips_all_bootstrap_probes_and_child_startup",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:02.8167607Z",
+        "name": "application::main_program::tests::actual_registration_ack_observes_instruction_file_and_shutdown_restores_original",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:02.9354110Z",
+        "name": "application::main_program::tests::actual_trial_composition_keeps_native_notifications_disabled_after_config_refresh",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:06.8792498Z",
+        "name": "application::main_program::tests::explicit_trial_port_conflict_fails_before_publication_and_dev_debug_have_actual_owners",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:07.0561802Z",
+        "name": "application::maintenance_cli::tests::converter_go_wire_duplicate_casefold_and_corrupt_records_do_not_discard_valid_output",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:07.2973924Z",
+        "name": "application::maintenance_cli::tests::graceful_deadline_forces_only_original_ledger_incarnation",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:07.6782122Z",
+        "name": "application::maintenance_cli::tests::history_backup_cas_tamper_and_recovery_are_canonical_and_fail_before_pointer_changes",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:07.7582178Z",
+        "name": "application::maintenance_cli::tests::log_clean_real_private_files_preserve_short_answers_and_skip_crash_tail_noise",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:08.1194710Z",
+        "name": "application::maintenance_cli::tests::log_clean_trial_accepts_native_and_plain_windows_root_spellings_and_denies_parent_traversal",
+        "result": "ok"
+      },
+      {
+        "timestamp": "2026-10-07T08:19:08.1498323Z",
+        "name": "application::event_observer::tests::handoff_gate_is_independent_of_capture_and_summary_requires_both_gates",
+        "result": "FAILED"
+      }
+    ]
+  },
+  "completed_through_failure": [
+    {
+      "timestamp": "2026-10-07T08:18:50.9399804Z",
+      "name": "application::agent_history::tests::exact_codex_path_precedes_ambiguous_start_lookup_and_trial_open_never_dispatches",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:50.9539665Z",
+      "name": "application::agent_history::tests::provider_location_resolves_metadata_only_copilot_cursor_command_and_shared_opencode_store",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:50.9831486Z",
+      "name": "application::agent_history::tests::grok_discovery_prefers_nonempty_candidate_without_falling_back_to_other_profile",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:50.9982856Z",
+      "name": "application::agent_history::tests::actual_session_chat_keeps_source_validation_order_and_never_reads_unsupported_provider",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:50.9985333Z",
+      "name": "application::agent_history::tests::metadata_nearest_ignores_bad_candidates_and_refuses_claude_tie_codex_subsecond_ambiguity",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:51.0428544Z",
+      "name": "application::agent_history::tests::grok_stream_page_counts_all_source_messages_and_retains_requested_window",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:51.0505853Z",
+      "name": "application::agent_history::tests::grok_history_preserves_missing_file_before_pagination_error_and_user_filter",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:51.8848319Z",
+      "name": "application::approval_patterns::tests::cancellation_drops_pending_fetches_without_overwriting_private_mirrors",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:51.8872873Z",
+      "name": "application::approval_patterns::tests::source_markdown_boundary_crlf_empty_and_duplicate_rules",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.1250865Z",
+      "name": "application::approval_rules::tests::consumed_automatic_approval_returns_while_detection_ticket_is_held_and_removes_priming_open",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.2403001Z",
+      "name": "application::approval_rules::tests::disabled_setting_records_would_approve_history_without_sending_or_auditing",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.2562171Z",
+      "name": "application::approval_patterns::tests::oversized_legacy_migration_preserves_whole_file_and_rejects_profile_assets",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.3819758Z",
+      "name": "application::approval_rules::tests::enabled_literal_rule_commits_once_and_writes_real_audit_then_stale_candidate_cannot_resend",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.4452492Z",
+      "name": "application::approval_rules::tests::live_setting_disable_after_detection_prevents_runtime_action",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.5464361Z",
+      "name": "application::approval_patterns::tests::remote_update_real_writer_failure_keeps_transport_warning",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.5504143Z",
+      "name": "application::approval_patterns::tests::remote_failure_empty_and_unchanged_preserve_profiles_and_only_changes_publish",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.6018657Z",
+      "name": "application::approval_patterns::tests::remote_update_after_core_drop_warns_without_retaining_core",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.6528074Z",
+      "name": "application::cli_updates::tests::abort_releases_all_pending_leases_and_terminalizes_job_including_queued_serial_work",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.6534694Z",
+      "name": "application::cli_updates::tests::log_read_failure_is_500_and_prefix_is_bounded",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.6694381Z",
+      "name": "application::cli_updates::tests::admitted_job_outlives_http_response_and_holds_real_provider_lease_through_version_after",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.6890555Z",
+      "name": "application::cli_updates::tests::native_updater_resolves_windows_shims_with_the_explicit_environment_and_keeps_deadline_and_cap",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.7278351Z",
+      "name": "application::cli_updates::tests::canonical_trial_checks_both_update_and_version_executable_and_log_failure_does_not_hold_lease",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.7509088Z",
+      "name": "application::cli_updates::tests::failed_version_probe_keeps_partial_version_line_without_classifying_it_as_success",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.7664860Z",
+      "name": "application::approval_patterns::tests::custom_sources_all_start_together_and_do_not_wait_behind_builtin_deadline",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.7687255Z",
+      "name": "application::diagnostic_cli::tests::go_bool_flags_stop_at_first_positional_and_do_not_consume_next_argument",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.9212393Z",
+      "name": "application::cli_updates::tests::history_eviction_does_not_drop_active_job_lease_and_log_remains_on_original_directory",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.9233809Z",
+      "name": "application::cli_updates::tests::retention_zero_is_disabled_and_exact_cutoff_keeps_current_logs",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.9239083Z",
+      "name": "application::diagnostics::bug_report::tests::gist_validation_rejects_credentials_ports_queries_fragments_and_markup",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.9370013Z",
+      "name": "application::agent_history::tests::pinned_go_grok_history_content_and_scanner_oracle",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:52.9721491Z",
+      "name": "application::approval_patterns::tests::remote_updates_pass_real_ui_priming_and_continue_live_without_warnings",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.0620166Z",
+      "name": "application::diagnostics::bug_report::tests::log_tail_is_private_bounded_200_lines_and_prevents_escape",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.0670921Z",
+      "name": "application::cli_updates::tests::shutdown_cancellation_interrupts_before_and_after_version_without_releasing_lease_early",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.0745107Z",
+      "name": "application::diagnostics::bug_report::tests::finalized_log_gist_validated_and_fixed_issue_url_scrubbed",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.0939027Z",
+      "name": "application::diagnostics::bug_report::tests::invalid_gist_url_saves_only_scrubbed_local_fallback_and_token_cannot_retry",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.0941347Z",
+      "name": "application::diagnostics::tests::native_trial_refuses_actual_host_command_and_network_before_effect",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.1139078Z",
+      "name": "application::cli_updates::tests::trial_refuses_external_updater_and_external_version_launch_before_any_probe",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.1141203Z",
+      "name": "application::diagnostics::bug_report::tests::default_preview_never_opens_session_logs_or_saves_files",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.2393415Z",
+      "name": "application::diagnostics::tests::authenticated_diagnostic_routes_keep_method_and_json_guards_before_actor_work",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.2404734Z",
+      "name": "application::diagnostics::tests::privacy_scrubs_named_secrets_private_paths_ips_but_keeps_loopback_and_public_contact",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.2510413Z",
+      "name": "application::diagnostics::tests::cancellation_propagates_without_launching_new_work",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.3045322Z",
+      "name": "application::diagnostics::tests::report_collect_is_allowlisted_and_urls_have_fixed_destination_and_byte_limit",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.4611134Z",
+      "name": "application::diagnostics::tests::real_checks_have_source_order_bounded_probes_and_disabled_profile_never_auth_probes",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.5191369Z",
+      "name": "application::cli_updates::tests::parallel_jobs_are_bounded_to_eight_and_serial_preserves_request_order",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8549673Z",
+      "name": "application::diagnostics::bug_report::tests::preview_tokens_are_content_bound_single_use_expiring_and_bounded",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8553413Z",
+      "name": "application::grid_spawn::tests::go_wire_rejects_earlier_invalid_duplicate_and_accepts_null",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8662750Z",
+      "name": "application::grid_spawn::tests::native_start_only_partial_failure_retains_exact_pending_proof",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8706373Z",
+      "name": "application::grid_spawn::tests::pinned_go_source_extracted_grid_spec_and_layout_corpus",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8726317Z",
+      "name": "application::grid_spawn::tests::source_validation_order_labels_and_layout_boundaries",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8728682Z",
+      "name": "application::host_actions::tests::detached_fixture_child",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.8733779Z",
+      "name": "application::host_actions::tests::fixed_windows_picker_scripts_preserve_owner_dialog_and_exact_executable_filter",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:53.9491833Z",
+      "name": "application::host_actions::tests::synthetic_detached_child_survives_hub_effect_shutdown",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.0624472Z",
+      "name": "application::host_actions::tests::synthetic_picker_captures_native_output_and_owner_cancellation_reaps",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.0642425Z",
+      "name": "application::host_actions::tests::trial_refuses_native_dispatch_without_lookup_or_gui_launch",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.0712761Z",
+      "name": "application::hub_status::tests::isolated_status_uses_root_then_bounded_info_and_refuses_other_trial_port",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.0952548Z",
+      "name": "application::instruction_rules::tests::corrupt_journal_never_authorizes_mutation_and_http_dismiss_ignores_body",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.2138607Z",
+      "name": "application::instruction_rules::tests::crash_recovery_removes_only_approved_rules_and_retains_failed_journal_entries",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.2997347Z",
+      "name": "application::instruction_rules::tests::oversize_journal_valid_prefix_with_invalid_suffix_cannot_authorize_recovery",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.3701345Z",
+      "name": "application::instruction_rules::tests::save_failure_retains_source_visible_enable_and_real_injection",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.4640713Z",
+      "name": "application::event_observer::tests::actual_capture_handoff_summary_broadcast_callback_order_and_next_input_barrier",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.4910706Z",
+      "name": "application::instruction_rules::tests::source_shared_provider_lifetime_keeps_block_until_last_actual_session_ends",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.6793197Z",
+      "name": "application::issue_cli::tests::explicit_confirmation_delegates_only_fixed_repo_web_action_with_scrubbed_args",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.7116097Z",
+      "name": "application::issue_cli::tests::dry_run_auto_guard_and_decline_never_delegate_to_external_actor",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.7890070Z",
+      "name": "application::issue_cli::tests::source_flag_stop_at_positional_and_symptom_prompt_are_preserved",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.7899089Z",
+      "name": "application::link_defaults::tests::install_catalog_filters_executable_links_and_keeps_case_sensitive_ids",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.7907819Z",
+      "name": "application::link_defaults::tests::negative_cache_retains_success_then_retries_and_full_json_rejects_trailing",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.7910804Z",
+      "name": "application::main_program::context::tests::serve_flags_follow_go_boolean_operand_and_last_port_semantics",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.8090863Z",
+      "name": "application::main_program::context::tests::trial_environment_replaces_ambient_vendor_paths_without_changing_owned_profile",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.8131361Z",
+      "name": "application::main_program::dev_assets::native_path_tests::unconfined_windows_assets_reject_backslash_and_colon_components",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.8170646Z",
+      "name": "application::main_program::dev_assets::tests::live_assets_reload_and_native_modified_date_preserves_ranges",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.8202525Z",
+      "name": "application::main_program::dev_assets::tests::trial_root_must_be_pinned_before_serving_and_rejects_component_aliases",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.8220105Z",
+      "name": "application::main_program::existing_hub::tests::actual_existing_hub_owner_rejects_trial_gui_and_keeps_production_url_contract",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.9220313Z",
+      "name": "application::main_program::instruction_observer::tests::downstream_failure_preserves_error_after_registration_prepares_then_cleans_actual_target",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.9222377Z",
+      "name": "application::main_program::logger::tests::bootstrap_diagnostics_ignore_broken_pipe_and_preserve_healthy_output",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.9276339Z",
+      "name": "application::main_program::logger::tests::closed_stderr_does_not_panic_or_suppress_persistent_diagnostics",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.9341648Z",
+      "name": "application::main_program::logger::tests::failed_file_and_stderr_sinks_do_not_panic",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.9416556Z",
+      "name": "application::main_program::logger::tests::obstructed_log_directory_uses_stderr_without_overwriting_it",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:54.9488602Z",
+      "name": "application::main_program::logger::tests::persistent_debug_filter_and_enabled_gate_use_real_private_logs",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.0579379Z",
+      "name": "application::issue_cli::tests::unavailable_gh_prints_fixed_url_failed_gh_saves_private_scrubbed_fallback",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1695182Z",
+      "name": "application::main_program::model_cache::tests::local_body_limit_accepts_complete_json_prefix_and_rejects_partial_id",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1697800Z",
+      "name": "application::main_program::model_cache::tests::startup_is_unobserved_and_parser_retains_cloud_alias_and_fallback_name",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1782143Z",
+      "name": "application::main_program::model_catalog::tests::body_limit_is_json_prefix_eof_instead_of_oversize_rejection",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1810423Z",
+      "name": "application::main_program::model_catalog::tests::concurrent_catalog_requests_share_real_gated_native_fetch_without_whole_request_lock",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1837091Z",
+      "name": "application::main_program::model_catalog::tests::full_catalog_has_source_order_labels_fallback_routes_and_keyed_ttls",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1909183Z",
+      "name": "application::main_program::model_catalog::tests::native_and_nvidia_parsers_retain_source_order_and_reject_unsafe_ids",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1938682Z",
+      "name": "application::main_program::model_catalog::tests::native_fresh_hit_does_not_wait_for_refresh_and_detached_old_generation_cannot_overwrite_new",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.1978746Z",
+      "name": "application::main_program::model_catalog::tests::nvidia_changed_generation_waits_then_fetches_own_key_and_dropped_fetch_owner_unstrands_waiter",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.2013169Z",
+      "name": "application::main_program::model_catalog::tests::remote_failure_keeps_last_actual_value_until_force_discards_it",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.2117192Z",
+      "name": "application::main_program::ownership::tests::held_owner_inode_excludes_until_drop_without_replacing_it",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.2134613Z",
+      "name": "application::main_program::serve::info::tests::source_binary_guard_caches_unchanged_metadata_and_missing_file_is_not_stale",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:55.3968043Z",
+      "name": "application::event_observer::tests::end_capture_materialization_has_an_independent_resolution_budget",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:56.3999954Z",
+      "name": "application::event_observer::tests::end_reservation_release_and_warm_reconnect_preserve_the_capture_incarnation",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:56.9825763Z",
+      "name": "application::main_program::model_cache::tests::actual_owned_loopback_refresh_populates_cache_and_ttl_skips_second_request",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:18:57.0734575Z",
+      "name": "application::event_observer::tests::fixture_git_keeps_auto_maintenance_enabled_before_real_capture",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:00.8918182Z",
+      "name": "application::main_program::tests::actual_http_composition_keeps_relay_guards_and_trial_notification_denial",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:01.1917785Z",
+      "name": "application::main_program::tests::actual_owned_loopback_composition_serves_info_and_removes_its_runtime_ledger_after_drain",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:01.2588087Z",
+      "name": "application::main_program::tests::hub_originated_wrapper_skips_all_bootstrap_probes_and_child_startup",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:02.8167607Z",
+      "name": "application::main_program::tests::actual_registration_ack_observes_instruction_file_and_shutdown_restores_original",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:02.9354110Z",
+      "name": "application::main_program::tests::actual_trial_composition_keeps_native_notifications_disabled_after_config_refresh",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:06.8792498Z",
+      "name": "application::main_program::tests::explicit_trial_port_conflict_fails_before_publication_and_dev_debug_have_actual_owners",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:07.0561802Z",
+      "name": "application::maintenance_cli::tests::converter_go_wire_duplicate_casefold_and_corrupt_records_do_not_discard_valid_output",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:07.2973924Z",
+      "name": "application::maintenance_cli::tests::graceful_deadline_forces_only_original_ledger_incarnation",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:07.6782122Z",
+      "name": "application::maintenance_cli::tests::history_backup_cas_tamper_and_recovery_are_canonical_and_fail_before_pointer_changes",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:07.7582178Z",
+      "name": "application::maintenance_cli::tests::log_clean_real_private_files_preserve_short_answers_and_skip_crash_tail_noise",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:08.1194710Z",
+      "name": "application::maintenance_cli::tests::log_clean_trial_accepts_native_and_plain_windows_root_spellings_and_denies_parent_traversal",
+      "result": "ok"
+    },
+    {
+      "timestamp": "2026-10-07T08:19:08.1498323Z",
+      "name": "application::event_observer::tests::handoff_gate_is_independent_of_capture_and_summary_requires_both_gates",
+      "result": "FAILED"
+    }
+  ],
+  "complete_inventory_check": {
+    "full_result_count": 1069,
+    "full_unique_names": 1069,
+    "quick_library_discovery_count": 1069,
+    "exact_membership_match": true,
+    "missing": [],
+    "unexpected": [],
+    "duplicates": [],
+    "full_job_log_sha256": "3e47a93e6313d5e1e68703257ac52977922875bd58e99e45e5158c761e83634d",
+    "quick_raw_tests_all_targets_member_sha256": "832dd6cbacaef8aac1774ccb550be2f5e508d8ba5a13fc08e06432fc0c253360",
+    "derived_library_discovery_sha256": "e439a737028fddcb7f12b5bc58fa2a316522653ce8fe41e6c097d606288bf770",
+    "derived_full_results_json_sha256": "98324d37ec06f76d1f368c6258014a38a1fb3dc406159320a449035eb0dbbf26"
+  },
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "rust/Cargo.toml",
+    "--target",
+    "x86_64-pc-windows-msvc",
+    "--all-targets",
+    "--no-fail-fast",
+    "--",
+    "--test-threads=8"
+  ],
+  "shuffle_checks": {
+    "no_Z_or_shuffle_arguments": true,
+    "environment_shuffle_controls_require_unstable_options": true,
+    "recorded_header": "running 1069 tests",
+    "shuffle_seed_header_absent": true,
+    "default_harness_source_check": {
+      "rust/Cargo.toml": {
+        "harness_false": false,
+        "custom_test_frameworks": false,
+        "test_runner_attribute": false,
+        "reexport_test_harness_main": false
+      },
+      "rust/src/lib.rs": {
+        "harness_false": false,
+        "custom_test_frameworks": false,
+        "test_runner_attribute": false,
+        "reexport_test_harness_main": false
+      }
+    }
+  },
+  "scheduler_bound": {
+    "completed": 105,
+    "concurrency": 8,
+    "maximum_admitted_conservative": 113,
+    "first_v01_index_1_based": 760,
+    "comparison": "105 + 8 = 113 < 760",
+    "reason": "Rust 1.90 admits FIFO up to 8 pending tests and emits/flushed each result synchronously before decrementing pending and refilling."
+  },
+  "rust_source_provenance": {
+    "tag": "1.90.0",
+    "tag_object": "d8401009a052a5efaed3f5c901c76dd733c04fbe",
+    "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+    "object_type": "commit",
+    "tag_date": "2025-09-18T13:31:21Z",
+    "tag_api_url": "https://api.github.com/repos/rust-lang/rust/git/tags/d8401009a052a5efaed3f5c901c76dd733c04fbe"
+  },
+  "exact_official_source_hashes": [
+    {
+      "upstream_path": "library/test/src/lib.rs",
+      "tag": "1.90.0",
+      "bytes": 27796,
+      "sha256": "7e7493d015657283a7f17b897238aff68a8df18f0faa61c5ccc3b99ed012baea",
+      "local_file": "rust190-libtest-lib.rs",
+      "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+      "tag_and_commit_content_identical": true,
+      "url": "https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/lib.rs"
+    },
+    {
+      "upstream_path": "library/test/src/cli.rs",
+      "tag": "1.90.0",
+      "bytes": 17379,
+      "sha256": "6c9460a0dcc0ee5f35953e53b4166e2e6eb0ed0d62c862092ac01af704c6a0ae",
+      "local_file": "rust190-cli.rs",
+      "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+      "tag_and_commit_content_identical": true,
+      "url": "https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/cli.rs"
+    },
+    {
+      "upstream_path": "library/test/src/helpers/shuffle.rs",
+      "tag": "1.90.0",
+      "bytes": 1871,
+      "sha256": "d7b25f4269396e5a296914b1382f9b1ef1a2729d5a7506cce014d8e1d32f6543",
+      "local_file": "rust190-helpers-shuffle.rs",
+      "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+      "tag_and_commit_content_identical": true,
+      "url": "https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/helpers/shuffle.rs"
+    },
+    {
+      "upstream_path": "library/test/src/formatters/pretty.rs",
+      "tag": "1.90.0",
+      "bytes": 9607,
+      "sha256": "8b6b783a683c0f49814591f916b6fed8a3d9c128d0998a071afa35a33132563c",
+      "local_file": "rust190-formatters-pretty.rs",
+      "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+      "tag_and_commit_content_identical": true,
+      "url": "https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/formatters/pretty.rs"
+    },
+    {
+      "upstream_path": "library/test/src/console.rs",
+      "tag": "1.90.0",
+      "bytes": 11093,
+      "sha256": "015e5a0a5244401ef7c5773cd8934fb731b4d67f66131e9aa463610ee775bb3b",
+      "local_file": "rust190-console.rs",
+      "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+      "tag_and_commit_content_identical": true,
+      "url": "https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/console.rs"
+    },
+    {
+      "upstream_path": "compiler/rustc_builtin_macros/src/test_harness.rs",
+      "tag": "1.90.0",
+      "bytes": 13842,
+      "sha256": "097c739ced671861e3cc5a7bdd1ee3d721b5ca1f45f973909c4c806b81c23593",
+      "local_file": "rust190-test_harness.rs",
+      "commit": "1159e78c4747b02ef996e55082b704c09b970588",
+      "tag_and_commit_content_identical": true,
+      "url": "https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/compiler/rustc_builtin_macros/src/test_harness.rs"
+    }
+  ],
+  "source_claims": [
+    {
+      "url": "https://github.com/rust-lang/rust/blob/1.90.0/compiler/rustc_builtin_macros/src/test_harness.rs#L367-L380",
+      "claim": "Compiler sorts generated static test vector by name.",
+      "upstream_source_sha256": "097c739ced671861e3cc5a7bdd1ee3d721b5ca1f45f973909c4c806b81c23593"
+    },
+    {
+      "url": "https://github.com/rust-lang/rust/blob/1.90.0/library/test/src/lib.rs#L349-L473",
+      "claim": "Optional shuffle precedes FIFO VecDeque; pop_front admission stops at pending==concurrency; TeResult notification occurs before pending decrement/refill.",
+      "upstream_source_sha256": "7e7493d015657283a7f17b897238aff68a8df18f0faa61c5ccc3b99ed012baea"
+    },
+    {
+      "url": "https://github.com/rust-lang/rust/blob/1.90.0/library/test/src/cli.rs#L346-L382",
+      "claim": "Environment shuffle variables are read only when allow_unstable is true.",
+      "upstream_source_sha256": "6c9460a0dcc0ee5f35953e53b4166e2e6eb0ed0d62c862092ac01af704c6a0ae"
+    },
+    {
+      "url": "https://github.com/rust-lang/rust/blob/1.90.0/library/test/src/cli.rs#L477-L495",
+      "claim": "allow_unstable defaults false and requires -Z unstable-options; recorded full command contains no -Z or shuffle options.",
+      "upstream_source_sha256": "6c9460a0dcc0ee5f35953e53b4166e2e6eb0ed0d62c862092ac01af704c6a0ae"
+    },
+    {
+      "url": "https://github.com/rust-lang/rust/blob/1.90.0/library/test/src/formatters/pretty.rs#L209-L260",
+      "claim": "Active shuffle always appears as shuffle seed in run header; actual full header contains none. Pretty result line is produced by the result event and flushed.",
+      "upstream_source_sha256": "8b6b783a683c0f49814591f916b6fed8a3d9c128d0998a071afa35a33132563c"
+    }
+  ],
+  "assessment_history": [
+    {
+      "at_utc": "2026-10-07T08:44:54Z",
+      "assessment": "Timestamp evidence alone did not establish whether V01 Go preparation overlapped."
+    },
+    {
+      "at_utc": "2026-10-07T08:50:36Z",
+      "assessment": "Official harness FIFO/no-shuffle source plus complete discovery/result counts excluded V01 admission before failure."
+    }
+  ],
+  "limits": [
+    "Timestamp/completion order alone did not establish admission order; the exclusion uses verified Rust 1.90 compiler/harness scheduling, explicit8-worker count, no shuffle and complete name membership.",
+    "Do not use late 08:20:13 captured panic-body timestamp as the failure time.",
+    "Go preparation start/end remains uninstrumented, but the preparation is inside first V01 test, whose admission is ruled out by the scheduler bound.",
+    "This excludes concurrent execution of V01 and its Go build during this failure. It does not establish the actual root cause, exclude other test load, or prove no indirect binary-layout/scheduling effect from the test move.",
+    "No source edits, probes, CI reruns or formal review were performed for this diagnosis."
+  ]
+}

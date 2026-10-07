@@ -10,7 +10,7 @@ last_reviewed: 2026-10-06
 
 # #3 recovered Rust: continuation progress
 
-> 最終更新: 2026-10-07(水) 08:37:00 UTC
+> 最終更新: 2026-10-07(水) 08:57:00 UTC
 
 Repository: ishizakahiroshi/many-ai-cli. Existing task #3 continues on `dots/rust-recovery-resume-3` toward develop in [Draft PR #11](https://github.com/ishizakahiroshi/many-ai-cli/pull/11). Old Draft PR #9 remains preserved. Recovery delivery and acknowledgment are complete: the supplied `7c2d7d3` source/instructions and authoritative R/V supplement were read in this continuation. Earlier delivery-pending entries below are historical.
 
@@ -753,3 +753,14 @@ All57 original Go source/embed inputs match d8fbf859. The private variant matche
 Validate37592062148 has11 successful jobs and the expected skip; actual merge checkout is `58087b05e875280c3ee629c300e43ee2cea21f92`. Push scan37592055990 covers the two new commits; PR scan37592062166 retains the historical first30 range, both with zero SARIF findings. Head, checkout and scan ranges remain distinct. [V01-NATIVE-d6ca5824.json](V01-NATIVE-d6ca5824.json) records commands, artifacts, counts, available binary hashes and actual native receipts.
 
 The successor changes only the existing callback assertion's failure text: `b03d1fd01674a58d13e6c13dbf4da517ed6307b7` retains its equality, handoff assertion and awaits, binds the already-returned effect-drain counters, and formats the already-captured sanitized stage/status warnings only when the equality fails. This is permanent failure-only test context, with no temporary trace recorder, pre-failure I/O, timeout change or production change. Its focused Linux test passes1/1; fmt and strict Clippy pass. It has not reproduced or fixed the Windows cause. A fresh exact-head Windows gate remains required, with no transfer of d6ca5824's single quick success.
+
+
+## 2026-10-07 V01 concurrent-load hypothesis excluded for this failure
+
+The owner proposed that moving V01 into the library let its real process trees or private Go compilation overlap the sensitive Git fixture. The shared8-worker library structure made that plausible in general. The full driver streams each output line; its live FAILED result is08:19:08.1498323 UTC. The later08:20:13.738 panic block is libtest's replay, not the failure time. V01 receipts occur later, but completion timestamps alone initially left preparation overlap unresolved.
+
+The verified scheduler/inventory evidence resolves this invocation: **105 completed parent-library tests +8 workers means at most113 tests could have started; first V01 is entry760.** All1,069 result names match the same-head discovery inventory exactly once, with no unknown or duplicate child-output entries. Rust1.90's compiler sorts tests by name; its harness takes FIFO entries and reports each completion before refilling. The recorded command has no `-Z`, `--shuffle` or `--shuffle-seed`; this version reads shuffle environment controls only when unstable options are enabled. Consequently V01's test bodies, including private Go preparation, had not begun when this failure was reported.
+
+The official1.90.0 tag resolves to `1159e78c4747b02ef996e55082b704c09b970588`, matching both the runner version and locally installed `rustc -vV`. Six relevant upstream source files match tag/commit bytes and retained SHA256 values. The [compiler's ordering](https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/compiler/rustc_builtin_macros/src/test_harness.rs#L367-L380), [FIFO admission/result loop](https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/lib.rs#L423-L473), and [shuffle controls](https://github.com/rust-lang/rust/blob/1159e78c4747b02ef996e55082b704c09b970588/library/test/src/cli.rs#L346-L382) support the bound. [The scheduling receipt](V01-SCHEDULING-d6ca5824.json) retains the command, source pins, all105 completion records, inventory comparison and limits.
+
+No additional shared gate was implemented. This excludes concurrent V01 scenario/build load for this failure; it does not identify the cause or assess every indirect effect of changed test binaries. The only test-code change in the next batch remains the existing assertion's failure context. Product behavior, current admission bounds, scenario concurrency, assertions, test-thread count and workflows are unchanged. The next exact-head Windows gate and eventual independent review remain pending.
