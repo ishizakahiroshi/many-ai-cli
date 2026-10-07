@@ -1,0 +1,250 @@
+{
+  "kind": "Restored G1 cleanup/isolation plus approval rules25 local validation",
+  "recorded_utc": "2026-10-07T00:42:58.273028+00:00",
+  "local_code_sha": "f34fdd5156430be07a6f392ef4191f0db69f35a1",
+  "local_code_tree": "d930d789010aa1b31a2d41f22350125737193be2",
+  "local_checkpoint_with_approved_exceptions": "1c54387d393d302fdd6425453866a7c1d0b2d62f",
+  "checkpoint_tree": "dfe6da9fecdd07bfa70717088aaf0f3c65fa7c3c",
+  "previous_public_head": "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf",
+  "oracle": {
+    "previous": "21d0bc7935a2c4696fb89ccff2e324157a528c2d",
+    "current": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+    "relationship": "sole direct child; only approval_rules.go and CHANGELOG differ",
+    "decision": "Advance current candidate oracle; retain separately pinned historical fixture identities"
+  },
+  "go_generation": {
+    "oracle_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+    "go_version": "go version go1.26.8 linux/amd64",
+    "case_count": 98,
+    "source_verification": "pinned HEAD and clean tracked/untracked Go inputs before and after execution",
+    "tracked_go_input_count": 650,
+    "tracked_go_inputs_sha256": "d41bd99597888ed2ebed80d4c45f5cd28ca4f80b331ec3438e3e7483aaa1e3dd",
+    "approval_rules_go_sha256": "15c0ca260e71d183e3a25f0d040e3d547fde51f57474609ce4e6eb8ceae8358f",
+    "generator_sha256": "0805a9ea6fe380e0d73b96ce0c59a28010e828b9976abb8d357f3f122da25abf",
+    "observer_sha256": "8fd356aaa23dbc9a8df2a95dcb57a3cd64539898b4a2477661881fd2fe1cb839",
+    "outputs_sha256": {
+      "cases.json": "4127fb26c67099ee3b11a6b812dd7838f2091a48fbdff873a1065ad8832f9739",
+      "golden.json": "f0227f50fe32c53dd0f42b10e12dd53e57a1edee09bee3152342d8c1043b460a",
+      "rules.txt": "4edf3045537383af0aff0fb22ed613d189fc60462d18dfec692efc141e509902"
+    }
+  },
+  "rules_bytes": 12251,
+  "rules_source": "Direct bytes written by the pinned Go SyncRulesFile via InjectRules, equal across all98 fresh synthetic homes; no handwritten golden output",
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "rust/src/wrapper/approval_injection/generate_oracle.py",
+        "--go",
+        "<verified Go1.26.8 executable>",
+        "--oracle-root",
+        "<clean detached d8fbf859 checkout>"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--no-fail-fast",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "cargo",
+        "test",
+        "--locked",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--doc"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "rust/packaging",
+        "-p",
+        "test_*.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "bun",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "all_targets": {
+    "passed": 1449,
+    "failed": 0,
+    "ignored": 0,
+    "library_included": 1137,
+    "summary_count": 34
+  },
+  "doctests_separate": {
+    "passed": 3,
+    "failed": 0,
+    "ignored": 0
+  },
+  "packaging_tests": 47,
+  "platform": "cloud Linux x86_64, official Rust1.90.0/Go1.26.8/Bun1.3.14 restored with vendor hash checks",
+  "logs": [
+    {
+      "log": "v25-generate.log",
+      "bytes": 95,
+      "sha256": "08f59ad9768489726c2644ad063949deedaab5eb4fcda801748d2215442fcbb5",
+      "counts": null,
+      "summary_count": 0
+    },
+    {
+      "log": "v25-fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "counts": null,
+      "summary_count": 0
+    },
+    {
+      "log": "v25-all-targets.log",
+      "bytes": 169792,
+      "sha256": "6e66ea21fed0b81bb5c534ef924061dfaaa11a7ec3110a65ef8f3122aa578318",
+      "counts": [
+        1449,
+        0,
+        0
+      ],
+      "summary_count": 34
+    },
+    {
+      "log": "v25-clippy.log",
+      "bytes": 6697,
+      "sha256": "11f86fa828afa2d184d58efc477d451e31dbe996f35c774015e9055a329f054e",
+      "counts": null,
+      "summary_count": 0
+    },
+    {
+      "log": "v25-doctests.log",
+      "bytes": 405,
+      "sha256": "1b87aa71336d5e46088852095007a4c4a2676b4beb60536f92be59c45cd2ec35",
+      "counts": [
+        3,
+        0,
+        0
+      ],
+      "summary_count": 1
+    },
+    {
+      "log": "v25-packaging.log",
+      "bytes": 474,
+      "sha256": "641a73d383c845fbde1b1ecd335dc8abe6e6099cc64d8a5e543641773504a3b8",
+      "counts": null,
+      "summary_count": 0
+    },
+    {
+      "log": "v25-instrumentation.log",
+      "bytes": 242,
+      "sha256": "836d095f0376826d08874d0aef37f6cd8965915156a7a09b99660e08bffbe5cb",
+      "counts": null,
+      "summary_count": 0
+    }
+  ],
+  "restored_original_code_tree_proof": [
+    {
+      "original_commit": "110bbaea1fa199ff398617d2fc65520169bc2efa",
+      "recovered_tree": "520d6964997a8257630356e34d91898c06b6e4aa",
+      "parent": "d2f2575a95389586fe5107fbae7cc233aa8d4051",
+      "timestamp": 1791302115,
+      "offset": "+0900",
+      "exact_commit_content_reproduced": true
+    },
+    {
+      "original_commit": "fde62ca9c6793db874b69c12f6a38d0f38d18c67",
+      "recovered_tree": "75a57d9073bcac347d8bfc142980ca0cbd74bb72",
+      "parent": "110bbaea1fa199ff398617d2fc65520169bc2efa",
+      "timestamp": 1791302115,
+      "offset": "+0900",
+      "exact_commit_content_reproduced": true
+    }
+  ],
+  "approved_exceptions": {
+    "scope": "Owner-approved exact4metadata fingerprints only",
+    "historical_public_commit": "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf",
+    "verified_public_value": "41e4b8ec336b80dd3735759113714ef02a42dcea",
+    "existing_bytes_preserved": 1969,
+    "existing_sha256": "bc60b3a7785ce46e90cc2909b3e669d140f648361683dd1f34b1565fccafe072",
+    "updated_sha256": "9c9dd86db5639766c0fda43e52ae46d1c4c4fc0831c319f528d92aac6a612ada",
+    "added_fingerprints": [
+      "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:276",
+      "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:414",
+      "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:702",
+      "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:990"
+    ],
+    "other_exclusions_added": false,
+    "older_findings_approved": false
+  },
+  "preservation": {
+    "original_G1_production_implementation": "Recovered from the published branch, not rewritten",
+    "diagnostic_cleanup": "Entire Rust source tree ab8d4c5f82318d9e2b145530ec6ed0c22c9215ef equals diagnostic-free public9c54604",
+    "fixture_isolation": "Same12 test-only admission lines; actualGit5s and branch250ms limits unchanged, in-scenario concurrency retained",
+    "lost_c277_documentation": "The original full local archive and its local logs were not retained; documentation/CI receipt is labeled fresh reconstruction",
+    "workflows_and_dependency_locks": "Unchanged; only current CI oracle receipt metadata changed",
+    "old_history": "Four approved metadata fingerprints do not accept other findings or prove fullPR history coverage"
+  },
+  "remaining": [
+    "Resolve paused publication with owner and reconcile remote state before further writes",
+    "Fresh final-head four-target, Validate and scans",
+    "Three consecutive final-head Windows quick successes",
+    "Independent final review only after CI green",
+    "Owner device/installed-data acceptance remains separate"
+  ],
+  "publication": {
+    "state": "paused; no new published code or final-head CI receipt",
+    "last_confirmed_branch_commit": "4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf",
+    "created_remote_objects": [
+      "46bec95b211e14eba76b11cfe9c4a3767ceb4185",
+      "532748a9f01a139c5e1e4195c0c542fb10cd6c6f"
+    ],
+    "retry_started_utc": "2026-10-07T00:28:09.779Z",
+    "retry_stopped_utc": "2026-10-07T00:36:40.001Z",
+    "preflight": "PR metadata eventually retained; no completion timestamp, Draft, head4debe28b",
+    "tree3": "No successful response retained; remote execution outcome must be reconciled before any further mutation",
+    "further_retry_started": false
+  }
+}
