@@ -1,8 +1,8 @@
 # Recovered Rust #3: remaining behavior and acceptance matrix
 
-> 最終更新: 2026-10-07(水) 05:40:24 UTC
+> 最終更新: 2026-10-07(水) 07:16:27 UTC
 
-Status: **the owner accepted public28f176d8 as the intermediate checkpoint; the requested effort and subscription-name source repairs pass local Linux validation against Go d8fbf859; new native gates and independent review are pending.** At28f, all four native targets, three consecutive Windows quick attempts, Validate and both range-limited scans passed. Independent re-review resolved the branch-persistence finding; startup-cwd remains explicitly deferred until pre-Go replacement, including Windows junction verification. The new display-field changes do not inherit those executed results. Current [PROGRESS](PROGRESS.md#2026-10-07-accepted28f-checkpoint-and-display-field-continuation) records exact prior run/count scopes, current work and gate boundaries. Migration-wide completeness is not established.
+Status: **display-field checkpoint3077609a passed the Windows intermediate gate and independent review; V01 native headless fixtures are prepared at local98176e0 but have not executed on Windows.** The previous Linux startup-cancellation timeout is recorded/deferred; no four-target/Go-replacement acceptance is claimed. [Current progress and local proof](PROGRESS.md#v01-current-checkpoint).
 
 ## Historical 2026-10-07 preparation: rules25 and restored test boundaries
 
@@ -244,3 +244,8 @@ These are validation obligations, not eight newly demonstrated code defects. V01
 ## Display-field checkpoint scope
 
 Local code `e6314803201b220ae1088072786616fcaf30c352` passes1,463 all-target Linux tests (library1,141 included),3 separate doctests,fmt,strict Clippy and instrumentation. [Exact local RED/GREEN receipt](DISPLAY-FIELDS-LOCAL.json). Fixed Go reference tests3/3 also pass. These local results do not substitute for the next same-SHA Windows gate/review. Warm-reattach effort retention remains a separate pre-existing state difference, recorded in PROGRESS; this patch only aligns the requested model-change wire and subscription-label producers.
+
+
+## V01 native headless verification in preparation
+
+Local98176e0 adds permanent Windows-only fixtures and a tagged fixed-Go overlay driver; production code is unchanged. The57-source/embed pin, raw committed-blob materialization, native Job/owned HANDLE assertions and Go blocked-return versus Rust prevention boundaries are documented in [the fixture contract](../../../rust/tests/fixtures/core/headless/V01-WINDOWS.md). Go Windows compilation and Linux checks pass; Windows setup/execution is pending. Four Rust behavior cases, one two-case Go compound test and one self-fixture entry must not be presented as already executed native evidence. V01 remains mandatory pending until its exact native receipt and independent review.
