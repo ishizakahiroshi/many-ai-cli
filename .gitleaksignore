@@ -23,3 +23,12 @@ a02223c622345e44c6da8cbcc4e2e9da1b225ded:rust/tests/fixtures/core/journal/mask_o
 
 # Public JSON metadata identifier; false match spans a prose sentence and the next field.
 2be97163be9302563bc810c857760a52ddc90376:rust/inventory/windows-check-timing-8530565.json:generic-api-key:305
+
+# G1 Windows CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:276
+# G1 Linux CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:414
+# G1 macOS ARM CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:702
+# G1 macOS Intel CI receipt: verified public source commit identity.
+4debe28b29ebeeb425bd3f2bcdc6bf167cd17ccf:docs/bot/rust-recovery-resume/G1-CI-41e4b8.json:generic-api-key:990

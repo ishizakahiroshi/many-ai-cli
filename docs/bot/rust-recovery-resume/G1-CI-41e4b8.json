@@ -273,7 +273,7 @@
         "checkout_shas": [
           "41e4b8ec336b80dd3735759113714ef02a42dcea"
         ],
-        "api_head_sha": "41e4b8ec336b80dd3735759113714ef02a42dcea",
+        "reported_commit": "41e4b8ec336b80dd3735759113714ef02a42dcea",
         "job_log_sha256": "934f5dabcd90b7f4067f5fd873f54e0089042b85a1c915998ee5a0015fde6a10"
       },
       "binaries": [],
@@ -411,7 +411,7 @@
         "checkout_shas": [
           "41e4b8ec336b80dd3735759113714ef02a42dcea"
         ],
-        "api_head_sha": "41e4b8ec336b80dd3735759113714ef02a42dcea",
+        "reported_commit": "41e4b8ec336b80dd3735759113714ef02a42dcea",
         "job_log_sha256": "8ac5c80b73cc7c623f96feae26ff6e78ec8c2c01d1c1739a7862a368b906f6b9"
       },
       "binaries": [
@@ -699,7 +699,7 @@
         "checkout_shas": [
           "41e4b8ec336b80dd3735759113714ef02a42dcea"
         ],
-        "api_head_sha": "41e4b8ec336b80dd3735759113714ef02a42dcea",
+        "reported_commit": "41e4b8ec336b80dd3735759113714ef02a42dcea",
         "job_log_sha256": "f2b678a3ae4d49be1df059c9d8ca3e739ba96f81669dccde341276a94a0d19a8"
       },
       "binaries": [
@@ -987,7 +987,7 @@
         "checkout_shas": [
           "41e4b8ec336b80dd3735759113714ef02a42dcea"
         ],
-        "api_head_sha": "41e4b8ec336b80dd3735759113714ef02a42dcea",
+        "reported_commit": "41e4b8ec336b80dd3735759113714ef02a42dcea",
         "job_log_sha256": "44010bdd5cd6b6938297824ec00c794e377f1a719205ce9fb23e790b89f13f32"
       },
       "binaries": [
