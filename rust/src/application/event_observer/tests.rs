@@ -374,7 +374,7 @@ async fn handoff_gate_is_independent_of_capture_and_summary_requires_both_gates(
     f.observer.observe(&event(f.binding, false)).await.unwrap();
     std::fs::write(f.cwd.join("task.txt"), "after\n").unwrap();
     f.observer.observe(&event(f.binding, true)).await.unwrap();
-    f.owner.drain_effects().await;
+    let completion = f.owner.drain_effects().await;
     assert!(
         f.callbacks
             .handoff
@@ -384,7 +384,12 @@ async fn handoff_gate_is_independent_of_capture_and_summary_requires_both_gates(
     );
     assert_eq!(
         *f.callbacks.trace.lock().unwrap(),
-        vec!["callback-after-broadcast"]
+        vec!["callback-after-broadcast"],
+        // Evaluated only on assertion failure, after the existing final drain.
+        // This Git-only fixture's observer warnings contain fixed stage names
+        // and response status codes, not Git stderr, work text or paths.
+        "effect completion: {completion:?}; sanitized observer warnings: {:?}",
+        f.warnings.lock().unwrap().as_slice(),
     );
 }
 
