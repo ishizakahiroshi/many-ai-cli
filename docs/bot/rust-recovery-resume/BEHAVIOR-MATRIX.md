@@ -2,7 +2,7 @@
 
 > 最終更新: 2026-10-07(水) 07:16:27 UTC
 
-Status: **V01 head3d7b417e failed the first Windows gate.** Full Windows stopped at strict Clippy; quick CI continued and ran the native tests, yielding three successful Rust lifecycle receipts but failed native-denial/Go-compound setup. V01 remains unaccepted. [Actual first-attempt evidence](V01-FIRST-NATIVE.json).
+Status: **All six V01 native cases pass in both Windows jobs at d6ca5824, while a separate event-observer assertion blocks the overall Windows gate.** One quick success is verified; three are required. Native-error input is deliberate, and spontaneous unchanged-Go/Windows failure is not established. [Current native evidence](V01-NATIVE-d6ca5824.json).
 
 ## Historical 2026-10-07 preparation: rules25 and restored test boundaries
 
@@ -259,3 +259,8 @@ The prepared fixture's claim of denial from an outer UI-restricted Job was dispr
 ### V01 approved native-error input successor
 
 Local7deacef moves the six fixtures into Windows library tests and uses a compiler-guarded task-local Job-assignment callback. It passes a query-only duplicate of an owned Job handle to the actual native API, leaving production cleanup and deadlines intact. The Go comparison overlays one assignment call in a private copy and records original/variant hashes while retaining all57 original pins. This is deliberate failure injection; it can prove failure handling but cannot establish that unchanged Go or a real installation naturally reaches that failure. Non-test source bytes and release-artifact absence of testing markers are separate checks. The successor's native results remain pending.
+
+
+### V01 measured atd6ca5824; callback gate remains open
+
+Both native Windows jobs verify all six cases and records under the explicitly approved injected Job-handle failure. The full candidate fails a separate callback assertion after effect drain; quick attempt1 passes. Full Windows distribution binaries were not built. Linux/ARM pass; Intel's owned-inode exclusion test fails and is deferred with its run/name in PROGRESS. The next assertion-only change exposes existing sanitized warnings and drain counters on failure, preserving behavior and deadlines. No root cause or complete Windows gate is claimed.
