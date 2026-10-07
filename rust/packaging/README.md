@@ -4,7 +4,7 @@ This is preparation for K15/A12, not a publisher or a replacement packaging
 owner. `src/launcher/delivery.rs` remains the target/channel/manifest contract.
 No package, release, installation, account, GUI or native-voice acceptance is
 established by these helpers. The fixed Go oracle remains
-`21d0bc7935a2c4696fb89ccff2e324157a528c2d`.
+`d8fbf8598c3effd4e2f837e43ad6f0488c461de3`.
 
 ## Offline collection from an actual successful build
 

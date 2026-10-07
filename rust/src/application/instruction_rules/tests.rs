@@ -240,39 +240,44 @@ async fn save_failure_retains_source_visible_enable_and_real_injection() {
 #[tokio::test]
 async fn oversize_journal_valid_prefix_with_invalid_suffix_cannot_authorize_recovery() {
     use std::io::{Seek, Write};
-    let f = fixture();
-    let target = f._root.path().join("AGENTS.md");
-    let body = b"original\n<!-- many-ai-cli:approval-rules -->\n<!-- version: 24 -->\nprivate synthetic\n<!-- /many-ai-cli:approval-rules -->\n";
-    std::fs::write(&target, body).unwrap();
-    let state = Journal {
-        version: 1,
-        targets: vec![Target {
-            path: target.clone(),
-            providers: vec!["codex".into()],
-            mode: "shared_block".into(),
-        }],
-    };
-    let journal = f.paths.root().join("approval-rule-targets.json");
-    {
-        let mut file = std::fs::File::create(&journal).unwrap();
-        file.write_all(&serde_json::to_vec(&state).unwrap())
-            .unwrap();
-        let chunk = vec![b' '; 1024 * 1024];
-        while file.stream_position().unwrap() < 32 * 1024 * 1024 {
-            let remaining = (32 * 1024 * 1024 - file.stream_position().unwrap()) as usize;
-            file.write_all(&chunk[..remaining.min(chunk.len())])
+    // Corrupt recovery cannot authorize mutation of either a previous or current rules block.
+    for version in ["24", "25"] {
+        let f = fixture();
+        let target = f._root.path().join("AGENTS.md");
+        let body = format!(
+            "original\n<!-- many-ai-cli:approval-rules -->\n<!-- version: {version} -->\nprivate synthetic\n<!-- /many-ai-cli:approval-rules -->\n"
+        );
+        std::fs::write(&target, body.as_bytes()).unwrap();
+        let state = Journal {
+            version: 1,
+            targets: vec![Target {
+                path: target.clone(),
+                providers: vec!["codex".into()],
+                mode: "shared_block".into(),
+            }],
+        };
+        let journal = f.paths.root().join("approval-rule-targets.json");
+        {
+            let mut file = std::fs::File::create(&journal).unwrap();
+            file.write_all(&serde_json::to_vec(&state).unwrap())
+                .unwrap();
+            let chunk = vec![b' '; 1024 * 1024];
+            while file.stream_position().unwrap() < 32 * 1024 * 1024 {
+                let remaining = (32 * 1024 * 1024 - file.stream_position().unwrap()) as usize;
+                file.write_all(&chunk[..remaining.min(chunk.len())])
+                    .unwrap();
+            }
+            file.write_all(b"invalid suffix must reject the whole journal")
                 .unwrap();
         }
-        file.write_all(b"invalid suffix must reject the whole journal")
-            .unwrap();
+        f.owner.recover().await;
+        assert_eq!(std::fs::read(&target).unwrap(), body.as_bytes());
+        assert!(std::fs::metadata(&journal).unwrap().len() > 32 * 1024 * 1024);
+        assert!(
+            f.warnings
+                .lock()
+                .unwrap()
+                .contains(&"approval instruction journal read failed")
+        );
     }
-    f.owner.recover().await;
-    assert_eq!(std::fs::read(&target).unwrap(), body);
-    assert!(std::fs::metadata(&journal).unwrap().len() > 32 * 1024 * 1024);
-    assert!(
-        f.warnings
-            .lock()
-            .unwrap()
-            .contains(&"approval instruction journal read failed")
-    );
 }

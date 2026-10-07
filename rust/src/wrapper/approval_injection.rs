@@ -123,7 +123,7 @@ pub fn inject_rules_content(provider: &str, content: &[u8], central: &[u8]) -> i
         ));
     };
     let already = scan(content, &markers)?;
-    if already && (provider == "claude" || current(content, START, END, "<!-- version: 24 -->")) {
+    if already && (provider == "claude" || current(content, START, END, "<!-- version: 25 -->")) {
         return Ok(content.to_vec());
     }
     let mut result = if already {
@@ -277,7 +277,7 @@ impl InstructionFiles {
             .map_err(|_| io::Error::other("instruction lock failed"))?;
         let central = self.sync(
             "approval-rules.md",
-            "<!-- version: 24 -->",
+            "<!-- version: 25 -->",
             RULES.as_bytes(),
         )?;
         let content = match self.read(path) {

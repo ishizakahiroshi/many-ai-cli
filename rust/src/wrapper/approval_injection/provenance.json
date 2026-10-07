@@ -1,0 +1,16 @@
+{
+  "oracle_sha": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+  "go_version": "go version go1.26.8 linux/amd64",
+  "case_count": 98,
+  "source_verification": "pinned HEAD and clean tracked/untracked Go inputs before and after execution",
+  "tracked_go_input_count": 650,
+  "tracked_go_inputs_sha256": "d41bd99597888ed2ebed80d4c45f5cd28ca4f80b331ec3438e3e7483aaa1e3dd",
+  "approval_rules_go_sha256": "15c0ca260e71d183e3a25f0d040e3d547fde51f57474609ce4e6eb8ceae8358f",
+  "generator_sha256": "0805a9ea6fe380e0d73b96ce0c59a28010e828b9976abb8d357f3f122da25abf",
+  "observer_sha256": "8fd356aaa23dbc9a8df2a95dcb57a3cd64539898b4a2477661881fd2fe1cb839",
+  "outputs_sha256": {
+    "cases.json": "4127fb26c67099ee3b11a6b812dd7838f2091a48fbdff873a1065ad8832f9739",
+    "golden.json": "f0227f50fe32c53dd0f42b10e12dd53e57a1edee09bee3152342d8c1043b460a",
+    "rules.txt": "4edf3045537383af0aff0fb22ed613d189fc60462d18dfec692efc141e509902"
+  }
+}

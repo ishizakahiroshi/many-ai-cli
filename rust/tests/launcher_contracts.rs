@@ -882,6 +882,12 @@ fn launcher_delivery_target_channel_contract_and_hash_readback() {
         });
     }
     manifest.validate().unwrap();
+    manifest.oracle = "21d0bc7935a2c4696fb89ccff2e324157a528c2d".into();
+    assert!(
+        manifest.validate().is_err(),
+        "the previous oracle cannot label a version25 candidate"
+    );
+    manifest.oracle = ORACLE.into();
     manifest.verify_files(t.path()).unwrap();
     let artifacts = manifest
         .goreleaser_artifacts("rust/candidate-dist")

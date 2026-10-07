@@ -2,7 +2,7 @@ use super::*;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 #[test]
-fn pinned_go_91_marker_injection_removal_and_byte_preservation_cases() {
+fn pinned_go_98_marker_injection_removal_and_byte_preservation_cases() {
     #[derive(Deserialize)]
     struct Case {
         #[serde(rename = "Name")]
@@ -27,7 +27,7 @@ fn pinned_go_91_marker_injection_removal_and_byte_preservation_cases() {
     }
     let cases: Vec<Case> = serde_json::from_str(include_str!("cases.json")).unwrap();
     let golden: Vec<Golden> = serde_json::from_str(include_str!("golden.json")).unwrap();
-    assert_eq!(cases.len(), 91);
+    assert_eq!(cases.len(), 98);
     assert_eq!(cases.len(), golden.len());
     for (case, golden) in cases.into_iter().zip(golden) {
         assert_eq!(case.name, golden.name);
@@ -80,9 +80,13 @@ fn actual_private_trial_rmw_restores_bytes_and_central_version_is_source_authori
     assert_eq!(files.read(&target).unwrap(), original);
     let central = home.join(".many-ai-cli/approval-rules.md");
     files
-        .write(&central, b"<!-- version: 24 -->\nuser central \xff", false)
+        .write(&central, b"<!-- version: 25 -->\nuser central \xff", false)
         .unwrap();
     files.inject("codex", &target).unwrap();
+    assert_eq!(
+        files.read(&central).unwrap(),
+        b"<!-- version: 25 -->\nuser central \xff"
+    );
     assert!(
         files
             .read(&target)
@@ -100,6 +104,32 @@ fn actual_private_trial_rmw_restores_bytes_and_central_version_is_source_authori
             .write(&root.path().join("project/../escaped.md"), b"no", false)
             .is_err()
     );
+}
+#[test]
+fn version_24_central_and_shared_block_upgrade_once_with_surrounding_bytes_preserved() {
+    let root = tempfile::tempdir().unwrap();
+    let installed = tempfile::tempdir().unwrap();
+    let paths = RuntimePaths::trial(root.path(), 49337, installed.path()).unwrap();
+    let home = root.path().join("actor");
+    std::fs::create_dir(&home).unwrap();
+    let files = InstructionFiles::new(paths, home.clone()).unwrap();
+    let central = home.join(".many-ai-cli/approval-rules.md");
+    let target = root.path().join("AGENTS.md");
+    let original = b"before\xff\n<!-- many-ai-cli:approval-rules -->\n<!-- version: 24 -->\nstale block\n<!-- /many-ai-cli:approval-rules -->\nafter\xfe";
+    files
+        .write(&central, b"<!-- version: 24 -->\nstale central", false)
+        .unwrap();
+    files.write(&target, original, false).unwrap();
+    files.inject("codex", &target).unwrap();
+    assert_eq!(files.read(&central).unwrap(), RULES.as_bytes());
+    assert!(RULES.starts_with("<!-- version: 25 -->\n"));
+    let upgraded = files.read(&target).unwrap();
+    assert!(current(&upgraded, START, END, "<!-- version: 25 -->"));
+    assert!(!current(&upgraded, START, END, "<!-- version: 24 -->"));
+    files.inject("codex", &target).unwrap();
+    assert_eq!(files.read(&target).unwrap(), upgraded);
+    files.remove("codex", &target, false).unwrap();
+    assert_eq!(files.read(&target).unwrap(), strip_blocks(original));
 }
 #[test]
 fn scanner_stops_on_first_found_marker_before_huge_later_line_and_rejects_prior_huge_line() {

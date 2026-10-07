@@ -7,7 +7,7 @@ use std::{
     path::{Component, Path},
 };
 
-pub const ORACLE: &str = "21d0bc7935a2c4696fb89ccff2e324157a528c2d";
+pub const ORACLE: &str = "d8fbf8598c3effd4e2f837e43ad6f0488c461de3";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Target {
