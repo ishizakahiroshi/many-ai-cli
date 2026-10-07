@@ -1,0 +1,197 @@
+{
+  "scope": "local Linux source validation; native CI and independent review pending",
+  "base_commit": "28f176d8bb776d6348425285d737f3f197c7ac27",
+  "go_oracle_commit": "d8fbf8598c3effd4e2f837e43ad6f0488c461de3",
+  "local_code_commit": "e6314803201b220ae1088072786616fcaf30c352",
+  "code_tree": "f29f2939b580deab30a1a440d63daa50298eed08",
+  "counts": {
+    "all_target_passed": 1463,
+    "failed": 0,
+    "ignored": 0,
+    "library_passed": 1141,
+    "summaries": 35,
+    "doctests_passed": 3
+  },
+  "fixed_go_reference_tests": {
+    "command": [
+      "go",
+      "test",
+      "-mod=readonly",
+      "./internal/hub",
+      "-run",
+      "^(TestResolveSubscriptionLabel|TestApplyDetectedModel_OnlyIfEmpty|TestLaunchEffortSurvivesBannerDetection)$",
+      "-count=1",
+      "-v"
+    ],
+    "exit_code": 0,
+    "tests_passed": 3,
+    "log_sha256": "68e42a0073c38d3e91c094585696658fbd84a2a09857e837e89a9cb1459d10a5"
+  },
+  "red_green": {
+    "effort-red": {
+      "baseline": "28f176d8bb776d6348425285d737f3f197c7ac27",
+      "scope": "baseline production plus corrected new tests",
+      "test_file": "rust/src/terminal/session/output_model_tests.rs",
+      "test_sha256": "523570f81a891fb38a34b820f0cba6f1f54b5e8e1cd7604f1015533685dce8a8",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--lib",
+        "terminal::session::observations::output_model_tests",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 61.885,
+      "log_sha256": "3b64f41cadb4c62256271dfeb33db9806d4f627f9fc80e3689eeeb7407782702"
+    },
+    "subscription-red": {
+      "baseline": "28f176d8bb776d6348425285d737f3f197c7ac27",
+      "scope": "baseline production plus final test bytes",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--test",
+        "subscription_label_contracts",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 101,
+      "elapsed_seconds": 1.487,
+      "test_sha256": "8ad8e1374b1c0a839ffad322c9a5679568a012d60fd944dd42838f9223a42647",
+      "log_sha256": "79831acfec096bc542c56d9968efddfdca7a8085e4388e45598dc427e2f44c11"
+    },
+    "effort-green": {
+      "scope": "current corrected working source",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--lib",
+        "terminal::session::observations::output_model_tests",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 60.131,
+      "log_sha256": "fe77810c8e258c137f5392b3c3997efb3b547fba22e6c4d3f40994d5e3466c15"
+    },
+    "subscription-green": {
+      "scope": "current corrected working source",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--test",
+        "subscription_label_contracts",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 41.383,
+      "log_sha256": "4334f79c3c2b7696444b1c8f45e8455ed00524f47dca298b04f5393d3475437a"
+    }
+  },
+  "aggregate_commands": [
+    {
+      "label": "fmt",
+      "source_commit": "e6314803201b220ae1088072786616fcaf30c352",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 1.886,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "label": "clippy",
+      "source_commit": "e6314803201b220ae1088072786616fcaf30c352",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 42.519,
+      "log_sha256": "f8514d52c6d21a0d98c157971eec5776dddcbc2e7206c44806efaa9946a9e47b"
+    },
+    {
+      "label": "all-targets",
+      "source_commit": "e6314803201b220ae1088072786616fcaf30c352",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--",
+        "--test-threads=8"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 124.454,
+      "log_sha256": "933f588ccab28594e8cf8783b83384c6233eb621d4abf907d6f57407a6d8137c"
+    },
+    {
+      "label": "doctests",
+      "source_commit": "e6314803201b220ae1088072786616fcaf30c352",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--doc"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 3.275,
+      "log_sha256": "1ca407e22ddf071d62164a6d8674197c201cff21ddbd65b0af0fe3d1ffc1dbc3"
+    },
+    {
+      "label": "instrumentation",
+      "source_commit": "e6314803201b220ae1088072786616fcaf30c352",
+      "command": [
+        "node",
+        "scripts/check-instrumentation.mjs"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 0.325,
+      "log_sha256": "8412c59dbc927823be661216cda83ce75f38df159678b2513c7829e76f74c16b"
+    }
+  ],
+  "limitations": [
+    "Local Linux is not native Windows verification.",
+    "New tests originally had a retained ordered-effect wait and two non-Debug unwrap compile errors; corrected before the final runtime RED/GREEN. Initial unsuccessful attempts remain in the delivered evidence.",
+    "Four new effort tests include two before-fix runtime failures and two preservation/omission controls. Four subscription tests include an eighteen-row input/provider matrix; matrix rows are not counted as standalone tests.",
+    "Warm reattach effort retention remains a separately recorded difference, deliberately outside this missing-update patch."
+  ],
+  "unchanged_locked_workflow_and_exclusion_inputs_verified": true
+}

@@ -1,10 +1,10 @@
 # Recovered Rust #3: remaining behavior and acceptance matrix
 
-> 最終更新: 2026-10-07(水) 01:48:53 UTC
+> 最終更新: 2026-10-07(水) 05:40:24 UTC
 
-Status: **recovered G1 cleanup/isolation plus approval-rules25 pass local Linux validation; final-head native acceptance and independent final review remain pending.** Tested code is `f34fdd5156430be07a6f392ef4191f0db69f35a1`; local checkpoint `1c54387d393d302fdd6425453866a7c1d0b2d62f` adds the four expressly approved scan exceptions and record-key rename. The original five checkpoint trees are preserved in the prepared remote chain through `e3c5b1747a2eeb101497c68b9d72ed6d5bb0acc7`; this receipt precedes the single branch update/readback. The prior publication pause is historical. [Current local evidence](ORACLE-V25-LOCAL-VALIDATION.json) and [publication mappings](PROGRESS.md#restored-changes-and-publication-mapping) distinguish local code, candidate commit objects and branch publication. Migration-wide completeness is not established.
+Status: **the owner accepted public28f176d8 as the intermediate checkpoint; the requested effort and subscription-name source repairs pass local Linux validation against Go d8fbf859; new native gates and independent review are pending.** At28f, all four native targets, three consecutive Windows quick attempts, Validate and both range-limited scans passed. Independent re-review resolved the branch-persistence finding; startup-cwd remains explicitly deferred until pre-Go replacement, including Windows junction verification. The new display-field changes do not inherit those executed results. Current [PROGRESS](PROGRESS.md#2026-10-07-accepted28f-checkpoint-and-display-field-continuation) records exact prior run/count scopes, current work and gate boundaries. Migration-wide completeness is not established.
 
-## 2026-10-07 combined checkpoint: rules25 and restored test boundaries
+## Historical 2026-10-07 preparation: rules25 and restored test boundaries
 
 | Contract / change | Verified evidence and remaining boundary |
 |---|---|
@@ -15,6 +15,8 @@ Status: **recovered G1 cleanup/isolation plus approval-rules25 pass local Linux 
 | Record naming and exact exceptions | `api_head_sha` becomes `reported_commit`. Only four owner-approved fingerprints at4debe28 / G1-CI-41e4b8.json lines276/414/702/990 are appended with individual reasons; original1,969 `.gitleaksignore` bytes are intact. No other exclusions or acceptance of the older2ef finding. |
 | Executed local scope | Linux all-targets1,449/0/0, including library1,137; separate doctests3/0/0;47 packaging checks, fmt, strict Clippy and instrumentation pass at the source identity above. Launcher delivery and candidate-CI oracle receipt pins advance together; workflow files, settings and dependency locks are unchanged. |
 | Acceptance still required | Final-head four-target CI, Validate, scans/artifacts and three consecutive Windows quick successes have not run for this combined checkpoint. Independent final review waits for green CI. Prior native receipts, audit-only findings and owner device/installed-data gates remain at their original scopes. |
+
+The preparation table above describes the earlier pre-publication point. Subsequent28f native gates and review are now complete as stated above; its pending wording is historical.
 
 ## Current G1: branch, change counts and project identity
 
@@ -37,11 +39,11 @@ The [complete baseline audit](G1-OBSERVATION-PAYLOAD-AUDIT.md) and [structured i
 
 | Finding at the pre-G1 baseline | Practical impact and current disposition |
 |---|---|
-| `effort`: confirmed serializer omission | Registration/output paths store effort, but no Rust `session_update` constructor assigns it. A connected card can miss live effort changes; snapshots and usage fields are separate paths. Recorded, not fixed or accepted by this branch-refresh work. |
-| `subscription_name`: confirmed unpopulated source | The DTO/emitter exists, but the snapshot's configured display name has no production assignment. The UI falls back to subscription ID. Recorded, not fixed or accepted here. |
+| `effort`: confirmed serializer omission | Registration/output paths store effort, but no Rust `session_update` constructor assigns it. A connected card can miss live effort changes; snapshots and usage fields are separate paths. The dedicated detected-model packet now carries effort and first/last summaries with Go omission rules. Two new runtime RED failures become GREEN; all9 focused model tests pass. See the local receipt; native verification/review are pending. |
+| `subscription_name`: confirmed unpopulated source | The DTO/emitter exists, but the snapshot's configured display name has no production assignment. The UI falls back to subscription ID. Config-backed registration and warm/cold reattach now populate the name and normalized ID. Four actual-composition/SQLite/wire regressions fail before the fix and pass after it, including18 input/provider cases. Native verification/review are pending. |
 | `route`: conditional inference gap | Explicit-model registration can retain a blank route because it lacks Go's fallback inference; later model-changing output can populate it. Static reachable path, not a runtime reproduction; no fix claimed. |
 | `transcript_grew_at`: conditional trigger/source gap | Growth updates stored state without Go's immediate growth-triggered `session_update`; an unchanged-activity connected UI can stay stale until another publication. Parsed-offset observation also differs from file-size/subagent-mtime observation. A producer exists; no fix claimed. |
-| `first_message` / `last_message`: packet difference | Confirmed-input producers work. The model-update packet omits summaries that Go includes, while the shared UI retains prior values when fields are absent. This is not proof of a missing summary feature or a visible regression; no additional repair claimed. |
+| `first_message` / `last_message`: packet difference | Confirmed-input producers work. The current dedicated model-update packet now includes those Go summaries as part of the same effort wire-shape repair. Other packet families are unchanged; no broader summary-feature repair or parity claim. |
 
 Ordinary zero/empty `omitempty` behavior, shared `token_statusbar:false`, bounded provider support, other WebSocket frame families and already superseded relay findings are not new missing-producer defects. These findings do not establish complete parity for triggers, clears, persistence, validation or delivery.
 
@@ -237,3 +239,8 @@ These are validation obligations, not eight newly demonstrated code defects. V01
 3. Retain the historical relay/notification/router G1–G4 closures and composed-HTTP regression evidence at 4dc961ce. Maintain separate source, local test, native CI, artifact and owner-acceptance records; preserve prior failures and count scopes.
 4. Continue the already documented runtime, V03/V06 and selected K/A/R/V gates using their exact later receipts in PROGRESS. Old scan unions or native successes do not cover new commits. V03 remains documentation-only. Workflows and scanner rules are unchanged; only the four specifically approved historical metadata fingerprints are appended to `.gitleaksignore`, with no acceptance of other findings.
 5. Keep approval-button continuation, existing-Go-database compatibility and rollback unverified until their own observations exist. Obtain the remaining target lifecycle/provider/device/GUI/SSH/installed-data and cutover decisions without treating the isolated DEBUG/new-database observations or green CI as blanket migration acceptance.
+
+
+## Display-field checkpoint scope
+
+Local code `e6314803201b220ae1088072786616fcaf30c352` passes1,463 all-target Linux tests (library1,141 included),3 separate doctests,fmt,strict Clippy and instrumentation. [Exact local RED/GREEN receipt](DISPLAY-FIELDS-LOCAL.json). Fixed Go reference tests3/3 also pass. These local results do not substitute for the next same-SHA Windows gate/review. Warm-reattach effort retention remains a separate pre-existing state difference, recorded in PROGRESS; this patch only aligns the requested model-change wire and subscription-label producers.
