@@ -120,15 +120,14 @@ impl SessionEngine {
                 pending.metadata,
             )
         };
-        let mut session = match self.initialize(binding, &m, size, &started, now, false, &metadata)
-        {
-            Ok(session) => session,
-            Err(error) => {
-                lock(&self.state).admission.end_provider_spawn(&lease);
-                return Err(error);
-            }
-        };
-        session.snapshot.branch = branch;
+        let mut session =
+            match self.initialize(binding, &m, &branch, size, &started, now, false, &metadata) {
+                Ok(session) => session,
+                Err(error) => {
+                    lock(&self.state).admission.end_provider_spawn(&lease);
+                    return Err(error);
+                }
+            };
         let snapshot = session.snapshot.clone();
         let registered = proto::Message {
             r#type: "registered".into(),
@@ -193,6 +192,7 @@ impl SessionEngine {
         &self,
         binding: SessionBinding,
         m: &proto::Message,
+        branch: &str,
         size: TerminalSize,
         started_text: &str,
         started: Timestamp,
@@ -207,6 +207,9 @@ impl SessionEngine {
             provider: m.provider.clone(),
             display: m.display_name.clone(),
             cwd: m.cwd.clone(),
+            // Go attachStore writes this before optional history delivery, even
+            // when session logging is disabled (the default).
+            branch: branch.to_owned(),
             label: m.label.clone(),
             model: m.model.clone(),
             route: m.route.trim().into(),
@@ -242,6 +245,7 @@ impl SessionEngine {
             provider_revision: m.provider_revision.clone(),
             display: m.display_name.clone(),
             cwd: m.cwd.clone(),
+            branch: branch.to_owned(),
             label: card.label,
             launch_label: m.label.clone(),
             pinned: card.pinned,
@@ -457,8 +461,16 @@ impl SessionEngine {
                 return Err(SessionError::InvalidRequest("session dismissed".into()));
             }
         }
-        let initialized =
-            self.initialize(binding, &m, size, &started_text, started, true, &metadata);
+        let initialized = self.initialize(
+            binding,
+            &m,
+            &branch,
+            size,
+            &started_text,
+            started,
+            true,
+            &metadata,
+        );
         let mut session = match initialized {
             Ok(s) => s,
             Err(e) => {
@@ -553,7 +565,6 @@ impl SessionEngine {
                 session.snapshot.last_output_at = reattached_at.clone();
             }
         }
-        session.snapshot.branch = branch;
         // Go reattach restarts the two-second timer while retaining warm
         // project/stats latches, including a same-ID replacement's saved state.
         session.branch_refresh.checked_at = Some(now);

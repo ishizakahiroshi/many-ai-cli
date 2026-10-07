@@ -3,6 +3,8 @@
 use many_ai_cli::proto::time::{Timestamp, UNIX_EPOCH};
 #[path = "session_engine/approval_actions.rs"]
 mod approval_actions;
+#[path = "session_engine/branch_persistence.rs"]
+mod branch_persistence;
 #[path = "session_engine/marker_suppression.rs"]
 mod marker_suppression;
 #[path = "session_engine/reattach_transaction.rs"]
@@ -141,6 +143,19 @@ fn fixture_with_warning(
     spawner: Arc<dyn WrappedSessionSpawner>,
     warning: many_ai_cli::terminal::session::EngineWarningHandler,
 ) -> Fixture {
+    fixture_with_branch_lookup(
+        spawner,
+        warning,
+        true,
+        EngineOptions::default().branch_lookup,
+    )
+}
+fn fixture_with_branch_lookup(
+    spawner: Arc<dyn WrappedSessionSpawner>,
+    warning: many_ai_cli::terminal::session::EngineWarningHandler,
+    session_enabled: bool,
+    branch_lookup: many_ai_cli::terminal::session::BranchLookup,
+) -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let installed = tempfile::tempdir().unwrap();
     let paths = RuntimePaths::trial(root.path(), 49121, installed.path()).unwrap();
@@ -155,7 +170,7 @@ fn fixture_with_warning(
         paths,
         Some(store.clone()),
         JournalOptions {
-            session_enabled: true,
+            session_enabled,
             max_bytes: 0,
         },
     ));
@@ -178,6 +193,7 @@ fn fixture_with_warning(
             confirm_window: Duration::from_millis(2),
         },
         warning,
+        branch_lookup,
         ..Default::default()
     };
     let engine = Arc::new(SessionEngine::new(
