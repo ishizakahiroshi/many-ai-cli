@@ -66,6 +66,21 @@ impl UpdateExecutor for NativeUpdateExecutor {
         })
     }
 }
+/// The environment an update command inherits from the Hub. `PSModulePath` is
+/// dropped: a Hub started from pwsh 7 carries pwsh 7's module path, and the
+/// Windows PowerShell 5.1 that `codex update` spawns then cannot resolve
+/// `Get-FileHash` (the installer fails with exit code 1). With the variable
+/// absent, PowerShell computes its own default for whichever edition runs.
+fn update_environment(
+    environment: &[String],
+) -> BTreeMap<std::ffi::OsString, Option<std::ffi::OsString>> {
+    environment
+        .iter()
+        .filter_map(|v| v.split_once('='))
+        .filter(|(key, _)| !key.eq_ignore_ascii_case("PSModulePath"))
+        .map(|(key, value)| (key.into(), Some(value.into())))
+        .collect()
+}
 fn normalize_process(
     plan: &crate::process::ProcessPlan,
     platform: crate::process::execpath::Platform,
@@ -256,12 +271,7 @@ impl CliUpdates {
                 }
             }
         }
-        plan.command.process.env = self
-            .dependencies
-            .environment
-            .iter()
-            .filter_map(|v| v.split_once('=').map(|(k, v)| (k.into(), Some(v.into()))))
-            .collect();
+        plan.command.process.env = update_environment(&self.dependencies.environment);
         Ok((plan, definition))
     }
     pub fn eligibility(&self) -> Result<Vec<Eligibility>, Response> {

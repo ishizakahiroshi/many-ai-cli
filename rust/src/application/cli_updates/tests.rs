@@ -659,3 +659,24 @@ fn native_updater_resolves_windows_shims_with_the_explicit_environment_and_keeps
     assert_eq!(direct.executable, script);
     assert_eq!(direct.args, plan.args);
 }
+
+#[test]
+fn update_environment_drops_psmodulepath_and_keeps_the_rest() {
+    let environment = [
+        "PATH=C:\\synthetic\\bin".to_owned(),
+        "PSModulePath=C:\\synthetic\\pwsh7\\Modules".to_owned(),
+        "psmodulepath=C:\\synthetic\\lowercase".to_owned(),
+        "OTHER=a=b".to_owned(),
+        "NO_EQUALS".to_owned(),
+    ];
+    let resolved = update_environment(&environment);
+    let keys: Vec<_> = resolved
+        .keys()
+        .map(|k| k.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(keys, ["OTHER", "PATH"]);
+    assert_eq!(
+        resolved.get(std::ffi::OsStr::new("OTHER")),
+        Some(&Some("a=b".into()))
+    );
+}

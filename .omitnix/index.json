@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "5d423dd306761b41bda8fb45be770213afffd9bf",
+    "commit": "e74ae6a8b330fca465d15f1644a18f4f1d6798c4",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,11 +138,11 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1882,
-    "analyzed": 1492,
+    "discovered": 1945,
+    "analyzed": 1510,
     "unresolved": 9,
     "unknown": 1,
-    "unclaimed": 380,
+    "unclaimed": 425,
     "skipped_by_config": 0
   },
   "files": [
@@ -228,6 +228,14 @@
     },
     {
       "path": ".github/workflows/rust-migration.yml",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.yml'"
+    },
+    {
+      "path": ".github/workflows/rust-windows-check.yml",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -876,12 +884,140 @@
       "reason": "no adapter claims '.md'"
     },
     {
+      "path": "docs/bot/rust-recovery-resume/ARTIFACTS-4dc961ce.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
       "path": "docs/bot/rust-recovery-resume/BEHAVIOR-MATRIX.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
       "unresolved": [],
       "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/CHILD-STARTUP-WAITS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/CONPTY-SPAWN-20261006.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/DISPLAY-FIELDS-LOCAL.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/EVENT-FIXTURE-VALIDATION-20261006.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/F1-CLEANUP-VALIDATION.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-BRANCH-PERSISTENCE-LOCAL.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-CI-41e4b8.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-CI-f4397e.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-GO-BRANCH-CONTRACT.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-GO-BRANCH-CONTRACT.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-LOCAL-VALIDATION.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-NATIVE-FAILURE-LOCAL.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-OBSERVATION-PAYLOAD-AUDIT.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/G1-OBSERVATION-PAYLOAD-AUDIT.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/HARNESS-VALIDATION-20261006.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "docs/bot/rust-recovery-resume/LOCAL-SCAN-RECEIPT.json",
@@ -892,7 +1028,31 @@
       "reason": "no adapter claims '.json'"
     },
     {
+      "path": "docs/bot/rust-recovery-resume/LOCAL-VALIDATION-20261006.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
       "path": "docs/bot/rust-recovery-resume/LOCAL-VALIDATION-RECEIPT.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/LOCAL-VALIDATION-SUCCESSOR-20261006.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/ORACLE-V25-LOCAL-VALIDATION.json",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -909,6 +1069,14 @@
     },
     {
       "path": "docs/bot/rust-recovery-resume/README.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/REVIEW-FIXES-20261006.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -940,7 +1108,167 @@
       "reason": "no adapter claims '.json'"
     },
     {
+      "path": "docs/bot/rust-recovery-resume/V01-FIRST-NATIVE.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/V01-INJECTED-LOCAL.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/V01-LOCAL.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/V01-NATIVE-d6ca5824.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/V01-SCHEDULING-d6ca5824.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-2cba1550.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-49b63f90.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-4dc961ce.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-64663728.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-9a214cef.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-a1c60661.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-a48a7e8a.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/VALIDATION-c4dcca95.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-CHECK-LOCAL-VALIDATION.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-CHECK.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-RUNTIME-SUPPLY-GATE.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-STDIO-9be3d983.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-STDIO-bcd052f8.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/WINDOWS-STDIO-e19c9884.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
       "path": "docs/bot/rust-recovery-resume/dependency-review/REVIEW.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
+      "path": "docs/bot/rust-recovery-resume/dependency-review/V06-SQLITE-CARGO.md",
       "adapter": null,
       "status": "unclaimed",
       "fields": {},
@@ -21130,6 +21458,14 @@
       "reason": "no adapter claims '.json'"
     },
     {
+      "path": "rust/inventory/windows-check-timing-8530565.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
       "path": "rust/packaging/.gitignore",
       "adapter": null,
       "status": "unclaimed",
@@ -21167,6 +21503,33 @@
         "writes": {
           "state": "none_observed",
           "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/packaging/prepare_windows_runtime.ps1",
+      "adapter": "powershell",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "requires -Version 5.1"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
         },
         "screen_to_api": {
           "state": "out_of_scope"
@@ -21219,6 +21582,64 @@
         "summary": {
           "state": "value",
           "value": "Synthetic isolated cache/build receipts. No Cargo, network or real installations."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/packaging/test_windows_check_ci.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Offline safety/selection/failure contracts; no Cargo, Windows runtime or network."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/packaging/test_windows_runtime.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Synthetic runtime receipt/embedded-byte checks; no DLL download or execution."
         },
         "authentication": {
           "state": "not_configured"
@@ -25326,6 +25747,64 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/application/session_workers/branch_refresh.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Per-cwd refresh ownership mirrors Go's pending-ID queue and four worker"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/application/session_workers/branch_refresh/tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/application/session_workers/handoff_hooks.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -27970,6 +28449,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/files/branch.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Session Git observations, matching the fixed Go branch/project helpers."
         },
         "authentication": {
           "state": "not_configured"
@@ -31207,6 +31715,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/logging/diagnostic.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/logging/mod.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -31541,6 +32078,35 @@
         "summary": {
           "state": "value",
           "value": "Source: internal/headless/{adapter,runner,prompt}.go at 21d0bc7."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/orchestration/headless/windows_contracts.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "V01 native headless ownership. These fixtures execute real Windows children,"
         },
         "authentication": {
           "state": "not_configured"
@@ -32179,6 +32745,35 @@
         "summary": {
           "state": "value",
           "value": "Native ConPTY: create suspended, assign the shared kill-on-close Job, then"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/process/windows_job/testing.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Scoped native assignment inputs for Windows unit tests only."
         },
         "authentication": {
           "state": "not_configured"
@@ -34038,6 +34633,64 @@
       "unresolved": []
     },
     {
+      "path": "rust/src/terminal/session/branch.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Git display state stays under the sole session lock. Workers carry IDs and"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/src/terminal/session/branch/tests.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/src/terminal/session/completion.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -34660,8 +35313,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "none_observed",
-          "value": null
+          "state": "value",
+          "value": "Observe approval injection using the complete, clean, pinned Go checkout."
         },
         "authentication": {
           "state": "not_configured"
@@ -34719,6 +35372,14 @@
         }
       },
       "unresolved": []
+    },
+    {
+      "path": "rust/src/wrapper/approval_injection/provenance.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
     },
     {
       "path": "rust/src/wrapper/approval_injection/rules.txt",
@@ -35809,6 +36470,14 @@
       "unresolved": []
     },
     {
+      "path": "rust/tests/fixtures/core/headless/V01-WINDOWS.md",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.md'"
+    },
+    {
       "path": "rust/tests/fixtures/core/headless/framing-golden.json",
       "adapter": null,
       "status": "unclaimed",
@@ -35832,6 +36501,43 @@
         "summary": {
           "state": "value",
           "value": "Synthetic exported-API oracle; Go source 21d0bc7935a2c4696fb89ccff2e324157a528c2d."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/fixtures/core/headless/v01_windows_oracle_sources.json",
+      "adapter": null,
+      "status": "unclaimed",
+      "fields": {},
+      "unresolved": [],
+      "reason": "no adapter claims '.json'"
+    },
+    {
+      "path": "rust/tests/fixtures/core/headless/v01_windows_oracle_test.go",
+      "adapter": "go",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "This test belongs only to a privately materialized fault variant of the fixed"
         },
         "authentication": {
           "state": "not_configured"
@@ -38151,6 +38857,64 @@
       "unresolved": []
     },
     {
+      "path": "rust/tests/native_git_branch.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Real Git and the built, normal-mode Hub communicate over authenticated"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/native_windows_spawn.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Exercise the built Hub, its real wrapper, and a real cmd.exe under ConPTY."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/tests/oracle/main.go",
       "adapter": "go",
       "status": "analyzed",
@@ -38354,6 +39118,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/tests/session_engine/branch_persistence.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Go attachStore persists the resolved branch independently of optional history."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/tests/session_engine/marker_suppression.rs",
       "adapter": "rust",
       "status": "analyzed",
@@ -38390,6 +39183,35 @@
         "summary": {
           "state": "none_observed",
           "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/session_engine/reattach_transaction.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Reattach failures must not consume the retained session or its journal owner."
         },
         "authentication": {
           "state": "not_configured"
@@ -38582,6 +39404,35 @@
         "summary": {
           "state": "value",
           "value": "Source → Rust: internal/hub/subagent_source_*_test.go and subagent_tree_test.go"
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "rust/tests/subscription_label_contracts.rs",
+      "adapter": "rust",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Fixed Go d8fbf859: subscription.go resolves display metadata when the wrapper"
         },
         "authentication": {
           "state": "not_configured"
@@ -39453,6 +40304,35 @@
         "summary": {
           "state": "value",
           "value": "Clean native build-only receipts for #3. Never publishes/releases or installs candidates."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/rust-windows-check-ci.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Partial Windows validation only; never a release, packaging or acceptance receipt."
         },
         "authentication": {
           "state": "not_configured"
