@@ -722,11 +722,13 @@ fn sha256(bytes: &[u8]) -> String {
         .collect()
 }
 
-fn tool_output(plan: ProcessPlan, env_clear: bool) -> Vec<u8> {
+fn tool_output(operation: &'static str, plan: ProcessPlan, env_clear: bool) -> Vec<u8> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
-        .unwrap();
+        .unwrap_or_else(|error| {
+            panic!("oracle preparation {operation}: runtime setup failed: {error}")
+        });
     let output = runtime
         .block_on(run_capped_with_options(
             &plan,
@@ -737,17 +739,22 @@ fn tool_output(plan: ProcessPlan, env_clear: bool) -> Vec<u8> {
                 ..Default::default()
             },
         ))
-        .expect("owned read/build tool process");
+        .unwrap_or_else(|error| {
+            panic!("oracle preparation {operation}: owned tool process failed: {error}")
+        });
     assert_eq!(
         output.outcome,
         ExitOutcome::Exited {
             code: Some(0),
             signal: None
         },
-        "oracle preparation failed: {}",
+        "oracle preparation {operation} failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(!output.stdout_truncated && !output.stderr_truncated && !output.pipes_forced_closed);
+    assert!(
+        !output.stdout_truncated && !output.stderr_truncated && !output.pipes_forced_closed,
+        "oracle preparation {operation} exceeded output or drain bound",
+    );
     output.stdout
 }
 
@@ -765,17 +772,32 @@ fn materialize_committed_sources(
     repo: &Path,
     destination: &Path,
     manifest: &OracleManifest,
-) -> String {
-    let mut env = preparation_environment(destination.parent().unwrap());
+) -> (String, String) {
+    let root = destination.parent().unwrap();
+    let global_config = root.join("empty-global-git-config");
+    assert!(global_config.is_absolute());
+    let empty_config = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&global_config)
+        .expect("create private empty Git configuration");
+    let metadata = empty_config.metadata().unwrap();
+    assert!(metadata.is_file());
+    assert_eq!(metadata.len(), 0);
+    drop(empty_config);
+    let mut env = preparation_environment(root);
     for (key, value) in [
         ("GIT_CONFIG_NOSYSTEM", "1"),
-        ("GIT_CONFIG_GLOBAL", "NUL"),
         ("GIT_TERMINAL_PROMPT", "0"),
         ("GIT_OPTIONAL_LOCKS", "0"),
     ] {
         env.insert(key.into(), Some(value.into()));
     }
-    let git = |args: Vec<OsString>, stdin: Vec<u8>| {
+    env.insert(
+        "GIT_CONFIG_GLOBAL".into(),
+        Some(global_config.into_os_string()),
+    );
+    let git = |operation: &'static str, args: Vec<OsString>, stdin: Vec<u8>| {
         // Built-in object readers do not run hooks, filters or textconv.
         // --no-lazy-fetch makes a missing local object a setup failure, never
         // permission to contact a promisor remote from this regression.
@@ -789,6 +811,7 @@ fn materialize_committed_sources(
         .to_vec();
         all.extend(args);
         tool_output(
+            operation,
             ProcessPlan {
                 executable: "git".into(),
                 args: all,
@@ -802,7 +825,28 @@ fn materialize_committed_sources(
             true,
         )
     };
+    let global = git(
+        "git config",
+        vec!["config".into(), "--global".into(), "--list".into()],
+        vec![],
+    );
+    assert!(
+        global.is_empty(),
+        "oracle preparation git config: private global configuration is not empty"
+    );
+    let version_output = String::from_utf8(git("git-version", vec!["--version".into()], vec![]))
+        .expect("oracle preparation git-version: invalid UTF-8");
+    let mut version_lines = version_output.lines();
+    let preparation_git_version = version_lines
+        .next()
+        .expect("oracle preparation git-version: missing version line")
+        .to_owned();
+    assert!(
+        preparation_git_version.starts_with("git version ") && version_lines.next().is_none(),
+        "oracle preparation git-version: expected one Git version line",
+    );
     let commit = String::from_utf8(git(
+        "git rev-parse",
         vec!["rev-parse".into(), "--verify".into(), "HEAD".into()],
         vec![],
     ))
@@ -821,7 +865,7 @@ fn materialize_committed_sources(
         "go.sum".into(),
     ];
     args.extend(manifest.packages.iter().map(Into::into));
-    let tree = git(args, vec![]);
+    let tree = git("git ls-tree", args, vec![]);
     let mut blobs = BTreeMap::new();
     for entry in tree
         .split(|byte| *byte == 0)
@@ -862,6 +906,7 @@ fn materialize_committed_sources(
     );
     let request: String = blobs.values().map(|blob| format!("{blob}\n")).collect();
     let response = git(
+        "git cat-file",
         vec!["cat-file".into(), "--batch".into()],
         request.into_bytes(),
     );
@@ -901,13 +946,14 @@ fn materialize_committed_sources(
         fs::write(target, bytes).unwrap();
     }
     assert!(remaining.is_empty(), "unexpected trailing Git batch data");
-    commit
+    (commit, preparation_git_version)
 }
 
 struct BuiltOracle {
     executable: PathBuf,
     manifest: OracleManifest,
     input_commit: String,
+    preparation_git_version: String,
     helper_sha256: String,
     assignment_variant: Value,
 }
@@ -932,6 +978,7 @@ fn build_oracle(root: &Path) -> BuiltOracle {
     .map(|(key, value)| (key.into(), Some(value.into())))
     .collect();
     let caches: BTreeMap<String, String> = serde_json::from_slice(&tool_output(
+        "Go env",
         ProcessPlan {
             executable: go.clone(),
             args: ["env", "-json", "GOCACHE", "GOMODCACHE", "GOPATH"]
@@ -955,7 +1002,8 @@ fn build_oracle(root: &Path) -> BuiltOracle {
     }
     let source = root.join("verified-go-source");
     fs::create_dir(&source).unwrap();
-    let input_commit = materialize_committed_sources(repo, &source, &manifest);
+    let (input_commit, preparation_git_version) =
+        materialize_committed_sources(repo, &source, &manifest);
     assert!(!source.join(&manifest.overlay_test).exists());
     // These are the helper bytes compiled into this Rust test binary, not a
     // later working-tree read. Only the fixed production inputs come from Git.
@@ -1010,8 +1058,9 @@ fn build_oracle(root: &Path) -> BuiltOracle {
     ] {
         env.insert(key.into(), Some(value.into()));
     }
-    let invoke = |args: Vec<OsString>| {
+    let invoke = |operation: &'static str, args: Vec<OsString>| {
         tool_output(
+            operation,
             ProcessPlan {
                 executable: go.clone(),
                 args,
@@ -1026,27 +1075,31 @@ fn build_oracle(root: &Path) -> BuiltOracle {
         )
     };
     assert_eq!(
-        String::from_utf8(invoke(vec!["version".into()]))
+        String::from_utf8(invoke("Go version", vec!["version".into()]))
             .unwrap()
             .trim(),
         manifest.go_version
     );
-    invoke(vec![
-        "test".into(),
-        "-c".into(),
-        "-mod=readonly".into(),
-        "-buildvcs=false".into(),
-        format!("-tags={}", manifest.build_tag).into(),
-        format!("-overlay={}", overlay.display()).into(),
-        "-o".into(),
-        executable.as_os_str().to_owned(),
-        manifest.package.clone().into(),
-    ]);
+    invoke(
+        "Go test",
+        vec![
+            "test".into(),
+            "-c".into(),
+            "-mod=readonly".into(),
+            "-buildvcs=false".into(),
+            format!("-tags={}", manifest.build_tag).into(),
+            format!("-overlay={}", overlay.display()).into(),
+            "-o".into(),
+            executable.as_os_str().to_owned(),
+            manifest.package.clone().into(),
+        ],
+    );
     assert!(executable.is_file());
     BuiltOracle {
         executable,
         manifest,
         input_commit,
+        preparation_git_version,
         helper_sha256,
         assignment_variant,
     }
@@ -1172,6 +1225,7 @@ fn go_case(oracle: &BuiltOracle, root: &Path, case: &str) {
         "case":format!("go-{case}-failed-attachment-retained-pipes"),
         "go_source_sha":manifest.go_source_sha, "go_version":manifest.go_version,
         "verified_input_source_commit":oracle.input_commit, "overlay_helper_sha256":oracle.helper_sha256,
+        "preparation_git_version":oracle.preparation_git_version,
         "assignment_variant":oracle.assignment_variant,
         "natural_windows_attachment_failure_proven":false, "unchanged_go_failure_proven":false,
         "os":windows_version(), "ready":ready, "result":result,

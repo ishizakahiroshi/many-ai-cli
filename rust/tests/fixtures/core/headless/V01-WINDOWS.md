@@ -1,6 +1,6 @@
 # V01 private Go attachment-failure variant
 
-> 最終更新: 2026-10-07(水) 07:48:37 UTC
+> 最終更新: 2026-10-07(水) 09:51:46 UTC
 
 The native Rust library-test supervisor in
 `rust/src/orchestration/headless/windows_contracts.rs` runs this fixture. It first verifies
@@ -20,6 +20,24 @@ expected source/embed membership with ls-tree, and reads raw blobs with cat-file
 private build tree. No replacement refs, lazy fetch, hooks, filters, textconv,
 working-tree newline normalization or global Git changes are used. This avoids
 Windows checkout CRLF conversion while pinning the bytes actually compiled.
+The Git child receives `GIT_CONFIG_GLOBAL` as an absolute path to a zero-byte
+regular file created with `create_new` inside the fresh private fixture root.
+The file is closed before Git starts. A read-only `git config --global --list`
+guard must succeed with empty output before any object reads. The child still
+uses `env_clear`, `GIT_CONFIG_NOSYSTEM=1`, and the existing no-fetch/no-replacement/
+no-optional-lock settings. This replaces the fixture's `NUL` target, which a
+Windows preparation run failed to access with exit 128; it changes no production
+reserved-name policy or user/system Git configuration.
+
+The same isolated runner also reads `git --version` within its existing bound,
+requires exactly one line beginning with `git version `, and records that actual
+tool version as `preparation_git_version` in each Go-case receipt.
+
+Preparation failures carry one fixed operation label: `git config`, `git-version`,
+`git rev-parse`, `git ls-tree`, `git cat-file`, `Go env`, `Go version`, or `Go test`.
+Existing bounded stderr remains available, without argument/environment dumps
+or additional tracing. All preparation and product deadlines are unchanged.
+
 The overlay helper is embedded in the Rust test executable and hashed in its
 receipt. CI never regenerates the fixed source pin from its candidate. After
 verifying all 57 originals, the private variant changes exactly one call in
