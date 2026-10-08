@@ -48,7 +48,9 @@ Allowed change scope: `rust/**`, `scripts/rust-candidate-ci.py`, `.github/workfl
 
 ## Reproducible validation
 
-From a clean candidate checkout, build the frontend with its locked Bun1.3.14 configuration before Cargo. `rust/build.rs` validates and embeds `web/dist` and the existing launcher HTML. Use the four-target workflow's commands/toolchains as the canonical clean-run entry. The Rust commands are:
+Routine fixes use the Windows workflow (`rust-windows-check.yml`) and relevant Web checks. The full Linux/Windows/Intel macOS/ARM macOS matrix (`rust-migration.yml`) is a manually dispatched pre-release gate, not a requirement to repeat on every fix or PR update. Before release, explicitly run that matrix against the final candidate and collect all four results. Keep this policy aligned with the actual workflow triggers; a written policy alone does not prevent automatic runs.
+
+From a clean candidate checkout, build the frontend with its locked Bun1.3.14 configuration before Cargo. `rust/build.rs` validates and embeds `web/dist` and the existing launcher HTML. Use the selected workflow's commands/toolchains as the canonical clean-run entry. The Rust commands are:
 
 ```text
 cargo +1.90.0 fmt --manifest-path rust/Cargo.toml -- --check

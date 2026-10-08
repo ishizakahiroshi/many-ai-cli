@@ -1,17 +1,8 @@
 name: Rust migration candidate
 
 on:
-  pull_request:
-    paths:
-      - 'rust/**'
-      - 'web/**'
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'scripts/rust-candidate-ci.py'
-      - 'scripts/rust-windows-check-ci.py'
-      - '.github/workflows/rust-windows-check.yml'
-      - '.github/workflows/rust-migration.yml'
+  # Full native coverage is a manually dispatched pre-release gate. Routine
+  # fixes use rust-windows-check.yml; PR updates must not start this matrix.
   workflow_dispatch:
 
 permissions:
