@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "4a3c141a1e6573459d3ff2a8cc6c9962bce6def3",
+    "commit": "e7eea35dc5c31f7f17a92bf0175cc7960e86d520",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1950,
-    "analyzed": 1511,
+    "discovered": 1955,
+    "analyzed": 1516,
     "unresolved": 9,
     "unknown": 1,
     "unclaimed": 429,
@@ -43001,8 +43001,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "mobile-home.ts"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44106,13 +44106,103 @@
       "unresolved": []
     },
     {
-      "path": "web/src/app/session-list.ts",
+      "path": "web/src/app/session-list-tab-fixtures.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-list-tab-state.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {
         "summary": {
           "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "value": "Browser-local sidebar buckets. Never add these fields to user-prefs' full-snapshot PUT."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-list-tabs.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "The sidebar UI has one lazy owner; callbacks avoid importing state/settings and their cycles."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/app/session-list.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -44351,8 +44441,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -45736,8 +45826,8 @@
       "status": "analyzed",
       "fields": {
         "summary": {
-          "state": "value",
-          "value": "--- ESM imports (generated) ---"
+          "state": "none_observed",
+          "value": null
         },
         "authentication": {
           "state": "not_configured"
@@ -46615,6 +46705,32 @@
     },
     {
       "path": "web/src/styles/server-modal.css",
+      "adapter": "css",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "out_of_scope"
+        },
+        "authentication": {
+          "state": "out_of_scope"
+        },
+        "authorization": {
+          "state": "out_of_scope"
+        },
+        "reads": {
+          "state": "out_of_scope"
+        },
+        "writes": {
+          "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/src/styles/session-list-tabs.css",
       "adapter": "css",
       "status": "analyzed",
       "fields": {
@@ -47526,6 +47642,36 @@
     },
     {
       "path": "web/tests/routines-model.test.ts",
+      "adapter": "tsjs",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "none_observed",
+          "value": null
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "none_observed",
+          "value": []
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "web/tests/session-list-tabs-dom.test.ts",
       "adapter": "tsjs",
       "status": "analyzed",
       "fields": {

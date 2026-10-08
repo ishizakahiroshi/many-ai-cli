@@ -11,6 +11,16 @@ Release artifacts are published at
 ## [Unreleased]
 
 ### Added
+- **Browser-local session-list tabs (partial implementation).** Group multiple
+  session cards into tabs, add and rename tabs, reorder by drag or keyboard menu,
+  and move root families using drag/drop or a destination chooser. Safe tab deletion
+  preserves sessions and history. Names, order, lifecycle identities, selection and
+  scroll offsets are stored separately from synchronized preferences. Inactive tabs
+  show live waiting/approval counts; touch holds and keyboard menus provide movement
+  alternatives. Missing ancestors defer a family move until reconnect resolves it.
+  Assigning user-spawned sessions to their request-start tab remains unimplemented
+  pending the requirement-11 API-correlation decision. Product/Windows UI acceptance
+  is pending; this does not change Go/Rust APIs or session-spawn behavior.
 - **Place input controls independently where you need them.** Send, microphone,
   clear input, templates, quick commands and the other input toolbar buttons each
   have a small grip. Drag it with a mouse or touch to move that control anywhere

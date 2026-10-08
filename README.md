@@ -1054,7 +1054,9 @@ Open `http://127.0.0.1:47777/?token=<token>` in your browser.
 - **Header**
   - Status summary chips `[running][waiting][standby]` (the waiting chip blinks when > 0) and per-provider connection counts such as `Claude:N / Codex:N / Copilot:N / Cursor Agent:N / Grok:N`.
 - **Left sidebar (session list)**
-  - Top: `+ New Session` button (opens the spawn dialog). The provider list ends with **Add AI CLI**, which opens the same dialog as **Settings → AI CLI integrations**.
+  - Top: the card-outline-plus button opens the existing New Session dialog. The provider list ends with **Add AI CLI**, which opens the same dialog as **Settings → AI CLI integrations**.
+  - **Session-list tabs** group multiple cards. First use starts with one localized **Tab 1** containing existing sessions; the tab-outline-plus button adds an empty tab. Switching a list tab leaves the active conversation and panes unchanged. Right-click, long-press, or press Shift+F10 on a tab to rename, delete, or move it left/right; arrow keys, Home and End navigate the strip. Drag tabs to reorder or drag a card onto a tab. The card menu also offers a destination chooser. A root session and its children move together; moves wait if an ancestor is missing during reconnect. Deleting a populated tab asks where to move its sessions and never stops processes or removes history. The last tab cannot be deleted.
+  - Tab names, order, lifecycle-aware memberships, selected tab and scroll offsets are saved in this browser for this Hub origin, separately from synchronized preferences. Inactive tabs show live waiting/approval counts. The toolbar and strip stay visible while the cards scroll. **Partial implementation:** associating a user-spawned session with the tab at request start (requirement 11) is not implemented pending an API-correlation decision; no request matching is guessed and no labels are repurposed. Newly observed unassigned sessions stay discoverable in the default tab. Product/Windows UI acceptance is still pending for this draft.
   - Sessions are grouped by **project folder** (the directory where the wrapper was launched). Each group shows its own session-count chips and a Files entry.
   - Each session card: `📌` (pin to the top "Pinned" group) / `×` (close) / provider-colored dot + ID + state badge (Running / Standby / Waiting / Completed / Error / Disconnected) / branch badge when Git is available / last response time / one-line preview of recent output.
   - Right-click a card to open the Git view, open the Files tab, activate the session, or copy the session ID.
@@ -1250,7 +1252,7 @@ Settings are split into three categories:
 
 | Category | Examples | Storage |
 |---|---|---|
-| **D1: UI display state** (per-device is natural) | sidebar width | Browser **localStorage** |
+| **D1: UI display state** (per-device is natural) | sidebar width; session-list tab names, order, memberships, selection and scroll | Browser **localStorage** |
 | **D2: User feature settings** (shared across devices / ports) | theme (including your own custom themes), font size, language, voice, trigger, notification sound, approval auto-switch, quick commands, usage links, favorites, session order, spawn defaults | `~/.many-ai-cli/config.yaml` under `user_prefs:`, read/written via `GET/PUT /api/user-prefs` |
 | **D3: Server operation settings** | hub port, log config, approval enable/disable, slash command sources, approval pattern sources, token | `~/.many-ai-cli/config.yaml` (direct edit or dedicated Settings UI) |
 

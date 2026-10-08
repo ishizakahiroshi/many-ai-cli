@@ -1,3 +1,4 @@
+import { preserveSessionListSelection } from './session-list-tabs.js';
 // --- ESM imports (generated) ---
 import { t } from '../i18n.js';
 import { showToast, token } from './util.js';
@@ -62,6 +63,7 @@ export function wsConnectionState(): 'open' | 'connecting' | 'closed' {
 // 同じ番号の別セッションに旧セッションのチャット・バッファが混入する。
 let _hubInstance = null;
 let _pendingOpenSessionId = parseInt(new URLSearchParams(location.search).get('session_id') || '0', 10) || 0;
+let pendingOpenFromReconnect = false;
 
 const REGISTER_DEFAULT_COLS = 200;
 const REGISTER_DEFAULT_ROWS = 50;
@@ -78,6 +80,7 @@ function openSessionFromNotification(sessionId) {
     return;
   }
   _pendingOpenSessionId = id;
+  pendingOpenFromReconnect = false;
 }
 
 if ('serviceWorker' in navigator) {
@@ -284,6 +287,7 @@ export function _connectWs() {
     document.getElementById('reconnect-btn').hidden = true;
     if (!_pendingOpenSessionId && _lastActiveSessionIdBeforeDisconnect) {
       _pendingOpenSessionId = _lastActiveSessionIdBeforeDisconnect;
+      pendingOpenFromReconnect = true;
     }
     // Hub は UI 接続ごとに ptyBuf を履歴リプレイする。同じ Hub への再接続では
     // 既存 xterm/chat バッファを先に空にしないと、履歴が末尾へ追記されて二重表示になる。
@@ -591,7 +595,10 @@ export function _connectWs() {
     if (_pendingOpenSessionId && sessions.has(_pendingOpenSessionId)) {
       const id = _pendingOpenSessionId;
       _pendingOpenSessionId = 0;
-      activateSession(id);
+      const reconnectRestore = pendingOpenFromReconnect;
+      pendingOpenFromReconnect = false;
+      if (reconnectRestore) preserveSessionListSelection(() => activateSession(id));
+      else activateSession(id);
     }
     checkApprovalOnStartup();
     syncElapsedTimer();

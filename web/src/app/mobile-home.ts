@@ -1,3 +1,4 @@
+import { isSessionInSelectedListTab, sessionListTapSuppressed, sessionListScrollBeforeRender, sessionListScrollAfterRender } from './session-list-tabs.js';
 // mobile-home.ts
 // スマホホーム画面（#mobile-home）と左ドロワーの描画モジュール。
 // PC には一切副作用を与えない。全エントリーポイントは isMobileViewport() で early return する。
@@ -82,6 +83,7 @@ function ensureMhWindowTapHandlers(): void {
     const tap = mhPendingTap;
     if (!tap || e.pointerId !== tap.pointerId) return;
     mhPendingTap = null;
+    if (tap.mode === 'drawer' && sessionListTapSuppressed()) return;
     const moved = Math.hypot(e.clientX - tap.x, e.clientY - tap.y);
     if (moved > MH_TAP_MOVE_LIMIT_PX) return;
     markMhActivated(tap.id, tap.mode);
@@ -114,6 +116,7 @@ function bindMhSessionTapRoot(root: HTMLElement, mode: 'drawer' | 'home', rowSel
     if (!row) return;
     const id = parseInt(row.dataset.sessionId || '', 10);
     if (isNaN(id)) return;
+    if (mode === 'drawer' && sessionListTapSuppressed()) { e.preventDefault(); return; }
     if (isDuplicateMhClick(id, mode)) {
       e.preventDefault();
       return;
@@ -539,8 +542,8 @@ function renderMobileDrawerResults(): void {
   const root = document.getElementById('mobile-drawer-content');
   if (!root) return;
   // 再描画でスクロール位置がトップへ戻るとタップが別行にずれる。
-  const scrollEl = document.getElementById('session-list');
-  const prevScrollTop = scrollEl ? scrollEl.scrollTop : 0;
+  const scrollEl = root.querySelector<HTMLElement>('.mobile-drawer-body');
+  const prevScrollTop = sessionListScrollBeforeRender(scrollEl, true);
   let body = root.querySelector<HTMLElement>('.mobile-drawer-body');
   if (!body) {
     body = document.createElement('div');
@@ -566,7 +569,7 @@ function renderMobileDrawerResults(): void {
   const viewSection = buildViewSwitchSection();
   if (viewSection) body.appendChild(viewSection);
 
-  const ids = filteredOrderedIds(mobileDrawerSearch);
+  const ids = filteredOrderedIds(mobileDrawerSearch).filter(isSessionInSelectedListTab);
   const pendingIds = ids.filter(id => getSessionBucket(id) === 'pending');
   const sessionIds = ids.filter(id => getSessionBucket(id) !== 'pending');
 
@@ -641,10 +644,7 @@ function renderMobileDrawerResults(): void {
   actions.append(home, expose, shutdown, settings, server);
   body.appendChild(actions);
 
-  if (scrollEl) {
-    const max = scrollEl.scrollHeight - scrollEl.clientHeight;
-    scrollEl.scrollTop = Math.max(0, Math.min(prevScrollTop, max));
-  }
+  sessionListScrollAfterRender(body, prevScrollTop, true);
 }
 
 window.addEventListener('approval-queue-updated', () => {

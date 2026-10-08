@@ -1,3 +1,4 @@
+import { restoreSessionListDrawerScroll } from './app/session-list-tabs.js';
 import { probeSpan } from './debug/probe.js';
 // --- ESM imports (generated) ---
 import { t } from './i18n.js';
@@ -1294,6 +1295,7 @@ export function openMobileSessionDrawer() {
   // force: まだ mobile-drawer-open が付く前に中身を描く
   (window as any).renderMobileSessionDrawer?.(true);
   document.body.classList.add('mobile-drawer-open');
+  restoreSessionListDrawerScroll();
   const btn = document.getElementById('mobile-menu-btn');
   const titleBtn = document.getElementById('mobile-session-title-btn');
   const backdrop = document.getElementById('mobile-drawer-backdrop');
