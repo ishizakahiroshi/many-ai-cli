@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<!--docsweep-meta
+type: design
+status: done
+tags: [ui, session-tabs]
+owner: user
+related: []
+last_reviewed: 2026-10-08
+docsweep_policy: archive_with_release
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>セッション一覧を分けるタブ — many-ai-cli</title>
+<style>
+  :root {
+    --bg:#f7f3ea; --ink:#241f1a; --ink-soft:#837a6c; --line:rgba(36,31,26,0.12);
+    --accent:#ff7a3d; --card:#fffdf8; --ok:#2e7d4f; --warn:#b8860b; --bad:#b3261e;
+    --display:'Baloo 2','Zen Maru Gothic',system-ui,cursive;
+    --body:'Zen Maru Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.7;
+       text-wrap:pretty;font-size:16px}
+  .wrap{max-width:min(1080px,92vw);margin:0 auto;padding:48px 0 80px}
+  h1{font-family:var(--display);font-weight:800;font-size:2rem;margin:0 0 12px;letter-spacing:-0.01em}
+  h2{font-family:var(--display);font-weight:700;font-size:1.4rem;margin:48px 0 16px;
+     padding-bottom:8px;border-bottom:2px solid var(--ink)}
+  h3{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:28px 0 10px}
+  p,li{font-size:1rem}
+  a{color:var(--accent);text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px}
+  .card{background:var(--card);border:2px solid var(--ink);border-radius:18px;
+        padding:22px 24px;box-shadow:4px 5px 0 var(--line);margin:16px 0}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;
+        border:2px solid var(--ink);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--line);font-size:0.94rem}
+  th{background:#fffdf8;font-family:var(--display);font-weight:700}
+  tr:last-child td{border-bottom:0}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;
+       font-family:var(--display);font-weight:700;font-size:0.78rem;
+       border:2px solid var(--ink);background:#fff;color:var(--ink)}
+  .tag-ok{background:var(--ok);color:#fff} .tag-warn{background:var(--warn);color:#fff}
+  .tag-bad{background:var(--bad);color:#fff} .tag-accent{background:var(--accent);color:#fff}
+  .system-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;
+                border-radius:999px;border:2px solid var(--ink);background:var(--card);
+                font-family:var(--display);font-weight:700;font-size:0.86rem}
+  .system-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+  .meta{color:var(--ink-soft);font-size:0.88rem}
+  @media print{ body{background:#fff} .card{box-shadow:none} }
+</style>
+<style>
+  .wrap{padding-top:24px;padding-bottom:28px;max-width:min(1220px,94vw)}
+  h1{font-size:24px;margin:8px 0 4px}.intro{margin:0 0 18px;color:var(--ink-soft);font-size:14px}
+  button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid #a7a4ff;outline-offset:3px}
+  .app{--panel:#0b0e0b;--surface:#191d18;--edge:#30372d;--text:#d9ded2;--muted:#939e88;--purple:#7770ff;
+    background:var(--panel);color:var(--text);border:1px solid #33392f;border-radius:10px;overflow:hidden;font-family:system-ui,sans-serif;line-height:1.4}
+  .appbar{height:44px;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid var(--edge);font-size:14px}
+  .appbar strong{letter-spacing:.04em}.local{color:#7ad697;border:1px solid #326641;padding:2px 6px;border-radius:3px;font-size:11px}.demo{margin-left:auto;color:var(--muted);font-size:12px}
+  .layout{display:grid;grid-template-columns:280px minmax(0,1fr);height:608px}
+  .sidebar{min-width:0;min-height:0;border-right:1px solid var(--edge);display:flex;flex-direction:column;position:relative}
+  .fixed-top{flex:none;padding:10px 8px 8px;background:var(--panel);border-bottom:1px solid var(--edge)}
+  .toolbar{display:flex;gap:4px;margin-bottom:12px}.icon{display:grid;place-items:center;width:29px;height:29px;border:1px solid #3e4279;border-radius:7px;background:#111323;color:#b0afff}.icon svg{width:16px;height:16px}.icon.stop{color:#d88e8e;border-color:#603d3d}.icon.add{font-size:21px}.icon.active{background:#24254a;border-color:#7873db}
+  .tab-label{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:11px;margin-bottom:6px}.tab-label span:last-child{color:#b8b2ff}
+  .tab-strip{display:flex;align-items:stretch;border-bottom:1px solid #3d4238;gap:3px}
+  .tabs{display:flex;flex:1;min-width:0;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#42463c transparent}
+  .tab{height:34px;min-width:52px;flex:1 0 52px;padding:0 5px;display:flex;align-items:center;justify-content:center;gap:4px;border:0;border-bottom:2px solid transparent;border-radius:5px 5px 0 0;background:transparent;color:#a5b09b;font-size:12px;white-space:nowrap}
+  .add-tab{display:grid;place-items:center;flex:none;width:30px;height:34px;background:transparent;border:0;border-radius:5px;color:#b0afff}.add-tab:hover,.add-session:hover{background:#292944}.add-tab svg,.add-session svg{width:23px;height:23px}.empty-list{padding:30px 12px;text-align:center;color:var(--muted);font-size:12px;line-height:1.8}.empty-list strong{display:block;color:var(--text);font-size:13px;margin-bottom:7px}
+  .tab .name{overflow:hidden;text-overflow:ellipsis}.tab[aria-selected=true]{border-bottom-color:#827aff;background:#24213a;color:#eeebff}.tab:hover{background:#252a21}.tab-total{font-size:10px;opacity:.65}
+  .status-dot{width:6px;height:6px;flex:none;border-radius:50%;background:#65c981}.status-dot.wait{background:#edbb5a}.status-dot.idle{background:#859080}
+  .session-list{flex:1;overflow:auto;padding:8px;scrollbar-width:thin;scrollbar-color:#40473b transparent}
+  .project{display:flex;align-items:center;gap:5px;margin-bottom:5px;padding:5px 6px;background:#171c15;border:1px solid #333c2d;border-radius:5px;color:#becea8;font-size:11px}.project b{margin-right:auto}.count{padding:1px 5px;border:1px solid #4a5740;border-radius:3px;color:#acb6a1}.count.green{color:#89d89b;border-color:#376044}
+  .session-card{display:block;width:100%;text-align:left;color:var(--text);background:#1c2019;border:1px solid #333c2c;border-radius:7px;padding:10px 9px;margin-bottom:7px;scroll-margin:8px}.session-card.selected{border:2px solid #7770ff;padding:9px 8px;background:#212037}.session-card:hover{background:#272b22}.card-head{display:flex;align-items:center;gap:6px;font-size:12px}.card-head strong{white-space:nowrap}.card-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card-sub{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:10px;color:#9ec59c}.task-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid #3b5840;padding:1px 4px;border-radius:3px;max-width:165px}.branch{color:#8aaa72}.provider{color:#a4a2e4;font-size:10px}.card-bottom{display:flex;justify-content:space-between;margin-top:7px;font-size:10px;color:var(--muted)}
+  .workspace{min-width:0;display:flex;flex-direction:column;background:#10130f}.session-header{display:flex;align-items:center;gap:10px;padding:13px 18px;border-bottom:1px solid var(--edge);min-height:58px}.session-header strong{font-size:14px}.pill{padding:3px 7px;background:#252840;border:1px solid #454975;border-radius:4px;font-size:10px;color:#c5c2fb}.view-tabs{padding:0 18px;border-bottom:1px solid var(--edge);display:flex;gap:23px;color:var(--muted);font-size:12px;height:39px;align-items:center}.view-tabs .current{color:#e2dfff;align-self:stretch;display:flex;align-items:center;border-bottom:2px solid #8179ff}
+  .conversation{overflow:auto;flex:1;padding:25px 26px;min-height:0}.message{max-width:670px;margin-bottom:24px}.who{font-size:11px;color:#a4b899;margin-bottom:7px}.bubble{padding:13px 16px;border:1px solid #384231;border-radius:8px;background:#1c241a;font-size:13px;line-height:1.8}.assistant-message{font-size:13px;color:#c1c9b8;line-height:1.9}.assistant-message p{font-size:13px;margin:0 0 9px}.command{border:1px solid #30382c;background:#0a0d09;padding:12px;border-radius:6px;font-family:monospace;font-size:12px;color:#a2c795;margin-top:15px}.composer{margin:12px 18px 18px;padding:12px 14px;border:1px solid #45413b;border-radius:7px;color:#8e9686;font-size:12px}.session-footer{font-size:11px;color:var(--muted);padding:9px 18px;border-top:1px solid var(--edge);display:flex;justify-content:space-between}
+  .legend{display:flex;flex-wrap:wrap;gap:18px;font-size:12px;color:var(--ink-soft);margin-top:12px}.legend span{display:flex;align-items:center;gap:7px}.notes{font-size:13px;color:var(--ink-soft);margin-top:8px}
+  .waiting-count{font-size:9px;color:#f3cc77;background:#46361d;border-radius:3px;padding:1px 3px}.tab.drop-before{box-shadow:inset 3px 0 #aaa4ff}.tab.drop-after{box-shadow:inset -3px 0 #aaa4ff}.tab.drop-session{background:#3a355b;outline:1px solid #a7a0ff;outline-offset:-2px}
+  .context-menu{position:fixed;z-index:50;min-width:175px;padding:5px;background:#20241d;color:#e0e6d8;border:1px solid #67608c;border-radius:7px;box-shadow:0 8px 24px #0006;font-family:system-ui,sans-serif}.context-menu[hidden]{display:none}.context-menu button{display:block;width:100%;padding:9px 12px;text-align:left;border:0;background:none;color:inherit;font-size:12px;border-radius:4px}.context-menu button:hover{background:#34362e}.context-menu button:disabled{opacity:.4;cursor:default}.context-menu .danger{color:#edaaa1}
+  dialog{width:min(390px,90vw);padding:22px;background:#1c2119;color:#dbe2d3;border:1px solid #8276b7;border-radius:10px;font-family:system-ui,sans-serif}dialog::backdrop{background:#0008}dialog h3{margin:0 0 12px;font:600 16px system-ui}dialog p{font-size:13px;line-height:1.7;margin:8px 0 15px}dialog input,dialog select{width:100%;padding:9px;border:1px solid #646b5b;border-radius:5px;background:#10140e;color:#e4eadc;font:14px system-ui}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}.dialog-actions button,.reset-demo{padding:7px 12px;border:1px solid #656955;border-radius:5px;background:#272c21;color:#dae0d0;font-size:12px}.dialog-actions .primary{background:#373154;border-color:#8a7fcc}.dialog-error{color:#ffb8a9;font-size:12px;min-height:18px;margin-top:5px}.demo-controls{display:flex;align-items:center;gap:12px;margin-top:12px}.reset-demo{background:var(--card);color:var(--ink);border-color:var(--line)}.save-status{font-size:12px;color:var(--ink-soft)}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#262a23;color:#ecf2e4;border:1px solid #777165;border-radius:6px;padding:9px 16px;font-size:13px;z-index:100;max-width:90vw}.toast[hidden]{display:none}
+  @media(max-width:700px){.layout{grid-template-columns:264px minmax(0,1fr)}.conversation{padding:14px}.session-header{padding:12px;font-size:12px}.view-tabs{gap:12px;padding:0 12px}.demo{display:none}}
+  @media(max-width:540px){.wrap{max-width:94vw}.layout{display:block;height:610px}.sidebar{height:100%;border-right:0}.workspace{display:none}.appbar{gap:8px}h1{font-size:21px}}
+  @media print{.layout{height:auto}.session-list{overflow:visible}.workspace{display:none}.layout{display:block}.sidebar{border:0}.picker{display:none}}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="system-badge"><span class="dot"></span>many-ai-cli / 画面イメージ</div>
+  <h1>セッション一覧に、タブの帯を1本追加する</h1>
+  <p class="intro">タブを右クリックで名前変更・削除。タブをドラッグで並べ替え。カードを別のタブへドラッグで移動できます。タッチでは長押しでメニューを開きます。</p>
+  <section class="app" aria-label="タブごとにセッション一覧を分ける試作画面">
+    <header class="appbar"><strong>MANY-AI-CLI</strong><span class="local">ローカル</span><span class="demo">セッション一覧のタブ分け</span></header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="セッション一覧">
+        <div class="fixed-top">
+          <div class="toolbar" aria-label="既存操作列の表示イメージ">
+            <span class="icon stop" title="停止"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor"><circle cx="10" cy="10" r="7"/><rect x="7" y="7" width="6" height="6"/></svg></span>
+            <span class="icon" title="レイアウト"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor"><rect x="3" y="3" width="14" height="14"/><path d="M10 3v14M3 10h14"/></svg></span>
+            <span class="icon active" title="セッション"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor"><circle cx="10" cy="4" r="2"/><circle cx="4" cy="15" r="2"/><circle cx="16" cy="15" r="2"/><path d="M10 6v3M10 9H4v4M10 9h6v4"/></svg></span>
+            <span class="icon" title="切り替え">↔</span><span class="icon" title="更新">↻</span>
+            <span class="icon" title="メモ"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor"><rect x="5" y="2" width="10" height="16" rx="1"/><path d="M7 6h6M7 10h6M7 14h4"/></svg></span>
+            <button class="icon add-session" type="button" title="セッションを追加" aria-label="セッションを追加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 18H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5"/><circle cx="6" cy="8" r="1"/><path d="M10 8h6M5 12h8M18 14v8M14 18h8"/></svg></button>
+          </div>
+          <div class="tab-strip">
+            <div class="tabs" role="tablist" aria-label="セッション一覧のタブ"></div>
+            <button class="add-tab" type="button" title="タブを追加" aria-label="タブを追加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 18V8h3l2-4h7l2 4h4v3M2 18h10M2 8h18M18 14v8M14 18h8"/></svg></button>
+          </div>
+        </div>
+        <div class="session-list" id="session-list" role="tabpanel" aria-label="選択したタブのセッションカード"></div>
+      </aside>
+      <section class="workspace" aria-label="選択中のセッション">
+        <div class="session-header"><strong id="workspace-title"></strong><span class="pill" id="workspace-provider"></span></div>
+        <div class="view-tabs"><span class="current">会話</span><span>ターミナル</span><span>ファイル</span><span>Git</span></div>
+        <div class="conversation">
+          <div class="message"><div class="who">あなた</div><div class="bubble" id="request"></div></div>
+          <div class="message assistant-message"><div class="who" id="assistant-name"></div><p id="reply"></p><p>確認した内容を整理して、次の作業を進めています。</p><div class="command">› セッションの会話と作業状況がここに表示されます。<br>› この画面の内容はサンプルです。</div></div>
+        </div>
+        <div class="session-footer"><span id="workspace-state"></span><span id="workspace-project"></span></div>
+        <div class="composer">メッセージを入力…</div>
+      </section>
+    </div>
+  </section>
+  <div class="legend"><span><i class="status-dot"></i>実行中</span><span><i class="status-dot wait"></i>返答待ち</span><span><i class="status-dot idle"></i>待機中</span><span>青紫の枠：選択中</span></div>
+  <p class="notes">カードの右クリックからも「別のタブへ移動」できます。中身があるタブの削除は、セッションの移動先を選んでから実行。黄色の件数は返答待ちです。名前・順序・所属・表示位置をこのブラウザに保存します。</p>
+  <div class="demo-controls"><button class="reset-demo" type="button">サンプルを初期状態に戻す</button><span class="save-status" aria-live="polite"></span></div>
+</main>
+<div class="context-menu" role="menu" aria-label="操作メニュー" hidden></div>
+<dialog id="edit-dialog" aria-labelledby="dialog-title"><form id="dialog-form"><h3 id="dialog-title"></h3><p id="dialog-description"></p><label id="dialog-label"></label><div id="dialog-field"></div><div class="dialog-error" aria-live="polite"></div><div class="dialog-actions"><button type="button" id="dialog-cancel">キャンセル</button><button type="submit" class="primary" id="dialog-submit">保存</button></div></form></dialog>
+<div class="toast" role="status" hidden></div>
+<script>
+'use strict';
+const sessions = [
+  {id:17,short:'Rust',title:'Rust版の動作確認',project:'many-ai-cli',provider:'Codex',state:'idle',task:'Rust版の使い方をテキストにまとめて',reply:'動作確認の記録と、使い方の説明を整理しています。'},
+  {id:18,short:'Web',title:'Web画面の調整',project:'sample-web',provider:'Claude',state:'run',task:'画面上部の配置を確認して',reply:'画面の配置と、操作ボタンの表示を確認しています。'},
+  {id:21,short:'CLI',title:'CLIの検証',project:'many-ai-cli',provider:'Claude',state:'run',task:'CLIの出力と切り替えを確認して',reply:'CLIの出力を確認し、セッション切り替え時の挙動を整理しています。'},
+  {id:24,short:'記事',title:'記事の下書き',project:'sample-docs',provider:'Codex',state:'wait',task:'記事の導入を短くして',reply:'導入を短くする案を用意しました。内容の確認を待っています。'},
+  {id:26,short:'地図',title:'地図表示の確認',project:'sample-map',provider:'Claude',state:'run',task:'地図の凡例を見やすくして',reply:'凡例の文字サイズと、地図との重なり方を確認しています。'},
+  {id:27,short:'API',title:'APIレスポンスの確認',project:'sample-web',provider:'Codex',state:'idle',task:'APIの返却項目を整理して',reply:'APIの返却項目を整理しています。'},
+  {id:28,short:'CSS',title:'狭い画面の表示',project:'sample-web',provider:'Claude',state:'wait',task:'スマートフォンでの余白を確認して',reply:'狭い画面の表示案を用意しました。'},
+  {id:29,short:'README',title:'READMEの説明更新',project:'many-ai-cli',provider:'Codex',state:'idle',task:'説明の順序を整理して',reply:'説明の順序を整理しています。'},
+  {id:30,short:'画像',title:'記事画像の確認',project:'sample-docs',provider:'Claude',state:'run',task:'本文と画像の対応を確認して',reply:'本文と画像の対応を確認しています。'},
+  {id:31,short:'検索',title:'検索結果の表示',project:'sample-map',provider:'Codex',state:'run',task:'検索結果を見やすくして',reply:'検索結果の表示を確認しています。'},
+  {id:32,short:'設定',title:'設定の説明',project:'many-ai-cli',provider:'Claude',state:'idle',task:'設定項目の説明を整理して',reply:'設定項目の説明を整理しています。'},
+  {id:33,short:'テスト',title:'テスト結果の整理',project:'many-ai-cli',provider:'Codex',state:'wait',task:'検証結果をまとめて',reply:'検証結果を整理しました。内容の確認を待っています。'}
+];
+const groups = [
+  {id:'dev',name:'開発',sessions:[17,21,29,32,33]},
+  {id:'web',name:'Web',sessions:[18,27,28]},
+  {id:'docs',name:'資料',sessions:[24,30]},
+  {id:'map',name:'地図',sessions:[26,31]}
+];
+let currentGroup='dev', selected=17, nextGroupNumber=5;
+const initialState=JSON.stringify({sessions,groups,currentGroup,selected,nextGroupNumber,scroll:[]});
+const STORAGE_KEY='many-ai-session-tabs-public-mock-v2';
+const scrollPositions=new Map();
+const stateText={run:'実行中',wait:'返答待ち',idle:'待機中'};
+const dotClass=s=>s.state==='wait'?' wait':s.state==='idle'?' idle':'';
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const list=document.querySelector('.session-list'),strip=document.querySelector('.tabs'),sidebar=document.querySelector('.sidebar');
+const menu=document.querySelector('.context-menu'),dialog=document.getElementById('edit-dialog');
+let dialogAction=null,menuOrigin=null,dragPayload=null,edgeFrame=0,edgeDirection=0,longPressTimer=0,suppressClick=false;
+function restoreState(state){
+ sessions.splice(0,sessions.length,...state.sessions);groups.splice(0,groups.length,...state.groups);
+ currentGroup=state.currentGroup;selected=state.selected;nextGroupNumber=state.nextGroupNumber;
+ scrollPositions.clear();for(const [id,y] of state.scroll||[])scrollPositions.set(id,y);
+}
+function persist(){
+ scrollPositions.set(currentGroup,list.scrollTop);
+ try{localStorage.setItem(STORAGE_KEY,JSON.stringify({sessions,groups,currentGroup,selected,nextGroupNumber,scroll:[...scrollPositions]}));document.querySelector('.save-status').textContent='このブラウザに保存済み';}
+ catch{document.querySelector('.save-status').textContent='保存できません。この画面内では操作できます。';}
+}
+function notice(text){const t=document.querySelector('.toast');t.textContent=text;t.hidden=false;clearTimeout(notice.timer);notice.timer=setTimeout(()=>t.hidden=true,2200);}
+function renderTabs(){
+ const oldScroll=strip.scrollLeft;
+ strip.innerHTML=groups.map(g=>{const waiting=sessions.filter(s=>g.sessions.includes(s.id)&&s.state==='wait').length;return `<button class="tab" draggable="true" role="tab" id="tab-${g.id}" data-group="${g.id}" aria-controls="session-list" aria-selected="${currentGroup===g.id}" tabindex="${currentGroup===g.id?0:-1}" title="${esc(g.name)}：${g.sessions.length}セッション、返答待ち${waiting}件。右クリックで管理"><span class="name">${esc(g.name)}</span>${waiting?`<span class="waiting-count" aria-label="返答待ち${waiting}件">${waiting}</span>`:''}</button>`;}).join('');
+ strip.scrollLeft=oldScroll;list.setAttribute('aria-labelledby','tab-'+currentGroup);
+}
+function revealTab(){const active=document.getElementById('tab-'+currentGroup);const a=active.getBoundingClientRect(),b=strip.getBoundingClientRect();if(a.left<b.left)strip.scrollLeft-=b.left-a.left;if(a.right>b.right)strip.scrollLeft+=a.right-b.right;}
+function renderCards(){
+ const visible=sessions.filter(s=>groups.find(g=>g.id===currentGroup).sessions.includes(s.id));
+ if(!visible.length){list.innerHTML='<div class="empty-list"><strong>このタブは空です</strong>上の「カード＋」から追加するか、<br>別のタブのカードをここへ移せます。</div>';return;}
+ list.innerHTML=[...new Set(visible.map(s=>s.project))].map(project=>{const group=visible.filter(s=>s.project===project);return `<div class="project"><span>▾</span><b>${esc(project)}</b><span class="count green">${group.filter(s=>s.state==='run').length}</span><span class="count">${group.length}</span></div>`+group.map(s=>`<button class="session-card${selected===s.id?' selected':''}" draggable="true" data-session="${s.id}" id="session-${s.id}" aria-pressed="${selected===s.id}"><div class="card-head"><i class="status-dot${dotClass(s)}" aria-hidden="true"></i><strong>#${s.id}</strong><span class="card-title">${esc(s.title)}</span><span class="provider">${esc(s.provider)}</span></div><div class="card-sub"><span class="task-preview">${esc(s.task)}</span><span class="branch">develop</span></div><div class="card-bottom"><span>${stateText[s.state]}</span><span>${esc(s.project)}</span></div></button>`).join('');}).join('');
+}
+function switchGroup(id){if(!groups.some(g=>g.id===id))return;scrollPositions.set(currentGroup,list.scrollTop);currentGroup=id;renderTabs();renderCards();list.scrollTop=scrollPositions.get(id)||0;revealTab();persist();}
+function choose(id){const s=sessions.find(s=>s.id===id);if(!s)return;selected=id;document.querySelectorAll('.session-card').forEach(el=>{const active=Number(el.dataset.session)===id;el.classList.toggle('selected',active);el.setAttribute('aria-pressed',String(active));});for(const [key,value] of Object.entries({'workspace-title':`#${s.id} ${s.title}`,'workspace-provider':s.provider,request:s.task,reply:s.reply,'assistant-name':s.provider,'workspace-state':stateText[s.state],'workspace-project':s.project+' / develop'}))document.getElementById(key).textContent=value;persist();}
+function moveSession(id,target){const dest=groups.find(g=>g.id===target),source=groups.find(g=>g.sessions.includes(id));if(!dest||!source||source===dest)return;source.sessions=source.sessions.filter(s=>s!==id);dest.sessions.push(id);renderTabs();renderCards();persist();notice(`#${id} を「${dest.name}」へ移動しました`);}
+function reorderGroup(id,target,after){if(id===target)return;const from=groups.findIndex(g=>g.id===id);if(from<0)return;const item=groups.splice(from,1)[0];const to=groups.findIndex(g=>g.id===target);if(to<0){groups.splice(from,0,item);return;}groups.splice(to+(after?1:0),0,item);renderTabs();revealTab();persist();}
+function deleteGroup(id,target){if(groups.length===1)return;const group=groups.find(g=>g.id===id);if(!group)return;const dest=groups.find(g=>g.id===target&&g.id!==id);if(group.sessions.length&&!dest)return;if(dest)dest.sessions.push(...group.sessions);groups.splice(groups.indexOf(group),1);scrollPositions.delete(id);if(currentGroup===id){currentGroup=dest?dest.id:groups[0].id;renderCards();list.scrollTop=scrollPositions.get(currentGroup)||0;}renderTabs();revealTab();persist();notice('タブを削除しました。セッションは残っています。');}
+function closeMenu(){menu.hidden=true;}
+function openDialog(title,description,label,field,submit,action){closeMenu();document.getElementById('dialog-title').textContent=title;document.getElementById('dialog-description').textContent=description;document.getElementById('dialog-label').textContent=label;document.getElementById('dialog-label').htmlFor='dialog-value';document.getElementById('dialog-field').replaceChildren(field);field.id='dialog-value';document.getElementById('dialog-submit').textContent=submit;document.querySelector('.dialog-error').textContent='';dialogAction=action;dialog.showModal();field.focus();if(field.tagName==='INPUT')field.select();}
+function destinationSelect(exclude){const select=document.createElement('select');for(const g of groups.filter(g=>g.id!==exclude)){const option=document.createElement('option');option.value=g.id;option.textContent=`${g.name}（${g.sessions.length}セッション）`;select.append(option);}return select;}
+function renameDialog(id){const g=groups.find(g=>g.id===id);const input=document.createElement('input');input.value=g.name;input.maxLength=40;openDialog('タブの名前を変更','タブに表示する名前を入力してください。','タブ名',input,'変更',()=>{const name=input.value.trim();if(!name){document.querySelector('.dialog-error').textContent='名前を入力してください。';return false;}g.name=name;renderTabs();revealTab();persist();return true;});}
+function deleteDialog(id){const g=groups.find(g=>g.id===id);if(groups.length===1)return;if(!g.sessions.length){closeMenu();deleteGroup(id);return;}const select=destinationSelect(id);openDialog('タブを削除',`「${g.name}」の${g.sessions.length}セッションを、選んだタブへ移してから削除します。セッション自体は削除されません。`,'セッションの移動先',select,'移動して削除',()=>{deleteGroup(id,select.value);return true;});}
+function moveDialog(id){const source=groups.find(g=>g.sessions.includes(id));const select=destinationSelect(source.id);openDialog('セッションを移動',`#${id} の移動先を選んでください。`,'移動先のタブ',select,'移動',()=>{moveSession(id,select.value);return true;});}
+function showMenu(el,x,y){closeMenu();menuOrigin=el;menu.replaceChildren();const add=(label,action,disabled=false,danger=false)=>{const b=document.createElement('button');b.textContent=label;b.setAttribute('role','menuitem');b.disabled=disabled;if(danger)b.className='danger';b.onclick=()=>{closeMenu();action();};menu.append(b);};if(el.dataset.group){const id=el.dataset.group,index=groups.findIndex(g=>g.id===id);add('名前を変更',()=>renameDialog(id));add('左へ移動',()=>reorderGroup(id,groups[index-1].id,false),index===0);add('右へ移動',()=>reorderGroup(id,groups[index+1].id,true),index===groups.length-1);add('タブを削除',()=>deleteDialog(id),groups.length===1,true);}else add('別のタブへ移動',()=>moveDialog(Number(el.dataset.session)),groups.length===1);menu.hidden=false;menu.style.left=Math.max(8,Math.min(x,innerWidth-menu.offsetWidth-8))+'px';menu.style.top=Math.max(8,Math.min(y,innerHeight-menu.offsetHeight-8))+'px';menu.querySelector('button:not(:disabled)').focus();}
+sidebar.addEventListener('contextmenu',e=>{const el=e.target.closest('[data-group],[data-session]');if(!el)return;e.preventDefault();showMenu(el,e.clientX,e.clientY);});
+sidebar.addEventListener('keydown',e=>{const el=e.target.closest('[data-group],[data-session]');if(el&&(e.key==='ContextMenu'||e.key==='F10'&&e.shiftKey)){e.preventDefault();const r=el.getBoundingClientRect();showMenu(el,r.left,r.bottom);}});
+document.addEventListener('click',e=>{if(!suppressClick&&!menu.contains(e.target))closeMenu();});
+menu.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Escape'].includes(e.key))return;e.preventDefault();if(e.key==='Escape'){closeMenu();menuOrigin?.focus();return;}const items=[...menu.querySelectorAll('button:not(:disabled)')],i=items.indexOf(document.activeElement);items[(i+(e.key==='ArrowDown'?1:-1)+items.length)%items.length].focus();});
+document.getElementById('dialog-cancel').onclick=()=>dialog.close();
+document.getElementById('dialog-form').onsubmit=e=>{e.preventDefault();if(dialogAction&&dialogAction()!==false)dialog.close();};
+dialog.addEventListener('close',()=>menuOrigin?.isConnected&&menuOrigin.focus());
+document.querySelector('.add-tab').onclick=()=>{const n=nextGroupNumber++,g={id:'group-'+n,name:'タブ'+n,sessions:[]};groups.push(g);switchGroup(g.id);document.getElementById('tab-'+g.id).focus();};
+document.querySelector('.add-session').onclick=()=>{const g=groups.find(g=>g.id===currentGroup),id=Math.max(...sessions.map(s=>s.id))+1,existing=sessions.find(s=>g.sessions.includes(s.id));sessions.push({id,title:'新しいセッション',project:existing?existing.project:'sample-project',provider:'Codex',state:'idle',task:'ここから新しい作業を始めます。',reply:'新しいセッションを、このタブに追加しました。'});g.sessions.push(id);renderTabs();renderCards();choose(id);list.scrollTop=list.scrollHeight;persist();};
+sidebar.addEventListener('click',e=>{if(suppressClick){e.preventDefault();return;}const tab=e.target.closest('[data-group]');if(tab){switchGroup(tab.dataset.group);document.getElementById('tab-'+currentGroup).focus();return;}const card=e.target.closest('[data-session]');if(card)choose(Number(card.dataset.session));});
+strip.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;const index=groups.findIndex(g=>g.id===e.target.dataset.group);if(index<0)return;e.preventDefault();const next=e.key==='Home'?0:e.key==='End'?groups.length-1:(index+(e.key==='ArrowRight'?1:-1)+groups.length)%groups.length;switchGroup(groups[next].id);document.getElementById('tab-'+currentGroup).focus();});
+let scrollTimer;list.addEventListener('scroll',()=>{clearTimeout(scrollTimer);scrollTimer=setTimeout(persist,120);});
+function clearDrag(){dragPayload=null;edgeDirection=0;cancelAnimationFrame(edgeFrame);edgeFrame=0;strip.querySelectorAll('.tab').forEach(t=>t.classList.remove('drop-before','drop-after','drop-session'));}
+function edgeScroll(){if(!edgeDirection)return;strip.scrollLeft+=edgeDirection*4;edgeFrame=requestAnimationFrame(edgeScroll);}
+sidebar.addEventListener('dragstart',e=>{const el=e.target.closest('[data-group],[data-session]');if(!el)return;closeMenu();dragPayload=el.dataset.group?{kind:'group',id:el.dataset.group}:{kind:'session',id:Number(el.dataset.session)};e.dataTransfer.setData('text/plain',JSON.stringify(dragPayload));e.dataTransfer.effectAllowed='move';});
+strip.addEventListener('dragover',e=>{if(!dragPayload)return;e.preventDefault();e.dataTransfer.dropEffect='move';strip.querySelectorAll('.tab').forEach(t=>t.classList.remove('drop-before','drop-after','drop-session'));const tab=e.target.closest('[data-group]');if(tab){const r=tab.getBoundingClientRect();tab.classList.add(dragPayload.kind==='session'?'drop-session':e.clientX>r.left+r.width/2?'drop-after':'drop-before');}const r=strip.getBoundingClientRect(),direction=e.clientX<r.left+18?-1:e.clientX>r.right-18?1:0;if(direction!==edgeDirection){cancelAnimationFrame(edgeFrame);edgeDirection=direction;edgeFrame=direction?requestAnimationFrame(edgeScroll):0;}});
+strip.addEventListener('dragleave',e=>{if(!strip.contains(e.relatedTarget)){edgeDirection=0;cancelAnimationFrame(edgeFrame);strip.querySelectorAll('.tab').forEach(t=>t.classList.remove('drop-before','drop-after','drop-session'));}});
+strip.addEventListener('drop',e=>{if(!dragPayload)return;e.preventDefault();const tab=e.target.closest('[data-group]'),payload=dragPayload;if(tab){if(payload.kind==='session')moveSession(payload.id,tab.dataset.group);else{const r=tab.getBoundingClientRect();reorderGroup(payload.id,tab.dataset.group,e.clientX>r.left+r.width/2);}}clearDrag();});
+document.addEventListener('dragend',clearDrag);
+let touchStart=null;
+sidebar.addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;const el=e.target.closest('[data-group],[data-session]');if(!el)return;touchStart={x:e.clientX,y:e.clientY};clearTimeout(longPressTimer);longPressTimer=setTimeout(()=>{suppressClick=true;showMenu(el,e.clientX,e.clientY);},550);});
+sidebar.addEventListener('pointermove',e=>{if(touchStart&&Math.hypot(e.clientX-touchStart.x,e.clientY-touchStart.y)>10)clearTimeout(longPressTimer);});
+function endTouch(){clearTimeout(longPressTimer);touchStart=null;setTimeout(()=>suppressClick=false,350);}
+sidebar.addEventListener('pointerup',endTouch);sidebar.addEventListener('pointercancel',endTouch);
+document.querySelector('.reset-demo').onclick=()=>{closeMenu();if(dialog.open)dialog.close();restoreState(JSON.parse(initialState));renderTabs();renderCards();list.scrollTop=0;strip.scrollLeft=0;choose(selected);notice('サンプルを初期状態に戻しました');};
+try{const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');if(saved&&saved.groups?.length&&saved.sessions?.length&&saved.groups.some(g=>g.id===saved.currentGroup)&&saved.sessions.some(s=>s.id===saved.selected))restoreState(saved);}catch{}
+renderTabs();renderCards();list.scrollTop=scrollPositions.get(currentGroup)||0;revealTab();choose(selected);
+</script>
+</body>
+</html>
