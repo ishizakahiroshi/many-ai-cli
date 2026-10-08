@@ -5,10 +5,18 @@ tags: [rust, recovery, dots]
 owner: unknown
 review_status: draft
 related: [REVIEW.md, PROGRESS.md, RV-CONTRACTS.md]
-last_reviewed: 2026-10-05
+last_reviewed: 2026-10-08
 ---
 
 # #3 many-ai-cli Rust: recovery continuation
+
+## Single source for ongoing fixes (2026-10-08)
+
+The integration branch `dots/rust-recovery-resume-3` in PR #11 is the source of truth for Rust fixes. Make related Rust and Web changes together in the checkout of that branch, and validate and commit them as one coherent change. Do not edit a separate trial checkout first and leave its fixes outside the integration branch.
+
+Build and trial the same source checkout. When using the owner's local `rust-local.ps1` helper, pass that checkout with `-Source`; its existing default still selects a separate trial copy. Keep required isolated runtime data and ports separate from source ownership. Existing binaries remain previous artifacts until rebuilt and restarted; source integration alone is not runtime acceptance.
+
+Preserve unrelated work and retain the authorization boundaries below. Report source SHA, local verification, commit/push, CI and running artifact as separate states.
 
 This continues existing task #3, not GitHub issue/PR number 3 and not a second concurrent rewrite. The previous environment was lost; its recovery handoff reported that implementation/publication had stopped. Before resuming, acknowledge whether another #3 worker is active. Do not start a duplicate worker.
 
