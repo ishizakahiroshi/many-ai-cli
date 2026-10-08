@@ -23,7 +23,7 @@ param(
     [switch]$Clean,
     [switch]$SkipWeb,
     [switch]$CopySettings,   # 実際の config.yaml を trial root へコピー（読むだけ・実物は変更しない。秘密を含む）
-    [switch]$Real,           # trial でなく通常モード。ただし home を C:\Temp\rust-home に向け、実際の ~/.many-ai-cli・DB・Go 版の Hub には触れない
+    [switch]$Real,           # trial でなく通常モード。ただし home を F:\build\rust-home に向け、実際の ~/.many-ai-cli・DB・Go 版の Hub には触れない
     [switch]$CopyDb,         # -Real のとき、DB（any-ai-cli.db と -wal/-shm）のスナップショットも、コピーして持ち込む（予定の実行が二重に走る可能性があるので既定では持ち込まない）
     [string]$Branch = 'dots/rust-recovery-resume-3',
     [string]$CodexHome,      # -Real の Hub に CODEX_HOME を渡す（例: %USERPROFILE%\.codex を展開した値）。「全部更新」で、本物の Codex のインストールを更新する。省略時は、仮 home の中だけを見る
@@ -35,15 +35,16 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $Repo      = Split-Path -Parent $PSScriptRoot   # このスクリプトは <repo>\scripts にある
-$Worktree  = 'C:\Temp\rust-local'
+$BuildRoot = 'F:\build'                          # ビルド・trial・仮 home の置き場（実際の home とは別のドライブ）
+$Worktree  = Join-Path $BuildRoot 'rust-local'
 if ($Source) {
     if (-not (Test-Path -LiteralPath (Join-Path $Source 'rust\Cargo.toml'))) { throw "-Source に rust\Cargo.toml がありません: $Source" }
     $Worktree = (Resolve-Path -LiteralPath $Source).Path   # 以降のビルド・exe・-Stop は、すべてこのフォルダを使う
 }
-$TrialRoot = 'C:\Temp\rust-accept-user\root'
+$TrialRoot = Join-Path $BuildRoot 'rust-accept-user'
 $Toolchain = '1.90.0'   # CI の固定版（scripts/rust-candidate-ci.py と .github/workflows と同じ）
 $RealUserHome = $env:USERPROFILE                 # 実際の home（読むだけ。ここへは書かない）
-$FakeHome  = 'C:\Temp\rust-home'                 # -Real のときの home（Rust は USERPROFILE を home とする）
+$FakeHome  = Join-Path $BuildRoot 'rust-home'    # -Real のときの home（Rust は USERPROFILE を home とする）
 $AppHome   = Join-Path $FakeHome '.many-ai-cli'
 
 # 子プロセスだけ、home を差し替えて実行する（呼び出し元のシェルの環境は、必ず元に戻す）
@@ -55,7 +56,7 @@ function Invoke-WithFakeHome([scriptblock]$cmd) {
 
 # junction はリンクだけを消す。再帰削除でリンク先（実際の認証情報）を消さないため、必ず先に外す
 function Remove-FakeHome {
-    if ($FakeHome -ne 'C:\Temp\rust-home' -or -not (Test-Path -LiteralPath $FakeHome)) { return }
+    if ($FakeHome -ne (Join-Path $BuildRoot 'rust-home') -or -not (Test-Path -LiteralPath $FakeHome)) { return }
     $junction = Join-Path $AppHome 'subscriptions'
     if (Test-Path -LiteralPath $junction) {
         $item = Get-Item -LiteralPath $junction -Force
@@ -66,7 +67,7 @@ function Remove-FakeHome {
     Write-Host "削除しました: $FakeHome"
 }
 
-# 秘密（config.yaml・DB）を置くフォルダは、作った時点で、自分と SYSTEM だけに絞る（C:\Temp は、継承で他のユーザーにも読める）。
+# 秘密（config.yaml・DB）を置くフォルダは、作った時点で、自分と SYSTEM だけに絞る（置き場のドライブは、継承で他のユーザーにも読めることがある）。
 # すでにあるフォルダは触らず、所有者だけ確かめる（他人が先に作っておいたフォルダへ秘密を書かないため）。
 function New-PrivateDir([string]$path) {
     $me = [Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -124,7 +125,7 @@ if ($Clean) {
     Native 'git worktree remove' { & git -C $Repo worktree remove --force $Worktree }
     Write-Host "削除しました: $Worktree"
     # trial root（コピーした config.yaml など）も、決め打ちの場所に限って削除する
-    if ((Test-Path -LiteralPath $TrialRoot) -and ($TrialRoot -eq 'C:\Temp\rust-accept-user\root')) {
+    if ((Test-Path -LiteralPath $TrialRoot) -and ($TrialRoot -eq (Join-Path $BuildRoot 'rust-accept-user'))) {
         Remove-Item -LiteralPath $TrialRoot -Recurse -Force
         Write-Host "削除しました: $TrialRoot"
     }
@@ -156,6 +157,8 @@ if ($Source) {
     if (-not (Test-Path -LiteralPath $Worktree)) {
         Native 'git worktree add' { & git -C $Repo worktree add --detach $Worktree $ref }
     } else {
+        & git -C $Worktree rev-parse --git-dir 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "$Worktree はありますが git の worktree ではありません（前回の残骸）。中身を確かめて、別の名前へ移すか消してから、やり直してください" }
         $dirty = & git -C $Worktree status --porcelain --untracked-files=no
         if ($dirty) { throw "worktree に未コミットの変更があります。確認してから -Clean するか、手で戻してください: $Worktree" }
         Native 'git checkout' { & git -C $Worktree checkout --detach $ref }
