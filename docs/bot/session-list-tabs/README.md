@@ -17,8 +17,8 @@ Repository: `ishizakahiroshi/many-ai-cli` (public).
 Work branch: `dots/P-20261008-007-session-list-tabs`.
 Draft PR base: `dots/rust-recovery-resume-3` (Rust candidate PR #11).
 Behavior baseline: `4a3c141a1e6573459d3ff2a8cc6c9962bce6def3`.
-Management Issue: created after instruction publication; not created yet.
-Implementation diff starts at the first instruction publication commit, which will be supplied in the start message. That commit and the behavior baseline are different.
+Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/12
+Implementation diff starts at the first instruction publication commit `c29b58fa1c5bff2298197d9700c61b503b581b18`. That commit and the behavior baseline are different.
 
 The sidebar currently shows many session cards in one vertical list. Add a tab strip between its existing toolbar and cards. Each tab contains multiple cards and may represent repositories or tasks. Selecting a sidebar tab changes the visible card list, not the active conversation or terminal. This is separate from existing conversation/files/git/pane workspace tabs and existing project groups.
 
@@ -73,3 +73,4 @@ Submit Draft PR URL, implementation code SHA, reviewed code SHA, test commands/e
 ## Communication
 
 At acceptance, reply with recognized task number/collision result, instruction commit read, repository/branch access, TypeScript/Bun/Node/browser capabilities and dependency availability. Every reply's first line must be `#P-20261008-007 many-ai-cli：<report>` and remain in this task's original thread. Record acceptance/submission/review/stop transitions in the management Issue; PROGRESS links to those records. Distinguish sent/read-back/accepted/code submitted/reviewed/CI/owner accepted. No private conversation locators or machine paths in this public folder.
+

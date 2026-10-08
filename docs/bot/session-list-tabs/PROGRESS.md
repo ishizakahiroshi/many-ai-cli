@@ -15,14 +15,14 @@ Work repo: `ishizakahiroshi/many-ai-cli`.
 Work branch: `dots/P-20261008-007-session-list-tabs`.
 PR base: `dots/rust-recovery-resume-3`.
 Behavior oracle: `4a3c141a1e6573459d3ff2a8cc6c9962bce6def3`.
-Management Issue: not created; created after instruction publication.
-First instruction commit: not published yet; recorded in the later publication receipt/start message.
-Final fixed instruction URL: not published yet.
+Management Issue: https://github.com/ishizakahiroshi/many-ai-cli/issues/12
+First instruction commit: `c29b58fa1c5bff2298197d9700c61b503b581b18`.
+Final fixed instruction URL: recorded in the management Issue body and start message after this publication receipt commit.
 Draft PR/code SHA/reviewed code SHA: not submitted.
 
 | Stage | Owner | Issue evidence | Remaining gate |
 |---|---|---|---|
-| Publication/dispatch | Local coordinator | Issue not created | Instruction-only publication permission, fixed URLs, send/read-back, acceptance |
+| Publication/dispatch | Local coordinator | [Issue #12](https://github.com/ishizakahiroshi/many-ai-cli/issues/12) | Final fixed URL, send/read-back, acceptance |
 | C2 state/save | dots implementer | Not started | Normalization/identity/default/spawn/reload |
 | C3 UI/manage | dots implementer | Not started | Strip/icons/menu/rename/delete |
 | C4 drag/move/status | dots implementer | Not started | Actual listeners/root family/overflow/touch/waiting |
@@ -31,4 +31,5 @@ Draft PR/code SHA/reviewed code SHA: not submitted.
 
 The management Issue comments are the state-transition source of truth once created. Link accepted/submitted/reviewed/blocked/owner-accepted receipts here; do not store private chat locators or machine paths. Keep instruction SHA, code SHA, reviewed SHA and board commit distinct. Do not self-reference the current board commit inside itself.
 
-Next: publish the prepared instruction-only scope when authorized, create/update the Issue and fixed links, then dispatch once. There is no implementation or browser-product acceptance evidence yet.
+Next: finalize the fixed instruction link in the Issue, then dispatch once and record read-back/acceptance separately in Issue comments. There is no implementation or browser-product acceptance evidence yet.
+
