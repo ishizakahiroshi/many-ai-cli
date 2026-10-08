@@ -2,7 +2,10 @@ use super::{FilesService, Result, content, err, safe_fs::Dir, time};
 use crate::{
     config::paths::Resource,
     hub::http::{Request, Response},
-    proto::core::{HistoryEvent, LiveSessionId, SessionCore, SessionStorage},
+    proto::core::{
+        HistoryEvent, LiveSessionId, PersistenceBindingScope, SessionBinding, SessionCore,
+        SessionStorage,
+    },
 };
 use serde_json::json;
 use std::{
@@ -17,15 +20,21 @@ impl FilesService {
         &self,
         r: &Request,
         core: &dyn SessionCore,
-        storage: Option<&dyn SessionStorage>,
+        _storage: Option<&dyn SessionStorage>,
     ) -> Result<Response> {
         self.require_attachment_history()?;
         let (session, filename, data) = multipart(r)?;
-        let snap = core
-            .snapshot(LiveSessionId(session))
-            .filter(|s| !s.provider.is_empty())
+        let details = core
+            .details(LiveSessionId(session))
+            .filter(|s| s.connected && !s.snapshot.provider.is_empty())
             .ok_or_else(|| err(404, "not_found", "session not found"))?;
-        let saved = self.save_attachment(session, &snap.provider, &filename, &data, storage)?;
+        let saved = self.save_attachment(
+            details.binding,
+            &details.snapshot.provider,
+            &filename,
+            &data,
+            |binding| core.is_current(binding),
+        )?;
         Ok(Response::json(200, &saved))
     }
     /// Authenticated UI WS attachment caller. The Hub intentionally sends no
@@ -34,7 +43,7 @@ impl FilesService {
         &self,
         message: &crate::proto::Message,
         core: &dyn SessionCore,
-        storage: Option<&dyn SessionStorage>,
+        _storage: Option<&dyn SessionStorage>,
     ) -> Result<()> {
         self.require_attachment_history()?;
         use base64::{
@@ -58,16 +67,16 @@ impl FilesService {
         let data = engine
             .decode(message.image_data.replace(['\r', '\n'], ""))
             .map_err(|_| err(400, "bad_request", "invalid base64"))?;
-        let provider = core
-            .snapshot(LiveSessionId(message.session_id))
-            .map(|s| s.provider)
-            .unwrap_or_default();
+        let details = core
+            .details(LiveSessionId(message.session_id))
+            .filter(|s| s.connected && !s.snapshot.provider.is_empty())
+            .ok_or_else(|| err(404, "not_found", "session not found"))?;
         self.save_attachment(
-            message.session_id,
-            &provider,
+            details.binding,
+            &details.snapshot.provider,
             &message.filename,
             &data,
-            storage,
+            |binding| core.is_current(binding),
         )?;
         Ok(())
     }
@@ -83,12 +92,13 @@ impl FilesService {
     }
     pub(super) fn save_attachment(
         &self,
-        session: i64,
+        binding: SessionBinding,
         provider: &str,
         filename: &str,
         data: &[u8],
-        _storage: Option<&dyn SessionStorage>,
+        is_current: impl FnOnce(SessionBinding) -> bool,
     ) -> Result<serde_json::Value> {
+        let session = binding.session.0;
         if data.len() > UPLOAD_MAX {
             return Err(err(400, "bad_request", "file too large"));
         }
@@ -141,14 +151,28 @@ impl FilesService {
                 return Err(super::io_error(e, "save_failed"));
             }
         };
+        // Saving can outlive a disconnect or wrapper replacement. Check the
+        // core as well as the journal, whose ordered cleanup may still be queued.
+        if !is_current(binding) {
+            let _ = dir.remove_file(&saved_name);
+            return Err(err(
+                409,
+                "stale_session",
+                "attachment session is no longer current",
+            ));
+        }
         if let Some(history) = &self.history {
             let value = json!({"ts":crate::proto::time::Timestamp::from_system_time(now).and_then(crate::proto::time::format_rfc3339).map_err(|_|err(500,"invalid_timestamp","invalid attachment timestamp"))?,"type":"attach","session_id":session,"path":saved,"filename":filename,"provider":provider});
             if let serde_json::Value::Object(obj) = value {
                 history
-                    .apply(crate::proto::core::PersistenceEffect::Event {
-                        session: LiveSessionId(session),
-                        event: HistoryEvent(obj.into_iter().collect()),
-                    })
+                    .apply_bound(
+                        binding,
+                        PersistenceBindingScope::ExactWrapper,
+                        crate::proto::core::PersistenceEffect::Event {
+                            session: LiveSessionId(session),
+                            event: HistoryEvent(obj.into_iter().collect()),
+                        },
+                    )
                     .map_err(|_| {
                         err(
                             500,

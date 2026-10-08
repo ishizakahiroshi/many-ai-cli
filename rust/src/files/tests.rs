@@ -525,7 +525,13 @@ fn saved_attachment_is_private_local_timestamp_prefixed_and_bounded() {
     use std::os::unix::fs::PermissionsExt;
     let (_dir, service, _) = setup();
     let value = service
-        .save_attachment(7, "codex", "CON.txt", b"synthetic", None)
+        .save_attachment(
+            attachment_binding(),
+            "codex",
+            "CON.txt",
+            b"synthetic",
+            |_| true,
+        )
         .unwrap();
     let path = Path::new(value["saved_path"].as_str().unwrap());
     assert!(path.starts_with(service.paths.resource(crate::config::Resource::Attachments)));
@@ -543,11 +549,11 @@ fn saved_attachment_is_private_local_timestamp_prefixed_and_bounded() {
     assert!(
         service
             .save_attachment(
-                7,
+                attachment_binding(),
                 "claude",
                 "large.bin",
                 &vec![0; attachments::UPLOAD_MAX + 1],
-                None
+                |_| true
             )
             .is_err()
     );
@@ -733,7 +739,20 @@ fn attachment_history_uses_injected_journal_once() {
     use std::sync::{Arc, Mutex};
     struct Journal(Mutex<Vec<HistoryEvent>>);
     impl PersistenceEffectSink for Journal {
-        fn apply(&self, effect: PersistenceEffect) -> std::result::Result<(), SessionError> {
+        fn apply(&self, _: PersistenceEffect) -> std::result::Result<(), SessionError> {
+            panic!("unbound attachment persistence")
+        }
+        fn apply_bound(
+            &self,
+            binding: crate::proto::core::SessionBinding,
+            scope: crate::proto::core::PersistenceBindingScope,
+            effect: PersistenceEffect,
+        ) -> std::result::Result<(), SessionError> {
+            assert_eq!(binding, attachment_binding());
+            assert_eq!(
+                scope,
+                crate::proto::core::PersistenceBindingScope::ExactWrapper
+            );
             let PersistenceEffect::Event { session, event } = effect else {
                 panic!("attachment emits one event")
             };
@@ -746,7 +765,13 @@ fn attachment_history_uses_injected_journal_once() {
     let journal = Arc::new(Journal(Mutex::new(vec![])));
     let service = service.with_history(journal.clone());
     let saved = service
-        .save_attachment(7, "codex", "fixture.txt", b"synthetic attachment", None)
+        .save_attachment(
+            attachment_binding(),
+            "codex",
+            "fixture.txt",
+            b"synthetic attachment",
+            |_| true,
+        )
         .unwrap();
     let events = journal.0.lock().unwrap();
     assert_eq!(events.len(), 1);
@@ -754,6 +779,102 @@ fn attachment_history_uses_injected_journal_once() {
     assert_eq!(events[0].0["path"], saved["saved_path"]);
     assert_eq!(events[0].0["filename"], "fixture.txt");
     assert!(!events[0].0.contains_key("data"));
+}
+fn attachment_binding() -> crate::proto::core::SessionBinding {
+    crate::proto::core::SessionBinding {
+        session: LiveSessionId(7),
+        incarnation: crate::proto::core::SessionIncarnation(0),
+        wrapper: crate::proto::core::WrapperConnectionId(0),
+    }
+}
+
+#[test]
+fn attachment_rejects_stale_core_and_journal_bindings() {
+    use crate::{
+        proto::core::*,
+        terminal::journal::{JournalOptions, SessionJournal},
+    };
+    use std::sync::Arc;
+    for enabled in [false, true] {
+        let (_dir, service, _) = setup();
+        let journal = Arc::new(SessionJournal::new(
+            service.paths.clone(),
+            None,
+            JournalOptions {
+                session_enabled: enabled,
+                max_bytes: 0,
+            },
+        ));
+        let logs = journal
+            .open(
+                LiveSessionId(7),
+                "claude",
+                "synthetic",
+                crate::proto::time::Timestamp::now(),
+                false,
+            )
+            .unwrap();
+        let service = service.with_history(journal.clone());
+        // Core can end before the ordered journal cleanup reaches its writer.
+        let stale = service
+            .save_attachment(
+                attachment_binding(),
+                "claude",
+                "stale.txt",
+                b"synthetic",
+                |_| false,
+            )
+            .unwrap_err();
+        assert_eq!(stale.status, 409);
+        assert_eq!(
+            fs::read_dir(
+                service
+                    .paths
+                    .resource(crate::config::Resource::Attachments)
+                    .join("7")
+            )
+            .unwrap()
+            .count(),
+            0
+        );
+        // A different incarnation or wrapper cannot use the existing writer,
+        // even if a caller erroneously reports its binding as current.
+        for binding in [
+            SessionBinding {
+                incarnation: SessionIncarnation(1),
+                ..attachment_binding()
+            },
+            SessionBinding {
+                wrapper: WrapperConnectionId(1),
+                ..attachment_binding()
+            },
+        ] {
+            let rejected = service
+                .save_attachment(binding, "claude", "replaced.txt", b"synthetic", |_| true)
+                .unwrap_err();
+            assert_eq!(rejected.status, 500);
+            assert_eq!(value(&rejected)["error"], "attachment_history_failed");
+        }
+        journal.close_writer(LiveSessionId(7));
+        assert_eq!(
+            service
+                .save_attachment(
+                    attachment_binding(),
+                    "claude",
+                    "closed.txt",
+                    b"synthetic",
+                    |_| true
+                )
+                .unwrap_err()
+                .status,
+            500
+        );
+        assert!(
+            !fs::read_to_string(logs.jsonl)
+                .unwrap_or_default()
+                .contains("\"type\":\"attach\"")
+        );
+    }
 }
 
 #[test]

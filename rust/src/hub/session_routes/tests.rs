@@ -206,6 +206,217 @@ async fn register(f: &Fixture) -> LiveSessionId {
     f.sink.apply(registration.after_registered).await.unwrap();
     registration.binding.session
 }
+
+#[tokio::test]
+async fn attachment_http_and_ws_use_real_bound_journal() {
+    for enabled in [false, true] {
+        let f = fixture(true);
+        f.sink.journal.set_enabled(enabled);
+        let id = register(&f).await;
+        let service = crate::files::FilesService::new(f._root.path().into(), f.paths.clone())
+            .with_history(f.sink.journal.clone());
+        let mut saved_paths = Vec::new();
+        for (filename, data) in [
+            ("image.png", b"\x89PNG\r\n\x1a\nsynthetic".as_slice()),
+            ("paste.txt", b"synthetic text".as_slice()),
+        ] {
+            let mut payload = format!("--bound\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n{}\r\n--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n\r\n", id.0).into_bytes();
+            payload.extend(data);
+            payload.extend(b"\r\n--bound--\r\n");
+            let response = service
+                .handle(
+                    &Request {
+                        method: "POST".into(),
+                        path: "/api/attach".into(),
+                        headers: vec![(
+                            "Content-Type".into(),
+                            "multipart/form-data; boundary=bound".into(),
+                        )],
+                        body: payload,
+                        ..Default::default()
+                    },
+                    f.core.as_ref(),
+                    f.store.as_deref().map(|s| s as &dyn SessionStorage),
+                    false,
+                    &AttachmentWorkspace,
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status,
+                200,
+                "{}",
+                String::from_utf8_lossy(&response.body)
+            );
+            let saved: Value = serde_json::from_slice(&response.body).unwrap();
+            saved_paths.push(saved["saved_path"].clone());
+            assert_eq!(
+                std::fs::read(saved["saved_path"].as_str().unwrap()).unwrap(),
+                data
+            );
+            assert_eq!(
+                saved["inject"],
+                format!("@{} ", saved["saved_path"].as_str().unwrap())
+            );
+        }
+        service
+            .record_ws_attachment(
+                &proto::Message {
+                    session_id: id.0,
+                    filename: "ws.png".into(),
+                    image_data: STANDARD.encode(b"synthetic ws image"),
+                    ..Default::default()
+                },
+                f.core.as_ref(),
+                None,
+            )
+            .unwrap();
+        let log = std::path::PathBuf::from(&f.core.snapshot(id).unwrap().log_path)
+            .with_extension("jsonl");
+        let history = std::fs::read_to_string(log).unwrap_or_default();
+        let events: Vec<Value> = history
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(
+            events.iter().filter(|e| e["type"] == "attach").count(),
+            if enabled { 3 } else { 0 }
+        );
+        if enabled {
+            let attachments: Vec<_> = events.iter().filter(|e| e["type"] == "attach").collect();
+            for (event, (filename, path)) in attachments
+                .iter()
+                .zip(["image.png", "paste.txt"].into_iter().zip(saved_paths))
+            {
+                assert_eq!(event["filename"], filename);
+                assert_eq!(event["path"], path);
+                assert_eq!(event["provider"], "claude");
+                assert_eq!(event["session_id"], id.0);
+            }
+            assert_eq!(attachments[2]["filename"], "ws.png");
+            assert_eq!(
+                std::fs::read(attachments[2]["path"].as_str().unwrap()).unwrap(),
+                b"synthetic ws image"
+            );
+        }
+        let messages = f
+            .store
+            .as_ref()
+            .unwrap()
+            .chat_messages_by_live_session(id, 100)
+            .unwrap();
+        assert_eq!(
+            messages
+                .unwrap_or_default()
+                .iter()
+                .filter(|e| e.kind == "attach")
+                .count(),
+            if enabled { 3 } else { 0 }
+        );
+    }
+}
+struct AttachmentWorkspace;
+impl crate::files::WorkspaceReads for AttachmentWorkspace {
+    fn memo_mentions(&self) -> Vec<(String, String)> {
+        vec![]
+    }
+    fn recorded_handoff_note(&self, _: &Path, _: &Path) -> bool {
+        false
+    }
+}
+
+#[tokio::test]
+async fn attachment_ws_rejects_missing_ended_and_replaced_session_contexts() {
+    let f = fixture(true);
+    let service = crate::files::FilesService::new(f._root.path().into(), f.paths.clone())
+        .with_history(f.sink.journal.clone());
+    let mut message = proto::Message {
+        session_id: 999,
+        filename: "fixture.png".into(),
+        image_data: STANDARD.encode(b"synthetic"),
+        ..Default::default()
+    };
+    assert_eq!(
+        service
+            .record_ws_attachment(&message, f.core.as_ref(), None)
+            .unwrap_err()
+            .status,
+        404
+    );
+    assert!(!f.paths.resource(Resource::Attachments).exists());
+    let missing = Request { method: "POST".into(), path: "/api/attach".into(), headers: vec![("Content-Type".into(), "multipart/form-data; boundary=bound".into())], body: b"--bound\r\nContent-Disposition: form-data; name=\"session_id\"\r\n\r\n999\r\n--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fixture.txt\"\r\n\r\nsynthetic\r\n--bound--\r\n".to_vec(), ..Default::default() };
+    assert_eq!(
+        service
+            .handle(&missing, f.core.as_ref(), None, false, &AttachmentWorkspace)
+            .await
+            .unwrap()
+            .status,
+        404
+    );
+    assert!(!f.paths.resource(Resource::Attachments).exists());
+    let id = register(&f).await;
+    let original = f.core.details(id).unwrap();
+    message.session_id = id.0;
+    let effects = f.core.disconnected(original.binding, now()).unwrap();
+    // Deliberately leave journal cleanup unapplied: the core still rejects it.
+    assert_eq!(
+        service
+            .record_ws_attachment(&message, f.core.as_ref(), None)
+            .unwrap_err()
+            .status,
+        404
+    );
+    assert!(!f.paths.resource(Resource::Attachments).exists());
+    f.sink.apply(effects).await.unwrap();
+    let replacement = f
+        .core
+        .reattach(
+            ReattachRequest {
+                restored_metadata: None,
+                message: proto::Message {
+                    session_id: id.0,
+                    provider: "claude".into(),
+                    cwd: original.snapshot.cwd,
+                    started_at: original.snapshot.started_at,
+                    pid: 8,
+                    cols: 80,
+                    rows: 24,
+                    ..Default::default()
+                },
+            },
+            WrapperConnectionId(2),
+            now(),
+        )
+        .await
+        .unwrap();
+    f.sink.apply(replacement.after_reattached).await.unwrap();
+    assert!(!f.core.is_current(original.binding));
+    assert!(f.core.is_current(replacement.binding));
+    service
+        .record_ws_attachment(&message, f.core.as_ref(), None)
+        .unwrap();
+    let invalid = proto::Message {
+        image_data: "invalid base64".into(),
+        ..message
+    };
+    assert_eq!(
+        service
+            .record_ws_attachment(&invalid, f.core.as_ref(), None)
+            .unwrap_err()
+            .status,
+        400
+    );
+    assert_eq!(
+        std::fs::read_dir(
+            f.paths
+                .resource(Resource::Attachments)
+                .join(id.0.to_string())
+        )
+        .unwrap()
+        .count(),
+        1
+    );
+}
 fn start(f: &Fixture, live: i64, suffix: &str) -> DbSessionId {
     let sessions = f.paths.resource(Resource::Logs).join("sessions");
     std::fs::create_dir_all(&sessions).unwrap();
