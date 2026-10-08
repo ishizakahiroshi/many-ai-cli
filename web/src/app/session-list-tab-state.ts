@@ -138,8 +138,22 @@ export function sessionListOwners(state: SessionListTabState, sessions: SessionS
   }
   return owners;
 }
+/** A display orphan is visible, but it is not proof that the whole family can be moved. */
+export function canMoveSessionListFamily(sessions: SessionSnapshot[], id: number): boolean {
+  const byId = new Map(sessions.map(session => [session.id, session]));
+  let current = byId.get(id);
+  const seen = new Set<number>();
+  while (current) {
+    if (seen.has(current.id)) return false;
+    seen.add(current.id);
+    const parent = Number(current.parent_session_id || 0);
+    if (!parent) return !!sessionListIdentity(current);
+    current = byId.get(parent);
+  }
+  return false;
+}
 export function moveSessionListFamily(state: SessionListTabState, sessions: SessionSnapshot[], id: number, target: string): boolean {
-  if (!state.tabs.some(tab => tab.id === target)) return false;
+  if (!state.tabs.some(tab => tab.id === target) || !canMoveSessionListFamily(sessions, id)) return false;
   const family = sessionListFamilies(sessions).get(id);
   if (!family) return false;
   const byId = new Map(sessions.map(session => [session.id, session]));

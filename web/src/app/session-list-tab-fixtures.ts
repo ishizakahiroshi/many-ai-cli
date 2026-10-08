@@ -127,3 +127,12 @@ test('reload preserves names/order/memberships/selected tab/scroll; storage deni
   assert.equal(loadSessionListTabs(denied, 'Local').tabs[0].name, 'Local');
   assert.equal(saveSessionListTabs(denied, s), false); assert.equal(s.selectedId, 'work');
 });
+
+test('C2-R1: missing ancestor defers a child move and reconnect preserves the original family', () => {
+  const s = state(); const root = session(1), child = session(2, { parent_session_id: 1 });
+  move(s, [root, child], 1, 'work'); const before = JSON.stringify(s);
+  assert.equal(move(s, [child], 2, 'tab-1'), false);
+  assert.equal(JSON.stringify(s), before);
+  assert.equal(owners(s, [child]).get(2), 'work');
+  assert.equal(owners(s, [root, child]).get(2), 'work');
+});
