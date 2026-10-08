@@ -156,6 +156,7 @@ export type MarkerMatch = {
   consumed: number;
   // マーカー文字列の途中へ折り返しが割り込ませたバイト（CR / LF / 空白 / タブ / ESC シーケンス）
   noise: Uint8Array;
+  fragment?: boolean;
 };
 
 const MARKER_NO_MATCH: MarkerMatch = { consumed: 0, noise: EMPTY_BYTES };
@@ -204,6 +205,7 @@ export function matchMarkerAllowingWrap(
   bytes: Uint8Array,
   offset: number,
   pattern: Uint8Array,
+  allowRedrawFragment = false,
 ): MarkerMatch {
   if (offset >= bytes.length) return MARKER_NEED_MORE;
   if (bytes[offset] !== pattern[0]) return MARKER_NO_MATCH;
@@ -211,6 +213,7 @@ export function matchMarkerAllowingWrap(
   let p = 1;
   let gap = 0;
   let noise: number[] | null = null;
+  let redraw = false;
   while (p < pattern.length) {
     if (i >= bytes.length) return MARKER_NEED_MORE;
     if (bytes[i] === pattern[p]) { i++; p++; continue; }
@@ -219,14 +222,22 @@ export function matchMarkerAllowingWrap(
     if (esc > 0) {
       if (!noise) noise = [];
       for (let k = 0; k < esc; k++) noise.push(bytes[i + k]);
+      if (bytes[i + 1] === 0x5b && 'HfGdABCDJK'.includes(String.fromCharCode(bytes[i + esc - 1]))) redraw = true;
       i += esc;
       gap += esc;
     } else if (isWrapNoiseByte(bytes[i])) {
       if (!noise) noise = [];
       noise.push(bytes[i]);
+      if (bytes[i] === 0x0d || bytes[i] === 0x0a) redraw = true;
       i++;
       gap++;
     } else {
+      // A TUI can repaint another line before finishing a DONE tag. Only
+      // discard a distinctive DONE prefix interrupted by a redraw; ordinary
+      // text/typos and complete tags retain their existing behavior.
+      if (allowRedrawFragment && redraw && p >= pattern.length - 4) {
+        return { consumed: i - offset, noise: noise ? new Uint8Array(noise) : EMPTY_BYTES, fragment: true };
+      }
       return MARKER_NO_MATCH;
     }
     if (gap > MAX_MARKER_WRAP_GAP_BYTES) return MARKER_NO_MATCH;
@@ -306,8 +317,13 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
     const doneClose = doneOpen.consumed > 0
       ? MARKER_NO_MATCH
       : matchMarkerAllowingWrap(combined, i, hubDoneMarkerClose);
-    const doneTag = doneOpen.consumed > 0 ? doneOpen
+    let doneTag = doneOpen.consumed > 0 ? doneOpen
       : (doneClose.consumed > 0 ? doneClose : null);
+    if (!doneTag && !inMarker && (inDone || lineStart)) {
+      const openFragment = matchMarkerAllowingWrap(combined, i, hubDoneMarkerOpen, true);
+      const closeFragment = matchMarkerAllowingWrap(combined, i, hubDoneMarkerClose, true);
+      doneTag = openFragment.fragment ? openFragment : closeFragment.fragment ? closeFragment : null;
+    }
     if (doneTag) {
       const isDoneClose = doneTag === doneClose;
       // 行頭ゲート: OPEN は行頭のみラッチ。close は inDone 中なら位置を問わず受理し、
@@ -319,9 +335,14 @@ export function filterHubMarkersPure(bytes: Uint8Array, state: HubMarkerFilterSt
         lineStart = false;
         // 案 I: 折り返しがタグの途中へ割り込ませた CR / LF / 空白 / ESC は本文側の描画指示
         // なので落とさず素通しする（案 J の「本文へ 1 バイトも足さない・削らない」を保つ）。
-        for (const b of doneTag.noise) out.push(b);
-        inDone = !isDoneClose;
-        doneSeen = 0;
+        for (const b of doneTag.noise) {
+          out.push(b);
+          if (doneTag.fragment) trackByte(b);
+        }
+        if (!doneTag.fragment) {
+          inDone = !isDoneClose;
+          doneSeen = 0;
+        }
         continue;
       }
       // 文中の prose リテラルはマーカー扱いせず素通し（'[' 1 バイトだけ進めて再走査）

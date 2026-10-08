@@ -151,6 +151,8 @@ Release artifacts are published at
   leading symbols or tables (`internal/wrapper/approval_rules.go`).
 
 ### Fixed
+- Hide unfinished completion tags when a terminal redraw interrupts them, while
+  preserving cursor movement and the following output in the Rust trial UI.
 - **The Settings icon stays at the bottom while Settings is open.** The same
   Settings, Usage and Hub buttons remain available, and the settings list can
   scroll past them.

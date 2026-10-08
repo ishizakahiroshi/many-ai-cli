@@ -23,6 +23,32 @@ function initialState(): HubMarkerFilterState {
   };
 }
 
+test('DONE redraw fragments are hidden at every transport split without losing the next line', () => {
+  for (const fragment of ['[MANY-AI-CLI-D', '[MANY-AI-CLI-DON', '[/MANY-AI-CLI-DON']) {
+    const input = bytes(`\x1b[2;1H${fragment}\x1b[3;1H次の行`);
+    for (let split = 0; split <= input.length; split++) {
+      const first = filterHubMarkersPure(input.slice(0, split), initialState());
+      const second = filterHubMarkersPure(input.slice(split), first.state);
+      assert.deepEqual(new Uint8Array([...first.out, ...second.out]), bytes('\x1b[2;1H\x1b[3;1H次の行'));
+      assert.equal(second.state.carry.length, 0);
+      assert.equal(second.state.inDone, false);
+    }
+  }
+});
+
+test('DONE fragments keep CRLF repainting, prose, ordinary typos and ANSI styling', () => {
+  for (const input of ['[MANY-AI-CLI-DON\r\n次の行', '[MANY-AI-CLI-DON\x1b[2K次の行']) {
+    const { out } = filterHubMarkersPure(bytes(input), initialState());
+    assert.equal(str(out), input.slice('[MANY-AI-CLI-DON'.length));
+  }
+  for (const input of ['説明 [MANY-AI-CLI-DON\x1b[3;1H次の行', '[MANY-AI-CLI-DON typo', '[MANY-AI-CLI-DON\x1b[0m typo']) {
+    const { out } = filterHubMarkersPure(bytes(input), initialState());
+    assert.equal(str(out), input);
+  }
+  const { out } = filterHubMarkersPure(bytes('[MANY-AI-CLI-DON\x1b[3;1HE] 本文[/MANY-AI-CLI-DONE]'), initialState());
+  assert.equal(str(out), '\x1b[3;1H 本文');
+});
+
 test('filterHubMarkersPure: 1 チャンクで完結する [MANY-AI-CLI] ブロックはタグだけ剥がして本文は残す', () => {
   const input = bytes('preamble\n[MANY-AI-CLI]Q1 question?\n1. opt1\n2. opt2\n[/MANY-AI-CLI]tail');
   const { out, state } = filterHubMarkersPure(input, initialState());
