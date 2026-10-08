@@ -1876,6 +1876,7 @@
   "cli_maintenance_version_error_generic": "Kiểm tra thất bại.",
   "cli_maintenance_executable_modified_at": "Tệp thực thi cập nhật lần cuối: {date}",
   "cli_maintenance_update_reason_not_installed": "Chưa được cài đặt.",
+  "cli_maintenance_update_reason_trial_scope": "Chế độ thử nghiệm nên không cập nhật.",
   "cli_maintenance_update_reason_disabled": "Cập nhật đang OFF (bật trong phần cài đặt).",
   "cli_maintenance_update_reason_not_configured": "Chưa cấu hình lệnh cập nhật.",
   "cli_maintenance_update_reason_running_sessions": "Có {count} phiên đang chạy.",

@@ -165,9 +165,10 @@ test('cliVersionCellText: 未確認・確認中・確認済み・取得失敗の
   assert.equal(err.detail?.vars?.code, '1');
 });
 
-test('cliUpdateDisabledNote: 6つの対象外理由がそれぞれ別の表示になる', () => {
+test('cliUpdateDisabledNote: 7つの対象外理由がそれぞれ別の表示になる', () => {
   const reasons = [
     'not_installed',
+    'trial_scope',
     'update_disabled',
     'update_not_configured',
     'running_sessions',

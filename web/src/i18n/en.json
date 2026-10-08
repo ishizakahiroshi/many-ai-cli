@@ -1876,6 +1876,7 @@
   "cli_maintenance_version_error_generic": "Check failed.",
   "cli_maintenance_executable_modified_at": "Executable last modified: {date}",
   "cli_maintenance_update_reason_not_installed": "Not installed.",
+  "cli_maintenance_update_reason_trial_scope": "Not updated in trial mode.",
   "cli_maintenance_update_reason_disabled": "Update is OFF (turn it on in settings).",
   "cli_maintenance_update_reason_not_configured": "No update command is configured.",
   "cli_maintenance_update_reason_running_sessions": "{count} running session(s).",

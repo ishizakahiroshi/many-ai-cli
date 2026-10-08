@@ -263,11 +263,13 @@ impl CliUpdates {
         })
         .map_err(|e| e.code().to_owned())?;
         if self.dependencies.paths.is_trial() {
+            // trial の外にある本物の CLI は更新させない。入っていないわけではないので、
+            // 「未インストール」ではなく専用の理由（trial_scope）で画面へ伝える。
             let root = std::fs::canonicalize(self.dependencies.paths.root())
-                .map_err(|_| "not_installed".to_owned())?;
+                .map_err(|_| "trial_scope".to_owned())?;
             for path in [&plan.command.process.executable, &plan.launch_path] {
                 if !std::fs::canonicalize(path).is_ok_and(|path| path.starts_with(&root)) {
-                    return Err("not_installed".into());
+                    return Err("trial_scope".into());
                 }
             }
         }

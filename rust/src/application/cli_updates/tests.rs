@@ -554,7 +554,7 @@ async fn trial_refuses_external_updater_and_external_version_launch_before_any_p
             .create(vec!["fixture-00".into()], false, Timestamp::now())
             .unwrap();
         assert!(response["accepted"].is_null());
-        assert_eq!(response["excluded"][0]["reason"], "not_installed");
+        assert_eq!(response["excluded"][0]["reason"], "trial_scope");
         fixture.owner.drain_effects().await;
         assert!(fixture.executor.calls.lock().unwrap().is_empty());
         assert!(fixture.versions.calls.lock().unwrap().is_empty());
