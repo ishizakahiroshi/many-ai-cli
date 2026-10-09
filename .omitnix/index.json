@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated": {
-    "commit": "e74ae6a8b330fca465d15f1644a18f4f1d6798c4",
+    "commit": "5453fb63426d018ceefc5b0557d4ccf00c0ab002",
     "dirty": true,
     "tool": "omitnix 0.1.3",
     "partial": false,
@@ -138,8 +138,8 @@
     "discovery_note": ""
   },
   "coverage": {
-    "discovered": 1945,
-    "analyzed": 1510,
+    "discovered": 1947,
+    "analyzed": 1512,
     "unresolved": 9,
     "unknown": 1,
     "unclaimed": 425,
@@ -21604,6 +21604,35 @@
       "unresolved": []
     },
     {
+      "path": "rust/packaging/test_package_candidates.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Synthetic candidate packaging checks; no builds or network."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
       "path": "rust/packaging/test_windows_check_ci.py",
       "adapter": "python",
       "status": "analyzed",
@@ -40262,6 +40291,35 @@
         },
         "writes": {
           "state": "out_of_scope"
+        },
+        "screen_to_api": {
+          "state": "out_of_scope"
+        }
+      },
+      "unresolved": []
+    },
+    {
+      "path": "scripts/package-rust-candidates.py",
+      "adapter": "python",
+      "status": "analyzed",
+      "fields": {
+        "summary": {
+          "state": "value",
+          "value": "Assemble four native CI candidates; never publish or mark them accepted."
+        },
+        "authentication": {
+          "state": "not_configured"
+        },
+        "authorization": {
+          "state": "not_configured"
+        },
+        "reads": {
+          "state": "none_observed",
+          "value": []
+        },
+        "writes": {
+          "state": "none_observed",
+          "value": []
         },
         "screen_to_api": {
           "state": "out_of_scope"

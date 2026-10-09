@@ -9,6 +9,7 @@ on:
       - 'go.mod'
       - 'go.sum'
       - 'scripts/rust-candidate-ci.py'
+      - 'scripts/package-rust-candidates.py'
       - 'scripts/rust-windows-check-ci.py'
       - '.github/workflows/rust-windows-check.yml'
       - '.github/workflows/rust-migration.yml'

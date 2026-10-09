@@ -1,5 +1,38 @@
 # Candidate packaging input evidence
 
+## Assemble four native CI candidates without publishing
+
+`scripts/package-rust-candidates.py` accepts the target folders produced by
+`scripts/rust-candidate-ci.py`: `windows-x64`, `linux-x64`, `macos-intel`, and
+`macos-apple-silicon`. Download and retain the original CI evidence, then place
+these four folders immediately under one input directory. Do not mix attempts
+or candidates. Use a canonical path without symlink ancestors.
+
+```sh
+python3 scripts/package-rust-candidates.py --inputs /path/to/native-candidates --output /path/to/new-candidate-package
+```
+
+This does not build, install, publish, or change the running Hub. It checks the
+four receipts' source/version/Cargo-lock/Web consistency, both binary hashes,
+notice hashes, successful input collection, and Windows embedded-runtime
+evidence. Documents come from the receipt's Git commit. Four ZIPs preserve the
+existing target suffixes and include both binaries, notices, receipts and an
+unaccepted-candidate warning. Archive bytes are read back and checked. Output
+must not already exist.
+
+`artifacts.json` has the Binary/ID/goos/goarch fields consumed by the existing
+`scripts/stage-npm-binaries.mjs`, referencing the same staged binary bytes as
+the ZIPs. Staging changes local npm package directories; it does not publish.
+Keep candidate output outside the checkout to avoid untracked binary artifacts.
+`SHA256SUMS.txt` covers the four ZIPs. This assembler trusts the downloaded CI
+receipts; it is not a signature verifier or an independent native-runtime test.
+
+This helper deliberately accepts only `0.0.0-rust-candidate+<source prefix>`,
+not v1.0.0. Public version stamping, Windows resources, distribution SBOM and
+signing, deb/rpm, Homebrew/winget, Docker, installed-update/rollback acceptance,
+and changing the existing Go release workflow remain separate release work.
+Input-collection success is source evidence, not license clearance.
+
 This is preparation for K15/A12, not a publisher or a replacement packaging
 owner. `src/launcher/delivery.rs` remains the target/channel/manifest contract.
 No package, release, installation, account, GUI or native-voice acceptance is
