@@ -11,6 +11,7 @@ import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { unchangedReplacementHit } from './secrets-scan.baseline.mjs';
 
 // === Configuration ===
 // KB_ROOT / FAMILY_ROOT are required env vars (no hardcoded default so this
@@ -295,7 +296,9 @@ function loadPersonalFileWatchlist(spec) {
 //
 // 判定は 2 段:
 //   1. staged diff の「追加行」に載っているヒットだけを残す
-//   2. 個人ディレクトリ由来の needle は、その文字列が既に HEAD にあるなら常に除外する
+//   2. 1行だけの置換では、全出現が完全一致する接頭部/接尾部内にあるwatchlist hitは既存分
+//      （圧縮ライブラリの一部修正でも、変更範囲内の新しい値は引き続きブロックする）
+//   3. 個人ディレクトリ由来の needle は、その文字列が既に HEAD にあるなら常に除外する
 //      （例: config.yaml のようにプロジェクトが本来参照している名前。新規追加行に出ても正規）
 
 const headNeedleCache = new Map();
@@ -313,12 +316,12 @@ function existsInHead(needle) {
   return found;
 }
 
-// stagedAddedLines は staged diff でその file に追加された行番号の集合を返す。
+// stagedDiff は staged diff と、その file に追加された行番号の集合を返す。
 // diff が取れない場合は null を返し、呼び出し側は絞り込まない（判定不能ならブロック側に倒す）。
-function stagedAddedLines(file) {
+function stagedDiff(file) {
   let out;
   try {
-    out = execFileSync('git', ['diff', '--cached', '-U0', '--', file], { encoding: 'utf8' });
+    out = execFileSync('git', ['diff', '--cached', '--no-color', '--no-ext-diff', '--no-textconv', '-U0', '--', file], { encoding: 'utf8' });
   } catch {
     return null;
   }
@@ -330,17 +333,27 @@ function stagedAddedLines(file) {
     const count = m[2] === undefined ? 1 : Number(m[2]);
     for (let i = 0; i < count; i++) added.add(start + i);
   }
-  return added;
+  return { added, diff: out };
 }
 
 function filterToNewlyIntroduced(hits) {
   const addedCache = new Map();
+  const linesCache = new Map();
   return hits.filter(hit => {
     if (String(hit.source).startsWith('personal-dir/') && existsInHead(hit.matched)) return false;
-    if (!addedCache.has(hit.file)) addedCache.set(hit.file, stagedAddedLines(hit.file));
-    const added = addedCache.get(hit.file);
-    if (added === null) return true;
-    return added.has(hit.lineNumber);
+    if (!addedCache.has(hit.file)) addedCache.set(hit.file, stagedDiff(hit.file));
+    const staged = addedCache.get(hit.file);
+    if (staged === null) return true;
+    if (!staged.added.has(hit.lineNumber)) return false;
+    if (hit.kind === 'watchlist') {
+      if (!linesCache.has(hit.file)) {
+        try { linesCache.set(hit.file, readFileSync(hit.file, 'utf8').split('\n')); }
+        catch { linesCache.set(hit.file, []); }
+      }
+      const line = linesCache.get(hit.file)[hit.lineNumber - 1];
+      if (unchangedReplacementHit(staged.diff, hit.lineNumber, line, hit.matched)) return false;
+    }
+    return true;
   });
 }
 

@@ -3,12 +3,13 @@
   many-ai-cli の Rust 候補を、手元でワンコマンドでビルドし、隔離（trial）で起動する。
 
 .DESCRIPTION
-  - dots の作業ブランチを別フォルダ（worktree）に取り出し、画面資材（Bun）と Rust（cargo +1.90.0）をビルドする。
+  - 通常は修正元のworktreeをそのまま使い、未commit変更を含む画面資材（Bun）と Rust（cargo +1.90.0）をビルドする。
+  - -Branch を明示した候補検査だけ、リモートから別フォルダへ取得する。
   - 起動は必ず trial モード（実際の ~/.many-ai-cli と、ポート 47777 の Go 版 Hub には触れない）。
   - 既存の Go 版や実 home は変更しない。作るのは $Worktree と $TrialRoot の中だけ。
 
 .EXAMPLE
-  pwsh scripts\rust-local.ps1              # 取得 → ビルド（debug）→ version 表示
+  pwsh scripts\rust-local.ps1              # 修正元をビルド（debug）→ version 表示
   pwsh scripts\rust-local.ps1 -Run         # 上に加えて serve を別ウィンドウで起動し、URL を表示
   pwsh scripts\rust-local.ps1 -Stop        # 起動した trial の Hub を止める
   pwsh scripts\rust-local.ps1 -Release     # release ビルド（CI と同じ形・時間がかかる）
@@ -37,8 +38,10 @@ $ErrorActionPreference = 'Stop'
 $Repo      = Split-Path -Parent $PSScriptRoot   # このスクリプトは <repo>\scripts にある
 $BuildRoot = 'F:\build'                          # ビルド・trial・仮 home の置き場（実際の home とは別のドライブ）
 $Worktree  = Join-Path $BuildRoot 'rust-local'
+. (Join-Path $PSScriptRoot 'rust-local-source.ps1')
+$Source = Resolve-RustLocalSource -Repo $Repo -Source $Source -Branch $Branch `
+    -RemoteCandidate:($PSBoundParameters.ContainsKey('Branch') -and -not $Source)
 if ($Source) {
-    if (-not (Test-Path -LiteralPath (Join-Path $Source 'rust\Cargo.toml'))) { throw "-Source に rust\Cargo.toml がありません: $Source" }
     $Worktree = (Resolve-Path -LiteralPath $Source).Path   # 以降のビルド・exe・-Stop は、すべてこのフォルダを使う
 }
 $TrialRoot = Join-Path $BuildRoot 'rust-accept-user'
@@ -147,7 +150,7 @@ Write-Host (& cargo "+$Toolchain" --version)
 if ($Source) {
     Step "手元の worktree をそのまま使う（取得しない・push 不要）: $Worktree"
     $sha = (& git -C $Worktree rev-parse HEAD).Trim()
-    $changed = @(& git -C $Worktree status --porcelain --untracked-files=no).Count
+    $changed = @(& git -C $Worktree status --porcelain --untracked-files=normal).Count
     Write-Host "commit: $sha / 未コミットの変更: $changed 件（あれば、その内容でビルドされます）"
 } else {
     Step "ブランチを取得して worktree に取り出す（$Branch）"

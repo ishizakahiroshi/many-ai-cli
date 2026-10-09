@@ -70,7 +70,7 @@ jobs:
 
       - name: Check instrumentation ledger
         run: |
-          node --test scripts/check-instrumentation.test.mjs
+          node --test scripts/check-instrumentation.test.mjs scripts/secrets-scan.baseline.test.mjs
           node scripts/check-instrumentation.mjs
 
       # AI がファイルを書く経路（heredoc 経由の文字列）でエスケープが 1 段落ちると、
